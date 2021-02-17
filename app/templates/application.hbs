@@ -1,7 +1,49 @@
 {{page-title "Animations"}}
 
-{{!-- The following component displays Ember's default welcome message. --}}
-<WelcomePage />
-{{!-- Feel free to remove this! --}}
+<h2>Controls</h2>
+
+<p>
+  <label>
+    <input type="checkbox" checked={{this.showContentBefore}} onclick={{action (mut this.showContentBefore) value="target.checked"}}>
+    Show content before sprite
+  </label>
+</p>
+<p>
+  <label>
+    <input type="checkbox" checked={{this.showSprite}} onclick={{action (mut this.showSprite) value="target.checked"}}>
+    Show Sprite
+  </label>
+</p>
+<p>
+  <label>
+    <input type="checkbox" checked={{this.showContentAfter}} onclick={{action (mut this.showContentAfter) value="target.checked"}}>
+    Show content after sprite
+  </label>
+</p>
+
+
+<h2>Animation Context</h2>
+
+<AnimationContext as |context|>
+
+  {{#if this.showContentBefore}}
+    <p>Here is some content before the sprite</p>
+  {{/if}}
+
+
+  {{#if this.showSprite}}
+    <div class="animated" {{sprite context=context}}>
+      Hello, I am a sprite
+    </div>
+  {{/if}}
+
+
+
+  {{#if this.showContentAfter}}
+    <p>Here is some content after the sprite</p>
+  {{/if}}
+
+</AnimationContext>
+
 
 {{outlet}}
