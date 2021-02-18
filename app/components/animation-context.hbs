@@ -1,3 +1,4 @@
-<div class="animation-context" {{observe-mutation this.onDomChange subtree=true childList=true characterData=true attributes=true}}>
+{{this.renderDetector}}
+<div class="animation-context">
   {{yield this}}
 </div>

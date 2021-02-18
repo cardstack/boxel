@@ -1,12 +1,16 @@
 import Component from '@glimmer/component';
-import { action } from '@ember/object';
-import { afterRender, microwait } from '../utils/scheduling';
+import { schedule } from '@ember/runloop';
+import Ember from 'ember';
+
+const { VOLATILE_TAG, consumeTag } = Ember.__loader.require(
+  '@glimmer/validator'
+);
+
 class Sprite {
   element;
   id;
   initialBounds = null;
-  initialBoundString = null; // Just for logging in experiment
-  finalBoundsString = null; // Just for logging in experiment
+  finalBounds = null;
 
   constructor(element) {
     this.element = element;
@@ -44,31 +48,28 @@ export default class AnimationContextComponent extends Component {
   freshlyRemoved = new Set();
   freshlyChanged = new Set();
 
+  get renderDetector() {
+    consumeTag(VOLATILE_TAG);
+    schedule('afterRender', this, 'maybeTransition');
+    return undefined;
+  }
+
   register(spriteModifier) {
     this.registered.add(spriteModifier);
     this.freshlyAdded.add(spriteModifier);
-    this.scheduleTransition();
   }
 
   unregister(spriteModifier) {
     this.registered.delete(spriteModifier);
     this.freshlyRemoved.add(spriteModifier);
-    this.scheduleTransition();
   }
 
-  @action
-  onDomChange() {
+  maybeTransition() {
     for (let spriteModifier of this.registered) {
       if (spriteModifier.checkForChanges()) {
         this.freshlyChanged.add(spriteModifier);
       }
     }
-    this.scheduleTransition();
-  }
-
-  async scheduleTransition() {
-    await afterRender();
-    await microwait();
     this.simulateTransition();
   }
 
