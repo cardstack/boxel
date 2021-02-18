@@ -7,39 +7,36 @@ import Modifier from 'ember-modifier';
 // 4. css change that doesn't result in an attribute change in the observed subtree?
 
 export default class SpriteModifier extends Modifier {
+  id = null;
   context = null;
   lastPosition = null;
+  currentPosition = null;
 
-  // lifecycle hooks
   didReceiveArguments() {
-    // this.removeEventListener();
-    // this.addEventListener();
     this.contextElement = this.element.closest('.animation-context');
     this.context = this.args.named.context;
+    this.id = this.args.named.id;
 
-    this.context.registerSprite(this);
+    this.context.register(this);
 
-    this.logPosition();
+    this.trackPosition();
   }
 
-  logPosition() {
-    this.lastPosition = {
+  trackPosition() {
+    this.lastPosition = this.currentPosition;
+    this.currentPosition = {
       parent: this.getDocumentPosition(this.contextElement),
-      element: this.getDocumentPosition(this.element)
+      element: this.getDocumentPosition(this.element),
     };
-
-    console.log('Logged position', this.lastPosition);
   }
 
-  handleDomChange() {
-    let previousPosition = this.lastPosition;
+  checkForChanges() {
+    this.trackPosition();
 
-    this.logPosition();
-
-    if (this.positionsIdentical(previousPosition, this.lastPosition)) {
-      console.log('nothing changed');
+    if (this.positionsIdentical(this.lastPosition, this.currentPosition)) {
+      return false;
     } else {
-      console.log('something changed');
+      return true;
     }
   }
 
@@ -58,11 +55,11 @@ export default class SpriteModifier extends Modifier {
 
     return {
       left: rect.left + window.scrollX,
-      top: rect.top + window.scrollY
+      top: rect.top + window.scrollY,
     };
   }
 
   willRemove() {
-    this.context.removeSprite(this);
+    this.context.unregister(this);
   }
 }

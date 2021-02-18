@@ -4,15 +4,32 @@
 
 <p>
   <label>
+    <input type="checkbox" checked={{this.showContentBeforeContext}} onclick={{action (mut this.showContentBeforeContext) value="target.checked"}}>
+    Show content before animation context
+  </label>
+</p>
+<p>
+  <label>
     <input type="checkbox" checked={{this.showContentBefore}} onclick={{action (mut this.showContentBefore) value="target.checked"}}>
     Show content before sprite
   </label>
 </p>
 <p>
   <label>
-    <input type="checkbox" checked={{this.showSprite}} onclick={{action (mut this.showSprite) value="target.checked"}}>
-    Show Sprite
+    <input type="checkbox" checked={{this.showSpriteA}} onclick={{action (mut this.showSpriteA) value="target.checked"}}>
+    Show Sprite A
   </label>
+</p>
+<p>
+  <label>
+    <input type="checkbox" checked={{this.showSpriteB}} onclick={{action (mut this.showSpriteB) value="target.checked"}}>
+    Show Sprite B
+  </label>
+</p>
+<p>
+  <button {{on 'click' this.toggleBothSprites}}>
+    Toggle Both Sprites
+  </button>
 </p>
 <p>
   <label>
@@ -24,6 +41,11 @@
 
 <h2>Animation Context</h2>
 
+
+{{#if this.showContentBeforeContext}}
+  <p>Here is some content before the AnimationContext</p>
+{{/if}}
+
 <AnimationContext as |context|>
 
   {{#if this.showContentBefore}}
@@ -31,9 +53,15 @@
   {{/if}}
 
 
-  {{#if this.showSprite}}
-    <div class="animated" {{sprite context=context}}>
-      Hello, I am a sprite
+  {{#if this.showSpriteA}}
+    <div class="sprite" {{sprite context=context id="A"}}>
+      Hello, I am a sprite A
+    </div>
+  {{/if}}
+
+  {{#if this.showSpriteB}}
+    <div class="sprite" {{sprite context=context id="B"}}>
+      Hello, I am a sprite B
     </div>
   {{/if}}
 
