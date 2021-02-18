@@ -1,27 +1,6 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
-import { schedule, cancel } from '@ember/runloop';
-
-const cancellation = new WeakMap();
-
-function registerCancellation(promise, handler) {
-  cancellation.set(promise, handler);
-}
-function afterRender() {
-  let ticket;
-  let promise = new Promise((resolve) => {
-    ticket = schedule('afterRender', resolve);
-  });
-  registerCancellation(promise, () => {
-    cancel(ticket);
-  });
-  return promise;
-}
-
-function microwait() {
-  return new Promise((resolve) => resolve());
-}
-
+import { afterRender, microwait } from '../utils/scheduling';
 class Sprite {
   element;
   id;
@@ -57,28 +36,6 @@ function createSprite(spriteModifier, type) {
   sprite.finalBoundsString = JSON.stringify(sprite.finalBounds);
 
   return sprite;
-}
-
-function toTable(changeset) {
-  function row(type, sprite) {
-    return {
-      type,
-      spriteId: sprite.id,
-      initialBounds: sprite.initialBounds
-        ? JSON.stringify(sprite.initialBounds)
-        : null,
-      finalBounds: sprite.finalBounds
-        ? JSON.stringify(sprite.finalBounds)
-        : null,
-    };
-  }
-  let results = [];
-  for (let type of ['inserted', 'removed', 'kept', 'sent', 'received']) {
-    for (let sprite of changeset[`${type}Sprites`]) {
-      results.push(row(type, sprite));
-    }
-  }
-  return results;
 }
 export default class AnimationContextComponent extends Component {
   registered = new Set();
@@ -146,6 +103,32 @@ export default class AnimationContextComponent extends Component {
     }
     this.freshlyChanged.clear();
 
-    console.table(toTable(changeset));
+    // This is where we could pass this changeset to the active transition,
+    // but instead we'll just log the details.
+    this.logChangeset(changeset);
+  }
+
+  logChangeset(changeset) {
+    let contextId = this.args.id;
+    function row(type, sprite) {
+      return {
+        context: contextId,
+        type,
+        spriteId: sprite.id,
+        initialBounds: sprite.initialBounds
+          ? JSON.stringify(sprite.initialBounds)
+          : null,
+        finalBounds: sprite.finalBounds
+          ? JSON.stringify(sprite.finalBounds)
+          : null,
+      };
+    }
+    let tableRows = [];
+    for (let type of ['inserted', 'removed', 'kept', 'sent', 'received']) {
+      for (let sprite of changeset[`${type}Sprites`]) {
+        tableRows.push(row(type, sprite));
+      }
+    }
+    console.table(tableRows);
   }
 }
