@@ -47,6 +47,7 @@
     "ember-mutation-observer-modifier": "^1.0.1",
     "ember-page-title": "^6.0.3",
     "ember-qunit": "^5.1.1",
+    "ember-ref-modifier": "^1.0.1",
     "ember-resolver": "^8.0.2",
     "ember-source": "~3.24.0",
     "ember-template-lint": "^2.15.0",
@@ -68,5 +69,9 @@
   },
   "ember": {
     "edition": "octane"
+  },
+  "volta": {
+    "node": "12.20.2",
+    "yarn": "1.22.10"
   }
 }

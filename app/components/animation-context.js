@@ -48,6 +48,8 @@ export default class AnimationContextComponent extends Component {
   freshlyRemoved = new Set();
   freshlyChanged = new Set();
 
+  orphansElement; //set by template
+
   get renderDetector() {
     consumeTag(VOLATILE_TAG);
     schedule('afterRender', this, 'maybeTransition');
@@ -104,9 +106,14 @@ export default class AnimationContextComponent extends Component {
     }
     this.freshlyChanged.clear();
 
-    // This is where we could pass this changeset to the active transition,
-    // but instead we'll just log the details.
-    this.logChangeset(changeset);
+    if (this.args.use && !this.isAnimating) {
+      this.isAnimating = true;
+      this.logChangeset(changeset); // For debugging
+      let animation = this.args.use(changeset, this.orphansElement);
+      animation.then(() => {
+        this.isAnimating = false;
+      });
+    }
   }
 
   logChangeset(changeset) {
