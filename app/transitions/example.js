@@ -1,6 +1,12 @@
 const FADE_DURATION = 3000;
 const TRANSLATE_DURATION = 3000;
 
+function positionAbsolute(sprite) {
+  sprite.element.style.position = 'absolute';
+  sprite.element.style.left = sprite.initialBounds.left + 'px';
+  sprite.element.style.top = sprite.initialBounds.top + 'px';
+}
+
 export default function exampleTransition(
   { insertedSprites, keptSprites, removedSprites },
   orphansElement
@@ -10,7 +16,7 @@ export default function exampleTransition(
   for (let removedSprite of Array.from(removedSprites)) {
     console.log('fade out ', removedSprite);
     orphansElement.appendChild(removedSprite.element);
-    removedSprite.element.style.position = 'absolute';
+    positionAbsolute(removedSprite);
     let animation = removedSprite.element.animate(
       [{ opacity: 1 }, { opacity: 0 }, { opacity: 0 }],
       {

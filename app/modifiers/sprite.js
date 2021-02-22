@@ -6,6 +6,13 @@ import Modifier from 'ember-modifier';
 // 3. far matching
 // 4. css change that doesn't result in an attribute change in the observed subtree?
 
+class ContextAwarePosition {
+  constructor({ parent, element }) {
+    this.parent = parent;
+    this.element = element;
+  }
+  // TODO: getter to calculate element position offets by parent top/left
+}
 export default class SpriteModifier extends Modifier {
   id = null;
   context = null;

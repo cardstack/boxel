@@ -1,5 +1,6 @@
 .animation-context {
   border: 1px dashed blue;
+  position: relative;
 }
 .sprite {
   border: 1px dotted green;
