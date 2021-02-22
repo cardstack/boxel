@@ -28,6 +28,10 @@ export default class SpriteModifier extends Modifier {
       parent: this.getDocumentPosition(this.contextElement),
       element: this.getDocumentPosition(this.element),
     };
+    console.log(`Positions updated Sprite ${this.id}`, {
+      last: this.lastPosition && this.lastPosition.element.top,
+      current: this.currentPosition && this.currentPosition.element.top,
+    });
   }
 
   checkForChanges() {

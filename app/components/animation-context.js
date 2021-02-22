@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { schedule } from '@ember/runloop';
 import Ember from 'ember';
+import { reads } from 'macro-decorators';
 
 const { VOLATILE_TAG, consumeTag } = Ember.__loader.require(
   '@glimmer/validator'
@@ -49,6 +50,8 @@ export default class AnimationContextComponent extends Component {
   freshlyChanged = new Set();
 
   orphansElement; //set by template
+  @reads('args.initialInsertion', false) initialInsertion;
+  isInitialRenderCompleted = false;
 
   get renderDetector() {
     consumeTag(VOLATILE_TAG);
@@ -106,14 +109,23 @@ export default class AnimationContextComponent extends Component {
     }
     this.freshlyChanged.clear();
 
-    if (this.args.use && !this.isAnimating) {
+    let shouldAnimate =
+      this.args.use &&
+      !this.isAnimating &&
+      (this.isInitialRenderCompleted || this.initialInsertion);
+
+    if (shouldAnimate) {
       this.isAnimating = true;
       this.logChangeset(changeset); // For debugging
       let animation = this.args.use(changeset, this.orphansElement);
       animation.then(() => {
         this.isAnimating = false;
+        for (let spriteModifier of this.registered) {
+          spriteModifier.checkForChanges();
+        }
       });
     }
+    this.isInitialRenderCompleted = true;
   }
 
   logChangeset(changeset) {
