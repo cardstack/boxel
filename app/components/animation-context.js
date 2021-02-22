@@ -1,22 +1,12 @@
 import Component from '@glimmer/component';
-import { schedule } from '@ember/runloop';
+import { scheduleOnce } from '@ember/runloop';
 import Ember from 'ember';
 import { reads } from 'macro-decorators';
+import Sprite from '../models/sprite';
 
 const { VOLATILE_TAG, consumeTag } = Ember.__loader.require(
   '@glimmer/validator'
 );
-
-class Sprite {
-  element;
-  id;
-  initialBounds = null;
-  finalBounds = null;
-
-  constructor(element) {
-    this.element = element;
-  }
-}
 
 const INSERTED = Symbol('inserted');
 const REMOVED = Symbol('removed');
@@ -28,14 +18,14 @@ function createSprite(spriteModifier, type) {
   let sprite = new Sprite(spriteModifier.element);
   sprite.id = spriteModifier.id;
   if (type === INSERTED) {
-    sprite.finalBounds = spriteModifier.currentPosition.element;
+    sprite.finalBounds = spriteModifier.currentPosition.relativeToContext;
   }
   if (type === REMOVED) {
-    sprite.initialBounds = spriteModifier.currentPosition.element;
+    sprite.initialBounds = spriteModifier.currentPosition.relativeToContext;
   }
   if (type === KEPT) {
-    sprite.initialBounds = spriteModifier.lastPosition.element;
-    sprite.finalBounds = spriteModifier.currentPosition.element;
+    sprite.initialBounds = spriteModifier.lastPosition.relativeToContext;
+    sprite.finalBounds = spriteModifier.currentPosition.relativeToContext;
   }
   sprite.initialBoundsString = JSON.stringify(sprite.initialBounds);
   sprite.finalBoundsString = JSON.stringify(sprite.finalBounds);
@@ -55,7 +45,7 @@ export default class AnimationContextComponent extends Component {
 
   get renderDetector() {
     consumeTag(VOLATILE_TAG);
-    schedule('afterRender', this, 'maybeTransition');
+    scheduleOnce('afterRender', this, 'maybeTransition');
     return undefined;
   }
 
@@ -110,16 +100,12 @@ export default class AnimationContextComponent extends Component {
     this.freshlyChanged.clear();
 
     let shouldAnimate =
-      this.args.use &&
-      !this.isAnimating &&
-      (this.isInitialRenderCompleted || this.initialInsertion);
+      this.args.use && (this.isInitialRenderCompleted || this.initialInsertion);
 
     if (shouldAnimate) {
-      this.isAnimating = true;
       this.logChangeset(changeset); // For debugging
       let animation = this.args.use(changeset, this.orphansElement);
       animation.then(() => {
-        this.isAnimating = false;
         for (let spriteModifier of this.registered) {
           spriteModifier.checkForChanges();
         }

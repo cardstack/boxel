@@ -1,17 +1,24 @@
 import Modifier from 'ember-modifier';
-
+import ContextAwarePosition from '../models/context-aware-position';
 // cases:
 // 1. Sprite added
 // 2. Sprite removed
 // 3. far matching
 // 4. css change that doesn't result in an attribute change in the observed subtree?
 
-class ContextAwarePosition {
-  constructor({ parent, element }) {
-    this.parent = parent;
-    this.element = element;
+function buildPosition(parentElement, element) {
+  function getDocumentPosition(element) {
+    let rect = element.getBoundingClientRect();
+
+    return {
+      left: rect.left + window.scrollX,
+      top: rect.top + window.scrollY,
+    };
   }
-  // TODO: getter to calculate element position offets by parent top/left
+  return new ContextAwarePosition({
+    element: getDocumentPosition(element),
+    contextElement: getDocumentPosition(parentElement),
+  });
 }
 export default class SpriteModifier extends Modifier {
   id = null;
@@ -31,43 +38,12 @@ export default class SpriteModifier extends Modifier {
 
   trackPosition() {
     this.lastPosition = this.currentPosition;
-    this.currentPosition = {
-      parent: this.getDocumentPosition(this.contextElement),
-      element: this.getDocumentPosition(this.element),
-    };
-    console.log(`Positions updated Sprite ${this.id}`, {
-      last: this.lastPosition && this.lastPosition.element.top,
-      current: this.currentPosition && this.currentPosition.element.top,
-    });
+    this.currentPosition = buildPosition(this.contextElement, this.element);
   }
 
   checkForChanges() {
     this.trackPosition();
-
-    if (this.positionsIdentical(this.lastPosition, this.currentPosition)) {
-      return false;
-    } else {
-      return true;
-    }
-  }
-
-  positionsIdentical(a, b) {
-    let parentLeftChange = b.parent.left - a.parent.left;
-    let parentTopChange = b.parent.top - a.parent.top;
-
-    return (
-      b.element.left - a.element.left - parentLeftChange === 0 &&
-      b.element.top - a.element.top - parentTopChange === 0
-    );
-  }
-
-  getDocumentPosition(element) {
-    let rect = element.getBoundingClientRect();
-
-    return {
-      left: rect.left + window.scrollX,
-      top: rect.top + window.scrollY,
-    };
+    return !this.currentPosition.isEqualTo(this.lastPosition);
   }
 
   willRemove() {

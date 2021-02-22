@@ -11,10 +11,8 @@ export default function exampleTransition(
   { insertedSprites, keptSprites, removedSprites },
   orphansElement
 ) {
-  console.log(...arguments);
   let animations = [];
   for (let removedSprite of Array.from(removedSprites)) {
-    console.log('fade out ', removedSprite);
     orphansElement.appendChild(removedSprite.element);
     positionAbsolute(removedSprite);
     let animation = removedSprite.element.animate(
@@ -27,8 +25,6 @@ export default function exampleTransition(
   }
 
   for (let insertedSprite of Array.from(insertedSprites)) {
-    console.log('fade in ', insertedSprite);
-    // insertedSprite.element.style.position = 'absolute';
     let animation = insertedSprite.element.animate(
       [{ opacity: 0 }, { opacity: 0 }, { opacity: 1 }],
       {
@@ -39,9 +35,7 @@ export default function exampleTransition(
   }
 
   for (let keptSprite of Array.from(keptSprites)) {
-    console.log('translate ', keptSprite);
     let deltaY = keptSprite.initialBounds.top - keptSprite.finalBounds.top;
-    console.log({ deltaY });
     let translationKeyFrames = [
       { transform: `translate(0, ${deltaY}px)` },
       { transform: 'translate(0, 0)' },
