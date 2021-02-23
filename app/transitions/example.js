@@ -38,9 +38,10 @@ export default function exampleTransition(
   for (let keptSprite of Array.from(keptSprites)) {
     let initialBounds = keptSprite.initialBounds.relativeToContext;
     let finalBounds = keptSprite.finalBounds.relativeToContext;
+    let deltaX = initialBounds.left - finalBounds.left;
     let deltaY = initialBounds.top - finalBounds.top;
     let translationKeyFrames = [
-      { transform: `translate(0, ${deltaY}px)` },
+      { transform: `translate(${deltaX}px, ${deltaY}px)` },
       { transform: 'translate(0, 0)' },
     ];
     if (removedSprites.size > 0) {
