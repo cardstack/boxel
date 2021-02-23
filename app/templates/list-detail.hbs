@@ -1,0 +1,33 @@
+<h2>
+  List Detail
+</h2>
+
+
+
+
+{{#if this.selectedPerson}}
+  <span onclick={{action (mut this.selectedPerson) null}}>Back</span>
+  <AnimationContext @id="Detail Animation Context" @use={{this.transition}} as |context|>
+    <div class="detail-card">
+      <h2 {{sprite context=context id=(concat "name:" this.selectedPerson.id)}}>{{this.selectedPerson.name}}</h2>
+      <h3 {{sprite context=context id=(concat "title:" this.selectedPerson.id)}}>{{this.selectedPerson.title}}</h3>
+      <p>{{this.selectedPerson.bio}}</p>
+    </div>
+  </AnimationContext>
+{{else}}
+  <AnimationContext @id="List Animation Context" @use={{this.transition}} as |context|>
+    <ul>
+      {{#each this.people as |person|}}
+        <li> 
+          <span  {{sprite context=context id=(concat "name:" person.id)}}>
+            {{person.name}}
+          </span>
+          <span  {{sprite context=context id=(concat "title:" person.id)}}>
+            {{person.title}}
+          </span>
+          <span onclick={{action (mut this.selectedPerson) person}}>More info</span>
+        </li>
+      {{/each}}
+    </ul>
+  </AnimationContext>
+{{/if}}

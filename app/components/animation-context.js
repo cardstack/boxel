@@ -3,6 +3,7 @@ import { scheduleOnce } from '@ember/runloop';
 import Ember from 'ember';
 import { reads } from 'macro-decorators';
 import Sprite from '../models/sprite';
+import { inject as service } from '@ember/service';
 
 const { VOLATILE_TAG, consumeTag } = Ember.__loader.require(
   '@glimmer/validator'
@@ -12,7 +13,7 @@ const INSERTED = Symbol('inserted');
 const REMOVED = Symbol('removed');
 const KEPT = Symbol('kept');
 // const SENT = new Symbol('sent');
-// const RECEIVED = new Symbol('received');
+const RECEIVED = Symbol('received');
 
 function createSprite(spriteModifier, type) {
   let sprite = new Sprite(spriteModifier.element);
@@ -38,12 +39,30 @@ export default class AnimationContextComponent extends Component {
   freshlyAdded = new Set();
   freshlyRemoved = new Set();
   freshlyChanged = new Set();
+  farMatchedSprites = new Set();
+
+  @service animations;
 
   orphansElement; //set by template
   @reads('args.initialInsertion', false) initialInsertion;
   isInitialRenderCompleted = false;
 
+  constructor(owner, args) {
+    super(owner, args);
+    this.animations.registerContext(this);
+  }
+
+  willDestroy() {
+    this.animations.unregisterContext(this);
+  }
+
+  handleFarMatching(spritesThatMightMatch) {
+    console.log('handleFarMatching called', this.args.id);
+    spritesThatMightMatch.forEach(s => this.farMatchedSprites.add(s));
+  }
+
   get renderDetector() {
+    console.log('renderDetector', this.args.id);
     consumeTag(VOLATILE_TAG);
     scheduleOnce('afterRender', this, 'maybeTransition');
     return undefined;
@@ -60,6 +79,8 @@ export default class AnimationContextComponent extends Component {
   }
 
   maybeTransition() {
+    console.log('maybeTransition called', this.args.id);
+
     for (let spriteModifier of this.registered) {
       if (spriteModifier.checkForChanges()) {
         this.freshlyChanged.add(spriteModifier);
@@ -81,13 +102,19 @@ export default class AnimationContextComponent extends Component {
       removedSprites: new Set(),
       keptSprites: new Set(),
       sentSprites: new Set(),
-      receivedSprites: new Set(),
+      receivedSprites: new Set()
     };
-
+    let farSpritesArray = Array.from(this.farMatchedSprites);
     for (let spriteModifier of this.freshlyAdded) {
-      changeset.insertedSprites.add(createSprite(spriteModifier, INSERTED));
+      if (farSpritesArray.any(s => s.id === spriteModifier.id)) {
+        changeset.receivedSprites.add(createSprite(spriteModifier, RECEIVED));
+      } else {
+        changeset.insertedSprites.add(createSprite(spriteModifier, INSERTED));
+      }
     }
+
     this.freshlyAdded.clear();
+    this.farMatchedSprites.clear();
 
     for (let spriteModifier of this.freshlyRemoved) {
       changeset.removedSprites.add(createSprite(spriteModifier, REMOVED));
@@ -100,7 +127,10 @@ export default class AnimationContextComponent extends Component {
     this.freshlyChanged.clear();
 
     let shouldAnimate =
-      this.args.use && (this.isInitialRenderCompleted || this.initialInsertion);
+      this.args.use &&
+      (this.isInitialRenderCompleted ||
+        this.initialInsertion ||
+        changeset.receivedSprites.size);
 
     if (shouldAnimate) {
       this.logChangeset(changeset); // For debugging
@@ -126,7 +156,7 @@ export default class AnimationContextComponent extends Component {
           : null,
         finalBounds: sprite.finalBounds
           ? JSON.stringify(sprite.finalBounds)
-          : null,
+          : null
       };
     }
     let tableRows = [];

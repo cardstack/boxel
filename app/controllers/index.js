@@ -2,7 +2,7 @@ import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import exampleTransition from '../transitions/example';
-export default class ApplicationController extends Controller {
+export default class IndexController extends Controller {
   @tracked contextHasPadding = false;
   @tracked showContentBeforeContext = false;
   @tracked showContentBefore = false;
