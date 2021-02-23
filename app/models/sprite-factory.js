@@ -7,7 +7,7 @@ export default {
       spriteModifier.id,
       INSERTED
     );
-    sprite.finalBounds = spriteModifier.currentPosition.relativeToContext;
+    sprite.finalBounds = spriteModifier.currentBounds;
     return sprite;
   },
   createReceivedSprite(spriteModifier, farMatchedSpriteModifier) {
@@ -17,27 +17,25 @@ export default {
       RECEIVED
     );
     farMatchedSpriteModifier.farMatch = spriteModifier;
-    sprite.initialBounds =
-      farMatchedSpriteModifier.currentPosition.relativeToContext;
-    sprite.finalBounds = spriteModifier.currentPosition.relativeToContext;
+    sprite.initialBounds = farMatchedSpriteModifier.currentBounds;
+    sprite.finalBounds = spriteModifier.currentBounds;
     return sprite;
   },
   createSentSprite(spriteModifier) {
     let sprite = new Sprite(spriteModifier.element, spriteModifier.id, SENT);
-    sprite.initialBounds = spriteModifier.currentPosition.relativeToContext;
-    sprite.finalBounds =
-      spriteModifier.farMatch.currentPosition.relativeToContext;
+    sprite.initialBounds = spriteModifier.currentBounds;
+    sprite.finalBounds = spriteModifier.farMatch.currentBounds;
     return sprite;
   },
   createRemovedSprite(spriteModifier) {
     let sprite = new Sprite(spriteModifier.element, spriteModifier.id, REMOVED);
-    sprite.initialBounds = spriteModifier.currentPosition.relativeToContext;
+    sprite.initialBounds = spriteModifier.currentBounds;
     return sprite;
   },
   createKeptSprite(spriteModifier) {
     let sprite = new Sprite(spriteModifier.element, spriteModifier.id, KEPT);
-    sprite.initialBounds = spriteModifier.lastPosition.relativeToContext;
-    sprite.finalBounds = spriteModifier.currentPosition.relativeToContext;
+    sprite.initialBounds = spriteModifier.lastBounds;
+    sprite.finalBounds = spriteModifier.currentBounds;
     return sprite;
   },
 };

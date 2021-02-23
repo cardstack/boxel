@@ -4,10 +4,10 @@ export default function toListTransition({ receivedSprites }) {
   let animations = [];
   for (let receivedSprite of Array.from(receivedSprites)) {
     receivedSprite.element.style.display = 'inline-block';
-    let deltaX =
-      receivedSprite.initialBounds.top - receivedSprite.finalBounds.top;
-    let deltaY =
-      receivedSprite.initialBounds.top - receivedSprite.finalBounds.top;
+    let initialBounds = receivedSprite.initialBounds.relativeToContext;
+    let finalBounds = receivedSprite.finalBounds.relativeToContext;
+    let deltaX = initialBounds.top - finalBounds.top;
+    let deltaY = initialBounds.top - finalBounds.top;
     let translationKeyFrames = [
       { transform: `translate(${deltaX}px, ${deltaY}px)` },
       { transform: 'translate(0, 0)' },

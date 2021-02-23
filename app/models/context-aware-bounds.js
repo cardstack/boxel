@@ -1,4 +1,4 @@
-export default class ContextAwarePosition {
+export default class ContextAwareBounds {
   constructor({ element, contextElement }) {
     this.element = element;
     this.parent = contextElement;

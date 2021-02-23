@@ -2,9 +2,10 @@ const FADE_DURATION = 3000;
 const TRANSLATE_DURATION = 3000;
 
 function positionAbsolute(sprite) {
+  let bounds = sprite.initialBounds.relativeToContext;
   sprite.element.style.position = 'absolute';
-  sprite.element.style.left = sprite.initialBounds.left + 'px';
-  sprite.element.style.top = sprite.initialBounds.top + 'px';
+  sprite.element.style.left = bounds.left + 'px';
+  sprite.element.style.top = bounds.top + 'px';
 }
 
 export default function exampleTransition(
@@ -35,7 +36,9 @@ export default function exampleTransition(
   }
 
   for (let keptSprite of Array.from(keptSprites)) {
-    let deltaY = keptSprite.initialBounds.top - keptSprite.finalBounds.top;
+    let initialBounds = keptSprite.initialBounds.relativeToContext;
+    let finalBounds = keptSprite.finalBounds.relativeToContext;
+    let deltaY = initialBounds.top - finalBounds.top;
     let translationKeyFrames = [
       { transform: `translate(0, ${deltaY}px)` },
       { transform: 'translate(0, 0)' },

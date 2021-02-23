@@ -1,5 +1,5 @@
 import Modifier from 'ember-modifier';
-import ContextAwarePosition from '../models/context-aware-position';
+import ContextAwareBounds from '../models/context-aware-bounds';
 // cases:
 // 1. Sprite added
 // 2. Sprite removed
@@ -15,7 +15,7 @@ function buildPosition(parentElement, element) {
       top: rect.top + window.scrollY,
     };
   }
-  return new ContextAwarePosition({
+  return new ContextAwareBounds({
     element: getDocumentPosition(element),
     contextElement: getDocumentPosition(parentElement),
   });
@@ -23,8 +23,8 @@ function buildPosition(parentElement, element) {
 export default class SpriteModifier extends Modifier {
   id = null;
   context = null;
-  lastPosition = null;
-  currentPosition = null;
+  lastBounds = null;
+  currentBounds = null;
   farMatch = null; // Gets set to the "received" sprite modifier when this is becoming a "sent" sprite
 
   didReceiveArguments() {
@@ -38,13 +38,13 @@ export default class SpriteModifier extends Modifier {
   }
 
   trackPosition() {
-    this.lastPosition = this.currentPosition;
-    this.currentPosition = buildPosition(this.contextElement, this.element);
+    this.lastBounds = this.currentBounds;
+    this.currentBounds = buildPosition(this.contextElement, this.element);
   }
 
   checkForChanges() {
     this.trackPosition();
-    return !this.currentPosition.isEqualTo(this.lastPosition);
+    return !this.currentBounds.isEqualTo(this.lastBounds);
   }
 
   willRemove() {
