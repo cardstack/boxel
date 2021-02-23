@@ -1,13 +1,6 @@
 const FADE_DURATION = 3000;
 const TRANSLATE_DURATION = 3000;
 
-function positionAbsolute(sprite) {
-  let bounds = sprite.initialBounds.relativeToContext;
-  sprite.element.style.position = 'absolute';
-  sprite.element.style.left = bounds.left + 'px';
-  sprite.element.style.top = bounds.top + 'px';
-}
-
 export default function exampleTransition(
   { insertedSprites, keptSprites, removedSprites },
   orphansElement
@@ -15,7 +8,7 @@ export default function exampleTransition(
   let animations = [];
   for (let removedSprite of Array.from(removedSprites)) {
     orphansElement.appendChild(removedSprite.element);
-    positionAbsolute(removedSprite);
+    removedSprite.lockStyles();
     let animation = removedSprite.element.animate(
       [{ opacity: 1 }, { opacity: 0 }, { opacity: 0 }],
       {

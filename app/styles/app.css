@@ -19,3 +19,26 @@
 .column:first-child {
   border-right: 1px solid gray;
 }
+.person-list {
+  list-style: none;
+  padding-inline-start: 0;
+}
+.list-person-name {
+  font-size: 1.0rem;
+}
+
+.list-person-title {
+  font-size: 1.0rem;
+}
+
+.detail-person-name {
+  font-size: 2.0rem;
+  font-weight: normal;
+  margin: 0;
+}
+
+.detail-person-title {
+  font-size: 1.2rem;
+  font-weight: normal;
+  margin: 0;
+}

@@ -11,6 +11,13 @@ export default class ContextAwareBounds {
     };
   }
 
+  relativeToPosition({ left, top }) {
+    return {
+      left: this.element.left - left,
+      top: this.element.top - top,
+    };
+  }
+
   isEqualTo(other) {
     let parentLeftChange = other.parent.left - this.parent.left;
     let parentTopChange = other.parent.top - this.parent.top;
