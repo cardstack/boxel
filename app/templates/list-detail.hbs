@@ -2,32 +2,31 @@
   List Detail
 </h2>
 
-
-
-
-{{#if this.selectedPerson}}
-  <span onclick={{action (mut this.selectedPerson) null}}>Back</span>
-  <AnimationContext @id="Detail Animation Context" @use={{this.transition}} as |context|>
+<AnimationContext @id="Detail Animation Context" @use={{this.toDetailTransition}} as |context|>
+  {{#if this.selectedPerson}}
+    <button type="button" {{on 'click' (fn (mut this.selectedPerson) null)}}>Back</button>
     <div class="detail-card">
-      <h2 {{sprite context=context id=(concat "name:" this.selectedPerson.id)}}>{{this.selectedPerson.name}}</h2>
-      <h3 {{sprite context=context id=(concat "title:" this.selectedPerson.id)}}>{{this.selectedPerson.title}}</h3>
+      <h2 {{sprite context=context id=(concat "person:" this.selectedPerson.id ":name")}}>{{this.selectedPerson.name}}</h2>
+      <h3 {{sprite context=context id=(concat "person:" this.selectedPerson.id ":title")}}>{{this.selectedPerson.title}}</h3>
       <p>{{this.selectedPerson.bio}}</p>
     </div>
-  </AnimationContext>
-{{else}}
-  <AnimationContext @id="List Animation Context" @use={{this.transition}} as |context|>
+  {{/if}}
+</AnimationContext>
+
+<AnimationContext @id="List Animation Context" @use={{this.toListTransition}} as |context|>
+  {{#unless this.selectedPerson}}
     <ul>
       {{#each this.people as |person|}}
         <li> 
-          <span  {{sprite context=context id=(concat "name:" person.id)}}>
+          <span  {{sprite context=context id=(concat "person:" person.id ":name")}}>
             {{person.name}}
           </span>
-          <span  {{sprite context=context id=(concat "title:" person.id)}}>
+          <span  {{sprite context=context id=(concat "person:" person.id ":title")}}>
             {{person.title}}
           </span>
-          <span onclick={{action (mut this.selectedPerson) person}}>More info</span>
+          <button type="button" {{on 'click' (fn (mut this.selectedPerson) person)}}>Details</button>
         </li>
       {{/each}}
     </ul>
-  </AnimationContext>
-{{/if}}
+  {{/unless}}
+</AnimationContext>

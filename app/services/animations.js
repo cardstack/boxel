@@ -5,29 +5,31 @@ import { scheduleOnce } from '@ember/runloop';
 export default class AnimationsService extends Service {
   contexts = new Set();
 
-  possiblyFarMatchingSprites = new Set();
+  possiblyFarMatchingSpriteModifiers = new Set();
 
   registerContext(context) {
     this.contexts.add(context);
     scheduleOnce('afterRender', this, 'handleFarMatching');
-
-    console.log('registered the context', context.args.id);
   }
 
   unregisterContext(context) {
-    console.log('will remove the context', context.args.id);
-    context.registered.forEach(s => this.possiblyFarMatchingSprites.add(s));
-
+    context.registered.forEach((s) =>
+      this.possiblyFarMatchingSpriteModifiers.add(s)
+    );
     this.contexts.delete(context);
   }
 
-  handleFarMatching() {
-    console.log('handleFarMatching');
+  notifyRemovedSpriteModifier(spriteModifier) {
+    this.possiblyFarMatchingSpriteModifiers.add(spriteModifier);
+    scheduleOnce('afterRender', this, 'handleFarMatching');
+  }
 
-    this.contexts.forEach(context =>
-      context.handleFarMatching(this.possiblyFarMatchingSprites)
+  handleFarMatching() {
+    console.log('AnimationsService#handleFarMatching()');
+    this.contexts.forEach((context) =>
+      context.handleFarMatching(this.possiblyFarMatchingSpriteModifiers)
     );
 
-    this.possiblyFarMatchingSprites.clear();
+    this.possiblyFarMatchingSpriteModifiers.clear();
   }
 }

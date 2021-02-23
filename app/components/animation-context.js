@@ -2,46 +2,24 @@ import Component from '@glimmer/component';
 import { scheduleOnce } from '@ember/runloop';
 import Ember from 'ember';
 import { reads } from 'macro-decorators';
-import Sprite from '../models/sprite';
+import Changeset from '../models/changeset';
 import { inject as service } from '@ember/service';
+import { task } from 'ember-concurrency-decorators';
+import { microwait } from '../utils/scheduling';
 
 const { VOLATILE_TAG, consumeTag } = Ember.__loader.require(
   '@glimmer/validator'
 );
-
-const INSERTED = Symbol('inserted');
-const REMOVED = Symbol('removed');
-const KEPT = Symbol('kept');
-// const SENT = new Symbol('sent');
-const RECEIVED = Symbol('received');
-
-function createSprite(spriteModifier, type) {
-  let sprite = new Sprite(spriteModifier.element);
-  sprite.id = spriteModifier.id;
-  if (type === INSERTED) {
-    sprite.finalBounds = spriteModifier.currentPosition.relativeToContext;
-  }
-  if (type === REMOVED) {
-    sprite.initialBounds = spriteModifier.currentPosition.relativeToContext;
-  }
-  if (type === KEPT) {
-    sprite.initialBounds = spriteModifier.lastPosition.relativeToContext;
-    sprite.finalBounds = spriteModifier.currentPosition.relativeToContext;
-  }
-  sprite.initialBoundsString = JSON.stringify(sprite.initialBounds);
-  sprite.finalBoundsString = JSON.stringify(sprite.finalBounds);
-
-  return sprite;
-}
 export default class AnimationContextComponent extends Component {
   registered = new Set();
 
   freshlyAdded = new Set();
   freshlyRemoved = new Set();
   freshlyChanged = new Set();
-  farMatchedSprites = new Set();
+  farMatchCandidates = new Set();
 
   @service animations;
+  @reads('args.id') id;
 
   orphansElement; //set by template
   @reads('args.initialInsertion', false) initialInsertion;
@@ -53,18 +31,13 @@ export default class AnimationContextComponent extends Component {
   }
 
   willDestroy() {
+    super.willDestroy(...arguments);
     this.animations.unregisterContext(this);
   }
 
-  handleFarMatching(spritesThatMightMatch) {
-    console.log('handleFarMatching called', this.args.id);
-    spritesThatMightMatch.forEach(s => this.farMatchedSprites.add(s));
-  }
-
   get renderDetector() {
-    console.log('renderDetector', this.args.id);
     consumeTag(VOLATILE_TAG);
-    scheduleOnce('afterRender', this, 'maybeTransition');
+    scheduleOnce('afterRender', this.maybeTransitionTask, 'perform');
     return undefined;
   }
 
@@ -74,74 +47,75 @@ export default class AnimationContextComponent extends Component {
   }
 
   unregister(spriteModifier) {
+    console.log(
+      `AnimationContext(${this.id})#unregister(spriteModifier)`,
+      spriteModifier
+    );
     this.registered.delete(spriteModifier);
     this.freshlyRemoved.add(spriteModifier);
+    this.animations.notifyRemovedSpriteModifier(spriteModifier);
   }
 
-  maybeTransition() {
-    console.log('maybeTransition called', this.args.id);
+  handleFarMatching(farMatchSpriteModifierCandidates) {
+    Array.from(farMatchSpriteModifierCandidates)
+      .filter((s) => s.context !== this)
+      .forEach((s) => this.farMatchCandidates.add(s));
+  }
 
+  @task *maybeTransitionTask() {
+    yield microwait(); // allow animations service to run far-matching to run first
+    console.log(`AnimationContext(${this.id})#maybeTransition()`);
     for (let spriteModifier of this.registered) {
       if (spriteModifier.checkForChanges()) {
         this.freshlyChanged.add(spriteModifier);
       }
     }
-    this.simulateTransition();
-  }
-
-  simulateTransition() {
-    if (
-      this.freshlyChanged.size === 0 &&
-      this.freshlyAdded.size === 0 &&
-      this.freshlyRemoved.size === 0
-    ) {
+    if (this.hasNoChanges) {
       return;
     }
-    let changeset = {
-      insertedSprites: new Set(),
-      removedSprites: new Set(),
-      keptSprites: new Set(),
-      sentSprites: new Set(),
-      receivedSprites: new Set()
-    };
-    let farSpritesArray = Array.from(this.farMatchedSprites);
-    for (let spriteModifier of this.freshlyAdded) {
-      if (farSpritesArray.any(s => s.id === spriteModifier.id)) {
-        changeset.receivedSprites.add(createSprite(spriteModifier, RECEIVED));
-      } else {
-        changeset.insertedSprites.add(createSprite(spriteModifier, INSERTED));
-      }
-    }
-
+    let changeset = new Changeset();
+    changeset.addInsertedAndReceivedSprites(
+      this.freshlyAdded,
+      this.farMatchCandidates
+    );
     this.freshlyAdded.clear();
-    this.farMatchedSprites.clear();
 
-    for (let spriteModifier of this.freshlyRemoved) {
-      changeset.removedSprites.add(createSprite(spriteModifier, REMOVED));
-    }
+    yield microwait(); // allow other contexts to do their far-matching for added sprites
+
+    changeset.addRemovedAndSentSprites(this.freshlyRemoved);
     this.freshlyRemoved.clear();
+    this.farMatchCandidates.clear();
 
-    for (let spriteModifier of this.freshlyChanged) {
-      changeset.keptSprites.add(createSprite(spriteModifier, KEPT));
-    }
+    changeset.addKeptSprites(this.freshlyChanged);
     this.freshlyChanged.clear();
 
-    let shouldAnimate =
+    if (this.shouldAnimate(changeset)) {
+      this.logChangeset(changeset); // For debugging
+      let animation = this.args.use(changeset, this.orphansElement);
+      yield Promise.resolve(animation);
+      for (let spriteModifier of this.registered) {
+        spriteModifier.checkForChanges();
+      }
+    }
+    this.isInitialRenderCompleted = true;
+  }
+
+  shouldAnimate(changeset) {
+    return (
+      changeset &&
       this.args.use &&
       (this.isInitialRenderCompleted ||
         this.initialInsertion ||
-        changeset.receivedSprites.size);
+        changeset.receivedSprites.size)
+    );
+  }
 
-    if (shouldAnimate) {
-      this.logChangeset(changeset); // For debugging
-      let animation = this.args.use(changeset, this.orphansElement);
-      animation.then(() => {
-        for (let spriteModifier of this.registered) {
-          spriteModifier.checkForChanges();
-        }
-      });
-    }
-    this.isInitialRenderCompleted = true;
+  get hasNoChanges() {
+    return (
+      this.freshlyChanged.size === 0 &&
+      this.freshlyAdded.size === 0 &&
+      this.freshlyRemoved.size === 0
+    );
   }
 
   logChangeset(changeset) {
@@ -156,7 +130,7 @@ export default class AnimationContextComponent extends Component {
           : null,
         finalBounds: sprite.finalBounds
           ? JSON.stringify(sprite.finalBounds)
-          : null
+          : null,
       };
     }
     let tableRows = [];

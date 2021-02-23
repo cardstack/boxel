@@ -25,6 +25,7 @@ export default class SpriteModifier extends Modifier {
   context = null;
   lastPosition = null;
   currentPosition = null;
+  farMatch = null; // Gets set to the "received" sprite modifier when this is becoming a "sent" sprite
 
   didReceiveArguments() {
     this.contextElement = this.element.closest('.animation-context');
