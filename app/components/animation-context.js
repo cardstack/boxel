@@ -101,7 +101,7 @@ export default class AnimationContextComponent extends Component {
 
     if (this.shouldAnimate(changeset)) {
       this.logChangeset(changeset); // For debugging
-      let animation = this.args.use(changeset, this.orphansElement);
+      let animation = this.args.use(changeset);
       yield Promise.resolve(animation);
       for (let spriteModifier of this.registered) {
         spriteModifier.checkForChanges();

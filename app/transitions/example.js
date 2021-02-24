@@ -1,13 +1,15 @@
 const FADE_DURATION = 3000;
 const TRANSLATE_DURATION = 3000;
 
-export default function exampleTransition(
-  { insertedSprites, keptSprites, removedSprites },
-  orphansElement
-) {
+export default function exampleTransition({
+  context,
+  insertedSprites,
+  keptSprites,
+  removedSprites,
+}) {
   let animations = [];
   for (let removedSprite of Array.from(removedSprites)) {
-    orphansElement.appendChild(removedSprite.element);
+    context.orphansElement.appendChild(removedSprite.element);
     removedSprite.lockStyles();
     let animation = removedSprite.element.animate(
       [{ opacity: 1 }, { opacity: 0 }, { opacity: 0 }],
@@ -53,8 +55,6 @@ export default function exampleTransition(
   }
 
   return Promise.all(animations.map((a) => a.finished)).then(() => {
-    for (let removedSprite of Array.from(removedSprites)) {
-      orphansElement.removeChild(removedSprite.element);
-    }
+    context.clearOrphans();
   });
 }
