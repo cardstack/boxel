@@ -6,6 +6,7 @@ import Changeset from '../models/changeset';
 import { inject as service } from '@ember/service';
 import { task } from 'ember-concurrency-decorators';
 import { microwait } from '../utils/scheduling';
+import { action } from '@ember/object';
 
 const { VOLATILE_TAG, consumeTag } = Ember.__loader.require(
   '@glimmer/validator'
@@ -40,6 +41,14 @@ export default class AnimationContextComponent extends Component {
     consumeTag(VOLATILE_TAG);
     scheduleOnce('afterRender', this.maybeTransitionTask, 'perform');
     return undefined;
+  }
+
+  @action didInsertEl(element) {
+    this.element = element;
+  }
+
+  @action didInsertOrphansEl(element) {
+    this.orphansElement = element;
   }
 
   register(spriteModifier) {
