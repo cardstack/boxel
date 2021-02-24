@@ -21,6 +21,7 @@ export default class AnimationContextComponent extends Component {
   @service animations;
   @reads('args.id') id;
 
+  element; //set by template
   orphansElement; //set by template
   @reads('args.initialInsertion', false) initialInsertion;
   isInitialRenderCompleted = false;
@@ -73,7 +74,7 @@ export default class AnimationContextComponent extends Component {
     if (this.hasNoChanges) {
       return;
     }
-    let changeset = new Changeset();
+    let changeset = new Changeset(this);
     changeset.addInsertedAndReceivedSprites(
       this.freshlyAdded,
       this.farMatchCandidates
@@ -140,5 +141,12 @@ export default class AnimationContextComponent extends Component {
       }
     }
     console.table(tableRows);
+  }
+
+  clearOrphans() {
+    let { orphansElement } = this;
+    while (orphansElement.firstChild) {
+      orphansElement.removeChild(orphansElement.firstChild);
+    }
   }
 }

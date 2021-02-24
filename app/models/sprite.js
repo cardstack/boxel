@@ -12,11 +12,16 @@ export default class Sprite {
     this.type = type;
   }
 
-  lockStyles() {
-    let bounds = this.initialBounds.relativeToContext;
+  lockStyles(bounds = this.initialBounds.relativeToContext) {
     this.element.style.position = 'absolute';
     this.element.style.left = bounds.left + 'px';
     this.element.style.top = bounds.top + 'px';
+  }
+
+  unlockStyles() {
+    this.element.style.position = null;
+    this.element.style.left = null;
+    this.element.style.top = null;
   }
 }
 

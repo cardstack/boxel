@@ -1,47 +1,77 @@
-const DURATION = 3000;
+// FADE OUT : ----------
+// TRANSLATE:     ----------
+// FADE IN  :          ----------
 
-export default function listTransition(
-  { insertedSprites, receivedSprites, removedSprites },
-  orphansElement
-) {
-  if (receivedSprites.size === 0) {
-    return; // this transition runs only when we are transitioning to the list from the detail view
-  }
+// const FADE_OUT_START = 0;
+const FADE_OUT_DURATION = 1000;
+const TRANSLATE_DURATION = 1000;
+const TRANSLATE_START = 400;
+const FADE_IN_DURATION = 1000;
+const FADE_IN_START = 900;
+const TOTAL_DURATION = FADE_IN_START + FADE_IN_DURATION;
+
+export default function listTransition({
+  context,
+  insertedSprites,
+  receivedSprites,
+  removedSprites,
+}) {
   let animations = [];
   for (let receivedSprite of Array.from(receivedSprites)) {
-    receivedSprite.element.style.display = 'inline-block';
     let initialBounds = receivedSprite.initialBounds.relativeToContext;
     let finalBounds = receivedSprite.finalBounds.relativeToContext;
     let deltaX = initialBounds.left - finalBounds.left;
     let deltaY = initialBounds.top - finalBounds.top;
 
-    orphansElement.appendChild(receivedSprite.counterpart.element);
-    let initialFontSize = getComputedStyle(receivedSprite.counterpart.element)
-      .fontSize;
-    orphansElement.removeChild(receivedSprite.counterpart.element);
-    let finalFontSize = getComputedStyle(receivedSprite.element).fontSize;
+    let clone = receivedSprite.counterpart.element.cloneNode(true);
+    receivedSprite.counterpart.element.style.opacity = 0;
 
+    context.orphansElement.appendChild(clone);
+    clone.style.position = 'absolute';
+    let cloneBounds = receivedSprite.finalBounds.relativeToPosition(
+      receivedSprite.finalBounds.parent
+    );
+    clone.style.left = cloneBounds.left + 'px';
+    clone.style.top = cloneBounds.top + 'px';
+
+    let initialFontSize = getComputedStyle(clone).fontSize;
+    let finalFontSize = getComputedStyle(receivedSprite.element).fontSize;
+    receivedSprite.element.style.opacity = 0;
     let translationKeyFrames = [
       {
         transform: `translate(${deltaX}px, ${deltaY}px)`,
         fontSize: initialFontSize,
       },
+      {
+        transform: `translate(${deltaX}px, ${deltaY}px)`,
+        fontSize: initialFontSize,
+        offset: TRANSLATE_START / TOTAL_DURATION,
+      },
+      {
+        transform: 'translate(0, 0)',
+        fontSize: finalFontSize,
+        offset: (TRANSLATE_START + TRANSLATE_DURATION) / TOTAL_DURATION,
+      },
       { transform: 'translate(0, 0)', fontSize: finalFontSize },
     ];
 
-    let animation = receivedSprite.element.animate(translationKeyFrames, {
-      duration: DURATION,
+    let animation = clone.animate(translationKeyFrames, {
+      duration: TOTAL_DURATION,
     });
     animations.push(animation);
   }
 
   for (let removedSprite of Array.from(removedSprites)) {
     removedSprite.lockStyles();
-    orphansElement.appendChild(removedSprite.element);
+    context.orphansElement.appendChild(removedSprite.element);
     let animation = removedSprite.element.animate(
-      [{ opacity: 1 }, { opacity: 0 }],
+      [
+        { opacity: 1 },
+        { opacity: 0, offset: FADE_OUT_DURATION / TOTAL_DURATION },
+        { opacity: 0 },
+      ],
       {
-        duration: DURATION,
+        duration: TOTAL_DURATION,
       }
     );
     animations.push(animation);
@@ -49,17 +79,22 @@ export default function listTransition(
 
   for (let insertedSprite of Array.from(insertedSprites)) {
     let animation = insertedSprite.element.animate(
-      [{ opacity: 0 }, { opacity: 1 }],
+      [
+        { opacity: 0 },
+        { opacity: 0, offset: FADE_IN_START / TOTAL_DURATION },
+        { opacity: 1 },
+      ],
       {
-        duration: DURATION,
+        duration: TOTAL_DURATION,
       }
     );
     animations.push(animation);
   }
 
   return Promise.all(animations.map((a) => a.finished)).then(() => {
-    while (orphansElement.firstChild) {
-      orphansElement.removeChild(orphansElement.firstChild);
+    context.clearOrphans();
+    for (let receivedSprite of Array.from(receivedSprites)) {
+      receivedSprite.element.style.opacity = null;
     }
   });
 }

@@ -7,6 +7,10 @@ export default class Changeset {
   sentSprites = new Set();
   receivedSprites = new Set();
 
+  constructor(animationContext) {
+    this.context = animationContext;
+  }
+
   addInsertedAndReceivedSprites(freshlyAdded, farMatchCandidates) {
     let farSpritesArray = Array.from(farMatchCandidates);
     for (let spriteModifier of freshlyAdded) {

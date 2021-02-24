@@ -2,24 +2,9 @@
   List Detail
 </h2>
 
-<AnimationContext @id="Detail Animation Context" @use={{this.detailTransition}} as |context|>
-  {{#if this.selectedPerson}}
-    <button type="button" {{on 'click' (fn (mut this.selectedPerson) null)}}>Back</button>
-    <div class="detail-card">
-      <h2 {{sprite context=context id=(concat "person:" this.selectedPerson.id ":name")}} class="detail-person-name">
-        {{this.selectedPerson.name}}
-      </h2>
-      <h3 {{sprite context=context id=(concat "person:" this.selectedPerson.id ":title")}} class="detail-person-title">
-        {{this.selectedPerson.title}}
-      </h3>
-      <p>{{this.selectedPerson.bio}}</p>
-    </div>
-  {{/if}}
-</AnimationContext>
-
-<AnimationContext @id="List Animation Context" @use={{this.listTransition}} as |context|>
+<AnimationContext @id="List Animation Context" @use={{this.listTransition}} data-animation-context="list" as |context|>
   {{#unless this.selectedPerson}}
-    <ul class="person-list">
+    <ul class="person-list" {{sprite context=context id='list'}}>
       {{#each this.people as |person|}}
         <li> 
           <span {{sprite context=context id=(concat "person:" person.id ":name")}} class="list-person-name">
@@ -34,3 +19,19 @@
     </ul>
   {{/unless}}
 </AnimationContext>
+
+<AnimationContext @id="Detail Animation Context" @use={{this.detailTransition}} as |context|>
+  {{#if this.selectedPerson}}
+    <div class="detail-card" {{sprite context=context id=(concat "person:" this.selectedPerson.id ":card")}}>
+      <button type="button" {{on 'click' (fn (mut this.selectedPerson) null)}}>Back</button>
+      <h2 {{sprite context=context id=(concat "person:" this.selectedPerson.id ":name")}} class="detail-person-name">
+        {{this.selectedPerson.name}}
+      </h2>
+      <h3 {{sprite context=context id=(concat "person:" this.selectedPerson.id ":title")}} class="detail-person-title">
+        {{this.selectedPerson.title}}
+      </h3>
+      <p>{{this.selectedPerson.bio}}</p>
+    </div>
+  {{/if}}
+</AnimationContext>
+

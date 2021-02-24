@@ -1,9 +1,9 @@
 .animation-context {
-  border: 1px dashed blue;
+  /* border: 1px dashed blue; */
   position: relative;
 }
 .sprite {
-  border: 1px dotted green;
+  /* border: 1px dotted green; */
 }
 .some-container.with-padded-animation-context .animation-context {
   padding: 20px;
@@ -24,21 +24,29 @@
   padding-inline-start: 0;
 }
 .list-person-name {
+  display: 'inline-block';
   font-size: 1.0rem;
+  /* border: 1px solid purple; */
 }
 
 .list-person-title {
+  display: 'inline-block';
   font-size: 1.0rem;
+  /* border: 1px solid red; */
 }
 
 .detail-person-name {
+  display: 'block';
   font-size: 2.0rem;
   font-weight: normal;
   margin: 0;
+  /* border: 1px solid purple; */
 }
 
 .detail-person-title {
+  display: 'block';
   font-size: 1.2rem;
   font-weight: normal;
   margin: 0;
+  /* border: 1px solid red; */
 }

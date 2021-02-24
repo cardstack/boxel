@@ -1,5 +1,5 @@
 {{this.renderDetector}}
-<div class="animation-context">
+<div class="animation-context" {{ref this 'element'}} ...attributes>
   <div {{ref this 'orphansElement'}}></div> <!-- JS appends and removes here -->
   {{yield this}}
 </div>
