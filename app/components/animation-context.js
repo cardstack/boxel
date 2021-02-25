@@ -99,6 +99,8 @@ export default class AnimationContextComponent extends Component {
     changeset.addKeptSprites(this.freshlyChanged);
     this.freshlyChanged.clear();
 
+    changeset.finalizeSpriteCategories();
+
     if (this.shouldAnimate(changeset)) {
       this.logChangeset(changeset); // For debugging
       let animation = this.args.use(changeset);

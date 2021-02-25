@@ -1,4 +1,6 @@
+import { intersect } from 'macro-decorators';
 import SpriteFactory from '../models/sprite-factory';
+import { KEPT } from './sprite';
 
 export default class Changeset {
   insertedSprites = new Set();
@@ -47,6 +49,28 @@ export default class Changeset {
   addKeptSprites(freshlyChanged) {
     for (let spriteModifier of freshlyChanged) {
       this.keptSprites.add(SpriteFactory.createKeptSprite(spriteModifier));
+    }
+  }
+
+  finalizeSpriteCategories() {
+    let insertedSpritesArr = [...this.insertedSprites];
+    let removedSpritesArr = [...this.removedSprites];
+    let insertedIds = insertedSpritesArr.map((s) => s.id);
+    let removedIds = removedSpritesArr.map((s) => s.id);
+    let intersectingIds = insertedIds.filter((x) => removedIds.includes(x));
+    for (let intersectingId of intersectingIds) {
+      let removedSprite = removedSpritesArr.find(
+        (s) => s.id === intersectingId
+      );
+      let insertedSprite = insertedSpritesArr.find(
+        (s) => s.id === intersectingId
+      );
+      this.insertedSprites.delete(insertedSprite);
+      this.removedSprites.delete(removedSprite);
+      insertedSprite.type = KEPT;
+      insertedSprite.initialBounds = removedSprite.initialBounds;
+      insertedSprite.counterpart = removedSprite;
+      this.keptSprites.add(insertedSprite);
     }
   }
 }
