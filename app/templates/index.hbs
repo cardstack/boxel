@@ -16,18 +16,26 @@
   <p>
     <label>
       <input type="checkbox" checked={{this.showSpriteA}} onclick={{action (mut this.showSpriteA) value="target.checked"}}>
-      Show Sprite A
+      Include Sprite A
+    </label>
+    |
+    <label>
+      <input type="checkbox" checked={{this.spriteAPositionBottom}} onclick={{action (mut this.spriteAPositionBottom) value="target.checked"}}>
+      Sprite A appears at bottom
     </label>
   </p>
   <p>
     <label>
       <input type="checkbox" checked={{this.showSpriteB}} onclick={{action (mut this.showSpriteB) value="target.checked"}}>
-      Show Sprite B
+      Include Sprite B
     </label>
   </p>
   <p class="my-2">
     <button class="border-2 p-1 px-4 rounded-lg" {{on 'click' this.toggleSpritesAandB}}>
-      Toggle Sprites A and B
+      Toggle Inclusion of A and B
+    </button>
+     <button class="border-2 p-1 px-4 rounded-lg" {{on 'click' this.moveSpriteC}}>
+      Move C to Other Context
     </button>
      <button class="border-2 p-1 px-4 rounded-lg" {{on 'click' this.moveSpriteC}}>
       Move Sprite C
@@ -61,7 +69,7 @@
           <p>Here is some content before the sprite</p>
         {{/if}}
 
-        {{#if this.showSpriteA}}
+        {{#if (and this.showSpriteA (not this.spriteAPositionBottom))}}
           <div class="sprite" {{sprite context=context id="A"}}>
             Hello, I am a sprite A
           </div>
@@ -76,6 +84,12 @@
         {{#if (eq this.spriteCPosition 0)}}
           <div class="sprite" {{sprite context=context id="C"}}>
             Hello, I am a sprite C
+          </div>
+        {{/if}}
+
+        {{#if (and this.showSpriteA this.spriteAPositionBottom)}}
+          <div class="sprite" {{sprite context=context id="A"}}>
+            Hello, I am a sprite A
           </div>
         {{/if}}
 

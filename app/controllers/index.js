@@ -7,6 +7,7 @@ export default class IndexController extends Controller {
   @tracked showContentBeforeContext = false;
   @tracked showContentBefore = false;
   @tracked showSpriteA = true;
+  @tracked spriteAPositionBottom = false;
   @tracked showSpriteB = true;
   @tracked spriteCPosition = 0;
   @tracked showContentAfter = false;
