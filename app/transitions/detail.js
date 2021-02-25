@@ -18,7 +18,7 @@ export default function detailTransition({
 }) {
   let animations = [];
   for (let insertedSprite of Array.from(insertedSprites)) {
-    if (insertedSprite.id.endsWith(':card')) {
+    if (insertedSprite.id?.endsWith(':card')) {
       let animation = insertedSprite.element.animate(
         [
           { opacity: 0 },

@@ -1,4 +1,21 @@
 {{page-title "Animations"}}
-{{link-to "Simple Example" "index"}} |
-{{link-to "List Detail Example" "list-detail"}}
+
+<ul class="list-reset flex">
+  <li class="mr-3">
+    <LinkTo @route="index" class="inline-block border border-white rounded hover:border-grey-lighter text-blue hover:bg-grey-lighter py-1 px-3">
+      Basics
+    </LinkTo>
+  </li>
+  <li class="mr-3">
+    <LinkTo @route="list-detail" class="inline-block border border-white rounded hover:border-grey-lighter text-blue hover:bg-grey-lighter py-1 px-3">
+      List Detail
+    </LinkTo>
+  </li>
+  <li class="mr-3">
+    <LinkTo @route="ea-demos" class="inline-block border border-white rounded hover:border-grey-lighter text-blue hover:bg-grey-lighter py-1 px-3">
+      e-animated Demos
+    </LinkTo>
+  </li>
+</ul>
+
 {{outlet}}

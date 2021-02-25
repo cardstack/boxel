@@ -15,7 +15,7 @@ export default class Changeset {
     let farSpritesArray = Array.from(farMatchCandidates);
     for (let spriteModifier of freshlyAdded) {
       let matchingFarSpriteModifier = farSpritesArray.find(
-        (s) => s.id === spriteModifier.id
+        (s) => s.id && s.id === spriteModifier.id
       );
       if (matchingFarSpriteModifier) {
         this.receivedSprites.add(

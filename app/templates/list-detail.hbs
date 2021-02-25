@@ -1,37 +1,52 @@
-<h2>
+<h2 class="m-4 text-lg font-bold">
   List Detail
 </h2>
 
-<AnimationContext @id="List Animation Context" @use={{this.listTransition}} data-animation-context="list" as |context|>
-  {{#unless this.selectedPerson}}
-    <ul class="person-list" {{sprite context=context id='list'}}>
-      {{#each this.people as |person|}}
-        <li> 
-          <span {{sprite context=context id=(concat "person:" person.id ":name")}} class="list-person-name">
-            {{person.name}}
-          </span>
-          <span {{sprite context=context id=(concat "person:" person.id ":title")}} class="list-person-title">
-            {{person.title}}
-          </span>
-          <button type="button" {{sprite context=context}} {{on 'click' (fn (mut this.selectedPerson) person)}}>Details</button>
-        </li>
-      {{/each}}
-    </ul>
-  {{/unless}}
-</AnimationContext>
+<div class="m-4">
+  <AnimationContext @id="List Animation Context" @use={{this.listTransition}} data-animation-context="list" as |context|>
+    {{#unless this.selectedPerson}}
+      <ul class="person-list" {{sprite context=context id='list'}}>
+        {{#each this.people as |person|}}
+          <li> 
+            <span {{sprite context=context id=(concat "person:" person.id ":name")}} class="inline-block font-bold">
+              {{person.name}}
+            </span>
+            <span {{sprite context=context id=(concat "person:" person.id ":title")}} class="inline-block">
+              {{person.title}}
+            </span>
+            <button
+              type="button"
+              class="border px-2 rounded-lg text-sm"
+              {{sprite context=context}}
+              {{on 'click' (fn (mut this.selectedPerson) person)}}
+            >
+              Details &gt;
+            </button>
+          </li>
+        {{/each}}
+      </ul>
+    {{/unless}}
+  </AnimationContext>
 
-<AnimationContext @id="Detail Animation Context" @use={{this.detailTransition}} as |context|>
-  {{#if this.selectedPerson}}
-    <div class="detail-card" {{sprite context=context id=(concat "person:" this.selectedPerson.id ":card")}}>
-      <button type="button" {{on 'click' (fn (mut this.selectedPerson) null)}}>Back</button>
-      <h2 {{sprite context=context id=(concat "person:" this.selectedPerson.id ":name")}} class="detail-person-name">
-        {{this.selectedPerson.name}}
-      </h2>
-      <h3 {{sprite context=context id=(concat "person:" this.selectedPerson.id ":title")}} class="detail-person-title">
-        {{this.selectedPerson.title}}
-      </h3>
-      <p>{{this.selectedPerson.bio}}</p>
-    </div>
-  {{/if}}
-</AnimationContext>
-
+  <AnimationContext @id="Detail Animation Context" @use={{this.detailTransition}} as |context|>
+    {{#if this.selectedPerson}}
+      <div class="detail-card" {{sprite context=context id=(concat "person:" this.selectedPerson.id ":card")}}>
+        <button
+          type="button"
+          class="border px-2 rounded-lg text-sm"
+          {{on 'click' (fn (mut this.selectedPerson) null)}}
+        >
+          &lt; Back
+        </button>
+        
+        <h2 {{sprite context=context id=(concat "person:" this.selectedPerson.id ":name")}} class="detail-person-name font-bold">
+          {{this.selectedPerson.name}}
+        </h2>
+        <h3 {{sprite context=context id=(concat "person:" this.selectedPerson.id ":title")}} class="detail-person-title">
+          {{this.selectedPerson.title}}
+        </h3>
+        <p>{{this.selectedPerson.bio}}</p>
+      </div>
+    {{/if}}
+  </AnimationContext>
+</div>
