@@ -1,4 +1,6 @@
 export default class Sprite {
+  changeset;
+  spriteModifier;
   element;
   id;
   type = null;
@@ -6,9 +8,11 @@ export default class Sprite {
   finalBounds = null;
   counterpart = null; // the sent sprite if this is the received sprite, or vice versa
 
-  constructor(element, id, type) {
-    this.element = element;
-    this.id = id;
+  constructor(changeset, spriteModifier, type) {
+    this.changeset = changeset;
+    this.spriteModifier = spriteModifier;
+    this.element = spriteModifier.element;
+    this.id = spriteModifier.id;
     this.type = type;
   }
 

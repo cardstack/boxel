@@ -1,0 +1,7 @@
+{{page-title "AnimationExp"}}
+
+<button {{on "click" this.animate}}>Animate</button>
+
+<div class="m-8" style="width: 1000px; border: 1px solid black; height: 1000px; position: relative;">
+  <div id='ball' class="absolute rounded-full bg-red w-10 h-10 ball-position-{{this.ballGoWhere}}"></div>
+</div>

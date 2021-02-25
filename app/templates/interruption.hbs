@@ -6,7 +6,7 @@
     <p class='mt-4 text-lg'>
       Click one of the four targets to initiate a transition of the circle to the target.
     </p>
-    <AnimationContext @use={{this.moveBall}} class="h-64 w-64 m-auto" style="position:fixed;top:0;left:0" as |context|>
+    <AnimationContext @use={{this.moveBallNew}} class="h-64 w-64 m-auto" style="position:fixed;top:0;left:0" as |context|>
       <div class="bg-grey-lightest relative h-64 w-64">
         <div style="top: 0; left: 0" class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer" {{on 'click' (fn (mut this.ballGoWhere) 'A')}}>A</div>
         <div style="top: 0; right: 0" class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer" {{on 'click' (fn (mut this.ballGoWhere) 'B')}}>B</div>

@@ -1,4 +1,3 @@
-import { intersect } from 'macro-decorators';
 import SpriteFactory from '../models/sprite-factory';
 import { KEPT } from './sprite';
 
@@ -8,9 +7,28 @@ export default class Changeset {
   keptSprites = new Set();
   sentSprites = new Set();
   receivedSprites = new Set();
+  animations = [];
 
   constructor(animationContext) {
     this.context = animationContext;
+
+    this.animate = this._animateUnbound.bind(this);
+  }
+
+  _animateUnbound(sprite, ...animationArgs) {
+    this.animations.push(sprite.element.animate(...animationArgs));
+  }
+
+  get finished() {
+    return Promise.all(this.animations.mapBy('finished'));
+  }
+
+  get isAnimating() {
+    return this.animations.some((a) => a.playState != 'finished');
+  }
+
+  pause() {
+    this.animations.invoke('pause');
   }
 
   addInsertedAndReceivedSprites(freshlyAdded, farMatchCandidates) {
@@ -22,13 +40,14 @@ export default class Changeset {
       if (matchingFarSpriteModifier) {
         this.receivedSprites.add(
           SpriteFactory.createReceivedSprite(
+            this,
             spriteModifier,
             matchingFarSpriteModifier
           )
         );
       } else {
         this.insertedSprites.add(
-          SpriteFactory.createInsertedSprite(spriteModifier)
+          SpriteFactory.createInsertedSprite(this, spriteModifier)
         );
       }
     }
@@ -37,10 +56,12 @@ export default class Changeset {
   addRemovedAndSentSprites(freshlyRemoved) {
     for (let spriteModifier of freshlyRemoved) {
       if (spriteModifier.farMatch) {
-        this.sentSprites.add(SpriteFactory.createSentSprite(spriteModifier));
+        this.sentSprites.add(
+          SpriteFactory.createSentSprite(this, spriteModifier)
+        );
       } else {
         this.removedSprites.add(
-          SpriteFactory.createRemovedSprite(spriteModifier)
+          SpriteFactory.createRemovedSprite(this, spriteModifier)
         );
       }
     }
@@ -48,7 +69,9 @@ export default class Changeset {
 
   addKeptSprites(freshlyChanged) {
     for (let spriteModifier of freshlyChanged) {
-      this.keptSprites.add(SpriteFactory.createKeptSprite(spriteModifier));
+      this.keptSprites.add(
+        SpriteFactory.createKeptSprite(this, spriteModifier)
+      );
     }
   }
 

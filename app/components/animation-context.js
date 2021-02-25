@@ -83,8 +83,8 @@ export default class AnimationContextComponent extends Component {
     if (this.hasNoChanges) {
       return;
     }
-    let changeset = new Changeset(this);
-    changeset.addInsertedAndReceivedSprites(
+    this.changeset = new Changeset(this);
+    this.changeset.addInsertedAndReceivedSprites(
       this.freshlyAdded,
       this.farMatchCandidates
     );
@@ -92,19 +92,23 @@ export default class AnimationContextComponent extends Component {
 
     yield microwait(); // allow other contexts to do their far-matching for added sprites
 
-    changeset.addRemovedAndSentSprites(this.freshlyRemoved);
+    this.changeset.addRemovedAndSentSprites(this.freshlyRemoved);
     this.freshlyRemoved.clear();
     this.farMatchCandidates.clear();
 
-    changeset.addKeptSprites(this.freshlyChanged);
+    this.changeset.addKeptSprites(this.freshlyChanged);
     this.freshlyChanged.clear();
 
-    changeset.finalizeSpriteCategories();
+    this.changeset.finalizeSpriteCategories();
 
-    if (this.shouldAnimate(changeset)) {
-      this.logChangeset(changeset); // For debugging
-      let animation = this.args.use(changeset);
-      yield Promise.resolve(animation);
+    if (this.shouldAnimate(this.changeset)) {
+      this.logChangeset(this.changeset); // For debugging
+      this.args.use.transition(this.changeset);
+
+      yield this.changeset.finished;
+
+      delete this.changeset;
+
       for (let spriteModifier of this.registered) {
         spriteModifier.checkForChanges();
       }

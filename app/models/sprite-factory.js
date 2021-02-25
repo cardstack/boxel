@@ -1,16 +1,12 @@
 import Sprite, { INSERTED, KEPT, RECEIVED, REMOVED, SENT } from './sprite';
 
 export default {
-  createInsertedSprite(spriteModifier) {
-    let sprite = new Sprite(
-      spriteModifier.element,
-      spriteModifier.id,
-      INSERTED
-    );
+  createInsertedSprite(changeset, spriteModifier) {
+    let sprite = new Sprite(changeset, spriteModifier, INSERTED);
     sprite.finalBounds = spriteModifier.currentBounds;
     return sprite;
   },
-  createReceivedSprite(spriteModifier, farMatchedSpriteModifier) {
+  createReceivedSprite(changeset, spriteModifier, farMatchedSpriteModifier) {
     let sprite = new Sprite(
       spriteModifier.element,
       spriteModifier.id,
@@ -20,25 +16,21 @@ export default {
     sprite.initialBounds = farMatchedSpriteModifier.currentBounds;
     sprite.finalBounds = spriteModifier.currentBounds;
 
-    sprite.counterpart = new Sprite(
-      farMatchedSpriteModifier.element,
-      farMatchedSpriteModifier.id,
-      SENT
-    );
+    sprite.counterpart = new Sprite(changeset, farMatchedSpriteModifier, SENT);
     sprite.counterpart.counterpart = sprite;
     sprite.counterpart.initialBounds = farMatchedSpriteModifier.currentBounds;
     sprite.counterpart.finalBounds = spriteModifier.currentBounds;
 
     return sprite;
   },
-  createSentSprite(spriteModifier) {
-    let sprite = new Sprite(spriteModifier.element, spriteModifier.id, SENT);
+  createSentSprite(changeset, spriteModifier) {
+    let sprite = new Sprite(changeset, spriteModifier, SENT);
     sprite.initialBounds = spriteModifier.currentBounds;
     sprite.finalBounds = spriteModifier.farMatch.currentBounds;
 
     sprite.counterpart = new Sprite(
-      spriteModifier.farMatch.element,
-      spriteModifier.farMatch.id,
+      changeset,
+      spriteModifier.farMatch,
       RECEIVED
     );
     sprite.counterpart.counterpart = sprite;
@@ -47,13 +39,13 @@ export default {
 
     return sprite;
   },
-  createRemovedSprite(spriteModifier) {
-    let sprite = new Sprite(spriteModifier.element, spriteModifier.id, REMOVED);
+  createRemovedSprite(changeset, spriteModifier) {
+    let sprite = new Sprite(changeset, spriteModifier, REMOVED);
     sprite.initialBounds = spriteModifier.currentBounds;
     return sprite;
   },
-  createKeptSprite(spriteModifier) {
-    let sprite = new Sprite(spriteModifier.element, spriteModifier.id, KEPT);
+  createKeptSprite(changeset, spriteModifier) {
+    let sprite = new Sprite(changeset, spriteModifier, KEPT);
     sprite.initialBounds = spriteModifier.lastBounds;
     sprite.finalBounds = spriteModifier.currentBounds;
     return sprite;
