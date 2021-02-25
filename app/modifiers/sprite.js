@@ -6,19 +6,37 @@ import ContextAwareBounds from '../models/context-aware-bounds';
 // 3. far matching
 // 4. css change that doesn't result in an attribute change in the observed subtree?
 
+function withoutAnimations(element, f) {
+  let animations = element.getAnimations();
+  let currentTimes = [];
+  animations.forEach((a) => {
+    a.pause();
+    currentTimes.push(a.currentTime);
+    a.currentTime =
+      a.effect.getComputedTiming().delay +
+      a.effect.getComputedTiming().activeDuration;
+  });
+  let result = f();
+  for (let i = 0; i < animations.length; i++) {
+    animations[i].currentTime = currentTimes[i];
+    animations[i].play();
+  }
+  return result;
+}
+
 function buildPosition(parentElement, element) {
   function getDocumentPosition(element) {
-    let rect = element.getBoundingClientRect();
+    return withoutAnimations(element, () => {
+      let rect = element.getBoundingClientRect();
 
-    return {
-      left: rect.left + window.scrollX,
-      top: rect.top + window.scrollY,
-    };
+      return {
+        left: rect.left + window.scrollX,
+        top: rect.top + window.scrollY,
+      };
+    });
   }
-  let elementPosition = getDocumentPosition(element);
-  console.log('elementPosition', elementPosition);
   return new ContextAwareBounds({
-    element: elementPosition,
+    element: getDocumentPosition(element),
     contextElement: getDocumentPosition(parentElement),
   });
 }
