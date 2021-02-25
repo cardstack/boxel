@@ -15,8 +15,10 @@ function buildPosition(parentElement, element) {
       top: rect.top + window.scrollY,
     };
   }
+  let elementPosition = getDocumentPosition(element);
+  console.log('elementPosition', elementPosition);
   return new ContextAwareBounds({
-    element: getDocumentPosition(element),
+    element: elementPosition,
     contextElement: getDocumentPosition(parentElement),
   });
 }

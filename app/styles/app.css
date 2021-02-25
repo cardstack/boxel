@@ -154,3 +154,28 @@ img,video {
   font-size: 1.2rem;
   /* border: 1px solid red; */
 }
+
+.ball-position-initial {
+  top:42%;
+  left:42%;
+}
+
+.ball-position-A {
+  top:4px;
+  left:4px;
+}
+
+.ball-position-B {
+  top:4px;
+  right:4px;
+}
+
+.ball-position-C {
+  bottom:4px;
+  left:4px;
+}
+
+.ball-position-D {
+  bottom:4px;
+  right:4px;  
+}
