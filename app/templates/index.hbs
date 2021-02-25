@@ -1,7 +1,6 @@
 
-<div class="controls">
-
-  <h2>Controls</h2>
+<div class="controls m-5 text-sm">
+  <h2 class="text-lg font-bold">Controls</h2>
   <p>
     <label>
       <input type="checkbox" checked={{this.showContentBeforeContext}} onclick={{action (mut this.showContentBeforeContext) value="target.checked"}}>
@@ -26,13 +25,11 @@
       Show Sprite B
     </label>
   </p>
-  <p>
-    <button {{on 'click' this.toggleSpritesAandB}}>
+  <p class="my-2">
+    <button class="border-2 p-1 px-4 rounded-lg" {{on 'click' this.toggleSpritesAandB}}>
       Toggle Sprites A and B
     </button>
-  </p>
-  <p>
-    <button {{on 'click' this.moveSpriteC}}>
+     <button class="border-2 p-1 px-4 rounded-lg" {{on 'click' this.moveSpriteC}}>
       Move Sprite C
     </button>
   </p>
@@ -50,8 +47,8 @@
   </p>
 </div>
 
-<div class='columns'>
-  <div class="column">
+<div class='flex w-full m-4'>
+  <div class="flex-none w-1/2">
     <h2>Animation Context 1</h2>
 
     {{#if this.showContentBeforeContext}}
@@ -89,7 +86,7 @@
       </AnimationContext>
     </div>
   </div>
-  <div class="column">
+  <div class="flex-none w-1/2">
     <h2>Animation Context 2</h2>
     <AnimationContext @id="2" as |context|>
 
@@ -103,8 +100,8 @@
   </div>
 </div>
 
-<h3>Notes</h3>
-<ol>
+<h3 class="font-bold mx-4 text-sm">Notes</h3>
+<ol class="px-8 text-sm">
   <li>ℹ Open the inspector to observe logging as you interact with this page.</li>
   <li>✔ Changing content before AnimationContext DOES NOT trigger sprite changes.</li>
   <li>✔ Changing content within AnimationContext above sprites DOES trigger sprite changes.</li>
