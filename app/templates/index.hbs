@@ -49,7 +49,7 @@
 
 <div class='flex w-full m-4'>
   <div class="flex-none w-1/2">
-    <h2>Animation Context 1</h2>
+    <h2 class="p-2 bg-grey-lightest mr-2">Animation Context 1</h2>
 
     {{#if this.showContentBeforeContext}}
       <p>Here is some content before AnimationContext 1</p>
@@ -87,9 +87,8 @@
     </div>
   </div>
   <div class="flex-none w-1/2">
-    <h2>Animation Context 2</h2>
-    <AnimationContext @id="2" as |context|>
-
+    <h2 class="p-2 bg-grey-lightest">Animation Context 2</h2>
+    <AnimationContext @id="2" @use={{this.transition}} as |context|>
       {{#if (eq this.spriteCPosition 1)}}
         <div class="sprite" {{sprite context=context id="C"}}>
           Hello, I am a sprite C
