@@ -5,6 +5,7 @@ export default function exampleTransition({
   context,
   insertedSprites,
   keptSprites,
+  receivedSprites,
   removedSprites,
 }) {
   let animations = [];
@@ -54,7 +55,45 @@ export default function exampleTransition({
     animations.push(animation);
   }
 
+  for (let receivedSprite of Array.from(receivedSprites)) {
+    let initialBounds = receivedSprite.initialBounds.relativeToPosition(
+      receivedSprite.finalBounds.parent
+    );
+    let finalBounds = receivedSprite.finalBounds.relativeToPosition(
+      receivedSprite.finalBounds.parent
+    );
+    receivedSprite.element.style.opacity = 0;
+
+    let deltaX = initialBounds.left - finalBounds.left;
+    let deltaY = initialBounds.top - finalBounds.top;
+
+    let translationKeyFrames = [
+      {
+        transform: `translate(${deltaX}px, ${deltaY}px)`,
+      },
+      {
+        transform: 'translate(0, 0)',
+      },
+    ];
+    context.orphansElement.appendChild(receivedSprite.counterpart.element);
+    receivedSprite.counterpart.lockStyles(
+      receivedSprite.finalBounds.relativeToPosition(
+        receivedSprite.finalBounds.parent
+      )
+    );
+    let animation = receivedSprite.counterpart.element.animate(
+      translationKeyFrames,
+      {
+        duration: TRANSLATE_DURATION,
+      }
+    );
+    animations.push(animation);
+  }
+
   return Promise.all(animations.map((a) => a.finished)).then(() => {
+    for (let receivedSprite of Array.from(receivedSprites)) {
+      receivedSprite.element.style.opacity = 1;
+    }
     context.clearOrphans();
   });
 }
