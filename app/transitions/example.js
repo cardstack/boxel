@@ -1,5 +1,5 @@
-const FADE_DURATION = 3000;
-const TRANSLATE_DURATION = 3000;
+const FADE_DURATION = 1500;
+const TRANSLATE_DURATION = 1500;
 
 export default function exampleTransition({
   context,
@@ -37,9 +37,25 @@ export default function exampleTransition({
     let deltaX = initialBounds.left - finalBounds.left;
     let deltaY = initialBounds.top - finalBounds.top;
     let translationKeyFrames = [
-      { transform: `translate(${deltaX}px, ${deltaY}px)` },
-      { transform: 'translate(0, 0)' },
+      {
+        transform: `translate(${deltaX}px, ${deltaY}px)`,
+      },
+      {
+        transform: 'translate(0, 0)',
+      },
     ];
+    if (keptSprite.id === 'container') {
+      translationKeyFrames = [
+        {
+          width: `${initialBounds.width}px`,
+          height: `${initialBounds.height}px`,
+        },
+        {
+          width: `${finalBounds.width}px`,
+          height: `${finalBounds.height}px`,
+        },
+      ];
+    }
     if (removedSprites.size > 0) {
       translationKeyFrames.unshift(translationKeyFrames[0]);
     }
