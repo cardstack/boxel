@@ -1,4 +1,5 @@
 @import url('tailwind-utilities-min.css');
+@import url('card.css');
 
 :root {
   --brand-primary: #b72f74;
@@ -153,4 +154,36 @@ img,video {
   display: 'block';
   font-size: 1.2rem;
   /* border: 1px solid red; */
+}
+
+.ball-position-initial {
+  top:42%;
+  left:42%;
+}
+
+.ball-position-A {
+  top:4px;
+  left:4px;
+}
+
+.ball-position-B {
+  top:4px;
+  right:4px;
+}
+
+.ball-position-C {
+  bottom:4px;
+  left:4px;
+}
+
+.ball-position-D {
+  bottom:4px;
+  right:4px;  
+}
+
+.isolation-layer {
+  top: 3em;
+  right: 3em;
+  bottom: 3em;
+  left: 3em;
 }

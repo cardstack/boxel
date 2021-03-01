@@ -9,4 +9,6 @@ export default class Router extends EmberRouter {
 Router.map(function () {
   this.route('ea-demos');
   this.route('list-detail');
+  this.route('interruption');
+  this.route('boxel');
 });

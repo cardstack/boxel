@@ -1,25 +1,6 @@
 import Modifier from 'ember-modifier';
-import ContextAwareBounds from '../models/context-aware-bounds';
-// cases:
-// 1. Sprite added
-// 2. Sprite removed
-// 3. far matching
-// 4. css change that doesn't result in an attribute change in the observed subtree?
+import { measure } from '../utils/measurement';
 
-function buildPosition(parentElement, element) {
-  function getDocumentPosition(element) {
-    let rect = element.getBoundingClientRect();
-
-    return {
-      left: rect.left + window.scrollX,
-      top: rect.top + window.scrollY,
-    };
-  }
-  return new ContextAwareBounds({
-    element: getDocumentPosition(element),
-    contextElement: getDocumentPosition(parentElement),
-  });
-}
 export default class SpriteModifier extends Modifier {
   id = null;
   context = null;
@@ -39,7 +20,10 @@ export default class SpriteModifier extends Modifier {
 
   trackPosition() {
     this.lastBounds = this.currentBounds;
-    this.currentBounds = buildPosition(this.contextElement, this.element);
+    this.currentBounds = measure({
+      contextElement: this.contextElement,
+      element: this.element,
+    });
   }
 
   checkForChanges() {
