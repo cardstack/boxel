@@ -5,16 +5,22 @@ export default class ContextAwareBounds {
   }
 
   get relativeToContext() {
+    let { element, parent } = this;
     return {
-      left: this.element.left - this.parent.left,
-      top: this.element.top - this.parent.top,
+      left: element.left - parent.left,
+      top: element.top - parent.top,
+      width: element.width,
+      height: element.height,
     };
   }
 
   relativeToPosition({ left, top }) {
+    let { element } = this;
     return {
       left: this.element.left - left,
       top: this.element.top - top,
+      width: element.width,
+      height: element.height,
     };
   }
 
@@ -24,7 +30,9 @@ export default class ContextAwareBounds {
 
     return (
       other.element.left - this.element.left - parentLeftChange === 0 &&
-      other.element.top - this.element.top - parentTopChange === 0
+      other.element.top - this.element.top - parentTopChange === 0 &&
+      other.element.width - this.element.width === 0 &&
+      other.element.height - this.element.height === 0
     );
   }
 }

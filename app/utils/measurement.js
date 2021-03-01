@@ -28,6 +28,8 @@ function getDocumentPosition(element, opts = { withAnimations: false }) {
     return {
       left: rect.left + window.scrollX,
       top: rect.top + window.scrollY,
+      width: rect.width,
+      height: rect.height,
     };
   });
 }
