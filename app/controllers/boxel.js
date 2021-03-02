@@ -2,7 +2,6 @@ import Controller from '@ember/controller';
 const PIA_MIDINA_PROFILE_IMG = '/images/Pia-Midina.jpg';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
 
 const FADE_DURATION = 500;
 const TRANSLATE_DURATION = 1000;
@@ -62,14 +61,25 @@ alex.description = 'Portugal resident';
 
 class BoxelController extends Controller {
   @tracked isCardIsolated = false;
-  sortedCardModels = new TrackedArray([piaMidina, luke, alex]);
+  models = [piaMidina, luke, alex];
+  get sortedCardModels() {
+    let result = this.models.sortBy('title');
+    if (!this.ascendingSort) {
+      result = result.reverse();
+    }
+    return result;
+  }
   @tracked isolatedCard = null;
+  @tracked ascendingSort = true;
 
   @action isolateCard(model) {
     this.isolatedCard = model;
   }
   @action dismissIsolatedCard() {
     this.isolatedCard = null;
+  }
+  @action reverseSort() {
+    this.ascendingSort = !this.ascendingSort;
   }
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @action async isolatedCardTransition({

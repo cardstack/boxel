@@ -11,7 +11,10 @@
   <AnimationContext @id="card-isolation-context" @use={{this.isolatedCardTransition}} as |context|>
 
     <div class="mt-16 w-1/3">
-      Click expand icon to isolate card:
+      Click expand icon to isolate card. Adjust sorting:
+      <button type="button" {{on 'click' this.reverseSort}}>
+        {{if this.ascendingSort 'A-Z' 'Z-A'}} (click to reverse)
+      </button>
       <AnimationContext @id="card-sorting-context" @use={{this.cardSortingTransition}}>
         {{#each this.sortedCardModels as |model|}}
           {{#if (eq model this.isolatedCard)}}
