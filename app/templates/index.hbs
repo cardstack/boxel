@@ -37,9 +37,6 @@
      <button class="border-2 p-1 px-4 rounded-lg" type="button" {{on 'click' this.moveSpriteC}}>
       Move C to Other Context
     </button>
-     <button class="border-2 p-1 px-4 rounded-lg" type="button" {{on 'click' this.moveSpriteC}}>
-      Move Sprite C
-    </button>
   </p>
   <p>
     <label>
@@ -64,39 +61,39 @@
     {{/if}}
     <div class="some-container {{if this.contextHasPadding 'with-padded-animation-context'}}">
       <AnimationContext @id="1" @use={{this.transition}} as |context|>
+        <div {{sprite context=context id="container"}}>
+          {{#if this.showContentBefore}}
+            <p>Here is some content before the sprite</p>
+          {{/if}}
 
-        {{#if this.showContentBefore}}
-          <p>Here is some content before the sprite</p>
-        {{/if}}
+          {{#if (and this.showSpriteA (not this.spriteAPositionBottom))}}
+            <div class="sprite" {{sprite context=context id="A"}}>
+              Hello, I am a sprite A
+            </div>
+          {{/if}}
 
-        {{#if (and this.showSpriteA (not this.spriteAPositionBottom))}}
-          <div class="sprite" {{sprite context=context id="A"}}>
-            Hello, I am a sprite A
-          </div>
-        {{/if}}
+          {{#if this.showSpriteB}}
+            <div class="sprite" {{sprite context=context id="B"}}>
+              Hello, I am a sprite B
+            </div>
+          {{/if}}
 
-        {{#if this.showSpriteB}}
-          <div class="sprite" {{sprite context=context id="B"}}>
-            Hello, I am a sprite B
-          </div>
-        {{/if}}
+          {{#if (eq this.spriteCPosition 0)}}
+            <div class="sprite" {{sprite context=context id="C"}}>
+              Hello, I am a sprite C
+            </div>
+          {{/if}}
 
-        {{#if (eq this.spriteCPosition 0)}}
-          <div class="sprite" {{sprite context=context id="C"}}>
-            Hello, I am a sprite C
-          </div>
-        {{/if}}
+          {{#if (and this.showSpriteA this.spriteAPositionBottom)}}
+            <div class="sprite" {{sprite context=context id="A"}}>
+              Hello, I am a sprite A
+            </div>
+          {{/if}}
 
-        {{#if (and this.showSpriteA this.spriteAPositionBottom)}}
-          <div class="sprite" {{sprite context=context id="A"}}>
-            Hello, I am a sprite A
-          </div>
-        {{/if}}
-
-        {{#if this.showContentAfter}}
-          <p>Here is some content after the sprite</p>
-        {{/if}}
-
+          {{#if this.showContentAfter}}
+            <p>Here is some content after the sprite</p>
+          {{/if}}
+        </div>
       </AnimationContext>
     </div>
   </div>
