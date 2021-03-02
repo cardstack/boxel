@@ -6,18 +6,22 @@
           <p class='text-lg'>How many guests?</p>
           <div class="ml-4 ">
             <div class="flex items-center">
-              <button {{action 'removeGuest'}}
+              <button
                 disabled={{eq this.guests 1}}
-                class='rounded-full text-lg border font-semibold border-pink text-pink w-8 h-8 flex items-center justify-center select-none focus:outline-none focus:shadow-outline hover:bg-pink hover:text-white {{if (eq guests 1) ' opacity-50 pointer-events-none'}}'
+                class='rounded-full text-lg border font-semibold border-pink text-pink w-8 h-8 flex items-center justify-center select-none focus:outline-none focus:shadow-outline hover:bg-pink hover:text-white {{if (eq this.guests 1) ' opacity-50 pointer-events-none'}}'
+                type="button"
+                {{on 'click' this.removeGuest}}
               >
                 -
               </button>
               <span class='text-pink font-bold w-8 text-center text-lg'>
                 {{this.guests}}
               </span>
-              <button {{action 'addGuest' 'guests'}}
-                disabled={{eq this.guests 6}}
+              <button
                 class='rounded-full text-lg border font-semibold border-pink text-pink w-8 h-8 flex items-center justify-center select-none focus:outline-none focus:shadow-outline hover:bg-pink hover:text-white {{if (eq this.guests 6) ' opacity-50 pointer-events-none'}}'
+                type="button"
+                disabled={{eq this.guests 6}}
+                {{on 'click' this.addGuest}}
               >
                 +
               </button>
@@ -42,7 +46,7 @@
 
       <ToggleBar
         @enabled={{this.animationEnabled}}
-        @onToggle={{action (mut this.animationEnabled)}}
+        @onToggle={{fn (mut this.animationEnabled)}}
       >
         ✨Animate
       </ToggleBar>
@@ -54,7 +58,7 @@
       @label='index.hbs'
       @diff={{this.templateDiff}}
       @isShowingFinal={{this.animationEnabled}}
-      @onAnimationChange={{action (mut this.isAnimating)}}
+      @onAnimationChange={{fn (mut this.isAnimating)}}
     />
 
     <div class="mt-4">

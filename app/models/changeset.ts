@@ -1,19 +1,38 @@
-import { intersect } from 'macro-decorators';
-import SpriteFactory from '../models/sprite-factory';
-import { KEPT } from './sprite';
-
+import SpriteFactory from './sprite-factory';
+import Sprite, { SpriteType } from './sprite';
+import AnimationContext from '../components/animation-context';
+import SpriteModifier from '../modifiers/sprite';
 export default class Changeset {
-  insertedSprites = new Set();
-  removedSprites = new Set();
-  keptSprites = new Set();
-  sentSprites = new Set();
-  receivedSprites = new Set();
+  context: AnimationContext;
+  insertedSprites: Set<Sprite> = new Set();
+  removedSprites: Set<Sprite> = new Set();
+  keptSprites: Set<Sprite> = new Set();
+  sentSprites: Set<Sprite> = new Set();
+  receivedSprites: Set<Sprite> = new Set();
 
-  constructor(animationContext) {
+  constructor(animationContext: AnimationContext) {
     this.context = animationContext;
   }
 
-  addInsertedAndReceivedSprites(freshlyAdded, farMatchCandidates) {
+  spritesFor(spriteType: SpriteType): Set<Sprite> {
+    switch (spriteType) {
+      case SpriteType.Inserted:
+        return this.insertedSprites;
+      case SpriteType.Removed:
+        return this.removedSprites;
+      case SpriteType.Kept:
+        return this.keptSprites;
+      case SpriteType.Sent:
+        return this.sentSprites;
+      case SpriteType.Received:
+        return this.receivedSprites;
+    }
+  }
+
+  addInsertedAndReceivedSprites(
+    freshlyAdded: Set<SpriteModifier>,
+    farMatchCandidates: Set<SpriteModifier>
+  ): void {
     let farSpritesArray = Array.from(farMatchCandidates);
     for (let spriteModifier of freshlyAdded) {
       let matchingFarSpriteModifier = farSpritesArray.find(
@@ -34,7 +53,7 @@ export default class Changeset {
     }
   }
 
-  addRemovedAndSentSprites(freshlyRemoved) {
+  addRemovedAndSentSprites(freshlyRemoved: Set<SpriteModifier>): void {
     for (let spriteModifier of freshlyRemoved) {
       if (spriteModifier.farMatch) {
         this.sentSprites.add(SpriteFactory.createSentSprite(spriteModifier));
@@ -46,13 +65,13 @@ export default class Changeset {
     }
   }
 
-  addKeptSprites(freshlyChanged) {
+  addKeptSprites(freshlyChanged: Set<SpriteModifier>): void {
     for (let spriteModifier of freshlyChanged) {
       this.keptSprites.add(SpriteFactory.createKeptSprite(spriteModifier));
     }
   }
 
-  finalizeSpriteCategories() {
+  finalizeSpriteCategories(): void {
     let insertedSpritesArr = [...this.insertedSprites];
     let removedSpritesArr = [...this.removedSprites];
     let insertedIds = insertedSpritesArr.map((s) => s.id);
@@ -65,9 +84,16 @@ export default class Changeset {
       let insertedSprite = insertedSpritesArr.find(
         (s) => s.id === intersectingId
       );
+      if (!insertedSprite || !removedSprite) {
+        throw new Error(
+          'intersection check should always result in removedSprite and insertedSprite being found'
+        );
+      }
       this.insertedSprites.delete(insertedSprite);
-      this.removedSprites.delete(removedSprite);
-      insertedSprite.type = KEPT;
+      if (removedSprite) {
+        this.removedSprites.delete(removedSprite);
+      }
+      insertedSprite.type = SpriteType.Kept;
       insertedSprite.initialBounds = removedSprite.initialBounds;
       insertedSprite.counterpart = removedSprite;
       this.keptSprites.add(insertedSprite);

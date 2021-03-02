@@ -7,7 +7,7 @@
       <AnimationContext @use={{this.codeTransition}} @duration={{400}} as |context|>
         <pre>
           {{#each
-            (if this.isShowingFinal this.finalLines this.originalLines)
+            (if @isShowingFinal this.finalLines this.originalLines)
             key='id'
           as |line|~}}
             <div {{sprite context=context}}>{{line.text}}</div>

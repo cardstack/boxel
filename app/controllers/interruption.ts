@@ -2,12 +2,16 @@ import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { measure } from '../utils/measurement';
+import Changeset from '../models/changeset';
+import { assert } from '@ember/debug';
 
 const BALL_SPEED_PX_PER_MS = 0.05;
 class InterruptionController extends Controller {
   @tracked ballGoWhere = 'A';
+  animationOriginPosition: DOMRect | null = null;
 
-  @action moveBall({ context, keptSprites }) {
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+  @action moveBall({ context, keptSprites }: Changeset) {
     let ballSprite = Array.from(keptSprites)[0];
     let activeAnimations = ballSprite.element.getAnimations(); // TODO: this is not supported in Safari
     let initialBounds;
@@ -23,8 +27,16 @@ class InterruptionController extends Controller {
       ballSprite.unlockStyles();
       activeAnimation.cancel();
     } else {
+      assert(
+        'kept sprite should always have initialBounds',
+        ballSprite.initialBounds
+      );
       initialBounds = ballSprite.initialBounds.relativeToContext;
     }
+    assert(
+      'kept sprite should always have finalBounds',
+      ballSprite.finalBounds
+    );
     let finalBounds = ballSprite.finalBounds.relativeToContext;
     this.animationOriginPosition = finalBounds;
     let deltaX = initialBounds.left - finalBounds.left;
@@ -39,6 +51,7 @@ class InterruptionController extends Controller {
         duration,
       }
     );
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     return animation.finished.catch(() => {});
   }
 }

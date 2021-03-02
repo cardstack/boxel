@@ -1,3 +1,5 @@
+import { assert } from '@ember/debug';
+import Changeset from '../models/changeset';
 /**
   Fades inserted, removed, and kept sprites.
 
@@ -18,20 +20,22 @@
   @function fade
   @export default
 */
+const FADE_DURATION = 300;
+
 export default async function ({
   context,
   removedSprites,
   insertedSprites,
   keptSprites,
-  duration = 300,
-}) {
+}: Changeset): Promise<void> {
   // TODO: removes before adds
-  let animations = [];
+  let animations: Animation[] = [];
   Array.from(removedSprites).forEach((s) => {
+    assert('context has an orphansElement', context.orphansElement);
     context.orphansElement.appendChild(s.element);
     s.lockStyles();
     let a = s.element.animate([{ opacity: 1 }, { opacity: 0 }], {
-      duration,
+      duration: FADE_DURATION,
     });
     animations.push(a);
   });
@@ -43,7 +47,7 @@ export default async function ({
     .concat(Array.from(keptSprites))
     .forEach((s) => {
       let a = s.element.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration,
+        duration: FADE_DURATION,
       });
       animations.push(a);
     });
