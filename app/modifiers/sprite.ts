@@ -3,6 +3,9 @@ import ContextAwareBounds from 'animations/models/context-aware-bounds';
 import { measure } from '../utils/measurement';
 import { assert } from '@ember/debug';
 import AnimationContext from '../components/animation-context';
+import { inject as service } from '@ember/service';
+import AnimationsService from '../services/animations';
+
 interface SpriteModifierArgs {
   positional: [];
   named: {
@@ -19,6 +22,8 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   farMatch: SpriteModifier | undefined; // Gets set to the "received" sprite modifier when this is becoming a "sent" sprite
   contextElement: HTMLElement | undefined;
 
+  @service declare animations: AnimationsService;
+
   didReceiveArguments(): void {
     this.contextElement = this.element.closest(
       '.animation-context'
@@ -27,6 +32,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
     this.id = this.args.named.id;
 
     this.context.register(this);
+    this.animations.registerSpriteModifier(this);
 
     this.trackPosition();
   }
@@ -59,5 +65,6 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
 
   willRemove(): void {
     this.context && this.context.unregister(this);
+    this.animations.unregisterSpriteModifier(this);
   }
 }

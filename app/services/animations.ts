@@ -6,6 +6,7 @@ import AnimationContext from '../components/animation-context';
 
 export default class AnimationsService extends Service {
   contexts: Set<AnimationContext> = new Set();
+  spriteModifiers: Set<SpriteModifier> = new Set();
 
   possiblyFarMatchingSpriteModifiers: Set<SpriteModifier> = new Set();
 
@@ -19,6 +20,14 @@ export default class AnimationsService extends Service {
       this.possiblyFarMatchingSpriteModifiers.add(s)
     );
     this.contexts.delete(context);
+  }
+
+  registerSpriteModifier(spriteModifier: SpriteModifier) {
+    this.spriteModifiers.add(spriteModifier);
+  }
+
+  unregisterSpriteModifier(spriteModifier: SpriteModifier) {
+    this.spriteModifiers.delete(spriteModifier);
   }
 
   notifyRemovedSpriteModifier(spriteModifier: SpriteModifier): void {
