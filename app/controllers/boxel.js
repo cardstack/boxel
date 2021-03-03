@@ -75,12 +75,45 @@ class BoxelController extends Controller {
   @action isolateCard(model) {
     this.isolatedCard = model;
   }
+
   @action dismissIsolatedCard() {
     this.isolatedCard = null;
   }
+
   @action reverseSort() {
     this.ascendingSort = !this.ascendingSort;
   }
+
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+  @action async cardSortingTransition({ keptSprites }) {
+    let translateAnimations = [];
+    for (let keptSprite of Array.from(keptSprites)) {
+      let initialBounds = keptSprite.initialBounds.relativeToContext;
+      let finalBounds = keptSprite.finalBounds.relativeToContext;
+      let deltaX = initialBounds.left - finalBounds.left;
+      let deltaY = initialBounds.top - finalBounds.top;
+      let translationKeyFrames = [
+        {
+          transform: `translate(${deltaX}px, ${deltaY}px)`,
+          boxShadow: '0 0 0',
+        },
+        {
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        },
+        {
+          transform: 'translate(0, 0)',
+          boxShadow: '0 0 0',
+        },
+      ];
+      let animation = keptSprite.element.animate(translationKeyFrames, {
+        duration: TRANSLATE_DURATION,
+        easing: 'ease-in-out',
+      });
+      translateAnimations.push(animation);
+    }
+    await Promise.all(translateAnimations.map((a) => a.finished));
+  }
+
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @action async isolatedCardTransition({
     context,

@@ -11,19 +11,22 @@
   <AnimationContext @id="card-isolation-context" @use={{this.isolatedCardTransition}} as |context|>
 
     <div class="mt-16 w-1/3">
-      Click expand icon to isolate card. Adjust sorting:
-      <button type="button" {{on 'click' this.reverseSort}}>
-        {{if this.ascendingSort 'A-Z' 'Z-A'}} (click to reverse)
-      </button>
-      <AnimationContext @id="card-sorting-context" @use={{this.cardSortingTransition}}>
+      <div class="my-4">
+        Click expand icon to isolate card. Adjust sorting:
+        <Boxel::Button {{on 'click' this.reverseSort}}>
+          {{if this.ascendingSort 'A-Z' 'Z-A'}} (click to reverse)
+        </Boxel::Button>
+      </div>
+      <AnimationContext @id="card-sorting-context" @use={{this.cardSortingTransition}} as |context|>
         {{#each this.sortedCardModels as |model|}}
           {{#if (eq model this.isolatedCard)}}
-            <div style="height:122px">card placeholder</div>
+            <div class="my-4" style="height:122px">card placeholder</div>
           {{else}}
             <Card
               @model={{model}}
               @expandAction={{fn this.isolateCard model}}
               @animationContext={{context}}
+              class="my-4"
               {{sprite context=context id=model.id}}
             />
           {{/if}}
@@ -31,8 +34,8 @@
       </AnimationContext>
     </div>
 
-    <div class="isolation-layer absolute">
-      {{#if this.isolatedCard}}
+    {{#if this.isolatedCard}}
+      <div class="isolation-layer absolute">
         <Card
           @model={{this.isolatedCard}}
           @expandAction={{this.dismissIsolatedCard}}
@@ -55,7 +58,7 @@
     Culpa elit quis velit ad laboris sunt et et Lorem aliquip eiusmod. Et aliquip mollit nisi aliquip quis labore est. Quis laboris nulla aliqua pariatur ex non nisi. Eu adipisicing est sint excepteur ad occaecat ea mollit adipisicing laboris quis. Ipsum esse dolor exercitation eiusmod. Ad quis duis aliqua nostrud cillum.
           </p>
         </Card>
-      {{/if}}
-    </div>
+      </div>
+    {{/if}}
   </AnimationContext>
 </div>
