@@ -22,11 +22,11 @@ export default class AnimationsService extends Service {
     this.contexts.delete(context);
   }
 
-  registerSpriteModifier(spriteModifier: SpriteModifier) {
+  registerSpriteModifier(spriteModifier: SpriteModifier): void {
     this.spriteModifiers.add(spriteModifier);
   }
 
-  unregisterSpriteModifier(spriteModifier: SpriteModifier) {
+  unregisterSpriteModifier(spriteModifier: SpriteModifier): void {
     this.spriteModifiers.delete(spriteModifier);
   }
 

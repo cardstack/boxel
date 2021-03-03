@@ -1,31 +1,33 @@
 import Controller from '@ember/controller';
+import { assert } from '@ember/debug';
 const PIA_MIDINA_PROFILE_IMG = '/images/Pia-Midina.jpg';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
+import Changeset from 'animations/models/changeset';
 
 const FADE_DURATION = 500;
 const TRANSLATE_DURATION = 1000;
 
 class Participant {
   @tracked isIsolated = false;
-  id;
-  type;
-  title;
-  description;
-  imgURL;
-  organization;
-  ipi;
-  pro;
-  email;
-  website;
-  number_of_recordings;
-  phone;
-  date_of_birth;
-  address;
-  city;
-  state;
-  zipcode;
-  country;
+  id: string | undefined;
+  type: string | undefined;
+  title: string | undefined;
+  description: string | undefined;
+  imgURL: string | undefined;
+  organization: string | undefined;
+  ipi: string | undefined;
+  pro: string | undefined;
+  email: string | undefined;
+  website: string | undefined;
+  number_of_recordings: string | undefined;
+  phone: string | undefined;
+  date_of_birth: string | undefined;
+  address: string | undefined;
+  city: string | undefined;
+  state: string | undefined;
+  zipcode: string | undefined;
+  country: string | undefined;
 }
 const piaMidina = new Participant();
 piaMidina.id = 'pia-midina';
@@ -62,32 +64,37 @@ alex.description = 'Portugal resident';
 class BoxelController extends Controller {
   @tracked isCardIsolated = false;
   models = [piaMidina, luke, alex];
-  get sortedCardModels() {
+  get sortedCardModels(): Participant[] {
     let result = this.models.sortBy('title');
     if (!this.ascendingSort) {
       result = result.reverse();
     }
     return result;
   }
-  @tracked isolatedCard = null;
+  @tracked isolatedCard: Participant | null | undefined;
   @tracked ascendingSort = true;
 
-  @action isolateCard(model) {
+  @action isolateCard(model: Participant): void {
     this.isolatedCard = model;
   }
 
-  @action dismissIsolatedCard() {
+  @action dismissIsolatedCard(): void {
     this.isolatedCard = null;
   }
 
-  @action reverseSort() {
+  @action reverseSort(): void {
     this.ascendingSort = !this.ascendingSort;
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  @action async cardSortingTransition({ keptSprites }) {
+  @action async cardSortingTransition({ keptSprites }: Changeset) {
     let translateAnimations = [];
     for (let keptSprite of Array.from(keptSprites)) {
+      assert(
+        'keptSprite always has initialBounds and finalBounds',
+        keptSprite.initialBounds && keptSprite.finalBounds
+      );
+
       let initialBounds = keptSprite.initialBounds.relativeToContext;
       let finalBounds = keptSprite.finalBounds.relativeToContext;
       let deltaX = initialBounds.left - finalBounds.left;
@@ -119,7 +126,7 @@ class BoxelController extends Controller {
     insertedSprites,
     keptSprites,
     removedSprites,
-  }) {
+  }: Changeset) {
     for (let insertedSprite of Array.from(insertedSprites)) {
       if (insertedSprite.id === 'card-more') {
         insertedSprite.element.style.opacity = '0';
@@ -127,7 +134,7 @@ class BoxelController extends Controller {
     }
     let fadeOutAnimations = [];
     for (let removedSprite of Array.from(removedSprites)) {
-      removedSprite.element.style.opacity = 0;
+      removedSprite.element.style.opacity = '0';
       let animation = removedSprite.element.animate(
         [{ opacity: 1 }, { opacity: 0 }],
         {
@@ -139,6 +146,11 @@ class BoxelController extends Controller {
     await Promise.all(fadeOutAnimations.map((a) => a.finished));
     let translateAnimations = [];
     for (let keptSprite of Array.from(keptSprites)) {
+      assert(
+        'keptSprite always has initialBounds and finalBounds',
+        keptSprite.initialBounds && keptSprite.finalBounds
+      );
+
       let initialBounds = keptSprite.initialBounds.relativeToContext;
       let finalBounds = keptSprite.finalBounds.relativeToContext;
       let deltaX = initialBounds.left - finalBounds.left;

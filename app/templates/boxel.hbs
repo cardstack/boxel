@@ -20,7 +20,7 @@
       <AnimationContext @id="card-sorting-context" @use={{this.cardSortingTransition}} as |context|>
         {{#each this.sortedCardModels as |model|}}
           {{#if (eq model this.isolatedCard)}}
-            <div class="my-4 card-placeholder" style="height:122px"></div>
+            <div class="my-4 card-placeholder"></div>
           {{else}}
             <Card
               @model={{model}}
@@ -34,7 +34,7 @@
       </AnimationContext>
     </div>
 
-    <div class="isolation-layer absolute {{if (not this.isolatedCard) 'hidden'}}">
+    <div class="isolation-layer absolute {{unless this.isolatedCard 'hidden'}}">
       {{#if this.isolatedCard}}
         <Card
           @model={{this.isolatedCard}}
