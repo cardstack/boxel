@@ -267,3 +267,9 @@
     border-color var(--boxel-transition),
     box-shadow var(--boxel-transition);
 }
+
+.card-placeholder {
+  background-color: var(--boxel-purple-200);
+  border-radius: var(--boxel-border-radius);
+  height: 122px;
+}
