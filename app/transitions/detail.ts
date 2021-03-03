@@ -2,6 +2,9 @@
 // TRANSLATE:     ----------
 // FADE IN  :          ----------
 
+import { assert } from '@ember/debug';
+import Changeset from '../models/changeset';
+
 // const FADE_OUT_START = 0;
 const FADE_OUT_DURATION = 1000;
 const TRANSLATE_DURATION = 1000;
@@ -15,7 +18,8 @@ export default function detailTransition({
   insertedSprites,
   receivedSprites,
   removedSprites,
-}) {
+}: Changeset): Promise<void> {
+  assert('context has an orphansElement', context.orphansElement);
   let animations = [];
   for (let insertedSprite of Array.from(insertedSprites)) {
     if (insertedSprite.id?.endsWith(':card')) {
@@ -35,13 +39,19 @@ export default function detailTransition({
     }
   }
   for (let receivedSprite of Array.from(receivedSprites)) {
+    assert(
+      'receivedSprite always has an counterpart, initialBounds and finalBounds',
+      receivedSprite.counterpart &&
+        receivedSprite.initialBounds &&
+        receivedSprite.finalBounds
+    );
     let initialBounds = receivedSprite.initialBounds.relativeToPosition(
       receivedSprite.finalBounds.parent
     );
     let finalBounds = receivedSprite.finalBounds.relativeToPosition(
       receivedSprite.finalBounds.parent
     );
-    receivedSprite.element.style.opacity = 0;
+    receivedSprite.element.style.opacity = '0';
 
     let deltaX = initialBounds.left - finalBounds.left;
     let deltaY = initialBounds.top - finalBounds.top;
@@ -106,6 +116,8 @@ export default function detailTransition({
   let listContextElement = document.querySelector(
     '[data-animation-context="list"]'
   );
+  assert('listContextElement was found', listContextElement);
+  assert('context has an element', context.element);
   if (removedSprites.size) {
     let listContextRect = listContextElement.getBoundingClientRect();
     context.element.style.position = 'absolute';
@@ -115,13 +127,18 @@ export default function detailTransition({
   }
 
   return Promise.all(animations.map((a) => a.finished)).then(() => {
+    assert('context has an element', context.element);
     context.clearOrphans();
     for (let receivedSprite of Array.from(receivedSprites)) {
+      assert(
+        'receivedSprite always has a counterpart',
+        receivedSprite.counterpart
+      );
       receivedSprite.counterpart.unlockStyles();
-      receivedSprite.element.style.opacity = null;
+      receivedSprite.element.style.removeProperty('opacity');
     }
-    context.element.style.position = null;
-    context.element.style.top = null;
-    context.element.style.left = null;
+    context.element.style.removeProperty('position');
+    context.element.style.removeProperty('top');
+    context.element.style.removeProperty('left');
   });
 }

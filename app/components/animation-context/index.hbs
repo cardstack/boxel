@@ -1,5 +1,5 @@
 {{this.renderDetector}}
 <div class="animation-context" {{did-insert this.didInsertEl}} ...attributes>
-  <div {{did-insert this.didInsertOrphansEl}}></div> <!-- JS appends and removes here -->
+  <div {{did-insert this.didInsertOrphansEl}}></div> {{!-- JS appends and removes here --}}
   {{yield this}}
 </div>

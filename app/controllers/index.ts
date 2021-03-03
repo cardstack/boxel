@@ -2,6 +2,7 @@ import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import exampleTransition from '../transitions/example';
+
 export default class IndexController extends Controller {
   @tracked contextHasPadding = false;
   @tracked showContentBeforeContext = false;
@@ -11,11 +12,11 @@ export default class IndexController extends Controller {
   @tracked showSpriteB = true;
   @tracked spriteCPosition = 0;
   @tracked showContentAfter = false;
-  @action toggleSpritesAandB() {
+  @action toggleSpritesAandB(): void {
     this.showSpriteA = !this.showSpriteA;
     this.showSpriteB = !this.showSpriteB;
   }
-  @action moveSpriteC() {
+  @action moveSpriteC(): void {
     this.spriteCPosition = (this.spriteCPosition + 1) % 2;
   }
   transition = exampleTransition;

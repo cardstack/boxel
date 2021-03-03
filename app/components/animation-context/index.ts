@@ -2,61 +2,74 @@ import Component from '@glimmer/component';
 import { scheduleOnce } from '@ember/runloop';
 import Ember from 'ember';
 import { reads } from 'macro-decorators';
-import Changeset from '../models/changeset';
+import Changeset from '../../models/changeset';
 import { inject as service } from '@ember/service';
 import { task } from 'ember-concurrency-decorators';
-import { microwait } from '../utils/scheduling';
+import { microwait } from '../../utils/scheduling';
 import { action } from '@ember/object';
+import AnimationsService from '../../services/animations';
+import SpriteModifier from '../../modifiers/sprite';
+import Sprite, { SpriteType } from '../../models/sprite';
+import { taskFor } from 'ember-concurrency-ts';
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 const { VOLATILE_TAG, consumeTag } = Ember.__loader.require(
   '@glimmer/validator'
 );
-export default class AnimationContextComponent extends Component {
-  registered = new Set();
 
-  freshlyAdded = new Set();
-  freshlyRemoved = new Set();
-  freshlyChanged = new Set();
-  farMatchCandidates = new Set();
+interface AnimationContextArgs {
+  id: string | undefined;
+  use: ((changeset: Changeset) => Promise<void>) | undefined;
+}
 
-  @service animations;
-  @reads('args.id') id;
+export default class AnimationContextComponent extends Component<AnimationContextArgs> {
+  registered: Set<SpriteModifier> = new Set();
 
-  element; //set by template
-  orphansElement; //set by template
-  @reads('args.initialInsertion', false) initialInsertion;
+  freshlyAdded: Set<SpriteModifier> = new Set();
+  freshlyRemoved: Set<SpriteModifier> = new Set();
+  freshlyChanged: Set<SpriteModifier> = new Set();
+  farMatchCandidates: Set<SpriteModifier> = new Set();
+
+  @service declare animations: AnimationsService;
+  @reads('args.id') id: string | undefined;
+
+  element!: HTMLElement; //set by template
+  orphansElement: HTMLElement | null = null; //set by template
+  @reads('args.initialInsertion', false) initialInsertion: boolean | undefined;
   isInitialRenderCompleted = false;
 
-  constructor(owner, args) {
+  constructor(owner: unknown, args: AnimationContextArgs) {
     super(owner, args);
     this.animations.registerContext(this);
   }
 
-  willDestroy() {
-    super.willDestroy(...arguments);
+  willDestroy(): void {
+    super.willDestroy();
     this.animations.unregisterContext(this);
   }
 
-  get renderDetector() {
+  get renderDetector(): undefined {
     consumeTag(VOLATILE_TAG);
-    scheduleOnce('afterRender', this.maybeTransitionTask, 'perform');
+    let task = taskFor(this.maybeTransitionTask);
+    scheduleOnce('afterRender', task, task.perform);
     return undefined;
   }
 
-  @action didInsertEl(element) {
+  @action didInsertEl(element: HTMLElement): void {
     this.element = element;
   }
 
-  @action didInsertOrphansEl(element) {
+  @action didInsertOrphansEl(element: HTMLElement): void {
     this.orphansElement = element;
   }
 
-  register(spriteModifier) {
+  register(spriteModifier: SpriteModifier): void {
     this.registered.add(spriteModifier);
     this.freshlyAdded.add(spriteModifier);
   }
 
-  unregister(spriteModifier) {
+  unregister(spriteModifier: SpriteModifier): void {
     console.log(
       `AnimationContext(${this.id})#unregister(spriteModifier)`,
       spriteModifier
@@ -66,12 +79,15 @@ export default class AnimationContextComponent extends Component {
     this.animations.notifyRemovedSpriteModifier(spriteModifier);
   }
 
-  handleFarMatching(farMatchSpriteModifierCandidates) {
+  handleFarMatching(
+    farMatchSpriteModifierCandidates: Set<SpriteModifier>
+  ): void {
     Array.from(farMatchSpriteModifierCandidates)
       .filter((s) => s.context !== this)
       .forEach((s) => this.farMatchCandidates.add(s));
   }
 
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @task *maybeTransitionTask() {
     yield microwait(); // allow animations service to run far-matching to run first
     console.log(`AnimationContext(${this.id})#maybeTransition()`);
@@ -103,7 +119,7 @@ export default class AnimationContextComponent extends Component {
 
     if (this.shouldAnimate(changeset)) {
       this.logChangeset(changeset); // For debugging
-      let animation = this.args.use(changeset);
+      let animation = this.args.use?.(changeset);
       yield Promise.resolve(animation);
       for (let spriteModifier of this.registered) {
         spriteModifier.checkForChanges();
@@ -112,8 +128,8 @@ export default class AnimationContextComponent extends Component {
     this.isInitialRenderCompleted = true;
   }
 
-  shouldAnimate(changeset) {
-    return (
+  shouldAnimate(changeset: Changeset): boolean {
+    return !!(
       changeset &&
       this.args.use &&
       (this.isInitialRenderCompleted ||
@@ -122,7 +138,7 @@ export default class AnimationContextComponent extends Component {
     );
   }
 
-  get hasNoChanges() {
+  get hasNoChanges(): boolean {
     return (
       this.freshlyChanged.size === 0 &&
       this.freshlyAdded.size === 0 &&
@@ -130,9 +146,9 @@ export default class AnimationContextComponent extends Component {
     );
   }
 
-  logChangeset(changeset) {
+  logChangeset(changeset: Changeset): void {
     let contextId = this.args.id;
-    function row(type, sprite) {
+    function row(type: SpriteType, sprite: Sprite) {
       return {
         context: contextId,
         type,
@@ -146,17 +162,23 @@ export default class AnimationContextComponent extends Component {
       };
     }
     let tableRows = [];
-    for (let type of ['inserted', 'removed', 'kept', 'sent', 'received']) {
-      for (let sprite of changeset[`${type}Sprites`]) {
+    for (let type of [
+      SpriteType.Inserted,
+      SpriteType.Removed,
+      SpriteType.Kept,
+      SpriteType.Sent,
+      SpriteType.Received,
+    ]) {
+      for (let sprite of changeset.spritesFor(type)) {
         tableRows.push(row(type, sprite));
       }
     }
     console.table(tableRows);
   }
 
-  clearOrphans() {
+  clearOrphans(): void {
     let { orphansElement } = this;
-    while (orphansElement.firstChild) {
+    while (orphansElement && orphansElement.firstChild) {
       orphansElement.removeChild(orphansElement.firstChild);
     }
   }

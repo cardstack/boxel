@@ -28,12 +28,15 @@ class BoxelController extends Controller {
     zipcode: '19111',
     country: 'United States',
   };
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @action isolatePiaMidinaCard() {
     this.isCardIsolated = true;
   }
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @action dismissPiaMidinaCard() {
     this.isCardIsolated = false;
   }
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @action async isolatedCardTransition({
     context,
     insertedSprites,

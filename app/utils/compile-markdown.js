@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 import marked from 'marked';
 
 import hljs from 'highlight.js/lib/core';
@@ -244,8 +245,8 @@ class HBSRenderer extends marked.Renderer {
   }
 
   tablecell(content, flags) {
-    const type = flags.header ? 'th' : 'td';
-    const tag = flags.align
+    let type = flags.header ? 'th' : 'td';
+    let tag = flags.align
       ? '<' +
         type +
         ' align="' +
@@ -264,7 +265,7 @@ class HBSRenderer extends marked.Renderer {
   }
 
   link(href, title, text) {
-    const titleAttribute = title ? `title="${title}"` : '';
+    let titleAttribute = title ? `title="${title}"` : '';
     return `<a href="${href}" ${titleAttribute} class="docs-md__a">${text}</a>`;
   }
 }

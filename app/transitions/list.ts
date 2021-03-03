@@ -1,3 +1,6 @@
+import { assert } from '@ember/debug';
+import Changeset from '../models/changeset';
+
 // FADE OUT : ----------
 // TRANSLATE:     ----------
 // FADE IN  :          ----------
@@ -15,16 +18,31 @@ export default function listTransition({
   insertedSprites,
   receivedSprites,
   removedSprites,
-}) {
+}: Changeset): Promise<void> {
+  assert('context has an orphansElement', context.orphansElement);
   let animations = [];
   for (let receivedSprite of Array.from(receivedSprites)) {
+    assert('receivedSprite is not null', !!receivedSprite);
+    assert(
+      'receivedSprites always have intialBounds',
+      !!receivedSprite.initialBounds
+    );
+    assert(
+      'receivedSprites always have finalBounds',
+      !!receivedSprite.finalBounds
+    );
+    assert(
+      'receivedSprites always have a counterpart',
+      !!receivedSprite.counterpart
+    );
     let initialBounds = receivedSprite.initialBounds.relativeToContext;
     let finalBounds = receivedSprite.finalBounds.relativeToContext;
     let deltaX = initialBounds.left - finalBounds.left;
     let deltaY = initialBounds.top - finalBounds.top;
 
-    let clone = receivedSprite.counterpart.element.cloneNode(true);
-    receivedSprite.counterpart.element.style.opacity = 0;
+    let clonedNode = receivedSprite.counterpart.element.cloneNode(true);
+    let clone: HTMLElement = clonedNode as HTMLElement;
+    receivedSprite.counterpart.element.style.opacity = '0';
 
     context.orphansElement.appendChild(clone);
     clone.style.position = 'absolute';
@@ -36,7 +54,7 @@ export default function listTransition({
 
     let initialFontSize = getComputedStyle(clone).fontSize;
     let finalFontSize = getComputedStyle(receivedSprite.element).fontSize;
-    receivedSprite.element.style.opacity = 0;
+    receivedSprite.element.style.opacity = '0';
     let translationKeyFrames = [
       {
         transform: `translate(${deltaX}px, ${deltaY}px)`,
@@ -94,7 +112,7 @@ export default function listTransition({
   return Promise.all(animations.map((a) => a.finished)).then(() => {
     context.clearOrphans();
     for (let receivedSprite of Array.from(receivedSprites)) {
-      receivedSprite.element.style.opacity = null;
+      receivedSprite.element.style.removeProperty('opacity');
     }
   });
 }

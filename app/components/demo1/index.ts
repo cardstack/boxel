@@ -1,29 +1,28 @@
-import Component from '@ember/component';
+import Component from '@glimmer/component';
 import fade from '../../transitions/fade';
 import dedent from '../../utils/dedent';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
 
-export default Component.extend({
-  transitionsRunning: 0,
+export default class Demo1 extends Component {
+  @tracked transitionsRunning = 0;
+  @tracked guests = 1;
+  @tracked animationEnabled = false;
+  transition = fade;
 
-  guests: 1,
+  @action addGuest(): void {
+    if (this.guests < 6) {
+      this.guests = this.guests + 1;
+    }
+  }
 
-  transition: fade,
-
-  actions: {
-    addGuest() {
-      if (this.guests < 6) {
-        this.incrementProperty('guests');
-      }
-    },
-
-    removeGuest() {
-      if (this.guests > 1) {
-        this.decrementProperty('guests');
-      }
-    },
-  },
-
-  templateDiff: dedent`
+  @action
+  removeGuest(): void {
+    if (this.guests > 1) {
+      this.guests = this.guests - 1;
+    }
+  }
+  templateDiff = dedent`
     + <AnimationContext @use={{this.transition}} as |context|>
         {{#each guests}}
     -     <Icon 'user' />
@@ -31,9 +30,9 @@ export default Component.extend({
         {{/each}}
     + </AnimationContext>
 
-  `,
+  `;
 
-  componentDiff: dedent`
+  componentDiff = dedent`
       import Component from '@ember/component';
     + import fade from '../../transitions/fade';
 
@@ -56,5 +55,5 @@ export default Component.extend({
           }
         }
       });
-  `,
-});
+  `;
+}

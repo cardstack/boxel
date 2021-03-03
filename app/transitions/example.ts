@@ -1,3 +1,6 @@
+import { assert } from '@ember/debug';
+import Changeset from '../models/changeset';
+
 const FADE_DURATION = 1500;
 const TRANSLATE_DURATION = 1500;
 
@@ -7,7 +10,9 @@ export default function exampleTransition({
   keptSprites,
   receivedSprites,
   removedSprites,
-}) {
+}: Changeset): Promise<void> {
+  assert('context has an orphansElement', context.orphansElement);
+
   let animations = [];
   for (let removedSprite of Array.from(removedSprites)) {
     context.orphansElement.appendChild(removedSprite.element);
@@ -32,11 +37,15 @@ export default function exampleTransition({
   }
 
   for (let keptSprite of Array.from(keptSprites)) {
+    assert(
+      'keptSprite always has an initialBounds and finalBounds',
+      keptSprite.initialBounds && keptSprite.finalBounds
+    );
     let initialBounds = keptSprite.initialBounds.relativeToContext;
     let finalBounds = keptSprite.finalBounds.relativeToContext;
     let deltaX = initialBounds.left - finalBounds.left;
     let deltaY = initialBounds.top - finalBounds.top;
-    let translationKeyFrames = [
+    let translationKeyFrames: Keyframe[] = [
       {
         transform: `translate(${deltaX}px, ${deltaY}px)`,
       },
@@ -72,13 +81,19 @@ export default function exampleTransition({
   }
 
   for (let receivedSprite of Array.from(receivedSprites)) {
+    assert(
+      'receivedSprite always has an counterpart, initialBounds and finalBounds',
+      receivedSprite.counterpart &&
+        receivedSprite.initialBounds &&
+        receivedSprite.finalBounds
+    );
     let initialBounds = receivedSprite.initialBounds.relativeToPosition(
       receivedSprite.finalBounds.parent
     );
     let finalBounds = receivedSprite.finalBounds.relativeToPosition(
       receivedSprite.finalBounds.parent
     );
-    receivedSprite.element.style.opacity = 0;
+    receivedSprite.element.style.opacity = '0';
 
     let deltaX = initialBounds.left - finalBounds.left;
     let deltaY = initialBounds.top - finalBounds.top;
@@ -108,7 +123,7 @@ export default function exampleTransition({
 
   return Promise.all(animations.map((a) => a.finished)).then(() => {
     for (let receivedSprite of Array.from(receivedSprites)) {
-      receivedSprite.element.style.opacity = 1;
+      receivedSprite.element.style.opacity = '1';
     }
     context.clearOrphans();
   });
