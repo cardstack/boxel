@@ -33,6 +33,11 @@ module('Unit | Models | SpriteTree', function (hooks) {
   module('empty', function () {
     test('constructing an empty tree', function (assert) {
       assert.ok(subject);
+      assert.equal(
+        subject.rootNodes.size,
+        0,
+        'tree has no rootNodes initially'
+      );
     });
     test('adding a root animation context node', function (assert) {
       let context = new MockAnimationContext();
@@ -48,6 +53,49 @@ module('Unit | Models | SpriteTree', function (hooks) {
         node.childNodes.size,
         0,
         'context node has no childNodes yet'
+      );
+      assert.equal(subject.rootNodes.size, 1, 'tree has one rootNode');
+      assert.equal(
+        Array.from(subject.rootNodes)[0],
+        node,
+        'tree has context node has root node'
+      );
+    });
+    test('adding a sprite modifier and then its parent animation context node', function (assert) {
+      let context = new MockAnimationContext();
+      let spriteModifier = new MockSpriteModifier(context.element);
+      let spriteModifierNode = subject.addSpriteModifier(spriteModifier);
+      let contextNode = subject.addAnimationContext(context);
+      assert.equal(
+        contextNode.isRoot,
+        true,
+        'context node with none above it isRoot'
+      );
+      assert.equal(
+        spriteModifierNode.isRoot,
+        false,
+        'spriteModifier node under context is not isRoot'
+      );
+      assert.equal(
+        spriteModifierNode.childNodes.size,
+        0,
+        'spriteModifierNode node has no childNodes yet'
+      );
+      assert.equal(
+        contextNode.childNodes.size,
+        1,
+        'context node has one childNode'
+      );
+      assert.equal(subject.rootNodes.size, 1, 'tree has one rootNode');
+      assert.equal(
+        Array.from(subject.rootNodes)[0],
+        contextNode,
+        'tree has context node as root node'
+      );
+      assert.equal(
+        Array.from(contextNode.childNodes)[0],
+        spriteModifierNode,
+        'context node has one has sprite node as child'
       );
     });
   });
@@ -131,6 +179,15 @@ module('Unit | Models | SpriteTree', function (hooks) {
         'nested context node has its parent set correctly'
       );
     });
+    test('remove an animation context', function (assert) {
+      subject.removeAnimationContext(context);
+      assert.equal(
+        subject.lookupNodeByElement(context.element),
+        null,
+        'can no longer lookup node after removing it'
+      );
+      assert.equal(subject.rootNodes.size, 0, 'tree has no rootNodes left');
+    });
   });
   module('with a context node and nested sprite modifier', function (hooks) {
     let context: MockAnimationContext,
@@ -155,6 +212,18 @@ module('Unit | Models | SpriteTree', function (hooks) {
         nestedSpriteNode.parent,
         spriteNode,
         'nested sprite node has its parent set correctly'
+      );
+      let descendants = subject.descendantsOf(context);
+      assert.equal(descendants.length, 2, 'the context has two descendants');
+      assert.equal(
+        descendants[0],
+        spriteModifer,
+        'the first descendant is the spriteModifier'
+      );
+      assert.equal(
+        descendants[1],
+        nestedSpriteModifer,
+        'the second descendant is the nested spriteModifier'
       );
     });
 
