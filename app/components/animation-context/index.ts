@@ -20,7 +20,6 @@ interface AnimationContextArgs {
 }
 
 export default class AnimationContextComponent extends Component<AnimationContextArgs> {
-  freshlyRemoved: Set<SpriteModifier> = new Set();
   farMatchCandidates: Set<SpriteModifier> = new Set();
 
   @service declare animations: AnimationsService;

@@ -83,6 +83,7 @@ export default class TransitionRunner {
     changeset.addRemovedAndSentSprites(freshlyRemoved);
     for (let item of freshlyRemoved) {
       this.freshlyRemoved.delete(item);
+      // TODO: clear relevant freshlyRemovedChildren in spriteTree?
     }
     animationContext.farMatchCandidates.clear();
 

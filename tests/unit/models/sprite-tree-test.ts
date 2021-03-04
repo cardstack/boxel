@@ -262,4 +262,27 @@ module('Unit | Models | SpriteTree', function (hooks) {
       );
     });
   });
+  module('with two context nodes, each with a sprite', function (hooks) {
+    let context1: ContextModel,
+      context2: ContextModel,
+      sprite1: SpriteModel,
+      sprite2: SpriteModel;
+    hooks.beforeEach(function () {
+      context1 = new MockAnimationContext();
+      context2 = new MockAnimationContext();
+      sprite1 = new MockSpriteModifier(context1.element);
+      sprite2 = new MockSpriteModifier(context2.element);
+      subject.addAnimationContext(context1);
+      subject.addAnimationContext(context2);
+      subject.addSpriteModifier(sprite1);
+      subject.addSpriteModifier(sprite2);
+    });
+
+    test('if a sprite is removed from one context, it is eligible for farmatching to another', function (assert) {
+      subject.removeSpriteModifier(sprite1);
+      assert.equal(subject.farMatchCandidatesFor(context2).length, 1);
+      assert.equal(subject.farMatchCandidatesFor(context2)[0], sprite1);
+      assert.equal(subject.farMatchCandidatesFor(context1).length, 0);
+    });
+  });
 });
