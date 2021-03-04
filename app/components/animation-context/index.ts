@@ -39,11 +39,6 @@ export default class AnimationContextComponent extends Component<AnimationContex
   @reads('args.initialInsertion', false) initialInsertion: boolean | undefined;
   isInitialRenderCompleted = false;
 
-  constructor(owner: unknown, args: AnimationContextArgs) {
-    super(owner, args);
-    this.animations.registerContext(this);
-  }
-
   willDestroy(): void {
     super.willDestroy();
     this.animations.unregisterContext(this);
@@ -58,6 +53,7 @@ export default class AnimationContextComponent extends Component<AnimationContex
 
   @action didInsertEl(element: HTMLElement): void {
     this.element = element;
+    this.animations.registerContext(this);
   }
 
   @action didInsertOrphansEl(element: HTMLElement): void {
