@@ -9,6 +9,7 @@ import SpriteModifier from '../modifiers/sprite';
 export default class TransitionRunner {
   animationContext: AnimationContext;
   spriteTree: SpriteTree;
+  freshlyChanged: Set<SpriteModifier> = new Set();
 
   constructor(animationContext: AnimationContext, spriteTree: SpriteTree) {
     this.animationContext = animationContext;
@@ -24,11 +25,11 @@ export default class TransitionRunner {
       if (contextDescendant instanceof SpriteModifier) {
         let spriteModifier = contextDescendant as SpriteModifier;
         if (spriteModifier.checkForChanges()) {
-          animationContext.freshlyChanged.add(spriteModifier);
+          this.freshlyChanged.add(spriteModifier);
         }
       }
     }
-    if (animationContext.hasNoChanges) {
+    if (this.hasNoChanges) {
       return;
     }
     let changeset = new Changeset(animationContext);
@@ -44,8 +45,8 @@ export default class TransitionRunner {
     animationContext.freshlyRemoved.clear();
     animationContext.farMatchCandidates.clear();
 
-    changeset.addKeptSprites(animationContext.freshlyChanged);
-    animationContext.freshlyChanged.clear();
+    changeset.addKeptSprites(this.freshlyChanged);
+    this.freshlyChanged.clear();
 
     changeset.finalizeSpriteCategories();
 
@@ -63,7 +64,18 @@ export default class TransitionRunner {
     animationContext.isInitialRenderCompleted = true;
   }
 
-  logChangeset(changeset: Changeset, animationContext: AnimationContext): void {
+  private get hasNoChanges(): boolean {
+    return (
+      this.freshlyChanged.size === 0 &&
+      this.animationContext.freshlyAdded.size === 0 &&
+      this.animationContext.freshlyRemoved.size === 0
+    );
+  }
+
+  private logChangeset(
+    changeset: Changeset,
+    animationContext: AnimationContext
+  ): void {
     let contextId = animationContext.args.id;
     function row(type: SpriteType, sprite: Sprite) {
       return {

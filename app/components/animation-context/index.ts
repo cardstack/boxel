@@ -22,7 +22,6 @@ interface AnimationContextArgs {
 export default class AnimationContextComponent extends Component<AnimationContextArgs> {
   freshlyAdded: Set<SpriteModifier> = new Set();
   freshlyRemoved: Set<SpriteModifier> = new Set();
-  freshlyChanged: Set<SpriteModifier> = new Set();
   farMatchCandidates: Set<SpriteModifier> = new Set();
 
   @service declare animations: AnimationsService;
@@ -85,14 +84,6 @@ export default class AnimationContextComponent extends Component<AnimationContex
       (this.isInitialRenderCompleted ||
         this.initialInsertion ||
         changeset.receivedSprites.size)
-    );
-  }
-
-  get hasNoChanges(): boolean {
-    return (
-      this.freshlyChanged.size === 0 &&
-      this.freshlyAdded.size === 0 &&
-      this.freshlyRemoved.size === 0
     );
   }
 
