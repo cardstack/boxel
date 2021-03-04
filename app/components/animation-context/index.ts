@@ -7,7 +7,6 @@ import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import AnimationsService from '../../services/animations';
 import SpriteModifier from '../../modifiers/sprite';
-import { taskFor } from 'ember-concurrency-ts';
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -41,13 +40,12 @@ export default class AnimationContextComponent extends Component<AnimationContex
 
   get renderDetector(): undefined {
     consumeTag(VOLATILE_TAG);
-    scheduleOnce('afterRender', this, this.performMaybeTransitionTask);
+    scheduleOnce('afterRender', this, this.maybeTransition);
     return undefined;
   }
 
-  performMaybeTransitionTask(): void {
-    let task = taskFor(this.animations.maybeTransitionTask);
-    task.perform(this);
+  maybeTransition(): void {
+    this.animations.runTransition(this);
   }
 
   @action didInsertEl(element: HTMLElement): void {

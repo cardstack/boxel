@@ -44,14 +44,6 @@ export class SpriteTreeNode {
 }
 
 export default class SpriteTree {
-  descendantsOf(model: SpriteTreeModel): SpriteTreeModel[] {
-    let node = this.lookupNodeByElement(model.element);
-    if (node) {
-      return node.descendantNodes.map((n) => n.model);
-    } else {
-      return [];
-    }
-  }
   nodesByElement = new WeakMap<Element, SpriteTreeNode>();
   rootNodes: Set<SpriteTreeNode> = new Set();
   addAnimationContext(context: ContextModel): SpriteTreeNode {
@@ -82,6 +74,14 @@ export default class SpriteTree {
   }
   lookupNodeByElement(element: Element): SpriteTreeNode | undefined {
     return this.nodesByElement.get(element);
+  }
+  descendantsOf(model: SpriteTreeModel): SpriteTreeModel[] {
+    let node = this.lookupNodeByElement(model.element);
+    if (node) {
+      return node.descendantNodes.map((n) => n.model);
+    } else {
+      return [];
+    }
   }
   addChild(rootNode: SpriteTreeNode): void {
     for (let existingRootNode of this.rootNodes) {
