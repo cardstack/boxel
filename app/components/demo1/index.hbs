@@ -31,9 +31,9 @@
 
         <div class='text-3xl text-pink select-none'>
           {{#if this.animationEnabled}}
-            <AnimationContext @use={{this.transition}} as |context|>
+            <AnimationContext @use={{this.transition}}>
               {{#each (range 0 this.guests)}}
-                <span class='inline-block' {{sprite context=context}}>{{svg-jar 'user' width=24 height=24}}</span>
+                <span class='inline-block' {{sprite}}>{{svg-jar 'user' width=24 height=24}}</span>
               {{/each}}
             </AnimationContext>
           {{else}}

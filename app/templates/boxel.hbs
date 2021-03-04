@@ -8,7 +8,7 @@
     </p>
   </div>
 
-  <AnimationContext @id="card-isolation-context" @use={{this.isolatedCardTransition}} as |context|>
+  <AnimationContext @id="card-isolation-context" @use={{this.isolatedCardTransition}}>
 
     <div class="mt-16 w-1/3">
       <div class="my-4">
@@ -17,7 +17,7 @@
           {{if this.ascendingSort 'A-Z' 'Z-A'}} (click to reverse)
         </Boxel::Button>
       </div>
-      <AnimationContext @id="card-sorting-context" @use={{this.cardSortingTransition}} as |context|>
+      <AnimationContext @id="card-sorting-context" @use={{this.cardSortingTransition}}>
         {{#each this.sortedCardModels as |model|}}
           {{#if (eq model this.isolatedCard)}}
             <div class="my-4 card-placeholder"></div>
@@ -25,9 +25,8 @@
             <Card
               @model={{model}}
               @expandAction={{fn this.isolateCard model}}
-              @animationContext={{context}}
               class="my-4"
-              {{sprite context=context id=model.id}}
+              {{sprite id=model.id}}
             />
           {{/if}}
         {{/each}}
@@ -39,8 +38,7 @@
         <Card
           @model={{this.isolatedCard}}
           @expandAction={{this.dismissIsolatedCard}}
-          @animationContext={{context}}
-          {{sprite context=context id=this.isolatedCard.id}}
+          {{sprite id=this.isolatedCard.id}}
         >
           <p class="mt-2 mb-2">
             Id Lorem laborum mollit labore. Et et est ipsum consequat est eiusmod amet quis. Est cillum velit et sunt ad occaecat enim eu eiusmod do. Sint ea fugiat nisi minim eu est ullamco proident aliqua. Non aliquip mollit quis elit Lorem fugiat est culpa exercitation voluptate commodo commodo. Duis ex sint enim cillum proident est esse. Est consequat reprehenderit enim laborum pariatur aute quis consequat quis cupidatat et voluptate.

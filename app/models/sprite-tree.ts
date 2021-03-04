@@ -7,10 +7,12 @@ export interface SpriteModel {
 }
 
 type SpriteTreeModel = ContextModel | SpriteModel;
+
 export class SpriteTreeNode {
   model: SpriteTreeModel;
   parent: SpriteTreeNode | SpriteTree;
-  childNodes: Set<SpriteTreeNode> = new Set();
+  children: Set<SpriteTreeNode> = new Set();
+  freshlyRemovedChildren: Set<SpriteTreeNode> = new Set();
 
   constructor(model: SpriteTreeModel, parentNode: SpriteTreeNode | SpriteTree) {
     this.model = model;
@@ -26,20 +28,27 @@ export class SpriteTreeNode {
     return this.model.element;
   }
 
-  get descendantNodes(): SpriteTreeNode[] {
+  getDescendantNodes(
+    opts = { includeFreshlyRemoved: false }
+  ): SpriteTreeNode[] {
     let result: SpriteTreeNode[] = [];
-    for (let childNode of this.childNodes) {
+    let children = this.children;
+    if (opts.includeFreshlyRemoved) {
+      children = new Set([...children, ...this.freshlyRemovedChildren]);
+    }
+    for (let childNode of children) {
       result.push(childNode);
-      result = result.concat(childNode.descendantNodes);
+      result = result.concat(childNode.getDescendantNodes(opts));
     }
     return result;
   }
 
   addChild(childNode: SpriteTreeNode): void {
-    this.childNodes.add(childNode);
+    this.children.add(childNode);
   }
   removeChild(childNode: SpriteTreeNode): void {
-    this.childNodes.delete(childNode);
+    this.children.delete(childNode);
+    this.freshlyRemovedChildren.add(childNode);
   }
 }
 
@@ -75,10 +84,13 @@ export default class SpriteTree {
   lookupNodeByElement(element: Element): SpriteTreeNode | undefined {
     return this.nodesByElement.get(element);
   }
-  descendantsOf(model: SpriteTreeModel): SpriteTreeModel[] {
+  descendantsOf(
+    model: SpriteTreeModel,
+    opts = { includeFreshlyRemoved: false }
+  ): SpriteTreeModel[] {
     let node = this.lookupNodeByElement(model.element);
     if (node) {
-      return node.descendantNodes.map((n) => n.model);
+      return node.getDescendantNodes(opts).map((n) => n.model);
     } else {
       return [];
     }

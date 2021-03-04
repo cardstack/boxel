@@ -67,32 +67,32 @@
       <p>Here is some content before AnimationContext 1</p>
     {{/if}}
     <div class="some-container {{if this.contextHasPadding 'with-padded-animation-context'}}">
-      <AnimationContext @id="1" @use={{this.transition}} as |context|>
-        <div {{sprite context=context id="container"}}>
+      <AnimationContext @id="1" @use={{this.transition}}>
+        <div {{sprite id="container"}}>
           {{#if this.showContentBefore}}
             <p>Here is some content before the sprite</p>
           {{/if}}
 
           {{#if (and this.showSpriteA (not this.spriteAPositionBottom))}}
-            <div class="sprite" {{sprite context=context id="A"}}>
+            <div class="sprite" {{sprite id="A"}}>
               Hello, I am a sprite A
             </div>
           {{/if}}
 
           {{#if this.showSpriteB}}
-            <div class="sprite" {{sprite context=context id="B"}}>
+            <div class="sprite" {{sprite id="B"}}>
               Hello, I am a sprite B
             </div>
           {{/if}}
 
           {{#if (eq this.spriteCPosition 0)}}
-            <div class="sprite" {{sprite context=context id="C"}}>
+            <div class="sprite" {{sprite id="C"}}>
               Hello, I am a sprite C
             </div>
           {{/if}}
 
           {{#if (and this.showSpriteA this.spriteAPositionBottom)}}
-            <div class="sprite" {{sprite context=context id="A"}}>
+            <div class="sprite" {{sprite id="A"}}>
               Hello, I am a sprite A
             </div>
           {{/if}}
@@ -106,9 +106,9 @@
   </div>
   <div class="flex-none w-1/2">
     <h2 class="p-2 bg-grey-lightest">Animation Context 2</h2>
-    <AnimationContext @id="2" @use={{this.transition}} as |context|>
+    <AnimationContext @id="2" @use={{this.transition}}>
       {{#if (eq this.spriteCPosition 1)}}
-        <div class="sprite" {{sprite context=context id="C"}}>
+        <div class="sprite" {{sprite id="C"}}>
           Hello, I am a sprite C
         </div>
       {{/if}}

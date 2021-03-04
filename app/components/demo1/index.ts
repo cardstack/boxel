@@ -23,10 +23,10 @@ export default class Demo1 extends Component {
     }
   }
   templateDiff = dedent`
-    + <AnimationContext @use={{this.transition}} as |context|>
+    + <AnimationContext @use={{this.transition}}>
         {{#each guests}}
     -     <Icon 'user' />
-    +     <Icon 'user' {{sprite context=context}} />
+    +     <Icon 'user' {{sprite}} />
         {{/each}}
     + </AnimationContext>
 

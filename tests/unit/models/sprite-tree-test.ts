@@ -49,11 +49,7 @@ module('Unit | Models | SpriteTree', function (hooks) {
         'can lookup node after adding it'
       );
       assert.equal(node.isRoot, true, 'context node with none above it isRoot');
-      assert.equal(
-        node.childNodes.size,
-        0,
-        'context node has no childNodes yet'
-      );
+      assert.equal(node.children.size, 0, 'context node has no children yet');
       assert.equal(subject.rootNodes.size, 1, 'tree has one rootNode');
       assert.equal(
         Array.from(subject.rootNodes)[0],
@@ -77,12 +73,12 @@ module('Unit | Models | SpriteTree', function (hooks) {
         'spriteModifier node under context is not isRoot'
       );
       assert.equal(
-        spriteModifierNode.childNodes.size,
+        spriteModifierNode.children.size,
         0,
-        'spriteModifierNode node has no childNodes yet'
+        'spriteModifierNode node has no children yet'
       );
       assert.equal(
-        contextNode.childNodes.size,
+        contextNode.children.size,
         1,
         'context node has one childNode'
       );
@@ -93,7 +89,7 @@ module('Unit | Models | SpriteTree', function (hooks) {
         'tree has context node as root node'
       );
       assert.equal(
-        Array.from(contextNode.childNodes)[0],
+        Array.from(contextNode.children)[0],
         spriteModifierNode,
         'context node has one has sprite node as child'
       );
@@ -125,12 +121,12 @@ module('Unit | Models | SpriteTree', function (hooks) {
         'sprite node has its parent set correctly'
       );
       assert.equal(
-        contextNode.childNodes.size,
+        contextNode.children.size,
         1,
         'context node has one childNode'
       );
       assert.equal(
-        Array.from(contextNode.childNodes)[0],
+        Array.from(contextNode.children)[0],
         spriteNode,
         'context node has sprite node as child'
       );
@@ -235,9 +231,34 @@ module('Unit | Models | SpriteTree', function (hooks) {
         'can no longer lookup node after removing it'
       );
       assert.equal(
-        contextNode.childNodes.size,
+        contextNode.children.size,
         0,
-        'context node has no childNodes yet'
+        'context node has no children yet'
+      );
+      assert.equal(
+        contextNode.freshlyRemovedChildren.size,
+        1,
+        'context node has no freshlyRemovedChildren yet'
+      );
+      assert.equal(
+        Array.from(contextNode.freshlyRemovedChildren)[0],
+        spriteNode,
+        'context node has removed spriteNode in freshlyRemovedChildren'
+      );
+      let descendants = subject.descendantsOf(context);
+      assert.equal(descendants.length, 0, 'the context has no descendants');
+      let descendantsWithFreshRemovals = subject.descendantsOf(context, {
+        includeFreshlyRemoved: true,
+      });
+      assert.equal(
+        descendantsWithFreshRemovals.length,
+        1,
+        'descendants includes freshly removed when flag is passed'
+      );
+      assert.equal(
+        descendantsWithFreshRemovals[0],
+        spriteModifer,
+        'the returned descendant is the removed spriteModifier'
       );
     });
   });

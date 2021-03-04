@@ -20,7 +20,6 @@ interface AnimationContextArgs {
 }
 
 export default class AnimationContextComponent extends Component<AnimationContextArgs> {
-  freshlyAdded: Set<SpriteModifier> = new Set();
   freshlyRemoved: Set<SpriteModifier> = new Set();
   farMatchCandidates: Set<SpriteModifier> = new Set();
 
@@ -54,19 +53,6 @@ export default class AnimationContextComponent extends Component<AnimationContex
 
   @action didInsertOrphansEl(element: HTMLElement): void {
     this.orphansElement = element;
-  }
-
-  register(spriteModifier: SpriteModifier): void {
-    this.freshlyAdded.add(spriteModifier);
-  }
-
-  unregister(spriteModifier: SpriteModifier): void {
-    console.log(
-      `AnimationContext(${this.id})#unregister(spriteModifier)`,
-      spriteModifier
-    );
-    this.freshlyRemoved.add(spriteModifier);
-    this.animations.notifyRemovedSpriteModifier(spriteModifier);
   }
 
   handleFarMatching(

@@ -2,21 +2,18 @@ import Modifier from 'ember-modifier';
 import ContextAwareBounds from 'animations/models/context-aware-bounds';
 import { measure } from '../utils/measurement';
 import { assert } from '@ember/debug';
-import AnimationContext from '../components/animation-context';
 import { inject as service } from '@ember/service';
 import AnimationsService from '../services/animations';
 
 interface SpriteModifierArgs {
   positional: [];
   named: {
-    context: AnimationContext;
     id: string | null;
   };
 }
 
 export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   id: string | null = null;
-  context: AnimationContext | undefined;
   lastBounds: ContextAwareBounds | undefined;
   currentBounds: ContextAwareBounds | undefined;
   farMatch: SpriteModifier | undefined; // Gets set to the "received" sprite modifier when this is becoming a "sent" sprite
@@ -28,10 +25,8 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
     this.contextElement = this.element.closest(
       '.animation-context'
     ) as HTMLElement;
-    this.context = this.args.named.context;
     this.id = this.args.named.id;
 
-    this.context.register(this);
     this.animations.registerSpriteModifier(this);
 
     this.trackPosition();
@@ -64,7 +59,6 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   }
 
   willRemove(): void {
-    this.context && this.context.unregister(this);
     this.animations.unregisterSpriteModifier(this);
   }
 }

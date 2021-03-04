@@ -5,15 +5,44 @@ import Changeset from '../models/changeset';
 import Sprite, { SpriteType } from '../models/sprite';
 import SpriteTree from './sprite-tree';
 import SpriteModifier from '../modifiers/sprite';
-
+import AnimationsService from '../services/animations';
 export default class TransitionRunner {
   animationContext: AnimationContext;
-  spriteTree: SpriteTree;
+  animations: AnimationsService;
   freshlyChanged: Set<SpriteModifier> = new Set();
 
-  constructor(animationContext: AnimationContext, spriteTree: SpriteTree) {
+  constructor(
+    animationContext: AnimationContext,
+    animationsService: AnimationsService
+  ) {
     this.animationContext = animationContext;
-    this.spriteTree = spriteTree;
+    this.animations = animationsService;
+  }
+
+  get spriteTree(): SpriteTree {
+    return this.animations.spriteTree;
+  }
+
+  get freshlyAdded(): Set<SpriteModifier> {
+    return this.animations.freshlyAdded;
+  }
+
+  get freshlyRemoved(): Set<SpriteModifier> {
+    return this.animations.freshlyRemoved;
+  }
+
+  filterToContext(
+    spriteModifiers: Set<SpriteModifier>,
+    opts = { includeFreshlyRemoved: false }
+  ): Set<SpriteModifier> {
+    let contextDescendants = this.spriteTree.descendantsOf(
+      this.animationContext,
+      opts
+    );
+    let result = new Set(
+      [...spriteModifiers].filter((m) => contextDescendants.includes(m))
+    );
+    return result;
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
@@ -29,20 +58,32 @@ export default class TransitionRunner {
         }
       }
     }
-    if (this.hasNoChanges) {
+    let freshlyAdded = this.filterToContext(this.freshlyAdded);
+    let freshlyRemoved = this.filterToContext(this.freshlyRemoved, {
+      includeFreshlyRemoved: true,
+    });
+    if (
+      this.freshlyChanged.size === 0 &&
+      freshlyAdded.size === 0 &&
+      freshlyRemoved.size === 0
+    ) {
       return;
     }
     let changeset = new Changeset(animationContext);
     changeset.addInsertedAndReceivedSprites(
-      animationContext.freshlyAdded,
+      freshlyAdded,
       animationContext.farMatchCandidates
     );
-    animationContext.freshlyAdded.clear();
+    for (let item of freshlyAdded) {
+      this.freshlyAdded.delete(item);
+    }
 
     yield microwait(); // allow other contexts to do their far-matching for added sprites
 
-    changeset.addRemovedAndSentSprites(animationContext.freshlyRemoved);
-    animationContext.freshlyRemoved.clear();
+    changeset.addRemovedAndSentSprites(freshlyRemoved);
+    for (let item of freshlyRemoved) {
+      this.freshlyRemoved.delete(item);
+    }
     animationContext.farMatchCandidates.clear();
 
     changeset.addKeptSprites(this.freshlyChanged);
@@ -62,14 +103,6 @@ export default class TransitionRunner {
       }
     }
     animationContext.isInitialRenderCompleted = true;
-  }
-
-  private get hasNoChanges(): boolean {
-    return (
-      this.freshlyChanged.size === 0 &&
-      this.animationContext.freshlyAdded.size === 0 &&
-      this.animationContext.freshlyRemoved.size === 0
-    );
   }
 
   private logChangeset(

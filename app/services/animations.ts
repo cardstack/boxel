@@ -41,9 +41,6 @@ export default class AnimationsService extends Service {
   unregisterSpriteModifier(spriteModifier: SpriteModifier): void {
     this.spriteTree.removeSpriteModifier(spriteModifier);
     this.freshlyRemoved.add(spriteModifier);
-  }
-
-  notifyRemovedSpriteModifier(spriteModifier: SpriteModifier): void {
     this.possiblyFarMatchingSpriteModifiers.add(spriteModifier);
     scheduleOnce('afterRender', this, 'handleFarMatching');
   }
@@ -58,10 +55,7 @@ export default class AnimationsService extends Service {
   }
 
   runTransition(animationContext: AnimationContext): void {
-    let transitionRunner = new TransitionRunner(
-      animationContext,
-      this.spriteTree
-    );
+    let transitionRunner = new TransitionRunner(animationContext, this);
     let task = taskFor(transitionRunner.maybeTransitionTask);
     task.perform(animationContext);
   }
