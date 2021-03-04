@@ -1,9 +1,10 @@
 import Sprite, { SpriteType } from './sprite';
-import SpriteModifier from '../modifiers/sprite';
+import { SpriteModel } from 'animations/models/sprite-tree';
+
 import { assert } from '@ember/debug';
 
 export default {
-  createInsertedSprite(spriteModifier: SpriteModifier): Sprite {
+  createInsertedSprite(spriteModifier: SpriteModel): Sprite {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,
@@ -13,8 +14,8 @@ export default {
     return sprite;
   },
   createReceivedSprite(
-    spriteModifier: SpriteModifier,
-    farMatchedSpriteModifier: SpriteModifier
+    spriteModifier: SpriteModel,
+    farMatchedSpriteModifier: SpriteModel
   ): Sprite {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
@@ -36,7 +37,7 @@ export default {
 
     return sprite;
   },
-  createSentSprite(spriteModifier: SpriteModifier): Sprite {
+  createSentSprite(spriteModifier: SpriteModel): Sprite {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,
@@ -61,7 +62,7 @@ export default {
 
     return sprite;
   },
-  createRemovedSprite(spriteModifier: SpriteModifier): Sprite {
+  createRemovedSprite(spriteModifier: SpriteModel): Sprite {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,
@@ -70,7 +71,7 @@ export default {
     sprite.initialBounds = spriteModifier.currentBounds;
     return sprite;
   },
-  createKeptSprite(spriteModifier: SpriteModifier): Sprite {
+  createKeptSprite(spriteModifier: SpriteModel): Sprite {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,

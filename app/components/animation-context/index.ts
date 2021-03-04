@@ -6,7 +6,7 @@ import Changeset from '../../models/changeset';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import AnimationsService from '../../services/animations';
-import SpriteModifier from '../../modifiers/sprite';
+import { SpriteModel } from 'animations/models/sprite-tree';
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -20,7 +20,7 @@ interface AnimationContextArgs {
 }
 
 export default class AnimationContextComponent extends Component<AnimationContextArgs> {
-  farMatchCandidates: Set<SpriteModifier> = new Set();
+  farMatchCandidates: Set<SpriteModel> = new Set();
 
   @service declare animations: AnimationsService;
   @reads('args.id') id: string | undefined;
@@ -55,11 +55,11 @@ export default class AnimationContextComponent extends Component<AnimationContex
   }
 
   handleFarMatching(
-    farMatchSpriteModifierCandidates: Set<SpriteModifier>
+    farMatchSpriteModifierCandidates: Array<SpriteModel>
   ): void {
-    Array.from(farMatchSpriteModifierCandidates)
-      .filter((s) => s.context !== this)
-      .forEach((s) => this.farMatchCandidates.add(s));
+    farMatchSpriteModifierCandidates.forEach((s) =>
+      this.farMatchCandidates.add(s)
+    );
   }
 
   shouldAnimate(changeset: Changeset): boolean {

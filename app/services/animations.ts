@@ -46,9 +46,8 @@ export default class AnimationsService extends Service {
   }
 
   handleFarMatching(): void {
-    console.log('AnimationsService#handleFarMatching()');
     this.contexts.forEach((context) =>
-      context.handleFarMatching(this.possiblyFarMatchingSpriteModifiers)
+      context.handleFarMatching(this.spriteTree.farMatchCandidatesFor(context))
     );
 
     this.possiblyFarMatchingSpriteModifiers.clear();

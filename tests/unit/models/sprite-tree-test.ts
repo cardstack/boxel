@@ -17,6 +17,8 @@ class MockAnimationContext implements ContextModel {
 
 class MockSpriteModifier implements SpriteModel {
   element: Element;
+  farMatch = false;
+  id = 'Mock';
   constructor(parentEl: Element | null = null) {
     this.element = document.createElement('div');
     if (parentEl) {

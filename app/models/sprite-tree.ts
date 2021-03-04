@@ -4,6 +4,8 @@ export interface ContextModel {
 
 export interface SpriteModel {
   element: Element;
+  farMatch: boolean;
+  id: string;
 }
 
 type SpriteTreeModel = ContextModel | SpriteModel;
