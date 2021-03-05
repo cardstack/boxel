@@ -46,7 +46,8 @@ export default class TransitionRunner {
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  @task *maybeTransitionTask(animationContext: AnimationContext) {
+  @task *maybeTransitionTask() {
+    let { animationContext } = this;
     yield microwait(); // allow animations service to run far-matching to run first
     console.log(`AnimationContext(${animationContext.id})#maybeTransition()`);
     let contextDescendants = this.spriteTree.descendantsOf(animationContext);
