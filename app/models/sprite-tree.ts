@@ -4,8 +4,6 @@ export interface ContextModel {
 
 export interface SpriteModel {
   element: Element;
-  farMatch: boolean;
-  id: string;
 }
 
 type SpriteTreeModel = ContextModel | SpriteModel;
@@ -44,16 +42,26 @@ export class SpriteTreeNode {
     }
     return result;
   }
-  freshlyRemovedDescendants(stopNode: SpriteTreeNode): SpriteModel[] {
-    let result: SpriteModel[] = [];
-    result = result.concat(
-      [...this.freshlyRemovedChildren].map((n) => n.model)
-    );
-    for (let childNode of this.children) {
-      if (childNode === stopNode) break;
+  freshlyRemovedDescendants(stopNode: SpriteTreeNode): SpriteTreeModel[] {
+    let result: SpriteTreeModel[] = [];
+    for (let childNode of this.freshlyRemovedChildren) {
+      result.push(childNode.model);
+    }
+    let allChildren = [...this.children].concat([
+      ...this.freshlyRemovedChildren,
+    ]);
+    for (let childNode of allChildren) {
+      if (childNode === stopNode) continue;
       result = result.concat(childNode.freshlyRemovedDescendants(stopNode));
     }
     return result;
+  }
+
+  clearFreshlyRemovedChildren(): void {
+    for (let rootNode of this.children) {
+      rootNode.freshlyRemovedChildren.clear();
+      rootNode.clearFreshlyRemovedChildren();
+    }
   }
 
   addChild(childNode: SpriteTreeNode): void {
@@ -116,11 +124,19 @@ export default class SpriteTree {
       return [];
     }
     for (let rootNode of this.rootNodes) {
-      if (rootNode === contextNode) break;
+      if (rootNode === contextNode) continue;
       result = result.concat(rootNode.freshlyRemovedDescendants(contextNode));
     }
     return result;
   }
+
+  clearFreshlyRemovedChildren(): void {
+    for (let rootNode of this.rootNodes) {
+      rootNode.freshlyRemovedChildren.clear();
+      rootNode.clearFreshlyRemovedChildren();
+    }
+  }
+
   addChild(rootNode: SpriteTreeNode): void {
     for (let existingRootNode of this.rootNodes) {
       if (rootNode.element.contains(existingRootNode.element)) {

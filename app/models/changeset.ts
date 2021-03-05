@@ -1,7 +1,7 @@
 import SpriteFactory from './sprite-factory';
 import Sprite, { SpriteType } from './sprite';
 import AnimationContext from '../components/animation-context';
-import { SpriteModel } from 'animations/models/sprite-tree';
+import SpriteModifier from '../modifiers/sprite';
 
 export default class Changeset {
   context: AnimationContext;
@@ -31,8 +31,8 @@ export default class Changeset {
   }
 
   addInsertedAndReceivedSprites(
-    freshlyAdded: Set<SpriteModel>,
-    farMatchCandidates: Set<SpriteModel>
+    freshlyAdded: Set<SpriteModifier>,
+    farMatchCandidates: Set<SpriteModifier>
   ): void {
     let farSpritesArray = Array.from(farMatchCandidates);
     for (let spriteModifier of freshlyAdded) {
@@ -54,7 +54,7 @@ export default class Changeset {
     }
   }
 
-  addRemovedAndSentSprites(freshlyRemoved: Set<SpriteModel>): void {
+  addRemovedAndSentSprites(freshlyRemoved: Set<SpriteModifier>): void {
     for (let spriteModifier of freshlyRemoved) {
       if (spriteModifier.farMatch) {
         this.sentSprites.add(SpriteFactory.createSentSprite(spriteModifier));
@@ -66,7 +66,7 @@ export default class Changeset {
     }
   }
 
-  addKeptSprites(freshlyChanged: Set<SpriteModel>): void {
+  addKeptSprites(freshlyChanged: Set<SpriteModifier>): void {
     for (let spriteModifier of freshlyChanged) {
       this.keptSprites.add(SpriteFactory.createKeptSprite(spriteModifier));
     }

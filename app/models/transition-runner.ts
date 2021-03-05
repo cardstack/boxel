@@ -70,27 +70,31 @@ export default class TransitionRunner {
       return;
     }
     let changeset = new Changeset(animationContext);
-    changeset.addInsertedAndReceivedSprites(
-      freshlyAdded,
-      animationContext.farMatchCandidates
+    let farMatchCandidates: Set<SpriteModifier> = new Set(
+      (this.spriteTree.farMatchCandidatesFor(animationContext).filter((m) => {
+        return m instanceof SpriteModifier;
+      }) as unknown) as SpriteModifier[]
     );
+    changeset.addInsertedAndReceivedSprites(freshlyAdded, farMatchCandidates);
     for (let item of freshlyAdded) {
       this.freshlyAdded.delete(item);
     }
 
-    yield microwait(); // allow other contexts to do their far-matching for added sprites
+    yield microwait(); // allow other TransitionRunners to do their far-matching for added sprites
 
     changeset.addRemovedAndSentSprites(freshlyRemoved);
-    for (let item of freshlyRemoved) {
-      this.freshlyRemoved.delete(item);
-      // TODO: clear relevant freshlyRemovedChildren in spriteTree?
-    }
-    animationContext.farMatchCandidates.clear();
 
     changeset.addKeptSprites(this.freshlyChanged);
     this.freshlyChanged.clear();
 
     changeset.finalizeSpriteCategories();
+
+    yield microwait(); // allow other TransitionRunners to do their far-matching for removed sprites
+
+    for (let item of freshlyRemoved) {
+      this.freshlyRemoved.delete(item);
+    }
+    this.spriteTree.clearFreshlyRemovedChildren();
 
     if (animationContext.shouldAnimate(changeset)) {
       this.logChangeset(changeset, animationContext); // For debugging

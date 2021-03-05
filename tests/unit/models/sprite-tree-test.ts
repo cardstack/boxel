@@ -285,6 +285,47 @@ module('Unit | Models | SpriteTree', function (hooks) {
       assert.equal(subject.farMatchCandidatesFor(context2).length, 1);
       assert.equal(subject.farMatchCandidatesFor(context2)[0], sprite1);
       assert.equal(subject.farMatchCandidatesFor(context1).length, 0);
+
+      subject.clearFreshlyRemovedChildren();
+      assert.equal(subject.farMatchCandidatesFor(context2).length, 0);
+      assert.equal(subject.farMatchCandidatesFor(context1).length, 0);
     });
   });
+  module(
+    'with a sprite modifier nested under another sprite modifier',
+    function (hooks) {
+      let context: MockAnimationContext,
+        spriteModifer: MockSpriteModifier,
+        spriteNode: SpriteTreeNode,
+        nestedSpriteModifer: MockSpriteModifier,
+        nestedSpriteNode: SpriteTreeNode;
+      hooks.beforeEach(function () {
+        context = new MockAnimationContext();
+        subject.addAnimationContext(context);
+        spriteModifer = new MockSpriteModifier(context.element);
+        spriteNode = subject.addSpriteModifier(spriteModifer);
+        nestedSpriteModifer = new MockSpriteModifier(spriteModifer.element);
+        nestedSpriteNode = subject.addSpriteModifier(nestedSpriteModifer);
+      });
+      test('removing nested modifiers results in both being freshlyRemoved', function (assert) {
+        let otherContext = new MockAnimationContext();
+        subject.addAnimationContext(otherContext);
+        subject.removeSpriteModifier(nestedSpriteModifer);
+        subject.removeSpriteModifier(spriteModifer);
+        assert.equal(
+          nestedSpriteNode.parent,
+          spriteNode,
+          'nested sprite node has its parent set correctly'
+        );
+        let farMatchCandidates = subject.farMatchCandidatesFor(otherContext);
+        assert.equal(
+          farMatchCandidates.length,
+          2,
+          'farMatchCandidates include both removed sprites'
+        );
+        assert.equal(farMatchCandidates[0], spriteModifer);
+        assert.equal(farMatchCandidates[1], nestedSpriteModifer);
+      });
+    }
+  );
 });

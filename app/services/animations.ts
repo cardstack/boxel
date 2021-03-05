@@ -1,6 +1,5 @@
 import Service from '@ember/service';
 
-import { scheduleOnce } from '@ember/runloop';
 import SpriteModifier from '../modifiers/sprite';
 import SpriteTree from '../models/sprite-tree';
 import AnimationContext from '../components/animation-context';
@@ -18,7 +17,6 @@ export default class AnimationsService extends Service {
   registerContext(context: AnimationContext): void {
     this.contexts.add(context);
     this.spriteTree.addAnimationContext(context);
-    scheduleOnce('afterRender', this, 'handleFarMatching');
   }
 
   unregisterContext(context: AnimationContext): void {
@@ -39,18 +37,11 @@ export default class AnimationsService extends Service {
   }
 
   unregisterSpriteModifier(spriteModifier: SpriteModifier): void {
+    console.log('SpriteTree#unregisterSpriteModifier', {
+      id: spriteModifier.id,
+    });
     this.spriteTree.removeSpriteModifier(spriteModifier);
     this.freshlyRemoved.add(spriteModifier);
-    this.possiblyFarMatchingSpriteModifiers.add(spriteModifier);
-    scheduleOnce('afterRender', this, 'handleFarMatching');
-  }
-
-  handleFarMatching(): void {
-    this.contexts.forEach((context) =>
-      context.handleFarMatching(this.spriteTree.farMatchCandidatesFor(context))
-    );
-
-    this.possiblyFarMatchingSpriteModifiers.clear();
   }
 
   runTransition(animationContext: AnimationContext): void {
