@@ -37,8 +37,12 @@ export default class AnimationsService extends Service {
   }
 
   maybeTransition(): void {
-    for (let context of this.eligibleContexts) {
-      let transitionRunner = new TransitionRunner(context, this);
+    let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
+    for (let context of contexts) {
+      let transitionRunner = new TransitionRunner(
+        context as AnimationContext,
+        this
+      );
       let task = taskFor(transitionRunner.maybeTransitionTask);
       task.perform();
     }
