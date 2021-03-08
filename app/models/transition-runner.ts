@@ -6,6 +6,29 @@ import Sprite, { SpriteType } from '../models/sprite';
 import SpriteTree from './sprite-tree';
 import SpriteModifier from '../modifiers/sprite';
 import AnimationsService from '../services/animations';
+
+function checkForChanges(
+  spriteModifier: SpriteModifier,
+  animationContext: AnimationContext
+): boolean {
+  spriteModifier.trackPosition();
+  let spriteCurrent = spriteModifier.currentBounds;
+  let spriteLast = spriteModifier.lastBounds;
+  let contextCurrent = animationContext.currentBounds;
+  let contextLast = animationContext.lastBounds;
+  if (spriteCurrent && spriteLast && contextCurrent && contextLast) {
+    let parentLeftChange = contextCurrent.left - contextLast.left;
+    let parentTopChange = contextCurrent.top - contextLast.top;
+
+    return (
+      spriteCurrent.left - spriteLast.left - parentLeftChange !== 0 ||
+      spriteCurrent.top - spriteLast.top - parentTopChange !== 0 ||
+      spriteCurrent.width - spriteLast.width !== 0 ||
+      spriteCurrent.height - spriteLast.height !== 0
+    );
+  }
+  return true;
+}
 export default class TransitionRunner {
   animationContext: AnimationContext;
   animations: AnimationsService;
@@ -50,11 +73,12 @@ export default class TransitionRunner {
     let { animationContext } = this;
     yield microwait(); // allow animations service to run far-matching to run first
     console.log(`AnimationContext(${animationContext.id})#maybeTransition()`);
+    animationContext.trackPosition();
     let contextDescendants = this.spriteTree.descendantsOf(animationContext);
     for (let contextDescendant of contextDescendants) {
       if (contextDescendant instanceof SpriteModifier) {
         let spriteModifier = contextDescendant as SpriteModifier;
-        if (spriteModifier.checkForChanges()) {
+        if (checkForChanges(spriteModifier, animationContext)) {
           this.freshlyChanged.add(spriteModifier);
         }
       }
@@ -101,10 +125,11 @@ export default class TransitionRunner {
       this.logChangeset(changeset, animationContext); // For debugging
       let animation = animationContext.args.use?.(changeset);
       yield Promise.resolve(animation);
+      animationContext.trackPosition();
       let contextDescendants = this.spriteTree.descendantsOf(animationContext);
       for (let contextDescendant of contextDescendants) {
         if (contextDescendant instanceof SpriteModifier) {
-          (contextDescendant as SpriteModifier).checkForChanges();
+          (contextDescendant as SpriteModifier).trackPosition();
         }
       }
     }

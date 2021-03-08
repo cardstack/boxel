@@ -43,12 +43,13 @@ export default class Changeset {
         this.receivedSprites.add(
           SpriteFactory.createReceivedSprite(
             spriteModifier,
-            matchingFarSpriteModifier
+            matchingFarSpriteModifier,
+            this.context
           )
         );
       } else {
         this.insertedSprites.add(
-          SpriteFactory.createInsertedSprite(spriteModifier)
+          SpriteFactory.createInsertedSprite(spriteModifier, this.context)
         );
       }
     }
@@ -57,10 +58,12 @@ export default class Changeset {
   addRemovedAndSentSprites(freshlyRemoved: Set<SpriteModifier>): void {
     for (let spriteModifier of freshlyRemoved) {
       if (spriteModifier.farMatch) {
-        this.sentSprites.add(SpriteFactory.createSentSprite(spriteModifier));
+        this.sentSprites.add(
+          SpriteFactory.createSentSprite(spriteModifier, this.context)
+        );
       } else {
         this.removedSprites.add(
-          SpriteFactory.createRemovedSprite(spriteModifier)
+          SpriteFactory.createRemovedSprite(spriteModifier, this.context)
         );
       }
     }
@@ -68,7 +71,9 @@ export default class Changeset {
 
   addKeptSprites(freshlyChanged: Set<SpriteModifier>): void {
     for (let spriteModifier of freshlyChanged) {
-      this.keptSprites.add(SpriteFactory.createKeptSprite(spriteModifier));
+      this.keptSprites.add(
+        SpriteFactory.createKeptSprite(spriteModifier, this.context)
+      );
     }
   }
 

@@ -1,9 +1,10 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { measure } from '../utils/measurement';
+import { getDocumentPosition } from '../utils/measurement';
 import Changeset from '../models/changeset';
 import { assert } from '@ember/debug';
+import ContextAwareBounds from '../models/context-aware-bounds';
 
 const BALL_SPEED_PX_PER_MS = 0.05;
 class InterruptionController extends Controller {
@@ -19,10 +20,13 @@ class InterruptionController extends Controller {
       let activeAnimation = activeAnimations[0];
       activeAnimation.pause();
       ballSprite.lockStyles(this.animationOriginPosition);
-      initialBounds = measure({
-        contextElement: context.element,
-        element: ballSprite.element,
-        withAnimations: true,
+      initialBounds = new ContextAwareBounds({
+        element: getDocumentPosition(ballSprite.element, {
+          withAnimations: true,
+        }),
+        contextElement: getDocumentPosition(context.element, {
+          withAnimations: true,
+        }),
       }).relativeToContext;
       ballSprite.unlockStyles();
       activeAnimation.cancel();
