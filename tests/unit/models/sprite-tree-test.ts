@@ -6,17 +6,25 @@ import SpriteTree, {
 import { module, test } from 'qunit';
 
 class MockAnimationContext implements ContextModel {
+  id: string | undefined;
   element: Element;
-  constructor(parentEl: Element | null = null) {
+  isAnimationContext = true;
+  constructor(
+    parentEl: Element | null = null,
+    id: string | undefined = undefined
+  ) {
     this.element = document.createElement('div');
     if (parentEl) {
       parentEl.appendChild(this.element);
     }
+    this.id = id;
   }
 }
 
 class MockSpriteModifier implements SpriteModel {
   element: Element;
+  farMatch = false;
+  id = 'Mock';
   constructor(parentEl: Element | null = null) {
     this.element = document.createElement('div');
     if (parentEl) {
@@ -184,6 +192,11 @@ module('Unit | Models | SpriteTree', function (hooks) {
       );
       assert.equal(subject.rootNodes.size, 0, 'tree has no rootNodes left');
     });
+    test('getting a context run list', function (assert) {
+      assert.deepEqual(subject.getContextRunList(new Set([context])), [
+        context,
+      ]);
+    });
   });
   module('with a context node and nested sprite modifier', function (hooks) {
     let context: MockAnimationContext,
@@ -283,6 +296,116 @@ module('Unit | Models | SpriteTree', function (hooks) {
       assert.equal(subject.farMatchCandidatesFor(context2).length, 1);
       assert.equal(subject.farMatchCandidatesFor(context2)[0], sprite1);
       assert.equal(subject.farMatchCandidatesFor(context1).length, 0);
+
+      subject.clearFreshlyRemovedChildren();
+      assert.equal(subject.farMatchCandidatesFor(context2).length, 0);
+      assert.equal(subject.farMatchCandidatesFor(context1).length, 0);
+    });
+    test('getting a context run list', function (assert) {
+      assert.deepEqual(subject.getContextRunList(new Set([context1])), [
+        context1,
+      ]);
+      assert.deepEqual(subject.getContextRunList(new Set([context2])), [
+        context2,
+      ]);
+      assert.deepEqual(
+        subject.getContextRunList(new Set([context1, context2])),
+        [context1, context2]
+      );
+    });
+  });
+  module(
+    'with a sprite modifier nested under another sprite modifier',
+    function (hooks) {
+      let context: MockAnimationContext,
+        spriteModifer: MockSpriteModifier,
+        spriteNode: SpriteTreeNode,
+        nestedSpriteModifer: MockSpriteModifier,
+        nestedSpriteNode: SpriteTreeNode;
+      hooks.beforeEach(function () {
+        context = new MockAnimationContext();
+        subject.addAnimationContext(context);
+        spriteModifer = new MockSpriteModifier(context.element);
+        spriteNode = subject.addSpriteModifier(spriteModifer);
+        nestedSpriteModifer = new MockSpriteModifier(spriteModifer.element);
+        nestedSpriteNode = subject.addSpriteModifier(nestedSpriteModifer);
+      });
+      test('removing nested modifiers results in both being freshlyRemoved', function (assert) {
+        let otherContext = new MockAnimationContext();
+        subject.addAnimationContext(otherContext);
+        subject.removeSpriteModifier(nestedSpriteModifer);
+        subject.removeSpriteModifier(spriteModifer);
+        assert.equal(
+          nestedSpriteNode.parent,
+          spriteNode,
+          'nested sprite node has its parent set correctly'
+        );
+        let farMatchCandidates = subject.farMatchCandidatesFor(otherContext);
+        assert.equal(
+          farMatchCandidates.length,
+          2,
+          'farMatchCandidates include both removed sprites'
+        );
+        assert.equal(farMatchCandidates[0], spriteModifer);
+        assert.equal(farMatchCandidates[1], nestedSpriteModifer);
+      });
+    }
+  );
+  module('with two contexts nested under another context', function (hooks) {
+    let parentContext: MockAnimationContext,
+      childContext1: MockAnimationContext,
+      childContext2: MockAnimationContext;
+    hooks.beforeEach(function () {
+      parentContext = new MockAnimationContext(null, 'parentContext');
+      subject.addAnimationContext(parentContext);
+      childContext1 = new MockAnimationContext(
+        parentContext.element,
+        'childContext1'
+      );
+      subject.addAnimationContext(childContext1);
+      childContext2 = new MockAnimationContext(
+        parentContext.element,
+        'childContext2'
+      );
+      subject.addAnimationContext(childContext2);
+    });
+    test('getting a context run list', function (assert) {
+      assert.deepEqual(
+        subject.getContextRunList(new Set([parentContext])),
+        [parentContext],
+        'run list for the parent context just includes the parent context'
+      );
+      assert.deepEqual(
+        subject.getContextRunList(new Set([parentContext, childContext1])),
+        [childContext1, parentContext],
+        'when both parent and child are specified both are returned, with child first'
+      );
+      assert.deepEqual(
+        subject.getContextRunList(new Set([childContext1])),
+        [childContext1, parentContext],
+        'when a child is specified, the run list includes the child then the parent'
+      );
+      let runList = subject.getContextRunList(
+        new Set([childContext1, childContext2])
+      );
+      assert.ok(
+        runList[0] === childContext1 || runList[0] === childContext2,
+        'when two children are specified, the parent is included once, after the children'
+      );
+      assert.ok(
+        runList[1] === childContext1 || runList[1] === childContext2,
+        'when two children are specified, the parent is included once, after the children'
+      );
+      assert.equal(
+        runList[2],
+        parentContext,
+        'when two children are specified, the parent is included once, after the children'
+      );
+      assert.deepEqual(
+        subject.getContextRunList(new Set([childContext2])),
+        [childContext2, parentContext],
+        'when a child is specified, the run list includes the child then the parent'
+      );
     });
   });
 });

@@ -1,12 +1,12 @@
 import Component from '@glimmer/component';
-import { scheduleOnce } from '@ember/runloop';
 import Ember from 'ember';
 import { reads } from 'macro-decorators';
 import Changeset from '../../models/changeset';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import AnimationsService from '../../services/animations';
-import SpriteModifier from '../../modifiers/sprite';
+import { assert } from '@ember/debug';
+import { getDocumentPosition } from '../../utils/measurement';
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -20,15 +20,16 @@ interface AnimationContextArgs {
 }
 
 export default class AnimationContextComponent extends Component<AnimationContextArgs> {
-  farMatchCandidates: Set<SpriteModifier> = new Set();
-
   @service declare animations: AnimationsService;
   @reads('args.id') id: string | undefined;
 
   element!: HTMLElement; //set by template
   orphansElement: HTMLElement | null = null; //set by template
-  @reads('args.initialInsertion', false) initialInsertion: boolean | undefined;
+  lastBounds: DOMRect | undefined;
+  currentBounds: DOMRect | undefined;
   isInitialRenderCompleted = false;
+
+  @reads('args.initialInsertion', false) initialInsertion: boolean | undefined;
 
   willDestroy(): void {
     super.willDestroy();
@@ -37,29 +38,28 @@ export default class AnimationContextComponent extends Component<AnimationContex
 
   get renderDetector(): undefined {
     consumeTag(VOLATILE_TAG);
-    scheduleOnce('afterRender', this, this.maybeTransition);
+    this.animations.notifyContextRendering(this);
     return undefined;
-  }
-
-  maybeTransition(): void {
-    this.animations.runTransition(this);
   }
 
   @action didInsertEl(element: HTMLElement): void {
     this.element = element;
     this.animations.registerContext(this);
+    this.trackPosition();
   }
 
   @action didInsertOrphansEl(element: HTMLElement): void {
     this.orphansElement = element;
   }
 
-  handleFarMatching(
-    farMatchSpriteModifierCandidates: Set<SpriteModifier>
-  ): void {
-    Array.from(farMatchSpriteModifierCandidates)
-      .filter((s) => s.context !== this)
-      .forEach((s) => this.farMatchCandidates.add(s));
+  trackPosition(): void {
+    let { element } = this;
+    assert(
+      'animation context must be an HTML element',
+      element instanceof HTMLElement
+    );
+    this.lastBounds = this.currentBounds;
+    this.currentBounds = getDocumentPosition(element);
   }
 
   shouldAnimate(changeset: Changeset): boolean {

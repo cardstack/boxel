@@ -1,20 +1,34 @@
 import Sprite, { SpriteType } from './sprite';
 import SpriteModifier from '../modifiers/sprite';
+
 import { assert } from '@ember/debug';
+import ContextAwareBounds from './context-aware-bounds';
+import AnimationContext from 'animations/components/animation-context';
 
 export default {
-  createInsertedSprite(spriteModifier: SpriteModifier): Sprite {
+  createInsertedSprite(
+    spriteModifier: SpriteModifier,
+    context: AnimationContext
+  ): Sprite {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,
       SpriteType.Inserted
     );
-    sprite.finalBounds = spriteModifier.currentBounds;
+    assert(
+      'inserted sprite should have currentBounds',
+      spriteModifier.currentBounds && context.currentBounds
+    );
+    sprite.finalBounds = new ContextAwareBounds({
+      element: spriteModifier.currentBounds,
+      contextElement: context.currentBounds,
+    });
     return sprite;
   },
   createReceivedSprite(
     spriteModifier: SpriteModifier,
-    farMatchedSpriteModifier: SpriteModifier
+    farMatchedSpriteModifier: SpriteModifier,
+    context: AnimationContext
   ): Sprite {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
@@ -22,8 +36,22 @@ export default {
       SpriteType.Received
     );
     farMatchedSpriteModifier.farMatch = spriteModifier;
-    sprite.initialBounds = farMatchedSpriteModifier.currentBounds;
-    sprite.finalBounds = spriteModifier.currentBounds;
+    assert(
+      'far-matched sprite should have currentBounds',
+      farMatchedSpriteModifier.currentBounds && context.lastBounds
+    );
+    sprite.initialBounds = new ContextAwareBounds({
+      element: farMatchedSpriteModifier.currentBounds,
+      contextElement: context.lastBounds,
+    });
+    assert(
+      'received sprite should have currentBounds',
+      spriteModifier.currentBounds && context.currentBounds
+    );
+    sprite.finalBounds = new ContextAwareBounds({
+      element: spriteModifier.currentBounds,
+      contextElement: context.currentBounds,
+    });
 
     sprite.counterpart = new Sprite(
       farMatchedSpriteModifier.element as HTMLElement,
@@ -31,24 +59,43 @@ export default {
       SpriteType.Sent
     );
     sprite.counterpart.counterpart = sprite;
-    sprite.counterpart.initialBounds = farMatchedSpriteModifier.currentBounds;
-    sprite.counterpart.finalBounds = spriteModifier.currentBounds;
+    sprite.counterpart.initialBounds = new ContextAwareBounds({
+      element: farMatchedSpriteModifier.currentBounds,
+      contextElement: context.currentBounds,
+    });
+    sprite.counterpart.finalBounds = new ContextAwareBounds({
+      element: spriteModifier.currentBounds,
+      contextElement: context.currentBounds,
+    });
 
     return sprite;
   },
-  createSentSprite(spriteModifier: SpriteModifier): Sprite {
+  createSentSprite(
+    spriteModifier: SpriteModifier,
+    context: AnimationContext
+  ): Sprite {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,
       SpriteType.Sent
     );
-    sprite.initialBounds = spriteModifier.currentBounds;
+    assert(
+      'sent sprite should have currentBounds',
+      spriteModifier.currentBounds && context.currentBounds
+    );
+    sprite.initialBounds = new ContextAwareBounds({
+      element: spriteModifier.currentBounds,
+      contextElement: context.currentBounds,
+    });
     let farMatch = spriteModifier.farMatch;
     assert(
       'farMatch is set on a SpriteModifier passed to createSentSprite',
-      farMatch
+      farMatch && farMatch.currentBounds
     );
-    sprite.finalBounds = farMatch.currentBounds;
+    sprite.finalBounds = new ContextAwareBounds({
+      element: farMatch.currentBounds,
+      contextElement: context.currentBounds,
+    });
 
     sprite.counterpart = new Sprite(
       farMatch.element as HTMLElement,
@@ -56,28 +103,60 @@ export default {
       SpriteType.Received
     );
     sprite.counterpart.counterpart = sprite;
-    sprite.counterpart.initialBounds = spriteModifier.currentBounds;
-    sprite.counterpart.finalBounds = farMatch.currentBounds;
+    sprite.counterpart.initialBounds = new ContextAwareBounds({
+      element: spriteModifier.currentBounds,
+      contextElement: context.currentBounds,
+    });
+    sprite.counterpart.finalBounds = new ContextAwareBounds({
+      element: farMatch.currentBounds,
+      contextElement: context.currentBounds,
+    });
 
     return sprite;
   },
-  createRemovedSprite(spriteModifier: SpriteModifier): Sprite {
+  createRemovedSprite(
+    spriteModifier: SpriteModifier,
+    context: AnimationContext
+  ): Sprite {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,
       SpriteType.Removed
     );
-    sprite.initialBounds = spriteModifier.currentBounds;
+    assert(
+      'removed sprite should have currentBounds',
+      spriteModifier.currentBounds && context.lastBounds
+    );
+    sprite.initialBounds = new ContextAwareBounds({
+      element: spriteModifier.currentBounds,
+      contextElement: context.lastBounds,
+    });
     return sprite;
   },
-  createKeptSprite(spriteModifier: SpriteModifier): Sprite {
+  createKeptSprite(
+    spriteModifier: SpriteModifier,
+    context: AnimationContext
+  ): Sprite {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,
       SpriteType.Kept
     );
-    sprite.initialBounds = spriteModifier.lastBounds;
-    sprite.finalBounds = spriteModifier.currentBounds;
+    assert(
+      'kept sprite should have lastBounds and currentBounds',
+      spriteModifier.lastBounds &&
+        context.lastBounds &&
+        spriteModifier.currentBounds &&
+        context.currentBounds
+    );
+    sprite.initialBounds = new ContextAwareBounds({
+      element: spriteModifier.lastBounds,
+      contextElement: context.lastBounds,
+    });
+    sprite.finalBounds = new ContextAwareBounds({
+      element: spriteModifier.currentBounds,
+      contextElement: context.currentBounds,
+    });
     return sprite;
   },
 };

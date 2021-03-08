@@ -6,6 +6,29 @@ import Sprite, { SpriteType } from '../models/sprite';
 import SpriteTree from './sprite-tree';
 import SpriteModifier from '../modifiers/sprite';
 import AnimationsService from '../services/animations';
+
+function checkForChanges(
+  spriteModifier: SpriteModifier,
+  animationContext: AnimationContext
+): boolean {
+  spriteModifier.trackPosition();
+  let spriteCurrent = spriteModifier.currentBounds;
+  let spriteLast = spriteModifier.lastBounds;
+  let contextCurrent = animationContext.currentBounds;
+  let contextLast = animationContext.lastBounds;
+  if (spriteCurrent && spriteLast && contextCurrent && contextLast) {
+    let parentLeftChange = contextCurrent.left - contextLast.left;
+    let parentTopChange = contextCurrent.top - contextLast.top;
+
+    return (
+      spriteCurrent.left - spriteLast.left - parentLeftChange !== 0 ||
+      spriteCurrent.top - spriteLast.top - parentTopChange !== 0 ||
+      spriteCurrent.width - spriteLast.width !== 0 ||
+      spriteCurrent.height - spriteLast.height !== 0
+    );
+  }
+  return true;
+}
 export default class TransitionRunner {
   animationContext: AnimationContext;
   animations: AnimationsService;
@@ -46,14 +69,16 @@ export default class TransitionRunner {
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  @task *maybeTransitionTask(animationContext: AnimationContext) {
+  @task *maybeTransitionTask() {
+    let { animationContext } = this;
     yield microwait(); // allow animations service to run far-matching to run first
     console.log(`AnimationContext(${animationContext.id})#maybeTransition()`);
+    animationContext.trackPosition();
     let contextDescendants = this.spriteTree.descendantsOf(animationContext);
     for (let contextDescendant of contextDescendants) {
       if (contextDescendant instanceof SpriteModifier) {
         let spriteModifier = contextDescendant as SpriteModifier;
-        if (spriteModifier.checkForChanges()) {
+        if (checkForChanges(spriteModifier, animationContext)) {
           this.freshlyChanged.add(spriteModifier);
         }
       }
@@ -70,36 +95,41 @@ export default class TransitionRunner {
       return;
     }
     let changeset = new Changeset(animationContext);
-    changeset.addInsertedAndReceivedSprites(
-      freshlyAdded,
-      animationContext.farMatchCandidates
+    let farMatchCandidates: Set<SpriteModifier> = new Set(
+      (this.spriteTree.farMatchCandidatesFor(animationContext).filter((m) => {
+        return m instanceof SpriteModifier;
+      }) as unknown) as SpriteModifier[]
     );
+    changeset.addInsertedAndReceivedSprites(freshlyAdded, farMatchCandidates);
     for (let item of freshlyAdded) {
       this.freshlyAdded.delete(item);
     }
 
-    yield microwait(); // allow other contexts to do their far-matching for added sprites
+    yield microwait(); // allow other TransitionRunners to do their far-matching for added sprites
 
     changeset.addRemovedAndSentSprites(freshlyRemoved);
-    for (let item of freshlyRemoved) {
-      this.freshlyRemoved.delete(item);
-      // TODO: clear relevant freshlyRemovedChildren in spriteTree?
-    }
-    animationContext.farMatchCandidates.clear();
 
     changeset.addKeptSprites(this.freshlyChanged);
     this.freshlyChanged.clear();
 
     changeset.finalizeSpriteCategories();
 
+    yield microwait(); // allow other TransitionRunners to do their far-matching for removed sprites
+
+    for (let item of freshlyRemoved) {
+      this.freshlyRemoved.delete(item);
+    }
+    this.spriteTree.clearFreshlyRemovedChildren();
+
     if (animationContext.shouldAnimate(changeset)) {
       this.logChangeset(changeset, animationContext); // For debugging
       let animation = animationContext.args.use?.(changeset);
       yield Promise.resolve(animation);
+      animationContext.trackPosition();
       let contextDescendants = this.spriteTree.descendantsOf(animationContext);
       for (let contextDescendant of contextDescendants) {
         if (contextDescendant instanceof SpriteModifier) {
-          (contextDescendant as SpriteModifier).checkForChanges();
+          (contextDescendant as SpriteModifier).trackPosition();
         }
       }
     }
