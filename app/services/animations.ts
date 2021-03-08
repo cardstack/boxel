@@ -1,15 +1,17 @@
 import Service from '@ember/service';
 
+import AnimationContext from '../components/animation-context';
 import SpriteModifier from '../modifiers/sprite';
 import SpriteTree from '../models/sprite-tree';
-import AnimationContext from '../components/animation-context';
+import TransitionRunner from '../models/transition-runner';
+import { scheduleOnce } from '@ember/runloop';
 import { taskFor } from 'ember-concurrency-ts';
-import TransitionRunner from 'animations/models/transition-runner';
 
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
   freshlyAdded: Set<SpriteModifier> = new Set();
   freshlyRemoved: Set<SpriteModifier> = new Set();
+  eligibleContexts: Set<AnimationContext> = new Set();
 
   registerContext(context: AnimationContext): void {
     this.spriteTree.addAnimationContext(context);
@@ -29,10 +31,17 @@ export default class AnimationsService extends Service {
     this.freshlyRemoved.add(spriteModifier);
   }
 
-  runTransition(animationContext: AnimationContext): void {
-    let transitionRunner = new TransitionRunner(animationContext, this);
-    let task = taskFor(transitionRunner.maybeTransitionTask);
-    task.perform();
+  notifyContextRendering(animationContext: AnimationContext): void {
+    this.eligibleContexts.add(animationContext);
+    scheduleOnce('afterRender', this, this.maybeTransition);
+  }
+
+  maybeTransition(): void {
+    for (let context of this.eligibleContexts) {
+      let transitionRunner = new TransitionRunner(context, this);
+      let task = taskFor(transitionRunner.maybeTransitionTask);
+      task.perform();
+    }
   }
 }
 

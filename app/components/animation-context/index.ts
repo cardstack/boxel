@@ -1,5 +1,4 @@
 import Component from '@glimmer/component';
-import { scheduleOnce } from '@ember/runloop';
 import Ember from 'ember';
 import { reads } from 'macro-decorators';
 import Changeset from '../../models/changeset';
@@ -39,12 +38,8 @@ export default class AnimationContextComponent extends Component<AnimationContex
 
   get renderDetector(): undefined {
     consumeTag(VOLATILE_TAG);
-    scheduleOnce('afterRender', this, this.maybeTransition);
+    this.animations.notifyContextRendering(this);
     return undefined;
-  }
-
-  maybeTransition(): void {
-    this.animations.runTransition(this);
   }
 
   @action didInsertEl(element: HTMLElement): void {
