@@ -88,6 +88,7 @@ class BoxelController extends Controller {
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @action async cardSortingTransition({ keptSprites }: Changeset) {
+    console.log('cardSortingTransition');
     let translateAnimations = [];
     for (let keptSprite of Array.from(keptSprites)) {
       assert(
@@ -112,6 +113,8 @@ class BoxelController extends Controller {
           boxShadow: '0 0 0',
         },
       ];
+
+      console.table(translationKeyFrames);
       let animation = keptSprite.element.animate(translationKeyFrames, {
         duration: TRANSLATE_DURATION,
         easing: 'ease-in-out',

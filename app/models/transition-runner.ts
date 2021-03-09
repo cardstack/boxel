@@ -132,6 +132,8 @@ export default class TransitionRunner {
           (contextDescendant as SpriteModifier).trackPosition();
         }
       }
+    } else {
+      console.log('no transition', this);
     }
     animationContext.isInitialRenderCompleted = true;
   }
