@@ -9,8 +9,6 @@ export default class Changeset {
   insertedSprites: Set<Sprite> = new Set();
   removedSprites: Set<Sprite> = new Set();
   keptSprites: Set<Sprite> = new Set();
-  sentSprites: Set<Sprite> = new Set();
-  receivedSprites: Set<Sprite> = new Set();
 
   constructor(animationContext: AnimationContext, intent: string | undefined) {
     this.context = animationContext;
@@ -25,49 +23,22 @@ export default class Changeset {
         return this.removedSprites;
       case SpriteType.Kept:
         return this.keptSprites;
-      case SpriteType.Sent:
-        return this.sentSprites;
-      case SpriteType.Received:
-        return this.receivedSprites;
     }
   }
 
-  addInsertedAndReceivedSprites(
-    freshlyAdded: Set<SpriteModifier>,
-    farMatchCandidates: Set<SpriteModifier>
-  ): void {
-    // let farSpritesArray = Array.from(farMatchCandidates);
+  addInsertedSprites(freshlyAdded: Set<SpriteModifier>): void {
     for (let spriteModifier of freshlyAdded) {
-      // let matchingFarSpriteModifier = farSpritesArray.find(
-      //   (s) => s.id && s.id === spriteModifier.id
-      // );
-      // if (matchingFarSpriteModifier) {
-      //   this.receivedSprites.add(
-      //     SpriteFactory.createReceivedSprite(
-      //       spriteModifier,
-      //       matchingFarSpriteModifier,
-      //       this.context
-      //     )
-      //   );
-      // } else {
       this.insertedSprites.add(
         SpriteFactory.createInsertedSprite(spriteModifier, this.context)
       );
-      // }
     }
   }
 
-  addRemovedAndSentSprites(freshlyRemoved: Set<SpriteModifier>): void {
+  addRemovedSprites(freshlyRemoved: Set<SpriteModifier>): void {
     for (let spriteModifier of freshlyRemoved) {
-      // if (spriteModifier.farMatch) {
-      //   this.sentSprites.add(
-      //     SpriteFactory.createSentSprite(spriteModifier, this.context)
-      //   );
-      // } else {
       this.removedSprites.add(
         SpriteFactory.createRemovedSprite(spriteModifier, this.context)
       );
-      // }
     }
   }
 

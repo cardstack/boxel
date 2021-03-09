@@ -66,9 +66,7 @@ export default class AnimationContextComponent extends Component<AnimationContex
     return !!(
       changeset &&
       this.args.use &&
-      (this.isInitialRenderCompleted ||
-        this.initialInsertion ||
-        changeset.receivedSprites.size)
+      (this.isInitialRenderCompleted || this.initialInsertion)
     );
   }
 

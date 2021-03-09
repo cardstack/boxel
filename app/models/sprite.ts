@@ -50,6 +50,4 @@ export enum SpriteType {
   Inserted = 'inserted',
   Removed = 'removed',
   Kept = 'kept',
-  Sent = 'sent',
-  Received = 'received',
 }

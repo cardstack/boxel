@@ -1,11 +1,9 @@
 import AnimationContext from 'animations/components/animation-context';
 import { task } from 'ember-concurrency-decorators';
-import { microwait } from '../utils/scheduling';
 import Changeset from '../models/changeset';
 import Sprite, { SpriteType } from '../models/sprite';
 import SpriteTree from './sprite-tree';
 import SpriteModifier from '../modifiers/sprite';
-import AnimationsService from '../services/animations';
 
 function checkForChanges(
   spriteModifier: SpriteModifier,
@@ -69,7 +67,6 @@ export default class TransitionRunner {
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @task *maybeTransitionTask() {
     let { animationContext } = this;
-    yield microwait(); // allow animations service to run far-matching to run first
     console.log(`AnimationContext(${animationContext.id})#maybeTransition()`);
     animationContext.trackPosition();
     let contextDescendants = this.spriteTree.descendantsOf(animationContext);
@@ -93,22 +90,10 @@ export default class TransitionRunner {
       return;
     }
     let changeset = new Changeset(animationContext, this.intent);
-    let farMatchCandidates: Set<SpriteModifier> = new Set(
-      (this.spriteTree.farMatchCandidatesFor(animationContext).filter((m) => {
-        return m instanceof SpriteModifier;
-      }) as unknown) as SpriteModifier[]
-    );
-    changeset.addInsertedAndReceivedSprites(freshlyAdded, farMatchCandidates);
-
-    yield microwait(); // allow other TransitionRunners to do their far-matching for added sprites
-
-    changeset.addRemovedAndSentSprites(freshlyRemoved);
-
+    changeset.addInsertedSprites(freshlyAdded);
+    changeset.addRemovedSprites(freshlyRemoved);
     changeset.addKeptSprites(this.freshlyChanged);
-
     changeset.finalizeSpriteCategories();
-
-    yield microwait(); // allow other TransitionRunners to do their far-matching for removed sprites
 
     if (animationContext.shouldAnimate(changeset)) {
       this.logChangeset(changeset, animationContext); // For debugging
@@ -151,8 +136,6 @@ export default class TransitionRunner {
       SpriteType.Inserted,
       SpriteType.Removed,
       SpriteType.Kept,
-      SpriteType.Sent,
-      SpriteType.Received,
     ]) {
       for (let sprite of changeset.spritesFor(type)) {
         tableRows.push(row(type, sprite));

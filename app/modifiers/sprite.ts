@@ -1,5 +1,4 @@
 import Modifier from 'ember-modifier';
-// import ContextAwareBounds from 'animations/models/context-aware-bounds';
 import { getDocumentPosition } from '../utils/measurement';
 import { assert } from '@ember/debug';
 import { inject as service } from '@ember/service';
