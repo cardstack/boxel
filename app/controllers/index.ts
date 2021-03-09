@@ -70,8 +70,8 @@ export default class IndexController extends Controller {
       );
       let initialBounds = keptSprite.initialBounds.relativeToContext;
       let finalBounds = keptSprite.finalBounds.relativeToContext;
-      let deltaX = finalBounds.left - initialBounds.left;
-      let deltaY = finalBounds.top - initialBounds.top;
+      let deltaX = initialBounds.left - finalBounds.left;
+      let deltaY = initialBounds.top - finalBounds.top;
       let translationKeyFrames: Keyframe[] = [
         {
           transform: `translate(${deltaX}px, ${deltaY}px)`,
