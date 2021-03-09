@@ -12,6 +12,7 @@ export default class AnimationsService extends Service {
   freshlyAdded: Set<SpriteModifier> = new Set();
   freshlyRemoved: Set<SpriteModifier> = new Set();
   eligibleContexts: Set<AnimationContext> = new Set();
+  intent: string | undefined;
 
   registerContext(context: AnimationContext): void {
     this.spriteTree.addAnimationContext(context);
@@ -36,16 +37,29 @@ export default class AnimationsService extends Service {
     scheduleOnce('afterRender', this, this.maybeTransition);
   }
 
-  maybeTransition(): void {
+  async maybeTransition(): Promise<void> {
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
+    let promises = [];
     for (let context of contexts) {
       let transitionRunner = new TransitionRunner(
         context as AnimationContext,
-        this
+        this,
+        {
+          intent: this.intent,
+        }
       );
       let task = taskFor(transitionRunner.maybeTransitionTask);
-      task.perform();
+      promises.push(task.perform());
     }
+    await Promise.allSettled(promises);
+    this.freshlyAdded.clear();
+    this.freshlyRemoved.clear();
+    this.spriteTree.clearFreshlyRemovedChildren();
+    this.intent = undefined;
+  }
+
+  setIntent(intentDescription: string): void {
+    this.intent = intentDescription;
   }
 }
 

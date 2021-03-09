@@ -18,18 +18,19 @@
         </Boxel::Button>
       </div>
       <AnimationContext @id="card-sorting-context" @use={{this.cardSortingTransition}}>
-        {{#each this.sortedCardModels as |model|}}
-          {{#if (eq model this.isolatedCard)}}
-            <div class="my-4 card-placeholder"></div>
-          {{else}}
-            <Card
-              @model={{model}}
-              @expandAction={{fn this.isolateCard model}}
-              class="my-4"
-              {{sprite id=model.id}}
-            />
-          {{/if}}
-        {{/each}}
+        <div class="stack">
+          {{#each this.sortedCardModels as |model|}}
+            {{#if (eq model this.isolatedCard)}}
+              <div class="card-placeholder" {{sprite id="card-placeholder"}}></div>
+            {{else}}
+              <Card
+                @model={{model}}
+                @expandAction={{fn this.isolateCard model}}
+                {{sprite id=model.id}}
+              />
+            {{/if}}
+          {{/each}}
+        </div>
       </AnimationContext>
     </div>
 

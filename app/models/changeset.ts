@@ -5,14 +5,16 @@ import SpriteModifier from '../modifiers/sprite';
 
 export default class Changeset {
   context: AnimationContext;
+  intent: string | undefined;
   insertedSprites: Set<Sprite> = new Set();
   removedSprites: Set<Sprite> = new Set();
   keptSprites: Set<Sprite> = new Set();
   sentSprites: Set<Sprite> = new Set();
   receivedSprites: Set<Sprite> = new Set();
 
-  constructor(animationContext: AnimationContext) {
+  constructor(animationContext: AnimationContext, intent: string | undefined) {
     this.context = animationContext;
+    this.intent = intent;
   }
 
   spritesFor(spriteType: SpriteType): Set<Sprite> {
@@ -34,38 +36,38 @@ export default class Changeset {
     freshlyAdded: Set<SpriteModifier>,
     farMatchCandidates: Set<SpriteModifier>
   ): void {
-    let farSpritesArray = Array.from(farMatchCandidates);
+    // let farSpritesArray = Array.from(farMatchCandidates);
     for (let spriteModifier of freshlyAdded) {
-      let matchingFarSpriteModifier = farSpritesArray.find(
-        (s) => s.id && s.id === spriteModifier.id
+      // let matchingFarSpriteModifier = farSpritesArray.find(
+      //   (s) => s.id && s.id === spriteModifier.id
+      // );
+      // if (matchingFarSpriteModifier) {
+      //   this.receivedSprites.add(
+      //     SpriteFactory.createReceivedSprite(
+      //       spriteModifier,
+      //       matchingFarSpriteModifier,
+      //       this.context
+      //     )
+      //   );
+      // } else {
+      this.insertedSprites.add(
+        SpriteFactory.createInsertedSprite(spriteModifier, this.context)
       );
-      if (matchingFarSpriteModifier) {
-        this.receivedSprites.add(
-          SpriteFactory.createReceivedSprite(
-            spriteModifier,
-            matchingFarSpriteModifier,
-            this.context
-          )
-        );
-      } else {
-        this.insertedSprites.add(
-          SpriteFactory.createInsertedSprite(spriteModifier, this.context)
-        );
-      }
+      // }
     }
   }
 
   addRemovedAndSentSprites(freshlyRemoved: Set<SpriteModifier>): void {
     for (let spriteModifier of freshlyRemoved) {
-      if (spriteModifier.farMatch) {
-        this.sentSprites.add(
-          SpriteFactory.createSentSprite(spriteModifier, this.context)
-        );
-      } else {
-        this.removedSprites.add(
-          SpriteFactory.createRemovedSprite(spriteModifier, this.context)
-        );
-      }
+      // if (spriteModifier.farMatch) {
+      //   this.sentSprites.add(
+      //     SpriteFactory.createSentSprite(spriteModifier, this.context)
+      //   );
+      // } else {
+      this.removedSprites.add(
+        SpriteFactory.createRemovedSprite(spriteModifier, this.context)
+      );
+      // }
     }
   }
 

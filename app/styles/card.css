@@ -273,3 +273,18 @@
   border-radius: var(--boxel-border-radius);
   height: 122px;
 }
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.stack > * {
+  margin-top: 0;
+  margin-bottom: 0;
+} 
+
+.stack > * + * {
+  margin-top: var(--boxel-sp-xs);
+}

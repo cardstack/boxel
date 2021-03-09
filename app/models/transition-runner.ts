@@ -33,13 +33,16 @@ export default class TransitionRunner {
   animationContext: AnimationContext;
   animations: AnimationsService;
   freshlyChanged: Set<SpriteModifier> = new Set();
+  intent: string | undefined;
 
   constructor(
     animationContext: AnimationContext,
-    animationsService: AnimationsService
+    animationsService: AnimationsService,
+    opts = { intent: undefined }
   ) {
     this.animationContext = animationContext;
     this.animations = animationsService;
+    this.intent = opts.intent;
   }
 
   get spriteTree(): SpriteTree {
@@ -94,32 +97,23 @@ export default class TransitionRunner {
     ) {
       return;
     }
-    let changeset = new Changeset(animationContext);
+    let changeset = new Changeset(animationContext, this.intent);
     let farMatchCandidates: Set<SpriteModifier> = new Set(
       (this.spriteTree.farMatchCandidatesFor(animationContext).filter((m) => {
         return m instanceof SpriteModifier;
       }) as unknown) as SpriteModifier[]
     );
     changeset.addInsertedAndReceivedSprites(freshlyAdded, farMatchCandidates);
-    for (let item of freshlyAdded) {
-      this.freshlyAdded.delete(item);
-    }
 
     yield microwait(); // allow other TransitionRunners to do their far-matching for added sprites
 
     changeset.addRemovedAndSentSprites(freshlyRemoved);
 
     changeset.addKeptSprites(this.freshlyChanged);
-    this.freshlyChanged.clear();
 
     changeset.finalizeSpriteCategories();
 
     yield microwait(); // allow other TransitionRunners to do their far-matching for removed sprites
-
-    for (let item of freshlyRemoved) {
-      this.freshlyRemoved.delete(item);
-    }
-    this.spriteTree.clearFreshlyRemovedChildren();
 
     if (animationContext.shouldAnimate(changeset)) {
       this.logChangeset(changeset, animationContext); // For debugging
@@ -145,6 +139,7 @@ export default class TransitionRunner {
     let contextId = animationContext.args.id;
     function row(type: SpriteType, sprite: Sprite) {
       return {
+        intent: changeset.intent,
         context: contextId,
         type,
         spriteId: sprite.id,
