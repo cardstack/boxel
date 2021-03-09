@@ -11,4 +11,7 @@ Router.map(function () {
   this.route('list-detail');
   this.route('interruption');
   this.route('boxel');
+  this.route('routes', function () {
+    this.route('other');
+  });
 });
