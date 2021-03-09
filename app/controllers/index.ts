@@ -100,8 +100,6 @@ export default class IndexController extends Controller {
           translationKeyFrames[translationKeyFrames.length - 1]
         );
       }
-      console.log(keptSprite.id);
-      console.table(translationKeyFrames);
       let animation = keptSprite.element.animate(translationKeyFrames, {
         duration: FADE_DURATION + TRANSLATE_DURATION,
       });

@@ -67,7 +67,6 @@ export default class TransitionRunner {
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @task *maybeTransitionTask() {
     let { animationContext } = this;
-    console.log(`AnimationContext(${animationContext.id})#maybeTransition()`);
     animationContext.trackPosition();
     let contextDescendants = this.spriteTree.descendantsOf(animationContext);
     for (let contextDescendant of contextDescendants) {
@@ -106,8 +105,6 @@ export default class TransitionRunner {
           (contextDescendant as SpriteModifier).trackPosition();
         }
       }
-    } else {
-      console.log('no transition', this);
     }
     animationContext.isInitialRenderCompleted = true;
   }

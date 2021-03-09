@@ -36,7 +36,6 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
       );
       this.lastBounds = this.currentBounds;
       this.currentBounds = getDocumentPosition(element);
-      console.log('trackPosition', this.id, this.currentBounds);
       this.alreadyTracked = true;
     }
     once(this, 'clearTrackedPosition');
