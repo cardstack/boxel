@@ -59,63 +59,62 @@
   </p>
 </div>
 
-<div class='flex w-full m-4'>
-  <div class="flex-none w-1/2">
-    <h2 class="p-2 bg-grey-lightest mr-2">Animation Context 1</h2>
+<AnimationContext @id="outer" @use={{this.outerTransition}}>
+  <div class='flex w-full m-4'>
+    <div class="flex-none w-1/2">
+      <h2 class="p-2 bg-grey-lightest mr-2">Inner Animation Context</h2>
 
-    {{#if this.showContentBeforeContext}}
-      <p>Here is some content before AnimationContext 1</p>
-    {{/if}}
-    <div class="some-container {{if this.contextHasPadding 'with-padded-animation-context'}}">
-      <AnimationContext @id="1" @use={{this.transition}}>
-        <div {{sprite id="container"}}>
-          {{#if this.showContentBefore}}
-            <p>Here is some content before the sprite</p>
-          {{/if}}
+      {{#if this.showContentBeforeContext}}
+        <p>Here is some content before AnimationContext 1</p>
+      {{/if}}
+      <div class="some-container {{if this.contextHasPadding 'with-padded-animation-context'}}">
+        <AnimationContext @id="inner" @use={{this.innerTransition}}>
+          <div {{sprite id="container"}}>
+            {{#if this.showContentBefore}}
+              <p>Here is some content before the sprite</p>
+            {{/if}}
 
-          {{#if (and this.showSpriteA (not this.spriteAPositionBottom))}}
-            <div class="sprite" {{sprite id="A"}}>
-              Hello, I am a sprite A
-            </div>
-          {{/if}}
+            {{#if (and this.showSpriteA (not this.spriteAPositionBottom))}}
+              <div class="sprite" {{sprite id="A"}}>
+                Hello, I am a sprite A
+              </div>
+            {{/if}}
 
-          {{#if this.showSpriteB}}
-            <div class="sprite" {{sprite id="B"}}>
-              Hello, I am a sprite B
-            </div>
-          {{/if}}
+            {{#if this.showSpriteB}}
+              <div class="sprite" {{sprite id="B"}}>
+                Hello, I am a sprite B
+              </div>
+            {{/if}}
 
-          {{#if (eq this.spriteCPosition 0)}}
-            <div class="sprite" {{sprite id="C"}}>
-              Hello, I am a sprite C
-            </div>
-          {{/if}}
+            {{#if (eq this.spriteCPosition 0)}}
+              <div class="sprite" {{sprite id="C"}}>
+                Hello, I am a sprite C
+              </div>
+            {{/if}}
 
-          {{#if (and this.showSpriteA this.spriteAPositionBottom)}}
-            <div class="sprite" {{sprite id="A"}}>
-              Hello, I am a sprite A
-            </div>
-          {{/if}}
+            {{#if (and this.showSpriteA this.spriteAPositionBottom)}}
+              <div class="sprite" {{sprite id="A"}}>
+                Hello, I am a sprite A
+              </div>
+            {{/if}}
 
-          {{#if this.showContentAfter}}
-            <p>Here is some content after the sprite</p>
-          {{/if}}
-        </div>
-      </AnimationContext>
+            {{#if this.showContentAfter}}
+              <p>Here is some content after the sprite</p>
+            {{/if}}
+          </div>
+        </AnimationContext>
+      </div>
     </div>
-  </div>
-  <div class="flex-none w-1/2">
-    <h2 class="p-2 bg-grey-lightest">Animation Context 2</h2>
-    <AnimationContext @id="2" @use={{this.transition}}>
+    <div class="flex-none w-1/2" data-right-side>
+      <h2 class="p-2 bg-grey-lightest">Within Outer Animation Context</h2>
       {{#if (eq this.spriteCPosition 1)}}
         <div class="sprite" {{sprite id="C"}}>
           Hello, I am a sprite C
         </div>
       {{/if}}
-
-    </AnimationContext>
+    </div>
   </div>
-</div>
+</AnimationContext>
 
 <h3 class="font-bold mx-4 text-sm">Notes</h3>
 <ol class="px-8 text-sm">

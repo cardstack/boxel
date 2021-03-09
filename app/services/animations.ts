@@ -41,13 +41,12 @@ export default class AnimationsService extends Service {
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
     let promises = [];
     for (let context of contexts) {
-      let transitionRunner = new TransitionRunner(
-        context as AnimationContext,
-        this,
-        {
-          intent: this.intent,
-        }
-      );
+      let transitionRunner = new TransitionRunner(context as AnimationContext, {
+        spriteTree: this.spriteTree,
+        freshlyAdded: this.freshlyAdded,
+        freshlyRemoved: this.freshlyRemoved,
+        intent: this.intent,
+      });
       let task = taskFor(transitionRunner.maybeTransitionTask);
       promises.push(task.perform());
     }

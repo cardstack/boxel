@@ -1,7 +1,6 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
-import listTransition from '../transitions/list';
-import detailTransition from '../transitions/detail';
+import listDetailTransition from '../transitions/list-detail';
 
 class Person {
   name: string;
@@ -23,6 +22,5 @@ export default class IndexController extends Controller {
   ];
 
   @tracked selectedPerson: Person | null = null;
-  detailTransition = detailTransition;
-  listTransition = listTransition;
+  listDetailTransition = listDetailTransition;
 }

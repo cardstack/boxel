@@ -2,8 +2,8 @@
   List Detail
 </h2>
 
-<div class="m-4">
-  <AnimationContext @id="List Animation Context" @use={{this.listTransition}} data-animation-context="list">
+<AnimationContext @id="List-Detail" @use={{this.listDetailTransition}}>
+  <div class="m-4">
     {{#unless this.selectedPerson}}
       <ul class="person-list" {{sprite id='list'}}>
         {{#each this.people as |person|}}
@@ -26,9 +26,7 @@
         {{/each}}
       </ul>
     {{/unless}}
-  </AnimationContext>
 
-  <AnimationContext @id="Detail Animation Context" @use={{this.detailTransition}}>
     {{#if this.selectedPerson}}
       <div class="detail-card" {{sprite id=(concat "person:" this.selectedPerson.id ":card")}}>
         <button
@@ -48,5 +46,5 @@
         <p>{{this.selectedPerson.bio}}</p>
       </div>
     {{/if}}
-  </AnimationContext>
-</div>
+  </div>
+</AnimationContext>

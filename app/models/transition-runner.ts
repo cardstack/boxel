@@ -29,32 +29,27 @@ function checkForChanges(
   }
   return true;
 }
+
+type TransitionRunnerOpts = {
+  spriteTree: SpriteTree;
+  freshlyAdded: Set<SpriteModifier>;
+  freshlyRemoved: Set<SpriteModifier>;
+  intent: string | undefined;
+};
 export default class TransitionRunner {
   animationContext: AnimationContext;
-  animations: AnimationsService;
-  freshlyChanged: Set<SpriteModifier> = new Set();
+  spriteTree: SpriteTree;
+  freshlyAdded: Set<SpriteModifier>;
+  freshlyRemoved: Set<SpriteModifier>;
   intent: string | undefined;
+  freshlyChanged: Set<SpriteModifier> = new Set();
 
-  constructor(
-    animationContext: AnimationContext,
-    animationsService: AnimationsService,
-    opts = { intent: undefined }
-  ) {
+  constructor(animationContext: AnimationContext, opts: TransitionRunnerOpts) {
     this.animationContext = animationContext;
-    this.animations = animationsService;
+    this.spriteTree = opts.spriteTree;
+    this.freshlyAdded = opts.freshlyAdded;
+    this.freshlyRemoved = opts.freshlyRemoved;
     this.intent = opts.intent;
-  }
-
-  get spriteTree(): SpriteTree {
-    return this.animations.spriteTree;
-  }
-
-  get freshlyAdded(): Set<SpriteModifier> {
-    return this.animations.freshlyAdded;
-  }
-
-  get freshlyRemoved(): Set<SpriteModifier> {
-    return this.animations.freshlyRemoved;
   }
 
   filterToContext(

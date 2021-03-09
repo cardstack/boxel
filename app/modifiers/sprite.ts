@@ -30,24 +30,21 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
 
   trackPosition(): void {
     if (!this.alreadyTracked) {
-      this._trackPosition();
+      let { element } = this;
+      assert(
+        'sprite modifier can only be installed on HTML elements',
+        element instanceof HTMLElement
+      );
+      this.lastBounds = this.currentBounds;
+      this.currentBounds = getDocumentPosition(element);
+      console.log('trackPosition', this.id, this.currentBounds);
+      this.alreadyTracked = true;
     }
     once(this, 'clearTrackedPosition');
   }
 
   clearTrackedPosition(): void {
     this.alreadyTracked = false;
-  }
-
-  _trackPosition(): void {
-    let { element } = this;
-    assert(
-      'sprite modifier can only be installed on HTML elements',
-      element instanceof HTMLElement
-    );
-    this.lastBounds = this.currentBounds;
-    this.currentBounds = getDocumentPosition(element);
-    this.alreadyTracked = true;
   }
 
   willRemove(): void {
