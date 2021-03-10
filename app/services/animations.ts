@@ -1,38 +1,64 @@
 import Service from '@ember/service';
 
-import { scheduleOnce } from '@ember/runloop';
-import SpriteModifier from '../modifiers/sprite';
 import AnimationContext from '../components/animation-context';
+import SpriteModifier from '../modifiers/sprite';
+import SpriteTree from '../models/sprite-tree';
+import TransitionRunner from '../models/transition-runner';
+import { scheduleOnce } from '@ember/runloop';
+import { taskFor } from 'ember-concurrency-ts';
 
 export default class AnimationsService extends Service {
-  contexts: Set<AnimationContext> = new Set();
-
-  possiblyFarMatchingSpriteModifiers: Set<SpriteModifier> = new Set();
+  spriteTree = new SpriteTree();
+  freshlyAdded: Set<SpriteModifier> = new Set();
+  freshlyRemoved: Set<SpriteModifier> = new Set();
+  eligibleContexts: Set<AnimationContext> = new Set();
+  intent: string | undefined;
 
   registerContext(context: AnimationContext): void {
-    this.contexts.add(context);
-    scheduleOnce('afterRender', this, 'handleFarMatching');
+    this.spriteTree.addAnimationContext(context);
   }
 
   unregisterContext(context: AnimationContext): void {
-    context.registered.forEach((s) =>
-      this.possiblyFarMatchingSpriteModifiers.add(s)
-    );
-    this.contexts.delete(context);
+    this.spriteTree.removeAnimationContext(context);
   }
 
-  notifyRemovedSpriteModifier(spriteModifier: SpriteModifier): void {
-    this.possiblyFarMatchingSpriteModifiers.add(spriteModifier);
-    scheduleOnce('afterRender', this, 'handleFarMatching');
+  registerSpriteModifier(spriteModifier: SpriteModifier): void {
+    this.spriteTree.addSpriteModifier(spriteModifier);
+    this.freshlyAdded.add(spriteModifier);
   }
 
-  handleFarMatching(): void {
-    console.log('AnimationsService#handleFarMatching()');
-    this.contexts.forEach((context) =>
-      context.handleFarMatching(this.possiblyFarMatchingSpriteModifiers)
-    );
+  unregisterSpriteModifier(spriteModifier: SpriteModifier): void {
+    this.spriteTree.removeSpriteModifier(spriteModifier);
+    this.freshlyRemoved.add(spriteModifier);
+  }
 
-    this.possiblyFarMatchingSpriteModifiers.clear();
+  notifyContextRendering(animationContext: AnimationContext): void {
+    this.eligibleContexts.add(animationContext);
+    scheduleOnce('afterRender', this, this.maybeTransition);
+  }
+
+  async maybeTransition(): Promise<void> {
+    let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
+    let promises = [];
+    for (let context of contexts) {
+      let transitionRunner = new TransitionRunner(context as AnimationContext, {
+        spriteTree: this.spriteTree,
+        freshlyAdded: this.freshlyAdded,
+        freshlyRemoved: this.freshlyRemoved,
+        intent: this.intent,
+      });
+      let task = taskFor(transitionRunner.maybeTransitionTask);
+      promises.push(task.perform());
+    }
+    await Promise.allSettled(promises);
+    this.freshlyAdded.clear();
+    this.freshlyRemoved.clear();
+    this.spriteTree.clearFreshlyRemovedChildren();
+    this.intent = undefined;
+  }
+
+  setIntent(intentDescription: string): void {
+    this.intent = intentDescription;
   }
 }
 

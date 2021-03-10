@@ -1,4 +1,4 @@
-import ContextAwareBounds, { Position } from './context-aware-bounds';
+import ContextAwareBounds, { Bounds } from './context-aware-bounds';
 
 export default class Sprite {
   element: HTMLElement;
@@ -18,23 +18,31 @@ export default class Sprite {
     this.type = type;
   }
 
-  lockStyles(bounds: Position | null = null): void {
+  lockStyles(bounds: Bounds | null = null): void {
     if (!bounds) {
       if (this.initialBounds) {
         bounds = this.initialBounds.relativeToContext;
       } else {
-        bounds = { left: 0, top: 0 };
+        bounds = { left: 0, top: 0, width: 0, height: 0 };
       }
     }
     this.element.style.position = 'absolute';
     this.element.style.left = bounds.left + 'px';
     this.element.style.top = bounds.top + 'px';
+    if (bounds.width) {
+      this.element.style.width = bounds.width + 'px';
+    }
+    if (bounds.height) {
+      this.element.style.height = bounds.height + 'px';
+    }
   }
 
   unlockStyles(): void {
     this.element.style.removeProperty('position');
     this.element.style.removeProperty('left');
     this.element.style.removeProperty('top');
+    this.element.style.removeProperty('width');
+    this.element.style.removeProperty('height');
   }
 }
 
@@ -42,6 +50,4 @@ export enum SpriteType {
   Inserted = 'inserted',
   Removed = 'removed',
   Kept = 'kept',
-  Sent = 'sent',
-  Received = 'received',
 }

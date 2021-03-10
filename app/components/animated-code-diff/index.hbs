@@ -4,13 +4,13 @@
   </div>
   <div class='flex docs-bg-code-base text-grey overflow-x-scroll'>
     <div class="p-4 w-full">
-      <AnimationContext @use={{this.codeTransition}} @duration={{400}} as |context|>
+      <AnimationContext @use={{this.codeTransition}} @duration={{400}}>
         <pre>
           {{#each
             (if @isShowingFinal this.finalLines this.originalLines)
             key='id'
           as |line|~}}
-            <div {{sprite context=context}}>{{line.text}}</div>
+            <div {{sprite}}>{{line.text}}</div>
           {{~/each~}}
         </pre>
       </AnimationContext>

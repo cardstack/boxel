@@ -7,6 +7,12 @@ export interface Position {
   left: number;
   top: number;
 }
+export interface Bounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
 
 export default class ContextAwareBounds {
   element: DOMRect;

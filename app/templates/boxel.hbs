@@ -8,46 +8,56 @@
     </p>
   </div>
 
-  <div class="mt-16 w-1/3">
-    Click expand icon to isolate card:
-    <AnimationContext @id="embedded-context" as |context|>
-      {{#unless this.isCardIsolated}}
+  <AnimationContext @id="card-isolation-context" @use={{this.isolatedCardTransition}}>
+
+    <div class="mt-16 w-1/3">
+      <div class="my-4">
+        Click expand icon to isolate card. Adjust sorting:
+        <Boxel::Button {{on 'click' this.reverseSort}}>
+          {{if this.ascendingSort 'A-Z' 'Z-A'}} (click to reverse)
+        </Boxel::Button>
+      </div>
+      <AnimationContext @id="card-sorting-context" @use={{this.cardSortingTransition}}>
+        <div class="stack">
+          {{#each this.sortedCardModels as |model|}}
+            {{#if (eq model this.isolatedCard)}}
+              <div class="card-placeholder" {{sprite id="card-placeholder"}}></div>
+            {{else}}
+              <Card
+                @model={{model}}
+                @expandAction={{fn this.isolateCard model}}
+                {{sprite id=model.id}}
+              />
+            {{/if}}
+          {{/each}}
+        </div>
+      </AnimationContext>
+    </div>
+
+    <div class="isolation-layer absolute {{unless this.isolatedCard 'hidden'}}">
+      {{#if this.isolatedCard}}
         <Card
-          @model={{this.piaMidina}}
-          @expandAction={{this.isolatePiaMidinaCard}}
-          @animationContext={{context}}
-          {{sprite context=context id=this.piaMidina.id}}
-        />
-      {{/unless}}
-    </AnimationContext>
-  </div>
-</div>
+          @model={{this.isolatedCard}}
+          @expandAction={{this.dismissIsolatedCard}}
+          {{sprite id=this.isolatedCard.id}}
+        >
+          <p class="mt-2 mb-2">
+            Id Lorem laborum mollit labore. Et et est ipsum consequat est eiusmod amet quis. Est cillum velit et sunt ad occaecat enim eu eiusmod do. Sint ea fugiat nisi minim eu est ullamco proident aliqua. Non aliquip mollit quis elit Lorem fugiat est culpa exercitation voluptate commodo commodo. Duis ex sint enim cillum proident est esse. Est consequat reprehenderit enim laborum pariatur aute quis consequat quis cupidatat et voluptate.
+          </p>
 
-<div class="isolation-layer absolute">
-  <AnimationContext @id="isolated-context" @use={{this.isolatedCardTransition}} as |context|>
-    {{#if this.isCardIsolated}}
-      <Card
-        @model={{this.piaMidina}}
-        @expandAction={{this.dismissPiaMidinaCard}}
-        @animationContext={{context}}
-        {{sprite context=context id=this.piaMidina.id}}
-      >
-        <p class="mt-2 mb-2">
-          Id Lorem laborum mollit labore. Et et est ipsum consequat est eiusmod amet quis. Est cillum velit et sunt ad occaecat enim eu eiusmod do. Sint ea fugiat nisi minim eu est ullamco proident aliqua. Non aliquip mollit quis elit Lorem fugiat est culpa exercitation voluptate commodo commodo. Duis ex sint enim cillum proident est esse. Est consequat reprehenderit enim laborum pariatur aute quis consequat quis cupidatat et voluptate.
-        </p>
+          <p class="mb-2">
+    Irure non dolore occaecat fugiat. Tempor proident occaecat eiusmod do ex in nisi amet do laboris. Exercitation enim reprehenderit elit eu nulla ad laboris culpa sunt voluptate deserunt culpa sint. Laboris dolore laborum nisi anim aliquip id quis. Sint dolore nulla nisi ea voluptate irure exercitation duis sit do tempor voluptate qui ipsum. Do labore sint veniam consectetur velit ad non ipsum et adipisicing. Consequat duis exercitation dolor nostrud eu commodo culpa pariatur.
+          </p>
 
-        <p class="mb-2">
-  Irure non dolore occaecat fugiat. Tempor proident occaecat eiusmod do ex in nisi amet do laboris. Exercitation enim reprehenderit elit eu nulla ad laboris culpa sunt voluptate deserunt culpa sint. Laboris dolore laborum nisi anim aliquip id quis. Sint dolore nulla nisi ea voluptate irure exercitation duis sit do tempor voluptate qui ipsum. Do labore sint veniam consectetur velit ad non ipsum et adipisicing. Consequat duis exercitation dolor nostrud eu commodo culpa pariatur.
-        </p>
+          <p class="mb-2">
+    Deserunt aliqua ex anim occaecat nulla velit ullamco Lorem irure. Ad magna aute ut anim sit non labore cupidatat quis adipisicing dolore aute. Non nulla velit voluptate consequat sunt eu ut non aliquip labore excepteur.
+          </p>
 
-        <p class="mb-2">
-  Deserunt aliqua ex anim occaecat nulla velit ullamco Lorem irure. Ad magna aute ut anim sit non labore cupidatat quis adipisicing dolore aute. Non nulla velit voluptate consequat sunt eu ut non aliquip labore excepteur.
-        </p>
-
-        <p>
-  Culpa elit quis velit ad laboris sunt et et Lorem aliquip eiusmod. Et aliquip mollit nisi aliquip quis labore est. Quis laboris nulla aliqua pariatur ex non nisi. Eu adipisicing est sint excepteur ad occaecat ea mollit adipisicing laboris quis. Ipsum esse dolor exercitation eiusmod. Ad quis duis aliqua nostrud cillum.
-        </p>
-      </Card>
-    {{/if}}
+          <p>
+    Culpa elit quis velit ad laboris sunt et et Lorem aliquip eiusmod. Et aliquip mollit nisi aliquip quis labore est. Quis laboris nulla aliqua pariatur ex non nisi. Eu adipisicing est sint excepteur ad occaecat ea mollit adipisicing laboris quis. Ipsum esse dolor exercitation eiusmod. Ad quis duis aliqua nostrud cillum.
+          </p>
+        </Card>
+      {{/if}}
+    </div>
   </AnimationContext>
 </div>

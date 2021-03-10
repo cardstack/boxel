@@ -1,5 +1,3 @@
-import ContextAwareBounds from '../models/context-aware-bounds';
-
 function runWithoutAnimations(element: HTMLElement, f: () => DOMRect) {
   let animations = element.getAnimations();
   let currentTimes: number[] = [];
@@ -19,10 +17,10 @@ function runWithoutAnimations(element: HTMLElement, f: () => DOMRect) {
   return result;
 }
 
-function getDocumentPosition(
+export function getDocumentPosition(
   element: HTMLElement,
   opts = { withAnimations: false }
-) {
+): DOMRect {
   let wrapper = (_el: HTMLElement, f: () => DOMRect) => f();
   if (opts.withAnimations === false) {
     wrapper = runWithoutAnimations;
@@ -36,22 +34,5 @@ function getDocumentPosition(
       rect.width,
       rect.height
     );
-  });
-}
-
-type MeasureArgs = {
-  contextElement: HTMLElement;
-  element: HTMLElement;
-  withAnimations?: boolean;
-};
-
-export function measure({
-  contextElement,
-  element,
-  withAnimations = false,
-}: MeasureArgs): ContextAwareBounds {
-  return new ContextAwareBounds({
-    element: getDocumentPosition(element, { withAnimations }),
-    contextElement: getDocumentPosition(contextElement),
   });
 }

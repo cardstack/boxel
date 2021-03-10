@@ -7,7 +7,7 @@
     <p class='mt-4 text-lg'>
       Click one of the four targets to initiate a transition of the circle to the target.
     </p>
-    <AnimationContext @use={{this.moveBall}} class="mt-8 h-64 w-64 m-auto" as |context|>
+    <AnimationContext @use={{this.moveBall}} class="mt-8 h-64 w-64 m-auto">
       <div class="bg-grey-lightest relative h-64 w-64">
         <button
           type="button"
@@ -42,7 +42,7 @@
           D
         </button>
         <div
-          {{sprite context=context id="ball"}}
+          {{sprite id="ball"}}
           class="absolute rounded-full bg-red w-10 h-10 ball-position-{{this.ballGoWhere}}"
         ></div>
       </div>
