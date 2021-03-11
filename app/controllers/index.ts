@@ -39,11 +39,10 @@ export default class IndexController extends Controller {
     if (intent === MOVE_C_INTENT) {
       return;
     }
-    assert('context has an orphansElement', context.orphansElement);
 
     let animations = [];
     for (let removedSprite of [...removedSprites]) {
-      context.orphansElement.appendChild(removedSprite.element);
+      context.appendOrphan(removedSprite);
       removedSprite.lockStyles();
       let animation = removedSprite.element.animate(
         [{ opacity: 1 }, { opacity: 0 }, { opacity: 0 }],
@@ -101,9 +100,7 @@ export default class IndexController extends Controller {
       animations.push(animation);
     }
 
-    await Promise.all(animations.map((a) => a.finished)).then(() => {
-      context.clearOrphans();
-    });
+    await Promise.all(animations.map((a) => a.finished));
   }
 
   async outerTransition(changeset: Changeset): Promise<void> {

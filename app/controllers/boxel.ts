@@ -137,7 +137,7 @@ class BoxelController extends Controller {
       let cardSprite = changeset.spriteFor({ role: 'card' });
       let moreSprite = changeset.spriteFor({ role: 'card-more' });
       assert('moreSprite and cardSprite are present', moreSprite && cardSprite);
-      moreSprite.element.style.opacity = '0';
+      moreSprite.hide();
 
       let delta = cardSprite.boundsDelta;
       assert('cardSprite boundsDelta is defined', delta);
@@ -160,7 +160,7 @@ class BoxelController extends Controller {
       });
       await cardAnimation.finished;
 
-      moreSprite.element.style.removeProperty('opacity');
+      moreSprite.unlockStyles();
       let fadeInAnimation = moreSprite.element.animate(
         [{ opacity: 0 }, { opacity: 1 }],
         {
@@ -170,7 +170,6 @@ class BoxelController extends Controller {
       await fadeInAnimation.finished;
     }
     if (intent === UNISOLATING_INTENT) {
-      assert('context has orphansElement', context.orphansElement);
       let cardSprite = changeset.spriteFor({ role: 'card' });
       let moreSprite = changeset.spriteFor({ role: 'card-more' });
       let placeholderSprite = changeset.spriteFor({ role: 'card-placeholder' });
@@ -185,17 +184,17 @@ class BoxelController extends Controller {
           cardSprite.finalBounds &&
           cardSprite.counterpart
       );
-      cardSprite.element.style.opacity = '0';
-      context.orphansElement.appendChild(cardSprite.counterpart.element);
+      cardSprite.hide();
+      context.appendOrphan(cardSprite.counterpart);
       cardSprite.counterpart.lockStyles();
       cardSprite.counterpart.element.style.zIndex = '1';
 
-      context.orphansElement.appendChild(placeholderSprite.element);
+      context.appendOrphan(placeholderSprite);
       placeholderSprite.lockStyles();
       placeholderSprite.element.style.opacity = '1';
       placeholderSprite.element.style.zIndex = '-1';
 
-      moreSprite.element.style.opacity = '0';
+      moreSprite.hide();
       let moreSpriteAnimation = moreSprite.element.animate(
         [{ opacity: 1 }, { opacity: 0 }],
         {
@@ -227,8 +226,7 @@ class BoxelController extends Controller {
         }
       );
       await cardAnimation.finished;
-      context.clearOrphans();
-      cardSprite.element.style.removeProperty('opacity');
+      cardSprite.unlockStyles();
     }
   }
 }

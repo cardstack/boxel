@@ -14,11 +14,9 @@ export default async function ({
   insertedSprites,
   keptSprites,
 }: Changeset): Promise<void> {
-  assert('context has an orphansElement', context.orphansElement);
-
   let animations: Animation[] = [];
   for (let s of [...removedSprites]) {
-    context.orphansElement.appendChild(s.element);
+    context.appendOrphan(s);
     s.lockStyles();
     let a = s.element.animate([{ opacity: 1 }, { opacity: 0 }], {
       duration: FADE_DURATION,
@@ -37,5 +35,4 @@ export default async function ({
   }
 
   await Promise.all(animations.map((a) => a.finished));
-  context.clearOrphans();
 }

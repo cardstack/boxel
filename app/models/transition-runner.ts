@@ -103,6 +103,7 @@ export default class TransitionRunner {
         console.error(error);
         throw error;
       }
+      animationContext.clearOrphans();
       animationContext.trackPosition();
       let contextDescendants = this.spriteTree.descendantsOf(animationContext);
       for (let contextDescendant of contextDescendants) {

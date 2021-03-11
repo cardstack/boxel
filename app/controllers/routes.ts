@@ -9,7 +9,6 @@ export default class RoutesController extends Controller {
 
     let insertedSprite = changeset.spriteFor({ type: SpriteType.Inserted });
     let removedSprite = changeset.spriteFor({ type: SpriteType.Removed });
-    assert('orphansElement is present', context.orphansElement);
     assert(
       'removedSprite.initialBounds and insertedSprite.finalBounds are present',
       removedSprite &&
@@ -17,7 +16,7 @@ export default class RoutesController extends Controller {
         removedSprite.initialBounds &&
         insertedSprite.finalBounds
     );
-    context.orphansElement.appendChild(removedSprite.element);
+    context.appendOrphan(removedSprite);
     removedSprite.lockStyles();
     let moveLeft = insertedSprite.id === 'route-content-other';
     let exitTransform = `translate(${moveLeft ? '-' : ''}${
@@ -51,6 +50,5 @@ export default class RoutesController extends Controller {
     await Promise.all(
       [removeAnimation, insertAnimation].map((a) => a.finished)
     );
-    context.clearOrphans();
   }
 }
