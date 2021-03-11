@@ -7,12 +7,18 @@ export interface Position {
   left: number;
   top: number;
 }
-export interface Bounds {
+export type Bounds = {
   left: number;
   top: number;
   width: number;
   height: number;
-}
+};
+export type BoundsDelta = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 export default class ContextAwareBounds {
   element: DOMRect;

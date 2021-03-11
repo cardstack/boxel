@@ -1,28 +1,30 @@
 import Controller from '@ember/controller';
 import { assert } from '@ember/debug';
+import { SpriteType } from '../models/sprite';
 import Changeset from '../models/changeset';
 
 export default class RoutesController extends Controller {
-  async transition({
-    context,
-    insertedSprites,
-    removedSprites,
-  }: Changeset): Promise<void> {
-    let insertedSprite = [...insertedSprites][0];
-    let removedSprite = [...removedSprites][0];
+  async transition(changeset: Changeset): Promise<void> {
+    let { context } = changeset;
+
+    let insertedSprite = changeset.spriteFor({ type: SpriteType.Inserted });
+    let removedSprite = changeset.spriteFor({ type: SpriteType.Removed });
     assert('orphansElement is present', context.orphansElement);
     assert(
       'removedSprite.initialBounds and insertedSprite.finalBounds are present',
-      removedSprite.initialBounds && insertedSprite.finalBounds
+      removedSprite &&
+        insertedSprite &&
+        removedSprite.initialBounds &&
+        insertedSprite.finalBounds
     );
     context.orphansElement.appendChild(removedSprite.element);
     removedSprite.lockStyles();
     let moveLeft = insertedSprite.id === 'route-content-other';
     let exitTransform = `translate(${moveLeft ? '-' : ''}${
-      removedSprite.initialBounds.element.width
+      removedSprite.initialWidth
     }px,0)`;
     let entranceTransform = `translate(${moveLeft ? '' : '-'}${
-      insertedSprite.finalBounds.element.width
+      insertedSprite.finalWidth
     }px,0)`;
     let removeAnimation = removedSprite.element.animate(
       [

@@ -5,13 +5,13 @@
 <AnimationContext @id="List-Detail" @use={{this.listDetailTransition}}>
   <div class="m-4">
     {{#unless this.selectedPerson}}
-      <ul class="person-list" {{sprite id='list'}}>
+      <ul class="person-list" {{sprite role="list"}}>
         {{#each this.people as |person|}}
           <li> 
-            <span {{sprite id=(concat "person:" person.id ":name")}} class="inline-block font-bold">
+            <span {{sprite role="person-name" id=(concat "person:" person.id)}} class="inline-block font-bold">
               {{person.name}}
             </span>
-            <span {{sprite id=(concat "person:" person.id ":title")}} class="inline-block">
+            <span {{sprite role="person-title" id=(concat "person:" person.id)}} class="inline-block">
               {{person.title}}
             </span>
             <button
@@ -28,7 +28,7 @@
     {{/unless}}
 
     {{#if this.selectedPerson}}
-      <div class="detail-card" {{sprite id=(concat "person:" this.selectedPerson.id ":card")}}>
+      <div class="detail-card" {{sprite role="card" id=(concat "person:" this.selectedPerson.id)}}>
         <button
           type="button"
           class="border px-2 rounded-lg text-sm"
@@ -37,10 +37,10 @@
           &lt; Back
         </button>
         
-        <h2 {{sprite id=(concat "person:" this.selectedPerson.id ":name")}} class="detail-person-name font-bold">
+        <h2 {{sprite role="person-name" id=(concat "person:" this.selectedPerson.id)}} class="detail-person-name font-bold">
           {{this.selectedPerson.name}}
         </h2>
-        <h3 {{sprite id=(concat "person:" this.selectedPerson.id ":title")}} class="detail-person-title">
+        <h3 {{sprite role="person-title" id=(concat "person:" this.selectedPerson.id)}} class="detail-person-title">
           {{this.selectedPerson.title}}
         </h3>
         <p>{{this.selectedPerson.bio}}</p>

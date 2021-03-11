@@ -3,20 +3,6 @@ import Changeset from '../models/changeset';
 /**
   Fades inserted, removed, and kept sprites.
 
-  ```js
-  import fade from 'ember-animated/transitions/fade';
-
-  export default Component.extend({
-    transition: fade
-  });
-  ```
-
-  ```hbs
-  {{#animated-if use=transition}}
-    ...
-  {{/animated-if}}
-  ```
-
   @function fade
   @export default
 */
@@ -28,31 +14,28 @@ export default async function ({
   insertedSprites,
   keptSprites,
 }: Changeset): Promise<void> {
-  // TODO: removes before adds
+  assert('context has an orphansElement', context.orphansElement);
+
   let animations: Animation[] = [];
-  Array.from(removedSprites).forEach((s) => {
-    assert('context has an orphansElement', context.orphansElement);
+  for (let s of [...removedSprites]) {
     context.orphansElement.appendChild(s.element);
     s.lockStyles();
     let a = s.element.animate([{ opacity: 1 }, { opacity: 0 }], {
       duration: FADE_DURATION,
     });
     animations.push(a);
-  });
+  }
 
   // TODO: if we get keptSprites of some things
   // were fading out and then we should get interrupted and decide to
   // keep them around after all.
-  Array.from(insertedSprites)
-    .concat(Array.from(keptSprites))
-    .forEach((s) => {
-      let a = s.element.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: FADE_DURATION,
-      });
-      animations.push(a);
+  for (let s of [...insertedSprites, ...keptSprites]) {
+    let a = s.element.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: FADE_DURATION,
     });
+    animations.push(a);
+  }
 
-  return Promise.all(animations.map((a) => a.finished)).then(() => {
-    context.clearOrphans();
-  });
+  await Promise.all(animations.map((a) => a.finished));
+  context.clearOrphans();
 }

@@ -9,11 +9,13 @@ interface SpriteModifierArgs {
   positional: [];
   named: {
     id: string | null;
+    role: string | null;
   };
 }
 
 export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   id: string | null = null;
+  role: string | null = null;
   lastBounds: DOMRect | undefined;
   currentBounds: DOMRect | undefined;
   farMatch: SpriteModifier | undefined; // Gets set to the "received" sprite modifier when this is becoming a "sent" sprite
@@ -23,6 +25,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
 
   didReceiveArguments(): void {
     this.id = this.args.named.id;
+    this.role = this.args.named.role;
     this.animations.registerSpriteModifier(this);
     this.trackPosition();
   }

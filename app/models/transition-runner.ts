@@ -97,7 +97,12 @@ export default class TransitionRunner {
     if (animationContext.shouldAnimate(changeset)) {
       this.logChangeset(changeset, animationContext); // For debugging
       let animation = animationContext.args.use?.(changeset);
-      yield Promise.resolve(animation);
+      try {
+        yield Promise.resolve(animation);
+      } catch (error) {
+        console.error(error);
+        throw error;
+      }
       animationContext.trackPosition();
       let contextDescendants = this.spriteTree.descendantsOf(animationContext);
       for (let contextDescendant of contextDescendants) {
@@ -119,6 +124,7 @@ export default class TransitionRunner {
         intent: changeset.intent,
         context: contextId,
         type,
+        spriteRole: sprite.role,
         spriteId: sprite.id,
         initialBounds: sprite.initialBounds
           ? JSON.stringify(sprite.initialBounds)
@@ -134,7 +140,7 @@ export default class TransitionRunner {
       SpriteType.Removed,
       SpriteType.Kept,
     ]) {
-      for (let sprite of changeset.spritesFor(type)) {
+      for (let sprite of changeset.spritesFor({ type })) {
         tableRows.push(row(type, sprite));
       }
     }

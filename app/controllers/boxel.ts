@@ -97,24 +97,19 @@ class BoxelController extends Controller {
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  @action async cardSortingTransition({ intent, keptSprites }: Changeset) {
-    if (intent !== SORTING_INTENT) {
+  @action async cardSortingTransition(changeset: Changeset) {
+    if (changeset.intent !== SORTING_INTENT) {
       return;
     }
     let translateAnimations = [];
-    for (let keptSprite of Array.from(keptSprites)) {
-      assert(
-        'keptSprite always has initialBounds and finalBounds',
-        keptSprite.initialBounds && keptSprite.finalBounds
-      );
+    let cardSprites = changeset.spritesFor({ role: 'card' });
+    for (let cardSprite of cardSprites) {
+      let delta = cardSprite.boundsDelta;
+      assert('cardSprite always has a boundsDelta', delta);
 
-      let initialBounds = keptSprite.initialBounds.relativeToContext;
-      let finalBounds = keptSprite.finalBounds.relativeToContext;
-      let deltaX = initialBounds.left - finalBounds.left;
-      let deltaY = initialBounds.top - finalBounds.top;
       let translationKeyFrames = [
         {
-          transform: `translate(${deltaX}px, ${deltaY}px)`,
+          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
           boxShadow: '0 0 0',
         },
         {
@@ -126,7 +121,7 @@ class BoxelController extends Controller {
         },
       ];
 
-      let animation = keptSprite.element.animate(translationKeyFrames, {
+      let animation = cardSprite.element.animate(translationKeyFrames, {
         duration: TRANSLATE_DURATION,
         easing: 'ease-in-out',
       });
@@ -136,140 +131,104 @@ class BoxelController extends Controller {
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  @action async isolatedCardTransition({
-    context,
-    intent,
-    insertedSprites,
-    keptSprites,
-    removedSprites,
-  }: Changeset) {
+  @action async isolatedCardTransition(changeset: Changeset) {
+    let { context, intent } = changeset;
     if (intent === ISOLATING_INTENT) {
-      for (let insertedSprite of Array.from(insertedSprites)) {
-        if (insertedSprite.id === 'card-more') {
-          insertedSprite.element.style.opacity = '0';
-        }
-      }
-      let translateAnimations = [];
-      for (let keptSprite of Array.from(keptSprites)) {
-        assert(
-          'keptSprite always has initialBounds and finalBounds',
-          keptSprite.initialBounds && keptSprite.finalBounds
-        );
+      let cardSprite = changeset.spriteFor({ role: 'card' });
+      let moreSprite = changeset.spriteFor({ role: 'card-more' });
+      assert('moreSprite and cardSprite are present', moreSprite && cardSprite);
+      moreSprite.element.style.opacity = '0';
 
-        let initialBounds = keptSprite.initialBounds.relativeToContext;
-        let finalBounds = keptSprite.finalBounds.relativeToContext;
-        let deltaX = initialBounds.left - finalBounds.left;
-        let deltaY = initialBounds.top - finalBounds.top;
-        let translationKeyFrames = [
-          {
-            transform: `translate(${deltaX}px, ${deltaY}px)`,
-            width: `${initialBounds.width}px`,
-            height: `${initialBounds.height}px`,
-          },
-          {
-            transform: 'translate(0, 0)',
-            width: `${finalBounds.width}px`,
-            height: `${finalBounds.height}px`,
-          },
-        ];
-        let animation = keptSprite.element.animate(translationKeyFrames, {
-          duration: TRANSLATE_DURATION,
-          easing: 'ease-in-out',
-        });
-        translateAnimations.push(animation);
-      }
-      await Promise.all(translateAnimations.map((a) => a.finished));
-      let fadeInAnimations = [];
-      for (let insertedSprite of Array.from(insertedSprites)) {
-        if (insertedSprite.id === 'card-more') {
-          insertedSprite.element.style.removeProperty('opacity');
-          let animation = insertedSprite.element.animate(
-            [{ opacity: 0 }, { opacity: 1 }],
-            {
-              duration: FADE_DURATION,
-            }
-          );
-          fadeInAnimations.push(animation);
+      let delta = cardSprite.boundsDelta;
+      assert('cardSprite boundsDelta is defined', delta);
+
+      let translationKeyFrames = [
+        {
+          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
+          width: `${cardSprite.initialWidth}px`,
+          height: `${cardSprite.initialHeight}px`,
+        },
+        {
+          transform: 'translate(0, 0)',
+          width: `${cardSprite.finalWidth}px`,
+          height: `${cardSprite.finalHeight}px`,
+        },
+      ];
+      let cardAnimation = cardSprite.element.animate(translationKeyFrames, {
+        duration: TRANSLATE_DURATION,
+        easing: 'ease-in-out',
+      });
+      await cardAnimation.finished;
+
+      moreSprite.element.style.removeProperty('opacity');
+      let fadeInAnimation = moreSprite.element.animate(
+        [{ opacity: 0 }, { opacity: 1 }],
+        {
+          duration: FADE_DURATION,
         }
-      }
-      await Promise.all(fadeInAnimations.map((a) => a.finished));
+      );
+      await fadeInAnimation.finished;
     }
     if (intent === UNISOLATING_INTENT) {
       assert('context has orphansElement', context.orphansElement);
+      let cardSprite = changeset.spriteFor({ role: 'card' });
+      let moreSprite = changeset.spriteFor({ role: 'card-more' });
+      let placeholderSprite = changeset.spriteFor({ role: 'card-placeholder' });
 
-      for (let keptSprite of Array.from(keptSprites)) {
-        assert(
-          'keptSprite always has initialBounds and finalBounds and counterpart',
-          keptSprite.initialBounds &&
-            keptSprite.finalBounds &&
-            keptSprite.counterpart
-        );
-        keptSprite.element.style.opacity = '0';
-        context.orphansElement.appendChild(keptSprite.counterpart.element);
-        keptSprite.counterpart.lockStyles();
-        keptSprite.counterpart.element.style.zIndex = '1';
-      }
+      assert(
+        'sprites are present',
+        moreSprite && cardSprite && placeholderSprite
+      );
+      assert(
+        'cardSprite always has initialBounds and finalBounds and counterpart',
+        cardSprite.initialBounds &&
+          cardSprite.finalBounds &&
+          cardSprite.counterpart
+      );
+      cardSprite.element.style.opacity = '0';
+      context.orphansElement.appendChild(cardSprite.counterpart.element);
+      cardSprite.counterpart.lockStyles();
+      cardSprite.counterpart.element.style.zIndex = '1';
 
-      let fadeOutAnimations = [];
-      for (let removedSprite of Array.from(removedSprites)) {
-        if (removedSprite.id === 'card-more') {
-          removedSprite.element.style.opacity = '0';
-          let animation = removedSprite.element.animate(
-            [{ opacity: 1 }, { opacity: 0 }],
-            {
-              duration: FADE_DURATION,
-            }
-          );
-          fadeOutAnimations.push(animation);
+      context.orphansElement.appendChild(placeholderSprite.element);
+      placeholderSprite.lockStyles();
+      placeholderSprite.element.style.opacity = '1';
+      placeholderSprite.element.style.zIndex = '-1';
+
+      moreSprite.element.style.opacity = '0';
+      let moreSpriteAnimation = moreSprite.element.animate(
+        [{ opacity: 1 }, { opacity: 0 }],
+        {
+          duration: FADE_DURATION,
         }
-        if (removedSprite.id === 'card-placeholder') {
-          context.orphansElement.appendChild(removedSprite.element);
-          removedSprite.lockStyles();
-          removedSprite.element.style.opacity = '1';
-          removedSprite.element.style.zIndex = '-1';
-        }
-      }
-      await Promise.all(fadeOutAnimations.map((a) => a.finished));
-      let translateAnimations = [];
-      for (let keptSprite of Array.from(keptSprites)) {
-        assert(
-          'keptSprite always has initialBounds and finalBounds and counterpart',
-          keptSprite.initialBounds &&
-            keptSprite.finalBounds &&
-            keptSprite.counterpart
-        );
+      );
 
-        let initialBounds = keptSprite.initialBounds.relativeToContext;
-        let finalBounds = keptSprite.finalBounds.relativeToContext;
-        let deltaX = finalBounds.left - initialBounds.left;
-        let deltaY = finalBounds.top - initialBounds.top;
-        let translationKeyFrames = [
-          {
-            transform: 'translate(0, 0)',
-            width: `${initialBounds.width}px`,
-            height: `${initialBounds.height}px`,
-          },
-          {
-            transform: `translate(${deltaX}px, ${deltaY}px)`,
-            width: `${finalBounds.width}px`,
-            height: `${finalBounds.height}px`,
-          },
-        ];
-        let animation = keptSprite.counterpart.element.animate(
-          translationKeyFrames,
-          {
-            duration: TRANSLATE_DURATION,
-            easing: 'ease-in-out',
-          }
-        );
-        console.table(translationKeyFrames);
-        translateAnimations.push(animation);
-      }
-      await Promise.all(translateAnimations.map((a) => a.finished));
+      await moreSpriteAnimation.finished;
+
+      let delta = cardSprite.boundsDelta;
+      assert('cardSprite boundsDelta is defined', delta);
+      let translationKeyFrames = [
+        {
+          transform: 'translate(0, 0)',
+          width: `${cardSprite.initialWidth}px`,
+          height: `${cardSprite.initialHeight}px`,
+        },
+        {
+          transform: `translate(${delta.x}px, ${delta.y}px)`,
+          width: `${cardSprite.finalWidth}px`,
+          height: `${cardSprite.finalHeight}px`,
+        },
+      ];
+      let cardAnimation = cardSprite.counterpart.element.animate(
+        translationKeyFrames,
+        {
+          duration: TRANSLATE_DURATION,
+          easing: 'ease-in-out',
+        }
+      );
+      await cardAnimation.finished;
       context.clearOrphans();
-      for (let keptSprite of Array.from(keptSprites)) {
-        keptSprite.element.style.removeProperty('opacity');
-      }
+      cardSprite.element.style.removeProperty('opacity');
     }
   }
 }

@@ -28,20 +28,21 @@ export default class IndexController extends Controller {
     this.animations.setIntent(MOVE_C_INTENT);
     this.spriteCPosition = (this.spriteCPosition + 1) % 2;
   }
-  async innerTransition({
-    context,
-    intent,
-    insertedSprites,
-    keptSprites,
-    removedSprites,
-  }: Changeset): Promise<void> {
+  async innerTransition(changeset: Changeset): Promise<void> {
+    let {
+      context,
+      intent,
+      insertedSprites,
+      keptSprites,
+      removedSprites,
+    } = changeset;
     if (intent === MOVE_C_INTENT) {
       return;
     }
     assert('context has an orphansElement', context.orphansElement);
 
     let animations = [];
-    for (let removedSprite of Array.from(removedSprites)) {
+    for (let removedSprite of [...removedSprites]) {
       context.orphansElement.appendChild(removedSprite.element);
       removedSprite.lockStyles();
       let animation = removedSprite.element.animate(
@@ -53,7 +54,7 @@ export default class IndexController extends Controller {
       animations.push(animation);
     }
 
-    for (let insertedSprite of Array.from(insertedSprites)) {
+    for (let insertedSprite of [...insertedSprites]) {
       let animation = insertedSprite.element.animate(
         [{ opacity: 0 }, { opacity: 0 }, { opacity: 1 }],
         {
@@ -64,17 +65,11 @@ export default class IndexController extends Controller {
     }
 
     for (let keptSprite of [...keptSprites]) {
-      assert(
-        'keptSprite always has an initialBounds and finalBounds',
-        keptSprite.initialBounds && keptSprite.finalBounds
-      );
-      let initialBounds = keptSprite.initialBounds.relativeToContext;
-      let finalBounds = keptSprite.finalBounds.relativeToContext;
-      let deltaX = initialBounds.left - finalBounds.left;
-      let deltaY = initialBounds.top - finalBounds.top;
+      let delta = keptSprite.boundsDelta;
+      assert('keptSprite always has a delta', delta);
       let translationKeyFrames: Keyframe[] = [
         {
-          transform: `translate(${deltaX}px, ${deltaY}px)`,
+          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
         },
         {
           transform: 'translate(0, 0)',
@@ -83,12 +78,12 @@ export default class IndexController extends Controller {
       if (keptSprite.id === 'container') {
         translationKeyFrames = [
           {
-            width: `${initialBounds.width}px`,
-            height: `${initialBounds.height}px`,
+            width: `${keptSprite.initialWidth}px`,
+            height: `${keptSprite.initialHeight}px`,
           },
           {
-            width: `${finalBounds.width}px`,
-            height: `${finalBounds.height}px`,
+            width: `${keptSprite.finalWidth}px`,
+            height: `${keptSprite.finalHeight}px`,
           },
         ];
       }
@@ -111,25 +106,21 @@ export default class IndexController extends Controller {
     });
   }
 
-  async outerTransition({ intent, keptSprites }: Changeset): Promise<void> {
+  async outerTransition(changeset: Changeset): Promise<void> {
+    let { intent, keptSprites } = changeset;
     if (intent !== MOVE_C_INTENT) {
       return;
     }
     let animations = [];
     for (let keptSprite of [...keptSprites]) {
+      let delta = keptSprite.boundsDelta;
       assert(
         'keptSprite always has an element, initialBounds and finalBounds',
-        keptSprite.element && keptSprite.initialBounds && keptSprite.finalBounds
+        keptSprite.element && delta
       );
-      let initialBounds = keptSprite.initialBounds.relativeToContext;
-      let finalBounds = keptSprite.finalBounds.relativeToContext;
-
-      let deltaX = initialBounds.left - finalBounds.left;
-      let deltaY = initialBounds.top - finalBounds.top;
-
       let translationKeyFrames = [
         {
-          transform: `translate(${deltaX}px, ${deltaY}px)`,
+          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
         },
         {
           transform: 'translate(0, 0)',
