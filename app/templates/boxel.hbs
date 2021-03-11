@@ -21,12 +21,12 @@
         <div class="stack">
           {{#each this.sortedCardModels as |model|}}
             {{#if (eq model this.isolatedCard)}}
-              <div class="card-placeholder" {{sprite id="card-placeholder"}}></div>
+              <div class="card-placeholder" {{sprite role="card-placeholder" id=model.id}}></div>
             {{else}}
               <Card
                 @model={{model}}
                 @expandAction={{fn this.isolateCard model}}
-                {{sprite id=model.id}}
+                {{sprite role="card" id=model.id}}
               />
             {{/if}}
           {{/each}}
@@ -39,7 +39,7 @@
         <Card
           @model={{this.isolatedCard}}
           @expandAction={{this.dismissIsolatedCard}}
-          {{sprite id=this.isolatedCard.id}}
+          {{sprite role="card" id=this.isolatedCard.id}}
         >
           <p class="mt-2 mb-2">
             Id Lorem laborum mollit labore. Et et est ipsum consequat est eiusmod amet quis. Est cillum velit et sunt ad occaecat enim eu eiusmod do. Sint ea fugiat nisi minim eu est ullamco proident aliqua. Non aliquip mollit quis elit Lorem fugiat est culpa exercitation voluptate commodo commodo. Duis ex sint enim cillum proident est esse. Est consequat reprehenderit enim laborum pariatur aute quis consequat quis cupidatat et voluptate.

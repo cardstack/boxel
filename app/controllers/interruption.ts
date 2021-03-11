@@ -1,10 +1,8 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { getDocumentPosition } from '../utils/measurement';
 import Changeset from '../models/changeset';
 import { assert } from '@ember/debug';
-import ContextAwareBounds from '../models/context-aware-bounds';
 
 const BALL_SPEED_PX_PER_MS = 0.05;
 class InterruptionController extends Controller {
@@ -12,27 +10,23 @@ class InterruptionController extends Controller {
   animationOriginPosition: DOMRect | null = null;
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  @action moveBall({ context, keptSprites }: Changeset) {
-    let ballSprite = Array.from(keptSprites)[0];
+  @action moveBall(changeset: Changeset) {
+    let ballSprite = changeset.spriteFor({ id: 'ball' });
+    assert('ballSprite is present', ballSprite);
     let activeAnimations = ballSprite.element.getAnimations(); // TODO: this is not supported in Safari
     let initialBounds;
     if (activeAnimations.length) {
       let activeAnimation = activeAnimations[0];
       activeAnimation.pause();
       ballSprite.lockStyles(this.animationOriginPosition);
-      initialBounds = new ContextAwareBounds({
-        element: getDocumentPosition(ballSprite.element, {
-          withAnimations: true,
-        }),
-        contextElement: getDocumentPosition(context.element, {
-          withAnimations: true,
-        }),
-      }).relativeToContext;
+      initialBounds = ballSprite.captureAnimatingBounds(
+        changeset.context.element
+      ).relativeToContext;
       ballSprite.unlockStyles();
       activeAnimation.cancel();
     } else {
       assert(
-        'kept sprite should always have initialBounds',
+        'kept sprite should always have initialBounds & finalBounds',
         ballSprite.initialBounds
       );
       initialBounds = ballSprite.initialBounds.relativeToContext;
@@ -56,7 +50,7 @@ class InterruptionController extends Controller {
       }
     );
     // eslint-disable-next-line @typescript-eslint/no-empty-function
-    return animation.finished.catch(() => {});
+    return animation.finished.catch(() => {}); // promise rejects when animation is prematurely canceled
   }
 }
 

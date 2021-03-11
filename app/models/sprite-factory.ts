@@ -13,6 +13,7 @@ export default {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,
+      spriteModifier.role as string | null,
       SpriteType.Inserted
     );
     assert(
@@ -32,6 +33,7 @@ export default {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,
+      spriteModifier.role as string | null,
       SpriteType.Removed
     );
     assert(
@@ -51,6 +53,7 @@ export default {
     let sprite = new Sprite(
       spriteModifier.element as HTMLElement,
       spriteModifier.id as string | null,
+      spriteModifier.role as string | null,
       SpriteType.Kept
     );
     assert(

@@ -1,4 +1,5 @@
 import { assert } from '@ember/debug';
+import { SpriteType } from 'animations/models/sprite';
 import Changeset from '../models/changeset';
 
 // FADE OUT : ----------
@@ -13,39 +14,28 @@ const FADE_IN_DURATION = 1000;
 const FADE_IN_START = 900;
 const TOTAL_DURATION = FADE_IN_START + FADE_IN_DURATION;
 
-export default function listTransition({
-  context,
-  insertedSprites,
-  keptSprites,
-  removedSprites,
-}: Changeset): Promise<void> {
+export default function listTransition(changeset: Changeset): Promise<void> {
+  let { context, insertedSprites, keptSprites, removedSprites } = changeset;
   assert('context has an orphansElement', context.orphansElement);
   let animations = [];
   let direction = 'to-list';
-  if (
-    Array.from(insertedSprites).any(
-      (s) => !!(s.id && /person:.+:card/.test(s.id))
-    )
-  ) {
+  if (changeset.spriteFor({ type: SpriteType.Inserted, role: 'card' })) {
     direction = 'to-detail';
   }
 
   if (direction === 'to-list') {
-    for (let keptSprite of Array.from(keptSprites)) {
-      assert('keptSprite is not null', !!keptSprite);
+    for (let keptSprite of [...keptSprites]) {
+      let delta = keptSprite.boundsDelta;
       assert(
-        'keptSprites always have intialBounds',
-        !!keptSprite.initialBounds
+        'keptSprite always have finalBounds and counterpart',
+        keptSprite &&
+          keptSprite.initialBounds &&
+          keptSprite.finalBounds &&
+          keptSprite.counterpart &&
+          delta
       );
-      assert('keptSprites always have finalBounds', !!keptSprite.finalBounds);
-      assert('keptSprites always have a counterpart', !!keptSprite.counterpart);
-      let initialBounds = keptSprite.initialBounds.relativeToContext;
-      let finalBounds = keptSprite.finalBounds.relativeToContext;
-      let deltaX = initialBounds.left - finalBounds.left;
-      let deltaY = initialBounds.top - finalBounds.top;
 
-      let clonedNode = keptSprite.counterpart.element.cloneNode(true);
-      let clone: HTMLElement = clonedNode as HTMLElement;
+      let clone = keptSprite.counterpart.element.cloneNode(true) as HTMLElement;
       keptSprite.counterpart.element.style.opacity = '0';
 
       context.orphansElement.appendChild(clone);
@@ -61,11 +51,11 @@ export default function listTransition({
       keptSprite.element.style.opacity = '0';
       let translationKeyFrames = [
         {
-          transform: `translate(${deltaX}px, ${deltaY}px)`,
+          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
           fontSize: initialFontSize,
         },
         {
-          transform: `translate(${deltaX}px, ${deltaY}px)`,
+          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
           fontSize: initialFontSize,
           offset: TRANSLATE_START / TOTAL_DURATION,
         },
@@ -83,7 +73,7 @@ export default function listTransition({
       animations.push(animation);
     }
 
-    for (let removedSprite of Array.from(removedSprites)) {
+    for (let removedSprite of [...removedSprites]) {
       removedSprite.lockStyles();
       context.orphansElement.appendChild(removedSprite.element);
       let animation = removedSprite.element.animate(
@@ -99,7 +89,7 @@ export default function listTransition({
       animations.push(animation);
     }
 
-    for (let insertedSprite of Array.from(insertedSprites)) {
+    for (let insertedSprite of [...insertedSprites]) {
       let animation = insertedSprite.element.animate(
         [
           { opacity: 0 },
@@ -115,29 +105,28 @@ export default function listTransition({
 
     return Promise.all(animations.map((a) => a.finished)).then(() => {
       context.clearOrphans();
-      for (let keptSprite of Array.from(keptSprites)) {
+      for (let keptSprite of [...keptSprites]) {
         keptSprite.element.style.removeProperty('opacity');
       }
     });
   } else {
-    for (let insertedSprite of Array.from(insertedSprites)) {
-      if (insertedSprite.id?.endsWith(':card')) {
-        let animation = insertedSprite.element.animate(
-          [
-            { opacity: 0 },
-            { opacity: 0, offset: FADE_IN_START / TOTAL_DURATION },
-            {
-              opacity: 1,
-            },
-          ],
-          {
-            duration: TOTAL_DURATION,
-          }
-        );
-        animations.push(animation);
+    let cardSprite = changeset.spriteFor({
+      type: SpriteType.Inserted,
+      role: 'card',
+    });
+    assert('cardSprite is found', !!cardSprite);
+    let animation = cardSprite.element.animate(
+      [
+        { opacity: 0 },
+        { opacity: 0, offset: FADE_IN_START / TOTAL_DURATION },
+        { opacity: 1 },
+      ],
+      {
+        duration: TOTAL_DURATION,
       }
-    }
-    for (let keptSprite of Array.from(keptSprites)) {
+    );
+    animations.push(animation);
+    for (let keptSprite of [...keptSprites]) {
       assert(
         'keptSprite always has an counterpart, initialBounds and finalBounds',
         keptSprite.counterpart &&
@@ -194,7 +183,7 @@ export default function listTransition({
       animations.push(animation);
     }
 
-    for (let removedSprite of Array.from(removedSprites)) {
+    for (let removedSprite of [...removedSprites]) {
       removedSprite.lockStyles();
       context.orphansElement.appendChild(removedSprite.element);
       let animation = removedSprite.element.animate(
@@ -212,8 +201,7 @@ export default function listTransition({
 
     return Promise.all(animations.map((a) => a.finished)).then(() => {
       context.clearOrphans();
-      for (let keptSprite of Array.from(keptSprites)) {
-        assert('keptSprite always has a counterpart', keptSprite.counterpart);
+      for (let keptSprite of [...keptSprites]) {
         keptSprite.element.style.removeProperty('opacity');
       }
     });

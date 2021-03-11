@@ -1,8 +1,23 @@
-import ContextAwareBounds, { Bounds } from './context-aware-bounds';
+import ContextAwareBounds, {
+  Bounds,
+  BoundsDelta,
+} from './context-aware-bounds';
+import { getDocumentPosition } from '../utils/measurement';
 
+class SpriteIdentifier {
+  id: string | null;
+  role: string | null;
+  constructor(id: string | null, role: string | null) {
+    this.id = id;
+    this.role = role;
+  }
+  equals(other: SpriteIdentifier): boolean {
+    return this.id === other.id && this.role === other.role;
+  }
+}
 export default class Sprite {
   element: HTMLElement;
-  id: string | null;
+  identifier: SpriteIdentifier;
   type: SpriteType | null = null;
   initialBounds: ContextAwareBounds | undefined;
   finalBounds: ContextAwareBounds | undefined;
@@ -11,11 +26,60 @@ export default class Sprite {
   constructor(
     element: HTMLElement,
     id: string | null,
+    role: string | null,
     type: SpriteType | null
   ) {
     this.element = element;
-    this.id = id;
+    this.identifier = new SpriteIdentifier(id, role);
     this.type = type;
+  }
+
+  get id(): string | null {
+    return this.identifier.id;
+  }
+  get role(): string | null {
+    return this.identifier.role;
+  }
+
+  get initialWidth(): number | undefined {
+    return this.initialBounds?.element.width;
+  }
+
+  get initialHeight(): number | undefined {
+    return this.initialBounds?.element.height;
+  }
+
+  get finalHeight(): number | undefined {
+    return this.finalBounds?.element.height;
+  }
+
+  get finalWidth(): number | undefined {
+    return this.finalBounds?.element.width;
+  }
+
+  get boundsDelta(): BoundsDelta | undefined {
+    if (!this.initialBounds || !this.finalBounds) {
+      return undefined;
+    }
+    let initialBounds = this.initialBounds.relativeToContext;
+    let finalBounds = this.finalBounds.relativeToContext;
+    return {
+      x: finalBounds.left - initialBounds.left,
+      y: finalBounds.top - initialBounds.top,
+      width: finalBounds.width - initialBounds.width,
+      height: finalBounds.height - initialBounds.height,
+    };
+  }
+
+  captureAnimatingBounds(contextElement: HTMLElement): ContextAwareBounds {
+    return new ContextAwareBounds({
+      element: getDocumentPosition(this.element, {
+        withAnimations: true,
+      }),
+      contextElement: getDocumentPosition(contextElement, {
+        withAnimations: true,
+      }),
+    });
   }
 
   lockStyles(bounds: Bounds | null = null): void {
