@@ -24,6 +24,8 @@ export default {
       element: spriteModifier.currentBounds,
       contextElement: context.currentBounds,
     });
+    sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
+
     return sprite;
   },
   createRemovedSprite(
@@ -44,6 +46,7 @@ export default {
       element: spriteModifier.currentBounds,
       contextElement: context.lastBounds,
     });
+    sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
     return sprite;
   },
   createKeptSprite(
@@ -71,6 +74,8 @@ export default {
       element: spriteModifier.currentBounds,
       contextElement: context.currentBounds,
     });
+    sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
+    sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
     return sprite;
   },
 };

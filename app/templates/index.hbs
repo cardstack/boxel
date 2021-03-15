@@ -69,7 +69,7 @@
       {{/if}}
       <div class="some-container {{if this.contextHasPadding 'with-padded-animation-context'}}">
         <AnimationContext @id="inner" @use={{this.innerTransition}}>
-          <div {{sprite id="container"}}>
+          <div {{sprite role="container"}}>
             {{#if this.showContentBefore}}
               <p>Here is some content before the sprite</p>
             {{/if}}

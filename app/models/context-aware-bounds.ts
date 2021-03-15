@@ -1,3 +1,5 @@
+import { BoundsVelocity } from '../utils/measurement';
+
 type ContextAwareBoundsConstructorArgs = {
   element: DOMRect;
   contextElement: DOMRect;
@@ -23,6 +25,12 @@ export type BoundsDelta = {
 export default class ContextAwareBounds {
   element: DOMRect;
   parent: DOMRect;
+  velocity: BoundsVelocity = {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  };
 
   constructor({ element, contextElement }: ContextAwareBoundsConstructorArgs) {
     this.element = element;

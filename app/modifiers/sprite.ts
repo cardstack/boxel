@@ -1,5 +1,9 @@
 import Modifier from 'ember-modifier';
-import { getDocumentPosition } from '../utils/measurement';
+import {
+  getDocumentPosition,
+  copyComputedStyle,
+  CopiedCSS,
+} from '../utils/measurement';
 import { assert } from '@ember/debug';
 import { inject as service } from '@ember/service';
 import { once } from '@ember/runloop';
@@ -18,6 +22,9 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   role: string | null = null;
   lastBounds: DOMRect | undefined;
   currentBounds: DOMRect | undefined;
+  lastComputedStyle: CopiedCSS | undefined;
+  currentComputedStyle: CopiedCSS | undefined;
+
   farMatch: SpriteModifier | undefined; // Gets set to the "received" sprite modifier when this is becoming a "sent" sprite
   alreadyTracked = false;
 
@@ -27,10 +34,10 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
     this.id = this.args.named.id;
     this.role = this.args.named.role;
     this.animations.registerSpriteModifier(this);
-    this.trackPosition();
+    this.captureSnapshot();
   }
 
-  trackPosition(): void {
+  captureSnapshot(): void {
     if (!this.alreadyTracked) {
       let { element } = this;
       assert(
@@ -38,7 +45,9 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
         element instanceof HTMLElement
       );
       this.lastBounds = this.currentBounds;
+      this.lastComputedStyle = this.currentComputedStyle;
       this.currentBounds = getDocumentPosition(element);
+      this.currentComputedStyle = copyComputedStyle(element);
       this.alreadyTracked = true;
     }
     once(this, 'clearTrackedPosition');
