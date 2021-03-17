@@ -107,6 +107,11 @@ export default class Sprite {
     this.element.style.removeProperty('top');
     this.element.style.removeProperty('width');
     this.element.style.removeProperty('height');
+    this.element.style.removeProperty('opacity');
+  }
+
+  hide(): void {
+    this.element.style.opacity = '0';
   }
 }
 

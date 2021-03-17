@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import Ember from 'ember';
 import { reads } from 'macro-decorators';
 import Changeset from '../../models/changeset';
+import Sprite from '../../models/sprite';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import AnimationsService from '../../services/animations';
@@ -68,6 +69,24 @@ export default class AnimationContextComponent extends Component<AnimationContex
       this.args.use &&
       (this.isInitialRenderCompleted || this.initialInsertion)
     );
+  }
+
+  appendOrphan(spriteOrElement: Sprite | HTMLElement): void {
+    let { orphansElement } = this;
+    if (spriteOrElement instanceof Sprite) {
+      orphansElement?.appendChild(spriteOrElement.element);
+    } else {
+      orphansElement?.appendChild(spriteOrElement);
+    }
+  }
+
+  removeOrphan(spriteOrElement: Sprite | HTMLElement): void {
+    let { orphansElement } = this;
+    if (spriteOrElement instanceof Sprite) {
+      orphansElement?.removeChild(spriteOrElement.element);
+    } else {
+      orphansElement?.removeChild(spriteOrElement);
+    }
   }
 
   clearOrphans(): void {

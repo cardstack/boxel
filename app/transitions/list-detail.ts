@@ -16,7 +16,6 @@ const TOTAL_DURATION = FADE_IN_START + FADE_IN_DURATION;
 
 export default function listTransition(changeset: Changeset): Promise<void> {
   let { context, insertedSprites, keptSprites, removedSprites } = changeset;
-  assert('context has an orphansElement', context.orphansElement);
   let animations = [];
   let direction = 'to-list';
   if (changeset.spriteFor({ type: SpriteType.Inserted, role: 'card' })) {
@@ -36,9 +35,9 @@ export default function listTransition(changeset: Changeset): Promise<void> {
       );
 
       let clone = keptSprite.counterpart.element.cloneNode(true) as HTMLElement;
-      keptSprite.counterpart.element.style.opacity = '0';
+      keptSprite.counterpart.hide();
 
-      context.orphansElement.appendChild(clone);
+      context.appendOrphan(clone);
       clone.style.position = 'absolute';
       let cloneBounds = keptSprite.finalBounds.relativeToPosition(
         keptSprite.finalBounds.parent
@@ -48,7 +47,7 @@ export default function listTransition(changeset: Changeset): Promise<void> {
 
       let initialFontSize = getComputedStyle(clone).fontSize;
       let finalFontSize = getComputedStyle(keptSprite.element).fontSize;
-      keptSprite.element.style.opacity = '0';
+      keptSprite.hide();
       let translationKeyFrames = [
         {
           transform: `translate(${-delta.x}px, ${-delta.y}px)`,
@@ -75,7 +74,7 @@ export default function listTransition(changeset: Changeset): Promise<void> {
 
     for (let removedSprite of [...removedSprites]) {
       removedSprite.lockStyles();
-      context.orphansElement.appendChild(removedSprite.element);
+      context.appendOrphan(removedSprite);
       let animation = removedSprite.element.animate(
         [
           { opacity: 1 },
@@ -104,9 +103,8 @@ export default function listTransition(changeset: Changeset): Promise<void> {
     }
 
     return Promise.all(animations.map((a) => a.finished)).then(() => {
-      context.clearOrphans();
       for (let keptSprite of [...keptSprites]) {
-        keptSprite.element.style.removeProperty('opacity');
+        keptSprite.unlockStyles();
       }
     });
   } else {
@@ -139,15 +137,15 @@ export default function listTransition(changeset: Changeset): Promise<void> {
       let finalBounds = keptSprite.finalBounds.relativeToPosition(
         keptSprite.finalBounds.parent
       );
-      keptSprite.element.style.opacity = '0';
+      keptSprite.hide();
 
       let deltaX = initialBounds.left - finalBounds.left;
       let deltaY = initialBounds.top - finalBounds.top;
 
-      context.orphansElement.appendChild(keptSprite.counterpart.element);
+      context.appendOrphan(keptSprite.counterpart);
       let initialFontSize = getComputedStyle(keptSprite.counterpart.element)
         .fontSize;
-      context.orphansElement.removeChild(keptSprite.counterpart.element);
+      context.removeOrphan(keptSprite.counterpart);
       let finalFontSize = getComputedStyle(keptSprite.element).fontSize;
 
       let translationKeyFrames = [
@@ -170,7 +168,7 @@ export default function listTransition(changeset: Changeset): Promise<void> {
           fontSize: finalFontSize,
         },
       ];
-      context.orphansElement.appendChild(keptSprite.counterpart.element);
+      context.appendOrphan(keptSprite.counterpart);
       keptSprite.counterpart.lockStyles(
         keptSprite.finalBounds.relativeToPosition(keptSprite.finalBounds.parent)
       );
@@ -185,7 +183,7 @@ export default function listTransition(changeset: Changeset): Promise<void> {
 
     for (let removedSprite of [...removedSprites]) {
       removedSprite.lockStyles();
-      context.orphansElement.appendChild(removedSprite.element);
+      context.appendOrphan(removedSprite);
       let animation = removedSprite.element.animate(
         [
           { opacity: 1 },
@@ -200,9 +198,8 @@ export default function listTransition(changeset: Changeset): Promise<void> {
     }
 
     return Promise.all(animations.map((a) => a.finished)).then(() => {
-      context.clearOrphans();
       for (let keptSprite of [...keptSprites]) {
-        keptSprite.element.style.removeProperty('opacity');
+        keptSprite.unlockStyles();
       }
     });
   }
