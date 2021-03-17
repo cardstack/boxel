@@ -88,6 +88,7 @@ export default class TransitionRunner {
     ) {
       return;
     }
+    debugger;
     let changeset = new Changeset(animationContext, this.intent);
     changeset.addInsertedSprites(freshlyAdded);
     changeset.addRemovedSprites(freshlyRemoved);
@@ -119,6 +120,7 @@ export default class TransitionRunner {
     changeset: Changeset,
     animationContext: AnimationContext
   ): void {
+    animationContext.animations.notifyTransition(changeset, animationContext);
     let contextId = animationContext.args.id;
     function row(type: SpriteType, sprite: Sprite) {
       return {

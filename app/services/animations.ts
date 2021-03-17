@@ -6,6 +6,7 @@ import SpriteTree from '../models/sprite-tree';
 import TransitionRunner from '../models/transition-runner';
 import { scheduleOnce } from '@ember/runloop';
 import { taskFor } from 'ember-concurrency-ts';
+import Changeset from '../models/changeset';
 
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
@@ -59,6 +60,13 @@ export default class AnimationsService extends Service {
 
   setIntent(intentDescription: string): void {
     this.intent = intentDescription;
+  }
+
+  notifyTransition(
+    changeset: Changeset,
+    animationContext: AnimationContext
+  ): void {
+    alert('here');
   }
 }
 

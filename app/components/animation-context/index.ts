@@ -8,6 +8,7 @@ import { action } from '@ember/object';
 import AnimationsService from '../../services/animations';
 import { assert } from '@ember/debug';
 import { getDocumentPosition } from '../../utils/measurement';
+import AnimationContext from 'animations/components/animation-context';
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -64,6 +65,7 @@ export default class AnimationContextComponent extends Component<AnimationContex
   }
 
   shouldAnimate(changeset: Changeset): boolean {
+    debugger;
     return !!(
       changeset &&
       this.args.use &&
