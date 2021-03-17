@@ -10,45 +10,24 @@ export default class RoutesController extends Controller {
     let insertedSprite = changeset.spriteFor({ type: SpriteType.Inserted });
     let removedSprite = changeset.spriteFor({ type: SpriteType.Removed });
     assert(
-      'removedSprite.initialBounds and insertedSprite.finalBounds are present',
-      removedSprite &&
-        insertedSprite &&
-        removedSprite.initialBounds &&
-        insertedSprite.finalBounds
+      'removedSprite.initialWidth and insertedSprite.finalWidth are present',
+      removedSprite?.initialWidth && insertedSprite?.finalWidth
     );
     context.appendOrphan(removedSprite);
     removedSprite.lockStyles();
     let moveLeft = insertedSprite.id === 'route-content-other';
-    let exitTransform = `translate(${moveLeft ? '-' : ''}${
-      removedSprite.initialWidth
-    }px,0)`;
-    let entranceTransform = `translate(${moveLeft ? '' : '-'}${
-      insertedSprite.finalWidth
-    }px,0)`;
-    let removeAnimation = removedSprite.element.animate(
-      [
-        { transform: 'translate(0,0)' },
-        {
-          transform: exitTransform,
-        },
-      ],
-      {
-        duration: 500,
-      }
-    );
-    let insertAnimation = insertedSprite.element.animate(
-      [
-        {
-          transform: entranceTransform,
-        },
-        { transform: 'translate(0,0)' },
-      ],
-      {
-        duration: 500,
-      }
-    );
+    removedSprite.setupAnimation('position', {
+      endX: removedSprite.initialWidth * (moveLeft ? -1 : 1),
+      duration: 500,
+    });
+    insertedSprite.setupAnimation('position', {
+      startX: insertedSprite.finalWidth * (moveLeft ? 1 : -1),
+      duration: 500,
+    });
     await Promise.all(
-      [removeAnimation, insertAnimation].map((a) => a.finished)
+      [removedSprite.startAnimation(), insertedSprite.startAnimation()].map(
+        (a) => a.finished
+      )
     );
   }
 }

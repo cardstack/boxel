@@ -144,6 +144,9 @@ export default class Changeset {
       }
       insertedSprite.type = SpriteType.Kept;
       insertedSprite.initialBounds = removedSprite.initialBounds;
+      insertedSprite.initialComputedStyle = removedSprite.initialComputedStyle;
+      removedSprite.finalBounds = insertedSprite.finalBounds;
+      removedSprite.finalComputedStyle = insertedSprite.finalComputedStyle;
       insertedSprite.counterpart = removedSprite;
       this.keptSprites.add(insertedSprite);
     }

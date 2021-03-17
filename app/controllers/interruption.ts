@@ -37,20 +37,16 @@ class InterruptionController extends Controller {
     );
     let finalBounds = ballSprite.finalBounds.relativeToContext;
     this.animationOriginPosition = finalBounds;
-    let deltaX = initialBounds.left - finalBounds.left;
-    let deltaY = initialBounds.top - finalBounds.top;
+    let deltaX = finalBounds.left - initialBounds.left;
+    let deltaY = finalBounds.top - initialBounds.top;
     let duration = (deltaX ** 2 + deltaY ** 2) ** 0.5 / BALL_SPEED_PX_PER_MS;
-    let animation = ballSprite.element.animate(
-      [
-        { transform: `translate(${deltaX}px, ${deltaY}px)` },
-        { transform: 'translate(0, 0)' },
-      ],
-      {
-        duration,
-      }
-    );
+    ballSprite.setupAnimation('position', {
+      startX: -deltaX,
+      startY: -deltaY,
+      duration,
+    });
     // eslint-disable-next-line @typescript-eslint/no-empty-function
-    return animation.finished.catch(() => {}); // promise rejects when animation is prematurely canceled
+    return ballSprite.startAnimation().finished.catch(() => {}); // promise rejects when animation is prematurely canceled
   }
 }
 

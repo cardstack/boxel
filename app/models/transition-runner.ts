@@ -9,7 +9,7 @@ function checkForChanges(
   spriteModifier: SpriteModifier,
   animationContext: AnimationContext
 ): boolean {
-  spriteModifier.trackPosition();
+  spriteModifier.captureSnapshot();
   let spriteCurrent = spriteModifier.currentBounds;
   let spriteLast = spriteModifier.lastBounds;
   let contextCurrent = animationContext.currentBounds;
@@ -67,7 +67,7 @@ export default class TransitionRunner {
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @task *maybeTransitionTask() {
     let { animationContext } = this;
-    animationContext.trackPosition();
+    animationContext.captureSnapshot();
     let contextDescendants = this.spriteTree.descendantsOf(animationContext);
     for (let contextDescendant of contextDescendants) {
       if (contextDescendant instanceof SpriteModifier) {
@@ -104,11 +104,11 @@ export default class TransitionRunner {
         throw error;
       }
       animationContext.clearOrphans();
-      animationContext.trackPosition();
+      animationContext.captureSnapshot();
       let contextDescendants = this.spriteTree.descendantsOf(animationContext);
       for (let contextDescendant of contextDescendants) {
         if (contextDescendant instanceof SpriteModifier) {
-          (contextDescendant as SpriteModifier).trackPosition();
+          (contextDescendant as SpriteModifier).captureSnapshot();
         }
       }
     }

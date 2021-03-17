@@ -12,7 +12,7 @@ const TRANSLATE_DURATION = 1000;
 const TRANSLATE_START = 400;
 const FADE_IN_DURATION = 1000;
 const FADE_IN_START = 900;
-const TOTAL_DURATION = FADE_IN_START + FADE_IN_DURATION;
+// const TOTAL_DURATION = FADE_IN_START + FADE_IN_DURATION;
 
 export default function listTransition(changeset: Changeset): Promise<void> {
   let { context, insertedSprites, keptSprites, removedSprites } = changeset;
@@ -23,7 +23,31 @@ export default function listTransition(changeset: Changeset): Promise<void> {
   }
 
   if (direction === 'to-list') {
-    for (let keptSprite of [...keptSprites]) {
+    let nameSprite = changeset.spriteFor({
+      role: 'person-name',
+      type: SpriteType.Kept,
+    });
+    let titleSprite = changeset.spriteFor({
+      role: 'person-title',
+      type: SpriteType.Kept,
+    });
+    let spaceholderSprite = changeset.spriteFor({
+      role: 'spaceholder',
+    });
+    let cardSprite = changeset.spriteFor({
+      role: 'card',
+    });
+    assert(
+      'sprites are present',
+      nameSprite &&
+        titleSprite &&
+        spaceholderSprite &&
+        spaceholderSprite.initialBounds &&
+        cardSprite
+    );
+    spaceholderSprite.element.style.height = `${spaceholderSprite.initialBounds.element.height}px`;
+
+    for (let keptSprite of [nameSprite, titleSprite]) {
       let delta = keptSprite.boundsDelta;
       assert(
         'keptSprite always have finalBounds and counterpart',
@@ -34,71 +58,46 @@ export default function listTransition(changeset: Changeset): Promise<void> {
           delta
       );
 
-      let clone = keptSprite.counterpart.element.cloneNode(true) as HTMLElement;
-      keptSprite.counterpart.hide();
-
-      context.appendOrphan(clone);
-      clone.style.position = 'absolute';
-      let cloneBounds = keptSprite.finalBounds.relativeToPosition(
-        keptSprite.finalBounds.parent
+      context.appendOrphan(keptSprite.counterpart);
+      keptSprite.counterpart.lockStyles(
+        keptSprite.finalBounds.relativeToPosition(keptSprite.finalBounds.parent)
       );
-      clone.style.left = cloneBounds.left + 'px';
-      clone.style.top = cloneBounds.top + 'px';
-
-      let initialFontSize = getComputedStyle(clone).fontSize;
-      let finalFontSize = getComputedStyle(keptSprite.element).fontSize;
       keptSprite.hide();
-      let translationKeyFrames = [
-        {
-          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
-          fontSize: initialFontSize,
-        },
-        {
-          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
-          fontSize: initialFontSize,
-          offset: TRANSLATE_START / TOTAL_DURATION,
-        },
-        {
-          transform: 'translate(0, 0)',
-          fontSize: finalFontSize,
-          offset: (TRANSLATE_START + TRANSLATE_DURATION) / TOTAL_DURATION,
-        },
-        { transform: 'translate(0, 0)', fontSize: finalFontSize },
-      ];
-
-      let animation = clone.animate(translationKeyFrames, {
-        duration: TOTAL_DURATION,
+      keptSprite.counterpart.setupAnimation('style', {
+        property: 'fontSize',
+        delay: TRANSLATE_START,
+        duration: TRANSLATE_DURATION,
       });
+      keptSprite.counterpart.setupAnimation('position', {
+        startX: -delta.x,
+        startY: -delta.y,
+        endX: 0,
+        endY: 0,
+        delay: TRANSLATE_START,
+        duration: TRANSLATE_DURATION,
+      });
+      keptSprite.counterpart.setupAnimation('size', {
+        delay: TRANSLATE_START,
+        duration: TRANSLATE_DURATION,
+      });
+      let animation = keptSprite.counterpart.startAnimation();
       animations.push(animation);
     }
 
-    for (let removedSprite of [...removedSprites]) {
-      removedSprite.lockStyles();
-      context.appendOrphan(removedSprite);
-      let animation = removedSprite.element.animate(
-        [
-          { opacity: 1 },
-          { opacity: 0, offset: FADE_OUT_DURATION / TOTAL_DURATION },
-          { opacity: 0 },
-        ],
-        {
-          duration: TOTAL_DURATION,
-        }
-      );
-      animations.push(animation);
-    }
+    context.appendOrphan(cardSprite);
+    cardSprite.lockStyles();
+    cardSprite.setupAnimation('opacity', {
+      to: 0,
+      duration: FADE_OUT_DURATION,
+    });
+    animations.push(cardSprite.startAnimation());
 
     for (let insertedSprite of [...insertedSprites]) {
-      let animation = insertedSprite.element.animate(
-        [
-          { opacity: 0 },
-          { opacity: 0, offset: FADE_IN_START / TOTAL_DURATION },
-          { opacity: 1 },
-        ],
-        {
-          duration: TOTAL_DURATION,
-        }
-      );
+      insertedSprite.setupAnimation('opacity', {
+        delay: FADE_IN_START,
+        duration: FADE_IN_DURATION,
+      });
+      let animation = insertedSprite.startAnimation();
       animations.push(animation);
     }
 
@@ -113,16 +112,11 @@ export default function listTransition(changeset: Changeset): Promise<void> {
       role: 'card',
     });
     assert('cardSprite is found', !!cardSprite);
-    let animation = cardSprite.element.animate(
-      [
-        { opacity: 0 },
-        { opacity: 0, offset: FADE_IN_START / TOTAL_DURATION },
-        { opacity: 1 },
-      ],
-      {
-        duration: TOTAL_DURATION,
-      }
-    );
+    cardSprite.setupAnimation('opacity', {
+      delay: FADE_IN_START,
+      duration: FADE_IN_DURATION,
+    });
+    let animation = cardSprite.startAnimation();
     animations.push(animation);
     for (let keptSprite of [...keptSprites]) {
       assert(
@@ -143,57 +137,34 @@ export default function listTransition(changeset: Changeset): Promise<void> {
       let deltaY = initialBounds.top - finalBounds.top;
 
       context.appendOrphan(keptSprite.counterpart);
-      let initialFontSize = getComputedStyle(keptSprite.counterpart.element)
-        .fontSize;
-      context.removeOrphan(keptSprite.counterpart);
-      let finalFontSize = getComputedStyle(keptSprite.element).fontSize;
-
-      let translationKeyFrames = [
-        {
-          transform: `translate(${deltaX}px, ${deltaY}px)`,
-          fontSize: initialFontSize,
-        },
-        {
-          transform: `translate(${deltaX}px, ${deltaY}px)`,
-          fontSize: initialFontSize,
-          offset: TRANSLATE_START / TOTAL_DURATION,
-        },
-        {
-          transform: 'translate(0, 0)',
-          fontSize: finalFontSize,
-          offset: (TRANSLATE_START + TRANSLATE_DURATION) / TOTAL_DURATION,
-        },
-        {
-          transform: 'translate(0, 0)',
-          fontSize: finalFontSize,
-        },
-      ];
-      context.appendOrphan(keptSprite.counterpart);
       keptSprite.counterpart.lockStyles(
         keptSprite.finalBounds.relativeToPosition(keptSprite.finalBounds.parent)
       );
-      let animation = keptSprite.counterpart.element.animate(
-        translationKeyFrames,
-        {
-          duration: TOTAL_DURATION,
-        }
-      );
+      keptSprite.counterpart.setupAnimation('position', {
+        startX: deltaX,
+        startY: deltaY,
+        endX: 0,
+        endY: 0,
+        delay: TRANSLATE_START,
+        duration: TRANSLATE_DURATION,
+      });
+      keptSprite.counterpart.setupAnimation('style', {
+        property: 'fontSize',
+        delay: TRANSLATE_START,
+        duration: TRANSLATE_DURATION,
+      });
+      let animation = keptSprite.counterpart.startAnimation();
       animations.push(animation);
     }
 
     for (let removedSprite of [...removedSprites]) {
       removedSprite.lockStyles();
       context.appendOrphan(removedSprite);
-      let animation = removedSprite.element.animate(
-        [
-          { opacity: 1 },
-          { opacity: 0, offset: FADE_OUT_DURATION / TOTAL_DURATION },
-          { opacity: 0 },
-        ],
-        {
-          duration: TOTAL_DURATION,
-        }
-      );
+      removedSprite.setupAnimation('opacity', {
+        to: 0,
+        duration: FADE_OUT_DURATION,
+      });
+      let animation = removedSprite.startAnimation();
       animations.push(animation);
     }
 

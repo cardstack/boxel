@@ -36,13 +36,14 @@
         >
           &lt; Back
         </button>
-        
-        <h2 {{sprite role="person-name" id=(concat "person:" this.selectedPerson.id)}} class="detail-person-name font-bold">
-          {{this.selectedPerson.name}}
-        </h2>
-        <h3 {{sprite role="person-title" id=(concat "person:" this.selectedPerson.id)}} class="detail-person-title">
-          {{this.selectedPerson.title}}
-        </h3>
+        <div {{sprite role="spaceholder"}}>
+          <h2 {{sprite role="person-name" id=(concat "person:" this.selectedPerson.id)}} class="detail-person-name font-bold">
+            {{this.selectedPerson.name}}
+          </h2>
+          <h3 {{sprite role="person-title" id=(concat "person:" this.selectedPerson.id)}} class="detail-person-title">
+            {{this.selectedPerson.title}}
+          </h3>
+        </div>
         <p>{{this.selectedPerson.bio}}</p>
       </div>
     {{/if}}

@@ -2,7 +2,18 @@ import ContextAwareBounds, {
   Bounds,
   BoundsDelta,
 } from './context-aware-bounds';
-import { getDocumentPosition } from '../utils/measurement';
+import {
+  CopiedCSS,
+  getDocumentPosition,
+  calculateBoundsVelocity,
+} from '../utils/measurement';
+import { SpriteAnimation } from './sprite-animation';
+import Motion from '../motions/base';
+import KeyframeGenerator from 'animations/utils/keyframe-generator';
+import { Opacity, OpacityOptions } from 'animations/motions/opacity';
+import { Move, MoveOptions } from '../motions/move';
+import { Resize, ResizeOptions } from '../motions/resize';
+import { CssMotion, CssMotionOptions } from '../motions/css-motion';
 
 class SpriteIdentifier {
   id: string | null;
@@ -15,13 +26,17 @@ class SpriteIdentifier {
     return this.id === other.id && this.role === other.role;
   }
 }
+
 export default class Sprite {
   element: HTMLElement;
   identifier: SpriteIdentifier;
   type: SpriteType | null = null;
   initialBounds: ContextAwareBounds | undefined;
   finalBounds: ContextAwareBounds | undefined;
+  initialComputedStyle: CopiedCSS | undefined;
+  finalComputedStyle: CopiedCSS | undefined;
   counterpart: Sprite | null = null; // the sent sprite if this is the received sprite, or vice versa
+  motions: Motion[] = [];
 
   constructor(
     element: HTMLElement,
@@ -72,7 +87,7 @@ export default class Sprite {
   }
 
   captureAnimatingBounds(contextElement: HTMLElement): ContextAwareBounds {
-    return new ContextAwareBounds({
+    let result = new ContextAwareBounds({
       element: getDocumentPosition(this.element, {
         withAnimations: true,
       }),
@@ -80,6 +95,15 @@ export default class Sprite {
         withAnimations: true,
       }),
     });
+    let priorElementBounds = getDocumentPosition(this.element, {
+      withAnimationOffset: -100,
+    });
+    result.velocity = calculateBoundsVelocity(
+      priorElementBounds,
+      result.element,
+      100
+    );
+    return result;
   }
 
   lockStyles(bounds: Bounds | null = null): void {
@@ -112,6 +136,38 @@ export default class Sprite {
 
   hide(): void {
     this.element.style.opacity = '0';
+  }
+
+  setupAnimation(
+    property: string,
+    opts: Partial<
+      OpacityOptions | MoveOptions | ResizeOptions | CssMotionOptions
+    >
+  ): void {
+    switch (property) {
+      case 'opacity':
+        this.motions.push(new Opacity(this, opts));
+        break;
+      case 'position':
+        this.motions.push(new Move(this, opts));
+        break;
+      case 'size':
+        this.motions.push(new Resize(this, opts));
+        break;
+      case 'style':
+        this.motions.push(new CssMotion(this, opts));
+        break;
+      default:
+        // noop
+        break;
+    }
+  }
+
+  startAnimation(): SpriteAnimation {
+    let keyframeGenerator = new KeyframeGenerator(this.motions);
+    let keyframes = keyframeGenerator.keyframes;
+    let keyframeAnimationOptions = keyframeGenerator.keyframeAnimationOptions;
+    return new SpriteAnimation(this, keyframes, keyframeAnimationOptions);
   }
 }
 

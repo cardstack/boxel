@@ -6,7 +6,14 @@ import SpriteTree from '../models/sprite-tree';
 import TransitionRunner from '../models/transition-runner';
 import { scheduleOnce } from '@ember/runloop';
 import { taskFor } from 'ember-concurrency-ts';
+import Sprite from '../models/sprite';
+import Motion from '../motions/base';
+import { SpriteAnimation } from '../models/sprite-animation';
 
+export type AnimateFunction = (
+  sprite: Sprite,
+  motion: Motion
+) => SpriteAnimation;
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
   freshlyAdded: Set<SpriteModifier> = new Set();

@@ -104,27 +104,17 @@ class BoxelController extends Controller {
     let translateAnimations = [];
     let cardSprites = changeset.spritesFor({ role: 'card' });
     for (let cardSprite of cardSprites) {
-      let delta = cardSprite.boundsDelta;
-      assert('cardSprite always has a boundsDelta', delta);
-
-      let translationKeyFrames = [
-        {
-          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
-          boxShadow: '0 0 0',
-        },
-        {
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-        },
-        {
-          transform: 'translate(0, 0)',
-          boxShadow: '0 0 0',
-        },
-      ];
-
-      let animation = cardSprite.element.animate(translationKeyFrames, {
+      cardSprite.setupAnimation('position', {
         duration: TRANSLATE_DURATION,
         easing: 'ease-in-out',
       });
+      cardSprite.setupAnimation('style', {
+        property: 'boxShadow',
+        keyframeValues: ['0 0 0', '0 2px 8px rgba(0,0,0,0.15)', '0 0 0'],
+        duration: TRANSLATE_DURATION,
+        easing: 'ease-in-out',
+      });
+      let animation = cardSprite.startAnimation();
       translateAnimations.push(animation);
     }
     await Promise.all(translateAnimations.map((a) => a.finished));
@@ -139,35 +129,23 @@ class BoxelController extends Controller {
       assert('moreSprite and cardSprite are present', moreSprite && cardSprite);
       moreSprite.hide();
 
-      let delta = cardSprite.boundsDelta;
-      assert('cardSprite boundsDelta is defined', delta);
-
-      let translationKeyFrames = [
-        {
-          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
-          width: `${cardSprite.initialWidth}px`,
-          height: `${cardSprite.initialHeight}px`,
-        },
-        {
-          transform: 'translate(0, 0)',
-          width: `${cardSprite.finalWidth}px`,
-          height: `${cardSprite.finalHeight}px`,
-        },
-      ];
-      let cardAnimation = cardSprite.element.animate(translationKeyFrames, {
+      cardSprite.setupAnimation('size', {
         duration: TRANSLATE_DURATION,
         easing: 'ease-in-out',
       });
+      cardSprite.setupAnimation('position', {
+        duration: TRANSLATE_DURATION,
+        easing: 'ease-in-out',
+      });
+      let cardAnimation = cardSprite.startAnimation();
       await cardAnimation.finished;
 
       moreSprite.unlockStyles();
-      let fadeInAnimation = moreSprite.element.animate(
-        [{ opacity: 0 }, { opacity: 1 }],
-        {
-          duration: FADE_DURATION,
-        }
-      );
-      await fadeInAnimation.finished;
+      moreSprite.setupAnimation('opacity', {
+        from: 0,
+        duration: FADE_DURATION,
+      });
+      await moreSprite.startAnimation().finished;
     }
     if (intent === UNISOLATING_INTENT) {
       let cardSprite = changeset.spriteFor({ role: 'card' });
@@ -195,36 +173,22 @@ class BoxelController extends Controller {
       placeholderSprite.element.style.zIndex = '-1';
 
       moreSprite.hide();
-      let moreSpriteAnimation = moreSprite.element.animate(
-        [{ opacity: 1 }, { opacity: 0 }],
-        {
-          duration: FADE_DURATION,
-        }
-      );
+      moreSprite.setupAnimation('opacity', {
+        to: 0,
+        duration: FADE_DURATION,
+      });
 
-      await moreSpriteAnimation.finished;
+      await moreSprite.startAnimation().finished;
 
-      let delta = cardSprite.boundsDelta;
-      assert('cardSprite boundsDelta is defined', delta);
-      let translationKeyFrames = [
-        {
-          transform: 'translate(0, 0)',
-          width: `${cardSprite.initialWidth}px`,
-          height: `${cardSprite.initialHeight}px`,
-        },
-        {
-          transform: `translate(${delta.x}px, ${delta.y}px)`,
-          width: `${cardSprite.finalWidth}px`,
-          height: `${cardSprite.finalHeight}px`,
-        },
-      ];
-      let cardAnimation = cardSprite.counterpart.element.animate(
-        translationKeyFrames,
-        {
-          duration: TRANSLATE_DURATION,
-          easing: 'ease-in-out',
-        }
-      );
+      cardSprite.counterpart.setupAnimation('position', {
+        duration: TRANSLATE_DURATION,
+        easing: 'ease-in-out',
+      });
+      cardSprite.counterpart.setupAnimation('size', {
+        duration: TRANSLATE_DURATION,
+        easing: 'ease-in-out',
+      });
+      let cardAnimation = cardSprite.counterpart.startAnimation();
       await cardAnimation.finished;
       cardSprite.unlockStyles();
     }

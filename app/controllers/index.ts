@@ -1,4 +1,3 @@
-import { assert } from '@ember/debug';
 import Changeset from '../models/changeset';
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
@@ -44,60 +43,34 @@ export default class IndexController extends Controller {
     for (let removedSprite of [...removedSprites]) {
       context.appendOrphan(removedSprite);
       removedSprite.lockStyles();
-      let animation = removedSprite.element.animate(
-        [{ opacity: 1 }, { opacity: 0 }, { opacity: 0 }],
-        {
-          duration: FADE_DURATION + TRANSLATE_DURATION,
-        }
-      );
-      animations.push(animation);
+      removedSprite.hide();
+      removedSprite.setupAnimation('opacity', {
+        to: 0,
+        duration: FADE_DURATION,
+      });
+      animations.push(removedSprite.startAnimation());
     }
 
     for (let insertedSprite of [...insertedSprites]) {
-      let animation = insertedSprite.element.animate(
-        [{ opacity: 0 }, { opacity: 0 }, { opacity: 1 }],
-        {
-          duration: FADE_DURATION + TRANSLATE_DURATION,
-        }
-      );
-      animations.push(animation);
+      insertedSprite.setupAnimation('opacity', {
+        delay: FADE_DURATION,
+        duration: TRANSLATE_DURATION,
+      });
+      animations.push(insertedSprite.startAnimation());
     }
 
     for (let keptSprite of [...keptSprites]) {
-      let delta = keptSprite.boundsDelta;
-      assert('keptSprite always has a delta', delta);
-      let translationKeyFrames: Keyframe[] = [
-        {
-          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
-        },
-        {
-          transform: 'translate(0, 0)',
-        },
-      ];
-      if (keptSprite.id === 'container') {
-        translationKeyFrames = [
-          {
-            width: `${keptSprite.initialWidth}px`,
-            height: `${keptSprite.initialHeight}px`,
-          },
-          {
-            width: `${keptSprite.finalWidth}px`,
-            height: `${keptSprite.finalHeight}px`,
-          },
-        ];
-      }
-      if (removedSprites.size > 0) {
-        translationKeyFrames.unshift(translationKeyFrames[0]);
-      }
-      if (insertedSprites.size > 0) {
-        translationKeyFrames.push(
-          translationKeyFrames[translationKeyFrames.length - 1]
-        );
-      }
-      let animation = keptSprite.element.animate(translationKeyFrames, {
-        duration: FADE_DURATION + TRANSLATE_DURATION,
+      keptSprite.setupAnimation('position', {
+        delay: removedSprites.size > 0 ? 1500 : 0,
+        duration: TRANSLATE_DURATION,
       });
-      animations.push(animation);
+      if (keptSprite.role === 'container') {
+        keptSprite.setupAnimation('size', {
+          delay: removedSprites.size > 0 ? 1500 : 0,
+          duration: TRANSLATE_DURATION,
+        });
+      }
+      animations.push(keptSprite.startAnimation());
     }
 
     await Promise.all(animations.map((a) => a.finished));
@@ -110,23 +83,8 @@ export default class IndexController extends Controller {
     }
     let animations = [];
     for (let keptSprite of [...keptSprites]) {
-      let delta = keptSprite.boundsDelta;
-      assert(
-        'keptSprite always has an element, initialBounds and finalBounds',
-        keptSprite.element && delta
-      );
-      let translationKeyFrames = [
-        {
-          transform: `translate(${-delta.x}px, ${-delta.y}px)`,
-        },
-        {
-          transform: 'translate(0, 0)',
-        },
-      ];
-      let animation = keptSprite.element.animate(translationKeyFrames, {
-        duration: TRANSLATE_DURATION,
-      });
-      animations.push(animation);
+      keptSprite.setupAnimation('position', { duration: TRANSLATE_DURATION });
+      animations.push(keptSprite.startAnimation());
     }
 
     await Promise.all(animations.map((a) => a.finished));

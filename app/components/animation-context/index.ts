@@ -46,14 +46,14 @@ export default class AnimationContextComponent extends Component<AnimationContex
   @action didInsertEl(element: HTMLElement): void {
     this.element = element;
     this.animations.registerContext(this);
-    this.trackPosition();
+    this.captureSnapshot();
   }
 
   @action didInsertOrphansEl(element: HTMLElement): void {
     this.orphansElement = element;
   }
 
-  trackPosition(): void {
+  captureSnapshot(): void {
     let { element } = this;
     assert(
       'animation context must be an HTML element',
@@ -91,7 +91,7 @@ export default class AnimationContextComponent extends Component<AnimationContex
 
   clearOrphans(): void {
     let { orphansElement } = this;
-    while (orphansElement && orphansElement.firstChild) {
+    while (orphansElement?.firstChild) {
       orphansElement.removeChild(orphansElement.firstChild);
     }
   }
