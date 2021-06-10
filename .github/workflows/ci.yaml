@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [$default-branch]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [12.x]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: actions/cache@v2
+        with:
+          path: '**/node_modules'
+          key: ci-modules-${{ hashFiles('**/yarn.lock') }}
+      - run: yarn install --frozen-lockfile --non-interactive
+      - run: yarn lint
+      - run: yarn test:ember
