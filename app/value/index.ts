@@ -6,23 +6,45 @@ export type Keyframe = {
   [k: string]: Value;
 };
 
+type BaseValueOptions = {
+  transferVelocity: boolean;
+};
+
 export default class BaseValue {
   private previousValue: Value;
   private currentValue: Value;
+  private velocity = 0; // velocity between behaviors
+  private previousFramesFromTime?: number[];
 
   private property: string;
   private behavior?: Behavior;
   private delay = 0;
   private duration = 0;
+  private transferVelocity = false;
 
-  constructor(property: string, value: Value) {
+  constructor(
+    property: string,
+    value: Value,
+    { transferVelocity }: BaseValueOptions = { transferVelocity: false }
+  ) {
     this.property = property;
     this.previousValue = this.currentValue = value;
+    this.transferVelocity = transferVelocity;
+  }
+
+  velocityAtTime(time: number, frames: number[] = this.frames): number {
+    return (
+      this.behavior?.instantaneousVelocity(time, this.duration, frames) ?? 0
+    );
   }
 
   /**
    * E.g. spring, easing function
    * @param behavior
+   * @param value
+   * @param duration
+   * @param delay
+   * @param time
    */
   applyBehavior(
     behavior: Behavior,
@@ -31,12 +53,24 @@ export default class BaseValue {
     delay?: number,
     time?: number
   ): void {
+    let previousFrames = this.frames;
+    this.velocity = 0;
+
     if (time) {
       // we don't currently interpolate between frames, we find the closest frame
-      let frames = this.frames;
-      let frame = Math.min(frames.length - 1, timeToFrame(time));
-      this.currentValue = frames[frame];
-      // TODO: update velocity based on the above
+      let frame = Math.min(this.frames.length - 1, timeToFrame(time));
+
+      this.currentValue = previousFrames[frame];
+      this.velocity = this.velocityAtTime(time); // We probably only need this if the new behaviour is a spring
+
+      if (this.transferVelocity) {
+        this.previousFramesFromTime = previousFrames.slice(
+          frame,
+          previousFrames.length
+        );
+      }
+    } else {
+      this.previousFramesFromTime = undefined;
     }
 
     this.previousValue = this.currentValue;
@@ -66,14 +100,15 @@ export default class BaseValue {
     return parse(this.currentValue).unit;
   }
 
-  get frames(): Value[] {
+  get frames(): number[] {
     return (
       this.behavior?.toFrames(
         this.previousAsNumber,
         this.currentAsNumber,
         this.duration,
-        0,
-        this.delay
+        this.velocity,
+        this.delay,
+        this.previousFramesFromTime
       ) ?? []
     );
   }

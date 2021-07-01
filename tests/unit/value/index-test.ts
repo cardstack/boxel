@@ -66,5 +66,34 @@ module('Unit | BaseValue | Index', function () {
         { left: '100px' },
       ]);
     });
+
+    test('keyframe generation with interruption and velocity transfer', function (assert) {
+      let value = new BaseValue('opacity', 0, { transferVelocity: true });
+      assert.deepEqual(value.keyframes, []);
+
+      let behavior = new LinearBehavior();
+      value.applyBehavior(behavior, 1, 100);
+      assert.deepEqual(value.keyframes, [
+        { opacity: 0 },
+        { opacity: 0.16666666666666666 },
+        { opacity: 0.3333333333333333 },
+        { opacity: 0.5 },
+        { opacity: 0.6666666666666666 },
+        { opacity: 0.8333333333333334 },
+        { opacity: 1 },
+      ]);
+      assert.equal(value.velocityAtTime(50), 0.00001);
+
+      value.applyBehavior(behavior, 0, 100, 0, 50);
+      assert.deepEqual(value.keyframes, [
+        { opacity: 0.5 },
+        { opacity: 0.5833333333333334 },
+        { opacity: 0.5000000000000001 },
+        { opacity: 0.25 },
+        { opacity: 0.16666666666666669 },
+        { opacity: 0.08333333333333331 },
+        { opacity: 0 },
+      ]);
+    });
   });
 });
