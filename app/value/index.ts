@@ -25,7 +25,7 @@ export default class BaseValue {
   constructor(
     property: string,
     value: Value,
-    { transferVelocity }: BaseValueOptions = { transferVelocity: false }
+    { transferVelocity }: BaseValueOptions = { transferVelocity: true }
   ) {
     this.property = property;
     this.previousValue = this.currentValue = value;
