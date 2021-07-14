@@ -1,6 +1,6 @@
-import Behavior, { timeToFrame } from '../behaviors/base';
+import { EasingBehavior, timeToFrame } from '../behaviors/base';
 
-export default class LinearBehavior implements Behavior {
+export default class LinearBehavior implements EasingBehavior {
   toFrames(
     from: number,
     to: number,

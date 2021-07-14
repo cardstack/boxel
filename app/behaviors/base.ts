@@ -22,7 +22,9 @@ export default interface Behavior {
     delay?: number,
     previousFramesFromTime?: number[]
   ): number[];
+}
 
+export interface EasingBehavior extends Behavior {
   /**
    * Calculates (an approximation of) the instantaneous velocity in units per second at the given time.
    *
