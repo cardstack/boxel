@@ -1,5 +1,6 @@
 import Behavior, {
   FPS,
+  Frame,
   SpringToFramesArgument,
   timeToFrame,
 } from '../behaviors/base';
@@ -31,11 +32,6 @@ type SpringValues = {
   initialVelocity?: number;
 };
 
-type SpringFrame = {
-  value: number;
-  velocity: number;
-};
-
 export default class SpringBehavior implements Behavior {
   private options: SpringOptions;
 
@@ -59,20 +55,21 @@ export default class SpringBehavior implements Behavior {
     assert('Damping value must be greater than 0', this.options.damping > 0);
   }
 
-  toFrames(options: SpringToFramesArgument): number[] {
+  toFrames(options: SpringToFramesArgument): Frame[] {
     let { from, to, velocity = 0, delay = 0 } = options;
 
     let delayFrameCount = timeToFrame(delay);
-
-    // TODO: should this be an array of { value, velocity } ?
-    let frames = Array.from(new Array(delayFrameCount)).map(() => from);
+    let frames = Array.from(new Array(delayFrameCount)).map(() => ({
+      value: from,
+      velocity: 0,
+    }));
     frames = [
       ...frames,
       ...this.springToKeyframes({
         fromValue: from,
         toValue: to,
         initialVelocity: velocity,
-      }).map((frame) => frame.value),
+      }),
     ];
 
     return frames;
@@ -115,10 +112,10 @@ export default class SpringBehavior implements Behavior {
   }
 
   private finalizeSpring(
-    frame: SpringFrame,
+    frame: Frame,
     fromValue: number,
     toValue: number
-  ): SpringFrame {
+  ): Frame {
     let { velocity, value } = frame;
 
     // If the Spring is overshooting (when overshoot clamping is on), or if the
@@ -154,7 +151,7 @@ export default class SpringBehavior implements Behavior {
     fromValue,
     toValue,
     initialVelocity,
-  }: SpringValues): (t: number) => SpringFrame {
+  }: SpringValues): (t: number) => Frame {
     let { damping: c, mass: m, stiffness: k, allowsOverdamping } = this.options;
     let v0 = initialVelocity ?? 0;
 
@@ -171,7 +168,7 @@ export default class SpringBehavior implements Behavior {
 
     if (zeta < 1) {
       // Underdamped
-      return (t: number): SpringFrame => {
+      return (t: number): Frame => {
         let envelope = Math.exp(-zeta * omega0 * t);
         let oscillation =
           toValue -
@@ -201,7 +198,7 @@ export default class SpringBehavior implements Behavior {
       };
     } else if (zeta === 1) {
       // Critically damped
-      return (t: number): SpringFrame => {
+      return (t: number): Frame => {
         let envelope = Math.exp(-omega0 * t);
         let oscillation = toValue - envelope * (x0 + (v0 + omega0 * x0) * t);
         let velocity =
@@ -218,7 +215,7 @@ export default class SpringBehavior implements Behavior {
       };
     } else {
       // Overdamped
-      return (t: number): SpringFrame => {
+      return (t: number): Frame => {
         let envelope = Math.exp(-zeta * omega0 * t);
         let oscillation =
           toValue -
@@ -249,11 +246,11 @@ export default class SpringBehavior implements Behavior {
     }
   }
 
-  private springToKeyframes(values: SpringValues) {
+  private springToKeyframes(values: SpringValues): Frame[] {
     let { fromValue = 0, toValue = 1, initialVelocity = 0 } = values;
 
-    if (fromValue === toValue) {
-      throw new Error('From and to value are already identical');
+    if (fromValue === toValue && initialVelocity === 0) {
+      return [];
     }
 
     if (isNaN(fromValue) || isNaN(toValue)) {

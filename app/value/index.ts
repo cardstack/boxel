@@ -1,4 +1,4 @@
-import Behavior, { timeToFrame } from '../behaviors/base';
+import Behavior, { Frame, timeToFrame } from '../behaviors/base';
 import { parse } from 'animations/utils/css-to-unit-value';
 
 export type Value = string | number;
@@ -14,7 +14,7 @@ export default class BaseValue {
   private previousValue: Value;
   private currentValue: Value;
   private velocity = 0; // velocity between behaviors
-  private previousFramesFromTime?: number[];
+  private previousFramesFromTime?: Frame[];
 
   private property: string;
   private behavior?: Behavior;
@@ -30,13 +30,6 @@ export default class BaseValue {
     this.property = property;
     this.previousValue = this.currentValue = value;
     this.transferVelocity = transferVelocity;
-  }
-
-  // TODO: fix, probably a refactor to always include a velocity per frame
-  velocityAtTime(time: number, frames: number[] = this.frames): number {
-    return (
-      this.behavior?.instantaneousVelocity(time, this.duration, frames) ?? 0
-    );
   }
 
   /**
@@ -61,8 +54,8 @@ export default class BaseValue {
       // we don't currently interpolate between frames, we find the closest frame
       let frame = Math.min(this.frames.length - 1, timeToFrame(time));
 
-      this.currentValue = previousFrames[frame];
-      this.velocity = this.velocityAtTime(time); // We probably only need this if the new behaviour is a spring
+      this.currentValue = previousFrames[frame].value;
+      this.velocity = previousFrames[frame].velocity;
 
       if (this.transferVelocity) {
         this.previousFramesFromTime = previousFrames.slice(
@@ -101,7 +94,7 @@ export default class BaseValue {
     return parse(this.currentValue).unit;
   }
 
-  get frames(): number[] {
+  get frames(): Frame[] {
     return (
       this.behavior?.toFrames({
         from: this.previousAsNumber,
@@ -116,7 +109,7 @@ export default class BaseValue {
 
   get keyframes(): Keyframe[] {
     return this.frames.map(
-      (value) =>
+      ({ value }) =>
         ({
           [this.property]: this.currentUnit
             ? `${value}${this.currentUnit}`
