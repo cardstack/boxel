@@ -1,4 +1,8 @@
-import Behavior, { FPS, timeToFrame } from '../behaviors/base';
+import Behavior, {
+  FPS,
+  SpringToFramesArgument,
+  timeToFrame,
+} from '../behaviors/base';
 import { assert } from '@ember/debug';
 
 type SpringOptionsArgument = {
@@ -55,13 +59,9 @@ export default class SpringBehavior implements Behavior {
     assert('Damping value must be greater than 0', this.options.damping > 0);
   }
 
-  toFrames(
-    from: number,
-    to: number,
-    _duration: number,
-    velocity: number,
-    delay = 0
-  ): number[] {
+  toFrames(options: SpringToFramesArgument): number[] {
+    let { from, to, velocity = 0, delay = 0 } = options;
+
     let delayFrameCount = timeToFrame(delay);
 
     // TODO: should this be an array of { value, velocity } ?

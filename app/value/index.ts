@@ -32,6 +32,7 @@ export default class BaseValue {
     this.transferVelocity = transferVelocity;
   }
 
+  // TODO: fix, probably a refactor to always include a velocity per frame
   velocityAtTime(time: number, frames: number[] = this.frames): number {
     return (
       this.behavior?.instantaneousVelocity(time, this.duration, frames) ?? 0
@@ -102,14 +103,14 @@ export default class BaseValue {
 
   get frames(): number[] {
     return (
-      this.behavior?.toFrames(
-        this.previousAsNumber,
-        this.currentAsNumber,
-        this.duration,
-        this.velocity,
-        this.delay,
-        this.previousFramesFromTime
-      ) ?? []
+      this.behavior?.toFrames({
+        from: this.previousAsNumber,
+        to: this.currentAsNumber,
+        duration: this.duration,
+        velocity: this.velocity,
+        delay: this.delay,
+        previousFramesFromTime: this.previousFramesFromTime,
+      }) ?? []
     );
   }
 

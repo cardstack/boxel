@@ -3,25 +3,28 @@ export function timeToFrame(time: number): number {
   return Math.round(time * FPS);
 }
 
+export type EasingToFramesArgument = {
+  from: number;
+  to: number;
+  duration: number;
+  previousFramesFromTime?: number[];
+  delay?: number;
+};
+
+export type SpringToFramesArgument = {
+  from: number;
+  to: number;
+  velocity?: number;
+  delay?: number;
+};
+
 export default interface Behavior {
   /**
    * Calculates the frames for the given parameters.
    *
-   * @param from
-   * @param to
-   * @param duration Duration in milliseconds
-   * @param velocity
-   * @param delay
-   * @param previousFramesFromTime The previous frames (if any) that would have happened without an interruption.
+   * @param options
    */
-  toFrames(
-    from: number,
-    to: number,
-    duration: number,
-    velocity: number,
-    delay?: number,
-    previousFramesFromTime?: number[]
-  ): number[];
+  toFrames(options: EasingToFramesArgument | SpringToFramesArgument): number[];
 }
 
 export interface EasingBehavior extends Behavior {

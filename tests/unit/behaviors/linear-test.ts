@@ -5,14 +5,20 @@ module('Unit | Behaviors | Linear', function () {
   test('generates minimum of 2 frames', function (assert) {
     let behavior = new LinearBehavior();
 
-    assert.deepEqual(behavior.toFrames(0, 1, 0, 0), [0, 1]);
-    assert.deepEqual(behavior.toFrames(1, 0, 0, 0), [1, 0]);
+    assert.deepEqual(behavior.toFrames({ from: 0, to: 1, duration: 0 }), [
+      0,
+      1,
+    ]);
+    assert.deepEqual(behavior.toFrames({ from: 1, to: 0, duration: 0 }), [
+      1,
+      0,
+    ]);
   });
 
   test('frames are generated at 60 FPS', function (assert) {
     let behavior = new LinearBehavior();
 
-    let frames = behavior.toFrames(0, 1, 100, 0);
+    let frames = behavior.toFrames({ from: 0, to: 1, duration: 100 });
 
     assert.equal(frames.length, 7);
     assert.deepEqual(frames, [
@@ -29,7 +35,12 @@ module('Unit | Behaviors | Linear', function () {
   test('takes a delay into account', function (assert) {
     let behavior = new LinearBehavior();
 
-    let frames = behavior.toFrames(0, 1, 100, 0, 50);
+    let frames = behavior.toFrames({
+      from: 0,
+      to: 1,
+      duration: 100,
+      delay: 50,
+    });
 
     assert.equal(frames.length, 10);
     assert.deepEqual(frames, [
@@ -49,8 +60,13 @@ module('Unit | Behaviors | Linear', function () {
   test('takes previous frames into account', function (assert) {
     let behavior = new LinearBehavior();
 
-    let previousFrames = [0.25, 0.5, 0.75, 1];
-    let frames = behavior.toFrames(1, 0, 100, 0, 0, previousFrames);
+    let previousFramesFromTime = [0.25, 0.5, 0.75, 1];
+    let frames = behavior.toFrames({
+      from: 1,
+      to: 0,
+      duration: 100,
+      previousFramesFromTime,
+    });
 
     assert.equal(frames.length, 7);
     assert.deepEqual(frames, [
@@ -67,8 +83,14 @@ module('Unit | Behaviors | Linear', function () {
   test('takes previous frames and delay into account', function (assert) {
     let behavior = new LinearBehavior();
 
-    let previousFrames = [0.25, 0.5, 0.75, 1];
-    let frames = behavior.toFrames(1, 0, 100, 0, 50, previousFrames);
+    let previousFramesFromTime = [0.25, 0.5, 0.75, 1];
+    let frames = behavior.toFrames({
+      from: 1,
+      to: 0,
+      duration: 100,
+      delay: 50,
+      previousFramesFromTime,
+    });
 
     assert.equal(frames.length, 10);
     assert.deepEqual(frames, [

@@ -1,17 +1,15 @@
-import { EasingBehavior, timeToFrame } from '../behaviors/base';
+import {
+  EasingBehavior,
+  EasingToFramesArgument,
+  timeToFrame,
+} from '../behaviors/base';
 
 export default class LinearBehavior implements EasingBehavior {
-  toFrames(
-    from: number,
-    to: number,
-    duration: number,
-    _velocity: number, // TODO: velocity is unused currently
-    delay = 0,
-    previousFramesFromTime?: number[]
-  ): number[] {
+  toFrames(options: EasingToFramesArgument): number[] {
+    let { from, to, duration, delay = 0, previousFramesFromTime } = options;
+
     let frameCount = Math.max(timeToFrame(duration), 1);
     let delayFrameCount = timeToFrame(delay);
-
     let frames = Array.from(new Array(delayFrameCount)).map(() => from);
     for (let i = 0; i <= frameCount; i++) {
       let t = i / frameCount;
