@@ -15,7 +15,7 @@ export default function instantaneousVelocity(
   let nextFrame =
     index < frames.length - 1 ? frames[index + 1].value : undefined;
 
-  if (previousFrame && nextFrame) {
+  if (previousFrame !== undefined && nextFrame !== undefined) {
     let frameDuration = 1 / FPS;
     let leftVelocity = (frame - previousFrame) / frameDuration / 1000;
     let rightVelocity = (nextFrame - frame) / frameDuration / 1000;

@@ -14,6 +14,7 @@ export default class BaseValue {
   private previousValue: Value;
   private currentValue: Value;
   private velocity = 0; // velocity between behaviors
+  private lastFrame?: Frame;
   private previousFramesFromTime?: Frame[];
 
   private property: string;
@@ -58,6 +59,7 @@ export default class BaseValue {
       this.velocity = previousFrames[frame].velocity;
 
       if (this.transferVelocity) {
+        this.lastFrame = previousFrames[frame - 1];
         this.previousFramesFromTime = previousFrames.slice(
           frame,
           previousFrames.length
@@ -102,6 +104,7 @@ export default class BaseValue {
         duration: this.duration,
         velocity: this.velocity,
         delay: this.delay,
+        lastFrame: this.lastFrame,
         previousFramesFromTime: this.previousFramesFromTime,
       }) ?? []
     );

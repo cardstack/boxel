@@ -7,6 +7,7 @@ export type EasingToFramesArgument = {
   from: number;
   to: number;
   duration: number;
+  lastFrame?: Frame;
   previousFramesFromTime?: Frame[];
   delay?: number;
 };

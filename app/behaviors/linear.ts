@@ -8,7 +8,14 @@ import instantaneousVelocity from 'animations/utils/instantaneous-velocity';
 
 export default class LinearBehavior implements Behavior {
   toFrames(options: EasingToFramesArgument): Frame[] {
-    let { from, to, duration, delay = 0, previousFramesFromTime } = options;
+    let {
+      from,
+      to,
+      duration,
+      delay = 0,
+      lastFrame,
+      previousFramesFromTime,
+    } = options;
 
     if (from === to) {
       return [];
@@ -49,8 +56,15 @@ export default class LinearBehavior implements Behavior {
           progress * frames[i].value +
           (1 - progress) * previousFramesFromTime[i].value;
       }
-      for (let i = 0; i <= frameCount; i++) {
-        // TODO: we need the previous frame for a more accurate velocity of the first frame!
+
+      if (lastFrame) {
+        // We explicitly add the lastFrame (if any) to correctly calculate the velocity at the transfer point.
+        frames[0].velocity = instantaneousVelocity(1, [lastFrame, ...frames]);
+      } else {
+        frames[0].velocity = instantaneousVelocity(0, frames);
+      }
+
+      for (let i = 1; i <= frameCount; i++) {
         frames[i].velocity = instantaneousVelocity(i, frames);
       }
     }

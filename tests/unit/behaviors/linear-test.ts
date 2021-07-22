@@ -237,4 +237,58 @@ module('Unit | Behaviors | Linear', function () {
       },
     ]);
   });
+
+  test('takes last frame and previous frames into account', function (assert) {
+    let behavior = new LinearBehavior();
+
+    let lastFrame = {
+      value: 0,
+      velocity: 0.000015,
+    };
+    let previousFramesFromTime = [
+      { value: 0.25, velocity: 0.000015 },
+      { value: 0.5, velocity: 0.000015 },
+      { value: 0.75, velocity: 0.000015 },
+      { value: 1, velocity: 0.000015 },
+    ];
+    let frames = behavior.toFrames({
+      from: 1,
+      to: 0,
+      duration: 100,
+      lastFrame,
+      previousFramesFromTime,
+    });
+
+    assert.equal(frames.length, 7);
+    assert.deepEqual(frames, [
+      {
+        value: 0.25,
+        velocity: 0.000018333333333333333,
+      },
+      {
+        value: 0.6111111111111112,
+        velocity: 0.00001333333333333333,
+      },
+      {
+        value: 0.6944444444444444,
+        velocity: -0.000003333333333333335,
+      },
+      {
+        value: 0.5,
+        velocity: -0.00001083333333333333,
+      },
+      {
+        value: 0.33333333333333337,
+        velocity: -0.00001,
+      },
+      {
+        value: 0.16666666666666663,
+        velocity: -0.00001,
+      },
+      {
+        value: 0,
+        velocity: -0.00001,
+      },
+    ]);
+  });
 });
