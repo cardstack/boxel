@@ -9,7 +9,6 @@ import {
 } from '../utils/measurement';
 import { SpriteAnimation } from './sprite-animation';
 import Motion from '../motions/base';
-import KeyframeGenerator from 'animations/utils/keyframe-generator';
 import { Opacity, OpacityOptions } from 'animations/motions/opacity';
 import { Move, MoveOptions } from '../motions/move';
 import { Resize, ResizeOptions } from '../motions/resize';
@@ -37,6 +36,7 @@ export default class Sprite {
   finalComputedStyle: CopiedCSS | undefined;
   counterpart: Sprite | null = null; // the sent sprite if this is the received sprite, or vice versa
   motions: Motion[] = [];
+  time: number;
 
   constructor(
     element: HTMLElement,
@@ -47,6 +47,7 @@ export default class Sprite {
     this.element = element;
     this.identifier = new SpriteIdentifier(id, role);
     this.type = type;
+    this.time = new Date().getTime();
   }
 
   get id(): string | null {
@@ -163,11 +164,25 @@ export default class Sprite {
     }
   }
 
-  startAnimation(): SpriteAnimation {
-    let keyframeGenerator = new KeyframeGenerator(this.motions);
-    let keyframes = keyframeGenerator.keyframes;
-    let keyframeAnimationOptions = keyframeGenerator.keyframeAnimationOptions;
-    return new SpriteAnimation(this, keyframes, keyframeAnimationOptions);
+  startAnimation({
+    time,
+  }: {
+    time?: number;
+  } = {}): SpriteAnimation {
+    let motion = this.motions.find((motion) => motion instanceof Move);
+
+    // TODO only implemented for Move for now
+    if (!motion || !(motion instanceof Move)) {
+      throw new Error('fail');
+    }
+
+    motion.applyBehaviour(time);
+
+    return new SpriteAnimation(
+      this,
+      motion.keyframes,
+      motion.keyframeAnimationOptions
+    );
   }
 }
 

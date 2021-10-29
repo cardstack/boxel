@@ -3,6 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import Changeset from '../models/changeset';
 import { assert } from '@ember/debug';
+import SpringBehavior from 'animations/behaviors/spring';
 
 const BALL_SPEED_PX_PER_MS = 0.05;
 class InterruptionController extends Controller {
@@ -15,13 +16,17 @@ class InterruptionController extends Controller {
     assert('ballSprite is present', ballSprite);
     let activeAnimations = ballSprite.element.getAnimations(); // TODO: this is not supported in Safari
     let initialBounds;
+    let initialVelocity;
+    let time;
     if (activeAnimations.length) {
       let activeAnimation = activeAnimations[0];
       activeAnimation.pause();
       ballSprite.lockStyles(this.animationOriginPosition);
-      initialBounds = ballSprite.captureAnimatingBounds(
-        changeset.context.element
-      ).relativeToContext;
+      time = activeAnimation.currentTime;
+      // TODO: extract actual precalculated velocity instead of guesstimating
+      let bounds = ballSprite.captureAnimatingBounds(changeset.context.element);
+      initialBounds = bounds.relativeToContext;
+      initialVelocity = bounds.velocity;
       ballSprite.unlockStyles();
       activeAnimation.cancel();
     } else {
@@ -40,13 +45,20 @@ class InterruptionController extends Controller {
     let deltaX = finalBounds.left - initialBounds.left;
     let deltaY = finalBounds.top - initialBounds.top;
     let duration = (deltaX ** 2 + deltaY ** 2) ** 0.5 / BALL_SPEED_PX_PER_MS;
+    let velocity = initialVelocity;
     ballSprite.setupAnimation('position', {
       startX: -deltaX,
       startY: -deltaY,
       duration,
+      velocity,
+      behavior: new SpringBehavior({ overshootClamping: true, damping: 100 }),
     });
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    return ballSprite.startAnimation().finished.catch(() => {}); // promise rejects when animation is prematurely canceled
+    return (
+      ballSprite
+        .startAnimation({ time: time ?? undefined })
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        .finished.catch(() => {})
+    ); // promise rejects when animation is prematurely canceled
   }
 }
 

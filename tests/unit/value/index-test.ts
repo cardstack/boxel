@@ -33,7 +33,7 @@ module('Unit | BaseValue | Index', function () {
 
     test('interruption based on time is handled', function (assert) {
       let behavior = new LinearBehavior();
-      let value = new BaseValue('opacity', 0);
+      let value = new BaseValue('opacity', 0, { transferVelocity: false });
       assert.deepEqual(value.keyframes, []);
 
       value.applyBehavior(behavior, 1, 100);
