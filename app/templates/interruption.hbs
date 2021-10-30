@@ -14,6 +14,7 @@
           class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
           style="top: 0; left: 0"
           {{on 'click' (fn (mut this.ballGoWhere) 'A')}}
+          {{on-key 'a'}}
         >
           A
         </button>
@@ -22,6 +23,7 @@
           class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
           type="button"
           {{on 'click' (fn (mut this.ballGoWhere) 'B')}}
+          {{on-key 'b'}}
         >
           B
         </button>
@@ -30,6 +32,7 @@
           class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
           type="button"
           {{on 'click' (fn (mut this.ballGoWhere) 'C')}}
+          {{on-key 'c'}}
         >
           C
         </button>
@@ -38,6 +41,7 @@
           class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
           type="button"
           {{on 'click' (fn (mut this.ballGoWhere) 'D')}}
+          {{on-key 'd'}}
         >
           D
         </button>
