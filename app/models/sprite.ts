@@ -177,9 +177,12 @@ export default class Sprite {
       let result: Keyframe[] = [];
       for (let i = 0; i < count; i++) {
         // TODO: this merge algorithm is too naïve, it implies we can have only 1 of each CSS property or it will be overridden
+        // we copy the final frame of a motion if there is another motion that takes longer
         result.push({
-          ...previousKeyframes?.[i],
-          ...motion.keyframes?.[i],
+          ...(previousKeyframes?.[i] ??
+            previousKeyframes[previousKeyframes.length - 1]),
+          ...(motion.keyframes?.[i] ??
+            motion.keyframes[motion.keyframes.length - 1]),
         });
       }
       return result;
