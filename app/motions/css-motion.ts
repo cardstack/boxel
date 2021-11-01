@@ -60,4 +60,7 @@ export class CssMotion extends Motion<CssMotionOptions> {
       easing: this.opts.easing,
     };
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  applyBehavior(): void {}
 }
