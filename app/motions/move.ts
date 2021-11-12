@@ -1,8 +1,13 @@
 import Motion, { BaseOptions } from './base';
 import Sprite, { SpriteType } from '../models/sprite';
 import { BoundsDelta } from '../models/context-aware-bounds';
+import SpringBehavior from 'animations/behaviors/spring';
+import BaseValue from 'animations/value';
+import Behavior, { FPS } from 'animations/behaviors/base';
+import { BoundsVelocity } from 'animations/utils/measurement';
 
 const DEFAULT_DURATION = 300;
+const DEFAULT_BEHAVIOR = SpringBehavior;
 
 export default function move(sprite: Sprite, opts: Partial<MoveOptions>): Move {
   return new Move(sprite, opts);
@@ -13,6 +18,8 @@ export interface MoveOptions extends BaseOptions {
   startY: number;
   endX: number;
   endY: number;
+  behavior: Behavior;
+  velocity: BoundsVelocity;
 }
 
 interface Position {
@@ -21,9 +28,36 @@ interface Position {
 }
 export class Move extends Motion<MoveOptions> {
   boundsDelta: BoundsDelta | undefined;
+  behavior: Behavior;
+  duration: number;
+  x: BaseValue;
+  y: BaseValue;
   constructor(sprite: Sprite, opts: Partial<MoveOptions>) {
     super(sprite, opts);
     this.boundsDelta = sprite.boundsDelta;
+    this.behavior = opts.behavior || new DEFAULT_BEHAVIOR();
+    this.duration = opts.duration ?? DEFAULT_DURATION;
+    this.x = new BaseValue('x', this.startPosition.x);
+    this.y = new BaseValue('y', this.startPosition.y);
+  }
+
+  applyBehaviour(time?: number): void {
+    this.x.applyBehavior(
+      this.behavior,
+      this.endPosition.x,
+      this.duration,
+      this.opts.delay,
+      time,
+      (this.opts.velocity?.x ?? 0) / -1000 // the behaviors take velocity in units per ms instead of per second
+    );
+    this.y.applyBehavior(
+      this.behavior,
+      this.endPosition.y,
+      this.duration,
+      this.opts.delay,
+      time,
+      (this.opts.velocity?.y ?? 0) / -1000
+    );
   }
 
   get startPosition(): Position {
@@ -55,18 +89,31 @@ export class Move extends Motion<MoveOptions> {
   }
 
   get keyframes(): Keyframe[] {
-    let { startPosition, endPosition } = this;
-    return [
-      { transform: `translate(${startPosition.x}px,${startPosition.y}px)` },
-      { transform: `translate(${endPosition.x}px,${endPosition.y}px)` },
-    ];
+    let xFrames = this.x.frames;
+    let yFrames = this.y.frames;
+
+    let count = Math.max(xFrames.length, yFrames.length);
+
+    let keyframes = [];
+    for (let i = 0; i < count; i++) {
+      let x = xFrames[i]?.value ?? xFrames[xFrames.length - 1]?.value ?? 0;
+      let y = yFrames[i]?.value ?? yFrames[yFrames.length - 1]?.value ?? 0;
+      keyframes.push({
+        transform: `translate(${x}px, ${y}px)`,
+      });
+    }
+
+    return keyframes;
   }
 
   get keyframeAnimationOptions(): KeyframeAnimationOptions {
+    // calculate "real" duration based on amount of keyframes at the given FPS
+    let duration = (this.keyframes.length - 1) / FPS;
+
     return {
-      delay: this.opts.delay,
-      duration: this.opts.duration ?? DEFAULT_DURATION,
-      easing: this.opts.easing,
+      duration,
+      // we always pass linear here as we precalculate the easings
+      easing: 'linear',
     };
   }
 }

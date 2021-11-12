@@ -2,6 +2,7 @@ import Behavior, { Frame, timeToFrame } from '../behaviors/base';
 import { parse } from 'animations/utils/css-to-unit-value';
 
 export type Value = string | number;
+export type CompositeValue = { [key: string]: Value };
 export type Keyframe = {
   [k: string]: Value;
 };
@@ -21,7 +22,7 @@ export default class BaseValue {
   private behavior?: Behavior;
   private delay = 0;
   private duration = 0;
-  private transferVelocity = false;
+  private transferVelocity = true;
 
   constructor(
     property: string,
@@ -46,24 +47,28 @@ export default class BaseValue {
     value: Value,
     duration: number,
     delay?: number,
-    time?: number
+    time?: number,
+    velocity?: number,
+    _previousFrames: Frame[] = this.frames
   ): void {
-    let previousFrames = this.frames;
-    this.velocity = 0;
+    let previousFrames = _previousFrames ?? this.frames;
+    this.velocity = velocity ?? 0;
 
     if (time) {
       // we don't currently interpolate between frames, we find the closest frame
-      let frame = Math.min(this.frames.length - 1, timeToFrame(time));
+      let frame = Math.min(previousFrames.length - 1, timeToFrame(time));
 
-      this.currentValue = previousFrames[frame].value;
-      this.velocity = previousFrames[frame].velocity;
+      if (previousFrames[frame]) {
+        this.currentValue = previousFrames[frame].value;
+        this.velocity = previousFrames[frame].velocity;
 
-      if (this.transferVelocity) {
-        this.lastFrame = previousFrames[frame - 1];
-        this.previousFramesFromTime = previousFrames.slice(
-          frame,
-          previousFrames.length
-        );
+        if (this.transferVelocity) {
+          this.lastFrame = previousFrames[frame - 1];
+          this.previousFramesFromTime = previousFrames.slice(
+            frame,
+            previousFrames.length
+          );
+        }
       }
     } else {
       this.previousFramesFromTime = undefined;
