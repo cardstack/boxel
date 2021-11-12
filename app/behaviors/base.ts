@@ -7,7 +7,8 @@ export type EasingToFramesArgument = {
   from: number;
   to: number;
   duration: number;
-  previousFramesFromTime?: number[];
+  lastFrame?: Frame;
+  previousFramesFromTime?: Frame[];
   delay?: number;
 };
 
@@ -18,13 +19,18 @@ export type SpringToFramesArgument = {
   delay?: number;
 };
 
+export type Frame = {
+  value: number;
+  velocity: number; // units per second
+};
+
 export default interface Behavior {
   /**
    * Calculates the frames for the given parameters.
    *
    * @param options
    */
-  toFrames(options: EasingToFramesArgument | SpringToFramesArgument): number[];
+  toFrames(options: EasingToFramesArgument | SpringToFramesArgument): Frame[];
 }
 
 export interface EasingBehavior extends Behavior {

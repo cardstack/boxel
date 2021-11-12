@@ -82,7 +82,6 @@ module('Unit | BaseValue | Index', function () {
         { opacity: 0.8333333333333334 },
         { opacity: 1 },
       ]);
-      assert.equal(value.velocityAtTime(50), 0.00001);
 
       value.applyBehavior(behavior, 0, 100, 0, 50);
       assert.deepEqual(value.keyframes, [
