@@ -13,6 +13,7 @@ import { Opacity, OpacityOptions } from 'animations/motions/opacity';
 import { Move, MoveOptions } from '../motions/move';
 import { Resize, ResizeOptions } from '../motions/resize';
 import { CssMotion, CssMotionOptions } from '../motions/css-motion';
+import { FPS } from 'animations/behaviors/base';
 
 class SpriteIdentifier {
   id: string | null;
@@ -169,20 +170,33 @@ export default class Sprite {
   }: {
     time?: number;
   } = {}): SpriteAnimation {
-    let motion = this.motions.find((motion) => motion instanceof Move);
+    let keyframes = this.motions.reduce((previousKeyframes, motion) => {
+      motion.applyBehavior(time);
 
-    // TODO only implemented for Move for now
-    if (!motion || !(motion instanceof Move)) {
-      throw new Error('fail');
-    }
+      let count = Math.max(previousKeyframes.length, motion.keyframes.length);
+      let result: Keyframe[] = [];
+      for (let i = 0; i < count; i++) {
+        // TODO: this merge algorithm is too naïve, it implies we can have only 1 of each CSS property or it will be overridden
+        // we copy the final frame of a motion if there is another motion that takes longer
+        result.push({
+          ...(previousKeyframes?.[i] ??
+            previousKeyframes[previousKeyframes.length - 1]),
+          ...(motion.keyframes?.[i] ??
+            motion.keyframes[motion.keyframes.length - 1]),
+        });
+      }
+      return result;
+    }, [] as Keyframe[]);
 
-    motion.applyBehaviour(time);
+    // calculate "real" duration based on amount of keyframes at the given FPS
+    let duration = Math.max(0, (keyframes.length - 1) / FPS);
 
-    return new SpriteAnimation(
-      this,
-      motion.keyframes,
-      motion.keyframeAnimationOptions
-    );
+    let keyframeAnimationOptions = {
+      easing: 'linear',
+      duration,
+    };
+
+    return new SpriteAnimation(this, keyframes, keyframeAnimationOptions);
   }
 }
 

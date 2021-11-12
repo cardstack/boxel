@@ -3,7 +3,7 @@ import Sprite, { SpriteType } from '../models/sprite';
 import { BoundsDelta } from '../models/context-aware-bounds';
 import SpringBehavior from 'animations/behaviors/spring';
 import BaseValue from 'animations/value';
-import Behavior, { FPS } from 'animations/behaviors/base';
+import Behavior from 'animations/behaviors/base';
 import { BoundsVelocity } from 'animations/utils/measurement';
 
 const DEFAULT_DURATION = 300;
@@ -39,25 +39,6 @@ export class Move extends Motion<MoveOptions> {
     this.duration = opts.duration ?? DEFAULT_DURATION;
     this.x = new BaseValue('x', this.startPosition.x);
     this.y = new BaseValue('y', this.startPosition.y);
-  }
-
-  applyBehaviour(time?: number): void {
-    this.x.applyBehavior(
-      this.behavior,
-      this.endPosition.x,
-      this.duration,
-      this.opts.delay,
-      time,
-      (this.opts.velocity?.x ?? 0) / -1000 // the behaviors take velocity in units per ms instead of per second
-    );
-    this.y.applyBehavior(
-      this.behavior,
-      this.endPosition.y,
-      this.duration,
-      this.opts.delay,
-      time,
-      (this.opts.velocity?.y ?? 0) / -1000
-    );
   }
 
   get startPosition(): Position {
@@ -106,14 +87,22 @@ export class Move extends Motion<MoveOptions> {
     return keyframes;
   }
 
-  get keyframeAnimationOptions(): KeyframeAnimationOptions {
-    // calculate "real" duration based on amount of keyframes at the given FPS
-    let duration = (this.keyframes.length - 1) / FPS;
-
-    return {
-      duration,
-      // we always pass linear here as we precalculate the easings
-      easing: 'linear',
-    };
+  applyBehavior(time?: number): void {
+    this.x.applyBehavior(
+      this.behavior,
+      this.endPosition.x,
+      this.duration,
+      this.opts.delay,
+      time,
+      (this.opts.velocity?.x ?? 0) / -1000 // TODO: the behaviors take velocity in units per ms instead of per second
+    );
+    this.y.applyBehavior(
+      this.behavior,
+      this.endPosition.y,
+      this.duration,
+      this.opts.delay,
+      time,
+      (this.opts.velocity?.y ?? 0) / -1000
+    );
   }
 }

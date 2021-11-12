@@ -7,7 +7,7 @@
     {{#unless this.selectedPerson}}
       <ul class="person-list" {{sprite role="list"}}>
         {{#each this.people as |person|}}
-          <li> 
+          <li>
             <span {{sprite role="person-name" id=(concat "person:" person.id)}} class="inline-block font-bold">
               {{person.name}}
             </span>
@@ -17,7 +17,7 @@
             <button
               type="button"
               class="border px-2 rounded-lg text-sm"
-              {{sprite}}
+              {{sprite role="person-button"}}
               {{on 'click' (fn (mut this.selectedPerson) person)}}
             >
               Details &gt;

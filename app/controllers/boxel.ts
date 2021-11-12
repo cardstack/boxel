@@ -6,8 +6,9 @@ import { tracked } from '@glimmer/tracking';
 import Changeset from 'animations/models/changeset';
 import { inject as service } from '@ember/service';
 import AnimationsService from '../services/animations';
+import SpringBehavior from 'animations/behaviors/spring';
 
-const FADE_DURATION = 500;
+const FADE_DURATION = 300;
 const TRANSLATE_DURATION = 1000;
 
 class Participant {
@@ -67,6 +68,15 @@ const ISOLATING_INTENT = 'isolating-card';
 const UNISOLATING_INTENT = 'unisolating-card';
 const SORTING_INTENT = 'sorting-cards';
 
+const SORT_SPRING_BEHAVIOR = new SpringBehavior({
+  damping: 12,
+});
+const SPRING_BEHAVIOR = new SpringBehavior({
+  restDisplacementThreshold: 1,
+  restVelocityThreshold: 0.3,
+  damping: 50,
+});
+
 class BoxelController extends Controller {
   @tracked isCardIsolated = false;
   models = [piaMidina, luke, alex];
@@ -106,7 +116,7 @@ class BoxelController extends Controller {
     for (let cardSprite of cardSprites) {
       cardSprite.setupAnimation('position', {
         duration: TRANSLATE_DURATION,
-        easing: 'ease-in-out',
+        behavior: SORT_SPRING_BEHAVIOR,
       });
       cardSprite.setupAnimation('style', {
         property: 'boxShadow',
@@ -131,11 +141,11 @@ class BoxelController extends Controller {
 
       cardSprite.setupAnimation('size', {
         duration: TRANSLATE_DURATION,
-        easing: 'ease-in-out',
+        behavior: SPRING_BEHAVIOR,
       });
       cardSprite.setupAnimation('position', {
         duration: TRANSLATE_DURATION,
-        easing: 'ease-in-out',
+        behavior: SPRING_BEHAVIOR,
       });
       let cardAnimation = cardSprite.startAnimation();
       await cardAnimation.finished;
@@ -182,11 +192,11 @@ class BoxelController extends Controller {
 
       cardSprite.counterpart.setupAnimation('position', {
         duration: TRANSLATE_DURATION,
-        easing: 'ease-in-out',
+        behavior: SPRING_BEHAVIOR,
       });
       cardSprite.counterpart.setupAnimation('size', {
         duration: TRANSLATE_DURATION,
-        easing: 'ease-in-out',
+        behavior: SPRING_BEHAVIOR,
       });
       let cardAnimation = cardSprite.counterpart.startAnimation();
       await cardAnimation.finished;

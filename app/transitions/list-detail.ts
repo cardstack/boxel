@@ -1,18 +1,20 @@
 import { assert } from '@ember/debug';
 import { SpriteType } from 'animations/models/sprite';
 import Changeset from '../models/changeset';
+import LinearBehavior from 'animations/behaviors/linear';
 
 // FADE OUT : ----------
 // TRANSLATE:     ----------
 // FADE IN  :          ----------
 
 // const FADE_OUT_START = 0;
-const FADE_OUT_DURATION = 1000;
-const TRANSLATE_DURATION = 1000;
+const FADE_OUT_DURATION = 400;
+const TRANSLATE_DURATION = 600;
 const TRANSLATE_START = 400;
-const FADE_IN_DURATION = 1000;
+const FADE_IN_DURATION = 100;
 const FADE_IN_START = 900;
 // const TOTAL_DURATION = FADE_IN_START + FADE_IN_DURATION;
+const LINEAR_BEHAVIOR = new LinearBehavior();
 
 export default function listTransition(changeset: Changeset): Promise<void> {
   let { context, insertedSprites, keptSprites, removedSprites } = changeset;
@@ -75,10 +77,12 @@ export default function listTransition(changeset: Changeset): Promise<void> {
         endY: 0,
         delay: TRANSLATE_START,
         duration: TRANSLATE_DURATION,
+        behavior: LINEAR_BEHAVIOR,
       });
       keptSprite.counterpart.setupAnimation('size', {
         delay: TRANSLATE_START,
         duration: TRANSLATE_DURATION,
+        behavior: LINEAR_BEHAVIOR,
       });
       let animation = keptSprite.counterpart.startAnimation();
       animations.push(animation);
@@ -147,6 +151,7 @@ export default function listTransition(changeset: Changeset): Promise<void> {
         endY: 0,
         delay: TRANSLATE_START,
         duration: TRANSLATE_DURATION,
+        behavior: LINEAR_BEHAVIOR,
       });
       keptSprite.counterpart.setupAnimation('style', {
         property: 'fontSize',
