@@ -33,6 +33,12 @@ export class Resize extends Motion<ResizeOptions> {
 
     this.behavior = opts.behavior || new DEFAULT_BEHAVIOR();
     this.duration = opts.duration ?? DEFAULT_DURATION;
+    console.log(
+      sprite.initialWidth,
+      sprite.initialHeight,
+      sprite.finalWidth,
+      sprite.finalHeight
+    );
     this.width = new BaseValue('width', this.startSize.width);
     this.height = new BaseValue('height', this.startSize.height);
   }

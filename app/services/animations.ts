@@ -41,7 +41,32 @@ export default class AnimationsService extends Service {
 
   notifyContextRendering(animationContext: AnimationContext): void {
     this.eligibleContexts.add(animationContext);
+    let el1 = document.querySelector('div.ball');
+    console.log('1', el1?.getBoundingClientRect(), el1?.getAnimations());
+
+    document.querySelectorAll('div.ball').forEach((el) => {
+      el.getAnimations().forEach((a) => a.pause());
+    });
+
+    if (document.querySelectorAll('div.ball').length === 2) {
+      debugger;
+    }
+
+    if (el1) {
+      let activeAnimations = el1?.getAnimations();
+      activeAnimations[0]?.pause();
+      console.log(
+        'active animation rect',
+        activeAnimations[0],
+        el1.getBoundingClientRect()
+      );
+    }
+
     scheduleOnce('afterRender', this, this.maybeTransition);
+    console.log(
+      '2',
+      document.querySelectorAll('div.ball')[1]?.getBoundingClientRect()
+    );
   }
 
   async maybeTransition(): Promise<void> {

@@ -94,6 +94,10 @@ export default class TransitionRunner {
     changeset.addKeptSprites(this.freshlyChanged);
     changeset.finalizeSpriteCategories();
 
+    console.log(changeset);
+
+    console.log(changeset.keptSprites[0]?.id);
+
     if (animationContext.shouldAnimate(changeset)) {
       this.logChangeset(changeset, animationContext); // For debugging
       let animation = animationContext.args.use?.(changeset);

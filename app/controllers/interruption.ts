@@ -4,11 +4,17 @@ import { action } from '@ember/object';
 import Changeset from '../models/changeset';
 import { assert } from '@ember/debug';
 import SpringBehavior from 'animations/behaviors/spring';
+import magicMove from '../transitions/magic-move';
 
 const BALL_SPEED_PX_PER_MS = 0.05;
 class InterruptionController extends Controller {
   @tracked ballGoWhere = 'A';
   animationOriginPosition: DOMRect | null = null;
+
+  @action
+  magicMoveBall(changeset: Changeset): Promise<void> {
+    return magicMove(changeset);
+  }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @action moveBall(spriteId: string, changeset: Changeset) {
