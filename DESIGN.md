@@ -42,6 +42,6 @@ AnimationContext controls all lifetime scoping for sprites and their ability to 
    - whether a sprite moved into orphans was not something you could control, it happened just because of the surrounding context changing
    - we tried to adjust the starting position of each sprite to where you would "want" it to start, but this could be wrong
  - instead we would like clear explicit API for each of these intentions
- - for example, before you were expected to put a sprite into the place you wanted it to start moving from, and we tried to guess that for you as a good default that you could change. This is confusing, instead the motion itself should take a clear argument expression the intention to start at the sprite's (for example) initial position
+ - for example, before you were expected to put a sprite into the place you wanted it to start moving from, and we tried to guess that for you as a good default that you could change. This is confusing, instead the motion itself should take a clear argument expression the intention to start at the sprite's (for example) initial
  - becoming an orphan should ideally also be something you can explicitly opt into 
    - so you can escape things like opacity changes of your parent
