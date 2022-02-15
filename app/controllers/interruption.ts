@@ -11,8 +11,8 @@ class InterruptionController extends Controller {
   animationOriginPosition: DOMRect | null = null;
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  @action moveBall(changeset: Changeset) {
-    let ballSprite = changeset.spriteFor({ id: 'ball' });
+  @action moveBall(spriteId: string, changeset: Changeset) {
+    let ballSprite = changeset.spriteFor({ id: spriteId });
     assert('ballSprite is present', ballSprite);
     let activeAnimations = ballSprite.element.getAnimations(); // TODO: this is not supported in Safari
     let initialBounds;
