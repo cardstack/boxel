@@ -127,21 +127,29 @@ export default class Changeset {
       (identifier) => !!removedIds.find((o) => o.equals(identifier))
     );
     for (let intersectingId of intersectingIds) {
-      let removedSprite = removedSpritesArr.find((s) =>
+      let removedSprites = removedSpritesArr.filter((s) =>
         s.identifier.equals(intersectingId)
       );
       let insertedSprite = insertedSpritesArr.find((s) =>
         s.identifier.equals(intersectingId)
       );
-      if (!insertedSprite || !removedSprite) {
+      if (!insertedSprite || removedSprites.length === 0) {
         throw new Error(
           'intersection check should always result in removedSprite and insertedSprite being found'
         );
       }
       this.insertedSprites.delete(insertedSprite);
-      if (removedSprite) {
-        this.removedSprites.delete(removedSprite);
+      // TODO: verify if this is correct, we might need to handle it on a different level.
+      //  We only get multiple ones in case of an interruption.
+      if (removedSprites.length) {
+        removedSprites.forEach((removedSprite) =>
+          this.removedSprites.delete(removedSprite)
+        );
       }
+
+      // The first removedSprite should be the "last added orphan" if any
+      let removedSprite = removedSprites[0];
+
       insertedSprite.type = SpriteType.Kept;
       insertedSprite.initialBounds = removedSprite.initialBounds;
       insertedSprite.initialComputedStyle = removedSprite.initialComputedStyle;
