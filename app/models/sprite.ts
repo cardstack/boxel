@@ -100,6 +100,8 @@ export default class Sprite {
     let priorElementBounds = getDocumentPosition(this.element, {
       withAnimationOffset: -100,
     });
+
+    // TODO: extract actual precalculated velocity instead of guesstimating
     result.velocity = calculateBoundsVelocity(
       priorElementBounds,
       result.element,
