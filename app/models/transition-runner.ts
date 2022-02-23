@@ -124,22 +124,24 @@ export default class TransitionRunner {
             return;
           }
 
-          if (!sprite.counterpart) {
-            assert('not implemented for cases without counterpart');
-            console.error('not implemented for cases without counterpart');
+          if (sprite.counterpart) {
+            assert(
+              'sprite counterpart should always have initialBounds',
+              sprite.counterpart?.initialBounds
+            );
+
+            // set the interrupted state as the initial state of the counterpart
+            sprite.counterpart.initialBounds = new ContextAwareBounds({
+              element: interruptedSprite.initialBounds.element,
+              contextElement: sprite.counterpart.initialBounds.parent,
+            });
+            sprite.initialComputedStyle =
+              interruptedSprite.initialComputedStyle;
+          } else {
+            sprite.initialBounds = interruptedSprite.initialBounds;
+            sprite.initialComputedStyle =
+              interruptedSprite.initialComputedStyle;
           }
-
-          assert(
-            'sprite counterpart should always have initialBounds',
-            sprite.counterpart?.initialBounds
-          );
-
-          // set the interrupted state as the initial state of the counterpart
-          sprite.counterpart.initialBounds = new ContextAwareBounds({
-            element: interruptedSprite.initialBounds.element,
-            contextElement: sprite.counterpart.initialBounds.parent,
-          });
-          sprite.initialComputedStyle = interruptedSprite.initialComputedStyle;
         }
       }
     }
