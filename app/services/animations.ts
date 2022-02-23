@@ -42,10 +42,10 @@ export default class AnimationsService extends Service {
     this.freshlyRemoved.add(spriteModifier);
   }
 
-  _notifiedContextRendering = false;
+  _notifiedContextRendering = new Set();
   notifyContextRendering(animationContext: AnimationContext): void {
-    if (!this._notifiedContextRendering) {
-      this._notifiedContextRendering = true;
+    if (!this._notifiedContextRendering.has(animationContext)) {
+      this._notifiedContextRendering.add(animationContext);
       this.eligibleContexts.add(animationContext);
 
       // we can't schedule this, if we don't deal with it immediately the animations will already be gone
@@ -151,7 +151,7 @@ export default class AnimationsService extends Service {
   }
 
   async maybeTransition(): Promise<void> {
-    this._notifiedContextRendering = false;
+    this._notifiedContextRendering.clear();
 
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
     let currentChangesets = this.currentChangesets;
