@@ -206,4 +206,5 @@ export enum SpriteType {
   Inserted = 'inserted',
   Removed = 'removed',
   Kept = 'kept',
+  Intermediate = 'intermediate',
 }
