@@ -35,7 +35,7 @@ type TransitionRunnerOpts = {
   freshlyAdded: Set<SpriteModifier>;
   freshlyRemoved: Set<SpriteModifier>;
   intent: string | undefined;
-  interruptionChangeset: Changeset | undefined;
+  animatingSprites: Sprite[] | undefined;
 };
 export default class TransitionRunner {
   animationContext: AnimationContext;
@@ -44,7 +44,7 @@ export default class TransitionRunner {
   freshlyRemoved: Set<SpriteModifier>;
   intent: string | undefined;
   freshlyChanged: Set<SpriteModifier> = new Set();
-  interruptionChangeset: Changeset | undefined;
+  animatingSprites: Sprite[];
 
   constructor(animationContext: AnimationContext, opts: TransitionRunnerOpts) {
     this.animationContext = animationContext;
@@ -52,7 +52,7 @@ export default class TransitionRunner {
     this.freshlyAdded = opts.freshlyAdded;
     this.freshlyRemoved = opts.freshlyRemoved;
     this.intent = opts.intent;
-    this.interruptionChangeset = opts.interruptionChangeset;
+    this.animatingSprites = opts.animatingSprites ?? [];
   }
 
   filterToContext(
@@ -99,22 +99,14 @@ export default class TransitionRunner {
     changeset.addKeptSprites(this.freshlyChanged);
     changeset.finalizeSpriteCategories();
 
-    if (this.interruptionChangeset) {
-      let allInterruptedSprites = [
-        ...this.interruptionChangeset.insertedSprites,
-        ...this.interruptionChangeset.removedSprites,
-        ...this.interruptionChangeset.keptSprites,
-      ];
+    if (this.animatingSprites.length) {
       for (let sprite of [
         ...changeset.insertedSprites,
         ...changeset.removedSprites,
         ...changeset.keptSprites,
       ]) {
-        let interruptedSprite = allInterruptedSprites.find(
-          (is) =>
-            is.id === sprite.id &&
-            is.role === sprite.role &&
-            is.type === sprite.type // TODO: check if this equals method is good enough or too naive
+        let interruptedSprite = this.animatingSprites.find(
+          (is) => is.id === sprite.id && is.role === sprite.role // TODO: check if this equals method is good enough or too naive
         );
 
         // TODO: we might need to set the bounds on the counterpart of

@@ -10,7 +10,7 @@ export interface SpriteModel {
 
 type SpriteTreeModel = ContextModel | SpriteModel;
 
-enum SpriteTreeNodeType {
+export enum SpriteTreeNodeType {
   Root,
   Context,
   Sprite,
