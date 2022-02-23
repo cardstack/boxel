@@ -52,7 +52,7 @@ export default class AnimationsService extends Service {
       this.eligibleContexts.add(animationContext);
 
       // we can't schedule this, if we don't deal with it immediately the animations will already be gone
-      this.willTransition();
+      this.willTransition(animationContext);
 
       scheduleOnce('afterRender', this, this.maybeTransition);
     }
@@ -74,57 +74,43 @@ export default class AnimationsService extends Service {
   }
 
   // TODO: as this is called once per context, we could probably pass the context as an argument and forego the loop
-  willTransition(): void {
+  willTransition(context: AnimationContext): void {
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
     console.log('willTransition', contexts);
 
     // TODO: what about intents
 
-    for (let context of contexts as AnimationContext[]) {
-      let spriteModifiersForContext = [];
-      let contextNodeChildren = this.spriteTree.lookupNodeByElement(
-        context.element
-      )?.children;
+    let contextNodeChildren = this.spriteTree.lookupNodeByElement(
+      context.element
+    )?.children;
 
-      let animatingSprites: Sprite[] = [];
-      if (contextNodeChildren) {
-        spriteModifiersForContext = [...contextNodeChildren].reduce(
-          (result: SpriteModifier[], c) => {
-            if (c.nodeType === SpriteTreeNodeType.Sprite) {
-              let spriteModifier = c.model as SpriteModifier;
-              result.push(spriteModifier);
+    let animatingSprites: Sprite[] = [];
+    if (contextNodeChildren) {
+      for (let contextNodeChild of contextNodeChildren) {
+        if (contextNodeChild.nodeType === SpriteTreeNodeType.Sprite) {
+          let spriteModifier = contextNodeChild.model as SpriteModifier;
 
-              // TODO: animations already need to be paused here
-              let sprite = SpriteFactory.createIntermediateSprite(
-                spriteModifier
-              );
+          // TODO: animations already need to be paused here
+          let sprite = SpriteFactory.createIntermediateSprite(spriteModifier);
 
-              // TODO: we could leave these measurements to the SpriteFactory as they are unique to the SpriteType
-              if (sprite.element.getAnimations().length) {
-                let bounds = sprite.captureAnimatingBounds(context.element);
-                let styles = copyComputedStyle(sprite.element); // TODO: check if we need to pause the animation
-                console.log(styles['background-color']);
-                sprite.initialBounds = bounds;
-                sprite.initialComputedStyle = styles;
-                animatingSprites.push(sprite);
-              }
-            }
-            return result;
-          },
-          []
-        );
-
-        console.log(contextNodeChildren, spriteModifiersForContext);
+          // TODO: we could leave these measurements to the SpriteFactory as they are unique to the SpriteType
+          if (sprite.element.getAnimations().length) {
+            let bounds = sprite.captureAnimatingBounds(context.element);
+            let styles = copyComputedStyle(sprite.element); // TODO: check if we need to pause the animation
+            console.log(styles['background-color']);
+            sprite.initialBounds = bounds;
+            sprite.initialComputedStyle = styles;
+            animatingSprites.push(sprite);
+          }
+        }
       }
-
-      assert(
-        'Context already present in animatingSprites',
-        !this.animatingSprites.has(context)
-      );
-      this.animatingSprites.set(context, animatingSprites);
-
-      console.log('MEASURED SPRITES: ', animatingSprites);
     }
+
+    assert(
+      'Context already present in animatingSprites',
+      !this.animatingSprites.has(context)
+    );
+    this.animatingSprites.set(context, animatingSprites);
   }
 
   async maybeTransition(): Promise<void> {
