@@ -35,7 +35,7 @@ type TransitionRunnerOpts = {
   freshlyAdded: Set<SpriteModifier>;
   freshlyRemoved: Set<SpriteModifier>;
   intent: string | undefined;
-  animatingSprites: Sprite[] | undefined;
+  intermediateSprites: Sprite[] | undefined;
 };
 export default class TransitionRunner {
   animationContext: AnimationContext;
@@ -44,7 +44,7 @@ export default class TransitionRunner {
   freshlyRemoved: Set<SpriteModifier>;
   intent: string | undefined;
   freshlyChanged: Set<SpriteModifier> = new Set();
-  animatingSprites: Sprite[];
+  intermediateSprites: Sprite[];
 
   constructor(animationContext: AnimationContext, opts: TransitionRunnerOpts) {
     this.animationContext = animationContext;
@@ -52,7 +52,7 @@ export default class TransitionRunner {
     this.freshlyAdded = opts.freshlyAdded;
     this.freshlyRemoved = opts.freshlyRemoved;
     this.intent = opts.intent;
-    this.animatingSprites = opts.animatingSprites ?? [];
+    this.intermediateSprites = opts.intermediateSprites ?? [];
   }
 
   filterToContext(
@@ -99,15 +99,25 @@ export default class TransitionRunner {
     changeset.addKeptSprites(this.freshlyChanged);
     changeset.finalizeSpriteCategories();
 
-    if (this.animatingSprites.length) {
+    if (this.intermediateSprites.length) {
       for (let sprite of [
         ...changeset.insertedSprites,
         ...changeset.removedSprites,
         ...changeset.keptSprites,
       ]) {
-        let interruptedSprite = this.animatingSprites.find(
-          (is) => is.id === sprite.id && is.role === sprite.role // TODO: check if this equals method is good enough or too naive
+        let interruptedSprites = this.intermediateSprites.filter((is) =>
+          is.identifier.equals(sprite.identifier)
         );
+
+        if (interruptedSprites.length > 1) {
+          console.warn(
+            `${interruptedSprites.length} matching interruptedSprites found`,
+            interruptedSprites
+          );
+        }
+
+        let interruptedSprite =
+          interruptedSprites[interruptedSprites.length - 1];
 
         // TODO: we might need to set the bounds on the counterpart of
         //  keptSprites only, not magically modify them for "new" sprites.

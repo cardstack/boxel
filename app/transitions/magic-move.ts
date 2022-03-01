@@ -1,7 +1,9 @@
-import Changeset from '../models/changeset';
+import Changeset, { SpritesForArgs } from '../models/changeset';
 import { SpriteAnimation } from '../models/sprite-animation';
 import { assert } from '@ember/debug';
 import SpringBehavior from 'animations/behaviors/spring';
+import LinearBehavior from 'animations/behaviors/linear';
+import { SpriteType } from 'animations/models/sprite';
 
 const SPEED_PX_PER_MS = 0.05;
 
@@ -11,8 +13,15 @@ const SPEED_PX_PER_MS = 0.05;
   @function magicMove
   @export default
 */
-export default async function (changeset: Changeset): Promise<void> {
-  let { keptSprites } = changeset;
+export default async function (
+  changeset: Changeset,
+  opts?: SpritesForArgs
+): Promise<void> {
+  let keptSprites = changeset.keptSprites;
+
+  if (opts) {
+    keptSprites = changeset.spritesFor({ ...opts, type: SpriteType.Kept });
+  }
 
   let animations: SpriteAnimation[] = [];
 
@@ -30,6 +39,9 @@ export default async function (changeset: Changeset): Promise<void> {
       // This is a Sprite that has changed places in the DOM
       let counterpart = s.counterpart;
 
+      counterpart.element.getAnimations().forEach((a) => a.pause());
+      counterpart.hide();
+
       assert(
         'counterpart sprite should always have initialBounds',
         counterpart.initialBounds
@@ -37,13 +49,6 @@ export default async function (changeset: Changeset): Promise<void> {
 
       initialBounds = counterpart.initialBounds.relativeToContext;
       initialStyles = counterpart.initialComputedStyle;
-
-      // TODO: We don't do anything with the counterpart for now other than taking it's state.
-      //  One might want to animate it too.
-      // counterpart.hide();
-      // context.appendOrphan(s.counterpart);
-      // counterpart.lockStyles();
-      // counterpart.element.style.zIndex = '1';
     } else {
       // This is the same Sprite moving elsewhere
       initialBounds = s.initialBounds.relativeToContext;
@@ -60,9 +65,9 @@ export default async function (changeset: Changeset): Promise<void> {
     s.setupAnimation('position', {
       startX: -deltaX,
       startY: -deltaY,
-      duration,
+      duration: 5000,
       velocity,
-      behavior: new SpringBehavior({ overshootClamping: true, damping: 100 }),
+      behavior: new LinearBehavior(), //new SpringBehavior({ overshootClamping: true, damping: 100 }),
     });
 
     s.setupAnimation('size', {

@@ -4,7 +4,7 @@ import AnimationContext from '../components/animation-context';
 import SpriteModifier from '../modifiers/sprite';
 import { assert } from '@ember/debug';
 
-type SpritesForArgs = {
+export type SpritesForArgs = {
   type?: SpriteType | undefined;
   role?: string | undefined;
   id?: string | undefined;
@@ -139,16 +139,18 @@ export default class Changeset {
         );
       }
       this.insertedSprites.delete(insertedSprite);
+
       // TODO: verify if this is correct, we might need to handle it on a different level.
       //  We only get multiple ones in case of an interruption.
-      if (removedSprites.length) {
-        removedSprites.forEach((removedSprite) =>
-          this.removedSprites.delete(removedSprite)
-        );
-      }
-
-      // The first removedSprite should be the "last added orphan" if any
+      assert(
+        'Multiple matching removedSprites found',
+        removedSprites.length < 2
+      );
       let removedSprite = removedSprites[0];
+      if (this.context.hasOrphan(removedSprite.element)) {
+        this.context.removeOrphan(removedSprite.element);
+      }
+      this.removedSprites.delete(removedSprite);
 
       insertedSprite.type = SpriteType.Kept;
       insertedSprite.initialBounds = removedSprite.initialBounds;

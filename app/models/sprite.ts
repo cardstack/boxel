@@ -38,6 +38,7 @@ export default class Sprite {
   counterpart: Sprite | null = null; // the sent sprite if this is the received sprite, or vice versa
   motions: Motion[] = [];
   time: number;
+  hidden = false;
 
   constructor(
     element: HTMLElement,
@@ -86,6 +87,10 @@ export default class Sprite {
       width: finalBounds.width - initialBounds.width,
       height: finalBounds.height - initialBounds.height,
     };
+  }
+
+  get canBeGarbageCollected() {
+    return this.type === SpriteType.Removed && this.hidden;
   }
 
   captureAnimatingBounds(contextElement: HTMLElement): ContextAwareBounds {
@@ -138,8 +143,11 @@ export default class Sprite {
     this.element.style.removeProperty('opacity');
   }
 
+  // hidden things get dropped at interruption
   hide(): void {
+    this.hidden = true;
     this.element.style.opacity = '0';
+    this.element.setAttribute('data-hidden', 'true');
   }
 
   setupAnimation(

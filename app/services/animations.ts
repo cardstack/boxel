@@ -13,6 +13,12 @@ import Changeset from 'animations/models/changeset';
 import { copyComputedStyle } from 'animations/utils/measurement';
 import { assert } from '@ember/debug';
 import SpriteFactory from 'animations/models/sprite-factory';
+import {
+  all,
+  didCancel,
+  restartableTask,
+  TaskInstance,
+} from 'ember-concurrency';
 
 export type AnimateFunction = (
   sprite: Sprite,
@@ -25,7 +31,7 @@ export default class AnimationsService extends Service {
   eligibleContexts: Set<AnimationContext> = new Set();
   intent: string | undefined;
   currentChangesets: Changeset[] = [];
-  animatingSprites: WeakMap<AnimationContext, Sprite[]> = new WeakMap();
+  intermediateSprites: WeakMap<AnimationContext, Sprite[]> = new WeakMap();
 
   registerContext(context: AnimationContext): void {
     this.spriteTree.addAnimationContext(context);
@@ -73,6 +79,24 @@ export default class AnimationsService extends Service {
     return result;
   }
 
+  // When we interrupt, we can clean certain sprites marked for garbage collection
+  cleanupSprites(context: AnimationContext): void {
+    let removedSprites = this.filterToContext(context, this.freshlyRemoved, {
+      includeFreshlyRemoved: true,
+    });
+
+    // cleanup removedSprites
+    removedSprites.forEach((sm) => {
+      if (sm.element.getAttribute('data-hidden') === 'true') {
+        // TODO: do we need to explicitly cancel animations or will the browser garbage collect those?
+        if (context.hasOrphan(sm.element as HTMLElement)) {
+          context.removeOrphan(sm.element as HTMLElement);
+        }
+        this.freshlyRemoved.delete(sm);
+      }
+    });
+  }
+
   // TODO: as this is called once per context, we could probably pass the context as an argument and forego the loop
   willTransition(context: AnimationContext): void {
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
@@ -80,59 +104,79 @@ export default class AnimationsService extends Service {
 
     // TODO: what about intents
 
+    this.cleanupSprites(context);
+
+    let spriteModifiers: Set<SpriteModifier> = this.filterToContext(
+      context,
+      this.freshlyRemoved,
+      { includeFreshlyRemoved: true }
+    );
+
+    // TODO: we only look at direct descendants here, not all
     let contextNodeChildren = this.spriteTree.lookupNodeByElement(
       context.element
     )?.children;
-
-    let animatingSprites: Sprite[] = [];
     if (contextNodeChildren) {
-      for (let contextNodeChild of contextNodeChildren) {
-        if (contextNodeChild.nodeType === SpriteTreeNodeType.Sprite) {
-          let spriteModifier = contextNodeChild.model as SpriteModifier;
-
-          // TODO: animations already need to be paused here
-          let sprite = SpriteFactory.createIntermediateSprite(spriteModifier);
-
-          // TODO: we could leave these measurements to the SpriteFactory as they are unique to the SpriteType
-          if (sprite.element.getAnimations().length) {
-            let bounds = sprite.captureAnimatingBounds(context.element);
-            let styles = copyComputedStyle(sprite.element); // TODO: check if we need to pause the animation
-            console.log(styles['background-color']);
-            sprite.initialBounds = bounds;
-            sprite.initialComputedStyle = styles;
-            animatingSprites.push(sprite);
-          }
+      for (let child of contextNodeChildren) {
+        if (child.nodeType === SpriteTreeNodeType.Sprite) {
+          spriteModifiers.add(child.model as SpriteModifier);
         }
       }
     }
 
+    let intermediateSprites: Sprite[] = [];
+    for (let spriteModifier of spriteModifiers) {
+      let sprite = SpriteFactory.createIntermediateSprite(spriteModifier);
+
+      // TODO: we could leave these measurements to the SpriteFactory as they are unique to the SpriteType
+      let bounds = sprite.captureAnimatingBounds(context.element);
+      let styles = copyComputedStyle(sprite.element); // TODO: check if we need to pause the animation, is so we want to integrate this with captureAnimatingBounds to only pause/play once.
+      // console.log(styles['background-color']);
+      sprite.initialBounds = bounds;
+      sprite.initialComputedStyle = styles;
+      intermediateSprites.push(sprite);
+    }
+
     assert(
-      'Context already present in animatingSprites',
-      !this.animatingSprites.has(context)
+      'Context already present in intermediateSprites',
+      !this.intermediateSprites.has(context)
     );
-    this.animatingSprites.set(context, animatingSprites);
+    this.intermediateSprites.set(context, intermediateSprites);
   }
 
-  async maybeTransition(): Promise<void> {
+  async maybeTransition(): Promise<TaskInstance<void>> {
+    return taskFor(this.maybeTransitionTask)
+      .perform()
+      .catch((error) => {
+        if (!didCancel(error)) {
+          throw error;
+        }
+      });
+  }
+
+  @restartableTask
+  *maybeTransitionTask() {
     this._notifiedContextRendering.clear();
 
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
-    let animatingSprites = this.animatingSprites;
-    this.animatingSprites = new WeakMap();
-    console.log('maybeTransition', contexts, animatingSprites);
+    let intermediateSprites = this.intermediateSprites;
+    this.intermediateSprites = new WeakMap();
+
     let promises = [];
     for (let context of contexts as AnimationContext[]) {
+      // TODO: Should we keep a "current" transition runner while it is running so we can actually interrupt it?
+      //  It may also be good enough to rewrite maybeTransition into a Task.
       let transitionRunner = new TransitionRunner(context as AnimationContext, {
         spriteTree: this.spriteTree,
         freshlyAdded: this.freshlyAdded,
         freshlyRemoved: this.freshlyRemoved,
         intent: this.intent,
-        animatingSprites: animatingSprites.get(context),
+        intermediateSprites: intermediateSprites.get(context),
       });
       let task = taskFor(transitionRunner.maybeTransitionTask);
       promises.push(task.perform());
     }
-    await Promise.allSettled(promises);
+    yield all(promises);
     this.freshlyAdded.clear();
     this.freshlyRemoved.clear();
     this.spriteTree.clearFreshlyRemovedChildren();

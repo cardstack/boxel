@@ -71,6 +71,15 @@ export default class AnimationContextComponent extends Component<AnimationContex
     );
   }
 
+  hasOrphan(spriteOrElement: Sprite | HTMLElement): boolean {
+    let { orphansElement } = this;
+    if (spriteOrElement instanceof Sprite) {
+      return spriteOrElement.element.parentElement === orphansElement;
+    } else {
+      return spriteOrElement.parentElement === orphansElement;
+    }
+  }
+
   appendOrphan(spriteOrElement: Sprite | HTMLElement): void {
     let { orphansElement } = this;
     if (spriteOrElement instanceof Sprite) {
