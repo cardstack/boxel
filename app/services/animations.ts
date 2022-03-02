@@ -38,6 +38,7 @@ export default class AnimationsService extends Service {
   }
 
   unregisterContext(context: AnimationContext): void {
+    this.eligibleContexts.delete(context);
     this.spriteTree.removeAnimationContext(context);
   }
 
