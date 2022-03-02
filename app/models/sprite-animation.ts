@@ -1,4 +1,4 @@
-import Sprite, { SpriteType } from './sprite';
+import Sprite from './sprite';
 
 export class SpriteAnimation {
   animation: Animation;

@@ -167,12 +167,13 @@ export default class TransitionRunner {
       }
       animationContext.clearOrphans();
       animationContext.captureSnapshot();
-      let contextDescendants = this.spriteTree.descendantsOf(animationContext);
+      // TODO: This is likely not needed anymore now that we measure beforehand
+      /*let contextDescendants = this.spriteTree.descendantsOf(animationContext);
       for (let contextDescendant of contextDescendants) {
         if (contextDescendant instanceof SpriteModifier) {
           (contextDescendant as SpriteModifier).captureSnapshot();
         }
-      }
+      }*/
     }
     animationContext.isInitialRenderCompleted = true;
   }
