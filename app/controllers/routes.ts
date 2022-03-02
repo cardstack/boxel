@@ -6,6 +6,8 @@ import magicMove from 'animations/transitions/magic-move';
 import { assert } from '@ember/debug';
 import ContextAwareBounds from 'animations/models/context-aware-bounds';
 
+const SPEED_PX_PER_MS = 0.25;
+
 export default class RoutesController extends Controller {
   async transition(changeset: Changeset): Promise<void> {
     let { removedSprites, keptSprites, context } = changeset;
@@ -24,15 +26,21 @@ export default class RoutesController extends Controller {
           keptSprite.finalBounds
       );
 
-      for (let sprite of removedSprites) {
+      for (let removedSprite of removedSprites) {
         assert(
           'removedSprite must always have initialBounds',
-          sprite.initialBounds
+          removedSprite.initialBounds
         );
 
-        sprite.element.getAnimations().forEach((a) => a.pause());
-        context.appendOrphan(sprite);
-        sprite.lockStyles();
+        context.appendOrphan(removedSprite);
+        // TODO: either don't compensate for the animation in lockStyles
+        //  or take it into account when calculating the animation.
+        removedSprite.lockStyles({
+          left: 0,
+          top: 0,
+          width: removedSprite.initialBounds.element.width,
+          height: removedSprite.initialBounds.element.height,
+        });
 
         let moveLeft = keptSprite.id === 'route-content-other';
 
@@ -42,36 +50,43 @@ export default class RoutesController extends Controller {
           finalElementBounds = new DOMRect(
             x - width,
             y,
-            sprite.initialBounds.element.width,
-            sprite.initialBounds.element.height
+            removedSprite.initialBounds.element.width,
+            removedSprite.initialBounds.element.height
           );
         } else {
           finalElementBounds = new DOMRect(
             x + width,
             y,
-            sprite.initialBounds.element.width,
-            sprite.initialBounds.element.height
+            removedSprite.initialBounds.element.width,
+            removedSprite.initialBounds.element.height
           );
         }
-        sprite.finalBounds = new ContextAwareBounds({
+        removedSprite.finalBounds = new ContextAwareBounds({
           element: finalElementBounds,
           contextElement: context.currentBounds,
         });
 
-        let finalBounds = sprite.finalBounds.relativeToContext;
+        let initialBounds = removedSprite.initialBounds.relativeToContext;
+        let finalBounds = removedSprite.finalBounds.relativeToContext;
 
-        sprite.setupAnimation('position', {
-          endX: finalBounds.x - sprite.initialBounds.element.x,
+        let deltaX = finalBounds.x - initialBounds.x;
+        let deltaY = 0;
+        let duration = (deltaX ** 2 + deltaY ** 2) ** 0.5 / SPEED_PX_PER_MS;
+
+        removedSprite.setupAnimation('position', {
+          startX: initialBounds.x,
+          endX: finalBounds.x,
           behavior: new LinearBehavior(),
-          duration: 5000,
+          duration,
         });
       }
 
-      let promises: Promise<void | Animation>[] = [
+      let animations: Promise<void | Animation>[] = [
         magicMove(changeset),
         ...[...removedSprites].map((s) => s.startAnimation().finished),
       ];
-      await Promise.all(promises);
+
+      await Promise.all(animations);
     } else {
       let removedSprite = changeset.spriteFor({ type: SpriteType.Removed });
       let insertedSprite = changeset.spriteFor({ type: SpriteType.Inserted });
@@ -86,22 +101,28 @@ export default class RoutesController extends Controller {
 
       let moveLeft = insertedSprite?.id === 'route-content-other';
 
+      let deltaXR = removedSprite.initialWidth * (moveLeft ? -1 : 1);
+      let durationR = (deltaXR ** 2) ** 0.5 / SPEED_PX_PER_MS;
       removedSprite.setupAnimation('position', {
         endX: removedSprite.initialWidth * (moveLeft ? -1 : 1),
         behavior: new LinearBehavior(),
-        duration: 5000,
+        duration: durationR,
       });
 
+      let deltaXI = insertedSprite.finalWidth * (moveLeft ? 1 : -1);
+      let durationI = (deltaXI ** 2) ** 0.5 / SPEED_PX_PER_MS;
       insertedSprite.setupAnimation('position', {
         startX: insertedSprite.finalWidth * (moveLeft ? 1 : -1),
         behavior: new LinearBehavior(),
-        duration: 5000,
+        duration: durationI,
       });
 
-      await Promise.all([
+      let animations = [
         removedSprite.startAnimation().finished,
         insertedSprite.startAnimation().finished,
-      ]);
+      ];
+
+      await Promise.all(animations);
     }
   }
 }

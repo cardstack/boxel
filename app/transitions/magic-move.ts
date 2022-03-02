@@ -5,7 +5,7 @@ import SpringBehavior from 'animations/behaviors/spring';
 import LinearBehavior from 'animations/behaviors/linear';
 import { SpriteType } from 'animations/models/sprite';
 
-const SPEED_PX_PER_MS = 0.05;
+const SPEED_PX_PER_MS = 0.25;
 
 /**
   Moves, scales and transforms kept sprites.
@@ -39,7 +39,6 @@ export default async function (
       // This is a Sprite that has changed places in the DOM
       let counterpart = s.counterpart;
 
-      counterpart.element.getAnimations().forEach((a) => a.pause());
       counterpart.hide();
 
       assert(
@@ -65,7 +64,7 @@ export default async function (
     s.setupAnimation('position', {
       startX: -deltaX,
       startY: -deltaY,
-      duration: 5000,
+      duration,
       velocity,
       behavior: new LinearBehavior(), //new SpringBehavior({ overshootClamping: true, damping: 100 }),
     });
