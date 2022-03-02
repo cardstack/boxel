@@ -14,6 +14,7 @@ import { Move, MoveOptions } from '../motions/move';
 import { Resize, ResizeOptions } from '../motions/resize';
 import { CssMotion, CssMotionOptions } from '../motions/css-motion';
 import { FPS } from 'animations/behaviors/base';
+import { assert } from '@ember/debug';
 
 class SpriteIdentifier {
   id: string | null;
@@ -180,6 +181,7 @@ export default class Sprite {
   }: {
     time?: number;
   } = {}): SpriteAnimation {
+    assert('Hidden sprite cannot be animation', !this.hidden);
     let keyframes = this.motions.reduce((previousKeyframes, motion) => {
       motion.applyBehavior(time);
 
