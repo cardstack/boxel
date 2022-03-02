@@ -32,6 +32,8 @@ export class Move extends Motion<MoveOptions> {
   duration: number;
   x: BaseValue;
   y: BaseValue;
+  keyframes: Keyframe[] = [];
+
   constructor(sprite: Sprite, opts: Partial<MoveOptions>) {
     super(sprite, opts);
     this.boundsDelta = sprite.boundsDelta;
@@ -39,6 +41,7 @@ export class Move extends Motion<MoveOptions> {
     this.duration = opts.duration ?? DEFAULT_DURATION;
     this.x = new BaseValue('x', this.startPosition.x);
     this.y = new BaseValue('y', this.startPosition.y);
+    this.updateKeyframes();
   }
 
   get startPosition(): Position {
@@ -69,7 +72,7 @@ export class Move extends Motion<MoveOptions> {
     };
   }
 
-  get keyframes(): Keyframe[] {
+  updateKeyframes(): void {
     let xFrames = this.x.frames;
     let yFrames = this.y.frames;
 
@@ -84,7 +87,7 @@ export class Move extends Motion<MoveOptions> {
       });
     }
 
-    return keyframes;
+    this.keyframes = keyframes;
   }
 
   applyBehavior(time?: number): void {
@@ -104,5 +107,6 @@ export class Move extends Motion<MoveOptions> {
       time,
       (this.opts.velocity?.y ?? 0) / -1000
     );
+    this.updateKeyframes();
   }
 }

@@ -27,20 +27,16 @@ export class Resize extends Motion<ResizeOptions> {
   duration: number;
   height: BaseValue;
   width: BaseValue;
+  keyframes: Keyframe[] = [];
 
   constructor(sprite: Sprite, opts: Partial<ResizeOptions>) {
     super(sprite, opts);
 
     this.behavior = opts.behavior || new DEFAULT_BEHAVIOR();
     this.duration = opts.duration ?? DEFAULT_DURATION;
-    console.log(
-      sprite.initialWidth,
-      sprite.initialHeight,
-      sprite.finalWidth,
-      sprite.finalHeight
-    );
     this.width = new BaseValue('width', this.startSize.width);
     this.height = new BaseValue('height', this.startSize.height);
+    this.updateKeyframes();
   }
 
   get startSize(): Size {
@@ -59,7 +55,7 @@ export class Resize extends Motion<ResizeOptions> {
     };
   }
 
-  get keyframes(): Keyframe[] {
+  updateKeyframes(): void {
     let widthFrames = this.width.frames;
     let heightFrames = this.height.frames;
 
@@ -81,7 +77,7 @@ export class Resize extends Motion<ResizeOptions> {
       });
     }
 
-    return keyframes;
+    this.keyframes = keyframes;
   }
 
   applyBehavior(time?: number): void {
@@ -101,5 +97,6 @@ export class Resize extends Motion<ResizeOptions> {
       time,
       (this.opts.velocity?.height ?? 0) / -1000
     );
+    this.updateKeyframes();
   }
 }
