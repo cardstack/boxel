@@ -148,7 +148,8 @@ export default class Sprite {
   hide(): void {
     this.hidden = true;
     this.element.style.opacity = '0';
-    this.element.setAttribute('data-hidden', 'true');
+    this.element.setAttribute('data-sprite-hidden', 'true');
+    this.element.getAnimations().forEach((a) => a.cancel());
   }
 
   setupAnimation(
@@ -181,7 +182,7 @@ export default class Sprite {
   }: {
     time?: number;
   } = {}): SpriteAnimation {
-    assert('Hidden sprite cannot be animation', !this.hidden);
+    assert('Hidden sprite cannot be animated', !this.hidden);
     let keyframes = this.motions.reduce((previousKeyframes, motion) => {
       motion.applyBehavior(time);
 
