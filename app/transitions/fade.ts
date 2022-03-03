@@ -1,5 +1,4 @@
 import Changeset from '../models/changeset';
-import { SpriteAnimation } from '../models/sprite-animation';
 
 /**
   Fades inserted, removed, and kept sprites.
@@ -15,12 +14,10 @@ export default async function ({
   insertedSprites,
   keptSprites,
 }: Changeset): Promise<void> {
-  let animations: SpriteAnimation[] = [];
   for (let s of [...removedSprites]) {
     context.appendOrphan(s);
     s.lockStyles();
     s.setupAnimation('opacity', { to: 0 });
-    animations.push(s.startAnimation());
   }
 
   // TODO: if we get keptSprites of some things
@@ -28,8 +25,5 @@ export default async function ({
   // keep them around after all.
   for (let s of [...insertedSprites, ...keptSprites]) {
     s.setupAnimation('opacity', { from: 0 });
-    animations.push(s.startAnimation());
   }
-
-  await Promise.all(animations.map((a) => a.finished));
 }
