@@ -99,8 +99,6 @@ export default class AnimationsService extends Service {
 
   // TODO: as this is called once per context, we could probably pass the context as an argument and forego the loop
   willTransition(context: AnimationContext): void {
-    console.log('willTransition', context);
-
     // TODO: what about intents
 
     this.cleanupSprites(context);
@@ -139,6 +137,7 @@ export default class AnimationsService extends Service {
       // console.log(styles['background-color']);
       sprite.initialBounds = bounds;
       sprite.initialComputedStyle = styles;
+      sprite.element.getAnimations().forEach((a) => a.cancel());
       intermediateSprites.push(sprite);
     }
 
