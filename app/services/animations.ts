@@ -88,8 +88,7 @@ export default class AnimationsService extends Service {
 
     // cleanup removedSprites
     removedSprites.forEach((sm) => {
-      if (sm.element.getAttribute('data-hidden') === 'true') {
-        // TODO: do we need to explicitly cancel animations or will the browser garbage collect those?
+      if (sm.element.getAttribute('data-sprite-hidden') === 'true') {
         if (context.hasOrphan(sm.element as HTMLElement)) {
           context.removeOrphan(sm.element as HTMLElement);
         }
@@ -100,8 +99,7 @@ export default class AnimationsService extends Service {
 
   // TODO: as this is called once per context, we could probably pass the context as an argument and forego the loop
   willTransition(context: AnimationContext): void {
-    let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
-    console.log('willTransition', contexts);
+    console.log('willTransition', context);
 
     // TODO: what about intents
 
@@ -150,7 +148,10 @@ export default class AnimationsService extends Service {
       .perform()
       .catch((error) => {
         if (!didCancel(error)) {
+          console.error(error);
           throw error;
+        } else {
+          console.warn('maybeTransition cancelled, animations interrupted');
         }
       });
   }
@@ -178,6 +179,7 @@ export default class AnimationsService extends Service {
       promises.push(task.perform());
     }
     yield all(promises);
+    // TODO: check for async leaks
     this.freshlyAdded.clear();
     this.freshlyRemoved.clear();
     this.spriteTree.clearFreshlyRemovedChildren();
