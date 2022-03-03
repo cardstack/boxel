@@ -5,6 +5,7 @@ import LinearBehavior from 'animations/behaviors/linear';
 import magicMove from 'animations/transitions/magic-move';
 import { assert } from '@ember/debug';
 import ContextAwareBounds from 'animations/models/context-aware-bounds';
+import runAnimations from 'animations/utils/run-animations';
 
 const SPEED_PX_PER_MS = 0.25;
 
@@ -81,12 +82,7 @@ export default class RoutesController extends Controller {
         });
       }
 
-      let animations: Promise<void | Animation>[] = [
-        magicMove(changeset),
-        ...[...removedSprites].map((s) => s.startAnimation().finished),
-      ];
-
-      await Promise.all(animations);
+      magicMove(changeset);
     } else {
       let removedSprite = changeset.spriteFor({ type: SpriteType.Removed });
       let insertedSprite = changeset.spriteFor({ type: SpriteType.Inserted });
@@ -116,13 +112,8 @@ export default class RoutesController extends Controller {
         behavior: new LinearBehavior(),
         duration: durationI,
       });
-
-      let animations = [
-        removedSprite.startAnimation().finished,
-        insertedSprite.startAnimation().finished,
-      ];
-
-      await Promise.all(animations);
     }
+
+    await runAnimations(changeset);
   }
 }
