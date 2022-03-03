@@ -63,18 +63,23 @@ export class Resize extends Motion<ResizeOptions> {
 
     let keyframes = [];
     for (let i = 0; i < count; i++) {
-      let width =
-        widthFrames[i]?.value ??
-        widthFrames[widthFrames.length - 1]?.value ??
-        0;
-      let height =
-        heightFrames[i]?.value ??
-        heightFrames[heightFrames.length - 1]?.value ??
-        0;
-      keyframes.push({
-        width: `${width}px`,
-        height: `${height}px`,
-      });
+      let keyframe: Keyframe = {};
+
+      // only add height/width to this keyframe if we need to animate the property, we could only be animating one of them.
+      if (widthFrames.length) {
+        let width =
+          widthFrames[i]?.value ?? widthFrames[widthFrames.length - 1]?.value;
+        keyframe.width = `${width}px`;
+      }
+
+      if (heightFrames.length) {
+        let height =
+          heightFrames[i]?.value ??
+          heightFrames[heightFrames.length - 1]?.value;
+        keyframe.height = `${height}px`;
+      }
+
+      keyframes.push(keyframe);
     }
 
     this.keyframes = keyframes;
