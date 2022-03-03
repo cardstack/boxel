@@ -1,0 +1,186 @@
+:root {
+  --brand-primary: #b72f74;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: system-ui,BlinkMacSystemFont,-apple-system,Segoe UI,Roboto,Oxygen,Ubuntu,Cantarell,Fira Sans,Droid Sans,Helvetica Neue,sans-serif;
+  font-size: 1rem;
+  line-height: 1.625;
+  color: #3d4852;
+}
+
+.nudge-r-0 {
+  transform: translateX(0);
+}
+.nudge-r-5 {
+  transform: translateX(1.25rem);
+}
+.nudge-r-10 {
+  transform: translateX(2.5rem);
+}
+.-nudge-r-10 {
+  transform: translateX(-2.5rem);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  box-sizing: border-box;
+  font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
+  line-height: 1.5
+}
+
+*,::after,::before {
+  box-sizing: inherit;
+  border-width: 0;
+  border-style: solid;
+  border-color: #dae1e7
+}
+
+blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre {
+  margin: 0
+}
+
+button {
+  background: 0 0
+}
+
+button:focus {
+  outline: dotted 1px;
+  outline: -webkit-focus-ring-color auto 5px
+}
+
+fieldset {
+  margin: 0;
+  padding: 0
+}
+
+ol,ul {
+  list-style: none;
+  margin: 0;
+  padding: 0
+}
+
+hr {
+  box-sizing: content-box;
+  height: 0;
+  border-top-width: 1px
+}
+
+img {
+  border-style: solid
+}
+
+input::placeholder,textarea::placeholder {
+  color: #a0aec0
+}
+
+[role=button],button {
+  cursor: pointer
+}
+
+table {
+  border-collapse: collapse
+}
+
+h1,h2,h3,h4,h5,h6 {
+  font-size: inherit;
+  font-weight: inherit
+}
+
+button,input,optgroup,select,textarea {
+  padding: 0;
+  line-height: inherit;
+  color: inherit
+}
+
+code,kbd,pre,samp {
+  font-family: Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace
+}
+
+audio,canvas,embed,iframe,img,object,svg,video {
+  display: block;
+  vertical-align: middle
+}
+
+img,video {
+  max-width: 100%;
+  height: auto
+}
+
+.transition {
+  transition: 0.25s all;
+}
+
+/* ======================== */
+
+.animation-context {
+  /* border: 1px dashed blue; */
+  position: relative;
+}
+.sprite {
+  /* border: 1px dotted green; */
+}
+.some-container.with-padded-animation-context .animation-context {
+  padding: 20px;
+}
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.column {
+  padding: 10px;
+}
+.column:first-child {
+  border-right: 1px solid gray;
+}
+.person-list {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.detail-person-name {
+  display: 'block';
+  font-size: 2.0rem;
+  /* border: 1px solid purple; */
+}
+
+.detail-person-title {
+  display: 'block';
+  font-size: 1.2rem;
+  /* border: 1px solid red; */
+}
+
+.ball-position-initial {
+  top:42%;
+  left:42%;
+}
+
+.ball-position-A {
+  top:4px;
+  left:4px;
+}
+
+.ball-position-B {
+  top:4px;
+  right:4px;
+}
+
+.ball-position-C {
+  bottom:4px;
+  left:4px;
+}
+
+.ball-position-D {
+  bottom:4px;
+  right:4px;
+}
+
+.isolation-layer {
+  top: 3em;
+  right: 3em;
+  bottom: 3em;
+  left: 3em;
+}

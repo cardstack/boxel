@@ -22,6 +22,9 @@ module.exports = function (defaults) {
   // along with the exports of each module as its value.
 
   app.import('node_modules/normalize.css/normalize.css');
+  app.import('vendor/app.css');
+  app.import('vendor/card.css');
+  app.import('vendor/tailwind-utilities-min.css');
 
   return app.toTree();
 };
