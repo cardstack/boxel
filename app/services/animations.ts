@@ -105,6 +105,12 @@ export default class AnimationsService extends Service {
 
     this.cleanupSprites(context);
 
+    // We need to measure if this was an already rendered context in case the window has resized.
+    // The element check is there because the renderDetector may fire this before the actual element exists.
+    if (context.element) {
+      context.captureSnapshot();
+    }
+
     let spriteModifiers: Set<SpriteModifier> = this.filterToContext(
       context,
       this.freshlyRemoved,
