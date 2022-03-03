@@ -14,6 +14,7 @@ import { Move, MoveOptions } from '../motions/move';
 import { Resize, ResizeOptions } from '../motions/resize';
 import { CssMotion, CssMotionOptions } from '../motions/css-motion';
 import { FPS } from 'animations/behaviors/base';
+import { assert } from '@ember/debug';
 
 class SpriteIdentifier {
   id: string | null;
@@ -38,6 +39,7 @@ export default class Sprite {
   counterpart: Sprite | null = null; // the sent sprite if this is the received sprite, or vice versa
   motions: Motion[] = [];
   time: number;
+  hidden = false;
 
   constructor(
     element: HTMLElement,
@@ -88,6 +90,10 @@ export default class Sprite {
     };
   }
 
+  get canBeGarbageCollected() {
+    return this.type === SpriteType.Removed && this.hidden;
+  }
+
   captureAnimatingBounds(contextElement: HTMLElement): ContextAwareBounds {
     let result = new ContextAwareBounds({
       element: getDocumentPosition(this.element, {
@@ -100,6 +106,8 @@ export default class Sprite {
     let priorElementBounds = getDocumentPosition(this.element, {
       withAnimationOffset: -100,
     });
+
+    // TODO: extract actual precalculated velocity instead of guesstimating
     result.velocity = calculateBoundsVelocity(
       priorElementBounds,
       result.element,
@@ -136,8 +144,12 @@ export default class Sprite {
     this.element.style.removeProperty('opacity');
   }
 
+  // hidden things get dropped at interruption
   hide(): void {
+    this.hidden = true;
     this.element.style.opacity = '0';
+    this.element.setAttribute('data-sprite-hidden', 'true');
+    this.element.getAnimations().forEach((a) => a.cancel());
   }
 
   setupAnimation(
@@ -170,6 +182,7 @@ export default class Sprite {
   }: {
     time?: number;
   } = {}): SpriteAnimation {
+    assert('Hidden sprite cannot be animated', !this.hidden);
     let keyframes = this.motions.reduce((previousKeyframes, motion) => {
       motion.applyBehavior(time);
 
@@ -204,4 +217,5 @@ export enum SpriteType {
   Inserted = 'inserted',
   Removed = 'removed',
   Kept = 'kept',
+  Intermediate = 'intermediate',
 }

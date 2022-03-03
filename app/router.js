@@ -14,4 +14,7 @@ Router.map(function () {
   this.route('routes', function () {
     this.route('other');
   });
+  this.route('motion-study', function () {
+    this.route('details', { path: '/:id' });
+  });
 });

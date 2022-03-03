@@ -4,7 +4,7 @@ import AnimationContext from '../components/animation-context';
 import SpriteModifier from '../modifiers/sprite';
 import { assert } from '@ember/debug';
 
-type SpritesForArgs = {
+export type SpritesForArgs = {
   type?: SpriteType | undefined;
   role?: string | undefined;
   id?: string | undefined;
@@ -127,21 +127,31 @@ export default class Changeset {
       (identifier) => !!removedIds.find((o) => o.equals(identifier))
     );
     for (let intersectingId of intersectingIds) {
-      let removedSprite = removedSpritesArr.find((s) =>
+      let removedSprites = removedSpritesArr.filter((s) =>
         s.identifier.equals(intersectingId)
       );
       let insertedSprite = insertedSpritesArr.find((s) =>
         s.identifier.equals(intersectingId)
       );
-      if (!insertedSprite || !removedSprite) {
+      if (!insertedSprite || removedSprites.length === 0) {
         throw new Error(
           'intersection check should always result in removedSprite and insertedSprite being found'
         );
       }
       this.insertedSprites.delete(insertedSprite);
-      if (removedSprite) {
-        this.removedSprites.delete(removedSprite);
+
+      // TODO: verify if this is correct, we might need to handle it on a different level.
+      //  We only get multiple ones in case of an interruption.
+      assert(
+        'Multiple matching removedSprites found',
+        removedSprites.length < 2
+      );
+      let removedSprite = removedSprites[0];
+      if (this.context.hasOrphan(removedSprite.element)) {
+        this.context.removeOrphan(removedSprite.element);
       }
+      this.removedSprites.delete(removedSprite);
+
       insertedSprite.type = SpriteType.Kept;
       insertedSprite.initialBounds = removedSprite.initialBounds;
       insertedSprite.initialComputedStyle = removedSprite.initialComputedStyle;

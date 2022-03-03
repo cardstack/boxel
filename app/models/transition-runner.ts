@@ -4,6 +4,8 @@ import Changeset from '../models/changeset';
 import Sprite, { SpriteType } from '../models/sprite';
 import SpriteTree from './sprite-tree';
 import SpriteModifier from '../modifiers/sprite';
+import ContextAwareBounds from 'animations/models/context-aware-bounds';
+import { assert } from '@ember/debug';
 
 function checkForChanges(
   spriteModifier: SpriteModifier,
@@ -33,6 +35,7 @@ type TransitionRunnerOpts = {
   freshlyAdded: Set<SpriteModifier>;
   freshlyRemoved: Set<SpriteModifier>;
   intent: string | undefined;
+  intermediateSprites: Sprite[] | undefined;
 };
 export default class TransitionRunner {
   animationContext: AnimationContext;
@@ -41,6 +44,7 @@ export default class TransitionRunner {
   freshlyRemoved: Set<SpriteModifier>;
   intent: string | undefined;
   freshlyChanged: Set<SpriteModifier> = new Set();
+  intermediateSprites: Sprite[];
 
   constructor(animationContext: AnimationContext, opts: TransitionRunnerOpts) {
     this.animationContext = animationContext;
@@ -48,6 +52,7 @@ export default class TransitionRunner {
     this.freshlyAdded = opts.freshlyAdded;
     this.freshlyRemoved = opts.freshlyRemoved;
     this.intent = opts.intent;
+    this.intermediateSprites = opts.intermediateSprites ?? [];
   }
 
   filterToContext(
@@ -94,6 +99,63 @@ export default class TransitionRunner {
     changeset.addKeptSprites(this.freshlyChanged);
     changeset.finalizeSpriteCategories();
 
+    if (this.intermediateSprites.length) {
+      for (let sprite of [
+        ...changeset.insertedSprites,
+        ...changeset.removedSprites,
+        ...changeset.keptSprites,
+      ]) {
+        let interruptedSprites = this.intermediateSprites.filter((is) =>
+          is.identifier.equals(sprite.identifier)
+        );
+
+        if (interruptedSprites.length > 1) {
+          console.warn(
+            `${interruptedSprites.length} matching interruptedSprites found`,
+            interruptedSprites
+          );
+        }
+
+        let interruptedSprite =
+          interruptedSprites[interruptedSprites.length - 1];
+
+        // TODO: we might need to set the bounds on the counterpart of
+        //  keptSprites only, not magically modify them for "new" sprites.
+
+        if (interruptedSprite) {
+          // TODO: fix this
+          if (!interruptedSprite.initialBounds) {
+            assert('interruptedSprite should always have initialBounds');
+            return;
+          }
+
+          if (!sprite.initialBounds?.parent) {
+            assert('sprite should always have initialBounds');
+            return;
+          }
+
+          if (sprite.counterpart) {
+            assert(
+              'sprite counterpart should always have initialBounds',
+              sprite.counterpart?.initialBounds
+            );
+
+            // set the interrupted state as the initial state of the counterpart
+            sprite.counterpart.initialBounds = new ContextAwareBounds({
+              element: interruptedSprite.initialBounds.element,
+              contextElement: sprite.counterpart.initialBounds.parent,
+            });
+            sprite.initialComputedStyle =
+              interruptedSprite.initialComputedStyle;
+          } else {
+            sprite.initialBounds = interruptedSprite.initialBounds;
+            sprite.initialComputedStyle =
+              interruptedSprite.initialComputedStyle;
+          }
+        }
+      }
+    }
+
     if (animationContext.shouldAnimate(changeset)) {
       this.logChangeset(changeset, animationContext); // For debugging
       let animation = animationContext.args.use?.(changeset);
@@ -105,12 +167,13 @@ export default class TransitionRunner {
       }
       animationContext.clearOrphans();
       animationContext.captureSnapshot();
-      let contextDescendants = this.spriteTree.descendantsOf(animationContext);
+      // TODO: This is likely not needed anymore now that we measure beforehand
+      /*let contextDescendants = this.spriteTree.descendantsOf(animationContext);
       for (let contextDescendant of contextDescendants) {
         if (contextDescendant instanceof SpriteModifier) {
           (contextDescendant as SpriteModifier).captureSnapshot();
         }
-      }
+      }*/
     }
     animationContext.isInitialRenderCompleted = true;
   }

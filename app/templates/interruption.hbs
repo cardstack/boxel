@@ -7,7 +7,7 @@
     <p class='mt-4 text-lg'>
       Click one of the four targets to initiate a transition of the circle to the target.
     </p>
-    <AnimationContext @use={{this.moveBall}} class="mt-8 h-64 w-64 m-auto">
+    <AnimationContext @use={{this.magicMoveBall}} class="mt-8 h-64 w-64 m-auto">
       <div class="bg-grey-lightest relative h-64 w-64">
         <button
           type="button"
@@ -20,7 +20,7 @@
         </button>
         <button
           style="top: 0; right: 0"
-          class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
+          class="absolute rounded-full w-16 h-16 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
           type="button"
           {{on 'click' (fn (mut this.ballGoWhere) 'B')}}
           {{on-key 'b'}}
@@ -46,9 +46,75 @@
           D
         </button>
         <div
-          {{sprite id="ball"}}
+          {{sprite id="single-ball"}}
           class="absolute rounded-full bg-red w-10 h-10 ball-position-{{this.ballGoWhere}}"
         ></div>
+      </div>
+    </AnimationContext>
+
+    <p>Different approach</p>
+    <AnimationContext @use={{this.magicMoveBall}} class="mt-8 h-64 w-64 m-auto">
+      <div class="bg-grey-lightest relative h-64 w-64">
+        <button
+          type="button"
+          class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
+          style="top: 0; left: 0"
+          {{on 'click' (fn (mut this.ballGoWhere) 'A')}}
+          {{on-key 'a'}}
+        >
+          {{#if (eq this.ballGoWhere 'A')}}
+            <div
+              {{sprite id="ball"}}
+              class="absolute pin rounded-full bg-red w-full h-full ball"
+            ></div>
+          {{/if}}
+          A
+        </button>
+        <button
+          style="top: 0; right: 0"
+          class="absolute rounded-full w-16 h-16 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
+          type="button"
+          {{on 'click' (fn (mut this.ballGoWhere) 'B')}}
+          {{on-key 'b'}}
+        >
+          {{#if (eq this.ballGoWhere 'B')}}
+            <div
+              {{sprite id="ball"}}
+              class="absolute pin rounded-full bg-red w-full h-full ball"
+            ></div>
+          {{/if}}
+          B
+        </button>
+        <button
+          style="bottom: 0; left: 0"
+          class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
+          type="button"
+          {{on 'click' (fn (mut this.ballGoWhere) 'C')}}
+          {{on-key 'c'}}
+        >
+          {{#if (eq this.ballGoWhere 'C')}}
+            <div
+              {{sprite id="ball"}}
+              class="absolute pin rounded-full bg-red w-full h-full ball"
+            ></div>
+          {{/if}}
+          C
+        </button>
+        <button
+          style="bottom: 0; right: 0"
+          class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
+          type="button"
+          {{on 'click' (fn (mut this.ballGoWhere) 'D')}}
+          {{on-key 'd'}}
+        >
+          {{#if (eq this.ballGoWhere 'D')}}
+            <div
+              {{sprite id="ball"}}
+              class="absolute pin rounded-full bg-red w-full h-full ball"
+            ></div>
+          {{/if}}
+          D
+        </button>
       </div>
     </AnimationContext>
   </div>

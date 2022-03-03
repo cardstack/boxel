@@ -12,7 +12,8 @@ export interface KeyframeProvider {
 
 export default abstract class Motion<T extends BaseOptions = BaseOptions>
   implements KeyframeProvider {
+  abstract keyframes: Keyframe[];
+
   constructor(readonly sprite: Sprite, readonly opts: Partial<T> = {}) {}
-  abstract get keyframes(): Keyframe[];
   abstract applyBehavior(time?: number): void;
 }

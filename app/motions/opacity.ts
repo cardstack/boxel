@@ -20,6 +20,7 @@ export class Opacity extends Motion<OpacityOptions> {
   behavior: Behavior;
   duration: number;
   value: BaseValue;
+  keyframes: Keyframe[] = [];
 
   constructor(sprite: Sprite, opts: Partial<OpacityOptions>) {
     super(sprite, opts);
@@ -27,6 +28,8 @@ export class Opacity extends Motion<OpacityOptions> {
     this.behavior = opts.behavior || new DEFAULT_BEHAVIOR();
     this.duration = opts.duration ?? DEFAULT_DURATION;
     this.value = new BaseValue('opacity', this.from);
+
+    this.updateKeyframes();
   }
 
   get from(): number {
@@ -43,7 +46,7 @@ export class Opacity extends Motion<OpacityOptions> {
     return this.opts.to ?? finalSpriteValue ?? 1;
   }
 
-  get keyframes(): Keyframe[] {
+  updateKeyframes(): void {
     let frames = this.value.frames;
 
     let keyframes = [];
@@ -53,7 +56,7 @@ export class Opacity extends Motion<OpacityOptions> {
       });
     }
 
-    return keyframes;
+    this.keyframes = keyframes;
   }
 
   applyBehavior(time?: number): void {
@@ -64,5 +67,6 @@ export class Opacity extends Motion<OpacityOptions> {
       this.opts.delay,
       time
     );
+    this.updateKeyframes();
   }
 }

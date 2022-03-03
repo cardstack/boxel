@@ -27,6 +27,7 @@ export class Resize extends Motion<ResizeOptions> {
   duration: number;
   height: BaseValue;
   width: BaseValue;
+  keyframes: Keyframe[] = [];
 
   constructor(sprite: Sprite, opts: Partial<ResizeOptions>) {
     super(sprite, opts);
@@ -35,6 +36,7 @@ export class Resize extends Motion<ResizeOptions> {
     this.duration = opts.duration ?? DEFAULT_DURATION;
     this.width = new BaseValue('width', this.startSize.width);
     this.height = new BaseValue('height', this.startSize.height);
+    this.updateKeyframes();
   }
 
   get startSize(): Size {
@@ -53,7 +55,7 @@ export class Resize extends Motion<ResizeOptions> {
     };
   }
 
-  get keyframes(): Keyframe[] {
+  updateKeyframes(): void {
     let widthFrames = this.width.frames;
     let heightFrames = this.height.frames;
 
@@ -61,21 +63,26 @@ export class Resize extends Motion<ResizeOptions> {
 
     let keyframes = [];
     for (let i = 0; i < count; i++) {
-      let width =
-        widthFrames[i]?.value ??
-        widthFrames[widthFrames.length - 1]?.value ??
-        0;
-      let height =
-        heightFrames[i]?.value ??
-        heightFrames[heightFrames.length - 1]?.value ??
-        0;
-      keyframes.push({
-        width: `${width}px`,
-        height: `${height}px`,
-      });
+      let keyframe: Keyframe = {};
+
+      // only add height/width to this keyframe if we need to animate the property, we could only be animating one of them.
+      if (widthFrames.length) {
+        let width =
+          widthFrames[i]?.value ?? widthFrames[widthFrames.length - 1]?.value;
+        keyframe.width = `${width}px`;
+      }
+
+      if (heightFrames.length) {
+        let height =
+          heightFrames[i]?.value ??
+          heightFrames[heightFrames.length - 1]?.value;
+        keyframe.height = `${height}px`;
+      }
+
+      keyframes.push(keyframe);
     }
 
-    return keyframes;
+    this.keyframes = keyframes;
   }
 
   applyBehavior(time?: number): void {
@@ -95,5 +102,6 @@ export class Resize extends Motion<ResizeOptions> {
       time,
       (this.opts.velocity?.height ?? 0) / -1000
     );
+    this.updateKeyframes();
   }
 }

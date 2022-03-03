@@ -4,15 +4,21 @@ import { action } from '@ember/object';
 import Changeset from '../models/changeset';
 import { assert } from '@ember/debug';
 import SpringBehavior from 'animations/behaviors/spring';
+import magicMove from '../transitions/magic-move';
 
 const BALL_SPEED_PX_PER_MS = 0.05;
 class InterruptionController extends Controller {
   @tracked ballGoWhere = 'A';
   animationOriginPosition: DOMRect | null = null;
 
+  @action
+  magicMoveBall(changeset: Changeset): Promise<void> {
+    return magicMove(changeset);
+  }
+
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  @action moveBall(changeset: Changeset) {
-    let ballSprite = changeset.spriteFor({ id: 'ball' });
+  @action moveBall(spriteId: string, changeset: Changeset) {
+    let ballSprite = changeset.spriteFor({ id: spriteId });
     assert('ballSprite is present', ballSprite);
     let activeAnimations = ballSprite.element.getAnimations(); // TODO: this is not supported in Safari
     let initialBounds;

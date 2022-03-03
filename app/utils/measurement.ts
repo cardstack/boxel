@@ -27,6 +27,18 @@ function runWithoutAnimations(element: HTMLElement, f: () => DOMRect) {
   return result;
 }
 
+function runWithAnimations(element: HTMLElement, f: () => DOMRect) {
+  let animations = element.getAnimations();
+  animations.forEach((a) => {
+    a.pause();
+  });
+  let result = f();
+  for (let i = 0; i < animations.length; i++) {
+    animations[i].play();
+  }
+  return result;
+}
+
 function runWithAnimationOffset(offset: number) {
   return function (element: HTMLElement, f: () => DOMRect) {
     let animations = element.getAnimations();
@@ -66,6 +78,8 @@ export function getDocumentPosition(
   );
   if (opts.withAnimations === false) {
     wrapper = runWithoutAnimations;
+  } else {
+    wrapper = runWithAnimations;
   }
   if (opts.withAnimationOffset) {
     wrapper = runWithAnimationOffset(opts.withAnimationOffset);

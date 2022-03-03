@@ -78,4 +78,12 @@ export default {
     sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
     return sprite;
   },
+  createIntermediateSprite(spriteModifier: SpriteModifier): Sprite {
+    return new Sprite(
+      spriteModifier.element as HTMLElement,
+      spriteModifier.id as string | null,
+      spriteModifier.role as string | null,
+      SpriteType.Intermediate
+    );
+  },
 };
