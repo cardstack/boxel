@@ -4,6 +4,7 @@ import { assert } from '@ember/debug';
 import SpringBehavior from 'animations/behaviors/spring';
 import LinearBehavior from 'animations/behaviors/linear';
 import { SpriteType } from 'animations/models/sprite';
+import approximatelyEqual from 'animations/utils/approximately-equal';
 
 const SPEED_PX_PER_MS = 0.25;
 
@@ -61,7 +62,7 @@ export default async function (
     let duration = (deltaX ** 2 + deltaY ** 2) ** 0.5 / SPEED_PX_PER_MS;
     let velocity = initialVelocity;
 
-    if (!(deltaX === 0 && deltaY === 0)) {
+    if (!(approximatelyEqual(deltaX, 0) && approximatelyEqual(deltaY, 0))) {
       s.setupAnimation('position', {
         startX: -deltaX,
         startY: -deltaY,
@@ -73,8 +74,8 @@ export default async function (
 
     // TODO: we probably do not want to animate extremely tiny difference (i.e. decimals in the measurements)
     if (
-      initialBounds?.width !== finalBounds.width ||
-      initialBounds?.height !== finalBounds.height
+      !approximatelyEqual(initialBounds?.width, finalBounds.width) ||
+      !approximatelyEqual(initialBounds?.height, finalBounds.height)
     ) {
       s.setupAnimation('size', {
         startWidth: initialBounds?.width,
