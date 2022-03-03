@@ -1,0 +1,19 @@
+.card {
+  background: orange;
+  border-radius: 15px;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid black;
+  overflow: hidden;
+}
+
+.content {
+  padding: 15px 25px;
+}
+
+.footer {
+  margin-top: auto;
+  width: 100%;
+  height: 50px;
+  background: white;
+}

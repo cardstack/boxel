@@ -1,0 +1,12 @@
+.container {
+  padding: 25px;
+}
+
+.card {
+  height: 100vh;
+}
+
+.title {
+  font-size: 32px;
+  color: #FFF;
+}

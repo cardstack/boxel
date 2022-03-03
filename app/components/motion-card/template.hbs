@@ -1,0 +1,9 @@
+<div {{on "click" this.handleClick}} local-class="card" {{sprite id=@identifier role="card"}} ...attributes>
+  {{#if (has-block)}}
+    <div local-class="content" {{sprite role="card-content"}}>
+      {{yield}}
+    </div>
+  {{/if}}
+
+  <footer local-class="footer"></footer>
+</div>
