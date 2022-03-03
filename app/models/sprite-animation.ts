@@ -1,5 +1,8 @@
 import Sprite from './sprite';
 
+/**
+ * Animates a sprite. By default, the animation is paused and must be started manually by calling `play()`.
+ */
 export class SpriteAnimation {
   animation: Animation;
 
@@ -12,6 +15,7 @@ export class SpriteAnimation {
       keyframes,
       keyframeAnimationOptions
     );
+    this.animation.pause();
 
     // TODO: we likely don't need this anymore now that we measure beforehand
     /*if (sprite.type === SpriteType.Removed && keyframes.length) {
@@ -24,6 +28,10 @@ export class SpriteAnimation {
         console.log(property, value);
       }
     }*/
+  }
+
+  play(): void {
+    this.animation.play();
   }
 
   get finished(): Promise<Animation> {

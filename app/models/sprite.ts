@@ -177,11 +177,15 @@ export default class Sprite {
     }
   }
 
-  startAnimation({
+  compileAnimation({
     time,
   }: {
     time?: number;
-  } = {}): SpriteAnimation {
+  } = {}): SpriteAnimation | undefined {
+    if (!this.motions.length) {
+      return;
+    }
+
     assert('Hidden sprite cannot be animated', !this.hidden);
     let keyframes = this.motions.reduce((previousKeyframes, motion) => {
       motion.applyBehavior(time);
@@ -210,6 +214,19 @@ export default class Sprite {
     };
 
     return new SpriteAnimation(this, keyframes, keyframeAnimationOptions);
+  }
+
+  startAnimation({
+    time,
+  }: {
+    time?: number;
+  } = {}): SpriteAnimation {
+    console.warn(
+      'Calling Sprite.startAnimation is deprecated, please use the runAnimations util.'
+    );
+    let spriteAnimation = this.compileAnimation({ time }) as SpriteAnimation;
+    spriteAnimation.play();
+    return spriteAnimation;
   }
 }
 
