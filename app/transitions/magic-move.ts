@@ -17,7 +17,7 @@ export default async function (
   changeset: Changeset,
   opts?: SpritesForArgs
 ): Promise<void> {
-  let keptSprites = changeset.keptSprites;
+  let { keptSprites } = changeset;
 
   if (opts) {
     keptSprites = changeset.spritesFor({ ...opts, type: SpriteType.Kept });
@@ -61,21 +61,29 @@ export default async function (
     let duration = (deltaX ** 2 + deltaY ** 2) ** 0.5 / SPEED_PX_PER_MS;
     let velocity = initialVelocity;
 
-    s.setupAnimation('position', {
-      startX: -deltaX,
-      startY: -deltaY,
-      duration,
-      velocity,
-      behavior: new LinearBehavior(), //new SpringBehavior({ overshootClamping: true, damping: 100 }),
-    });
+    if (!(deltaX === 0 && deltaY === 0)) {
+      s.setupAnimation('position', {
+        startX: -deltaX,
+        startY: -deltaY,
+        duration,
+        velocity,
+        behavior: new LinearBehavior(), //new SpringBehavior({ overshootClamping: true, damping: 100 }),
+      });
+    }
 
-    s.setupAnimation('size', {
-      startWidth: initialBounds?.width ?? undefined,
-      startHeight: initialBounds?.height ?? undefined,
-      duration,
-      velocity,
-      behavior: new SpringBehavior({ overshootClamping: true, damping: 100 }),
-    });
+    // TODO: we probably do not want to animate extremely tiny difference (i.e. decimals in the measurements)
+    if (
+      initialBounds?.width !== finalBounds.width ||
+      initialBounds?.height !== finalBounds.height
+    ) {
+      s.setupAnimation('size', {
+        startWidth: initialBounds?.width,
+        startHeight: initialBounds?.height,
+        duration,
+        velocity,
+        behavior: new LinearBehavior(), //new SpringBehavior({ overshootClamping: true, damping: 100 }),
+      });
+    }
 
     // TODO: we don't support this yet
     /*s.setupAnimation('style', {
@@ -85,5 +93,6 @@ export default async function (
 
     animations.push(s.startAnimation({ time: time ?? undefined }));
   }
+
   await Promise.all(animations.map((a) => a.finished));
 }
