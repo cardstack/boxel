@@ -7,7 +7,7 @@
     <p class='mt-4 text-lg'>
       Click one of the four targets to initiate a transition of the circle to the target.
     </p>
-    <AnimationContext @use={{this.magicMoveBall}} class="mt-8 h-64 w-64 m-auto">
+    <AnimationContext @use={{this.transition}} class="mt-8 h-64 w-64 m-auto">
       <div class="bg-grey-lightest relative h-64 w-64">
         <button
           type="button"
@@ -53,7 +53,7 @@
     </AnimationContext>
 
     <p>Different approach</p>
-    <AnimationContext @use={{this.magicMoveBall}} class="mt-8 h-64 w-64 m-auto">
+    <AnimationContext @use={{this.transition}} class="mt-8 h-64 w-64 m-auto">
       <div class="bg-grey-lightest relative h-64 w-64">
         <button
           type="button"
