@@ -1,5 +1,4 @@
 import Changeset, { SpritesForArgs } from '../models/changeset';
-import { SpriteAnimation } from '../models/sprite-animation';
 import { assert } from '@ember/debug';
 import SpringBehavior from 'animations/behaviors/spring';
 import LinearBehavior from 'animations/behaviors/linear';
@@ -14,17 +13,12 @@ const SPEED_PX_PER_MS = 0.25;
   @function magicMove
   @export default
 */
-export default async function (
-  changeset: Changeset,
-  opts?: SpritesForArgs
-): Promise<void> {
+export default function (changeset: Changeset, opts?: SpritesForArgs): void {
   let { keptSprites } = changeset;
 
   if (opts) {
     keptSprites = changeset.spritesFor({ ...opts, type: SpriteType.Kept });
   }
-
-  let animations: SpriteAnimation[] = [];
 
   for (let s of keptSprites) {
     assert(
@@ -91,9 +85,5 @@ export default async function (
         property: 'backgroundColor',
         from: initialStyles['backgroundColor'],
       });*/
-
-    animations.push(s.startAnimation({ time: time ?? undefined }));
   }
-
-  await Promise.all(animations.map((a) => a.finished));
 }
