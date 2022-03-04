@@ -15,6 +15,8 @@ import { Resize, ResizeOptions } from '../motions/resize';
 import { CssMotion, CssMotionOptions } from '../motions/css-motion';
 import { FPS } from 'animations/behaviors/base';
 import { assert } from '@ember/debug';
+import SpringBehavior from 'animations/behaviors/spring';
+import LinearBehavior from 'animations/behaviors/linear';
 
 class SpriteIdentifier {
   id: string | null;
@@ -158,6 +160,21 @@ export default class Sprite {
       OpacityOptions | MoveOptions | ResizeOptions | CssMotionOptions
     >
   ): void {
+    // TODO: this applies to any "non-Tween" based behavior, currently only Spring
+    assert(
+      'Passing a duration is not necessary when using a Spring behavior',
+      (opts.duration === undefined &&
+        opts.behavior instanceof SpringBehavior) ||
+        !(opts.behavior instanceof SpringBehavior)
+    );
+    // TODO: this applies to any "Tween" based behavior, currently only Linear
+    assert(
+      'You must pass a duration when using a Linear behavior',
+      (opts.duration !== undefined &&
+        opts.behavior instanceof LinearBehavior) ||
+        !(opts.behavior instanceof LinearBehavior)
+    );
+
     switch (property) {
       case 'opacity':
         this.motions.push(new Opacity(this, opts));
