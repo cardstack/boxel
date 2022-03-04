@@ -1,11 +1,13 @@
-import Changeset, { SpritesForArgs } from '../models/changeset';
+import Changeset from '../models/changeset';
 import { assert } from '@ember/debug';
-import SpringBehavior from 'animations/behaviors/spring';
 import LinearBehavior from 'animations/behaviors/linear';
-import { SpriteType } from 'animations/models/sprite';
 import approximatelyEqual from 'animations/utils/approximately-equal';
+import Behavior from 'animations/behaviors/base';
 
-const SPEED_PX_PER_MS = 0.25;
+export type TransitionOptions = {
+  behavior?: Behavior;
+  duration?: number;
+};
 
 /**
   Moves, scales and transforms kept sprites.
@@ -13,12 +15,12 @@ const SPEED_PX_PER_MS = 0.25;
   @function magicMove
   @export default
 */
-export default function (changeset: Changeset, opts?: SpritesForArgs): void {
+export default function (
+  changeset: Changeset,
+  options: TransitionOptions = {}
+): void {
   let { keptSprites } = changeset;
-
-  if (opts) {
-    keptSprites = changeset.spritesFor({ ...opts, type: SpriteType.Kept });
-  }
+  let { behavior = new LinearBehavior(), duration } = options;
 
   for (let s of keptSprites) {
     assert(
@@ -27,8 +29,9 @@ export default function (changeset: Changeset, opts?: SpritesForArgs): void {
     );
     let initialBounds = s.initialBounds.relativeToContext;
     let initialStyles = s.initialComputedStyle;
-    let initialVelocity;
-    let time;
+    let initialVelocity = s.initialBounds.velocity;
+
+    // TODO "oldInitialBounds" when interrupting to calculate Tween duration proportionally
 
     if (s.counterpart) {
       // This is a Sprite that has changed places in the DOM
@@ -53,7 +56,6 @@ export default function (changeset: Changeset, opts?: SpritesForArgs): void {
     let finalBounds = s.finalBounds.relativeToContext;
     let deltaX = finalBounds.left - initialBounds.left;
     let deltaY = finalBounds.top - initialBounds.top;
-    let duration = (deltaX ** 2 + deltaY ** 2) ** 0.5 / SPEED_PX_PER_MS;
     let velocity = initialVelocity;
 
     if (!(approximatelyEqual(deltaX, 0) && approximatelyEqual(deltaY, 0))) {
@@ -62,7 +64,7 @@ export default function (changeset: Changeset, opts?: SpritesForArgs): void {
         startY: -deltaY,
         duration,
         velocity,
-        behavior: new LinearBehavior(), //new SpringBehavior({ overshootClamping: true, damping: 100 }),
+        behavior,
       });
     }
 
@@ -76,7 +78,7 @@ export default function (changeset: Changeset, opts?: SpritesForArgs): void {
         startHeight: initialBounds?.height,
         duration,
         velocity,
-        behavior: new LinearBehavior(), //new SpringBehavior({ overshootClamping: true, damping: 100 }),
+        behavior,
       });
     }
 
