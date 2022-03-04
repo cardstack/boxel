@@ -174,9 +174,10 @@ export default class Changeset {
           is.identifier.equals(sprite.identifier)
         );
 
+        // If more than 1 matching IntermediateSprite is found, we warn but also guess the last one is correct
         if (interruptedSprites.length > 1) {
           console.warn(
-            `${interruptedSprites.length} matching interruptedSprites found`,
+            `${interruptedSprites.length} matching interruptedSprites found where 1 was expected`,
             interruptedSprites
           );
         }
