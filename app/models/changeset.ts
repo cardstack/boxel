@@ -3,6 +3,7 @@ import Sprite, { SpriteType } from './sprite';
 import AnimationContext from '../components/animation-context';
 import SpriteModifier from '../modifiers/sprite';
 import { assert } from '@ember/debug';
+import ContextAwareBounds from 'animations/models/context-aware-bounds';
 
 export type SpritesForArgs = {
   type?: SpriteType | undefined;
@@ -159,6 +160,65 @@ export default class Changeset {
       removedSprite.finalComputedStyle = insertedSprite.finalComputedStyle;
       insertedSprite.counterpart = removedSprite;
       this.keptSprites.add(insertedSprite);
+    }
+  }
+
+  addIntermediateSprites(intermediateSprites: Set<Sprite>) {
+    if (intermediateSprites.size) {
+      for (let sprite of [
+        ...this.insertedSprites,
+        ...this.removedSprites,
+        ...this.keptSprites,
+      ]) {
+        let interruptedSprites = [...intermediateSprites].filter((is) =>
+          is.identifier.equals(sprite.identifier)
+        );
+
+        if (interruptedSprites.length > 1) {
+          console.warn(
+            `${interruptedSprites.length} matching interruptedSprites found`,
+            interruptedSprites
+          );
+        }
+
+        let interruptedSprite =
+          interruptedSprites[interruptedSprites.length - 1];
+
+        // TODO: we might need to set the bounds on the counterpart of
+        //  keptSprites only, not magically modify them for "new" sprites.
+
+        if (interruptedSprite) {
+          // TODO: fix this
+          if (!interruptedSprite.initialBounds) {
+            assert('interruptedSprite should always have initialBounds');
+            return;
+          }
+
+          if (!sprite.initialBounds?.parent) {
+            assert('sprite should always have initialBounds');
+            return;
+          }
+
+          if (sprite.counterpart) {
+            assert(
+              'sprite counterpart should always have initialBounds',
+              sprite.counterpart?.initialBounds
+            );
+
+            // set the interrupted state as the initial state of the counterpart
+            sprite.counterpart.initialBounds = new ContextAwareBounds({
+              element: interruptedSprite.initialBounds.element,
+              contextElement: sprite.counterpart.initialBounds.parent,
+            });
+            sprite.initialComputedStyle =
+              interruptedSprite.initialComputedStyle;
+          } else {
+            sprite.initialBounds = interruptedSprite.initialBounds;
+            sprite.initialComputedStyle =
+              interruptedSprite.initialComputedStyle;
+          }
+        }
+      }
     }
   }
 }
