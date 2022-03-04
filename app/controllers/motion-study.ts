@@ -4,10 +4,19 @@ import magicMove from 'animations/transitions/magic-move';
 import { SpriteType } from 'animations/models/sprite';
 import fade from 'animations/transitions/fade';
 import runAnimations from 'animations/utils/run-animations';
+import SpringBehavior from 'animations/behaviors/spring';
 
 export default class MotionStudy extends Controller {
   async transition(changeset: Changeset): Promise<void> {
     let { context } = changeset;
+
+    let behavior = new SpringBehavior({
+      overshootClamping: false,
+      stiffness: 100,
+      damping: 15,
+    });
+    //let moveDuration = 1000;
+    let fadeDuration = 300;
 
     let removedCardContentSprites = changeset.spritesFor({
       role: 'card-content',
@@ -15,12 +24,17 @@ export default class MotionStudy extends Controller {
     });
 
     if (removedCardContentSprites.size) {
-      fade({
-        context,
-        insertedSprites: new Set(),
-        removedSprites: removedCardContentSprites,
-        keptSprites: new Set(),
-      } as Changeset);
+      fade(
+        {
+          context,
+          insertedSprites: new Set(),
+          removedSprites: removedCardContentSprites,
+          keptSprites: new Set(),
+        } as Changeset,
+        {
+          duration: fadeDuration,
+        }
+      );
     }
 
     let removedCardSprites = changeset.spritesFor({
@@ -38,12 +52,18 @@ export default class MotionStudy extends Controller {
       type: SpriteType.Kept,
     });
 
-    magicMove({
-      context,
-      insertedSprites: new Set(),
-      removedSprites: new Set(),
-      keptSprites: cardSprites,
-    } as Changeset);
+    magicMove(
+      {
+        context,
+        insertedSprites: new Set(),
+        removedSprites: new Set(),
+        keptSprites: cardSprites,
+      } as Changeset,
+      {
+        behavior,
+        //duration: moveDuration,
+      }
+    );
 
     let cardContentSprites = changeset.spritesFor({
       role: 'card-content',
@@ -57,12 +77,17 @@ export default class MotionStudy extends Controller {
 
     removedCardSprites.forEach((r) => r.hide());
 
-    fade({
-      context,
-      insertedSprites: cardContentSprites,
-      removedSprites: new Set(),
-      keptSprites: new Set(),
-    } as Changeset);
+    fade(
+      {
+        context,
+        insertedSprites: cardContentSprites,
+        removedSprites: new Set(),
+        keptSprites: new Set(),
+      } as Changeset,
+      {
+        duration: fadeDuration,
+      }
+    );
 
     await runAnimations(changeset);
 
