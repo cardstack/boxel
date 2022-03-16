@@ -1,4 +1,4 @@
-<h3 {{sprite id=(concat @id "-accordion-panel-header") role="accordion-panel-trigger"}}>
+<h3  class="accordion-panel-header"{{sprite id=(concat @id "-accordion-panel-header") role="accordion-panel-trigger"}}>
   <button
     aria-expanded={{if @expanded "true" "false"}}
     {{!-- we don't allow closing just yet --}}
@@ -21,7 +21,7 @@
   role="region"
   aria-labelledby={{@id}}
   local-class="Accordion-panel"
-  hidden={{not @expanded}}
+  aria-hidden={{unless @expanded "true"}}
 >
   <div>
     {{!-- Variable content within section, may include any type of markup or interactive widgets. --}}

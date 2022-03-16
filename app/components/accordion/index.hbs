@@ -1,6 +1,6 @@
   <div
     {{sprite id="accordion"}}
-    class="Accordion {{if this.isFocused "focus"}}"
+    local-class="Accordion {{if this.isFocused "focus"}}"
     {{on "focusin" this.handleFocusin}}
     {{on "focusout" this.handleFocusout}}
   >

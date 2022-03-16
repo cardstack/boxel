@@ -6,21 +6,15 @@
   width: 20em;
 }
 
-.Accordion h3 {
-  margin: 0;
-  padding: 0;
-}
-
 .Accordion.focus {
   border-color: hsl(216, 94%, 73%);
 }
 
-.Accordion.focus h3 {
+.accordion-panel-header {
   background-color: hsl(0, 0%, 97%);
-}
-
-.Accordion > * + * {
   border-top: 1px solid hsl(0, 0%, 82%);
+  margin: 0;
+  padding: 0;
 }
 
 .Accordion-trigger {
@@ -42,15 +36,15 @@
   background: hsl(216, 94%, 94%);
 }
 
-.Accordion *:first-child .Accordion-trigger {
+.accordion-panel-header:first-child .Accordion-trigger {
   border-radius: 5px 5px 0 0;
 }
 
-button {
+.accordion-panel-header button {
   border-style: none;
 }
 
-.Accordion button::-moz-focus-inner {
+.accordion-panel-header button::-moz-focus-inner {
   border: 0;
 }
 
@@ -91,11 +85,15 @@ button {
 .Accordion-panel {
   margin: 0;
   padding: 1em 1.5em;
+  overflow: hidden;
+  background: red;
 }
 
 /* For Edge bug https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/4806035/ */
-.Accordion-panel[hidden] {
-  display: none;
+.Accordion-panel[aria-hidden="true"] {
+  height: 0;
+  padding: 0;
+  width: 100%;
 }
 
 fieldset {
