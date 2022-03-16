@@ -7,6 +7,8 @@ import LinearBehavior from 'animations/behaviors/linear';
 
 // TODO:
 // - different content length
+// - router
+// - rename things
 export default class Accordion extends Component {
   items = [
     {
