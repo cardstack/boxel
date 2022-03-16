@@ -1,4 +1,4 @@
-<h3>
+<h3 {{sprite id=@id role="accordion-panel-trigger"}}>
   <button
     aria-expanded={{if @expanded "true" "false"}}
     {{!-- we don't allow closing just yet --}}
@@ -16,6 +16,7 @@
   </button>
 </h3>
 <div
+  {{sprite id=@id role="accordion-panel-content"}}
   id={{concat @id "-section"}}
   role="region"
   aria-labelledby={{@id}}

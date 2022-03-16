@@ -1,6 +1,8 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
+import magicMove from 'animations/transitions/magic-move';
+import Changeset from 'animations/models/changeset';
 
 export default class Accordion extends Component {
   items = [
@@ -42,5 +44,9 @@ export default class Accordion extends Component {
   @action
   handleTrigger(target: string) {
     this.currentItem = target;
+  }
+
+  @action resizePanels(changeset: Changeset) {
+    return magicMove(changeset);
   }
 }
