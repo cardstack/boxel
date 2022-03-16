@@ -1,5 +1,6 @@
 <AnimationContext @use={{this.resizePanels}}>
   <div
+    {{sprite id="accordion"}}
     class="Accordion {{if this.isFocused "focus"}}"
     {{on "focusin" this.handleFocusin}}
     {{on "focusout" this.handleFocusout}}
