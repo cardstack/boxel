@@ -1,4 +1,3 @@
-<AnimationContext @use={{this.resizePanels}}>
   <div
     {{sprite id="accordion"}}
     class="Accordion {{if this.isFocused "focus"}}"
@@ -6,12 +5,13 @@
     {{on "focusout" this.handleFocusout}}
   >
     {{#each this.items as |item|}}
-      <Accordion::Panel
-        @id={{item.id}}
-        @title={{item.title}}
-        @expanded={{eq this.currentItem item.id}}
-        @trigger={{this.handleTrigger}}
-      />
+      <AnimationContext @use={{this.resizePanels}}>
+        <Accordion::Panel
+          @id={{item.id}}
+          @title={{item.title}}
+          @expanded={{eq this.currentItem item.id}}
+          @trigger={{this.handleTrigger}}
+        />
+      </AnimationContext>
     {{/each}}
   </div>
-</AnimationContext>
