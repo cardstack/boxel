@@ -1,5 +1,5 @@
-<AnimationContext @use={{this.resizePanels}}>
-  <h3  class="accordion-panel-header"{{sprite id=(concat @id "-accordion-panel-header") role="accordion-panel-trigger"}}>
+<div {{sprite id=(concat @id "-accordion-panel-header") role="accordion-panel-body"}}>
+  <h3  class="accordion-panel-header">
     <button
       aria-expanded={{if @expanded "true" "false"}}
       {{!-- we don't allow closing just yet --}}
@@ -96,4 +96,4 @@
     </div>
   </div>
   {{/if}}
-</AnimationContext>
+</div>
