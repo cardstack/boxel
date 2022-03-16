@@ -1,0 +1,95 @@
+<h3>
+  <button
+    aria-expanded={{if @expanded "true" "false"}}
+    {{!-- we don't allow closing just yet --}}
+    aria-disabled={{if @expanded "true" "false"}}
+    local-class="Accordion-trigger"
+    aria-controls={{concat @id "-section"}}
+    id={{@id}}
+    data-is-accordion-trigger="true"
+    {{on "click" (fn @trigger @id)}}
+  >
+    <span local-class="Accordion-title">
+      {{@title}}
+      <span local-class="Accordion-icon"></span>
+    </span>
+  </button>
+</h3>
+<div
+  id={{concat @id "-section"}}
+  role="region"
+  aria-labelledby={{@id}}
+  local-class="Accordion-panel"
+  hidden={{not @expanded}}
+>
+  <div>
+    {{!-- Variable content within section, may include any type of markup or interactive widgets. --}}
+    <fieldset>
+      <p>
+        <label for={{concat @id "-input-1"}}>
+          Name
+          <span aria-hidden="true">
+            *
+          </span>
+          :
+        </label>
+        <input type="text"
+                value=""
+                name="Name"
+                id={{concat @id "-input-1"}}
+                local-class="required"
+                aria-required="true">
+      </p>
+      <p>
+        <label for={{concat @id "-input-2"}}>
+          Email
+          <span aria-hidden="true">
+            *
+          </span>
+          :
+        </label>
+        <input type="text"
+                value=""
+                name="Email"
+                id={{concat @id "-input-2"}}
+                aria-required="true">
+      </p>
+      <p>
+        <label for={{concat @id "-input-3"}}>
+          Phone:
+        </label>
+        <input type="text"
+                value=""
+                name="Phone"
+                id={{concat @id "-input-3"}}>
+      </p>
+      <p>
+        <label for={{concat @id "-input-4"}}>
+          Extension:
+        </label>
+        <input type="text"
+                value=""
+                name="Ext"
+                id={{concat @id "-input-4"}}>
+      </p>
+      <p>
+        <label for={{concat @id "-input-5"}}>
+          Country:
+        </label>
+        <input type="text"
+                value=""
+                name="Country"
+                id={{concat @id "-input-5"}}>
+      </p>
+      <p>
+        <label for={{concat @id "-input-6"}}>
+          City/Province:
+        </label>
+        <input type="text"
+                value=""
+                name="City_Province"
+                id={{concat @id "-input-6"}}>
+      </p>
+    </fieldset>
+  </div>
+</div>

@@ -17,4 +17,5 @@ Router.map(function () {
   this.route('motion-study', function () {
     this.route('details', { path: '/:id' });
   });
+  this.route('accordion');
 });
