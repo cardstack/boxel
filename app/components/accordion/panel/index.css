@@ -84,16 +84,9 @@
 
 .Accordion-panel {
   margin: 0;
-  padding: 1em 1.5em;
+  /* padding: 1em 1.5em; */
   overflow: hidden;
   background: red;
-}
-
-/* For Edge bug https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/4806035/ */
-.Accordion-panel[aria-hidden="true"] {
-  height: 0;
-  padding: 0;
-  width: 100%;
 }
 
 fieldset {
