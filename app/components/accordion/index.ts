@@ -2,10 +2,6 @@ import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
-// TODO:
-// - different content length
-// - router
-// - rename things
 export default class Accordion extends Component {
   items = [
     {
