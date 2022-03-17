@@ -51,4 +51,48 @@ export default class Accordion extends Component {
   handleTrigger(target: string) {
     this.currentItem = target;
   }
+
+  @action jumpToNextTrigger(event: any) {
+    if (
+      !(
+        document.activeElement instanceof HTMLElement &&
+        document.activeElement.dataset.isAccordionTrigger
+      )
+    ) {
+      return;
+    }
+
+    if (event.repeat) return;
+
+    let id = document.activeElement.id.replace(/-trigger$/, '');
+
+    let index = this.items.findIndex((item) => item.id === id);
+    if (index < this.items.length - 1) {
+      document.getElementById(this.items[index + 1].id + '-trigger')?.focus();
+    }
+
+    event.preventDefault();
+  }
+
+  @action jumpToPreviousTrigger(event: any) {
+    if (
+      !(
+        document.activeElement instanceof HTMLElement &&
+        document.activeElement.dataset.isAccordionTrigger
+      )
+    ) {
+      return;
+    }
+
+    if (event.repeat) return;
+
+    let id = document.activeElement.id.replace(/-trigger$/, '');
+
+    let index = this.items.findIndex((item) => item.id === id);
+    if (index > 0) {
+      document.getElementById(this.items[index - 1].id + '-trigger')?.focus();
+    }
+
+    event.preventDefault();
+  }
 }

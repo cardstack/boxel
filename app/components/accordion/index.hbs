@@ -2,6 +2,8 @@
   local-class="Accordion {{if this.isFocused "focus"}}"
   {{on "focusin" this.handleFocusin}}
   {{on "focusout" this.handleFocusout}}
+  {{on-key "ArrowUp" this.jumpToPreviousTrigger event="keyup"}}
+  {{on-key "ArrowDown" this.jumpToNextTrigger event="keyup"}}
 >
   {{#each this.items as |item|}}
     <Accordion::Panel

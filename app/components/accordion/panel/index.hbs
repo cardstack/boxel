@@ -7,7 +7,7 @@
         aria-disabled={{if @expanded "true" "false"}}
         local-class="Accordion-trigger"
         aria-controls={{concat @id "-section"}}
-        id={{@id}}
+        id={{concat @id "-trigger"}}
         data-is-accordion-trigger="true"
         {{on "click" (fn @trigger @id)}}
       >
