@@ -6,7 +6,7 @@ import LinearBehavior from 'animations/behaviors/linear';
 
 export default class AccordionPanel extends Component {
   @action async resizePanels(changeset: Changeset) {
-    let duration = 4750;
+    let duration = 320;
     let { context } = changeset;
     let bodies = changeset.spritesFor({
       type: SpriteType.Kept,
@@ -14,13 +14,6 @@ export default class AccordionPanel extends Component {
     });
     let hiddenPanel: Sprite | undefined;
 
-    // let revealedPanelContentGroup = changeset.spritesFor({
-    //   type: SpriteType.Inserted,
-    //   role: 'accordion-panel-content',
-    // });
-    // if (revealedPanelContentGroup.size) {
-    //   revealedPanel = [...revealedPanelContentGroup][0];
-    // }
     let hiddenPanelContentGroup = changeset.spritesFor({
       type: SpriteType.Removed,
       role: 'accordion-panel-content',
@@ -30,16 +23,6 @@ export default class AccordionPanel extends Component {
     }
 
     let spritesToAnimate = [];
-
-    // if (revealedPanel) {
-    //   revealedPanel.setupAnimation('size', {
-    //     startWidth: revealedPanel.element.clientWidth,
-    //     startHeight: 0,
-    //     duration,
-    //     behavior: new LinearBehavior(),
-    //   });
-    //   spritesToAnimate.push(revealedPanel);
-    // }
 
     if (hiddenPanel) {
       context.appendOrphan(hiddenPanel);
@@ -54,10 +37,6 @@ export default class AccordionPanel extends Component {
         duration,
         behavior: new LinearBehavior(),
       });
-      // hiddenPanel.setupAnimation('position', {
-      //   startY: hiddenPanel.initialBounds?.relativeToContext.top,
-      //   endY: hiddenPanel.initialBounds?.relativeToContext.top,
-      // });
       spritesToAnimate.push(hiddenPanel);
     }
 
