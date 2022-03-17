@@ -27,6 +27,8 @@ export default class AccordionPanel extends Component {
     if (hiddenPanel) {
       context.appendOrphan(hiddenPanel);
       hiddenPanel.lockStyles();
+      // hardcoded at the moment, lockStyles seems to be a bit buggy with height auto
+      // the element gets positioned in an awkward way in the orphans element
       hiddenPanel.element.style.top = '70px';
       hiddenPanel.element.style.left = '0px';
 
