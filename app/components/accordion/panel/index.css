@@ -10,6 +10,10 @@
   border-color: hsl(216, 94%, 73%);
 }
 
+.accordion-panel-animation-context, .accordion-panel-body {
+  overflow-y: hidden;
+}
+
 .accordion-panel-header {
   background-color: hsl(0, 0%, 97%);
   border-top: 1px solid hsl(0, 0%, 82%);
@@ -84,7 +88,7 @@
 
 .Accordion-panel {
   margin: 0;
-  /* padding: 1em 1.5em; */
+  padding: 1em 1.5em;
   overflow: hidden;
 }
 

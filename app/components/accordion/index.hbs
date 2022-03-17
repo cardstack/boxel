@@ -1,16 +1,14 @@
-<AnimationContext @use={{this.resizePanels}}>
-  <div
-    local-class="Accordion {{if this.isFocused "focus"}}"
-    {{on "focusin" this.handleFocusin}}
-    {{on "focusout" this.handleFocusout}}
-  >
-    {{#each this.items as |item|}}
-      <Accordion::Panel
-        @id={{item.id}}
-        @title={{item.title}}
-        @expanded={{eq this.currentItem item.id}}
-        @trigger={{this.handleTrigger}}
-      />
-    {{/each}}
-  </div>
-</AnimationContext>
+<div
+  local-class="Accordion {{if this.isFocused "focus"}}"
+  {{on "focusin" this.handleFocusin}}
+  {{on "focusout" this.handleFocusout}}
+>
+  {{#each this.items as |item|}}
+    <Accordion::Panel
+      @id={{item.id}}
+      @title={{item.title}}
+      @expanded={{eq this.currentItem item.id}}
+      @trigger={{this.handleTrigger}}
+    />
+  {{/each}}
+</div>
