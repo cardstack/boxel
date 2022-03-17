@@ -1,6 +1,6 @@
 <AnimationContext local-class="accordion-panel-animation-context" @use={{this.resizePanels}}>
-  <div local-class="accordion-panel-body" {{sprite id=(concat @id "-accordion-panel-header") role="accordion-panel-body"}}>
-    <h3 local-class="accordion-panel-header">
+  <div local-class="accordion-panel-body" {{sprite id=(concat @id "-accordion-panel-body") role="accordion-panel-body"}}>
+    <h3 local-class="accordion-panel-header" {{sprite id=(concat @id "-accordion-panel-header") role="accordion-panel-header"}}>
       <button
         aria-expanded={{if @expanded "true" "false"}}
         {{!-- we don't allow closing just yet --}}
@@ -19,7 +19,7 @@
     </h3>
     {{#if @expanded}}
     <div
-      {{sprite id=(concat @id "-accordion-panel") role="accordion-panel-content"}}
+      {{sprite id=(concat @id "-accordion-panel-content") role="accordion-panel-content"}}
       id={{concat @id "-section"}}
       role="region"
       aria-labelledby={{@id}}
@@ -28,71 +28,20 @@
       <div>
         {{!-- Variable content within section, may include any type of markup or interactive widgets. --}}
         <fieldset>
-          <p>
-            <label for={{concat @id "-input-1"}}>
-              Name
-              <span aria-hidden="true">
-                *
-              </span>
-              :
-            </label>
-            <input type="text"
-                    value=""
-                    name="Name"
-                    id={{concat @id "-input-1"}}
-                    local-class="required"
-                    aria-required="true">
-          </p>
-          <p>
-            <label for={{concat @id "-input-2"}}>
-              Email
-              <span aria-hidden="true">
-                *
-              </span>
-              :
-            </label>
-            <input type="text"
-                    value=""
-                    name="Email"
-                    id={{concat @id "-input-2"}}
-                    aria-required="true">
-          </p>
-          <p>
-            <label for={{concat @id "-input-3"}}>
-              Phone:
-            </label>
-            <input type="text"
-                    value=""
-                    name="Phone"
-                    id={{concat @id "-input-3"}}>
-          </p>
-          <p>
-            <label for={{concat @id "-input-4"}}>
-              Extension:
-            </label>
-            <input type="text"
-                    value=""
-                    name="Ext"
-                    id={{concat @id "-input-4"}}>
-          </p>
-          <p>
-            <label for={{concat @id "-input-5"}}>
-              Country:
-            </label>
-            <input type="text"
-                    value=""
-                    name="Country"
-                    id={{concat @id "-input-5"}}>
-          </p>
-          <p>
-            <label for={{concat @id "-input-6"}}>
-              City/Province:
-            </label>
-            <input type="text"
-                    value=""
-                    name="City_Province"
-                    id={{concat @id "-input-6"}}>
-          </p>
+          {{#each @fields as |field|}}
+            <p>
+              <label for={{concat @id "-" field}}>
+                {{field}}
+                :
+              </label>
+              <input type="text"
+                      value=""
+                      name={{field}}
+                      id={{concat @id "-" field}}
+                      local-class="required"
+                      aria-required="true">
+            </p>
+          {{/each}}
         </fieldset>
       </div>
     </div>

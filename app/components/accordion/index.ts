@@ -11,18 +11,22 @@ export default class Accordion extends Component {
     {
       id: 'pi',
       title: 'Personal Information',
+      fields: ['Name', 'Age'],
     },
     {
       id: 'mi',
       title: 'More Information',
+      fields: ['Email'],
     },
     {
       id: 'emi',
       title: 'Even More Information',
+      fields: ['IP Address', 'ZIP Code', 'Last Meal', "Pet's Name"],
     },
     {
       id: 'dsti',
       title: "Don't Stop The Information",
+      fields: ['Favourite Song'],
     },
   ];
 
