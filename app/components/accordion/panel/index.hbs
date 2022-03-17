@@ -1,5 +1,5 @@
 <div {{sprite id=(concat @id "-accordion-panel-header") role="accordion-panel-body"}}>
-  <h3  class="accordion-panel-header">
+  <h3 local-class="accordion-panel-header">
     <button
       aria-expanded={{if @expanded "true" "false"}}
       {{!-- we don't allow closing just yet --}}

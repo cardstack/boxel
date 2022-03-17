@@ -85,7 +85,7 @@ export default class Accordion extends Component {
       revealedPanel.setupAnimation('size', {
         startWidth: revealedPanel.element.clientWidth,
         startHeight: 0,
-        duration: duration,
+        duration,
         behavior: new LinearBehavior(),
       });
       spritesToAnimate.push(revealedPanel);
@@ -98,7 +98,7 @@ export default class Accordion extends Component {
         startWidth: hiddenPanel.element.clientWidth,
         startHeight: hiddenPanel.element.clientHeight,
         endWidth: hiddenPanel.element.clientWidth,
-        duration: duration,
+        duration,
         behavior: new LinearBehavior(),
       });
 
@@ -113,7 +113,7 @@ export default class Accordion extends Component {
           revealedPanelBounds.top > hiddenPanelBounds.top
             ? hiddenPanelBounds.top
             : revealedPanelBounds.height,
-        duration: duration,
+        duration,
         behavior: new LinearBehavior(),
       });
       spritesToAnimate.push(hiddenPanel);
@@ -124,7 +124,7 @@ export default class Accordion extends Component {
         sprite.setupAnimation('size', {
           startHeight: sprite.initialBounds?.element.height,
           endHeight: sprite.finalBounds?.element.height,
-          duration: duration,
+          duration,
           behavior: new LinearBehavior(),
         });
         spritesToAnimate.push(sprite);
