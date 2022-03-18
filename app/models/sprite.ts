@@ -152,6 +152,7 @@ export default class Sprite {
     this.element.style.opacity = '0';
     this.element.setAttribute('data-sprite-hidden', 'true');
     this.element.getAnimations().forEach((a) => a.cancel());
+    this.motions = [];
   }
 
   setupAnimation(
@@ -221,6 +222,9 @@ export default class Sprite {
       }
       return result;
     }, [] as Keyframe[]);
+
+    // We can clear these as we've compiled them already.
+    this.motions = [];
 
     // calculate "real" duration based on amount of keyframes at the given FPS
     let duration = Math.max(0, (keyframes.length - 1) / FPS);
