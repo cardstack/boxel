@@ -8,9 +8,9 @@ export default class AccordionPanel extends Component {
   @action async resizePanels(changeset: Changeset) {
     let duration = 320;
     let { context } = changeset;
-    let bodies = changeset.spritesFor({
+    let containers = changeset.spritesFor({
       type: SpriteType.Kept,
-      role: 'accordion-panel-body',
+      role: 'accordion-panel-container',
     });
     let hiddenPanel: Sprite | undefined;
 
@@ -42,8 +42,8 @@ export default class AccordionPanel extends Component {
       spritesToAnimate.push(hiddenPanel);
     }
 
-    if (bodies.size) {
-      for (let sprite of [...bodies]) {
+    if (containers.size) {
+      for (let sprite of [...containers]) {
         sprite.setupAnimation('size', {
           startHeight: sprite.initialBounds?.element.height,
           endHeight: sprite.finalBounds?.element.height,

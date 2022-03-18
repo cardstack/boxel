@@ -1,5 +1,5 @@
 <AnimationContext local-class="accordion-panel-animation-context" @use={{this.resizePanels}}>
-  <div local-class="accordion-panel-body" {{sprite id=(concat @id "-accordion-panel-body") role="accordion-panel-body"}}>
+  <div local-class="accordion-panel-container" {{sprite id=(concat @id "-accordion-panel-container") role="accordion-panel-container"}}>
     <h3 local-class="accordion-panel-header">
       <button
         aria-expanded={{if @expanded "true" "false"}}
