@@ -69,6 +69,8 @@ export default class Accordion extends Component {
     let index = this.items.findIndex((item) => item.id === id);
     if (index < this.items.length - 1) {
       document.getElementById(this.items[index + 1].id + '-trigger')?.focus();
+    } else {
+      document.getElementById(this.items[0].id + '-trigger')?.focus();
     }
 
     event.preventDefault();
@@ -91,6 +93,10 @@ export default class Accordion extends Component {
     let index = this.items.findIndex((item) => item.id === id);
     if (index > 0) {
       document.getElementById(this.items[index - 1].id + '-trigger')?.focus();
+    } else {
+      document
+        .getElementById(this.items[this.items.length - 1].id + '-trigger')
+        ?.focus();
     }
 
     event.preventDefault();
