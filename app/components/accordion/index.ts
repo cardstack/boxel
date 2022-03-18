@@ -52,7 +52,7 @@ export default class Accordion extends Component {
     this.currentItem = target;
   }
 
-  @action jumpToNextTrigger(event: any) {
+  @action jumpToNextTrigger(event: KeyboardEvent) {
     if (
       !(
         document.activeElement instanceof HTMLElement &&
@@ -74,7 +74,7 @@ export default class Accordion extends Component {
     event.preventDefault();
   }
 
-  @action jumpToPreviousTrigger(event: any) {
+  @action jumpToPreviousTrigger(event: KeyboardEvent) {
     if (
       !(
         document.activeElement instanceof HTMLElement &&
