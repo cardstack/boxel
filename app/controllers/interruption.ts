@@ -11,7 +11,7 @@ class InterruptionController extends Controller {
 
   async transition(changeset: Changeset): Promise<void> {
     magicMove(changeset, {
-      behavior: new SpringBehavior({ overshootClamping: true, damping: 100 }),
+      behavior: new SpringBehavior({ overshootClamping: false, damping: 11 }),
     });
 
     await runAnimations([...changeset.keptSprites]);
