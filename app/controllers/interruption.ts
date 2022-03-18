@@ -13,7 +13,8 @@ class InterruptionController extends Controller {
     magicMove(changeset, {
       behavior: new SpringBehavior({ overshootClamping: true, damping: 100 }),
     });
-    await runAnimations(changeset);
+
+    await runAnimations([...changeset.keptSprites]);
   }
 }
 

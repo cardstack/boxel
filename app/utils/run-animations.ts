@@ -1,20 +1,19 @@
 import { SpriteAnimation } from 'animations/models/sprite-animation';
-import Changeset from 'animations/models/changeset';
+import Sprite from 'animations/models/sprite';
 
 /**
  * Utility to compile & run all animations that were setup for a given changeset.
  *
- * @param changeset
+ * @param sprites
  * @param time
  */
 export default async function runAnimations(
-  changeset: Changeset,
+  sprites: Sprite[],
   time?: number
 ): Promise<Animation[]> {
-  let { keptSprites, insertedSprites, removedSprites } = changeset;
   let animations: SpriteAnimation[] = [];
   let promises = [];
-  for (let sprite of [...keptSprites, ...insertedSprites, ...removedSprites]) {
+  for (let sprite of sprites) {
     let animation = sprite.compileAnimation({ time });
     if (animation) {
       animations.push(animation);
