@@ -17,25 +17,12 @@ export default class MotionStudy extends Controller {
     });
     //let moveDuration = 1000;
     let fadeDuration = 300;
+    let magicMoveDelay = 0;
 
-    let removedCardContentSprites = changeset.spritesFor({
-      role: 'card-content',
-      type: SpriteType.Removed,
+    let cardSprites = changeset.spritesFor({
+      role: 'card',
+      type: SpriteType.Kept,
     });
-
-    if (removedCardContentSprites.size) {
-      fade(
-        {
-          context,
-          insertedSprites: new Set(),
-          removedSprites: removedCardContentSprites,
-          keptSprites: new Set(),
-        } as Changeset,
-        {
-          duration: fadeDuration,
-        }
-      );
-    }
 
     let removedCardSprites = changeset.spritesFor({
       role: 'card',
@@ -47,10 +34,46 @@ export default class MotionStudy extends Controller {
       removedSprite.element.style.zIndex = '0';
     });
 
-    let cardSprites = changeset.spritesFor({
-      role: 'card',
-      type: SpriteType.Kept,
+    let removedCardContentSprites = changeset.spritesFor({
+      role: 'card-content',
+      type: SpriteType.Removed,
     });
+
+    if (removedCardContentSprites.size) {
+      magicMoveDelay = fadeDuration;
+      fade(
+        {
+          context,
+          insertedSprites: new Set(),
+          removedSprites: removedCardContentSprites,
+          keptSprites: new Set(),
+        } as Changeset,
+        {
+          duration: fadeDuration,
+        }
+      );
+
+      removedCardContentSprites.forEach((s) => {
+        s.element.style.zIndex = '2';
+      });
+
+      cardSprites.forEach((s) => {
+        // only lock styles & set z-index for the animating card
+        if (s.boundsDelta && (s.boundsDelta.x !== 0 || s.boundsDelta.y !== 0)) {
+          s.lockStyles();
+          s.element.style.zIndex = '1';
+        }
+      });
+
+      await runAnimations([...removedCardContentSprites]);
+
+      cardSprites.forEach((s) => {
+        s.unlockStyles();
+      });
+
+      removedCardContentSprites.forEach((r) => r.hide());
+      // TODO: this is too late as the fade duration is shorter
+    }
 
     magicMove(
       {
@@ -62,6 +85,7 @@ export default class MotionStudy extends Controller {
       {
         behavior,
         //duration: moveDuration,
+        delay: magicMoveDelay,
       }
     );
 
@@ -73,7 +97,7 @@ export default class MotionStudy extends Controller {
       s.element.style.opacity = '0';
     });
 
-    await runAnimations(changeset);
+    await runAnimations([...cardSprites]);
 
     removedCardSprites.forEach((r) => r.hide());
 
@@ -89,7 +113,7 @@ export default class MotionStudy extends Controller {
       }
     );
 
-    await runAnimations(changeset);
+    await runAnimations([...cardContentSprites]);
 
     cardContentSprites.forEach((s) => {
       s.element.style.removeProperty('opacity');

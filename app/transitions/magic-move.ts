@@ -7,6 +7,7 @@ import Behavior from 'animations/behaviors/base';
 export type TransitionOptions = {
   behavior?: Behavior;
   duration?: number;
+  delay?: number;
 };
 
 /**
@@ -20,7 +21,7 @@ export default function (
   options: TransitionOptions = {}
 ): void {
   let { keptSprites } = changeset;
-  let { behavior = new LinearBehavior(), duration } = options;
+  let { behavior = new LinearBehavior(), duration, delay } = options;
 
   for (let s of keptSprites) {
     assert(
@@ -65,6 +66,7 @@ export default function (
         duration,
         velocity,
         behavior,
+        delay,
       });
     }
 
@@ -79,6 +81,7 @@ export default function (
         duration,
         velocity,
         behavior,
+        delay,
       });
     }
 
