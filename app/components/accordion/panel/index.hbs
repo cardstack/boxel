@@ -3,11 +3,12 @@
     <h3 local-class="accordion-panel-header">
       <button
         aria-expanded={{if @expanded "true" "false"}}
-        {{!-- we don't allow closing just yet --}}
+        {{!-- we don't allow closing by pressing an opened accordion just yet --}}
         aria-disabled={{if @expanded "true" "false"}}
         local-class="Accordion-trigger"
         aria-controls={{concat @id "-section"}}
         id={{concat @id "-trigger"}}
+        type="button"
         data-is-accordion-trigger="true"
         {{on "click" (fn @trigger @id)}}
       >
