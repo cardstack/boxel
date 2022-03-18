@@ -26,14 +26,14 @@ export default class Accordion extends Component {
     },
   ];
 
-  @tracked isFocused = false;
+  @tracked isTriggerFocused = false;
   @tracked currentItem = '';
 
   @action
   handleFocusin(e: Event) {
     if (e.target instanceof HTMLElement) {
       if (e.target.dataset.isAccordionTrigger) {
-        this.isFocused = true;
+        this.isTriggerFocused = true;
       }
     }
   }
@@ -42,7 +42,7 @@ export default class Accordion extends Component {
   handleFocusout(e: Event) {
     if (e.target instanceof HTMLElement) {
       if (e.target.dataset.isAccordionTrigger) {
-        this.isFocused = false;
+        this.isTriggerFocused = false;
       }
     }
   }
