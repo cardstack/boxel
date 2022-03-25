@@ -3,6 +3,7 @@ import { action } from '@ember/object';
 import Changeset from 'animations/models/changeset';
 import Sprite, { SpriteType } from 'animations/models/sprite';
 import LinearBehavior from 'animations/behaviors/linear';
+import runAnimations from 'animations/utils/run-animations';
 
 export default class AccordionPanel extends Component {
   @action async resizePanels(changeset: Changeset) {
@@ -54,8 +55,6 @@ export default class AccordionPanel extends Component {
       }
     }
 
-    await Promise.all(
-      spritesToAnimate.map((sprite) => sprite.startAnimation().finished)
-    );
+    await runAnimations(spritesToAnimate);
   }
 }
