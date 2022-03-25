@@ -31,7 +31,7 @@ export default class AnimationsService extends Service {
   eligibleContexts: Set<AnimationContext> = new Set();
   intent: string | undefined;
   currentChangesets: Changeset[] = [];
-  intermediateSprites: WeakMap<AnimationContext, Sprite[]> = new WeakMap();
+  intermediateSprites: WeakMap<AnimationContext, Set<Sprite>> = new WeakMap();
 
   registerContext(context: AnimationContext): void {
     this.spriteTree.addAnimationContext(context);
@@ -127,7 +127,7 @@ export default class AnimationsService extends Service {
       }
     }
 
-    let intermediateSprites: Sprite[] = [];
+    let intermediateSprites: Set<Sprite> = new Set();
     for (let spriteModifier of spriteModifiers) {
       let sprite = SpriteFactory.createIntermediateSprite(spriteModifier);
 
@@ -138,7 +138,7 @@ export default class AnimationsService extends Service {
       sprite.initialBounds = bounds;
       sprite.initialComputedStyle = styles;
       sprite.element.getAnimations().forEach((a) => a.cancel());
-      intermediateSprites.push(sprite);
+      intermediateSprites.add(sprite);
     }
 
     assert(

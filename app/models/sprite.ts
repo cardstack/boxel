@@ -15,6 +15,8 @@ import { Resize, ResizeOptions } from '../motions/resize';
 import { CssMotion, CssMotionOptions } from '../motions/css-motion';
 import { FPS } from 'animations/behaviors/base';
 import { assert } from '@ember/debug';
+import SpringBehavior from 'animations/behaviors/spring';
+import LinearBehavior from 'animations/behaviors/linear';
 
 class SpriteIdentifier {
   id: string | null;
@@ -150,6 +152,7 @@ export default class Sprite {
     this.element.style.opacity = '0';
     this.element.setAttribute('data-sprite-hidden', 'true');
     this.element.getAnimations().forEach((a) => a.cancel());
+    this.motions = [];
   }
 
   setupAnimation(
@@ -158,6 +161,21 @@ export default class Sprite {
       OpacityOptions | MoveOptions | ResizeOptions | CssMotionOptions
     >
   ): void {
+    // TODO: this applies to any "non-Tween" based behavior, currently only Spring
+    assert(
+      'Passing a duration is not necessary when using a Spring behavior',
+      (opts.duration === undefined &&
+        opts.behavior instanceof SpringBehavior) ||
+        !(opts.behavior instanceof SpringBehavior)
+    );
+    // TODO: this applies to any "Tween" based behavior, currently only Linear
+    assert(
+      'You must pass a duration when using a Linear behavior',
+      (opts.duration !== undefined &&
+        opts.behavior instanceof LinearBehavior) ||
+        !(opts.behavior instanceof LinearBehavior)
+    );
+
     switch (property) {
       case 'opacity':
         this.motions.push(new Opacity(this, opts));
@@ -177,11 +195,15 @@ export default class Sprite {
     }
   }
 
-  startAnimation({
+  compileAnimation({
     time,
   }: {
     time?: number;
-  } = {}): SpriteAnimation {
+  } = {}): SpriteAnimation | undefined {
+    if (!this.motions.length) {
+      return;
+    }
+
     assert('Hidden sprite cannot be animated', !this.hidden);
     let keyframes = this.motions.reduce((previousKeyframes, motion) => {
       motion.applyBehavior(time);
@@ -201,6 +223,9 @@ export default class Sprite {
       return result;
     }, [] as Keyframe[]);
 
+    // We can clear these as we've compiled them already.
+    this.motions = [];
+
     // calculate "real" duration based on amount of keyframes at the given FPS
     let duration = Math.max(0, (keyframes.length - 1) / FPS);
 
@@ -210,6 +235,19 @@ export default class Sprite {
     };
 
     return new SpriteAnimation(this, keyframes, keyframeAnimationOptions);
+  }
+
+  startAnimation({
+    time,
+  }: {
+    time?: number;
+  } = {}): SpriteAnimation {
+    console.warn(
+      'Calling Sprite.startAnimation is deprecated, please use the runAnimations util.'
+    );
+    let spriteAnimation = this.compileAnimation({ time }) as SpriteAnimation;
+    spriteAnimation.play();
+    return spriteAnimation;
   }
 }
 

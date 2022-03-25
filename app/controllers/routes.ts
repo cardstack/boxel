@@ -1,16 +1,20 @@
 import Controller from '@ember/controller';
 import Sprite, { SpriteType } from '../models/sprite';
 import Changeset from '../models/changeset';
-import LinearBehavior from 'animations/behaviors/linear';
 import magicMove from 'animations/transitions/magic-move';
 import { assert } from '@ember/debug';
 import ContextAwareBounds from 'animations/models/context-aware-bounds';
+import runAnimations from 'animations/utils/run-animations';
+import SpringBehavior from 'animations/behaviors/spring';
 
-const SPEED_PX_PER_MS = 0.25;
+const springBehavior = new SpringBehavior({
+  overshootClamping: true,
+  damping: 100,
+});
 
 export default class RoutesController extends Controller {
   async transition(changeset: Changeset): Promise<void> {
-    let { removedSprites, keptSprites, context } = changeset;
+    let { removedSprites, keptSprites, insertedSprites, context } = changeset;
 
     assert('Context must always have currentBounds', context.currentBounds);
 
@@ -69,24 +73,16 @@ export default class RoutesController extends Controller {
         let initialBounds = removedSprite.initialBounds.relativeToContext;
         let finalBounds = removedSprite.finalBounds.relativeToContext;
 
-        let deltaX = finalBounds.x - initialBounds.x;
-        let deltaY = 0;
-        let duration = (deltaX ** 2 + deltaY ** 2) ** 0.5 / SPEED_PX_PER_MS;
-
         removedSprite.setupAnimation('position', {
           startX: initialBounds.x,
           endX: finalBounds.x,
-          behavior: new LinearBehavior(),
-          duration,
+          behavior: springBehavior,
         });
       }
 
-      let animations: Promise<void | Animation>[] = [
-        magicMove(changeset),
-        ...[...removedSprites].map((s) => s.startAnimation().finished),
-      ];
-
-      await Promise.all(animations);
+      magicMove(changeset, {
+        behavior: springBehavior,
+      });
     } else {
       let removedSprite = changeset.spriteFor({ type: SpriteType.Removed });
       let insertedSprite = changeset.spriteFor({ type: SpriteType.Inserted });
@@ -101,28 +97,21 @@ export default class RoutesController extends Controller {
 
       let moveLeft = insertedSprite?.id === 'route-content-other';
 
-      let deltaXR = removedSprite.initialWidth * (moveLeft ? -1 : 1);
-      let durationR = (deltaXR ** 2) ** 0.5 / SPEED_PX_PER_MS;
       removedSprite.setupAnimation('position', {
         endX: removedSprite.initialWidth * (moveLeft ? -1 : 1),
-        behavior: new LinearBehavior(),
-        duration: durationR,
+        behavior: springBehavior,
       });
 
-      let deltaXI = insertedSprite.finalWidth * (moveLeft ? 1 : -1);
-      let durationI = (deltaXI ** 2) ** 0.5 / SPEED_PX_PER_MS;
       insertedSprite.setupAnimation('position', {
         startX: insertedSprite.finalWidth * (moveLeft ? 1 : -1),
-        behavior: new LinearBehavior(),
-        duration: durationI,
+        behavior: springBehavior,
       });
-
-      let animations = [
-        removedSprite.startAnimation().finished,
-        insertedSprite.startAnimation().finished,
-      ];
-
-      await Promise.all(animations);
     }
+
+    await runAnimations([
+      ...removedSprites,
+      ...keptSprites,
+      ...insertedSprites,
+    ]);
   }
 }
