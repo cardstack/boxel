@@ -19,33 +19,33 @@
       </button>
     </h3>
     {{#if @expanded}}
-    <div
-      {{sprite id=(concat @id "-accordion-panel-content") role="accordion-panel-content"}}
-      id={{concat @id "-section"}}
-      role="region"
-      aria-labelledby={{concat @id "-trigger"}}
-      local-class="Accordion-panel"
-    >
-      <div>
-        {{!-- Variable content within section, may include any type of markup or interactive widgets. --}}
-        <fieldset>
-          {{#each @fields as |field|}}
-            <p>
-              <label for={{concat @id "-" field}}>
-                {{field}}
-                :
-              </label>
-              <input type="text"
-                      value=""
-                      name={{field}}
-                      id={{concat @id "-" field}}
-                      local-class="required"
-                      aria-required="true">
-            </p>
-          {{/each}}
-        </fieldset>
+      <div
+        {{sprite id=(concat @id "-accordion-panel-content") role="accordion-panel-content"}}
+        id={{concat @id "-section"}}
+        role="region"
+        aria-labelledby={{concat @id "-trigger"}}
+        local-class="Accordion-panel"
+      >
+        <div>
+          {{!-- Variable content within section, may include any type of markup or interactive widgets. --}}
+          <fieldset>
+            {{#each @fields as |field|}}
+              <p>
+                <label for={{concat @id "-" field}}>
+                  {{field}}
+                  :
+                </label>
+                <input type="text"
+                        value=""
+                        name={{field}}
+                        id={{concat @id "-" field}}
+                        local-class="required"
+                        aria-required="true">
+              </p>
+            {{/each}}
+          </fieldset>
+        </div>
       </div>
-    </div>
     {{/if}}
   </div>
 </AnimationContext>
