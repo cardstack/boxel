@@ -59,7 +59,13 @@ export default class MotionStudy extends Controller {
 
       cardSprites.forEach((s) => {
         // only lock styles & set z-index for the animating card
-        if (s.boundsDelta && (s.boundsDelta.x !== 0 || s.boundsDelta.y !== 0)) {
+        if (
+          s.boundsDelta &&
+          (s.boundsDelta.width !== 0 ||
+            s.boundsDelta.height !== 0 ||
+            s.boundsDelta.x !== 0 ||
+            s.boundsDelta.y !== 0)
+        ) {
           s.lockStyles();
           s.element.style.zIndex = '1';
         }
