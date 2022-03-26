@@ -131,13 +131,15 @@ export default class AnimationsService extends Service {
     for (let spriteModifier of spriteModifiers) {
       let sprite = SpriteFactory.createIntermediateSprite(spriteModifier);
 
+      // We cannot know which animations we need to cancel until afterRender, so we will pause them so they don't
+      // progress after we did our measurements.
+      sprite.element.getAnimations().forEach((a) => a.pause());
       // TODO: we could leave these measurements to the SpriteFactory as they are unique to the SpriteType
       let bounds = sprite.captureAnimatingBounds(context.element);
-      let styles = copyComputedStyle(sprite.element); // TODO: check if we need to pause the animation, is so we want to integrate this with captureAnimatingBounds to only pause/play once.
-      // console.log(styles['background-color']);
+      let styles = copyComputedStyle(sprite.element);
       sprite.initialBounds = bounds;
       sprite.initialComputedStyle = styles;
-      sprite.element.getAnimations().forEach((a) => a.cancel());
+
       intermediateSprites.add(sprite);
     }
 

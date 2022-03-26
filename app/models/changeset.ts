@@ -170,9 +170,28 @@ export default class Changeset {
         ...this.removedSprites,
         ...this.keptSprites,
       ]) {
-        let interruptedSprites = [...intermediateSprites].filter((is) =>
-          is.identifier.equals(sprite.identifier)
-        );
+        // TODO: this is kind of a weird spot to handle cancelling/resuming animations... Find a better one.
+        let interruptedSprites = [...intermediateSprites].filter((is) => {
+          if (is.identifier.equals(sprite.identifier)) {
+            if (is.element.getAnimations().length) {
+              console.warn(
+                `Cancelling existing animations for interrupted sprite`,
+                sprite.identifier
+              );
+              is.element.getAnimations().forEach((a) => a.cancel());
+            }
+            return true;
+          } else {
+            if (is.element.getAnimations().length) {
+              console.warn(
+                `Keeping animations for sprite because sprite was not interrupted`,
+                sprite.identifier
+              );
+              is.element.getAnimations().forEach((a) => a.play());
+            }
+            return false;
+          }
+        });
 
         // If more than 1 matching IntermediateSprite is found, we warn but also guess the last one is correct
         if (interruptedSprites.length > 1) {
