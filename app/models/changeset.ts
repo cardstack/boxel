@@ -214,11 +214,6 @@ export default class Changeset {
             return;
           }
 
-          if (!sprite.initialBounds?.parent) {
-            assert('sprite should always have initialBounds');
-            return;
-          }
-
           if (sprite.counterpart) {
             assert(
               'sprite counterpart should always have initialBounds',
@@ -233,6 +228,15 @@ export default class Changeset {
             sprite.initialComputedStyle =
               interruptedSprite.initialComputedStyle;
           } else {
+            // TODO: check if we want to support this in this way as this case may only happen if the final state is the same as before the interruption.
+            // If we have an inserted sprite with a matching intermediate sprite we are animating the same SpriteModifier
+            //  This makes it a KeptSprite without a counterpart.
+            if (sprite.type === SpriteType.Inserted) {
+              sprite.type = SpriteType.Kept;
+              this.insertedSprites.delete(sprite);
+              this.keptSprites.add(sprite);
+            }
+
             sprite.initialBounds = interruptedSprite.initialBounds;
             sprite.initialComputedStyle =
               interruptedSprite.initialComputedStyle;
