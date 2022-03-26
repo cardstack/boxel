@@ -135,7 +135,7 @@ export default class AnimationsService extends Service {
       // progress after we did our measurements.
       sprite.element.getAnimations().forEach((a) => a.pause());
       // TODO: we could leave these measurements to the SpriteFactory as they are unique to the SpriteType
-      let bounds = sprite.captureAnimatingBounds(context.element);
+      let bounds = sprite.captureAnimatingBounds(context.element, false);
       let styles = copyComputedStyle(sprite.element);
       sprite.initialBounds = bounds;
       sprite.initialComputedStyle = styles;

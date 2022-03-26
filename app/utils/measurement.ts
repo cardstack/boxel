@@ -8,38 +8,45 @@ export type BoundsVelocity = {
   height: MeasuredSpeed;
 };
 
-function runWithoutAnimations(element: HTMLElement, f: () => DOMRect) {
-  let animations = element.getAnimations();
-  let currentTimes: number[] = [];
-  animations.forEach((a) => {
-    a.pause();
-    currentTimes.push(a.currentTime || 0);
-    let timing = a.effect && a.effect.getComputedTiming();
-    if (timing) {
-      a.currentTime = (timing.delay || 0) + (timing.activeDuration || 0);
+function runWithoutAnimations(playAnimations: boolean) {
+  return (element: HTMLElement, f: () => DOMRect) => {
+    let animations = element.getAnimations();
+    let currentTimes: number[] = [];
+    animations.forEach((a) => {
+      a.pause();
+      currentTimes.push(a.currentTime || 0);
+      let timing = a.effect && a.effect.getComputedTiming();
+      if (timing) {
+        a.currentTime = (timing.delay || 0) + (timing.activeDuration || 0);
+      }
+    });
+    let result = f();
+    for (let i = 0; i < animations.length; i++) {
+      animations[i].currentTime = currentTimes[i];
+      if (playAnimations) {
+        animations[i].play();
+      }
     }
-  });
-  let result = f();
-  for (let i = 0; i < animations.length; i++) {
-    animations[i].currentTime = currentTimes[i];
-    animations[i].play();
-  }
-  return result;
+    return result;
+  };
 }
 
-function runWithAnimations(element: HTMLElement, f: () => DOMRect) {
-  let animations = element.getAnimations();
-  animations.forEach((a) => {
-    a.pause();
-  });
-  let result = f();
-  for (let i = 0; i < animations.length; i++) {
-    animations[i].play();
-  }
-  return result;
+function runWithAnimations(playAnimations: boolean) {
+  return (element: HTMLElement, f: () => DOMRect) => {
+    let animations = element.getAnimations();
+    animations.forEach((a) => {
+      a.pause();
+    });
+    let result = f();
+    if (playAnimations) {
+      for (let i = 0; i < animations.length; i++) {
+        animations[i].play();
+      }
+    }
+    return result;
+  };
 }
-
-function runWithAnimationOffset(offset: number) {
+function runWithAnimationOffset(offset: number, playAnimations: boolean) {
   return function (element: HTMLElement, f: () => DOMRect) {
     let animations = element.getAnimations();
     let currentTimes: number[] = [];
@@ -54,7 +61,9 @@ function runWithAnimationOffset(offset: number) {
     let result = f();
     for (let i = 0; i < animations.length; i++) {
       animations[i].currentTime = currentTimes[i];
-      animations[i].play();
+      if (playAnimations) {
+        animations[i].play();
+      }
     }
     return result;
   };
@@ -63,12 +72,14 @@ function runWithAnimationOffset(offset: number) {
 type DocumentPositionArgs = {
   withAnimations: boolean;
   withAnimationOffset: number;
+  playAnimations: boolean;
 };
 export function getDocumentPosition(
   element: HTMLElement,
   opts: Partial<DocumentPositionArgs> = {
     withAnimations: false,
     withAnimationOffset: undefined,
+    playAnimations: true,
   }
 ): DOMRect {
   let wrapper = (_el: HTMLElement, f: () => DOMRect) => f();
@@ -77,12 +88,15 @@ export function getDocumentPosition(
     !(opts.withAnimations && opts.withAnimationOffset)
   );
   if (opts.withAnimations === false) {
-    wrapper = runWithoutAnimations;
+    wrapper = runWithoutAnimations(opts.playAnimations ?? true);
   } else {
-    wrapper = runWithAnimations;
+    wrapper = runWithAnimations(opts.playAnimations ?? true);
   }
   if (opts.withAnimationOffset) {
-    wrapper = runWithAnimationOffset(opts.withAnimationOffset);
+    wrapper = runWithAnimationOffset(
+      opts.withAnimationOffset,
+      opts.playAnimations ?? true
+    );
   }
   return wrapper(element, () => {
     let rect = element.getBoundingClientRect();
