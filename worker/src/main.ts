@@ -1,4 +1,4 @@
-const worker = self as unknown as ServiceWorkerGlobalScope;
+const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
 worker.addEventListener('install', () => {
   // force moving on to activation even if another service worker had control
