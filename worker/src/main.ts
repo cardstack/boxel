@@ -1,4 +1,8 @@
+import { FetchHandler } from './fetch';
+
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
+
+const fetchHandler = new FetchHandler(worker);
 
 worker.addEventListener('install', () => {
   // force moving on to activation even if another service worker had control
@@ -12,6 +16,5 @@ worker.addEventListener('activate', () => {
 });
 
 worker.addEventListener('fetch', (event: FetchEvent) => {
-  console.log(`SAW fetch ${event.request.url}`);
-  event.respondWith(fetch(event.request));
+  event.respondWith(fetchHandler.handleFetch(event.request));
 });
