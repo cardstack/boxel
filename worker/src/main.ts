@@ -1,5 +1,3 @@
-/// <reference lib="WebWorker" />
-
 const worker = self as unknown as ServiceWorkerGlobalScope;
 
 worker.addEventListener('install', () => {

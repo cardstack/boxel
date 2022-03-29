@@ -24,6 +24,7 @@ module.exports = {
   },
   output: {
     filename: "[name].js",
+    path: path.resolve("../host/public"),
   },
   resolve: {
     extensions: [".ts", ".js", ".json"],
