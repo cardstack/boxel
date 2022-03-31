@@ -7,6 +7,5 @@ export async function launchWorker() {
     while (registration.active?.state !== 'activated') {
       await new Promise<void>((resolve) => setTimeout(resolve, 10));
     }
-    window.location.reload();
   }
 }
