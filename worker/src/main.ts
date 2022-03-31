@@ -15,6 +15,15 @@ worker.addEventListener('activate', () => {
   console.log('activating service worker');
 });
 
+worker.addEventListener('message', (event) => {
+  console.log(event);
+  (async () => {
+    for await (let item of event.data.handle.keys()) {
+      console.log(item);
+    }
+  })()
+});
+
 worker.addEventListener('fetch', (event: FetchEvent) => {
   event.respondWith(fetchHandler.handleFetch(event.request));
 });

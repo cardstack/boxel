@@ -3,6 +3,7 @@
 const EmberApp = require('ember-cli/lib/broccoli/ember-app');
 const { compatBuild } = require('@embroider/compat');
 const { Webpack } = require('@embroider/webpack');
+const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
 module.exports = function (defaults) {
   let app = new EmberApp(defaults, {});
@@ -16,5 +17,20 @@ module.exports = function (defaults) {
 
     staticModifiers: true,
     staticAppPaths: ['lib'],
+
+    packagerOptions: {
+      webpackConfig: {
+        devtool: 'source-map',
+        module: {
+          rules: [
+            {
+              test: /\.ttf$/,
+              type: 'asset',
+            },
+          ],
+        },
+        plugins: [new MonacoWebpackPlugin()],
+      },
+    },
   });
 };
