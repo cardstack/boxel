@@ -80,6 +80,7 @@
     "ember-qunit": "^5.1.5",
     "ember-resolver": "^8.0.3",
     "ember-source": "~4.2.0",
+    "ember-template-imports": "^2.0.1",
     "ember-template-lint": "^4.2.0",
     "ember-welcome-page": "^6.1.0",
     "eslint": "^7.32.0",
@@ -97,12 +98,13 @@
     "webpack": "^5.69.1"
   },
   "engines": {
-    "node": "16"
+    "node": "14"
   },
   "ember": {
     "edition": "octane"
   },
   "volta": {
-    "extends": "../package.json"
+    "extends": "../package.json",
+    "node": "14.19.1"
   }
 }

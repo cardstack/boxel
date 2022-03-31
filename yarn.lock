@@ -5961,6 +5961,21 @@ ember-source@~4.2.0:
     semver "^7.3.4"
     silent-error "^1.1.1"
 
+ember-template-imports@^2.0.1:
+  version "2.0.1"
+  resolved "https://registry.yarnpkg.com/ember-template-imports/-/ember-template-imports-2.0.1.tgz#942fbda0ae9a806eb2f83ebd61743704c4c66d90"
+  integrity sha512-2J0p3NU1hyP9VW6FX7/IAQtJPP0jDg/4zS3E2aYGND7uzuFbGJRgz9Ifze7yKkgWd7EAGnCjDQYCm5jTLu8Fvg==
+  dependencies:
+    babel-import-util "^0.2.0"
+    broccoli-stew "^3.0.0"
+    ember-cli-babel-plugin-helpers "^1.1.1"
+    ember-cli-version-checker "^5.1.2"
+    line-column "^1.0.2"
+    magic-string "^0.25.7"
+    parse-static-imports "^1.1.0"
+    string.prototype.matchall "^4.0.6"
+    validate-peer-dependencies "^1.1.0"
+
 ember-template-lint@^4.2.0:
   version "4.3.0"
   resolved "https://registry.yarnpkg.com/ember-template-lint/-/ember-template-lint-4.3.0.tgz#4bb6050db57eeeaa8f944151c9fef9cf582e7217"
@@ -11171,7 +11186,7 @@ string-width@^2.1.0:
     is-fullwidth-code-point "^2.0.0"
     strip-ansi "^4.0.0"
 
-string.prototype.matchall@^4.0.5:
+string.prototype.matchall@^4.0.5, string.prototype.matchall@^4.0.6:
   version "4.0.7"
   resolved "https://registry.yarnpkg.com/string.prototype.matchall/-/string.prototype.matchall-4.0.7.tgz#8e6ecb0d8a1fb1fda470d81acecb2dba057a481d"
   integrity sha512-f48okCX7JiwVi1NXCVWcFnZgADDC/n2vePlQ/KUCNqCikLLilQvwjMO8+BHVKvgzH0JB0J9LEPgxOGT02RoETg==
@@ -11977,7 +11992,7 @@ validate-npm-package-name@^3.0.0:
   dependencies:
     builtins "^1.0.3"
 
-validate-peer-dependencies@^1.2.0:
+validate-peer-dependencies@^1.1.0, validate-peer-dependencies@^1.2.0:
   version "1.2.0"
   resolved "https://registry.yarnpkg.com/validate-peer-dependencies/-/validate-peer-dependencies-1.2.0.tgz#22aab93c514f4fda457d36c80685e8b1160d2036"
   integrity sha512-nd2HUpKc6RWblPZQ2GDuI65sxJ2n/UqZwSBVtj64xlWjMx0m7ZB2m9b2JS3v1f+n9VWH/dd1CMhkHfP6pIdckA==

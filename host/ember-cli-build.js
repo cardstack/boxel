@@ -10,7 +10,10 @@ module.exports = function (defaults) {
     staticAddonTrees: true,
     staticAddonTestSupportTrees: true,
     staticHelpers: true,
-    staticComponents: true,
+
+    // needed to disable this to get embroider's resolver happy with gjs
+    staticComponents: false,
+
     staticModifiers: true,
     staticAppPaths: ['lib'],
   });
