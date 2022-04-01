@@ -4,9 +4,12 @@ import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 
-// we're reaching across packages in an odd way here, which works for a
-// type-only import but wouldn't necessarily work for runtime code
-import type { RequestDirectoryHandle } from '../../../worker/src/interfaces';
+import {
+  isWorkerMessage,
+  DirectoryHandleResponse,
+  send,
+} from '@cardstack/worker/src/messages';
+import { timeout, Deferred } from '@cardstack/worker/src/util';
 
 export default class LocalRealm extends Service {
   constructor(properties: object) {
@@ -19,23 +22,41 @@ export default class LocalRealm extends Service {
   }
 
   private handleMessage(event: MessageEvent) {
-    console.log(event.data);
+    let { data } = event;
+    if (!isWorkerMessage(data)) {
+      return;
+    }
+    switch (this.state.type) {
+      case 'requesting-handle':
+        if (data.type === 'directoryHandleResponse') {
+          this.state.response.fulfill(data);
+          return;
+        }
+    }
+    console.log(`did not handle worker message`, data);
   }
 
-  @restartableTask private async update(): Promise<void> {
+  @restartableTask private async setup(): Promise<void> {
     await Promise.resolve();
     this.state = { type: 'checking-worker' };
     let worker = await this.ensureWorker();
-    this.state = { type: 'requesting-handle', worker };
-    let message: RequestDirectoryHandle = {
-      type: 'requestDirectoryHandle',
+    this.state = {
+      type: 'requesting-handle',
+      worker,
+      response: new Deferred<DirectoryHandleResponse>(),
     };
-    this.state.worker.postMessage(message);
+    send(this.state.worker, { type: 'requestDirectoryHandle' });
+    let { handle } = await this.state.response.promise;
+    if (handle) {
+      this.state = { type: 'available', handle, worker: this.state.worker };
+    } else {
+      this.state = { type: 'empty', worker: this.state.worker };
+    }
   }
 
-  private maybeUpdate() {
+  private maybeSetup() {
     if (this.state.type === 'starting-up') {
-      taskFor(this.update).perform();
+      taskFor(this.setup).perform();
     }
   }
 
@@ -43,29 +64,50 @@ export default class LocalRealm extends Service {
   private state:
     | { type: 'starting-up' }
     | { type: 'checking-worker' }
-    | { type: 'requesting-handle'; worker: ServiceWorker }
-    | { type: 'empty' }
+    | {
+        type: 'requesting-handle';
+        worker: ServiceWorker;
+        response: Deferred<DirectoryHandleResponse>;
+      }
+    | { type: 'empty'; worker: ServiceWorker }
     | {
         type: 'available';
         handle: FileSystemDirectoryHandle;
+        worker: ServiceWorker;
       } = { type: 'starting-up' };
 
   get isAvailable(): boolean {
-    this.maybeUpdate();
+    this.maybeSetup();
     return this.state.type === 'available';
   }
 
   get isEmpty(): boolean {
-    this.maybeUpdate();
+    this.maybeSetup();
     return this.state.type === 'empty';
   }
 
   get isLoading(): boolean {
-    this.maybeUpdate();
+    this.maybeSetup();
     return this.state.type === 'starting-up';
   }
 
-  chooseDirectory(): void {}
+  chooseDirectory(): void {
+    taskFor(this.openDirectory).perform();
+  }
+
+  @restartableTask private async openDirectory() {
+    let handle = await showDirectoryPicker();
+    if (this.state.type !== 'empty') {
+      throw new Error(
+        `tried to chooseDirectory when we already have a local realm`
+      );
+    }
+    send(this.state.worker, {
+      type: 'setDirectoryHandle',
+      handle,
+    });
+    this.state = { type: 'available', handle, worker: this.state.worker };
+  }
 
   private async ensureWorker() {
     if (!navigator.serviceWorker.controller) {
@@ -74,7 +116,7 @@ export default class LocalRealm extends Service {
       });
       let registration = await navigator.serviceWorker.ready;
       while (registration.active?.state !== 'activated') {
-        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+        await timeout(10);
       }
     }
     return navigator.serviceWorker.controller!;

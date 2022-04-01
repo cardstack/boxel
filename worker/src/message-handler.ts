@@ -1,23 +1,24 @@
-import { isMessage, send } from './interfaces';
+import { isClientMessage, send } from './messages';
 import assertNever from 'assert-never';
 
 export class MessageHandler {
+  private fs: FileSystemDirectoryHandle | null = null;
+
   handle(event: ExtendableMessageEvent) {
     let { data, source } = event;
-    if (!isMessage(data) || !source) {
+    if (!isClientMessage(data) || !source) {
       return;
     }
     switch (data.type) {
       case 'requestDirectoryHandle':
         send(source, {
           type: 'directoryHandleResponse',
-          handle: null,
+          handle: this.fs,
         });
         return;
-      case 'directoryHandleResponse':
-        throw new Error(
-          `server received a message that should never come client: ${data.type}`
-        );
+      case 'setDirectoryHandle':
+        this.fs = data.handle;
+        return;
       default:
         throw assertNever(data);
     }

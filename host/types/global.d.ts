@@ -4,3 +4,5 @@ declare module 'runtime-spike/templates/*' {
   const tmpl: TemplateFactory;
   export default tmpl;
 }
+
+declare function showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
