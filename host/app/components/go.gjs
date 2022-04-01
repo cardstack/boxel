@@ -23,4 +23,6 @@ export default class extends Component {
     this.localRealm.chooseDirectory();
   }
 
+  // NEXT: use this.localRealm.fsHandle to render list of files
+
 }

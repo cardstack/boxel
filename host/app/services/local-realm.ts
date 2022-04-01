@@ -81,6 +81,13 @@ export default class LocalRealm extends Service {
     return this.state.type === 'available';
   }
 
+  get fsHandle(): FileSystemDirectoryHandle {
+    if (this.state.type !== 'available') {
+      throw new Error(`fsHandle is not available in state ${this.state.type}`);
+    }
+    return this.state.handle;
+  }
+
   get isEmpty(): boolean {
     this.maybeSetup();
     return this.state.type === 'empty';
