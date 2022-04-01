@@ -1176,7 +1176,7 @@
     ember-cli-version-checker "^5.1.2"
     semver "^7.3.5"
 
-"@embroider/addon-shim@^1.5.0":
+"@embroider/addon-shim@^1.2.0", "@embroider/addon-shim@^1.5.0":
   version "1.5.0"
   resolved "https://registry.yarnpkg.com/@embroider/addon-shim/-/addon-shim-1.5.0.tgz#639b8b394336a5ae26dd3e24ffc3d34d864ac5ce"
   integrity sha512-5zgwA/wTYjgn2Oo6hKRQhF/5Gnwb+hGhj/WXhZQa5yA7fRRdBV1tVMS7b7SLawZcmOhuWkyPwFdgsYtGBvDB0w==
@@ -1279,7 +1279,7 @@
   resolved "https://registry.yarnpkg.com/@embroider/hbs-loader/-/hbs-loader-1.5.0.tgz#a007573a591e6cdb18eb2077bb35bac5c9a58a39"
   integrity sha512-//fSJEE+FQaLDRpJKEP64pg5R4qQtL1oH/HKtaUK+nXPKHwYwaOXQegtrv3UJwFjuL9H84QbLLZxjKa8TnhTLg==
 
-"@embroider/macros@1.5.0", "@embroider/macros@^1.0.0":
+"@embroider/macros@1.5.0", "@embroider/macros@^1.0.0", "@embroider/macros@^1.2.0":
   version "1.5.0"
   resolved "https://registry.yarnpkg.com/@embroider/macros/-/macros-1.5.0.tgz#8c67666359e7814d91cdeac2fd96c896080473b3"
   integrity sha512-QqNsWmIJ8LvwWg+YAfB+nfcRZ49hAJNTJAKt2IDpgZDKa/FYj/Mp75UWfJ1BJvB3KUq50OQCOv4TZ3ZcU9h/TQ==
@@ -6004,6 +6004,15 @@ ember-resolver@^8.0.3:
     ember-cli-babel "^7.26.6"
     ember-cli-version-checker "^5.1.2"
     resolve "^1.20.0"
+
+ember-resources@^4.4.0:
+  version "4.4.0"
+  resolved "https://registry.yarnpkg.com/ember-resources/-/ember-resources-4.4.0.tgz#a3b85a0269c3523ba32a2a5ab15472c8e90a6a41"
+  integrity sha512-bMk3qdD7sgG33VY3Znri6z2p/XneITuT02zgFROS9flvUE124rnW/m9ND/fySt5EOE8URhS3IZ6MImIgI1dyCg==
+  dependencies:
+    "@ember/test-waiters" "^3.0.0"
+    "@embroider/addon-shim" "^1.2.0"
+    "@embroider/macros" "^1.2.0"
 
 ember-rfc176-data@^0.3.15, ember-rfc176-data@^0.3.17:
   version "0.3.17"

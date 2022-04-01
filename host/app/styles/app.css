@@ -1,0 +1,36 @@
+.editor {
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
+}
+.file-tree {
+  min-width: 8rem;
+}
+.file-tree + div {
+  flex-grow: 10;
+}
+
+.item.file:hover {
+  background-color: cornflowerblue;
+  color: white;
+  cursor: pointer;
+}
+.item.file:active {
+  background-color: blue;
+}
+
+.indent-0 {
+  padding-left: 0;
+}
+.indent-1 {
+  padding-left: 1rem;
+}
+.indent-2 {
+  padding-left: 2rem;
+}
+.indent-3 {
+  padding-left: 3rem;
+}
+.indent-4 {
+  padding-left: 4rem;
+}
