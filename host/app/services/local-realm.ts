@@ -2,12 +2,26 @@ import Service from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
+import { registerDestructor } from '@ember/destroyable';
 
 // we're reaching across packages in an odd way here, which works for a
 // type-only import but wouldn't necessarily work for runtime code
 import type { RequestDirectoryHandle } from '../../../worker/src/interfaces';
 
 export default class LocalRealm extends Service {
+  constructor(properties: object) {
+    super(properties);
+    let handler = (event: MessageEvent) => this.handleMessage(event);
+    navigator.serviceWorker.addEventListener('message', handler);
+    registerDestructor(this, () =>
+      navigator.serviceWorker.removeEventListener('message', handler)
+    );
+  }
+
+  private handleMessage(event: MessageEvent) {
+    console.log(event.data);
+  }
+
   @restartableTask private async update(): Promise<void> {
     await Promise.resolve();
     this.state = { type: 'checking-worker' };

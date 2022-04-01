@@ -13,7 +13,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
-    "noEmitOnError": true,
+    "noEmitOnError": false,
     "noEmit": true,
     "inlineSourceMap": true,
     "inlineSources": true,
@@ -21,20 +21,10 @@
     "module": "es6",
     "experimentalDecorators": true,
     "paths": {
-      "runtime-spike/tests/*": [
-        "tests/*"
-      ],
-      "runtime-spike/*": [
-        "app/*"
-      ],
-      "*": [
-        "types/*"
-      ]
+      "runtime-spike/tests/*": ["tests/*"],
+      "runtime-spike/*": ["app/*"],
+      "*": ["types/*"]
     }
   },
-  "include": [
-    "app/**/*",
-    "tests/**/*",
-    "types/**/*"
-  ]
+  "include": ["app/**/*", "tests/**/*", "types/**/*"]
 }
