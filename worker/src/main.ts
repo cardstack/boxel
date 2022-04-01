@@ -1,8 +1,10 @@
 import { FetchHandler } from './fetch';
+import { MessageHandler } from './message-handler';
 
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
 const fetchHandler = new FetchHandler(worker);
+const messageHandler = new MessageHandler();
 
 worker.addEventListener('install', () => {
   // force moving on to activation even if another service worker had control
@@ -16,12 +18,7 @@ worker.addEventListener('activate', () => {
 });
 
 worker.addEventListener('message', (event) => {
-  console.log(event);
-  (async () => {
-    for await (let item of event.data.handle.keys()) {
-      console.log(item);
-    }
-  })()
+  messageHandler.handle(event);
 });
 
 worker.addEventListener('fetch', (event: FetchEvent) => {
