@@ -86,15 +86,15 @@ export default class extends Component {
 
 }
 
-async function getDirectoryEntries(directoryHandle, dir = []) {
+async function getDirectoryEntries(directoryHandle, dir = ['.']) {
   let entries = [];
   for await (let [name, handle] of directoryHandle.entries()) {
-    entries.push({ name, handle, dir: dir.join('/'), indent: dir.length });
+    entries.push({ name, handle, path: [...dir, name].join('/'), indent: dir.length });
     if (handle.kind === 'directory') {
       entries.push(...await getDirectoryEntries(handle, [...dir, name]));
     }
   }
-  return entries;
+  return entries.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 const concat = helper(([...params]) => params.join(''));
