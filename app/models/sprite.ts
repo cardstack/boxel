@@ -92,7 +92,7 @@ export default class Sprite {
     };
   }
 
-  get canBeGarbageCollected() {
+  get canBeGarbageCollected(): boolean {
     return this.type === SpriteType.Removed && this.hidden;
   }
 
