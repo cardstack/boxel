@@ -52,15 +52,20 @@ export default class AnimationsService extends Service {
     this.freshlyRemoved.add(spriteModifier);
   }
 
-  _notifiedContextRendering = new Set();
+  didNotifyContextRendering = false;
   notifyContextRendering(animationContext: AnimationContext): void {
-    if (!this._notifiedContextRendering.has(animationContext)) {
-      this._notifiedContextRendering.add(animationContext);
-      this.eligibleContexts.add(animationContext);
+    this.eligibleContexts.add(animationContext);
 
-      // we can't schedule this, if we don't deal with it immediately the animations will already be gone
-      this.willTransition(animationContext);
+    // Trigger willTransition once per render cycle
+    if (!this.didNotifyContextRendering) {
+      this.didNotifyContextRendering = true;
 
+      // TODO: we are very likely doing too much measuring as this triggers measurements on all contexts.
+      //  We (probably) only need to measure for sibling contexts (and their children).
+      for (let context of this.eligibleContexts) {
+        // We can't schedule this, if we don't deal with it immediately the animations will already be gone
+        this.willTransition(context);
+      }
       scheduleOnce('afterRender', this, this.maybeTransition);
     }
   }
@@ -97,7 +102,6 @@ export default class AnimationsService extends Service {
     });
   }
 
-  // TODO: as this is called once per context, we could probably pass the context as an argument and forego the loop
   willTransition(context: AnimationContext): void {
     // TODO: what about intents
 
@@ -131,13 +135,15 @@ export default class AnimationsService extends Service {
     for (let spriteModifier of spriteModifiers) {
       let sprite = SpriteFactory.createIntermediateSprite(spriteModifier);
 
+      // We cannot know which animations we need to cancel until afterRender, so we will pause them so they don't
+      // progress after we did our measurements.
+      sprite.element.getAnimations().forEach((a) => a.pause());
       // TODO: we could leave these measurements to the SpriteFactory as they are unique to the SpriteType
-      let bounds = sprite.captureAnimatingBounds(context.element);
-      let styles = copyComputedStyle(sprite.element); // TODO: check if we need to pause the animation, is so we want to integrate this with captureAnimatingBounds to only pause/play once.
-      // console.log(styles['background-color']);
+      let bounds = sprite.captureAnimatingBounds(context.element, false);
+      let styles = copyComputedStyle(sprite.element);
       sprite.initialBounds = bounds;
       sprite.initialComputedStyle = styles;
-      sprite.element.getAnimations().forEach((a) => a.cancel());
+
       intermediateSprites.add(sprite);
     }
 
@@ -163,7 +169,7 @@ export default class AnimationsService extends Service {
 
   @restartableTask
   *maybeTransitionTask() {
-    this._notifiedContextRendering.clear();
+    this.didNotifyContextRendering = false;
 
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
     let intermediateSprites = this.intermediateSprites;
