@@ -1,40 +1,52 @@
 import Sprite from './sprite';
+import { defer } from 'rsvp';
 
 /**
  * Animates a sprite. By default, the animation is paused and must be started manually by calling `play()`.
  */
 export class SpriteAnimation {
-  animation: Animation;
+  animation!: Animation;
+
+  sprite: Sprite;
+  keyframes: Keyframe[];
+  keyframeAnimationOptions: KeyframeAnimationOptions;
+
+  _finished = defer();
 
   constructor(
     sprite: Sprite,
     keyframes: Keyframe[],
     keyframeAnimationOptions: KeyframeAnimationOptions
   ) {
-    this.animation = sprite.element.animate(
-      keyframes,
-      keyframeAnimationOptions
-    );
-    this.animation.pause();
-
-    // TODO: we likely don't need this anymore now that we measure beforehand
-    /*if (sprite.type === SpriteType.Removed && keyframes.length) {
-      let lastKeyframe: Keyframe = keyframes[keyframes.length - 1];
-      for (let [property, value] of Object.entries(lastKeyframe)) {
-        // TODO: fix typescript issue, lib.dom.d.ts seems to only accept numbers here
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        sprite.element.style[property] = value;
-        console.log(property, value);
-      }
-    }*/
+    this.sprite = sprite;
+    this.keyframes = keyframes;
+    this.keyframeAnimationOptions = keyframeAnimationOptions;
   }
 
   play(): void {
+    if (!this.animation) {
+      this.animation = this.sprite.element.animate(
+        this.keyframes,
+        this.keyframeAnimationOptions
+      );
+      this.animation.finished
+        .then(() => this._finished.resolve(this.animation))
+        .catch((error) => {
+          if (
+            error instanceof DOMException &&
+            error.message === 'The user aborted a request.'
+          ) {
+            console.warn(`A sprite animation's web animation was cancelled`);
+            return;
+          }
+
+          throw error;
+        });
+    }
     this.animation.play();
   }
 
   get finished(): Promise<Animation> {
-    return this.animation.finished;
+    return this._finished.promise as Promise<Animation>;
   }
 }
