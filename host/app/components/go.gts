@@ -19,12 +19,12 @@ export default class extends Component {
         {{#if this.localRealm.isAvailable}}
           {{#each this.listing.value as |entry|}}
             {{#if (eq entry.handle.kind 'file')}}
-              <div class="item file {{concat 'indent-' entry.indent}}"
+              <div class="item file indent-{{entry.indent}}"
                    {{on "click" (fn this.open entry)}}>
                 {{entry.name}}
               </div>
             {{else}}
-              <div class="item directory {{concat 'indent-' entry.indent}}">
+              <div class="item directory indent-{{entry.indent}}">
                 {{entry.name}}/
               </div>
             {{/if}}
