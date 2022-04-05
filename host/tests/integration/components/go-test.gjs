@@ -13,6 +13,6 @@ module('Integration | Component | go', function (hooks) {
 
   test('it renders', async function (assert) {
     await renderComponent(<template><Go/></template>)
-    assert.strictEqual(this.element.textContent!.trim(), 'Go');
+    assert.strictEqual(this.element.textContent.trim(), 'Go');
   });
 });

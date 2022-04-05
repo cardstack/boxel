@@ -1,5 +1,5 @@
 import { on } from '@ember/modifier';
-import Component from '@glimmer/component';
+import Component from '@glint/environment-ember-loose/glimmer-component';
 import { action } from '@ember/object';
 import monaco from '../modifiers/monaco';
 import { service } from '@ember/service';
@@ -7,24 +7,70 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { trackedFunction } from 'ember-resources';
-import { helper } from '@ember/component/helper';
+import Helper, { helper } from '@glint/environment-ember-loose/ember-component/helper';
 import { fn } from '@ember/helper';
 import * as monacoEditor from 'monaco-editor';
+import LocalRealm from '../services/local-realm';
 
+interface Entry {
+  name: string;
+  handle: FileSystemDirectoryHandle | FileSystemFileHandle;
+  path: string;
+  indent: number
+}
 
-export default class extends Component {
+async function getDirectoryEntries(directoryHandle: FileSystemDirectoryHandle, dir = ['.']): Promise<Entry[]> {
+  let entries: Entry[] = [];
+  for await (let [name, handle] of (directoryHandle as any as AsyncIterable<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>)) {
+    entries.push({ name, handle, path: [...dir, name].join('/'), indent: dir.length });
+    if (handle.kind === 'directory') {
+      entries.push(...await getDirectoryEntries(handle, [...dir, name]));
+    }
+  }
+  return entries.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function getEditorLanguage(fileName: string) {
+  const languages = monacoEditor.languages.getLanguages();
+  let extension = '.' + fileName.split('.').pop();
+  let language = languages.find(lang => {
+    if (!lang.extensions || lang.extensions.length === 0) {
+      return;
+    }
+    return lang.extensions.find(ext => ext === extension ? lang : null);
+  });
+
+  if (!language) {
+    return 'plaintext';
+  }
+  return language.id;
+}
+
+const eq = helper(<T>([a,b]: [T, T]): boolean => a === b);
+
+class FakePageTitle extends Helper<{ PositionalArgs: [string]}> {}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    Go: typeof Go;
+     'page-title': typeof FakePageTitle
+   }
+}
+
+export default class Go extends Component {
   <template>
     <div class="editor">
       <div class="file-tree">
         {{#if this.localRealm.isAvailable}}
+          <button {{on "click" this.closeRealm}}>Close local realm</button>
           {{#each this.listing.value as |entry|}}
             {{#if (eq entry.handle.kind 'file')}}
-              <div class="item file {{concat 'indent-' entry.indent}}"
+              <div class="item file indent-{{entry.indent}}"
                    {{on "click" (fn this.open entry)}}>
                 {{entry.name}}
               </div>
             {{else}}
-              <div class="item directory {{concat 'indent-' entry.indent}}">
+              <div class="item directory indent-{{entry.indent}}">
                 {{entry.name}}/
               </div>
             {{/if}}
@@ -41,16 +87,23 @@ export default class extends Component {
     </div>
   </template>
 
-  @service localRealm;
-  @tracked selectedFile;
+  @service declare localRealm: LocalRealm;
+  @tracked selectedFile: Entry | undefined;
 
   @action
   openRealm() {
     this.localRealm.chooseDirectory();
   }
+  @action
+  closeRealm() {
+    if (this.localRealm.isAvailable) {
+      this.localRealm.close();
+      this.selectedFile = undefined;
+    }
+  }
 
   @action
-  open(handle) {
+  open(handle: Entry) {
     this.selectedFile = handle;
     taskFor(this.openFile).perform(handle);
   }
@@ -62,7 +115,7 @@ export default class extends Component {
     return getDirectoryEntries(this.localRealm.fsHandle)
   });
 
-  @restartableTask async openFile(entry) {
+  @restartableTask async openFile(entry: Entry) {
     let { handle } = entry;
     if (handle.kind !== 'file') {
       throw new Error(`Cannot open the directory ${handle.name} in monaco`);
@@ -70,8 +123,8 @@ export default class extends Component {
     let file = await handle.getFile();
     let language = getEditorLanguage(file.name);
     let reader = new FileReader();
-    let data = await new Promise((resolve, reject) => {
-      reader.onload = () => resolve(reader.result);
+    let data = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(reader.result as string);
       reader.onerror = reject;
       reader.readAsText(file);
     });
@@ -84,41 +137,3 @@ export default class extends Component {
     model.setValue(data);
   }
 }
-
-function getEditorLanguage(fileName) {
-  // note: if we only care about a couple of the languages,
-  // a conditional would be sufficient instead of this
-  const languages = monacoEditor.languages.getLanguages();
-  let extension = '.' + fileName.split('.').pop();
-  let language = languages.find(lang => {
-    if (!lang.extensions || lang.extensions.length === 0) {
-      return;
-    }
-    return lang.extensions.find(ext => ext === extension ? lang : null);
-  });
-
-  if (!language) {
-    return 'plaintext';
-  }
-  return language.id;
-}
-
-async function getDirectoryEntries(directoryHandle, dir = ['.']) {
-  let entries = [];
-  const EXCLUDED_DIRS = ['dist', 'tmp', 'node_modules', '.vscode', '.git'];
-  const EXCLUDED_FILES = ['.gitkeep'];
-  for await (let [name, handle] of directoryHandle.entries()) {
-    if (EXCLUDED_DIRS.includes(name)) {
-      continue;
-    }
-    entries.push({ name, handle, path: [...dir, name].join('/'), indent: dir.length });
-    if (handle.kind === 'directory') {
-      entries.push(...await getDirectoryEntries(handle, [...dir, name]));
-      entries = entries.filter(entry => !EXCLUDED_FILES.includes(entry.name));
-    }
-  }
-  return entries.sort((a, b) => a.path.localeCompare(b.path));
-}
-
-const concat = helper(([...params]) => params.join(''));
-const eq = helper(([a, b]) => a === b);
