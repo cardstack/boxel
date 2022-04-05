@@ -102,6 +102,17 @@ export default class LocalRealm extends Service {
     taskFor(this.openDirectory).perform();
   }
 
+  close(): void {
+    if (this.state.type !== 'available') {
+      throw new Error(`Cannot close local realm in state ${this.state.type}`);
+    }
+    send(this.state.worker, {
+      type: 'setDirectoryHandle',
+      handle: null,
+    });
+    this.state = { type: 'empty', worker: this.state.worker };
+  }
+
   @restartableTask private async openDirectory() {
     let handle = await showDirectoryPicker();
     if (this.state.type !== 'empty') {
