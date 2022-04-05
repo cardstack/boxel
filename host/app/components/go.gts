@@ -46,6 +46,7 @@ export default class Go extends Component {
     <div class="editor">
       <div class="file-tree">
         {{#if this.localRealm.isAvailable}}
+          <button {{on "click" this.closeRealm}}>Close local realm</button> 
           {{#each this.listing.value as |entry|}}
             {{#if (eq entry.handle.kind 'file')}}
               <div class="item file indent-{{entry.indent}}"
@@ -76,6 +77,13 @@ export default class Go extends Component {
   @action 
   openRealm() {
     this.localRealm.chooseDirectory();
+  }
+  @action
+  closeRealm() {
+    if (this.localRealm.isAvailable) {
+      this.localRealm.close();
+      this.selectedFile = undefined;
+    }
   }
 
   @action

@@ -12,7 +12,7 @@ export interface DirectoryHandleResponse {
 
 export interface SetDirectoryHandle {
   type: 'setDirectoryHandle';
-  handle: FileSystemDirectoryHandle;
+  handle: FileSystemDirectoryHandle | null;
 }
 
 export type ClientMessage = RequestDirectoryHandle | SetDirectoryHandle;
@@ -38,7 +38,11 @@ export function isClientMessage(message: unknown): message is ClientMessage {
     case 'requestDirectoryHandle':
       return true;
     case 'setDirectoryHandle':
-      return (message as any).handle instanceof FileSystemDirectoryHandle;
+      return (
+        'handle' in message &&
+        ((message as any).handle === null ||
+          (message as any).handle instanceof FileSystemDirectoryHandle)
+      );
     default:
       return false;
   }
