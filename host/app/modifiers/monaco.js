@@ -9,11 +9,6 @@ export default modifier(
       language: 'javascript',
     });
 
-    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
-      noSemanticValidation: false,
-      noSyntaxValidation: false,
-    });
-
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
       target: monaco.languages.typescript.ScriptTarget.ES2020,
       module: monaco.languages.typescript.ModuleKind.ES6,
