@@ -68,18 +68,7 @@ export default class extends Component {
       throw new Error(`Cannot open the directory ${handle.name} in monaco`);
     }
     let file = await handle.getFile();
-
     let language = getEditorLanguage(file.name);
-    // if (file.type) {
-    //   language = file.type.split('/')[1];
-    // } else if (file.name.endsWith('.ts')) {
-    //   language = 'typescript';
-    // } else if (file.name.endsWith('.hbs')) {
-    //   language = 'handlebars';
-    // } else {
-    //   language = 'plaintext';
-    // }
-
     let reader = new FileReader();
     let data = await new Promise((resolve, reject) => {
       reader.onload = () => resolve(reader.result);
@@ -97,6 +86,8 @@ export default class extends Component {
 }
 
 function getEditorLanguage(fileName) {
+  // note: if we only care about a couple of the languages,
+  // a conditional would be sufficient instead of this
   const languages = monacoEditor.languages.getLanguages();
   let extension = '.' + fileName.split('.').pop();
   let language = languages.find(lang => {
