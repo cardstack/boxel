@@ -21,10 +21,16 @@ interface Entry {
 
 async function getDirectoryEntries(directoryHandle: FileSystemDirectoryHandle, dir = ['.']): Promise<Entry[]> {
   let entries: Entry[] = [];
+  const EXCLUDED_DIRS = ['dist', 'tmp', 'node_modules', '.vscode', '.git'];
+  const EXCLUDED_FILES = ['.gitkeep'];
   for await (let [name, handle] of (directoryHandle as any as AsyncIterable<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>)) {
+    if (EXCLUDED_DIRS.includes(name)) {
+      continue;
+    }
     entries.push({ name, handle, path: [...dir, name].join('/'), indent: dir.length });
     if (handle.kind === 'directory') {
       entries.push(...await getDirectoryEntries(handle, [...dir, name]));
+      entries = entries.filter(entry => !EXCLUDED_FILES.includes(entry.name));
     }
   }
   return entries.sort((a, b) => a.path.localeCompare(b.path));

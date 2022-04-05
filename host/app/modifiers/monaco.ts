@@ -10,7 +10,7 @@ export default modifier(function monacoModifier(element) {
 
   monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
     target: monaco.languages.typescript.ScriptTarget.ES2020,
-    module: monaco.languages.typescript.ModuleKind.ES6,
+    module: monaco.languages.typescript.ModuleKind.ES2015,
     moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
     allowJs: true,
     allowSyntheticDefaultImports: true,
