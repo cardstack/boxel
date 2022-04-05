@@ -44,7 +44,7 @@ export default class extends Component {
   @service localRealm;
   @tracked selectedFile;
 
-  @action 
+  @action
   openRealm() {
     this.localRealm.chooseDirectory();
   }
@@ -68,6 +68,18 @@ export default class extends Component {
       throw new Error(`Cannot open the directory ${handle.name} in monaco`);
     }
     let file = await handle.getFile();
+
+    let language = getEditorLanguage(file.name);
+    // if (file.type) {
+    //   language = file.type.split('/')[1];
+    // } else if (file.name.endsWith('.ts')) {
+    //   language = 'typescript';
+    // } else if (file.name.endsWith('.hbs')) {
+    //   language = 'handlebars';
+    // } else {
+    //   language = 'plaintext';
+    // }
+
     let reader = new FileReader();
     let data = await new Promise((resolve, reject) => {
       reader.onload = () => resolve(reader.result);
@@ -79,19 +91,39 @@ export default class extends Component {
     // way we are editing the first one
     let [ model ] = monacoEditor.editor.getModels();
 
-    // TODO we'll probably also wanna set the code language too based on the MIME
-    // type/file extension
+    monacoEditor.editor.setModelLanguage(model, language);
     model.setValue(data);
   }
+}
 
+function getEditorLanguage(fileName) {
+  const languages = monacoEditor.languages.getLanguages();
+  let extension = '.' + fileName.split('.').pop();
+  let language = languages.find(lang => {
+    if (!lang.extensions || lang.extensions.length === 0) {
+      return;
+    }
+    return lang.extensions.find(ext => ext === extension ? lang : null);
+  });
+
+  if (!language) {
+    return 'plaintext';
+  }
+  return language.id;
 }
 
 async function getDirectoryEntries(directoryHandle, dir = ['.']) {
   let entries = [];
+  const EXCLUDED_DIRS = ['dist', 'tmp', 'node_modules', '.vscode', '.git'];
+  const EXCLUDED_FILES = ['.gitkeep'];
   for await (let [name, handle] of directoryHandle.entries()) {
+    if (EXCLUDED_DIRS.includes(name)) {
+      continue;
+    }
     entries.push({ name, handle, path: [...dir, name].join('/'), indent: dir.length });
     if (handle.kind === 'directory') {
       entries.push(...await getDirectoryEntries(handle, [...dir, name]));
+      entries = entries.filter(entry => !EXCLUDED_FILES.includes(entry.name));
     }
   }
   return entries.sort((a, b) => a.path.localeCompare(b.path));
