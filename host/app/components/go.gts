@@ -8,7 +8,7 @@ import { fn } from '@ember/helper';
 import * as monacoEditor from 'monaco-editor';
 import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
-import { file, isReady } from '../resources/file';
+import { file } from '../resources/file';
 
 function getEditorLanguage(fileName: string) {
   const languages = monacoEditor.languages.getLanguages();
@@ -60,7 +60,7 @@ export default class Go extends Component {
           <button {{on "click" this.openRealm}}>Open a local realm</button>
         {{/if}}
       </div>
-      {{#if (isReady this.openFile) }}
+      {{#if this.openFile.ready }}
         <div {{monaco content=this.openFile.content language=(getEditorLanguage this.openFile.name) }}></div>
       {{/if}}
     </div>

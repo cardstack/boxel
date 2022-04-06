@@ -6,7 +6,17 @@ interface Args {
   named: { handle: FileSystemFileHandle | undefined };
 }
 
-export class FileResource extends Resource<Args> {
+type FileResource =
+  | {
+      ready: false;
+    }
+  | {
+      ready: true;
+      content: string;
+      name: string;
+    };
+
+class _FileResource extends Resource<Args> {
   private handle: FileSystemFileHandle | undefined;
   @tracked content: string | undefined;
   @tracked ready = false;
@@ -25,10 +35,6 @@ export class FileResource extends Resource<Args> {
 
   get name() {
     return this.handle?.name;
-  }
-
-  isReady(): this is FileResource & { content: string; name: string } {
-    return this.ready;
   }
 
   private async read() {
@@ -51,14 +57,8 @@ export class FileResource extends Resource<Args> {
 export function file(
   parent: object,
   handle: () => FileSystemFileHandle | undefined
-) {
-  return useResource(parent, FileResource, () => ({
+): FileResource {
+  return useResource(parent, _FileResource, () => ({
     named: { handle: handle() },
-  }));
-}
-
-export function isReady(
-  file: FileResource
-): file is FileResource & { content: string; name: string } {
-  return file.ready;
+  })) as FileResource;
 }
