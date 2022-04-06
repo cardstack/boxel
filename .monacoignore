@@ -1,0 +1,12 @@
+.git
+.vscode
+.DS_Store
+
+# compiled output
+/dist/
+/tmp/
+/public/worker.js
+
+# dependencies
+/bower_components/
+/node_modules/

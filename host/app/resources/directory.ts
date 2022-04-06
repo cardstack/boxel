@@ -1,6 +1,8 @@
 import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
+import { parse } from 'parse-gitignore';
+import { readFile } from '@cardstack/worker/src/util';
 
 interface Args {
   named: { dir: FileSystemDirectoryHandle | null };
@@ -8,15 +10,14 @@ interface Args {
 
 async function getDirectoryEntries(
   directoryHandle: FileSystemDirectoryHandle,
-  dir = ['.']
+  dir = ['.'],
+  ignoredNames: string[] = []
 ): Promise<Entry[]> {
   let entries: Entry[] = [];
-  const EXCLUDED_DIRS = ['dist', 'tmp', 'node_modules', '.vscode', '.git'];
-  const EXCLUDED_FILES = ['.gitkeep'];
   for await (let [name, handle] of directoryHandle as any as AsyncIterable<
     [string, FileSystemDirectoryHandle | FileSystemFileHandle]
   >) {
-    if (EXCLUDED_DIRS.includes(name)) {
+    if (ignoredNames.includes(name)) {
       continue;
     }
     entries.push({
@@ -26,8 +27,9 @@ async function getDirectoryEntries(
       indent: dir.length,
     });
     if (handle.kind === 'directory') {
-      entries.push(...(await getDirectoryEntries(handle, [...dir, name])));
-      entries = entries.filter((entry) => !EXCLUDED_FILES.includes(entry.name));
+      entries.push(
+        ...(await getDirectoryEntries(handle, [...dir, name], ignoredNames))
+      );
     }
   }
   return entries.sort((a, b) => a.path.localeCompare(b.path));
@@ -58,7 +60,8 @@ export class DirectoryResource extends Resource<Args> {
 
   private async readdir() {
     if (this.dir) {
-      this.entries = await getDirectoryEntries(this.dir);
+      let ignoredNames = await getIgnoredNames(this.dir);
+      this.entries = await getDirectoryEntries(this.dir, ['.'], ignoredNames);
     } else {
       this.entries = [];
     }
@@ -72,4 +75,25 @@ export function directory(
   return useResource(parent, DirectoryResource, () => ({
     named: { dir: dir() },
   }));
+}
+
+async function getIgnoredNames(
+  fileDir: FileSystemDirectoryHandle
+): Promise<string[] | []> {
+  let fileHandle;
+
+  try {
+    fileHandle = await fileDir.getFileHandle('.monacoignore');
+  } catch (e) {
+    try {
+      fileHandle = await fileDir.getFileHandle('.gitignore');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  let content = await readFile(fileHandle);
+  return parse(content).patterns.map((name) =>
+    name.replace(/^\/?(.*?)\/?$/, '$1')
+  );
 }
