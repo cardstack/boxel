@@ -3,38 +3,12 @@ import Component from '@glint/environment-ember-loose/glimmer-component';
 import { action } from '@ember/object';
 import monaco from '../modifiers/monaco';
 import { service } from '@ember/service';
-import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
-import { trackedFunction } from 'ember-resources';
-import { helper } from '@glint/environment-ember-loose/ember-component/helper';
 import { fn } from '@ember/helper';
 import * as monacoEditor from 'monaco-editor';
 import LocalRealm from '../services/local-realm';
-
-interface Entry {
-  name: string;
-  handle: FileSystemDirectoryHandle | FileSystemFileHandle;
-  path: string;
-  indent: number
-}
-
-async function getDirectoryEntries(directoryHandle: FileSystemDirectoryHandle, dir = ['.']): Promise<Entry[]> {
-  let entries: Entry[] = [];
-  const EXCLUDED_DIRS = ['dist', 'tmp', 'node_modules', '.vscode', '.git'];
-  const EXCLUDED_FILES = ['.gitkeep'];
-  for await (let [name, handle] of (directoryHandle as any as AsyncIterable<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>)) {
-    if (EXCLUDED_DIRS.includes(name)) {
-      continue;
-    }
-    entries.push({ name, handle, path: [...dir, name].join('/'), indent: dir.length });
-    if (handle.kind === 'directory') {
-      entries.push(...await getDirectoryEntries(handle, [...dir, name]));
-      entries = entries.filter(entry => !EXCLUDED_FILES.includes(entry.name));
-    }
-  }
-  return entries.sort((a, b) => a.path.localeCompare(b.path));
-}
+import { directory, Entry } from '../resources/directory';
+import { file, isReady } from '../resources/file';
 
 function getEditorLanguage(fileName: string) {
   const languages = monacoEditor.languages.getLanguages();
@@ -52,7 +26,9 @@ function getEditorLanguage(fileName: string) {
   return language.id;
 }
 
-const eq = helper(<T>([a,b]: [T, T]): boolean => a === b);
+function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
+  return a === b;
+}
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
@@ -66,7 +42,7 @@ export default class Go extends Component {
       <div class="file-tree">
         {{#if this.localRealm.isAvailable}}
           <button {{on "click" this.closeRealm}}>Close local realm</button>
-          {{#each this.listing.value as |entry|}}
+          {{#each this.listing.entries as |entry|}}
             {{#if (eq entry.handle.kind 'file')}}
               <div class="item file indent-{{entry.indent}}"
                    {{on "click" (fn this.open entry)}}>
@@ -84,8 +60,8 @@ export default class Go extends Component {
           <button {{on "click" this.openRealm}}>Open a local realm</button>
         {{/if}}
       </div>
-      {{#if this.selectedFile}}
-        <div {{monaco}}></div>
+      {{#if (isReady this.openFile) }}
+        <div {{monaco content=this.openFile.content language=(getEditorLanguage this.openFile.name) }}></div>
       {{/if}}
     </div>
   </template>
@@ -97,6 +73,7 @@ export default class Go extends Component {
   openRealm() {
     this.localRealm.chooseDirectory();
   }
+
   @action
   closeRealm() {
     if (this.localRealm.isAvailable) {
@@ -108,35 +85,18 @@ export default class Go extends Component {
   @action
   open(handle: Entry) {
     this.selectedFile = handle;
-    taskFor(this.openFile).perform(handle);
   }
 
-  listing = trackedFunction(this, async () => {
-    if (!this.localRealm.isAvailable) {
-      return [];
+  listing = directory(this, () => this.localRealm.isAvailable ? this.localRealm.fsHandle : null)
+
+  openFile = file(this, () => {
+    if (this.selectedFile) {
+      let { handle } = this.selectedFile;
+      if (handle.kind !== 'file') {
+        throw new Error(`Cannot open the directory ${handle.name} in monaco`);
+      }
+      return handle;
     }
-    return getDirectoryEntries(this.localRealm.fsHandle)
+    return undefined;
   });
-
-  @restartableTask async openFile(entry: Entry) {
-    let { handle } = entry;
-    if (handle.kind !== 'file') {
-      throw new Error(`Cannot open the directory ${handle.name} in monaco`);
-    }
-    let file = await handle.getFile();
-    let language = getEditorLanguage(file.name);
-    let reader = new FileReader();
-    let data = await new Promise<string>((resolve, reject) => {
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsText(file);
-    });
-
-    // Don't really understand what it means to have multiple models--but either
-    // way we are editing the first one
-    let [ model ] = monacoEditor.editor.getModels();
-
-    monacoEditor.editor.setModelLanguage(model, language);
-    model.setValue(data);
-  }
 }
