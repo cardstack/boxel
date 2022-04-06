@@ -16,7 +16,7 @@ declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
     'page-title': new () => Helper<{
       PositionalArgs: [string];
-      Return: string;
+      Return: void;
     }>;
   }
 }

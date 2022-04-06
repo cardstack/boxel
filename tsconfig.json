@@ -21,10 +21,10 @@
     "module": "es6",
     "experimentalDecorators": true,
     "paths": {
-      "runtime-spike/tests/*": ["tests/*"],
-      "runtime-spike/*": ["app/*"],
-      "*": ["types/*"]
+      "runtime-spike/tests/*": ["host/tests/*"],
+      "runtime-spike/*": ["host/app/*"],
+      "*": ["host/types/*"]
     }
   },
-  "include": ["app/**/*", "tests/**/*", "types/**/*"]
+  "include": ["host/app/**/*", "host/tests/**/*", "host/types/**/*"]
 }

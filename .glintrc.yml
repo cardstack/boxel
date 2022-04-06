@@ -3,4 +3,4 @@ environment:
   - ember-template-imports
 
 include:
-  - app/**
+  - host/app/**

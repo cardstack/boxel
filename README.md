@@ -1,4 +1,13 @@
-Rough work-in-progress
+# Rough work-in-progress
 
-- for Glint editor support, you need to open the `host` directory as a separate vscode workspace.
-- add the [Glint](https://marketplace.visualstudio.com/items?itemName=typed-ember.glint-vscode) vscode extension
+## Setup
+
+- you will want the [Glint](https://marketplace.visualstudio.com/items?itemName=typed-ember.glint-vscode) vscode extension
+
+## Orientation
+
+`host` is the ember app
+
+`worker` is a separate build for the service worker
+
+The top-level of the monorepo contains typescript & glint setting for the ember app, because Glint doesn't like monorepos.
