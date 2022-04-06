@@ -1,6 +1,5 @@
 import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
-import { registerDestructor } from '@ember/destroyable';
 
 interface Args {
   named: { handle: FileSystemFileHandle | undefined };
@@ -21,15 +20,9 @@ class _FileResource extends Resource<Args> {
   @tracked content: string | undefined;
   @tracked ready = false;
 
-  private interval: ReturnType<typeof setInterval>;
-
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    registerDestructor(this, () => {
-      clearInterval(this.interval);
-    });
     this.handle = args.named.handle;
-    this.interval = setInterval(() => this.read(), 1000);
     this.read();
   }
 
