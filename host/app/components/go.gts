@@ -92,7 +92,8 @@ export default class Go extends Component {
 
   @action
   contentChanged(content: string) {
-    // TODO we should auto save the user's changes
+    // TODO we should auto save the user's changes if `content` is different
+    // than `this.openFile.content`
   }
 
   listing = directory(this, () => this.localRealm.isAvailable ? this.localRealm.fsHandle : null)
