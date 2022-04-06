@@ -71,7 +71,6 @@ export default class Go extends Component {
 
   @service declare localRealm: LocalRealm;
   @tracked selectedFile: Entry | undefined;
-  @tracked content: string | undefined;
 
   @action
   openRealm() {
@@ -94,7 +93,6 @@ export default class Go extends Component {
   @action
   contentChanged(content: string) {
     // TODO we should auto save the user's changes
-    this.content = content;
   }
 
   listing = directory(this, () => this.localRealm.isAvailable ? this.localRealm.fsHandle : null)
