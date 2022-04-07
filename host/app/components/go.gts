@@ -9,6 +9,7 @@ import * as monacoEditor from 'monaco-editor';
 import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
+import Preview from './preview';
 
 function getEditorLanguage(fileName: string) {
   const languages = monacoEditor.languages.getLanguages();
@@ -24,6 +25,10 @@ function getEditorLanguage(fileName: string) {
     return 'plaintext';
   }
   return language.id;
+}
+
+function isRunnable(filename: string): boolean {
+  return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
 }
 
 function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
@@ -64,6 +69,11 @@ export default class Go extends Component {
         <div {{monaco content=this.openFile.content
                       language=(getEditorLanguage this.openFile.name)
                       contentChanged=this.contentChanged}}></div>
+        <div>
+          {{#if (isRunnable this.openFile.name)}}
+            <Preview @filename={{this.openFile.name}} />
+          {{/if}}
+        </div>
       {{/if}}              
     </div>
   </template>

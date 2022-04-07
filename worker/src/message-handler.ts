@@ -2,7 +2,13 @@ import { isClientMessage, send } from './messages';
 import assertNever from 'assert-never';
 
 export class MessageHandler {
-  private fs: FileSystemDirectoryHandle | null = null;
+  fs: FileSystemDirectoryHandle | null = null;
+
+  constructor(worker: ServiceWorkerGlobalScope) {
+    worker.addEventListener('message', (event) => {
+      this.handle(event);
+    });
+  }
 
   handle(event: ExtendableMessageEvent) {
     let { data, source } = event;
