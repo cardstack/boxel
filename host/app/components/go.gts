@@ -51,6 +51,7 @@ export default class Go extends Component<Args> {
     <div class="editor">
       <div class="file-tree">
         <FileTree @localRealm={{this.localRealm}}
+                  @initialFile={{this.args.initialFile}}
                   @onSelectedFile={{this.onSelectedFile}} />
       </div>
       {{#if this.openFile.ready}}
