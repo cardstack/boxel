@@ -20,7 +20,5 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-yarn-
       - run: yarn --prefer-offline
-      - name: Glint host package
       - run: cd ./host && yarn glint
-      - name: Type-check worker package
       - run: cd ./worker && yarn tsc
