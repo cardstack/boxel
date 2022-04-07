@@ -9,6 +9,8 @@ import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import Preview from './preview';
 import FileTree from './file-tree';
+import { task, } from 'ember-concurrency';
+import { taskFor } from 'ember-concurrency-ts';
 
 function getEditorLanguage(fileName: string) {
   const languages = monacoEditor.languages.getLanguages();
@@ -36,7 +38,15 @@ declare module '@glint/environment-ember-loose/registry' {
    }
 }
 
-export default class Go extends Component {
+interface Args {
+
+  Args: {
+    initialFile: string | undefined;
+    onSelectedFile: (filename: string | undefined) => void;
+  }
+}
+
+export default class Go extends Component<Args> {
   <template>
     <div class="editor">
       <div class="file-tree">
@@ -59,9 +69,40 @@ export default class Go extends Component {
   @service declare localRealm: LocalRealm;
   @tracked selectedFile: Entry | undefined;
 
+  constructor(owner: unknown, args: Args ) {
+    super(owner, args as any); // unsure if the glint wrapped component's types are lining up, `Args` doesn't work here
+    if (this.args.initialFile) {
+      taskFor(this.loadInitialFile).perform(this.args.initialFile);
+    }
+  }
+
+  @task private async loadInitialFile(path: string) {
+    await Promise.resolve();
+    await this.localRealm.startedUp;
+    if (this.localRealm.isAvailable) {
+      let handle: FileSystemFileHandle | undefined;
+      try {
+        handle = await this.localRealm.fsHandle.getFileHandle(path);
+      } catch (err: unknown) {
+        if ((err as DOMException).name === 'NotFoundError') {
+          console.error(`${path} was not found in the local realm`);
+          return;
+        }
+        throw err;
+      }
+      this.selectedFile = {
+        handle,
+        name: handle.name,
+        path,
+        indent: path.split('/').length
+      }
+    }
+  }
+
   @action
   onSelectedFile(entry: Entry | undefined) {
     this.selectedFile = entry;
+    this.args.onSelectedFile(entry?.name);
   }
 
   @action

@@ -10,6 +10,7 @@ import {
   send,
 } from '@cardstack/worker/src/messages';
 import { timeout, Deferred } from '@cardstack/worker/src/util';
+import { TaskInstance } from 'ember-resources';
 
 export default class LocalRealm extends Service {
   constructor(properties: object) {
@@ -96,6 +97,11 @@ export default class LocalRealm extends Service {
   get isLoading(): boolean {
     this.maybeSetup();
     return this.state.type === 'starting-up';
+  }
+
+  get startedUp(): TaskInstance<void> | null {
+    this.maybeSetup();
+    return taskFor(this.setup).last;
   }
 
   chooseDirectory(): void {
