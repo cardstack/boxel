@@ -10,10 +10,7 @@ import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 
-function getEditorLanguage(fileName: string | undefined) {
-  if (!fileName) {
-    return undefined;
-  }
+function getEditorLanguage(fileName: string) {
   const languages = monacoEditor.languages.getLanguages();
   let extension = '.' + fileName.split('.').pop();
   let language = languages.find(lang => {
@@ -63,9 +60,11 @@ export default class Go extends Component {
           <button {{on "click" this.openRealm}}>Open a local realm</button>
         {{/if}}
       </div>
-      <div {{monaco content=this.openFile.content
-                    language=(getEditorLanguage this.openFile.name)
-                    contentChanged=this.contentChanged}}></div>
+      {{#if this.openFile.ready}}
+        <div {{monaco content=this.openFile.content
+                      language=(getEditorLanguage this.openFile.name)
+                      contentChanged=this.contentChanged}}></div>
+      {{/if}}              
     </div>
   </template>
 
@@ -94,6 +93,7 @@ export default class Go extends Component {
   contentChanged(content: string) {
     // TODO we should auto save the user's changes if `content` is different
     // than `this.openFile.content`
+    console.log('contentchanged', content);
   }
 
   listing = directory(this, () => this.localRealm.isAvailable ? this.localRealm.fsHandle : null)
