@@ -1,5 +1,7 @@
 import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
+import { restartableTask } from 'ember-concurrency';
+import { taskFor } from 'ember-concurrency-ts';
 
 interface Args {
   named: { handle: FileSystemFileHandle | undefined };
@@ -13,6 +15,7 @@ type FileResource =
       ready: true;
       content: string;
       name: string;
+      write(content: string): void;
     };
 
 class _FileResource extends Resource<Args> {
@@ -44,6 +47,20 @@ class _FileResource extends Resource<Args> {
       this.content = undefined;
       this.ready = false;
     }
+  }
+
+  async write(content: string) {
+    taskFor(this.doWrite).perform(content);
+  }
+
+  @restartableTask private async doWrite(content: string) {
+    if (!this.handle) {
+      throw new Error(`can't write to not ready FileResource`);
+    }
+    // TypeScript seems to lack types for the writable stream features
+    let stream = await (this.handle as any).createWritable();
+    await stream.write(content);
+    await stream.close();
   }
 }
 
