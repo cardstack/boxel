@@ -16,6 +16,8 @@ interface Signature {
 export default class Monaco extends Modifier<Signature> {
   private model: monaco.editor.ITextModel | undefined;
   private editor: monaco.editor.IStandaloneCodeEditor | undefined;
+  private lastLanguage: string | undefined;
+  private lastContent: string | undefined;
 
   modify(
     element: HTMLElement,
@@ -23,8 +25,12 @@ export default class Monaco extends Modifier<Signature> {
     { content, language, contentChanged }: Signature['NamedArgs']
   ) {
     if (this.model && content != null) {
-      monaco.editor.setModelLanguage(this.model, language);
-      this.model.setValue(content);
+      if (language !== this.lastLanguage) {
+        monaco.editor.setModelLanguage(this.model, language);
+      }
+      if (content !== this.lastContent) {
+        this.model.setValue(content);
+      }
     } else if (content != null) {
       this.editor = monaco.editor.create(element, {
         value: content,
@@ -66,6 +72,7 @@ export default class Monaco extends Modifier<Signature> {
         allowNonTsExtensions: true,
       });
     }
+    this.lastLanguage = language;
   }
 
   @restartableTask private async onContentChanged(
@@ -73,7 +80,8 @@ export default class Monaco extends Modifier<Signature> {
   ) {
     await timeout(500);
     if (this.model) {
-      contentChanged(this.model.getValue());
+      this.lastContent = this.model.getValue();
+      contentChanged(this.lastContent);
     }
   }
 }

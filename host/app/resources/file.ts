@@ -2,6 +2,7 @@ import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
+import { registerDestructor } from '@ember/destroyable';
 
 interface Args {
   named: { handle: FileSystemFileHandle | undefined };
@@ -20,6 +21,8 @@ type FileResource =
 
 class _FileResource extends Resource<Args> {
   private handle: FileSystemFileHandle | undefined;
+  private lastModified: number | undefined;
+  private interval: ReturnType<typeof setInterval>;
   @tracked content: string | undefined;
   @tracked ready = false;
 
@@ -27,6 +30,8 @@ class _FileResource extends Resource<Args> {
     super(owner, args);
     this.handle = args.named.handle;
     this.read();
+    this.interval = setInterval(this.read.bind(this), 1000);
+    registerDestructor(this, () => clearInterval(this.interval));
   }
 
   get name() {
@@ -36,6 +41,10 @@ class _FileResource extends Resource<Args> {
   private async read() {
     if (this.handle) {
       let file = await this.handle.getFile();
+      if (file.lastModified === this.lastModified) {
+        return;
+      }
+      this.lastModified = file.lastModified;
       let reader = new FileReader();
       this.content = await new Promise<string>((resolve, reject) => {
         reader.onload = () => resolve(reader.result as string);
