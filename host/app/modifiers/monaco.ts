@@ -1,34 +1,52 @@
 import Modifier from '@glint/environment-ember-loose/ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 import * as monaco from 'monaco-editor';
+import { restartableTask, timeout } from 'ember-concurrency';
+import { taskFor } from 'ember-concurrency-ts';
+import { registerDestructor } from '@ember/destroyable';
 
 interface Signature {
   NamedArgs: {
     content: string;
     language: string;
+    contentChanged: (text: string) => void;
   };
 }
 
 export default class Monaco extends Modifier<Signature> {
-  private installed = false;
+  private model: monaco.editor.ITextModel | undefined;
+  private editor: monaco.editor.IStandaloneCodeEditor | undefined;
+  private lastLanguage: string | undefined;
+  private lastContent: string | undefined;
 
   modify(
     element: HTMLElement,
     _positional: [],
-    { content, language }: Signature['NamedArgs']
+    { content, language, contentChanged }: Signature['NamedArgs']
   ) {
-    if (this.installed) {
-      // Don't really understand what it means to have multiple models--but either
-      // way we are editing the first one
-      let [model] = monaco.editor.getModels();
-      monaco.editor.setModelLanguage(model, language);
-      model.setValue(content);
-    } else {
-      this.installed = true;
-      monaco.editor.create(element, {
+    if (this.model && content != null) {
+      if (language !== this.lastLanguage) {
+        monaco.editor.setModelLanguage(this.model, language);
+      }
+      if (content !== this.lastContent) {
+        this.model.setValue(content);
+      }
+    } else if (content != null) {
+      this.editor = monaco.editor.create(element, {
         value: content,
         language,
       });
+      registerDestructor(this, () => this.editor!.dispose());
+
+      this.model = this.editor.getModel()!;
+
+      this.model.onDidChangeContent(() =>
+        taskFor(this.onContentChanged).perform(contentChanged)
+      );
+
+      // To be consistent call this immediately since the initial content
+      // was set before we had a chance to register our listener
+      taskFor(this.onContentChanged).perform(contentChanged);
 
       monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
         target: monaco.languages.typescript.ScriptTarget.ES2020,
@@ -53,6 +71,17 @@ export default class Monaco extends Modifier<Signature> {
         experimentalDecorators: true,
         allowNonTsExtensions: true,
       });
+    }
+    this.lastLanguage = language;
+  }
+
+  @restartableTask private async onContentChanged(
+    contentChanged: (text: string) => void
+  ) {
+    await timeout(500);
+    if (this.model) {
+      this.lastContent = this.model.getValue();
+      contentChanged(this.lastContent);
     }
   }
 }

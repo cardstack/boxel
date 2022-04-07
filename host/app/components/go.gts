@@ -60,9 +60,11 @@ export default class Go extends Component {
           <button {{on "click" this.openRealm}}>Open a local realm</button>
         {{/if}}
       </div>
-      {{#if this.openFile.ready }}
-        <div {{monaco content=this.openFile.content language=(getEditorLanguage this.openFile.name) }}></div>
-      {{/if}}
+      {{#if this.openFile.ready}}
+        <div {{monaco content=this.openFile.content
+                      language=(getEditorLanguage this.openFile.name)
+                      contentChanged=this.contentChanged}}></div>
+      {{/if}}              
     </div>
   </template>
 
@@ -85,6 +87,13 @@ export default class Go extends Component {
   @action
   open(handle: Entry) {
     this.selectedFile = handle;
+  }
+
+  @action
+  contentChanged(content: string) {
+    if (this.openFile.ready && content !== this.openFile.content) {
+      this.openFile.write(content);
+    }
   }
 
   listing = directory(this, () => this.localRealm.isAvailable ? this.localRealm.fsHandle : null)

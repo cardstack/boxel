@@ -1,5 +1,7 @@
 import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
+import { restartableTask } from 'ember-concurrency';
+import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 
 interface Args {
@@ -14,23 +16,22 @@ type FileResource =
       ready: true;
       content: string;
       name: string;
+      write(content: string): void;
     };
 
 class _FileResource extends Resource<Args> {
   private handle: FileSystemFileHandle | undefined;
+  private lastModified: number | undefined;
+  private interval: ReturnType<typeof setInterval>;
   @tracked content: string | undefined;
   @tracked ready = false;
 
-  private interval: ReturnType<typeof setInterval>;
-
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    registerDestructor(this, () => {
-      clearInterval(this.interval);
-    });
     this.handle = args.named.handle;
-    this.interval = setInterval(() => this.read(), 1000);
     this.read();
+    this.interval = setInterval(this.read.bind(this), 1000);
+    registerDestructor(this, () => clearInterval(this.interval));
   }
 
   get name() {
@@ -40,6 +41,10 @@ class _FileResource extends Resource<Args> {
   private async read() {
     if (this.handle) {
       let file = await this.handle.getFile();
+      if (file.lastModified === this.lastModified) {
+        return;
+      }
+      this.lastModified = file.lastModified;
       let reader = new FileReader();
       this.content = await new Promise<string>((resolve, reject) => {
         reader.onload = () => resolve(reader.result as string);
@@ -51,6 +56,20 @@ class _FileResource extends Resource<Args> {
       this.content = undefined;
       this.ready = false;
     }
+  }
+
+  async write(content: string) {
+    taskFor(this.doWrite).perform(content);
+  }
+
+  @restartableTask private async doWrite(content: string) {
+    if (!this.handle) {
+      throw new Error(`can't write to not ready FileResource`);
+    }
+    // TypeScript seems to lack types for the writable stream features
+    let stream = await (this.handle as any).createWritable();
+    await stream.write(content);
+    await stream.close();
   }
 }
 
