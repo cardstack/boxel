@@ -28,13 +28,8 @@ export default class IndexController extends Controller {
     this.spriteCPosition = (this.spriteCPosition + 1) % 2;
   }
   async innerTransition(changeset: Changeset): Promise<void> {
-    let {
-      context,
-      intent,
-      insertedSprites,
-      keptSprites,
-      removedSprites,
-    } = changeset;
+    let { context, intent, insertedSprites, keptSprites, removedSprites } =
+      changeset;
     if (intent === MOVE_C_INTENT) {
       return;
     }

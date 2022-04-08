@@ -9,11 +9,10 @@ import AnimationsService from '../../services/animations';
 import { assert } from '@ember/debug';
 import { getDocumentPosition } from '../../utils/measurement';
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-const { VOLATILE_TAG, consumeTag } = Ember.__loader.require(
-  '@glimmer/validator'
-);
+const { VOLATILE_TAG, consumeTag } =
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  Ember.__loader.require('@glimmer/validator');
 
 interface AnimationContextArgs {
   id: string | undefined;
