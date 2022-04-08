@@ -9,8 +9,6 @@ import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import Preview from './preview';
 import FileTree from './file-tree';
-import { task, } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 
 function getEditorLanguage(fileName: string) {
   const languages = monacoEditor.languages.getLanguages();
@@ -41,7 +39,7 @@ declare module '@glint/environment-ember-loose/registry' {
 interface Args {
 
   Args: {
-    initialFile: string | undefined;
+    file: string | undefined;
     onSelectedFile: (filename: string | undefined) => void;
   }
 }
@@ -51,7 +49,7 @@ export default class Go extends Component<Args> {
     <div class="editor">
       <div class="file-tree">
         <FileTree @localRealm={{this.localRealm}}
-                  @initialFile={{this.args.initialFile}}
+                  @file={{this.args.file}}
                   @onSelectedFile={{this.onSelectedFile}} />
       </div>
       {{#if this.openFile.ready}}
@@ -70,36 +68,6 @@ export default class Go extends Component<Args> {
   @service declare localRealm: LocalRealm;
   @tracked selectedFile: Entry | undefined;
 
-  constructor(owner: unknown, args: Args ) {
-    super(owner, args as any); // unsure if the glint wrapped component's types are lining up, `Args` doesn't work here
-    if (this.args.initialFile) {
-      taskFor(this.loadInitialFile).perform(this.args.initialFile);
-    }
-  }
-
-  @task private async loadInitialFile(path: string) {
-    await Promise.resolve();
-    await this.localRealm.startedUp;
-    if (this.localRealm.isAvailable) {
-      let handle: FileSystemFileHandle | undefined;
-      try {
-        handle = await this.localRealm.fsHandle.getFileHandle(path);
-      } catch (err: unknown) {
-        if ((err as DOMException).name === 'NotFoundError') {
-          console.error(`${path} was not found in the local realm`);
-          return;
-        }
-        throw err;
-      }
-      this.selectedFile = {
-        handle,
-        name: handle.name,
-        path,
-        indent: path.split('/').length
-      }
-    }
-  }
-
   @action
   onSelectedFile(entry: Entry | undefined) {
     this.selectedFile = entry;
@@ -115,14 +83,8 @@ export default class Go extends Component<Args> {
 
   listing = directory(this, () => this.localRealm.isAvailable ? this.localRealm.fsHandle : null)
 
-  openFile = file(this, () => {
-    if (this.selectedFile) {
-      let { handle } = this.selectedFile;
-      if (handle.kind !== 'file') {
-        throw new Error(`Cannot open the directory ${handle.name} in monaco`);
-      }
-      return handle;
-    }
-    return undefined;
-  });
+  openFile = file(this,
+    () => this.args.file,
+    () => this.localRealm.isAvailable ? this.localRealm.fsHandle : undefined,
+  );
 }

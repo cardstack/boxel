@@ -5,7 +5,10 @@ import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 
 interface Args {
-  named: { handle: FileSystemFileHandle | undefined };
+  named: {
+    path: string | undefined;
+    handle: FileSystemDirectoryHandle | undefined;
+  };
 }
 
 type FileResource =
@@ -28,9 +31,11 @@ class _FileResource extends Resource<Args> {
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    this.handle = args.named.handle;
-    this.read();
-    this.interval = setInterval(this.read.bind(this), 1000);
+    this.read(args.named.path, args.named.handle);
+    this.interval = setInterval(
+      () => this.read(args.named.path, args.named.handle),
+      1000
+    );
     registerDestructor(this, () => clearInterval(this.interval));
   }
 
@@ -38,8 +43,27 @@ class _FileResource extends Resource<Args> {
     return this.handle?.name;
   }
 
-  private async read() {
-    if (this.handle) {
+  private async read(
+    path: string | undefined,
+    dirHandle: FileSystemDirectoryHandle | undefined
+  ) {
+    if (path && dirHandle) {
+      let handle: FileSystemFileHandle | undefined;
+      try {
+        handle = await dirHandle.getFileHandle(path);
+      } catch (err: unknown) {
+        if ((err as DOMException).name === 'NotFoundError') {
+          console.error(`${path} was not found in the local realm`);
+        }
+        throw err;
+      }
+      if (!handle) {
+        throw new Error(
+          `can't obtain file ${path} from the local realm, perhaps this is a directory?`
+        );
+      }
+
+      this.handle = handle;
       let file = await this.handle.getFile();
       if (file.lastModified === this.lastModified) {
         return;
@@ -75,9 +99,10 @@ class _FileResource extends Resource<Args> {
 
 export function file(
   parent: object,
-  handle: () => FileSystemFileHandle | undefined
+  path: () => string | undefined,
+  handle: () => FileSystemDirectoryHandle | undefined
 ): FileResource {
   return useResource(parent, _FileResource, () => ({
-    named: { handle: handle() },
+    named: { path: path(), handle: handle() },
   })) as FileResource;
 }
