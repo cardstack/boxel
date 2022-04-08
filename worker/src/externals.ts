@@ -31,7 +31,7 @@ export function generateExternalStub(moduleName: string): Response {
 }
 
 export function externalsPlugin(babel: typeof Babel) {
-  let t = babel.types;
+  // let t = babel.types;
   return {
     visitor: {
       ImportDeclaration(path: NodePath<t.ImportDeclaration>) {
