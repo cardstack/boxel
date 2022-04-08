@@ -66,7 +66,15 @@ export class FetchHandler {
         },
       });
     } catch (err) {
-      debugger;
+      if ((err as DOMException).name === 'NotFoundError') {
+        return new Response(
+          `${url.pathname.slice(1)} not found in local realm`,
+          {
+            status: 404,
+            headers: { 'content-type': 'text/html' },
+          }
+        );
+      }
       throw err;
     }
   }
