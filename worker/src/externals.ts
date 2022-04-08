@@ -2,7 +2,11 @@ import type * as Babel from '@babel/core';
 import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 
-const externals = new Map([['@glimmer/component', ['default']]]);
+const externals = new Map([
+  ['@glimmer/component', ['default']],
+  ['@ember/component', ['setComponentTemplate', 'default']],
+  ['@ember/template-factory', ['createTemplateFactory']],
+]);
 
 export function generateExternalStub(moduleName: string): Response {
   let names = externals.get(moduleName);

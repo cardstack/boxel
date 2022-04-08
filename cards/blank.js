@@ -1,2 +1,8 @@
 import Component from "@glimmer/component";
-export class component extends Component {}
+import { precompileTemplate } from "@ember/template-compilation";
+import { setComponentTemplate } from "@ember/component";
+
+export const component = setComponentTemplate(
+  precompileTemplate("hello world"),
+  class extends Component {}
+);

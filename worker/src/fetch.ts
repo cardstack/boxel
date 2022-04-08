@@ -69,6 +69,7 @@ export class FetchHandler {
   private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
     let content = await readFileAsText(handle);
     content = babel.transformSync(content, {
+      // NEXT plugin: https://github.com/emberjs/babel-plugin-ember-template-compilation
       plugins: [externalsPlugin],
     })!.code!;
     return new Response(content, {
