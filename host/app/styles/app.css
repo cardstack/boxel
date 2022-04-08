@@ -15,8 +15,10 @@
   color: white;
   cursor: pointer;
 }
+.item.file.selected,
 .item.file:active {
   background-color: blue;
+  color: white;
 }
 
 .indent-0 {

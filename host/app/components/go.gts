@@ -1,15 +1,16 @@
-import { on } from '@ember/modifier';
 import Component from '@glint/environment-ember-loose/glimmer-component';
 import { action } from '@ember/object';
 import monaco from '../modifiers/monaco';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
 import * as monacoEditor from 'monaco-editor';
 import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import Preview from './preview';
+import FileTree from './file-tree';
+import { task, } from 'ember-concurrency';
+import { taskFor } from 'ember-concurrency-ts';
 
 function getEditorLanguage(fileName: string) {
   const languages = monacoEditor.languages.getLanguages();
@@ -31,39 +32,27 @@ function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
 }
 
-function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
-  return a === b;
-}
-
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
     Go: typeof Go;
    }
 }
 
-export default class Go extends Component {
+interface Args {
+
+  Args: {
+    initialFile: string | undefined;
+    onSelectedFile: (filename: string | undefined) => void;
+  }
+}
+
+export default class Go extends Component<Args> {
   <template>
     <div class="editor">
       <div class="file-tree">
-        {{#if this.localRealm.isAvailable}}
-          <button {{on "click" this.closeRealm}}>Close local realm</button>
-          {{#each this.listing.entries as |entry|}}
-            {{#if (eq entry.handle.kind 'file')}}
-              <div class="item file indent-{{entry.indent}}"
-                   {{on "click" (fn this.open entry)}}>
-                {{entry.name}}
-              </div>
-            {{else}}
-              <div class="item directory indent-{{entry.indent}}">
-                {{entry.name}}/
-              </div>
-            {{/if}}
-          {{/each}}
-        {{else if this.localRealm.isLoading }}
-          ...
-        {{else if this.localRealm.isEmpty}}
-          <button {{on "click" this.openRealm}}>Open a local realm</button>
-        {{/if}}
+        <FileTree @localRealm={{this.localRealm}}
+                  @initialFile={{this.args.initialFile}}
+                  @onSelectedFile={{this.onSelectedFile}} />
       </div>
       {{#if this.openFile.ready}}
         <div {{monaco content=this.openFile.content
@@ -81,22 +70,40 @@ export default class Go extends Component {
   @service declare localRealm: LocalRealm;
   @tracked selectedFile: Entry | undefined;
 
-  @action
-  openRealm() {
-    this.localRealm.chooseDirectory();
+  constructor(owner: unknown, args: Args ) {
+    super(owner, args as any); // unsure if the glint wrapped component's types are lining up, `Args` doesn't work here
+    if (this.args.initialFile) {
+      taskFor(this.loadInitialFile).perform(this.args.initialFile);
+    }
   }
 
-  @action
-  closeRealm() {
+  @task private async loadInitialFile(path: string) {
+    await Promise.resolve();
+    await this.localRealm.startedUp;
     if (this.localRealm.isAvailable) {
-      this.localRealm.close();
-      this.selectedFile = undefined;
+      let handle: FileSystemFileHandle | undefined;
+      try {
+        handle = await this.localRealm.fsHandle.getFileHandle(path);
+      } catch (err: unknown) {
+        if ((err as DOMException).name === 'NotFoundError') {
+          console.error(`${path} was not found in the local realm`);
+          return;
+        }
+        throw err;
+      }
+      this.selectedFile = {
+        handle,
+        name: handle.name,
+        path,
+        indent: path.split('/').length
+      }
     }
   }
 
   @action
-  open(handle: Entry) {
-    this.selectedFile = handle;
+  onSelectedFile(entry: Entry | undefined) {
+    this.selectedFile = entry;
+    this.args.onSelectedFile(entry?.name);
   }
 
   @action
