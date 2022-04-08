@@ -1,6 +1,6 @@
 {{!-- template-lint-disable no-inline-styles --}}
-<div class="my-20 w-full max-w-md lg:max-w-2xl mx-auto px-4">
-  <div class="text-center max-w-lg mx-auto">
+<div class="my-20 w-full mx-auto px-4">
+  <div class="text-center mx-auto">
     <h2 class='text-4xl font-semibold leading-tight'>
       Transitions can be interrupted
     </h2>
@@ -8,49 +8,53 @@
       Click one of the four targets to initiate a transition of the circle to the target.
     </p>
 
-    <p class="text-lg mt-16">1 ball sprite</p>
-    <AnimationContext @use={{this.transition}} class="mt-8 h-64 w-64 m-auto">
-      <div class="bg-grey-lightest relative h-64 w-64">
-        <button
-          type="button"
-          class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
-          style="top: 0; left: 0"
-          {{on 'click' (fn (mut this.ballGoWhere) 'A')}}
-          {{on-key 'a'}}
-        >
-          A
-        </button>
-        <button
-          style="top: 0; right: 0"
-          class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
-          type="button"
-          {{on 'click' (fn (mut this.ballGoWhere) 'B')}}
-          {{on-key 'b'}}
-        >
-          B
-        </button>
-        <button
-          style="bottom: 0; left: 0"
-          class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
-          type="button"
-          {{on 'click' (fn (mut this.ballGoWhere) 'C')}}
-          {{on-key 'c'}}
-        >
-          C
-        </button>
-        <button
-          style="bottom: 0; right: 0"
-          class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
-          type="button"
-          {{on 'click' (fn (mut this.ballGoWhere) 'D')}}
-          {{on-key 'd'}}
-        >
-          D
-        </button>
-        <div
-          {{sprite id="single-ball"}}
-          class="absolute rounded-full bg-red w-10 h-10 opacity-75 z-10 ball-position-{{this.ballGoWhere}}"
-        ></div>
+    <p class="text-lg mt-16 mb-8">1 ball sprite</p>
+    <AnimationContext @use={{this.transition}}>
+      <div local-class="grid">
+        {{#each this.ballIds as |id|}}
+          <div class="bg-grey-lightest relative h-64 w-64">
+            <button
+              type="button"
+              class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
+              style="top: 0; left: 0"
+              {{on 'click' (fn (mut this.ballGoWhere) 'A')}}
+              {{on-key 'a'}}
+            >
+              A
+            </button>
+            <button
+              style="top: 0; right: 0"
+              class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
+              type="button"
+              {{on 'click' (fn (mut this.ballGoWhere) 'B')}}
+              {{on-key 'b'}}
+            >
+              B
+            </button>
+            <button
+              style="bottom: 0; left: 0"
+              class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
+              type="button"
+              {{on 'click' (fn (mut this.ballGoWhere) 'C')}}
+              {{on-key 'c'}}
+            >
+              C
+            </button>
+            <button
+              style="bottom: 0; right: 0"
+              class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
+              type="button"
+              {{on 'click' (fn (mut this.ballGoWhere) 'D')}}
+              {{on-key 'd'}}
+            >
+              D
+            </button>
+            <div
+              {{sprite id=(concat "single-ball-" id)}}
+              class="absolute rounded-full bg-red w-10 h-10 opacity-75 z-10 ball-position-{{this.ballGoWhere}}"
+            ></div>
+          </div>
+        {{/each}}
       </div>
     </AnimationContext>
 

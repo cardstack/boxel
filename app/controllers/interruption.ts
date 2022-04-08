@@ -9,6 +9,8 @@ class InterruptionController extends Controller {
   @tracked ballGoWhere = 'A';
   animationOriginPosition: DOMRect | null = null;
 
+  ballIds = [...new Array(1)].map((_, id) => id);
+
   async transition(changeset: Changeset): Promise<void> {
     magicMove(changeset, {
       behavior: new SpringBehavior({ overshootClamping: false, damping: 11 }),
