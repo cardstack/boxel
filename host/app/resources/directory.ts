@@ -1,8 +1,8 @@
 import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
-import { parse } from 'parse-gitignore';
-import { readFile } from '@cardstack/worker/src/util';
+import ignore from 'ignore';
+import { readFileAsText } from '@cardstack/worker/src/util';
 
 interface Args {
   named: { dir: FileSystemDirectoryHandle | null };
@@ -10,29 +10,35 @@ interface Args {
 
 async function getDirectoryEntries(
   directoryHandle: FileSystemDirectoryHandle,
-  dir = ['.'],
-  ignoredNames: string[] = []
+  dir: string[] = [],
+  ignoreFile = ''
 ): Promise<Entry[]> {
   let entries: Entry[] = [];
   for await (let [name, handle] of directoryHandle as any as AsyncIterable<
     [string, FileSystemDirectoryHandle | FileSystemFileHandle]
   >) {
-    if (ignoredNames.includes(name)) {
+    if (
+      handle.kind === 'directory' &&
+      filterIgnored([`${name}/`], ignoreFile).length === 0
+    ) {
+      // without this, trying to open large root dirs causes the browser to hang
       continue;
     }
+    let path = [...dir, name].join('/');
     entries.push({
       name,
       handle,
-      path: [...dir, name].join('/'),
+      path: handle.kind === 'directory' ? `${path}/` : path,
       indent: dir.length,
     });
     if (handle.kind === 'directory') {
       entries.push(
-        ...(await getDirectoryEntries(handle, [...dir, name], ignoredNames))
+        ...(await getDirectoryEntries(handle, [...dir, name], ignoreFile))
       );
     }
   }
-  return entries.sort((a, b) => a.path.localeCompare(b.path));
+  let filteredEntries = filterIgnoredEntries(entries, ignoreFile);
+  return filteredEntries.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export interface Entry {
@@ -60,8 +66,8 @@ export class DirectoryResource extends Resource<Args> {
 
   private async readdir() {
     if (this.dir) {
-      let ignoredNames = await getIgnoredNames(this.dir);
-      this.entries = await getDirectoryEntries(this.dir, ['.'], ignoredNames);
+      let ignoreFile = await getIgnorePatterns(this.dir);
+      this.entries = await getDirectoryEntries(this.dir, [], ignoreFile);
     } else {
       this.entries = [];
     }
@@ -77,23 +83,28 @@ export function directory(
   }));
 }
 
-async function getIgnoredNames(
-  fileDir: FileSystemDirectoryHandle
-): Promise<string[] | []> {
+async function getIgnorePatterns(fileDir: FileSystemDirectoryHandle) {
   let fileHandle;
-
   try {
     fileHandle = await fileDir.getFileHandle('.monacoignore');
   } catch (e) {
     try {
       fileHandle = await fileDir.getFileHandle('.gitignore');
     } catch (e) {
-      return [];
+      return '';
     }
   }
+  return await readFileAsText(fileHandle);
+}
 
-  let content = await readFile(fileHandle);
-  return parse(content).patterns.map((name) =>
-    name.replace(/^\/?(.*?)\/?$/, '$1')
+function filterIgnoredEntries(entries: Entry[], patterns: string): Entry[] {
+  let filteredPaths = filterIgnored(
+    entries.map((e) => e.path),
+    patterns
   );
+  return entries.filter((entry) => filteredPaths.includes(entry.path));
+}
+
+function filterIgnored(paths: string[], patterns: string): string[] {
+  return ignore().add(patterns).filter(paths);
 }
