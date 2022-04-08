@@ -30,7 +30,7 @@ export function generateExternalStub(moduleName: string): Response {
   });
 }
 
-export function externalsPlugin(babel: typeof Babel) {
+export function externalsPlugin(_babel: typeof Babel) {
   // let t = babel.types;
   return {
     visitor: {
