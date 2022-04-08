@@ -34,6 +34,7 @@ type TransitionRunnerOpts = {
   freshlyRemoved: Set<SpriteModifier>;
   intent: string | undefined;
   intermediateSprites: Set<Sprite> | undefined;
+  runningAnimations: Map<string, Set<Animation>>;
 };
 export default class TransitionRunner {
   animationContext: AnimationContext;
@@ -43,6 +44,7 @@ export default class TransitionRunner {
   intent: string | undefined;
   freshlyChanged: Set<SpriteModifier> = new Set();
   intermediateSprites: Set<Sprite>;
+  runningAnimations: Map<string, Set<Animation>>;
 
   constructor(animationContext: AnimationContext, opts: TransitionRunnerOpts) {
     this.animationContext = animationContext;
@@ -51,6 +53,7 @@ export default class TransitionRunner {
     this.freshlyRemoved = opts.freshlyRemoved;
     this.intent = opts.intent;
     this.intermediateSprites = opts.intermediateSprites ?? new Set();
+    this.runningAnimations = opts.runningAnimations;
   }
 
   filterToContext(
@@ -96,7 +99,14 @@ export default class TransitionRunner {
     changeset.addRemovedSprites(freshlyRemoved);
     changeset.addKeptSprites(this.freshlyChanged);
     changeset.finalizeSpriteCategories();
-    changeset.addIntermediateSprites(this.intermediateSprites);
+    let { playUnrelatedAnimations, cancelInterruptedAnimations } =
+      changeset.addIntermediateSprites(
+        this.intermediateSprites,
+        this.runningAnimations
+      );
+
+    cancelInterruptedAnimations();
+    playUnrelatedAnimations();
 
     if (animationContext.shouldAnimate(changeset)) {
       this.logChangeset(changeset, animationContext); // For debugging

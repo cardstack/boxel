@@ -20,7 +20,10 @@ export class SpriteAnimation {
   ) {
     this.sprite = sprite;
     this.keyframes = keyframes;
-    this.keyframeAnimationOptions = keyframeAnimationOptions;
+    this.keyframeAnimationOptions = {
+      ...keyframeAnimationOptions,
+      id: sprite.identifier.toString(),
+    };
   }
 
   play(): void {

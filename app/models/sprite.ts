@@ -28,6 +28,9 @@ class SpriteIdentifier {
   equals(other: SpriteIdentifier): boolean {
     return this.id === other.id && this.role === other.role;
   }
+  toString(): string {
+    return `id:${this.id};role:${this.role}`;
+  }
 }
 
 export default class Sprite {

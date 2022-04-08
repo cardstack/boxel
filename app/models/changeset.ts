@@ -163,32 +163,28 @@ export default class Changeset {
     }
   }
 
-  addIntermediateSprites(intermediateSprites: Set<Sprite>) {
+  addIntermediateSprites(
+    intermediateSprites: Set<Sprite>,
+    runningAnimations: Map<string, Set<Animation>>
+  ): {
+    playUnrelatedAnimations: () => void;
+    cancelInterruptedAnimations: () => void;
+  } {
+    let allSprites = [
+      ...this.insertedSprites,
+      ...this.removedSprites,
+      ...this.keptSprites,
+    ];
+
+    let allInterruptedSprites: Set<Sprite> = new Set();
+
     if (intermediateSprites.size) {
-      for (let sprite of [
-        ...this.insertedSprites,
-        ...this.removedSprites,
-        ...this.keptSprites,
-      ]) {
-        // TODO: this is kind of a weird spot to handle cancelling/resuming animations... Find a better one.
+      for (let sprite of allSprites) {
         let interruptedSprites = [...intermediateSprites].filter((is) => {
           if (is.identifier.equals(sprite.identifier)) {
-            if (is.element.getAnimations().length) {
-              console.warn(
-                `Cancelling existing animations for interrupted sprite`,
-                sprite.identifier
-              );
-              is.element.getAnimations().forEach((a) => a.cancel());
-            }
+            allInterruptedSprites.add(sprite);
             return true;
           } else {
-            if (is.element.getAnimations().length) {
-              console.warn(
-                `Keeping animations for sprite because sprite was not interrupted`,
-                sprite.identifier
-              );
-              is.element.getAnimations().forEach((a) => a.play());
-            }
             return false;
           }
         });
@@ -211,7 +207,6 @@ export default class Changeset {
           // TODO: fix this
           if (!interruptedSprite.initialBounds) {
             assert('interruptedSprite should always have initialBounds');
-            return;
           }
 
           if (sprite.counterpart) {
@@ -244,5 +239,40 @@ export default class Changeset {
         }
       }
     }
+
+    let animationsToPlay: Set<Animation> = new Set();
+    let animationsToCancel: Set<Animation> = new Set();
+
+    // Play animations for non-interrupted sprites as we shouldn't have handled them
+    for (let sprite of allSprites) {
+      let identifierString = sprite.identifier.toString();
+      if (
+        runningAnimations.has(identifierString) &&
+        !allInterruptedSprites.has(sprite)
+      ) {
+        console.warn(
+          `Keeping animations for sprite because sprite was not interrupted`,
+          sprite.identifier,
+          sprite.type
+        );
+        runningAnimations
+          .get(identifierString)
+          ?.forEach((a) => animationsToPlay.add(a));
+      } else if (allInterruptedSprites.has(sprite)) {
+        runningAnimations
+          .get(identifierString)
+          ?.forEach((a) => animationsToCancel.add(a));
+      }
+    }
+
+    // return a function that cancels all animations at once
+    return {
+      playUnrelatedAnimations: () => {
+        animationsToPlay.forEach((a) => a.play());
+      },
+      cancelInterruptedAnimations: () => {
+        animationsToCancel.forEach((a) => a.cancel());
+      },
+    };
   }
 }
