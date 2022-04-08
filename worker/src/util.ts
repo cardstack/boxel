@@ -17,7 +17,9 @@ export class Deferred<T> {
   }
 }
 
-export async function readFile(handle: FileSystemFileHandle): Promise<string> {
+export async function readFileAsText(
+  handle: FileSystemFileHandle
+): Promise<string> {
   let file = await handle.getFile();
   let reader = new FileReader();
   return await new Promise<string>((resolve, reject) => {

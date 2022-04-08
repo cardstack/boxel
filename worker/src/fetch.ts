@@ -1,6 +1,9 @@
 import { LivenessWatcher } from './liveness';
 import { MessageHandler } from './message-handler';
-import { readFile } from './util';
+import { readFileAsText } from './util';
+import { WorkerError } from './error';
+import * as babel from '@babel/core';
+import { externalsPlugin, generateExternalStub } from './externals';
 
 export class FetchHandler {
   private baseURL: string;
@@ -28,15 +31,22 @@ export class FetchHandler {
       }
 
       let url = new URL(request.url);
+
       if (url.origin === 'http://local-realm') {
-        return this.handleLocalRealm(request, url);
+        return await this.handleLocalRealm(request, url);
+      }
+      if (url.origin === 'http://externals') {
+        return generateExternalStub(url.pathname.slice(1));
       }
 
       console.log(
         `Service worker on ${this.baseURL} passing through ${request.url}`
       );
-      return fetch(request);
+      return await fetch(request);
     } catch (err) {
+      if (err instanceof WorkerError) {
+        return err.response;
+      }
       console.error(err);
       return new Response(`unexpected exception in service worker ${err}`, {
         status: 500,
@@ -48,31 +58,51 @@ export class FetchHandler {
     _request: Request,
     url: URL
   ): Promise<Response> {
+    let handle = await this.getLocalFile(url.pathname.slice(1));
+    if (['.js'].some((extension) => handle.name.endsWith(extension))) {
+      return await this.makeJS(handle);
+    } else {
+      return await this.serveLocalFile(handle);
+    }
+  }
+
+  private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
+    let content = await readFileAsText(handle);
+    content = babel.transformSync(content, {
+      plugins: [externalsPlugin],
+    })!.code!;
+    return new Response(content, {
+      status: 200,
+      headers: {
+        'content-type': 'text/javascript',
+      },
+    });
+  }
+
+  private async serveLocalFile(
+    handle: FileSystemFileHandle
+  ): Promise<Response> {
+    return new Response(await handle.getFile());
+  }
+
+  private async getLocalFile(path: string): Promise<FileSystemFileHandle> {
     if (!this.messageHandler.fs) {
-      return new Response('no local realm is available', {
-        status: 404,
-        headers: { 'content-type': 'text/html' },
-      });
+      throw WorkerError.withResponse(
+        new Response('no local realm is available', {
+          status: 404,
+          headers: { 'content-type': 'text/html' },
+        })
+      );
     }
     try {
-      let handle = await this.messageHandler.fs.getFileHandle(
-        url.pathname.slice(1)
-      );
-      let content = await readFile(handle);
-      return new Response(content, {
-        status: 200,
-        headers: {
-          'content-type': 'text/javascript',
-        },
-      });
+      return await this.messageHandler.fs.getFileHandle(path);
     } catch (err) {
       if ((err as DOMException).name === 'NotFoundError') {
-        return new Response(
-          `${url.pathname.slice(1)} not found in local realm`,
-          {
+        throw WorkerError.withResponse(
+          new Response(`${path} not found in local realm`, {
             status: 404,
             headers: { 'content-type': 'text/html' },
-          }
+          })
         );
       }
       throw err;

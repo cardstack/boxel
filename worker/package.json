@@ -6,6 +6,8 @@
   "devDependencies": {
     "@babel/core": "^7.17.8",
     "@babel/plugin-transform-typescript": "^7.16.8",
+    "@types/babel__core": "^7.1.19",
+    "@types/babel__traverse": "^7.14.2",
     "assert-never": "^1.2.1",
     "babel-loader": "^8.2.4",
     "path-browserify": "^1.0.1",
