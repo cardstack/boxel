@@ -80,7 +80,7 @@ export class FetchHandler {
           (makeEmberTemplatePlugin as any)(() => precompile),
         ],
       })!.code!;
-    } catch (err) {
+    } catch (err: any) {
       return new Response(err.message, {
         status: 500,
         headers: { 'content-type': 'text/html' },
