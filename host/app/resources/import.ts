@@ -7,7 +7,7 @@ interface Args {
 
 export class ImportResource extends Resource<Args> {
   @tracked module: any;
-  @tracked error: string | undefined;
+  @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
@@ -21,9 +21,20 @@ export class ImportResource extends Resource<Args> {
       let errResponse = await fetch(url.href, {
         headers: { 'content-type': 'text/javascript' },
       });
-      this.error = errResponse.ok
-        ? `cannot obtain error message for failed import of ${url.href}`
-        : await errResponse.text();
+      if (!errResponse.ok) {
+        this.error = { type: 'compile', message: await errResponse.text() };
+      } else {
+        this.error = {
+          type: 'runtime',
+          message: `Encountered error while evaluating
+${url.href}:
+
+${err}.
+
+Check console log for more details`,
+        };
+        console.error(err);
+      }
     }
   }
 }

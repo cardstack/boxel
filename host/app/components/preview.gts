@@ -5,8 +5,8 @@ export default class Preview extends Component<{ Args: { filename: string } }> {
   <template>
     <div>
     {{#if this.error}}
-      <h2>Encountered compile error</h2>
-      <pre>{{this.error}}</pre>
+      <h2>Encountered {{this.error.type}} error</h2>
+      <pre>{{this.error.message}}</pre>
     {{else if this.component}}
       <this.component />
     {{/if}}
