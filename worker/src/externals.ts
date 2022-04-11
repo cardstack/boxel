@@ -6,6 +6,7 @@ const externals = new Map([
   ['@glimmer/component', ['default']],
   ['@ember/component', ['setComponentTemplate', 'default']],
   ['@ember/template-factory', ['createTemplateFactory']],
+  ['@glimmer/tracking', ['tracked']],
 ]);
 
 export function generateExternalStub(moduleName: string): Response {
