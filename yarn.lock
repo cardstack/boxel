@@ -3165,6 +3165,11 @@ babel-import-util@^1.1.0:
   resolved "https://registry.yarnpkg.com/babel-import-util/-/babel-import-util-1.1.0.tgz#4156b16ef090c4f0d3cdb869ff799202f24aeb93"
   integrity sha512-sfzgAiJsUT1es9yrHAuJZuJfBkkOE7Og6rovAIwK/gNJX6MjDfWTprbPngdJZTd5ye4F3FvpvpQmvKXObRzVYA==
 
+babel-import-util@^1.2.0:
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/babel-import-util/-/babel-import-util-1.2.0.tgz#96dc3ad9a186b4383229bcce35e1c4fb4de9a0d8"
+  integrity sha512-hsjWpyurnbXLNPcIKSkV6l23YfMSCLdA39C5pMh9VSFtGbGU+UFv5Uyz3u//pOOc/FUknGod1KgUd8KM8VQ07g==
+
 babel-loader@8, babel-loader@^8.0.6, babel-loader@^8.2.2, babel-loader@^8.2.4:
   version "8.2.4"
   resolved "https://registry.yarnpkg.com/babel-loader/-/babel-loader-8.2.4.tgz#95f5023c791b2e9e2ca6f67b0984f39c82ff384b"
@@ -3232,6 +3237,16 @@ babel-plugin-ember-template-compilation@^1.0.0:
     babel-import-util "^0.2.0"
     line-column "^1.0.2"
     magic-string "^0.25.7"
+    string.prototype.matchall "^4.0.5"
+
+babel-plugin-ember-template-compilation@^1.0.2:
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/babel-plugin-ember-template-compilation/-/babel-plugin-ember-template-compilation-1.0.2.tgz#e0695b8ad5a8fe6b2cbdff1eadb01cf402731ad6"
+  integrity sha512-4HBMksmlYsWEf/C/n3uW5rkBRbUp4FNaspzdQTAHgLbfCJnkLze8R6i6sUSge48y/Wne7mx+vcImI1o6rlUwXQ==
+  dependencies:
+    babel-import-util "^1.2.0"
+    line-column "^1.0.2"
+    magic-string "^0.26.0"
     string.prototype.matchall "^4.0.5"
 
 babel-plugin-filter-imports@^4.0.0:
@@ -9024,6 +9039,13 @@ magic-string@^0.25.7:
   version "0.25.9"
   resolved "https://registry.yarnpkg.com/magic-string/-/magic-string-0.25.9.tgz#de7f9faf91ef8a1c91d02c2e5314c8277dbcdd1c"
   integrity sha512-RmF0AsMzgt25qzqqLc1+MbHmhdx0ojF2Fvs4XnOqz2ZOBXzzkEwc/dJQZCYHAn7v1jbVOjAZfK8msRn4BxO4VQ==
+  dependencies:
+    sourcemap-codec "^1.4.8"
+
+magic-string@^0.26.0:
+  version "0.26.1"
+  resolved "https://registry.yarnpkg.com/magic-string/-/magic-string-0.26.1.tgz#ba9b651354fa9512474199acecf9c6dbe93f97fd"
+  integrity sha512-ndThHmvgtieXe8J/VGPjG+Apu7v7ItcD5mhEIvOscWjPF/ccOiLxHaSuCAS2G+3x4GKsAbT8u7zdyamupui8Tg==
   dependencies:
     sourcemap-codec "^1.4.8"
 

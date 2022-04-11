@@ -9,6 +9,9 @@
 .file-tree + div {
   flex-grow: 10;
 }
+.preview {
+  min-width: 8rem;
+}
 
 .item.file:hover {
   background-color: cornflowerblue;

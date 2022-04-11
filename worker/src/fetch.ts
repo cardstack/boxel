@@ -4,6 +4,8 @@ import { readFileAsText } from './util';
 import { WorkerError } from './error';
 import * as babel from '@babel/core';
 import { externalsPlugin, generateExternalStub } from './externals';
+import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation';
+import { precompile } from 'ember-source/dist/ember-template-compiler';
 
 export class FetchHandler {
   private baseURL: string;
@@ -69,8 +71,13 @@ export class FetchHandler {
   private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
     let content = await readFileAsText(handle);
     content = babel.transformSync(content, {
-      // NEXT plugin: https://github.com/emberjs/babel-plugin-ember-template-compilation
-      plugins: [externalsPlugin],
+      plugins: [
+        externalsPlugin,
+        // this "as any" is because typescript is using the Node-specific types
+        // from babel-plugin-ember-template-compilation, but we're using the
+        // browser interface
+        (makeEmberTemplatePlugin as any)(() => precompile),
+      ],
     })!.code!;
     return new Response(content, {
       status: 200,
