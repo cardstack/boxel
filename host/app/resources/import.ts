@@ -7,6 +7,7 @@ interface Args {
 
 export class ImportResource extends Resource<Args> {
   @tracked module: any;
+  @tracked error: string | undefined;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
@@ -14,7 +15,16 @@ export class ImportResource extends Resource<Args> {
   }
 
   private async load(url: URL) {
-    this.module = await import(/* webpackIgnore: true */ url.href);
+    try {
+      this.module = await import(/* webpackIgnore: true */ url.href);
+    } catch (err) {
+      let errResponse = await fetch(url.href, {
+        headers: { 'content-type': 'text/javascript' },
+      });
+      this.error = errResponse.ok
+        ? `cannot obtain error message for failed import of ${url.href}`
+        : await errResponse.text();
+    }
   }
 }
 

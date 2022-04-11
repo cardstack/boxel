@@ -3,8 +3,11 @@ import { importResource } from '../resources/import';
 
 export default class Preview extends Component<{ Args: { filename: string } }> {
   <template>
-    <div class="preview">
-    {{#if this.component}}
+    <div>
+    {{#if this.error}}
+      <h2>Encountered compile error</h2>
+      <pre>{{this.error}}</pre>
+    {{else if this.component}}
       <this.component />
     {{/if}}
     </div>
@@ -14,5 +17,8 @@ export default class Preview extends Component<{ Args: { filename: string } }> {
 
   get component() {
     return this.imported.module?.component;
+  }
+  get error() {
+    return this.imported.error;
   }
 }

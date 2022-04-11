@@ -70,15 +70,22 @@ export class FetchHandler {
 
   private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
     let content = await readFileAsText(handle);
-    content = babel.transformSync(content, {
-      plugins: [
-        externalsPlugin,
-        // this "as any" is because typescript is using the Node-specific types
-        // from babel-plugin-ember-template-compilation, but we're using the
-        // browser interface
-        (makeEmberTemplatePlugin as any)(() => precompile),
-      ],
-    })!.code!;
+    try {
+      content = babel.transformSync(content, {
+        plugins: [
+          externalsPlugin,
+          // this "as any" is because typescript is using the Node-specific types
+          // from babel-plugin-ember-template-compilation, but we're using the
+          // browser interface
+          (makeEmberTemplatePlugin as any)(() => precompile),
+        ],
+      })!.code!;
+    } catch (err) {
+      return new Response(err.message, {
+        status: 500,
+        headers: { 'content-type': 'text/html' },
+      });
+    }
     return new Response(content, {
       status: 200,
       headers: {
