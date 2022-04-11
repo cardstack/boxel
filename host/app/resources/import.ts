@@ -29,7 +29,7 @@ export class ImportResource extends Resource<Args> {
           message: `Encountered error while evaluating
 ${url.href}:
 
-${err}.
+${err}
 
 Check console log for more details`,
         };
