@@ -5,6 +5,8 @@ import { WorkerError } from './error';
 import * as babel from '@babel/core';
 import { externalsPlugin, generateExternalStub } from './externals';
 import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation';
+import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
+import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
 import { precompile } from 'ember-source/dist/ember-template-compiler';
 
 export class FetchHandler {
@@ -72,6 +74,8 @@ export class FetchHandler {
     let content = await readFileAsText(handle);
     content = babel.transformSync(content, {
       plugins: [
+        [decoratorsProposalPlugin, { legacy: true }],
+        [classPropertiesProposalPlugin, { loose: false }],
         externalsPlugin,
         // this "as any" is because typescript is using the Node-specific types
         // from babel-plugin-ember-template-compilation, but we're using the
