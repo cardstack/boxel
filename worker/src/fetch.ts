@@ -8,6 +8,8 @@ import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation';
 import * as etc from 'ember-source/dist/ember-template-compiler';
 import { preprocessEmbeddedTemplates } from 'ember-template-imports/lib/preprocess-embedded-templates';
 import glimmerTemplatePlugin from 'ember-template-imports/src/babel-plugin';
+import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
+import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 
@@ -90,6 +92,8 @@ export class FetchHandler {
       content = babel.transformSync(content, {
         filename: handle.name,
         plugins: [
+          [decoratorsProposalPlugin, { legacy: true }],
+          classPropertiesProposalPlugin,
           typescriptPlugin,
           glimmerTemplatePlugin,
           // this "as any" is because typescript is using the Node-specific types
