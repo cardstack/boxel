@@ -7,6 +7,7 @@ interface Args {
 
 export class ImportResource extends Resource<Args> {
   @tracked module: any;
+  @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
@@ -14,7 +15,27 @@ export class ImportResource extends Resource<Args> {
   }
 
   private async load(url: URL) {
-    this.module = await import(/* webpackIgnore: true */ url.href);
+    try {
+      this.module = await import(/* webpackIgnore: true */ url.href);
+    } catch (err) {
+      let errResponse = await fetch(url.href, {
+        headers: { 'content-type': 'text/javascript' },
+      });
+      if (!errResponse.ok) {
+        this.error = { type: 'compile', message: await errResponse.text() };
+      } else {
+        this.error = {
+          type: 'runtime',
+          message: `Encountered error while evaluating
+${url.href}:
+
+${err}
+
+Check console log for more details`,
+        };
+        console.error(err);
+      }
+    }
   }
 }
 

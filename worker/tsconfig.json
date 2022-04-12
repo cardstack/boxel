@@ -23,5 +23,5 @@
     "noEmit": true,
     "lib": ["ES2020", "ScriptHost", "WebWorker", "WebWorker.ImportScripts"]
   },
-  "include": ["/src/**/*", "/types/**/*"]
+  "include": ["src/**/*", "types/**/*"]
 }
