@@ -134,15 +134,24 @@ export default class LocalRealm extends Service {
   }
 
   private async ensureWorker() {
-    if (!navigator.serviceWorker.controller) {
-      navigator.serviceWorker.register('./worker.js', {
-        scope: '/',
-      });
-      let registration = await navigator.serviceWorker.ready;
-      while (registration.active?.state !== 'activated') {
-        await timeout(10);
+    let registration = await navigator.serviceWorker.register('./worker.js', {
+      scope: '/',
+    });
+    registration.addEventListener('updatefound', () => {
+      // if we see a new service worker version getting installed, and if we
+      // already have an open file handle, send it to the new worker so we don't
+      // lose access
+      if (this.isAvailable) {
+        send(registration.installing!, {
+          type: 'setDirectoryHandle',
+          handle: this.fsHandle,
+        });
       }
+    });
+    while (registration.active?.state !== 'activated') {
+      await timeout(10);
     }
+
     return navigator.serviceWorker.controller!;
   }
 }

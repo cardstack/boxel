@@ -7,10 +7,11 @@
   min-width: 8rem;
 }
 .file-tree + div {
-  flex-grow: 10;
+  flex-grow: 3;
 }
 .preview {
-  min-width: 8rem;
+  flex-grow: 2;
+  min-width: 10rem;
 }
 
 .item.file:hover {

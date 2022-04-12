@@ -56,7 +56,7 @@ export default class Go extends Component<Args> {
         <div {{monaco content=this.openFile.content
                       language=(getEditorLanguage this.openFile.name)
                       contentChanged=this.contentChanged}}></div>
-        <div>
+        <div class="preview">
           {{#if (isRunnable this.openFile.name)}}
             <Preview @filename={{this.openFile.name}} />
           {{/if}}
