@@ -34,10 +34,14 @@ export function externalsPlugin(_babel: typeof Babel) {
   // let t = babel.types;
   return {
     visitor: {
-      ImportDeclaration(path: NodePath<t.ImportDeclaration>) {
-        if (externals.has(path.node.source.value)) {
-          path.node.source.value = `http://externals/${path.node.source.value}`;
-        }
+      Program: {
+        exit(path: NodePath<t.Program>) {
+          for (let topLevelPath of path.get('body')) {
+            if (topLevelPath.isImportDeclaration()) {
+              topLevelPath.node.source.value = `http://externals/${topLevelPath.node.source.value}`;
+            }
+          }
+        },
       },
     },
   };

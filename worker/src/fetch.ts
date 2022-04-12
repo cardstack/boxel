@@ -73,11 +73,11 @@ export class FetchHandler {
     try {
       content = babel.transformSync(content, {
         plugins: [
-          externalsPlugin,
           // this "as any" is because typescript is using the Node-specific types
           // from babel-plugin-ember-template-compilation, but we're using the
           // browser interface
           (makeEmberTemplatePlugin as any)(() => precompile),
+          externalsPlugin,
         ],
       })!.code!;
     } catch (err: any) {
