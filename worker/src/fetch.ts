@@ -8,6 +8,7 @@ import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation';
 import * as etc from 'ember-source/dist/ember-template-compiler';
 import { preprocessEmbeddedTemplates } from 'ember-template-imports/lib/preprocess-embedded-templates';
 import glimmerTemplatePlugin from 'ember-template-imports/src/babel-plugin';
+//@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 
 export class FetchHandler {
