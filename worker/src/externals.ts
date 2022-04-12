@@ -5,6 +5,7 @@ import type { NodePath } from '@babel/traverse';
 const externals = new Map([
   ['@glimmer/component', ['default']],
   ['@ember/component', ['setComponentTemplate', 'default']],
+  ['@ember/component/template-only', ['default']],
   ['@ember/template-factory', ['createTemplateFactory']],
 ]);
 
@@ -37,7 +38,10 @@ export function externalsPlugin(_babel: typeof Babel) {
       Program: {
         exit(path: NodePath<t.Program>) {
           for (let topLevelPath of path.get('body')) {
-            if (topLevelPath.isImportDeclaration()) {
+            if (
+              topLevelPath.isImportDeclaration() &&
+              externals.has(topLevelPath.node.source.value)
+            ) {
               topLevelPath.node.source.value = `http://externals/${topLevelPath.node.source.value}`;
             }
           }

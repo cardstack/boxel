@@ -5,7 +5,9 @@ import { WorkerError } from './error';
 import * as babel from '@babel/core';
 import { externalsPlugin, generateExternalStub } from './externals';
 import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation';
-import { precompile } from 'ember-source/dist/ember-template-compiler';
+import * as etc from 'ember-source/dist/ember-template-compiler';
+import { preprocessEmbeddedTemplates } from 'ember-template-imports/lib/preprocess-embedded-templates';
+import glimmerTemplatePlugin from 'ember-template-imports/src/babel-plugin';
 
 export class FetchHandler {
   private baseURL: string;
@@ -61,7 +63,7 @@ export class FetchHandler {
     url: URL
   ): Promise<Response> {
     let handle = await this.getLocalFile(url.pathname.slice(1));
-    if (['.js'].some((extension) => handle.name.endsWith(extension))) {
+    if (['.js', '.gjs'].some((extension) => handle.name.endsWith(extension))) {
       return await this.makeJS(handle);
     } else {
       return await this.serveLocalFile(handle);
@@ -71,16 +73,29 @@ export class FetchHandler {
   private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
     let content = await readFileAsText(handle);
     try {
+      content = preprocessEmbeddedTemplates(content, {
+        relativePath: handle.name,
+        getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
+        templateTag: 'template',
+        templateTagReplacement: '__GLIMMER_TEMPLATE',
+        includeSourceMaps: true,
+        includeTemplateTokens: true,
+      }).output;
       content = babel.transformSync(content, {
+        filename: handle.name,
         plugins: [
+          glimmerTemplatePlugin,
           // this "as any" is because typescript is using the Node-specific types
           // from babel-plugin-ember-template-compilation, but we're using the
           // browser interface
-          (makeEmberTemplatePlugin as any)(() => precompile),
+          (makeEmberTemplatePlugin as any)(() => etc.precompile),
           externalsPlugin,
         ],
       })!.code!;
     } catch (err: any) {
+      Promise.resolve().then(() => {
+        throw err;
+      });
       return new Response(err.message, {
         // using "Not Acceptable" here because no text/javascript representation
         // can be made and we're sending text/html error page instead
