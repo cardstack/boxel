@@ -23,8 +23,9 @@
     "paths": {
       "runtime-spike/tests/*": ["host/tests/*"],
       "runtime-spike/*": ["host/app/*"],
+      "cards": ["cards/*"],
       "*": ["host/types/*"]
     }
   },
-  "include": ["host/app/**/*", "host/tests/**/*", "host/types/**/*"]
+  "include": ["cards/**/*", "host/app/**/*", "host/tests/**/*", "host/types/**/*"]
 }

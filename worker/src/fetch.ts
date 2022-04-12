@@ -8,6 +8,7 @@ import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation';
 import * as etc from 'ember-source/dist/ember-template-compiler';
 import { preprocessEmbeddedTemplates } from 'ember-template-imports/lib/preprocess-embedded-templates';
 import glimmerTemplatePlugin from 'ember-template-imports/src/babel-plugin';
+import typescriptPlugin from '@babel/plugin-transform-typescript';
 
 export class FetchHandler {
   private baseURL: string;
@@ -63,7 +64,11 @@ export class FetchHandler {
     url: URL
   ): Promise<Response> {
     let handle = await this.getLocalFile(url.pathname.slice(1));
-    if (['.js', '.gjs'].some((extension) => handle.name.endsWith(extension))) {
+    if (
+      ['.js', '.gjs', '.ts', '.gts'].some((extension) =>
+        handle.name.endsWith(extension)
+      )
+    ) {
       return await this.makeJS(handle);
     } else {
       return await this.serveLocalFile(handle);
@@ -84,6 +89,7 @@ export class FetchHandler {
       content = babel.transformSync(content, {
         filename: handle.name,
         plugins: [
+          typescriptPlugin,
           glimmerTemplatePlugin,
           // this "as any" is because typescript is using the Node-specific types
           // from babel-plugin-ember-template-compilation, but we're using the
