@@ -10,6 +10,8 @@ import { preprocessEmbeddedTemplates } from 'ember-template-imports/lib/preproce
 import glimmerTemplatePlugin from 'ember-template-imports/src/babel-plugin';
 import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
 import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
+//@ts-ignore unsure where these types live
+import typescriptPlugin from '@babel/plugin-transform-typescript';
 
 export class FetchHandler {
   private baseURL: string;
@@ -65,7 +67,11 @@ export class FetchHandler {
     url: URL
   ): Promise<Response> {
     let handle = await this.getLocalFile(url.pathname.slice(1));
-    if (['.js', '.gjs'].some((extension) => handle.name.endsWith(extension))) {
+    if (
+      ['.js', '.gjs', '.ts', '.gts'].some((extension) =>
+        handle.name.endsWith(extension)
+      )
+    ) {
       return await this.makeJS(handle);
     } else {
       return await this.serveLocalFile(handle);
@@ -88,6 +94,7 @@ export class FetchHandler {
         plugins: [
           [decoratorsProposalPlugin, { legacy: true }],
           classPropertiesProposalPlugin,
+          typescriptPlugin,
           glimmerTemplatePlugin,
           // this "as any" is because typescript is using the Node-specific types
           // from babel-plugin-ember-template-compilation, but we're using the

@@ -2,4 +2,5 @@
 // detect a named export of "component" and render it.
 // (actual cards and their API will come after that)
 
-export const component = <template>Hello world</template>
+const message: string = "Hello world I'm GTS";
+export const component = <template>{{message}}</template>
