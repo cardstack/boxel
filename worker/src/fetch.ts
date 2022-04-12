@@ -82,7 +82,9 @@ export class FetchHandler {
       })!.code!;
     } catch (err: any) {
       return new Response(err.message, {
-        status: 500,
+        // using "Not Acceptable" here because no text/javascript representation
+        // can be made and we're sending text/html error page instead
+        status: 406,
         headers: { 'content-type': 'text/html' },
       });
     }
