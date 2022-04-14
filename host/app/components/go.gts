@@ -3,28 +3,13 @@ import { action } from '@ember/object';
 import monaco from '../modifiers/monaco';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import * as monacoEditor from 'monaco-editor';
 import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import Preview from './preview';
 import FileTree from './file-tree';
-
-function getEditorLanguage(fileName: string) {
-  const languages = monacoEditor.languages.getLanguages();
-  let extension = '.' + fileName.split('.').pop();
-  let language = languages.find(lang => {
-    if (!lang.extensions || lang.extensions.length === 0) {
-      return;
-    }
-    return lang.extensions.find(ext => ext === extension ? lang : null);
-  });
-
-  if (!language) {
-    return 'plaintext';
-  }
-  return language.id;
-}
+import { getEditorLanguage, registerMonacoLanguage } from '../utils/editor-language';
+import { gjsRegistryInfo, gjsDefinition } from '../config/monaco-gjs';
 
 function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
@@ -61,12 +46,17 @@ export default class Go extends Component<Args> {
             <Preview @filename={{this.openFile.name}} />
           {{/if}}
         </div>
-      {{/if}}              
+      {{/if}}
     </div>
   </template>
 
   @service declare localRealm: LocalRealm;
   @tracked selectedFile: Entry | undefined;
+
+  constructor(owner: unknown, args: Args) {
+    super(owner, args);
+    registerMonacoLanguage(gjsRegistryInfo, gjsDefinition);
+  }
 
   @action
   onSelectedFile(entry: Entry | undefined) {
