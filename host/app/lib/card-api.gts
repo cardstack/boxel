@@ -62,7 +62,7 @@ export class CardView {
 
 export function contains(field: Card) {
   // TODO unsure how to wire this up....
-  return function(target, key) {
+  return function(target: _Schema, key: string) {
 
   }
 }
