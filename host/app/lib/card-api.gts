@@ -60,9 +60,9 @@ export class CardView {
   }
 }
 
-export function contains(field: Card) {
+export function contains(_field: Card) {
   // TODO unsure how to wire this up....
-  return function(target: _Schema, key: string) {
+  return function(_target: _Schema, _key: string) {
 
   }
 }
