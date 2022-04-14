@@ -10,6 +10,9 @@ module('Integration | card-basics', function (hooks) {
   test('render a simple card', async function (assert) {
 
     let helloWorld = new Card({
+      data: {
+        title: 'the title'
+      },
       isolated: class Isolated extends Component<Signature> {
         <template>{{@model.title}}</template>
       }

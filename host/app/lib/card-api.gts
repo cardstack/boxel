@@ -12,15 +12,18 @@ export type CardComponent = typeof _CardComponent;
 export type Format = 'isolated' | 'embedded' | 'edit';
 
 export class Card {
+  data: Record<string, any>;
   isolated: CardComponent;
   edit: CardComponent;
   embedded: CardComponent;
 
   constructor(params: {
+    data?: Record<string, any>;
     isolated?: CardComponent;
     edit?: CardComponent;
     embedded?: CardComponent;
   }) {
+    this.data = params.data || {};
     this.isolated = params.isolated ?? _CardComponent;
     this.edit = params.edit ?? _CardComponent;
     this.embedded = params.embedded ?? _CardComponent;
@@ -34,17 +37,17 @@ export class Card {
 class _Wrapper extends Component {}
 
 export class CardView {
-  constructor(card: Card, format: Format) {
+  constructor(private card: Card, format: Format) {
     let CardComponent = card[format];
     let self: CardView = this;
     this.component = class Wrapper extends Component {
-      <template><CardComponent @model={{self.model}} /></template>
+      <template><CardComponent @model={{self.data}} /></template>
     }
   }
 
   component: typeof _Wrapper;
 
-  get model() {
-    return { title: 'the title' };
+  get data() {
+    return this.card.data;
   }
 }
