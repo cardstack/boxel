@@ -1,4 +1,4 @@
-import Component from '@glint/environment-ember-loose/glimmer-component';
+import Component from '@glimmer/component';
 import { importResource } from '../resources/import';
 
 export default class Preview extends Component<{ Args: { filename: string } }> {
