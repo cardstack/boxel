@@ -1,12 +1,12 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import { Card, Signature, contains } from 'runtime-spike/lib/card-api';
+import { Card, Signature, SchemaClass, contains } from 'runtime-spike/lib/card-api';
 import Component from '@glint/environment-ember-loose/glimmer-component';
 import stringField from 'runtime-spike/lib/string-field';
 
-class SimpleSchema {
-  @contains(stringField()) title: string | undefined;
+class SimpleSchema extends SchemaClass {
+  @contains(stringField) title: string | undefined;
 }
 
 module('Integration | card-basics', function (hooks) {
