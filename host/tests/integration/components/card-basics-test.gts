@@ -1,8 +1,13 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import { Card, Signature } from 'runtime-spike/lib/card-api';
+import { Card, Signature, contains } from 'runtime-spike/lib/card-api';
 import Component from '@glint/environment-ember-loose/glimmer-component';
+import stringField from 'runtime-spike/lib/string-field';
+
+class SimpleSchema {
+  @contains(stringField()) title: string | undefined;
+}
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -13,7 +18,9 @@ module('Integration | card-basics', function (hooks) {
       data: {
         title: 'the title'
       },
+      schema: SimpleSchema,
       isolated: class Isolated extends Component<Signature> {
+        // TODO change this to {{@field.title}}
         <template>{{@model.title}}</template>
       }
     });
