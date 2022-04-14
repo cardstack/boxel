@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import { Card, Signature } from 'runtime-spike/lib/card-api';
-import Component from '@glint/environment-ember-loose/glimmer-component';
+import Component from '@glimmer/component';
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);

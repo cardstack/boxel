@@ -1,7 +1,8 @@
 import { TemplateFactory } from 'htmlbars-inline-precompile';
-import Helper from '@glint/environment-ember-loose/ember-component/helper';
+import Helper from '@ember/component/helper';
 import '@glint/environment-ember-loose/registry';
-import GlimmerComponent from '@glimmer/component';
+import '@glint/environment-ember-loose/native-integration';
+import { ComponentLike } from '@glint/template';
 
 // Types for compiled templates
 declare module 'runtime-spike/templates/*' {
@@ -16,7 +17,7 @@ declare global {
 declare module '@ember/component' {
   export function setComponentTemplate(
     template: string,
-    Component: typeof GlimmerComponent
+    Component: ComponentLike
   ): void;
 }
 

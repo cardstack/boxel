@@ -1,4 +1,4 @@
-import Modifier from '@glint/environment-ember-loose/ember-modifier';
+import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 import * as monaco from 'monaco-editor';
 import { restartableTask, timeout } from 'ember-concurrency';
