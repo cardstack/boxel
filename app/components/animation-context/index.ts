@@ -16,7 +16,7 @@ const { VOLATILE_TAG, consumeTag } =
 
 interface AnimationContextArgs {
   id: string | undefined;
-  use: ((changeset: Changeset) => Promise<void>) | undefined;
+  use: ((changeset: Changeset, log?: Function) => Promise<void>) | undefined;
 }
 
 export default class AnimationContextComponent extends Component<AnimationContextArgs> {

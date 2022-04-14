@@ -19,6 +19,11 @@ import {
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
+import debug, { Debugger } from 'debug';
+
+let runCount = 0;
+let baseLogger = debug('run');
+debug.enable('run:*');
 
 export type AnimateFunction = (
   sprite: Sprite,
@@ -58,6 +63,9 @@ export default class AnimationsService extends Service {
 
     // Trigger willTransition once per render cycle
     if (!this.didNotifyContextRendering) {
+      let logger = baseLogger.extend(String(++runCount));
+      logger.color = runCount % 2 === 0 ? '#0077AE' : '#6A0121';
+      logger(`---rendering---`);
       this.didNotifyContextRendering = true;
 
       // TODO: we are very likely doing too much measuring as this triggers measurements on all contexts.
@@ -66,7 +74,7 @@ export default class AnimationsService extends Service {
         // We can't schedule this, if we don't deal with it immediately the animations will already be gone
         this.willTransition(context);
       }
-      scheduleOnce('afterRender', this, this.maybeTransition);
+      scheduleOnce('afterRender', this, this.maybeTransition, logger);
     }
   }
 
@@ -154,10 +162,14 @@ export default class AnimationsService extends Service {
     this.intermediateSprites.set(context, intermediateSprites);
   }
 
-  async maybeTransition(): Promise<TaskInstance<void>> {
+  async maybeTransition(logger: Debugger): Promise<TaskInstance<void>> {
     return taskFor(this.maybeTransitionTask)
-      .perform()
+      .perform(logger)
+      .then(() => {
+        logger(`---done rendering - complete ---`);
+      })
       .catch((error) => {
+        logger(`---done rendering - cancel---`);
         if (!didCancel(error)) {
           console.error(error);
           throw error;
@@ -168,7 +180,7 @@ export default class AnimationsService extends Service {
   }
 
   @restartableTask
-  *maybeTransitionTask() {
+  *maybeTransitionTask(logger: Debugger) {
     this.didNotifyContextRendering = false;
 
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
@@ -179,12 +191,15 @@ export default class AnimationsService extends Service {
     for (let context of contexts as AnimationContext[]) {
       // TODO: Should we keep a "current" transition runner while it is running so we can actually interrupt it?
       //  It may also be good enough to rewrite maybeTransition into a Task.
+      let contextSpecificLogger = logger.extend(context?.id ?? 'no-id', ' > ');
+      contextSpecificLogger.color = logger.color;
       let transitionRunner = new TransitionRunner(context as AnimationContext, {
         spriteTree: this.spriteTree,
         freshlyAdded: this.freshlyAdded,
         freshlyRemoved: this.freshlyRemoved,
         intent: this.intent,
         intermediateSprites: intermediateSprites.get(context),
+        logger: contextSpecificLogger,
       });
       let task = taskFor(transitionRunner.maybeTransitionTask);
       promises.push(task.perform());
@@ -193,6 +208,7 @@ export default class AnimationsService extends Service {
     // TODO: check for async leaks
     this.freshlyAdded.clear();
     this.freshlyRemoved.clear();
+    logger(`freshly removed cleared`);
     this.spriteTree.clearFreshlyRemovedChildren();
     this.intent = undefined;
   }

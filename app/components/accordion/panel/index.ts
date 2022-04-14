@@ -6,10 +6,11 @@ import runAnimations from 'animations/utils/run-animations';
 
 //import LinearBehavior from 'animations/behaviors/linear';
 import SpringBehavior from 'animations/behaviors/spring';
+import LinearBehavior from 'animations/behaviors/linear';
 
 export default class AccordionPanel extends Component {
-  @action async resizePanels(changeset: Changeset) {
-    let behavior = new SpringBehavior({ overshootClamping: true });
+  @action async resizePanels(changeset: Changeset, log: Function) {
+    let behavior = new LinearBehavior();
     let duration = behavior instanceof SpringBehavior ? undefined : 320;
     let { context } = changeset;
     let containers = changeset.spritesFor({
@@ -48,6 +49,10 @@ export default class AccordionPanel extends Component {
         });
         spritesToAnimate.push(sprite);
       }
+    }
+
+    if (log) {
+      log('sprites to animate:', spritesToAnimate);
     }
 
     await runAnimations(spritesToAnimate);

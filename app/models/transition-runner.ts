@@ -4,6 +4,7 @@ import Changeset from '../models/changeset';
 import Sprite, { SpriteType } from '../models/sprite';
 import SpriteTree from './sprite-tree';
 import SpriteModifier from '../modifiers/sprite';
+import { Debugger } from 'debug';
 
 function checkForChanges(
   spriteModifier: SpriteModifier,
@@ -34,6 +35,7 @@ type TransitionRunnerOpts = {
   freshlyRemoved: Set<SpriteModifier>;
   intent: string | undefined;
   intermediateSprites: Set<Sprite> | undefined;
+  logger?: Debugger;
 };
 export default class TransitionRunner {
   animationContext: AnimationContext;
@@ -43,6 +45,7 @@ export default class TransitionRunner {
   intent: string | undefined;
   freshlyChanged: Set<SpriteModifier> = new Set();
   intermediateSprites: Set<Sprite>;
+  logger?: Debugger;
 
   constructor(animationContext: AnimationContext, opts: TransitionRunnerOpts) {
     this.animationContext = animationContext;
@@ -51,6 +54,12 @@ export default class TransitionRunner {
     this.freshlyRemoved = opts.freshlyRemoved;
     this.intent = opts.intent;
     this.intermediateSprites = opts.intermediateSprites ?? new Set();
+    this.logger = opts.logger;
+    this.logger?.('transition runner arguments:', {
+      freshlyAdded: [...this.freshlyAdded].map(sprite => sprite.id),
+      freshlyRemoved: [...this.freshlyRemoved].map(sprite => sprite.id),
+      intermediateSprites: [...this.intermediateSprites].map(sprite => sprite.id),
+    });
   }
 
   filterToContext(
@@ -100,14 +109,16 @@ export default class TransitionRunner {
 
     if (animationContext.shouldAnimate(changeset)) {
       this.logChangeset(changeset, animationContext); // For debugging
-      let animation = animationContext.args.use?.(changeset);
+      let animation = animationContext.args.use?.(changeset, this.logger);
       try {
         yield Promise.resolve(animation);
       } catch (error) {
         console.error(error);
         throw error;
       }
+
       animationContext.clearOrphans();
+      this.logger?.('cleared orphans');
       animationContext.captureSnapshot();
       // TODO: This is likely not needed anymore now that we measure beforehand
       /*let contextDescendants = this.spriteTree.descendantsOf(animationContext);
@@ -150,6 +161,7 @@ export default class TransitionRunner {
         tableRows.push(row(type, sprite));
       }
     }
+    this.logger?.('changeset');
     console.table(tableRows);
   }
 }

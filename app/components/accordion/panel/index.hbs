@@ -1,4 +1,4 @@
-<AnimationContext local-class="accordion-panel-animation-context" @use={{this.resizePanels}}>
+<AnimationContext @id={{concat @id "-context"}} local-class="accordion-panel-animation-context" @use={{this.resizePanels}}>
   <div local-class="accordion-panel-container" {{sprite id=(concat @id "-accordion-panel-container") role="accordion-panel-container"}}>
     <h3 local-class="accordion-panel-header">
       <button
