@@ -4,3 +4,4 @@ environment:
 
 include:
   - host/app/**
+  - host/tests/**
