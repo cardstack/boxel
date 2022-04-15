@@ -1,8 +1,10 @@
+import GlimmerComponent from '@glimmer/component';
+
 export const primitive = Symbol('cardstack-primitive');
 
 type FieldTypeFor<T> = T extends { [primitive]: infer F } ? F : T;
 
-export function contains<CardT extends abstract new(...args: any) => any>(card: CardT): FieldTypeFor<InstanceType<CardT>> {
+export function contains<CardT extends abstract new(...args: any) => any>(card: CardT): FieldTypeFor<CardT> {
   if (primitive in card) {
     return {
       setupField() {
@@ -27,3 +29,11 @@ export function contains<CardT extends abstract new(...args: any) => any>(card: 
 export const field = function(_target: object, _key: string| symbol, { initializer }: { initializer(): any }) {
   return initializer().setupField();
 } as unknown as PropertyDecorator;
+
+type Constructable = abstract new(...args: any) => any;
+
+type SignatureFor<CardT extends Constructable> = { Args: { model: InstanceType<CardT> } }
+
+export class Component<CardT extends Constructable> extends GlimmerComponent<SignatureFor<CardT>> {
+
+}

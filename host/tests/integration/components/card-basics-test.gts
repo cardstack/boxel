@@ -1,10 +1,8 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 // import { renderComponent } from '../../helpers/render-component';
-import { contains, field } from 'runtime-spike/lib/card-api';
+import { contains, field, Component } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
-
-// import Component from '@glimmer/component';
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -12,11 +10,16 @@ module('Integration | card-basics', function (hooks) {
   test('primitive field type checking', async function (assert) {
     class Person {
       @field name = contains(StringCard);
-    }
+      @field title = contains(StringCard);
 
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>{{@model.name}} {{@model.title}}</template>
+      }
+    }
     let card = new Person();
     card.name = 'arthur';
-    assert.strictEqual(card.name, 'arthur');
+    let readName: string = card.name;
+    assert.strictEqual(readName, 'arthur');
   });
 
   // test('render a simple card', async function (assert) {
