@@ -29,7 +29,7 @@ export class Opacity extends Motion<OpacityOptions> {
     this.duration = opts.duration ?? DEFAULT_DURATION;
     this.value = new BaseValue('opacity', this.from);
 
-    this.updateKeyframes();
+    //this.updateKeyframes();
   }
 
   get from(): number {

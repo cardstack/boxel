@@ -41,7 +41,7 @@ export class Move extends Motion<MoveOptions> {
     this.duration = opts.duration ?? DEFAULT_DURATION;
     this.x = new BaseValue('x', this.startPosition.x);
     this.y = new BaseValue('y', this.startPosition.y);
-    this.updateKeyframes();
+    //this.updateKeyframes();
   }
 
   get startPosition(): Position {
