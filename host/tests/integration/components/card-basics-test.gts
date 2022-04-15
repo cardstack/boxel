@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import { Card, Signature, SchemaClass, contains } from 'runtime-spike/lib/card-api';
-import Component from '@glint/environment-ember-loose/glimmer-component';
+import Component from '@glimmer/component';
 import string from 'runtime-spike/lib/string-field';
 
 class SimpleSchema extends SchemaClass {
