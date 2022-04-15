@@ -1,29 +1,27 @@
-import { languages } from 'monaco-editor/esm/vs/editor/editor.api';
-
 import {
-  conf as jsConfig,
-  language as js,
-} from 'monaco-editor/esm/vs/basic-languages/javascript/javascript';
+  conf as tsConfig,
+  language as ts,
+} from 'monaco-editor/esm/vs/basic-languages/typescript/typescript';
 
-export const gjsRegistryInfo: languages.ILanguageExtensionPoint = {
-  id: 'glimmerJS',
-  extensions: ['.gjs'],
+export const gtsRegistryInfo = {
+  id: 'glimmerTS',
+  extensions: ['.gts'],
 };
 
-export const gjsConfig: languages.LanguageConfiguration = {
-  ...jsConfig,
+export const gtsConfig = {
+  ...tsConfig,
   autoClosingPairs: [
     { open: '<!--', close: '-->', notIn: ['comment', 'string'] },
     { open: '<template>', close: '</template>' },
-    ...jsConfig.autoClosingPairs,
+    ...tsConfig.autoClosingPairs,
   ],
 };
 
-export const gjsDefinition: languages.IMonarchLanguage = {
-  ...js,
-  tokenPostfix: '.gjs',
+export const gtsDefinition = {
+  ...ts,
+  tokenPostfix: '.gts',
   tokenizer: {
-    ...js.tokenizer,
+    ...ts.tokenizer,
     root: [
       [
         /<template\s*>/,
@@ -35,7 +33,7 @@ export const gjsDefinition: languages.IMonarchLanguage = {
         },
       ],
       [/<\/template\s*>/, { token: 'tag', bracket: '@close' }],
-      ...js.tokenizer.root,
+      ...ts.tokenizer.root,
     ],
     hbs: [
       [

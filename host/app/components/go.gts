@@ -9,7 +9,8 @@ import { file } from '../resources/file';
 import Preview from './preview';
 import FileTree from './file-tree';
 import { getEditorLanguage, registerMonacoLanguage } from '../utils/editor-language';
-import { gjsRegistryInfo, gjsDefinition } from '../config/monaco-gjs';
+import { gjsRegistryInfo, gjsDefinition, gjsConfig } from '../config/monaco-gjs';
+import { gtsRegistryInfo, gtsDefinition, gtsConfig } from '../config/monaco-gts';
 
 function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
@@ -55,7 +56,8 @@ export default class Go extends Component<Args> {
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    registerMonacoLanguage(gjsRegistryInfo, gjsDefinition);
+    registerMonacoLanguage(gjsRegistryInfo, gjsDefinition, gjsConfig);
+    registerMonacoLanguage(gtsRegistryInfo, gtsDefinition, gtsConfig);
   }
 
   @action

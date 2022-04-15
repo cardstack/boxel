@@ -1,26 +1,23 @@
-import * as monaco from 'monaco-editor';
+import { languages } from 'monaco-editor/esm/vs/editor/editor.api';
 
 export function getEditorLanguage(fileName: string) {
-  const languages = monaco.languages.getLanguages();
+  const editorLanguages = languages.getLanguages();
   let extension = '.' + fileName.split('.').pop();
-  let language = languages.find((lang) => {
-    if (!lang.extensions || lang.extensions.length === 0) {
-      return;
-    }
-    return lang.extensions.find((ext) => (ext === extension ? lang : null));
+  let language = editorLanguages.find((lang) => {
+    return lang.extensions?.find((ext) => (ext === extension ? lang : null));
   });
-
-  if (!language) {
-    return 'plaintext';
-  }
-  return language.id;
+  return language?.id ?? 'plaintext';
 }
 
 export function registerMonacoLanguage(
-  languageInfo: monaco.languages.ILanguageExtensionPoint,
-  definition: monaco.languages.IMonarchLanguage
+  languageInfo: languages.ILanguageExtensionPoint,
+  definition: languages.IMonarchLanguage,
+  config?: languages.LanguageConfiguration
 ) {
   const { id, extensions } = languageInfo;
-  monaco.languages.register({ id, extensions });
-  monaco.languages.setMonarchTokensProvider(id, definition);
+  languages.register({ id, extensions });
+  languages.setMonarchTokensProvider(id, definition);
+  if (config) {
+    languages.setLanguageConfiguration(id, config);
+  }
 }
