@@ -1,4 +1,4 @@
-import Sprite from './sprite';
+import Sprite, { SpriteType } from './sprite';
 import { defer } from 'rsvp';
 
 /**
@@ -22,6 +22,7 @@ export class SpriteAnimation {
     this.keyframes = keyframes;
     this.keyframeAnimationOptions = {
       ...keyframeAnimationOptions,
+      fill: sprite.type === SpriteType.Removed ? 'forwards' : undefined,
       id: sprite.identifier.toString(),
     };
   }
