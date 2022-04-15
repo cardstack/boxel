@@ -36,7 +36,7 @@ export class Resize extends Motion<ResizeOptions> {
     this.duration = opts.duration ?? DEFAULT_DURATION;
     this.width = new BaseValue('width', this.startSize.width);
     this.height = new BaseValue('height', this.startSize.height);
-    this.updateKeyframes();
+    //this.updateKeyframes();
   }
 
   get startSize(): Size {
