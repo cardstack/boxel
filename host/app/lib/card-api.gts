@@ -1,50 +1,39 @@
-import Component from '@glimmer/component';
+import GlimmerComponent from '@glimmer/component';
 
-export interface Signature {
-  Args: {
-    model: Record<string, any>;
-  };
-}
+export const primitive = Symbol('cardstack-primitive');
 
-class _CardComponent extends Component<Signature> {}
+type FieldTypeFor<T> = T extends { [primitive]: infer F } ? F : T;
 
-export type CardComponent = typeof _CardComponent;
-export type Format = 'isolated' | 'embedded' | 'edit';
-
-export class Card {
-  isolated: CardComponent;
-  edit: CardComponent;
-  embedded: CardComponent;
-
-  constructor(params: {
-    isolated?: CardComponent;
-    edit?: CardComponent;
-    embedded?: CardComponent;
-  }) {
-    this.isolated = params.isolated ?? _CardComponent;
-    this.edit = params.edit ?? _CardComponent;
-    this.embedded = params.embedded ?? _CardComponent;
-  }
-  async inFormat(format: Format): Promise<CardView> {
-    return new CardView(this, format);
+export function contains<CardT extends abstract new(...args: any) => any>(card: CardT): FieldTypeFor<CardT> {
+  if (primitive in card) {
+    return {
+      setupField() {
+        let bucket = new WeakMap();
+        return {
+          get() {
+            return bucket.get(this);
+          },
+          set(value: any) {
+            bucket.set(this, value);
+          }
+        }
+      }
+    } as any;
+  } else {
+    throw new Error("composite cards not implemented");
   }
 }
 
+// our decorators are implemented by Babel, not TypeScript, so they have a
+// different signature than Typescript thinks they do.
+export const field = function(_target: object, _key: string| symbol, { initializer }: { initializer(): any }) {
+  return initializer().setupField();
+} as unknown as PropertyDecorator;
 
-class _Wrapper extends Component {}
+type Constructable = abstract new(...args: any) => any;
 
-export class CardView {
-  constructor(card: Card, format: Format) {
-    let CardComponent = card[format];
-    let self: CardView = this;
-    this.component = class Wrapper extends Component {
-      <template><CardComponent @model={{self.model}} /></template>
-    }
-  }
+type SignatureFor<CardT extends Constructable> = { Args: { model: InstanceType<CardT> } }
 
-  component: typeof _Wrapper;
+export class Component<CardT extends Constructable> extends GlimmerComponent<SignatureFor<CardT>> {
 
-  get model() {
-    return { title: 'the title' };
-  }
 }
