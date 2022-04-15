@@ -28,6 +28,9 @@ class SpriteIdentifier {
   equals(other: SpriteIdentifier): boolean {
     return this.id === other.id && this.role === other.role;
   }
+  toString(): string {
+    return `id:${this.id};role:${this.role}`;
+  }
 }
 
 export default class Sprite {
@@ -92,7 +95,7 @@ export default class Sprite {
     };
   }
 
-  get canBeGarbageCollected() {
+  get canBeGarbageCollected(): boolean {
     return this.type === SpriteType.Removed && this.hidden;
   }
 

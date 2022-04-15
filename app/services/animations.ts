@@ -32,6 +32,7 @@ export default class AnimationsService extends Service {
   intent: string | undefined;
   currentChangesets: Changeset[] = [];
   intermediateSprites: WeakMap<AnimationContext, Set<Sprite>> = new WeakMap();
+  runningAnimations: Map<string, Set<Animation>> = new Map();
 
   registerContext(context: AnimationContext): void {
     this.spriteTree.addAnimationContext(context);
@@ -62,6 +63,27 @@ export default class AnimationsService extends Service {
 
       // TODO: we are very likely doing too much measuring as this triggers measurements on all contexts.
       //  We (probably) only need to measure for sibling contexts (and their children).
+
+      // TODO: it could be nice if we keep track of animations that we own in the sprites or contexts so we don't even need to look them up in the DOM
+      // Lookup all animations at once so we only need to access the DOM once
+      let animations = document.getAnimations();
+      let playing = 0; // debug
+      for (let animation of animations) {
+        if (animation.playState === 'running') {
+          playing++;
+          animation.pause();
+          let runningAnimation = this.runningAnimations.get(animation.id);
+          if (runningAnimation) {
+            runningAnimation.add(animation);
+          } else {
+            this.runningAnimations.set(animation.id, new Set([animation]));
+          }
+        }
+      }
+      console.info(
+        `${animations.length} animations found in DOM, ${playing} were playing.`
+      );
+
       for (let context of this.eligibleContexts) {
         // We can't schedule this, if we don't deal with it immediately the animations will already be gone
         this.willTransition(context);
@@ -104,6 +126,7 @@ export default class AnimationsService extends Service {
 
   willTransition(context: AnimationContext): void {
     // TODO: what about intents
+    // TODO: it might be possible to only measure if we know something changed since last we measured.
 
     this.cleanupSprites(context);
 
@@ -137,7 +160,7 @@ export default class AnimationsService extends Service {
 
       // We cannot know which animations we need to cancel until afterRender, so we will pause them so they don't
       // progress after we did our measurements.
-      sprite.element.getAnimations().forEach((a) => a.pause());
+      //sprite.element.getAnimations().forEach((a) => a.pause());
       // TODO: we could leave these measurements to the SpriteFactory as they are unique to the SpriteType
       let bounds = sprite.captureAnimatingBounds(context.element, false);
       let styles = copyComputedStyle(sprite.element);
@@ -173,7 +196,9 @@ export default class AnimationsService extends Service {
 
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
     let intermediateSprites = this.intermediateSprites;
+    let runningAnimations = this.runningAnimations;
     this.intermediateSprites = new WeakMap();
+    this.runningAnimations = new Map();
 
     let promises = [];
     for (let context of contexts as AnimationContext[]) {
@@ -185,6 +210,7 @@ export default class AnimationsService extends Service {
         freshlyRemoved: this.freshlyRemoved,
         intent: this.intent,
         intermediateSprites: intermediateSprites.get(context),
+        runningAnimations,
       });
       let task = taskFor(transitionRunner.maybeTransitionTask);
       promises.push(task.perform());

@@ -33,10 +33,14 @@ function runWithoutAnimations(playAnimations: boolean) {
 
 function runWithAnimations(playAnimations: boolean) {
   return (element: HTMLElement, f: () => DOMRect) => {
-    let animations = element.getAnimations();
-    animations.forEach((a) => {
-      a.pause();
-    });
+    let animations: Animation[] = [];
+
+    if (playAnimations) {
+      animations = element.getAnimations();
+      animations.forEach((a) => {
+        a.pause();
+      });
+    }
     let result = f();
     if (playAnimations) {
       for (let i = 0; i < animations.length; i++) {
