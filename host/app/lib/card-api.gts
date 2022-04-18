@@ -1,10 +1,14 @@
 import GlimmerComponent from '@glimmer/component';
+import { ComponentLike } from '@glint/template';
 
 export const primitive = Symbol('cardstack-primitive');
 
 type FieldTypeFor<T> = T extends { [primitive]: infer F } ? F : T;
+type CardInstanceType<T extends Constructable> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
 
-export function contains<CardT extends abstract new(...args: any) => any>(card: CardT): FieldTypeFor<CardT> {
+export type Format = 'isolated' | 'embedded' | 'edit';
+
+export function contains<CardT extends Constructable>(card: CardT): FieldTypeFor<CardT> {
   if (primitive in card) {
     return {
       setupField() {
@@ -20,7 +24,19 @@ export function contains<CardT extends abstract new(...args: any) => any>(card: 
       }
     } as any;
   } else {
-    throw new Error("composite cards not implemented");
+    return {
+      setupField() {
+       let instance = new card();
+       return {
+         get() {
+           return instance;
+         },
+         set(value: any) {
+           Object.assign(instance, value);
+         }
+       }
+      }
+    } as any
   }
 }
 
@@ -30,10 +46,38 @@ export const field = function(_target: object, _key: string| symbol, { initializ
   return initializer().setupField();
 } as unknown as PropertyDecorator;
 
-type Constructable = abstract new(...args: any) => any;
+export type Constructable = new(...args: any) => any;
 
-type SignatureFor<CardT extends Constructable> = { Args: { model: InstanceType<CardT> } }
+type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT> } }
 
 export class Component<CardT extends Constructable> extends GlimmerComponent<SignatureFor<CardT>> {
 
+}
+
+const defaultComponent = {
+  isolated: <template></template>,
+  embedded: <template></template>,
+  edit: <template></template>
+}
+
+function getComponent<CardT extends Constructable>(card: CardT, format: Format): new() => Component<CardT> {
+  let Implementation = (card as any)[format];  
+  return Implementation ?? defaultComponent[format];
+}
+
+function getInitialData(card: Constructable): Record<string, any> | undefined {
+  return (card as any).data;
+}
+
+export async function prepareToRender<CardT extends Constructable>(card: CardT, format: Format): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
+  let Implementation = getComponent(card, format);
+  let model = new card();
+  let data = getInitialData(card);
+  if (data) {
+    Object.assign(model, data);
+  }
+  let component = <template>
+    <Implementation @model={{model}} />
+  </template>
+  return { component };
 }

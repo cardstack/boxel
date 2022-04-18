@@ -1,7 +1,21 @@
 // @ts-ignore
 import { precompileTemplate } from '@ember/template-compilation';
 import { render } from '@ember/test-helpers';
+import {
+  Format,
+  prepareToRender,
+  Constructable,
+} from 'runtime-spike/lib/card-api';
+import { ComponentLike } from '@glint/template';
 
-export async function renderComponent(C: any) {
+export async function renderComponent(C: ComponentLike) {
   await render(precompileTemplate(`<C/>`, { scope: () => ({ C }) }));
+}
+
+export async function renderCard(
+  card: Constructable,
+  format: Format
+): Promise<void> {
+  let { component } = await prepareToRender(card, format);
+  await renderComponent(component);
 }
