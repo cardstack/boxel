@@ -8,11 +8,22 @@ type CardInstanceType<T extends Constructable> = T extends { [primitive]: infer 
 
 export type Format = 'isolated' | 'embedded' | 'edit';
 
+
+let fields = new WeakMap(); // unsure how to type this....
+
 export function contains<CardT extends Constructable>(card: CardT): FieldTypeFor<CardT> {
   if (primitive in card) {
     return {
-      setupField() {
+      setupField(target: object, fieldName: string) {
         let bucket = new WeakMap();
+        let myFields = fields.get(target.constructor);
+        if (!myFields) {
+          myFields = {}
+          fields.set(target.constructor, myFields);
+        }
+        let Implementation = getComponent(card, 'embedded');
+        let model = bucket.get(this);
+        myFields[fieldName] = <template><Implementation @model={{model}}/></template>;
         return {
           get() {
             return bucket.get(this);
@@ -20,21 +31,28 @@ export function contains<CardT extends Constructable>(card: CardT): FieldTypeFor
           set(value: any) {
             bucket.set(this, value);
           }
-        }
+        };
       }
     } as any;
   } else {
     return {
-      setupField() {
-       let instance = new card();
-       return {
-         get() {
-           return instance;
-         },
-         set(value: any) {
-           Object.assign(instance, value);
-         }
-       }
+      setupField(target: object, fieldName: string) {
+        let instance = new card();
+        let myFields = fields.get(target.constructor);
+        if (!myFields) {
+          myFields = {};
+          fields.set(target.constructor, myFields);
+        }
+        let Implementation = getComponent(card, 'embedded');
+        myFields[fieldName] = <template><Implementation @model={{instance}}/></template>;
+        return {
+          get() {
+            return instance;
+          },
+          set(value: any) {
+            Object.assign(instance, value);
+          }
+        };
       }
     } as any
   }
@@ -42,13 +60,13 @@ export function contains<CardT extends Constructable>(card: CardT): FieldTypeFor
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
-export const field = function(_target: object, _key: string| symbol, { initializer }: { initializer(): any }) {
-  return initializer().setupField();
+export const field = function(target: object, key: string| symbol, { initializer }: { initializer(): any }) {
+  return initializer().setupField(target, key);
 } as unknown as PropertyDecorator;
 
 export type Constructable = new(...args: any) => any;
 
-type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT> } }
+type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT>; fields?: {[fieldName: string]: Component<CardT>} } }
 
 export class Component<CardT extends Constructable> extends GlimmerComponent<SignatureFor<CardT>> {
 
@@ -76,8 +94,20 @@ export async function prepareToRender<CardT extends Constructable>(card: CardT, 
   if (data) {
     Object.assign(model, data);
   }
+  let myFields = getFields(card);
   let component = <template>
-    <Implementation @model={{model}} />
+    <Implementation @model={{model}} @fields={{myFields}}/>
   </template>
   return { component };
+}
+
+function getFields<CardT extends Constructable>(card: CardT) {
+  let myFields = {};
+  let currentCard = card;
+  do {
+    // make sure child fields override parent fields
+    myFields = { ...(fields.get(currentCard) ?? {}), ...myFields };
+    currentCard = Object.getPrototypeOf(currentCard);
+  } while(currentCard)
+  return myFields;
 }
