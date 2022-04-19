@@ -62,9 +62,13 @@ export class Component<CardT extends Constructable> extends GlimmerComponent<Sig
 
 }
 
+function isObject(val: unknown){
+  return typeof val === 'object';
+}
+const DefaultIsolated = <template>{{#each-in @model as |key val|}}{{#if (isObject val)}}<DefaultIsolated @model={{val}} /> {{else}}<defaultComponent.embedded @model={{val}} /> {{/if}}{{/each-in}}</template>;
 const defaultComponent = {
-  isolated: <template></template>,
-  embedded: <template></template>,
+  embedded: <template>{{@model}}</template>,
+  isolated: <template><DefaultIsolated @model={{@model.constructor.data}} /></template>,
   edit: <template></template>
 }
 

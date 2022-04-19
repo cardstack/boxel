@@ -115,7 +115,24 @@ module('Integration | card-basics', function (hooks) {
       static data = { author: { firstName: 'Arthur' } }
     }
 
-    await renderCard(HelloWorld, 'isolated');
     assert.dom('[data-test]').containsText('Arthur');
+  });
+
+  test('render default templates', async function (assert) {
+    class Person {
+      @field name = contains(StringCard);
+    }
+
+    class Post {
+      @field title = contains(StringCard);
+      @field author = contains(Person);
+    }
+
+    class HelloWorld extends Post {
+      static data = { title: 'First Post', author: { name: 'Arthur' } }
+    }
+
+    await renderCard(HelloWorld, 'isolated');
+    assert.strictEqual(this.element.textContent!.trim(), 'First Post Arthur');
   });
 });
