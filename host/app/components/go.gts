@@ -10,41 +10,14 @@ import { file } from '../resources/file';
 import Preview from './preview';
 import FileTree from './file-tree';
 
-function getEditorLanguage(fileName: string) {
-  const languages = monacoEditor.languages.getLanguages();
-  let extension = '.' + fileName.split('.').pop();
-  let language = languages.find(lang => {
-    if (!lang.extensions || lang.extensions.length === 0) {
-      return;
-    }
-    return lang.extensions.find(ext => ext === extension ? lang : null);
-  });
-
-  if (!language) {
-    return 'plaintext';
-  }
-  return language.id;
-}
-
-function isRunnable(filename: string): boolean {
-  return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    Go: typeof Go;
-   }
-}
-
-interface Args {
-
+interface Signature {
   Args: {
     file: string | undefined;
     onSelectedFile: (filename: string | undefined) => void;
   }
 }
 
-export default class Go extends Component<Args> {
+export default class Go extends Component<Signature> {
   <template>
     <div class="editor">
       <div class="file-tree">
@@ -87,4 +60,30 @@ export default class Go extends Component<Args> {
     () => this.args.file,
     () => this.localRealm.isAvailable ? this.localRealm.fsHandle : undefined,
   );
+}
+
+function getEditorLanguage(fileName: string) {
+  const languages = monacoEditor.languages.getLanguages();
+  let extension = '.' + fileName.split('.').pop();
+  let language = languages.find(lang => {
+    if (!lang.extensions || lang.extensions.length === 0) {
+      return;
+    }
+    return lang.extensions.find(ext => ext === extension ? lang : null);
+  });
+
+  if (!language) {
+    return 'plaintext';
+  }
+  return language.id;
+}
+
+function isRunnable(filename: string): boolean {
+  return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    Go: typeof Go;
+   }
 }
