@@ -18,7 +18,6 @@ export function contains<CardT extends Constructable>(card: CardT): CardInstance
       setupField() {
         let bucket = new WeakMap();
         let get = function(this: InstanceType<CardT>) { 
-          console.log(`got value`);
           return bucket.get(this); 
         };
         (get as any)[isField] = card;
