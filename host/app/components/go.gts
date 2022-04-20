@@ -12,25 +12,14 @@ import { getEditorLanguage, registerMonacoLanguage } from '../utils/editor-langu
 import { gjsRegistryInfo, gjsDefinition, gjsConfig } from '../config/monaco-gjs';
 import { gtsRegistryInfo, gtsDefinition, gtsConfig } from '../config/monaco-gts';
 
-function isRunnable(filename: string): boolean {
-  return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    Go: typeof Go;
-   }
-}
-
-interface Args {
-
+interface Signature {
   Args: {
     file: string | undefined;
     onSelectedFile: (filename: string | undefined) => void;
   }
 }
 
-export default class Go extends Component<Args> {
+export default class Go extends Component<Signature> {
   <template>
     <div class="editor">
       <div class="file-tree">
@@ -79,4 +68,14 @@ export default class Go extends Component<Args> {
     () => this.args.file,
     () => this.localRealm.isAvailable ? this.localRealm.fsHandle : undefined,
   );
+}
+
+function isRunnable(filename: string): boolean {
+  return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    Go: typeof Go;
+   }
 }
