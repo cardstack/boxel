@@ -115,24 +115,41 @@ module('Integration | card-basics', function (hooks) {
       static data = { author: { firstName: 'Arthur' } }
     }
 
+    await renderCard(HelloWorld, 'isolated');
     assert.dom('[data-test]').containsText('Arthur');
   });
 
   test('render default templates', async function (assert) {
+    function testString(label: string) {
+      return class TestString {
+        static [primitive]: string;
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><em data-test={{label}}>{{@model}}</em></template>
+        }
+      }
+    }
+
     class Person {
-      @field name = contains(StringCard);
+      @field firstName = contains(testString('first-name'));
+
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName /></template>
+      }
     }
 
     class Post {
-      @field title = contains(StringCard);
+      @field title = contains(testString('title'));
       @field author = contains(Person);
     }
 
     class HelloWorld extends Post {
-      static data = { title: 'First Post', author: { name: 'Arthur' } }
+      static data = { title: 'First Post', author: { firstName: 'Arthur' } }
     }
 
     await renderCard(HelloWorld, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), 'First Post Arthur');
+
+    assert.dom('[data-test="first-name"]').containsText('Arthur');
+    assert.dom('[data-test="title"]').containsText('First Post');
+
   });
 });

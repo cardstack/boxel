@@ -62,30 +62,16 @@ export class Component<CardT extends Constructable> extends GlimmerComponent<Sig
 
 }
 
-// class DefaultComponent {
-//   static embedded = class Embedded extends Component<typeof this> {
-//     <template>{{@model}}</template>
-//   }
-//   static isolated = class Isolated extends Component<typeof this> {
-//     get currentModel() {
-//       return this.args.model.constructor.data ?? this.args.model;
-//     }
-//     isObject(val: unknown) {
-//       return typeof val === 'object';
-//     }
-//     <template>{{#each-in this.currentModel as |key val|}}{{#if (this.isObject val)}}<DefaultComponent.isolated @model={{val}} @fields={{@fields}} /> {{else}}<DefaultComponent.embedded @model={{val}} @fields={{@fields}} /> {{/if}}{{/each-in}}
-//     </template>
-//   }
-//   static edit = <template></template>;
-// }
-
-function isObject(val: unknown){
-  return typeof val === 'object';
+class DefaultIsolated extends GlimmerComponent<{ Args: { fields: Record<string, new() => GlimmerComponent>}}> {
+  <template>
+    {{#each-in @fields as |_key Field|}}
+      <Field />
+    {{/each-in}}
+  </template>;
 }
-const DefaultIsolated = <template>{{#each-in @model as |key val|}}{{#if (isObject val)}}<DefaultIsolated @model={{val}} /> {{else}}<defaultComponent.embedded @model={{val}} /> {{/if}}{{/each-in}}</template>;
 const defaultComponent = {
-  embedded: <template>{{@model}}</template>,
-  isolated: <template><DefaultIsolated @model={{@model.constructor.data}} /></template>,
+  embedded: <template><!-- Inherited from base card embedded view. Did your card forget to specify its embedded component? --></template>,
+  isolated: DefaultIsolated,
   edit: <template></template>
 }
 
@@ -171,6 +157,34 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
       // but we can pretend our Proxy object inherits from the true component, and
       // Ember's template lookup respects inheritance.
       return target;
+    },
+    ownKeys(target)  {
+      let keys = Reflect.ownKeys(target);
+      for (let name in model) {
+        let field = getField(model.constructor, name);
+        if (field) {
+          keys.push(name);
+        }
+      }
+      return keys;
+    },
+    getOwnPropertyDescriptor(target, property) {
+      if (typeof property === 'symbol') {
+        // don't handle symbols
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      }
+      let field = getField(model.constructor, property);
+      if (!field) {
+        // field doesn't exist, fall back to normal property access behavior
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      }
+      // found field: fields are enumerable properties
+      return {
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      }
     }
+
   }) as any;
 }
