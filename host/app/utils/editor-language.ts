@@ -1,7 +1,9 @@
-import { languages } from 'monaco-editor/esm/vs/editor/editor.api';
+import { languages } from 'monaco-editor';
+import { getLanguageConfig } from '../config/monaco-gjs';
 
-export function getEditorLanguage(fileName: string) {
+export function getEditorLanguage(fileName: string): string | undefined {
   const editorLanguages = languages.getLanguages();
+  console.log(editorLanguages);
   let extension = '.' + fileName.split('.').pop();
   let language = editorLanguages.find((lang) => {
     return lang.extensions?.find((ext) => (ext === extension ? lang : null));
@@ -9,15 +11,19 @@ export function getEditorLanguage(fileName: string) {
   return language?.id ?? 'plaintext';
 }
 
-export function registerMonacoLanguage(
-  languageInfo: languages.ILanguageExtensionPoint,
-  definition: languages.IMonarchLanguage,
-  config?: languages.LanguageConfiguration
+export async function registerMonacoLanguage(
+  langId: string,
+  registryInfo: languages.ILanguageExtensionPoint,
+  postfix: string
 ) {
-  const { id, extensions } = languageInfo;
+  let { info, config, language } = await getLanguageConfig(
+    langId,
+    registryInfo,
+    postfix
+  );
+  let { id, extensions } = info;
+  console.log(config, language);
   languages.register({ id, extensions });
-  languages.setMonarchTokensProvider(id, definition);
-  if (config) {
-    languages.setLanguageConfiguration(id, config);
-  }
+  languages.setMonarchTokensProvider(id, language);
+  languages.setLanguageConfiguration(id, config);
 }

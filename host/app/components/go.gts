@@ -9,8 +9,7 @@ import { file } from '../resources/file';
 import Preview from './preview';
 import FileTree from './file-tree';
 import { getEditorLanguage, registerMonacoLanguage } from '../utils/editor-language';
-import { gjsRegistryInfo, gjsDefinition, gjsConfig } from '../config/monaco-gjs';
-import { gtsRegistryInfo, gtsDefinition, gtsConfig } from '../config/monaco-gts';
+import { gjsRegistryInfo, gtsRegistryInfo } from '../config/monaco-gjs';
 
 interface Signature {
   Args: {
@@ -43,10 +42,10 @@ export default class Go extends Component<Signature> {
   @service declare localRealm: LocalRealm;
   @tracked selectedFile: Entry | undefined;
 
-  constructor(owner: unknown, args: Args) {
-    super(owner, args);
-    registerMonacoLanguage(gjsRegistryInfo, gjsDefinition, gjsConfig);
-    registerMonacoLanguage(gtsRegistryInfo, gtsDefinition, gtsConfig);
+  constructor() {
+    super(...arguments);
+    registerMonacoLanguage('javascript', gjsRegistryInfo, 'gjs');
+    registerMonacoLanguage('typescript', gtsRegistryInfo, 'gts');
   }
 
   @action
