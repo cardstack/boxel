@@ -62,6 +62,23 @@ export class Component<CardT extends Constructable> extends GlimmerComponent<Sig
 
 }
 
+// class DefaultComponent {
+//   static embedded = class Embedded extends Component<typeof this> {
+//     <template>{{@model}}</template>
+//   }
+//   static isolated = class Isolated extends Component<typeof this> {
+//     get currentModel() {
+//       return this.args.model.constructor.data ?? this.args.model;
+//     }
+//     isObject(val: unknown) {
+//       return typeof val === 'object';
+//     }
+//     <template>{{#each-in this.currentModel as |key val|}}{{#if (this.isObject val)}}<DefaultComponent.isolated @model={{val}} @fields={{@fields}} /> {{else}}<DefaultComponent.embedded @model={{val}} @fields={{@fields}} /> {{/if}}{{/each-in}}
+//     </template>
+//   }
+//   static edit = <template></template>;
+// }
+
 function isObject(val: unknown){
   return typeof val === 'object';
 }
