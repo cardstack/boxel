@@ -8,8 +8,8 @@ import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import Preview from './preview';
 import FileTree from './file-tree';
-import { getEditorLanguage, registerMonacoLanguage } from '../utils/editor-language';
-import { gjsRegistryInfo, gtsRegistryInfo } from '../config/monaco-gjs';
+import { getEditorLanguage, extendMonacoLanguage } from '../utils/editor-language';
+import { gjsConfigForMonaco, gtsConfigForMonaco } from '../config/monaco-gjs-gts';
 
 interface Signature {
   Args: {
@@ -44,8 +44,9 @@ export default class Go extends Component<Signature> {
 
   constructor() {
     super(...arguments);
-    registerMonacoLanguage('javascript', gjsRegistryInfo, 'gjs');
-    registerMonacoLanguage('typescript', gtsRegistryInfo, 'gts');
+    const { baseId, config, rules } = gjsConfigForMonaco;
+    extendMonacoLanguage(baseId, config, rules);
+    extendMonacoLanguage(gtsConfigForMonaco.baseId, gtsConfigForMonaco.config, gtsConfigForMonaco.rules);
   }
 
   @action
