@@ -62,9 +62,16 @@ export class Component<CardT extends Constructable> extends GlimmerComponent<Sig
 
 }
 
+class DefaultIsolated extends GlimmerComponent<{ Args: { fields: Record<string, new() => GlimmerComponent>}}> {
+  <template>
+    {{#each-in @fields as |_key Field|}}
+      <Field />
+    {{/each-in}}
+  </template>;
+}
 const defaultComponent = {
-  isolated: <template></template>,
-  embedded: <template></template>,
+  embedded: <template><!-- Inherited from base card embedded view. Did your card forget to specify its embedded component? --></template>,
+  isolated: DefaultIsolated,
   edit: <template></template>
 }
 
@@ -150,6 +157,34 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
       // but we can pretend our Proxy object inherits from the true component, and
       // Ember's template lookup respects inheritance.
       return target;
+    },
+    ownKeys(target)  {
+      let keys = Reflect.ownKeys(target);
+      for (let name in model) {
+        let field = getField(model.constructor, name);
+        if (field) {
+          keys.push(name);
+        }
+      }
+      return keys;
+    },
+    getOwnPropertyDescriptor(target, property) {
+      if (typeof property === 'symbol') {
+        // don't handle symbols
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      }
+      let field = getField(model.constructor, property);
+      if (!field) {
+        // field doesn't exist, fall back to normal property access behavior
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      }
+      // found field: fields are enumerable properties
+      return {
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      }
     }
+
   }) as any;
 }
