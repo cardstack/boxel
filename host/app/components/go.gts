@@ -8,8 +8,11 @@ import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import Preview from './preview';
 import FileTree from './file-tree';
-import { getEditorLanguage, extendMonacoLanguage } from '../utils/editor-language';
-import { gjsConfigForMonaco, gtsConfigForMonaco } from '../config/monaco-gjs-gts';
+import {
+  getLangFromFileExtension,
+  extendMonacoLanguage,
+  languageConfigs
+} from '../utils/editor-language';
 
 interface Signature {
   Args: {
@@ -28,7 +31,7 @@ export default class Go extends Component<Signature> {
       </div>
       {{#if this.openFile.ready}}
         <div {{monaco content=this.openFile.content
-                      language=(getEditorLanguage this.openFile.name)
+                      language=(getLangFromFileExtension this.openFile.name)
                       contentChanged=this.contentChanged}}></div>
         <div class="preview">
           {{#if (isRunnable this.openFile.name)}}
@@ -42,11 +45,9 @@ export default class Go extends Component<Signature> {
   @service declare localRealm: LocalRealm;
   @tracked selectedFile: Entry | undefined;
 
-  constructor() {
-    super(...arguments);
-    const { baseId, config, rules } = gjsConfigForMonaco;
-    extendMonacoLanguage(baseId, config, rules);
-    extendMonacoLanguage(gtsConfigForMonaco.baseId, gtsConfigForMonaco.config, gtsConfigForMonaco.rules);
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+    languageConfigs.map(lang => extendMonacoLanguage(lang));
   }
 
   @action
