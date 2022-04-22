@@ -119,7 +119,50 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test]').containsText('Arthur');
   });
 
-  test('render default templates', async function (assert) {
+  test('render edit field', async function (assert) {
+    class TestString {
+      static [primitive]: string;
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          {{!-- template-lint-disable require-input-label --}}
+          <input value={{@model}} />
+        </template>
+      }
+    }
+
+    class Person {
+      @field firstName = contains(TestString);
+    }
+
+    class Post {
+      @field title = contains(TestString);
+      @field author = contains(Person);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <label data-test-field="title">
+            Title
+            <@fields.title />
+          </label>
+          <label data-test-field="author">
+            Author
+            <@fields.author.firstName />
+          </label>
+        </template>
+      }
+    }
+
+    class HelloWorld extends Post {
+      static data = { title: 'My Post', author: { firstName: 'Arthur' } }
+    }
+
+    await renderCard(HelloWorld, 'edit');
+    assert.dom('[data-test-field="title"]').containsText('Title');
+    assert.dom('[data-test-field="title"] input').hasValue('My Post');
+    assert.dom('[data-test-field="author"]').containsText('Author');
+    assert.dom('[data-test-field="author"] input').hasValue('Arthur');
+  });
+
+  test('render default isolated template', async function (assert) {
     function testString(label: string) {
       return class TestString {
         static [primitive]: string;
@@ -150,6 +193,36 @@ module('Integration | card-basics', function (hooks) {
 
     assert.dom('[data-test="first-name"]').containsText('Arthur');
     assert.dom('[data-test="title"]').containsText('First Post');
+  });
 
+  test('render default edit template', async function (assert) {
+    class TestString {
+      static [primitive]: string;
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          {{!-- template-lint-disable require-input-label --}}
+          <input value={{@model}} />
+        </template>
+      }
+    }
+
+    class Person {
+      @field firstName = contains(TestString);
+    }
+
+    class Post {
+      @field title = contains(TestString);
+      @field author = contains(Person);
+    }
+
+    class HelloWorld extends Post {
+      static data = { title: 'My Post', author: { firstName: 'Arthur' } }
+    }
+
+    await renderCard(HelloWorld, 'edit');
+    assert.dom('[data-test-field="title"]').containsText('title');
+    assert.dom('[data-test-field="title"] input').hasValue('My Post');
+    assert.dom('[data-test-field="author"]').containsText('author firstName'); // TODO: fix nested labels
+    assert.dom('[data-test-field="author"] input').hasValue('Arthur');
   });
 });

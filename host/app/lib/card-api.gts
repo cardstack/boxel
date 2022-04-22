@@ -69,10 +69,20 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { fields: Record<string, 
     {{/each-in}}
   </template>;
 }
+class DefaultEdit extends GlimmerComponent<{ Args: { fields: Record<string, new() => GlimmerComponent>}}> {
+  <template>
+    {{#each-in @fields as |key Field|}}
+      <label data-test-field={{key}}>
+        {{key}}
+        <Field />
+      </label>
+    {{/each-in}}
+  </template>;
+}
 const defaultComponent = {
   embedded: <template><!-- Inherited from base card embedded view. Did your card forget to specify its embedded component? --></template>,
   isolated: DefaultIsolated,
-  edit: <template></template>
+  edit: DefaultEdit,
 }
 
 function defaultFieldFormat(format: Format): Format {
