@@ -48,29 +48,9 @@ export default class Monaco extends Modifier<Signature> {
       // was set before we had a chance to register our listener
       taskFor(this.onContentChanged).perform(contentChanged);
 
-      monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
-        target: monaco.languages.typescript.ScriptTarget.ES2020,
-        module: monaco.languages.typescript.ModuleKind.ES2015,
-        moduleResolution:
-          monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-        allowJs: true,
-        allowSyntheticDefaultImports: true,
-        noImplicitAny: true,
-        noImplicitThis: true,
-        alwaysStrict: true,
-        strictNullChecks: true,
-        strictPropertyInitialization: true,
-        noFallthroughCasesInSwitch: true,
-        noUnusedLocals: true,
-        noUnusedParameters: true,
-        noImplicitReturns: true,
-        noEmitOnError: true,
-        noEmit: true,
-        inlineSourceMap: true,
-        inlineSources: true,
-        experimentalDecorators: true,
-        allowNonTsExtensions: true,
-      });
+      monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
+        monacoTypescriptOptions
+      );
     }
     this.lastLanguage = language;
   }
@@ -85,3 +65,26 @@ export default class Monaco extends Modifier<Signature> {
     }
   }
 }
+
+const monacoTypescriptOptions: monaco.languages.typescript.CompilerOptions = {
+  target: monaco.languages.typescript.ScriptTarget.ES2020,
+  module: monaco.languages.typescript.ModuleKind.ES2015,
+  moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+  allowJs: true,
+  allowSyntheticDefaultImports: true,
+  noImplicitAny: true,
+  noImplicitThis: true,
+  alwaysStrict: true,
+  strictNullChecks: true,
+  strictPropertyInitialization: true,
+  noFallthroughCasesInSwitch: true,
+  noUnusedLocals: true,
+  noUnusedParameters: true,
+  noImplicitReturns: true,
+  noEmitOnError: true,
+  noEmit: true,
+  inlineSourceMap: true,
+  inlineSources: true,
+  experimentalDecorators: true,
+  allowNonTsExtensions: true,
+};

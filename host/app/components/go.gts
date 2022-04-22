@@ -3,12 +3,16 @@ import { action } from '@ember/object';
 import monaco from '../modifiers/monaco';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import * as monacoEditor from 'monaco-editor';
 import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import Preview from './preview';
 import FileTree from './file-tree';
+import {
+  getLangFromFileExtension,
+  extendMonacoLanguage,
+  languageConfigs
+} from '../utils/editor-language';
 
 interface Signature {
   Args: {
@@ -27,19 +31,24 @@ export default class Go extends Component<Signature> {
       </div>
       {{#if this.openFile.ready}}
         <div {{monaco content=this.openFile.content
-                      language=(getEditorLanguage this.openFile.name)
+                      language=(getLangFromFileExtension this.openFile.name)
                       contentChanged=this.contentChanged}}></div>
         <div class="preview">
           {{#if (isRunnable this.openFile.name)}}
             <Preview @filename={{this.openFile.name}} />
           {{/if}}
         </div>
-      {{/if}}              
+      {{/if}}
     </div>
   </template>
 
   @service declare localRealm: LocalRealm;
   @tracked selectedFile: Entry | undefined;
+
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+    languageConfigs.map(lang => extendMonacoLanguage(lang));
+  }
 
   @action
   onSelectedFile(entry: Entry | undefined) {
@@ -60,22 +69,6 @@ export default class Go extends Component<Signature> {
     () => this.args.file,
     () => this.localRealm.isAvailable ? this.localRealm.fsHandle : undefined,
   );
-}
-
-function getEditorLanguage(fileName: string) {
-  const languages = monacoEditor.languages.getLanguages();
-  let extension = '.' + fileName.split('.').pop();
-  let language = languages.find(lang => {
-    if (!lang.extensions || lang.extensions.length === 0) {
-      return;
-    }
-    return lang.extensions.find(ext => ext === extension ? lang : null);
-  });
-
-  if (!language) {
-    return 'plaintext';
-  }
-  return language.id;
 }
 
 function isRunnable(filename: string): boolean {
