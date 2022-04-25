@@ -1,8 +1,10 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
+import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import { contains, field, Component, primitive } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
+import on from 'runtime-spike/modifiers/on';
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -125,7 +127,12 @@ module('Integration | card-basics', function (hooks) {
       static edit = class Edit extends Component<typeof this> {
         <template>
           {{!-- template-lint-disable require-input-label --}}
-          <input value={{@model}} />
+          <input value={{@model}} {{on "input" @set}} />
+        </template>
+      }
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-value>{{@model}}</div>
         </template>
       }
     }
@@ -149,17 +156,29 @@ module('Integration | card-basics', function (hooks) {
           </label>
         </template>
       }
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <@fields.title />
+        </template>
+      }
     }
 
     class HelloWorld extends Post {
       static data = { title: 'My Post', author: { firstName: 'Arthur' } }
     }
 
+    await renderCard(HelloWorld, 'isolated');
+    assert.dom('[data-test-value]').hasText('My Post');
+
     await renderCard(HelloWorld, 'edit');
     assert.dom('[data-test-field="title"]').containsText('Title');
     assert.dom('[data-test-field="title"] input').hasValue('My Post');
     assert.dom('[data-test-field="author"]').containsText('Author');
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
+
+    await fillIn('[data-test-field="title"] input', 'New Title');
+    await renderCard(HelloWorld, 'isolated');
+    assert.dom('[data-test-value]').hasText('New Title');
   });
 
   test('render default isolated template', async function (assert) {

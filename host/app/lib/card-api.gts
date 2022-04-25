@@ -10,6 +10,8 @@ type FieldsTypeFor<CardT extends Constructable> = {
   [Field in keyof InstanceType<CardT>]: (new() => GlimmerComponent<{ Args: {}, Blocks: {} }>) & FieldsTypeFor<InstanceType<CardT>[Field]>;
 }
 
+type Setter = (value: any) => void;
+
 export type Format = 'isolated' | 'embedded' | 'edit';
 
 export function contains<CardT extends Constructable>(card: CardT): CardInstanceType<CardT> {
@@ -17,8 +19,8 @@ export function contains<CardT extends Constructable>(card: CardT): CardInstance
     return {
       setupField() {
         let bucket = new WeakMap();
-        let get = function(this: InstanceType<CardT>) { 
-          return bucket.get(this); 
+        let get = function(this: InstanceType<CardT>) {
+          return bucket.get(this);
         };
         (get as any)[isField] = card;
         return {
@@ -56,7 +58,7 @@ export const field = function(_target: object, _key: string| symbol, { initializ
 
 export type Constructable = new(...args: any) => any;
 
-type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<CardT> } }
+type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<CardT>; set: Setter } }
 
 export class Component<CardT extends Constructable> extends GlimmerComponent<SignatureFor<CardT>> {
 
@@ -98,19 +100,20 @@ function defaultFieldFormat(format: Format): Format {
 function getComponent<CardT extends Constructable>(card: CardT, format: Format, model: InstanceType<CardT>): ComponentLike<{ Args: never, Blocks: never }> {
   let Implementation = (card as any)[format] ?? defaultComponent[format];
 
-  // *inside* our own component, @fields is a proxy object that looks 
-  // up our fields on demand. 
+  // *inside* our own component, @fields is a proxy object that looks
+  // up our fields on demand.
   let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
+  let set = makeSetter(); // TODO
   let component = <template>
-    <Implementation @model={{model}} @fields={{internalFields}}/>
+    <Implementation @model={{model}} @fields={{internalFields}} @set={{set}} />
   </template>
 
-  // when viewed from *outside*, our component is both an invokable component 
+  // when viewed from *outside*, our component is both an invokable component
   // and a proxy that makes our fields available for nested invocation, like
   // <@fields.us.deeper />.
   //
-  // It would be possible to use `externalFields` in place of `internalFields` above, 
-  // avoiding the need for two separate Proxies. But that has the uncanny property of 
+  // It would be possible to use `externalFields` in place of `internalFields` above,
+  // avoiding the need for two separate Proxies. But that has the uncanny property of
   // making `<@fields />` be an infinite recursion.
   let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format));
 
@@ -162,7 +165,7 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
       return getComponent(field, defaultFormat, innerModel);
     },
     getPrototypeOf() {
-      // This is necessary for Ember to be able to locate the template associated 
+      // This is necessary for Ember to be able to locate the template associated
       // with a proxied component. Our Proxy object won't be in the template WeakMap,
       // but we can pretend our Proxy object inherits from the true component, and
       // Ember's template lookup respects inheritance.
@@ -195,6 +198,9 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
         configurable: true,
       }
     }
-
   }) as any;
+}
+
+function makeSetter(segments: string[] = []): Setter {
+  // TODO
 }
