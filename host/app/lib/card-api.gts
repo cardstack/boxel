@@ -191,13 +191,21 @@ function getInitialData(card: Constructable): Record<string, any> | undefined {
   return (card as any).data;
 }
 
-export async function prepareToRender<CardT extends Constructable>(card: CardT, format: Format): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
+export interface RenderOptions { 
+  dataIsDeserialized?: boolean
+}
+
+export async function prepareToRender<CardT extends Constructable>(card: CardT, format: Format, opts?: RenderOptions): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
+  let { dataIsDeserialized }: Required<RenderOptions> = { dataIsDeserialized: false, ...opts };
   let model = new card();
   let data = getInitialData(card);
   if (data) {
-    for (let [fieldName, value] of Object.entries(data)) {
-      // we assume that static Card.data property is serialized data
-      serializedSet(model, fieldName, value);
+    if (dataIsDeserialized) {
+      Object.assign(model, data);
+    } else {
+      for (let [fieldName, value] of Object.entries(data)) {
+        serializedSet(model, fieldName, value);
+      }
     }
   }
   let component = getComponent(card, format, model);

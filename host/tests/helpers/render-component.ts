@@ -5,6 +5,7 @@ import {
   Format,
   prepareToRender,
   Constructable,
+  RenderOptions,
 } from 'runtime-spike/lib/card-api';
 import { ComponentLike } from '@glint/template';
 
@@ -14,8 +15,9 @@ export async function renderComponent(C: ComponentLike) {
 
 export async function renderCard(
   card: Constructable,
-  format: Format
+  format: Format,
+  opts?: RenderOptions
 ): Promise<void> {
-  let { component } = await prepareToRender(card, format);
+  let { component } = await prepareToRender(card, format, opts);
   await renderComponent(component);
 }
