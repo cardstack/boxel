@@ -1,6 +1,7 @@
 import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { parse } from 'date-fns';
+import stringify from 'fast-json-stable-stringify'
 import { renderCard } from '../../helpers/render-component';
 import { contains, field, Component, serializedGet } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
@@ -15,8 +16,8 @@ module('Integration | serialization', function (hooks) {
 
   test('can deserialize field', async function (assert) {
     class Post {
-      @field title = contains(StringCard)
-      @field created = contains(DateCard)
+      @field title = contains(StringCard);
+      @field created = contains(DateCard);
       static isolated = class Isolated extends Component<typeof this> {
         <template><@fields.title/> created <@fields.created/></template>
       }
@@ -34,8 +35,8 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize field', async function(assert) {
     class Post {
-      @field title = contains(StringCard)
-      @field created = contains(DateCard)
+      @field title = contains(StringCard);
+      @field created = contains(DateCard);
       static isolated = class Isolated extends Component<typeof this> {
         <template>created {{serializedGet @model 'created'}}</template>
       }
@@ -49,13 +50,78 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(this.element.textContent!.trim(), 'created 2022-04-22');
   });
 
-  skip('can deserialize a nested field');
-  skip('can serialize a nested field');
+  test('can deserialize a nested field', async function(assert) {
+    class Person {
+      @field firstName = contains(StringCard);
+      @field birthdate = contains(DateCard);
+    }
 
-  skip('can deserialize a composite field');
-  skip('can serialize a composite field');
+    class Post {
+      @field title = contains(StringCard);
+      @field author = contains(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.author.birthdate/></template>
+      }
+    }
+
+    class FirstPost extends Post {
+      static data = { title: 'First Post', author: { firstName: 'Mango', birthdate: '2019-10-30' } }
+    }
+
+    await renderCard(FirstPost, 'isolated');
+    assert.dom('[data-test="date"]').containsText('Oct 30, 2019');
+  });
+
+  test('can deserialize a composite field', async function(assert) {
+    class Person {
+      @field firstName = contains(StringCard);
+      @field birthdate = contains(DateCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName/> born on: <@fields.birthdate/></template>
+      }
+    }
+
+    class Post {
+      @field title = contains(StringCard);
+      @field author = contains(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.author/></template>
+      }
+    }
+
+    class FirstPost extends Post {
+      static data = { title: 'First Post', author: { firstName: 'Mango', birthdate: '2019-10-30' } }
+    }
+    
+    await renderCard(FirstPost, 'isolated');
+    assert.dom('[data-test="date"]').containsText('Oct 30, 2019');
+  });
+
+  test('can serialize a composite field', async function(assert) {
+    class Animal {
+      @field species = contains(StringCard);
+    }
+
+    class Person extends Animal {
+      @field firstName = contains(StringCard);
+      @field birthdate = contains(DateCard);
+    }
+
+    class Post {
+      @field title = contains(StringCard);
+      @field author = contains(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>{{stringify (serializedGet @model 'author')}}</template>
+      }
+    }
+
+    class FirstPost extends Post {
+      static data = { title: 'First Post', author: { firstName: 'Mango', birthdate: p('2019-10-30'), species: 'canis familiaris' } }
+    }
+    await renderCard(FirstPost, 'isolated', { dataIsDeserialized: true });
+    assert.strictEqual(this.element.textContent!.trim(), `{"birthdate":"2019-10-30","firstName":"Mango","species":"canis familiaris"}`);
+  });
 
   skip('can deserialize a containsMany field');
   skip('can serialize a containsMany field');
-
 });

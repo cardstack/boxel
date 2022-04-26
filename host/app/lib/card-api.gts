@@ -40,8 +40,16 @@ export function serializedGet<CardT extends Constructable>(model: InstanceType<C
     return value;
   }
   value = deserialized.get(fieldName);
-  if (typeof (field as any)[serialize] === 'function') {
-    value = (field as any)[serialize](value);
+  if (primitive in (field as any)) {
+    if (typeof (field as any)[serialize] === 'function') {
+      value = (field as any)[serialize](value);
+    }
+  } else if (value != null) {
+    let instance = {} as Record<string, any>;
+    for (let interiorFieldName of getFieldNames(value)) {
+      instance[interiorFieldName] = serializedGet(value, interiorFieldName);
+    }
+    value = instance;
   }
   serialized.set(fieldName, value);
   return value;
@@ -58,7 +66,9 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
     serialized.set(fieldName, value);
   } else {
     let instance = new field();
-    Object.assign(instance, value);
+    for (let [ interiorFieldName, interiorValue ] of Object.entries(value)) {
+      serializedSet(instance, interiorFieldName, interiorValue);
+    }
     serialized.set(fieldName, instance);
   }
   deserialized.delete(fieldName);
@@ -104,6 +114,7 @@ export function contains<CardT extends Constructable>(card: CardT): CardInstance
           if (value !== undefined) {
             return value;
           }
+          // we save these as instantiated cards in serialized set for composite fields
           value = serialized.get(fieldName);
           if (value === undefined) {
             value = instance;
@@ -223,6 +234,17 @@ function getField<CardT extends Constructable>(card: CardT, fieldName: string): 
     obj = Reflect.getPrototypeOf(obj);
   }
   return undefined
+}
+
+function getFieldNames<CardT extends Constructable>(card: CardT): string[] {
+  let obj = Reflect.getPrototypeOf(card);
+  let names: string[] = [];
+  while (obj?.constructor.name && obj.constructor.name !== 'Object') {
+    let descs = Object.getOwnPropertyDescriptors(obj);
+    names.push(...Object.keys(descs).filter(key => key !== 'constructor'));
+    obj = Reflect.getPrototypeOf(obj);
+  }
+  return names;
 }
 
 function fieldsComponentsFor<CardT extends Constructable>(target: object, model: InstanceType<CardT>, defaultFormat: Format): FieldsTypeFor<CardT> {
