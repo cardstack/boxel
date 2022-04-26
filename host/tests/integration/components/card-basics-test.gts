@@ -182,15 +182,6 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render default isolated template', async function (assert) {
-    function testString(label: string) {
-      return class TestString {
-        static [primitive]: string;
-        static embedded = class Embedded extends Component<typeof this> {
-          <template><em data-test={{label}}>{{@model}}</em></template>
-        }
-      }
-    }
-
     class Person {
       @field firstName = contains(testString('first-name'));
 
@@ -244,4 +235,33 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-field="author"]').containsText('author firstName'); // TODO: fix nested labels
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
   });
+
+  test('can adopt a card', async function (assert) {
+    class Animal {
+      @field species = contains(testString('species'));
+    }
+    class Person extends Animal {
+      @field firstName = contains(testString('first-name'));
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName /><@fields.species/></template>
+      }
+    }
+
+    class Hassan extends Person {
+      static data = { firstName: 'Hassan', species: 'Homo Sapiens' }
+    }
+
+    await renderCard(Hassan, 'embedded');
+    assert.dom('[data-test="first-name"]').containsText('Hassan');
+    assert.dom('[data-test="species"]').containsText('Homo Sapiens');
+  });
 });
+
+function testString(label: string) {
+  return class TestString {
+    static [primitive]: string;
+    static embedded = class Embedded extends Component<typeof this> {
+      <template><em data-test={{label}}>{{@model}}</em></template>
+    }
+  }
+}

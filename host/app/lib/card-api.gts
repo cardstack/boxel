@@ -2,6 +2,9 @@ import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 
 export const primitive = Symbol('cardstack-primitive');
+export const serialize = Symbol('cardstack-serialize');
+export const deserialize = Symbol('cardstack-deserialize');
+
 const isField = Symbol('cardstack-field');
 
 type CardInstanceType<T extends Constructable> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
@@ -14,35 +17,122 @@ type Setter = (value: any) => void;
 
 export type Format = 'isolated' | 'embedded' | 'edit';
 
+const deserializedData = new WeakMap<object, Map<string, any>>();
+const serializedData = new WeakMap<object, Map<string, any>>();
+
+function getOrCreateDataBuckets<CardT extends Constructable>(instance: InstanceType<CardT>): { serialized: Map<string, any>, deserialized: Map<string, any> } {
+  let serialized = serializedData.get(instance);
+  if (!serialized) {
+    serialized = new Map();
+    serializedData.set(instance, serialized);
+  }
+  let deserialized = deserializedData.get(instance);
+  if (!deserialized) {
+    deserialized = new Map();
+    deserializedData.set(instance, deserialized);
+  }
+  return { serialized, deserialized };
+}
+
+export function serializedGet<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string ) {
+  let { serialized, deserialized } = getOrCreateDataBuckets(model);
+  let field = getField(model.constructor, fieldName);
+  let value = serialized.get(fieldName);
+  if (value !== undefined) {
+    return value;
+  }
+  value = deserialized.get(fieldName);
+  if (primitive in (field as any)) {
+    if (typeof (field as any)[serialize] === 'function') {
+      value = (field as any)[serialize](value);
+    }
+  } else if (value != null) {
+    let instance = {} as Record<string, any>;
+    for (let interiorFieldName of getFieldNames(value)) {
+      instance[interiorFieldName] = serializedGet(value, interiorFieldName);
+    }
+    value = instance;
+  }
+  serialized.set(fieldName, value);
+  return value;
+}
+
+export function serializedSet<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string, value: any ) {
+  let { serialized, deserialized } = getOrCreateDataBuckets(model);
+  let field = getField(model.constructor, fieldName);
+  if (!field) {
+    throw new Error(`Field ${fieldName} does not exist on ${model.constructor.name}`);
+  }
+
+  if (primitive in field) {
+    serialized.set(fieldName, value);
+  } else {
+    let instance = new field();
+    for (let [ interiorFieldName, interiorValue ] of Object.entries(value)) {
+      serializedSet(instance, interiorFieldName, interiorValue);
+    }
+    serialized.set(fieldName, instance);
+  }
+  deserialized.delete(fieldName);
+}
+
 export function contains<CardT extends Constructable>(card: CardT): CardInstanceType<CardT> {
   if (primitive in card) {
     return {
-      setupField() {
-        let bucket = new WeakMap();
+      setupField(_instance: InstanceType<CardT>, fieldName: string) {
         let get = function(this: InstanceType<CardT>) {
-          return bucket.get(this);
+          let { serialized, deserialized } = getOrCreateDataBuckets(this);
+          let value = deserialized.get(fieldName);
+          let field = getField(this.constructor, fieldName);
+          if (value !== undefined) {
+            return value;
+          }
+          value = serialized.get(fieldName);
+          if (typeof (field as any)[deserialize] === 'function') {
+            value = (field as any)[deserialize](value);
+          }
+          deserialized.set(fieldName, value);
+          return value;
         };
         (get as any)[isField] = card;
         return {
           enumerable: true,
           get,
           set(value: any) {
-            bucket.set(this, value);
+            let { serialized, deserialized } = getOrCreateDataBuckets(this);
+            deserialized.set(fieldName, value);
+            serialized.delete(fieldName);
           }
         };
       }
     } as any;
   } else {
     return {
-      setupField() {
+      setupField(_instance: InstanceType<CardT>, fieldName: string) {
         let instance = new card();
-        let get = function(this: InstanceType<CardT>) { return instance };
+        let get = function(this: InstanceType<CardT>) {
+          let { serialized, deserialized } = getOrCreateDataBuckets(this);
+          let value = deserialized.get(fieldName);
+          if (value !== undefined) {
+            return value;
+          }
+          // we save these as instantiated cards in serialized set for composite fields
+          value = serialized.get(fieldName);
+          if (value === undefined) {
+            value = instance;
+            serialized.set(fieldName, value);
+          }
+          return value;
+        };
         (get as any)[isField] = card;
         return {
           enumerable: true,
           get,
           set(value: any) {
             Object.assign(instance, value);
+            let { serialized, deserialized } = getOrCreateDataBuckets(this);
+            deserialized.set(fieldName, instance);
+            serialized.delete(fieldName);
           }
         };
       }
@@ -52,8 +142,8 @@ export function contains<CardT extends Constructable>(card: CardT): CardInstance
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
-export const field = function(_target: object, _key: string| symbol, { initializer }: { initializer(): any }) {
-  return initializer().setupField();
+export const field = function(target: object, key: string | symbol, { initializer }: { initializer(): any }) {
+  return initializer().setupField(target, key);
 } as unknown as PropertyDecorator;
 
 export type Constructable = new(...args: any) => any;
@@ -125,11 +215,22 @@ function getInitialData(card: Constructable): Record<string, any> | undefined {
   return (card as any).data;
 }
 
-export async function prepareToRender<CardT extends Constructable>(card: CardT, format: Format): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
+export interface RenderOptions {
+  dataIsDeserialized?: boolean
+}
+
+export async function prepareToRender<CardT extends Constructable>(card: CardT, format: Format, opts?: RenderOptions): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
+  let { dataIsDeserialized }: Required<RenderOptions> = { dataIsDeserialized: false, ...opts };
   let model = new card();
   let data = getInitialData(card);
   if (data) {
-    Object.assign(model, data);
+    if (dataIsDeserialized) {
+      Object.assign(model, data);
+    } else {
+      for (let [fieldName, value] of Object.entries(data)) {
+        serializedSet(model, fieldName, value);
+      }
+    }
   }
   let component = getComponent(card, format, model);
   return { component };
@@ -146,6 +247,17 @@ function getField<CardT extends Constructable>(card: CardT, fieldName: string): 
     obj = Reflect.getPrototypeOf(obj);
   }
   return undefined
+}
+
+function getFieldNames<CardT extends Constructable>(card: CardT): string[] {
+  let obj = Reflect.getPrototypeOf(card);
+  let names: string[] = [];
+  while (obj?.constructor.name && obj.constructor.name !== 'Object') {
+    let descs = Object.getOwnPropertyDescriptors(obj);
+    names.push(...Object.keys(descs).filter(key => key !== 'constructor'));
+    obj = Reflect.getPrototypeOf(obj);
+  }
+  return names;
 }
 
 function fieldsComponentsFor<CardT extends Constructable>(target: object, model: InstanceType<CardT>, defaultFormat: Format): FieldsTypeFor<CardT> {
