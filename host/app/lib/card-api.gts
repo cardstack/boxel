@@ -74,11 +74,14 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
   deserialized.delete(fieldName);
 }
 
-export function contains<CardT extends Constructable>(card: CardT): CardInstanceType<CardT> {
+export function contains<CardT extends Constructable>(card: CardT, computed?: () => unknown): CardInstanceType<CardT> {
   if (primitive in card) {
     return {
-      setupField(_instance: InstanceType<CardT>, fieldName: string) {
+      setupField(fieldName: string) {
         let get = function(this: InstanceType<CardT>) { 
+          if (computed) {
+            return computed.bind(this)();
+          }
           let { serialized, deserialized } = getOrCreateDataBuckets(this);
           let value = deserialized.get(fieldName); 
           let field = getField(this.constructor, fieldName);
@@ -96,19 +99,27 @@ export function contains<CardT extends Constructable>(card: CardT): CardInstance
         return {
           enumerable: true,
           get,
-          set(value: any) {
-            let { serialized, deserialized } = getOrCreateDataBuckets(this);
-            deserialized.set(fieldName, value);
-            serialized.delete(fieldName);
-          }
+          ...(computed
+            ? {} // computeds don't have setters
+            : {
+              set(value: any) {
+                let { serialized, deserialized } = getOrCreateDataBuckets(this);
+                deserialized.set(fieldName, value);
+                serialized.delete(fieldName);
+              }
+            }
+          )
         };
       }
     } as any;
   } else {
     return {
-      setupField(_instance: InstanceType<CardT>, fieldName: string) {
+      setupField(fieldName: string) {
         let instance = new card();
         let get = function(this: InstanceType<CardT>) {
+          if (computed) {
+            return computed.bind(this)();
+          }
           let { serialized, deserialized } = getOrCreateDataBuckets(this);
           let value = deserialized.get(fieldName); 
           if (value !== undefined) {
@@ -126,12 +137,17 @@ export function contains<CardT extends Constructable>(card: CardT): CardInstance
         return {
           enumerable: true,
           get,
-          set(value: any) {
-            Object.assign(instance, value);
-            let { serialized, deserialized } = getOrCreateDataBuckets(this);
-            deserialized.set(fieldName, instance);
-            serialized.delete(fieldName);
-          }
+          ...(computed
+            ? {} // computeds don't have setters
+            : {
+              set(value: any) {
+                Object.assign(instance, value);
+                let { serialized, deserialized } = getOrCreateDataBuckets(this);
+                deserialized.set(fieldName, instance);
+                serialized.delete(fieldName);
+              }
+            }
+          )
         };
       }
     } as any
@@ -140,8 +156,8 @@ export function contains<CardT extends Constructable>(card: CardT): CardInstance
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
-export const field = function(target: object, key: string | symbol, { initializer }: { initializer(): any }) {
-  return initializer().setupField(target, key);
+export const field = function(_target: object, key: string | symbol, { initializer }: { initializer(): any }) {
+  return initializer().setupField(key);
 } as unknown as PropertyDecorator;
 
 export type Constructable = new(...args: any) => any;
