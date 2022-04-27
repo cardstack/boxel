@@ -42,7 +42,7 @@ module('Integration | serialization', function (hooks) {
       }
     }
     class FirstPost extends Post {
-      // initialze card data as deserialized to force us to serialize instead of using cached data
+      // initialize card data as deserialized to force us to serialize instead of using cached data
       static data = { title: 'First Post', created: p('2022-04-22') }
     }
 
