@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
 import { contains, field, Component } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
