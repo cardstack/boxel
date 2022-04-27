@@ -81,7 +81,7 @@ module('Integration | computeds', function (hooks) {
     class Post {
       @field title = contains(StringCard);
       @field author = contains(Person,
-        function(this: Person) {
+        function(this: Post) {
           let person = new Person();
           person.firstName = 'Mango';
           return person;
