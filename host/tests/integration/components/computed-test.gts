@@ -5,7 +5,7 @@ import StringCard from 'runtime-spike/lib/string';
 import DateCard from 'runtime-spike/lib/date';
 import { setupRenderingTest } from 'ember-qunit';
 
-module('Integration | serialization', function (hooks) {
+module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
 
   test('can render a synchronous computed field', async function(assert) {
