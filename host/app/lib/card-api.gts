@@ -164,7 +164,7 @@ export const field = function(_target: object, key: string | symbol, { initializ
 
 export type Constructable = new(...args: any) => any;
 
-type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<CardT> } }
+type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<CardT>; set: Setter; } }
 
 export class Component<CardT extends Constructable> extends GlimmerComponent<SignatureFor<CardT>> {
 
@@ -203,14 +203,20 @@ function defaultFieldFormat(format: Format): Format {
   }
 }
 
-function getComponent<CardT extends Constructable>(card: CardT, format: Format, model: InstanceType<CardT>): ComponentLike<{ Args: never, Blocks: never }> {
+function getComponent<CardT extends Constructable>(card: CardT, format: Format, model: InstanceType<CardT>, setters: Record<string, Setter>, property?: string): ComponentLike<{ Args: never, Blocks: never }> {
   let Implementation = (card as any)[format] ?? defaultComponent[format];
 
   // *inside* our own component, @fields is a proxy object that looks
   // up our fields on demand.
-  let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
+  let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format), setters);
+
+  let set: Setter | undefined;
+  if (property && setters[property]) {
+    set = setters[property].setters[property];
+  }
+
   let component = <template>
-    <Implementation @model={{model}} @fields={{internalFields}} />
+    <Implementation @model={{model}} @fields={{internalFields}} @set={{set}} />
   </template>
 
   // when viewed from *outside*, our component is both an invokable component
@@ -220,7 +226,7 @@ function getComponent<CardT extends Constructable>(card: CardT, format: Format, 
   // It would be possible to use `externalFields` in place of `internalFields` above,
   // avoiding the need for two separate Proxies. But that has the uncanny property of
   // making `<@fields />` be an infinite recursion.
-  let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format));
+  let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format), setters);
 
   // This cast is safe because we're returning a proxy that wraps component.
   return externalFields as unknown as typeof component;
@@ -237,6 +243,7 @@ export interface RenderOptions {
 export async function prepareToRender<CardT extends Constructable>(card: CardT, format: Format, opts?: RenderOptions): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
   let { dataIsDeserialized }: Required<RenderOptions> = { dataIsDeserialized: false, ...opts };
   let model = new card();
+  let setters: Record<string, Setter> = {};
   let data = getInitialData(card);
   if (data) {
     if (dataIsDeserialized) {
@@ -244,11 +251,47 @@ export async function prepareToRender<CardT extends Constructable>(card: CardT, 
     } else {
       for (let [fieldName, value] of Object.entries(data)) {
         serializedSet(model, fieldName, value);
+        setters[fieldName] = makeSetter([], data);
       }
     }
   }
-  let component = getComponent(card, format, model);
+
+  let component = getComponent(card, format, model, setters);
   return { component };
+}
+
+function makeSetter(segments: string[] = [], data: Record<string, any>): Setter {
+  let s = (ev: Event) => {
+    let { value } = ev.target as HTMLInputElement;
+    let innerSegments = segments.slice();
+    let lastSegment = innerSegments.pop();
+    if (!lastSegment) {
+      return;
+    }
+    let cursor = data;
+    for (let segment of innerSegments) {
+      let nextCursor = cursor[segment];
+      if (!nextCursor) {
+        nextCursor = {};
+        cursor[segment] = nextCursor;
+      }
+      cursor = nextCursor;
+    }
+    cursor[lastSegment] = value;
+  };
+  (s as any).setters = new Proxy(
+    {},
+    {
+      get: (target: any, prop: string, receiver: unknown) => {
+        if (typeof prop === 'string') {
+          return makeSetter([...segments, prop], data);
+        } else {
+          return Reflect.get(target, prop, receiver);
+        }
+      },
+    }
+  );
+  return s;
 }
 
 function getField<CardT extends Constructable>(card: CardT, fieldName: string): Constructable | undefined {
@@ -275,7 +318,7 @@ function getFieldNames<CardT extends Constructable>(card: CardT): string[] {
   return names;
 }
 
-function fieldsComponentsFor<CardT extends Constructable>(target: object, model: InstanceType<CardT>, defaultFormat: Format): FieldsTypeFor<CardT> {
+function fieldsComponentsFor<CardT extends Constructable>(target: object, model: InstanceType<CardT>, defaultFormat: Format, setters: Record<string, Setter>): FieldsTypeFor<CardT> {
   return new Proxy(target, {
     get(target, property, received) {
       if (typeof property === 'symbol') {
@@ -289,7 +332,7 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
       }
       // found field: get the corresponding component
       let innerModel = model[property];
-      return getComponent(field, defaultFormat, innerModel);
+      return getComponent(field, defaultFormat, innerModel, setters, property);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
@@ -327,20 +370,4 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
     },
 
   }) as any;
-}
-
-// export function setData<CardT extends Constructable>(data: Record<string, any>, model: InstanceType<CardT>): void {
-//   for (let [ name, value ] of Object.entries(data)) {
-//     let card = model.prototype;
-//     card.constructor.data[name] = value;
-//   }
-// }
-
-function setter(segments: string[] = []): Setter {
-  return function(ev: any) {
-    let { value } = ev.target;
-    // setData({
-    //   [fieldName]: value,
-    // }, model);
-  }
 }

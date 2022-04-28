@@ -220,50 +220,57 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test="species"]').containsText('Homo Sapiens');
   });
 
-  test('can edit field', async function (assert) {
+  test('can edit fields', async function (assert) {
     class Person {
       @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName /></template>
+      }
     }
 
     class Post {
       @field title = contains(StringCard);
+      @field reviews = contains(IntegerCard);
       @field author = contains(Person);
       static edit = class Edit extends Component<typeof this> {
         <template>
-          <label data-test-field="title">
-            Title
-            <@fields.title />
-          </label>
-          <label data-test-field="author">
-            Author
-            <@fields.author.firstName />
-          </label>
+          <fieldset>
+            <label data-test-field="title">Title <@fields.title /></label>
+            <label data-test-field="reviews">Reviews <@fields.reviews /></label>
+            <label data-test-field="author">Author <@fields.author /></label>
+          </fieldset>
         </template>
       }
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h1 data-test-title><@fields.title /></h1>
-          <h2 data-test-author><@fields.author /><@fields.author.firstName /></h2>
+          <h2 data-test-author><@fields.author /></h2>
+          <span data-test-reviews><@fields.reviews /></span>
         </template>
       }
     }
 
     class HelloWorld extends Post {
-      static data = { title: 'First Post', author: { firstName: 'Arthur' } }
+      static data = { title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } }
     }
 
     await renderCard(HelloWorld, 'isolated');
     assert.dom('[data-test-title]').hasText('First Post');
 
     await renderCard(HelloWorld, 'edit');
-    assert.dom('[data-test-field="title"]').containsText('Title');
     assert.dom('[data-test-field="title"] input').hasValue('First Post');
-    assert.dom('[data-test-field="author"]').containsText('Author');
+    assert.dom('[data-test-field="reviews"] input').hasValue('1');
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
 
     await fillIn('[data-test-field="title"] input', 'New Title');
+    await fillIn('[data-test-field="reviews"] input', '5');
+    await fillIn('[data-test-field="author"] input', 'Carl Stack');
+
     await renderCard(HelloWorld, 'isolated');
     assert.dom('[data-test-title]').hasText('New Title');
+    assert.dom('[data-test-reviews]').hasText('5');
+    // TODO: editing contained card fields
+    // assert.dom('[data-test-author]').hasText('Carl Stack');
   });
 });
 
