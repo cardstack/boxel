@@ -1,5 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
+import { NotReady, isNotReadyError} from './not-ready';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -15,10 +16,14 @@ type FieldsTypeFor<CardT extends Constructable> = {
 
 export type Format = 'isolated' | 'embedded' | 'edit';
 
+interface Options {
+  computeVia?: string | (() => unknown);
+}
+
 const deserializedData = new WeakMap<object, Map<string, any>>();
 const serializedData = new WeakMap<object, Map<string, any>>();
 
-function getOrCreateDataBuckets<CardT extends Constructable>(instance: InstanceType<CardT>): { serialized: Map<string, any>, deserialized: Map<string, any> } {
+function getOrCreateDataBuckets<CardT extends Constructable>(instance: InstanceType<CardT>): { serialized: Map<string, any>; deserialized: Map<string, any>; } {
   let serialized = serializedData.get(instance);
   if (!serialized) {
     serialized = new Map();
@@ -39,15 +44,18 @@ export function serializedGet<CardT extends Constructable>(model: InstanceType<C
   if (value !== undefined) {
     return value;
   }
-  value = deserialized.get(fieldName) ?? model[fieldName]; // computeds don't currently cache in deserialized bucket
+  value = deserialized.get(fieldName);
   if (primitive in (field as any)) {
     if (typeof (field as any)[serialize] === 'function') {
       value = (field as any)[serialize](value);
     }
   } else if (value != null) {
     let instance = {} as Record<string, any>;
-    for (let interiorFieldName of getFieldNames(value)) {
-      instance[interiorFieldName] = serializedGet(value, interiorFieldName);
+    for (let interiorFieldName of getMemberNames(value)) {
+      let field = getField(value.constructor, interiorFieldName);
+      if (field) {
+        instance[interiorFieldName] = serializedGet(value, interiorFieldName);
+      }
     }
     value = instance;
   }
@@ -74,14 +82,26 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
   deserialized.delete(fieldName);
 }
 
-export function contains<CardT extends Constructable>(card: CardT, computed?: () => unknown): CardInstanceType<CardT> {
+export function contains<CardT extends Constructable>(card: CardT, options?: Options): CardInstanceType<CardT> {
+  let { computeVia } = options ?? {};
+  let computedGet = function (fieldName: string) {
+    return function(this: InstanceType<CardT>) { 
+      let { deserialized } = getOrCreateDataBuckets(this);
+      let value = deserialized.get(fieldName);
+      if (value === undefined && typeof computeVia === 'function') {
+        value = computeVia.bind(this)();
+        deserialized.set(fieldName, value);
+      } else if (value === undefined && typeof computeVia === 'string') {
+        throw new NotReady(this, fieldName, computeVia, this.constructor.name);
+      }
+      return value;
+    };
+  }
+
   if (primitive in card) {
     return {
       setupField(fieldName: string) {
-        let get = function(this: InstanceType<CardT>) { 
-          if (computed) {
-            return computed.bind(this)();
-          }
+        let get = computeVia ? computedGet(fieldName) : function(this: InstanceType<CardT>) { 
           let { serialized, deserialized } = getOrCreateDataBuckets(this);
           let value = deserialized.get(fieldName); 
           let field = getField(this.constructor, fieldName);
@@ -99,7 +119,7 @@ export function contains<CardT extends Constructable>(card: CardT, computed?: ()
         return {
           enumerable: true,
           get,
-          ...(computed
+          ...(computeVia
             ? {} // computeds don't have setters
             : {
               set(value: any) {
@@ -116,10 +136,7 @@ export function contains<CardT extends Constructable>(card: CardT, computed?: ()
     return {
       setupField(fieldName: string) {
         let instance = new card();
-        let get = function(this: InstanceType<CardT>) {
-          if (computed) {
-            return computed.bind(this)();
-          }
+        let get = computeVia ? computedGet(fieldName) : function(this: InstanceType<CardT>) {
           let { serialized, deserialized } = getOrCreateDataBuckets(this);
           let value = deserialized.get(fieldName); 
           if (value !== undefined) {
@@ -137,7 +154,7 @@ export function contains<CardT extends Constructable>(card: CardT, computed?: ()
         return {
           enumerable: true,
           get,
-          ...(computed
+          ...(computeVia
             ? {} // computeds don't have setters
             : {
               set(value: any) {
@@ -235,8 +252,40 @@ export async function prepareToRender<CardT extends Constructable>(card: CardT, 
       }
     }
   }
+  await loadModel(model); // absorb model asynchronicity
   let component = getComponent(card, format, model);
   return { component };
+}
+
+async function loadModel<CardT extends Constructable>(model: InstanceType<CardT>): Promise<void> {
+  for (let fieldName of getMemberNames(model)) {
+    let field = getField(model.constructor, fieldName);
+    if (field) {
+      let value = await loadField(model, fieldName);
+      if (!(primitive in field)) {
+        await loadModel(value);
+      }
+    }
+  }
+}
+
+async function loadField<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string): Promise<any> {
+  let result;
+  let isLoaded = false;
+  let { deserialized } = getOrCreateDataBuckets(model);
+  while(!isLoaded) {
+    try {
+      result = model[fieldName];
+      isLoaded = true;
+    } catch (e: any) {
+      if (!isNotReadyError(e)) {
+        throw e;
+      }
+      let { model, computeVia, fieldName } = e;
+      deserialized.set(fieldName, await model[computeVia]());
+    }
+  }
+  return result;
 }
 
 function getField<CardT extends Constructable>(card: CardT, fieldName: string): Constructable | undefined {
@@ -252,7 +301,8 @@ function getField<CardT extends Constructable>(card: CardT, fieldName: string): 
   return undefined
 }
 
-function getFieldNames<CardT extends Constructable>(card: CardT): string[] {
+// TODO refactor this into a getAllFields function using the getField to filter out the non-field members
+function getMemberNames<CardT extends Constructable>(card: CardT): string[] {
   let obj = Reflect.getPrototypeOf(card);
   let names: string[] = [];
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
