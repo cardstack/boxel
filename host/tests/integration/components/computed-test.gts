@@ -50,26 +50,6 @@ module('Integration | computeds', function (hooks) {
     assert.strictEqual(this.element.textContent!.trim(), 'First Post by Mango');
   });
 
-  test('can render a computed that is a field which has a serializer', async function(assert) {
-    class Person {
-      @field birthdate = contains(DateCard);
-      @field firstBirthday = contains(DateCard,
-        function(this: Person) {
-          return new Date(this.birthdate.getFullYear() + 1, this.birthdate.getMonth(), this.birthdate.getDate());
-        });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>{{serializedGet @model 'firstBirthday'}}</template>
-      }
-    }
-
-    class Mango extends Person {
-      static data = { birthdate: p('2019-10-30') }
-    }
-
-    await renderCard(Mango, 'isolated', { dataIsDeserialized: true});
-    assert.strictEqual(this.element.textContent!.trim(), '2020-10-30');
-  });
-
   test('can render a computed that is a composite type', async function(assert) {
     class Person {
       @field firstName = contains(StringCard);

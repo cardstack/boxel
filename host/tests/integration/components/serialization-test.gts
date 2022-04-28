@@ -125,6 +125,26 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(this.element.textContent!.trim(), `{"birthdate":"2019-10-30","firstName":"Mango","lastLogin":"2022-04-27T16:30:00.000Z","species":"canis familiaris"}`);
   });
 
+  test('can serialize a computed field', async function(assert) {
+    class Person {
+      @field birthdate = contains(DateCard);
+      @field firstBirthday = contains(DateCard,
+        function(this: Person) {
+          return new Date(this.birthdate.getFullYear() + 1, this.birthdate.getMonth(), this.birthdate.getDate());
+        });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>{{serializedGet @model 'firstBirthday'}}</template>
+      }
+    }
+
+    class Mango extends Person {
+      static data = { birthdate: p('2019-10-30') }
+    }
+
+    await renderCard(Mango, 'isolated', { dataIsDeserialized: true});
+    assert.strictEqual(this.element.textContent!.trim(), '2020-10-30');
+  });
+
   skip('can deserialize a containsMany field');
   skip('can serialize a containsMany field');
 });
