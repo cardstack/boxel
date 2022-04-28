@@ -1,5 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
+import { NotReady, isNotReadyError} from './not-ready';
+import flatMap from 'lodash/flatMap';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -17,10 +19,14 @@ type Setter = (value: any) => void;
 
 export type Format = 'isolated' | 'embedded' | 'edit';
 
+interface Options {
+  computeVia?: string | (() => unknown);
+}
+
 const deserializedData = new WeakMap<object, Map<string, any>>();
 const serializedData = new WeakMap<object, Map<string, any>>();
 
-function getOrCreateDataBuckets<CardT extends Constructable>(instance: InstanceType<CardT>): { serialized: Map<string, any>, deserialized: Map<string, any> } {
+function getDataBuckets<CardT extends Constructable>(instance: InstanceType<CardT>): { serialized: Map<string, any>; deserialized: Map<string, any>; } {
   let serialized = serializedData.get(instance);
   if (!serialized) {
     serialized = new Map();
@@ -35,7 +41,7 @@ function getOrCreateDataBuckets<CardT extends Constructable>(instance: InstanceT
 }
 
 export function serializedGet<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string ) {
-  let { serialized, deserialized } = getOrCreateDataBuckets(model);
+  let { serialized, deserialized } = getDataBuckets(model);
   let field = getField(model.constructor, fieldName);
   let value = serialized.get(fieldName);
   if (value !== undefined) {
@@ -48,7 +54,7 @@ export function serializedGet<CardT extends Constructable>(model: InstanceType<C
     }
   } else if (value != null) {
     let instance = {} as Record<string, any>;
-    for (let interiorFieldName of getFieldNames(value)) {
+    for (let interiorFieldName of Object.keys(getFields(value))) {
       instance[interiorFieldName] = serializedGet(value, interiorFieldName);
     }
     value = instance;
@@ -58,7 +64,7 @@ export function serializedGet<CardT extends Constructable>(model: InstanceType<C
 }
 
 export function serializedSet<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string, value: any ) {
-  let { serialized, deserialized } = getOrCreateDataBuckets(model);
+  let { serialized, deserialized } = getDataBuckets(model);
   let field = getField(model.constructor, fieldName);
   if (!field) {
     throw new Error(`Field ${fieldName} does not exist on ${model.constructor.name}`);
@@ -76,15 +82,27 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
   deserialized.delete(fieldName);
 }
 
-export function contains<CardT extends Constructable>(card: CardT, computed?: () => unknown): CardInstanceType<CardT> {
+export function contains<CardT extends Constructable>(card: CardT, options?: Options): CardInstanceType<CardT> {
+  let { computeVia } = options ?? {};
+  let computedGet = function (fieldName: string) {
+    return function(this: InstanceType<CardT>) {
+      let { deserialized } = getDataBuckets(this);
+      let value = deserialized.get(fieldName);
+      if (value === undefined && typeof computeVia === 'function') {
+        value = computeVia.bind(this)();
+        deserialized.set(fieldName, value);
+      } else if (value === undefined && typeof computeVia === 'string') {
+        throw new NotReady(this, fieldName, computeVia, this.constructor.name);
+      }
+      return value;
+    };
+  }
+
   if (primitive in card) {
     return {
       setupField(fieldName: string) {
-        let get = function(this: InstanceType<CardT>) {
-          if (computed) {
-            return computed.bind(this)();
-          }
-          let { serialized, deserialized } = getOrCreateDataBuckets(this);
+        let get = computeVia ? computedGet(fieldName) : function(this: InstanceType<CardT>) {
+          let { serialized, deserialized } = getDataBuckets(this);
           let value = deserialized.get(fieldName);
           let field = getField(this.constructor, fieldName);
           if (value !== undefined) {
@@ -101,11 +119,11 @@ export function contains<CardT extends Constructable>(card: CardT, computed?: ()
         return {
           enumerable: true,
           get,
-          ...(computed
+          ...(computeVia
             ? {} // computeds don't have setters
             : {
               set(value: any) {
-                let { serialized, deserialized } = getOrCreateDataBuckets(this);
+                let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, value);
                 serialized.delete(fieldName);
               }
@@ -118,11 +136,8 @@ export function contains<CardT extends Constructable>(card: CardT, computed?: ()
     return {
       setupField(fieldName: string) {
         let instance = new card();
-        let get = function(this: InstanceType<CardT>) {
-          if (computed) {
-            return computed.bind(this)();
-          }
-          let { serialized, deserialized } = getOrCreateDataBuckets(this);
+        let get = computeVia ? computedGet(fieldName) : function(this: InstanceType<CardT>) {
+          let { serialized, deserialized } = getDataBuckets(this);
           let value = deserialized.get(fieldName);
           if (value !== undefined) {
             return value;
@@ -139,12 +154,12 @@ export function contains<CardT extends Constructable>(card: CardT, computed?: ()
         return {
           enumerable: true,
           get,
-          ...(computed
+          ...(computeVia
             ? {} // computeds don't have setters
             : {
               set(value: any) {
                 Object.assign(instance, value);
-                let { serialized, deserialized } = getOrCreateDataBuckets(this);
+                let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, instance);
                 serialized.delete(fieldName);
               }
@@ -255,43 +270,37 @@ export async function prepareToRender<CardT extends Constructable>(card: CardT, 
       }
     }
   }
-
+  await loadModel(model); // absorb model asynchronicity
   let component = getComponent(card, format, model, setters);
   return { component };
 }
 
-function makeSetter(segments: string[] = [], data: Record<string, any>): Setter {
-  let s = (val: any) => {
-    let value = val?.target?.value ?? val;
-    let innerSegments = segments.slice();
-    let lastSegment = innerSegments.pop();
-    if (!lastSegment) {
-      return;
+async function loadModel<CardT extends Constructable>(model: InstanceType<CardT>): Promise<void> {
+  for (let [fieldName, field] of Object.entries(getFields(model))) {
+    let value = await loadField(model, fieldName);
+    if (!(primitive in field)) {
+      await loadModel(value);
     }
-    let cursor = data;
-    for (let segment of innerSegments) {
-      let nextCursor = cursor[segment];
-      if (!nextCursor) {
-        nextCursor = {};
-        cursor[segment] = nextCursor;
+  }
+}
+
+async function loadField<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string): Promise<any> {
+  let result;
+  let isLoaded = false;
+  let { deserialized } = getDataBuckets(model);
+  while(!isLoaded) {
+    try {
+      result = model[fieldName];
+      isLoaded = true;
+    } catch (e: any) {
+      if (!isNotReadyError(e)) {
+        throw e;
       }
-      cursor = nextCursor;
+      let { model, computeVia, fieldName } = e;
+      deserialized.set(fieldName, await model[computeVia]());
     }
-    cursor[lastSegment] = value;
-  };
-  (s as any).setters = new Proxy(
-    {},
-    {
-      get: (target: any, prop: string, receiver: unknown) => {
-        if (typeof prop === 'string') {
-          return makeSetter([...segments, prop], data);
-        } else {
-          return Reflect.get(target, prop, receiver);
-        }
-      },
-    }
-  );
-  return s;
+  }
+  return result;
 }
 
 function getField<CardT extends Constructable>(card: CardT, fieldName: string): Constructable | undefined {
@@ -307,15 +316,24 @@ function getField<CardT extends Constructable>(card: CardT, fieldName: string): 
   return undefined
 }
 
-function getFieldNames<CardT extends Constructable>(card: CardT): string[] {
+function getFields<CardT extends Constructable>(card: InstanceType<CardT>): { [fieldName: string]: Constructable } {
   let obj = Reflect.getPrototypeOf(card);
-  let names: string[] = [];
+  let fields: { [fieldName: string]: Constructable } = {};
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
     let descs = Object.getOwnPropertyDescriptors(obj);
-    names.push(...Object.keys(descs).filter(key => key !== 'constructor'));
+    let currentFields = flatMap(Object.keys(descs), maybeFieldName => {
+      if (maybeFieldName !== 'constructor') {
+        let maybeField = getField(card.constructor, maybeFieldName);
+        if (maybeField) {
+          return [[maybeFieldName, maybeField]] as [[string, Constructable]];
+        }
+      }
+      return [];
+    });
+    fields = { ...fields, ...Object.fromEntries(currentFields) };
     obj = Reflect.getPrototypeOf(obj);
   }
-  return names;
+  return fields;
 }
 
 function fieldsComponentsFor<CardT extends Constructable>(target: object, model: InstanceType<CardT>, defaultFormat: Format, setters: Record<string, Setter>): FieldsTypeFor<CardT> {
@@ -370,4 +388,38 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
     },
 
   }) as any;
+}
+
+function makeSetter(segments: string[] = [], data: Record<string, any>): Setter {
+  let s = (val: any) => {
+    let value = val?.target?.value ?? val;
+    let innerSegments = segments.slice();
+    let lastSegment = innerSegments.pop();
+    if (!lastSegment) {
+      return;
+    }
+    let cursor = data;
+    for (let segment of innerSegments) {
+      let nextCursor = cursor[segment];
+      if (!nextCursor) {
+        nextCursor = {};
+        cursor[segment] = nextCursor;
+      }
+      cursor = nextCursor;
+    }
+    cursor[lastSegment] = value;
+  };
+  (s as any).setters = new Proxy(
+    {},
+    {
+      get: (target: any, prop: string, receiver: unknown) => {
+        if (typeof prop === 'string') {
+          return makeSetter([...segments, prop], data);
+        } else {
+          return Reflect.get(target, prop, receiver);
+        }
+      },
+    }
+  );
+  return s;
 }
