@@ -210,7 +210,7 @@ function getComponent<CardT extends Constructable>(card: CardT, format: Format, 
   // up our fields on demand.
   let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format), setters);
 
-  let set: Setter | undefined;
+  let set = () => {};
   if (property && setters[property]) {
     set = setters[property].setters[property];
   }
@@ -261,8 +261,8 @@ export async function prepareToRender<CardT extends Constructable>(card: CardT, 
 }
 
 function makeSetter(segments: string[] = [], data: Record<string, any>): Setter {
-  let s = (ev: Event) => {
-    let { value } = ev.target as HTMLInputElement;
+  let s = (val: any) => {
+    let value = val?.target?.value ?? val;
     let innerSegments = segments.slice();
     let lastSegment = innerSegments.pop();
     if (!lastSegment) {

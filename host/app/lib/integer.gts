@@ -1,5 +1,5 @@
 import { primitive, Component } from 'runtime-spike/lib/card-api';
-import on from 'runtime-spike/modifiers/on';
+import { on } from '@ember/modifier';
 
 export default class IntegerCard {
   static [primitive]: number;
