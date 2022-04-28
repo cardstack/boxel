@@ -27,7 +27,7 @@ export default class DatetimeCard {
     return parseISO(date);
   }
   static embedded = class Embedded extends Component<typeof this> {
-    <template><span data-test="datetime">{{this.formatted}}</span></template>
+    <template>{{this.formatted}}</template>
     get formatted() {
       return this.args.model ? Format.format(this.args.model) : undefined
     }
