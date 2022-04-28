@@ -128,10 +128,11 @@ module('Integration | serialization', function (hooks) {
   test('can serialize a computed field', async function(assert) {
     class Person {
       @field birthdate = contains(DateCard);
-      @field firstBirthday = contains(DateCard,
+      @field firstBirthday = contains(DateCard, { computeVia: 
         function(this: Person) {
           return new Date(this.birthdate.getFullYear() + 1, this.birthdate.getMonth(), this.birthdate.getDate());
-        });
+        }
+      });
       static isolated = class Isolated extends Component<typeof this> {
         <template>{{serializedGet @model 'firstBirthday'}}</template>
       }
