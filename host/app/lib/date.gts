@@ -24,7 +24,7 @@ export default class DateCard {
     return parse(date, 'yyyy-MM-dd', new Date());
   }
   static embedded = class Embedded extends Component<typeof this> {
-    <template><span data-test="date">{{this.formatted}}</span></template>
+    <template>{{this.formatted}}</template>
     get formatted() {
       return this.args.model ? Format.format(this.args.model) : undefined
     }

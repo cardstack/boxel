@@ -39,7 +39,7 @@ export function serializedGet<CardT extends Constructable>(model: InstanceType<C
   if (value !== undefined) {
     return value;
   }
-  value = deserialized.get(fieldName);
+  value = deserialized.get(fieldName) ?? model[fieldName]; // computeds don't currently cache in deserialized bucket
   if (primitive in (field as any)) {
     if (typeof (field as any)[serialize] === 'function') {
       value = (field as any)[serialize](value);
