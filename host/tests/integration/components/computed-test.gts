@@ -1,10 +1,9 @@
 import { module, test } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
-import { contains, field, Component, serializedGet } from 'runtime-spike/lib/card-api';
+import { contains, field, Component } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
-import DateCard from 'runtime-spike/lib/date';
 import { setupRenderingTest } from 'ember-qunit';
-import { p, cleanWhiteSpace } from '../../helpers';
+import { cleanWhiteSpace } from '../../helpers';
 
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
