@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
-import { contains, field, Component, primitive } from 'runtime-spike/lib/card-api';
+import { contains, field, Component, primitive, setData } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import on from 'runtime-spike/modifiers/on';
 
@@ -177,7 +177,10 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
 
     await fillIn('[data-test-field="title"] input', 'New Title');
+    // setData({ title: 'New Title'}, HelloWorld);
+    // await this.pauseTest();
     await renderCard(HelloWorld, 'isolated');
+    // await this.pauseTest();
     assert.dom('[data-test-value]').hasText('New Title');
   });
 

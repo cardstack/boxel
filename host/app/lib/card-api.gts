@@ -148,7 +148,7 @@ export const field = function(target: object, key: string | symbol, { initialize
 
 export type Constructable = new(...args: any) => any;
 
-type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<CardT>; set: Setter } }
+type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<CardT> } }
 
 export class Component<CardT extends Constructable> extends GlimmerComponent<SignatureFor<CardT>> {
 
@@ -193,9 +193,8 @@ function getComponent<CardT extends Constructable>(card: CardT, format: Format, 
   // *inside* our own component, @fields is a proxy object that looks
   // up our fields on demand.
   let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
-  let set = makeSetter(); // TODO
   let component = <template>
-    <Implementation @model={{model}} @fields={{internalFields}} @set={{set}} />
+    <Implementation @model={{model}} @fields={{internalFields}} />
   </template>
 
   // when viewed from *outside*, our component is both an invokable component
@@ -309,10 +308,23 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
         writable: true,
         configurable: true,
       }
-    }
+    },
+
   }) as any;
 }
 
-function makeSetter(segments: string[] = []): Setter {
-  // TODO
+// export function setData<CardT extends Constructable>(data: Record<string, any>, model: InstanceType<CardT>): void {
+//   for (let [ name, value ] of Object.entries(data)) {
+//     let card = model.prototype;
+//     card.constructor.data[name] = value;
+//   }
+// }
+
+function setter(segments: string[] = []): Setter {
+  return function(ev: any) {
+    let { value } = ev.target;
+    // setData({
+    //   [fieldName]: value,
+    // }, model);
+  }
 }
