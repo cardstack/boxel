@@ -2,15 +2,15 @@
 
 module.exports = {
   root: true,
-  parser: 'babel-eslint',
+  parser: '@typescript-eslint/parser',
   parserOptions: {
-    ecmaVersion: 2018,
+    ecmaVersion: 2020,
     sourceType: 'module',
     ecmaFeatures: {
       legacyDecorators: true,
     },
   },
-  plugins: ['ember'],
+  plugins: ['ember', '@typescript-eslint', 'prettier'],
   extends: [
     'eslint:recommended',
     'plugin:ember/recommended',
@@ -19,7 +19,6 @@ module.exports = {
   env: {
     browser: true,
   },
-  rules: {},
   overrides: [
     // node files
     {
