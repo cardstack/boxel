@@ -170,6 +170,20 @@ module('Integration | card-basics', function (hooks) {
 
   // TODO what does this mean--is the base case just a {{#each}} over all the values?
   // If you wanted to override the default template for a containsMany field where do you do that?
+  // maybe there is an additional template for "containsMany" that a field card can have?
+  // class String {
+  //   static [primitive]: string;
+  //   static embedded = class Embedded extends Component<typeof this> {
+  //     <template>{{@model}}</template>
+  //   }
+  //   static containsMany = class ContainsMany extends Component<typeof this> {
+  //     <template>
+  //       {{#each @model as |value|}}
+  //         {{value}},
+  //       {{/each}}
+  //     </template>
+  //   }
+  // }
   skip('render a containsMany primitive field');
   skip('render a containsMany composite field');
 
