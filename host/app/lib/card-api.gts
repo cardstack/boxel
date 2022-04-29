@@ -80,6 +80,11 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
   deserialized.delete(fieldName);
 }
 
+export function containsMany<CardT extends Constructable>(card: CardT, options?: Options): CardInstanceType<CardT>[] {
+  // TODO need to map over values for deserialization....
+  return contains(card, options);
+}
+
 export function contains<CardT extends Constructable>(card: CardT, options?: Options): CardInstanceType<CardT> {
   let { computeVia } = options ?? {};
   let computedGet = function (fieldName: string) {

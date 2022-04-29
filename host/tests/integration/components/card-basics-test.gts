@@ -1,9 +1,10 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderCard } from '../../helpers/render-component';
-import { contains, field, Component, primitive } from 'runtime-spike/lib/card-api';
+import { contains, containsMany, field, Component, primitive } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import IntegerCard from 'runtime-spike/lib/integer';
+import { cleanWhiteSpace } from '../../helpers';
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -13,41 +14,64 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard);
       @field number = contains(IntegerCard);
+      @field languagesSpoken = containsMany(StringCard);
 
       static isolated = class Isolated extends Component<typeof this> {
-        <template>{{@model.firstName}} {{@model.title}} {{@model.number}}</template>
+        <template>
+          {{@model.firstName}}
+          {{@model.title}}
+          {{@model.number}}
+          {{#each @model.languagesSpoken as |language|}}
+            {{language}}
+          {{/each}}
+        </template>
       }
     }
     let card = new Person();
     card.firstName = 'arthur';
     card.number = 42;
+    card.languagesSpoken = ['english', 'japanese'];
     let readName: string = card.firstName;
     assert.strictEqual(readName, 'arthur');
     let readNumber: number = card.number;
     assert.strictEqual(readNumber, 42);
+    let readLanguages: string[] = card.languagesSpoken;
+    assert.deepEqual(readLanguages, ['english', 'japanese']);
   });
 
-  test('access @model for primitive and composite fields', async function (assert) {
 
+  test('access @model for primitive and composite fields', async function (assert) {
     class Person {
       @field firstName = contains(StringCard);
       @field subscribers = contains(IntegerCard);
+      @field languagesSpoken = containsMany(StringCard);
     }
 
     class Post {
       @field title = contains(StringCard);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
-        <template>{{@model.title}} by {{@model.author.firstName}}, {{@model.author.subscribers}} subscribers</template>
+        <template>
+          {{@model.title}} by {{@model.author.firstName}}
+          speaks: {{#each @model.author.languagesSpoken as |language|}} {{language}} {{/each}}
+          {{@model.author.subscribers}} subscribers
+        </template>
       }
     }
 
     class HelloWorld extends Post {
-      static data = { title: 'First Post', author: { firstName: 'Arthur', subscribers: 5 } }
+      static data = {
+        title: 'First Post',
+        author: {
+          firstName: 'Arthur',
+          subscribers: 5,
+          languagesSpoken:[ "english", "japanese"]
+        }
+      }
     }
 
     await renderCard(HelloWorld, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), 'First Post by Arthur, 5 subscribers');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Arthur speaks: english japanese 5 subscribers');
   });
 
   test('render primitive field', async function (assert) {
@@ -143,6 +167,11 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test="string"]').containsText('Arthur');
     assert.dom('[data-test="integer"]').containsText('10');
   });
+
+  // TODO what does this mean--is the base case just a {{#each}} over all the values?
+  // If you wanted to override the default template for a containsMany field where do you do that?
+  skip('render a containsMany primitive field');
+  skip('render a containsMany composite field');
 
   test('render default templates', async function (assert) {
     class Person {
