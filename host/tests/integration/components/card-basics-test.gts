@@ -178,8 +178,8 @@ module('Integration | card-basics', function (hooks) {
   //   }
   //   static containsMany = class ContainsMany extends Component<typeof this> {
   //     <template>
-  //       {{#each @model as |value|}}
-  //         {{value}},
+  //       {{#each @model as |value index|}}
+  //         {{value}}{{#if (isLast @model index) '' ','}},
   //       {{/each}}
   //     </template>
   //   }
