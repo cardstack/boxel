@@ -38,6 +38,8 @@ function getDataBuckets<CardT extends Constructable>(instance: InstanceType<Card
   return { serialized, deserialized };
 }
 
+// TODO think about what it means to handle a containsMany field--how would we know a field is containsMany?
+// Perhaps we stamp a little state on the PropertyDescriptor to indicate containsMany?
 export function serializedGet<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string ) {
   let { serialized, deserialized } = getDataBuckets(model);
   let field = getField(model.constructor, fieldName);
@@ -61,6 +63,7 @@ export function serializedGet<CardT extends Constructable>(model: InstanceType<C
   return value;
 }
 
+// TODO think about what it means to handle a containsMany field
 export function serializedSet<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string, value: any ) {
   let { serialized, deserialized } = getDataBuckets(model);
   let field = getField(model.constructor, fieldName);
@@ -82,6 +85,8 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
 
 export function containsMany<CardT extends Constructable>(card: CardT, options?: Options): CardInstanceType<CardT>[] {
   // TODO need to map over values for deserialization....
+  // add some state on the PropertyDescriptor to indicate 
+  // that it's a containsMany field (like we do for `[isField]`)
   return contains(card, options);
 }
 
