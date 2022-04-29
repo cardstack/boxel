@@ -22,4 +22,6 @@ jobs:
           key: ci-modules-${{ hashFiles('**/yarn.lock') }}
       - run: yarn install --frozen-lockfile --non-interactive
       - run: yarn lint
+        working-directory: addon
       - run: yarn test:ember
+        working-directory: demo-app
