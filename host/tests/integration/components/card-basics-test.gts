@@ -271,6 +271,15 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-reviews]').hasText('5');
     // TODO: editing contained card fields
     // assert.dom('[data-test-author]').hasText('Carl Stack');
+
+    await renderCard(HelloWorld, 'edit');
+    assert.dom('[data-test-field="title"] input').hasValue('New Title');
+    await fillIn('[data-test-field="title"] input', 'Different Title');
+
+    await renderCard(HelloWorld, 'isolated');
+    assert.dom('[data-test-title]').hasText('Different Title');
+    assert.dom('[data-test-reviews]').hasText('5');
+    // assert.dom('[data-test-author]').hasText('Carl Stack');
   });
 });
 
