@@ -1,4 +1,4 @@
-import { Component, primitive, serialize, deserialize } from 'runtime-spike/lib/card-api';
+import { Component, primitive, serialize, deserialize, Card } from 'runtime-spike/lib/card-api';
 import parseISO from 'date-fns/parseISO';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
@@ -12,7 +12,7 @@ const Format = new Intl.DateTimeFormat('us-EN', {
   minute: '2-digit',
 });
 
-export default class DatetimeCard {
+export default class DatetimeCard extends Card {
   static [primitive]: Date;
   static [serialize](date: string | Date) {
     if (typeof date === 'string') {
