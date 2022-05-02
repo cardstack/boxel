@@ -4,7 +4,7 @@ import { render } from '@ember/test-helpers';
 import {
   Format,
   prepareToRender,
-  Constructable,
+  Card,
   RenderOptions,
 } from 'runtime-spike/lib/card-api';
 import { ComponentLike } from '@glint/template';
@@ -14,7 +14,7 @@ export async function renderComponent(C: ComponentLike) {
 }
 
 export async function renderCard(
-  card: Constructable,
+  card: Card,
   format: Format,
   opts?: RenderOptions
 ): Promise<void> {

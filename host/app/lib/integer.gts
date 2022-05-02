@@ -1,8 +1,8 @@
-import { primitive, Component } from 'runtime-spike/lib/card-api';
+import { primitive, Component, Card } from 'runtime-spike/lib/card-api';
 import { on } from '@ember/modifier';
 import { pick } from './pick';
 
-export default class IntegerCard {
+export default class IntegerCard extends Card {
   static [primitive]: number;
   static embedded = class Embedded extends Component<typeof this> {
     <template>{{@model}}</template>

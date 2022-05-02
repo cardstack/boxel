@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
-import { contains, field, Component, primitive } from 'runtime-spike/lib/card-api';
+import { contains, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import IntegerCard from 'runtime-spike/lib/integer';
 
@@ -10,7 +10,7 @@ module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
 
   test('primitive field type checking', async function (assert) {
-    class Person {
+    class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard);
       @field number = contains(IntegerCard);
@@ -30,12 +30,12 @@ module('Integration | card-basics', function (hooks) {
 
   test('access @model for primitive and composite fields', async function (assert) {
 
-    class Person {
+    class Person extends Card {
       @field firstName = contains(StringCard);
       @field subscribers = contains(IntegerCard);
     }
 
-    class Post {
+    class Post extends Card {
       @field title = contains(StringCard);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
@@ -43,30 +43,31 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class HelloWorld extends Post {
-      static data = { title: 'First Post', author: { firstName: 'Arthur', subscribers: 5 } }
-    }
+    let HelloWorld = new Post({
+      title: 'First Post', 
+      author: { firstName: 'Arthur', subscribers: 5 },
+    });
 
     await renderCard(HelloWorld, 'isolated');
     assert.strictEqual(this.element.textContent!.trim(), 'First Post by Arthur, 5 subscribers');
   });
 
   test('render primitive field', async function (assert) {
-    class EmphasizedString {
+    class EmphasizedString extends Card {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
         <template><em data-test="name">{{@model}}</em></template>
       }
     }
 
-    class StrongInteger {
+    class StrongInteger extends Card {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template><strong data-test="integer">{{@model}}</strong></template>
       }
     }
 
-    class Person {
+    class Person extends Card {
       @field firstName = contains(EmphasizedString);
       @field number = contains(StrongInteger);
 
@@ -75,17 +76,15 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class Arthur extends Person {
-      static data = { firstName: 'Arthur', number: 10 }
-    }
+    let arthur = new Person({ firstName: 'Arthur', number: 10 });
 
-    await renderCard(Arthur, 'embedded');
+    await renderCard(arthur, 'embedded');
     assert.dom('[data-test="name"]').containsText('Arthur');
     assert.dom('[data-test="integer"]').containsText('10');
   });
 
   test('render whole composite field', async function (assert) {
-    class Person {
+    class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard);
       @field number = contains(IntegerCard);
@@ -94,51 +93,47 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class Post {
+    class Post extends Card {
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
         <template><div data-test><@fields.author /></div></template>
       }
     }
 
-    class HelloWorld extends Post {
-      static data = { author: { firstName: 'Arthur', title: 'Mr', number: 10 } }
-    }
-
+    let HelloWorld = new Post({ author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
     await renderCard(HelloWorld, 'isolated');
     assert.dom('[data-test]').containsText('Mr Arthur 10');
   });
 
   test('render nested composite field', async function (assert) {
-    class TestString {
+    class TestString extends Card {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
         <template><em data-test="string">{{@model}}</em></template>
       }
     }
 
-    class TestInteger {
+    class TestInteger extends Card {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template><strong data-test="integer">{{@model}}</strong></template>
       }
     }
 
-    class Person {
+    class Person extends Card {
       @field firstName = contains(TestString);
       @field number = contains(TestInteger);
     }
 
-    class Post {
+    class Post extends Card {
+      @field title = contains(TestString);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
-        <template><@fields.author.firstName /><@fields.author.number /></template>
+      <template><@fields.author.firstName /><@fields.author.number /></template>
       }
     }
 
-    class HelloWorld extends Post {
-      static data = { author: { firstName: 'Arthur', number: 10 } }
-    }
+    let HelloWorld = new Post({ author: { firstName: 'Arthur', number: 10 } });
 
     await renderCard(HelloWorld, 'isolated');
     assert.dom('[data-test="string"]').containsText('Arthur');
@@ -267,7 +262,7 @@ module('Integration | card-basics', function (hooks) {
 });
 
 function testString(label: string) {
-  return class TestString {
+  return class TestString extends Card {
     static [primitive]: string;
     static embedded = class Embedded extends Component<typeof this> {
       <template><em data-test={{label}}>{{@model}}</em></template>

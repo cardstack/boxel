@@ -12,8 +12,8 @@ const isField = Symbol('cardstack-field');
 
 type CardInstanceType<T extends Constructable> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
 
-type FieldsTypeFor<CardT extends Constructable> = {
-  [Field in keyof InstanceType<CardT>]: (new() => GlimmerComponent<{ Args: {}, Blocks: {} }>) & FieldsTypeFor<InstanceType<CardT>[Field]>;
+type FieldsTypeFor<T extends Card> = {
+  [Field in keyof T]: (new() => GlimmerComponent<{ Args: {}, Blocks: {} }>) & (T[Field] extends Card ? FieldsTypeFor<T[Field]> : unknown);
 }
 
 type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
@@ -30,6 +30,30 @@ const serializedData = new WeakMap<object, Map<string, any>>();
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
 const cardTracking = new TrackedWeakMap<object, any>();
+
+const isBaseCard = Symbol('isBaseCard');
+
+export class Card {
+  // this is here because Card has no public instance methods, so without it
+  // typescript considers everything a valid card.
+  [isBaseCard] = true;
+
+  declare ["constructor"]: Constructable;
+
+  static fromSerialized<T extends Constructable>(this: T, data: Record<string, any>): InstanceType<T> {
+    let model = new this() as InstanceType<T>;
+    for (let [fieldName, value] of Object.entries(data)) {
+      serializedSet(model, fieldName, value);
+    }
+    return model;
+  }
+
+  constructor(data?: Record<string, any>) {
+    if (data) {
+      Object.assign(this, data);
+    }
+  }
+}
 
 function getDataBuckets<CardT extends Constructable>(instance: InstanceType<CardT>): { serialized: Map<string, any>; deserialized: Map<string, any>; } {
   let serialized = serializedData.get(instance);
@@ -129,7 +153,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
           ...(computeVia
             ? {} // computeds don't have setters
             : {
-              set(value: any) {
+              set(this: InstanceType<CardT>, value: any) {
                 let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, value);
                 serialized.delete(fieldName);
@@ -168,7 +192,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
           ...(computeVia
             ? {} // computeds don't have setters
             : {
-              set(value: any) {
+              set(this: InstanceType<CardT>, value: any) {
                 Object.assign(instance, value);
                 let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, instance);
@@ -188,9 +212,9 @@ export const field = function(_target: object, key: string | symbol, { initializ
   return initializer().setupField(key);
 } as unknown as PropertyDecorator;
 
-export type Constructable = new(...args: any) => any;
+export type Constructable = new(...args: any) => Card;
 
-type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<CardT>; set: Setter; } }
+type SignatureFor<CardT extends Constructable> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; } }
 
 export class Component<CardT extends Constructable> extends GlimmerComponent<SignatureFor<CardT>> {
 
@@ -252,47 +276,28 @@ function getComponent<CardT extends Constructable>(card: CardT, format: Format, 
   return externalFields as unknown as typeof component;
 }
 
-function getInitialData(card: Constructable): Record<string, any> | undefined {
-  return (card as any).data;
-}
 
-export interface RenderOptions {
-  dataIsDeserialized?: boolean
-}
-
-export async function prepareToRender<CardT extends Constructable>(card: CardT, format: Format, opts?: RenderOptions): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
-  let { dataIsDeserialized }: Required<RenderOptions> = { dataIsDeserialized: false, ...opts };
-  let model = new card();
-  let data = getInitialData(card);
-  if (data) {
-    if (dataIsDeserialized) {
-      Object.assign(model, data);
-    } else {
-      for (let [fieldName, value] of Object.entries(data)) {
-        serializedSet(model, fieldName, value);
-      }
-    }
-  }
+export async function prepareToRender(model: Card, format: Format): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
   await loadModel(model); // absorb model asynchronicity
   let set: Setter | undefined;
   if (format === 'edit') {
     set = makeSetter(model);
   }
-  let component = getComponent(card, format, model, set);
+  let component = getComponent(model.constructor as Constructable, format, model, set);
   return { component };
 }
 
-async function loadModel<CardT extends Constructable>(model: InstanceType<CardT>): Promise<void> {
+async function loadModel<T extends Card>(model: T): Promise<void> {
   for (let [fieldName, field] of Object.entries(getFields(model))) {
-    let value = await loadField(model, fieldName);
+    let value: any = await loadField(model, fieldName as keyof T);
     if (!(primitive in field)) {
       await loadModel(value);
     }
   }
 }
 
-async function loadField<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string): Promise<any> {
-  let result;
+async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K): Promise<T[K]> {
+  let result: T[K];
   let isLoaded = false;
   let { deserialized } = getDataBuckets(model);
   while(!isLoaded) {
@@ -307,7 +312,8 @@ async function loadField<CardT extends Constructable>(model: InstanceType<CardT>
       deserialized.set(fieldName, await model[computeVia]());
     }
   }
-  return result;
+  // case OK because deserialized.set assigns it
+  return result!;
 }
 
 function getField<CardT extends Constructable>(card: CardT, fieldName: string): Constructable | undefined {
@@ -323,9 +329,9 @@ function getField<CardT extends Constructable>(card: CardT, fieldName: string): 
   return undefined
 }
 
-function getFields<CardT extends Constructable>(card: InstanceType<CardT>): { [fieldName: string]: Constructable } {
+function getFields<T extends Card>(card: T): { [P in keyof T]?: Constructable } {
   let obj = Reflect.getPrototypeOf(card);
-  let fields: { [fieldName: string]: Constructable } = {};
+  let fields: { [P in keyof T]?: Constructable } = {};
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
     let descs = Object.getOwnPropertyDescriptors(obj);
     let currentFields = flatMap(Object.keys(descs), maybeFieldName => {
@@ -343,7 +349,7 @@ function getFields<CardT extends Constructable>(card: InstanceType<CardT>): { [f
   return fields;
 }
 
-function fieldsComponentsFor<CardT extends Constructable>(target: object, model: InstanceType<CardT>, defaultFormat: Format, set?: Setter): FieldsTypeFor<CardT> {
+function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFormat: Format, set?: Setter): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
       if (typeof property === 'symbol') {
@@ -356,7 +362,7 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
         return Reflect.get(target, property, received);
       }
       // found field: get the corresponding component
-      let innerModel = model[property];
+      let innerModel = (model as any)[property];
       return getComponent(field, defaultFormat, innerModel, set?.setters[property]);
     },
     getPrototypeOf() {
