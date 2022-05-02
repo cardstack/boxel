@@ -43,12 +43,12 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let HelloWorld = new Post({
+    let helloWorld = new Post({
       title: 'First Post', 
       author: { firstName: 'Arthur', subscribers: 5 },
     });
 
-    await renderCard(HelloWorld, 'isolated');
+    await renderCard(helloWorld, 'isolated');
     assert.strictEqual(this.element.textContent!.trim(), 'First Post by Arthur, 5 subscribers');
   });
 
@@ -100,8 +100,8 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let HelloWorld = new Post({ author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
-    await renderCard(HelloWorld, 'isolated');
+    let helloWorld = new Post({ author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
+    await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test]').containsText('Mr Arthur 10');
   });
 
@@ -133,15 +133,15 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let HelloWorld = new Post({ author: { firstName: 'Arthur', number: 10 } });
+    let helloWorld = new Post({ author: { firstName: 'Arthur', number: 10 } });
 
-    await renderCard(HelloWorld, 'isolated');
+    await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test="string"]').containsText('Arthur');
     assert.dom('[data-test="integer"]').containsText('10');
   });
 
   test('render default isolated template', async function (assert) {
-    class Person {
+    class Person extends Card {
       @field firstName = contains(testString('first-name'));
 
       static embedded = class Embedded extends Component<typeof this> {
@@ -149,23 +149,21 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class Post {
+    class Post extends Card{
       @field title = contains(testString('title'));
       @field author = contains(Person);
     }
 
-    class HelloWorld extends Post {
-      static data = { title: 'First Post', author: { firstName: 'Arthur' } }
-    }
+    let helloWorld = new Post({ title: 'First Post', author: { firstName: 'Arthur' } });
 
-    await renderCard(HelloWorld, 'isolated');
+    await renderCard(helloWorld, 'isolated');
 
     assert.dom('[data-test="first-name"]').containsText('Arthur');
     assert.dom('[data-test="title"]').containsText('First Post');
   });
 
   test('render default edit template', async function (assert) {
-    class TestString {
+    class TestString extends Card {
       static [primitive]: string;
       static edit = class Edit extends Component<typeof this> {
         <template>
@@ -175,20 +173,18 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class Person {
+    class Person extends Card {
       @field firstName = contains(TestString);
     }
 
-    class Post {
+    class Post extends Card {
       @field title = contains(TestString);
       @field author = contains(Person);
     }
 
-    class HelloWorld extends Post {
-      static data = { title: 'My Post', author: { firstName: 'Arthur' } }
-    }
+    let helloWorld = new Post({ title: 'My Post', author: { firstName: 'Arthur' } });
 
-    await renderCard(HelloWorld, 'edit');
+    await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"]').containsText('title');
     assert.dom('[data-test-field="title"] input').hasValue('My Post');
     assert.dom('[data-test-field="author"]').containsText('author firstName'); // TODO: fix nested labels
@@ -196,7 +192,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('can adopt a card', async function (assert) {
-    class Animal {
+    class Animal extends Card {
       @field species = contains(testString('species'));
     }
     class Person extends Animal {
@@ -206,24 +202,22 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class Hassan extends Person {
-      static data = { firstName: 'Hassan', species: 'Homo Sapiens' }
-    }
+    let hassan = new Person ({ firstName: 'Hassan', species: 'Homo Sapiens' });
 
-    await renderCard(Hassan, 'embedded');
+    await renderCard(hassan, 'embedded');
     assert.dom('[data-test="first-name"]').containsText('Hassan');
     assert.dom('[data-test="species"]').containsText('Homo Sapiens');
   });
 
   test('can edit fields', async function (assert) {
-    class Person {
+    class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template><@fields.firstName /></template>
       }
     }
 
-    class Post {
+    class Post extends Card {
       @field title = contains(StringCard);
       @field reviews = contains(IntegerCard);
       @field author = contains(Person);
@@ -242,11 +236,9 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class HelloWorld extends Post {
-      static data = { title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } };
-    }
+    let helloWorld = new  Post({ title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
 
-    await renderCard(HelloWorld, 'edit');
+    await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"] input').hasValue('First Post');
     assert.dom('[data-test-field="reviews"] input').hasValue('1');
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
