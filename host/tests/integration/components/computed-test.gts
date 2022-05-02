@@ -205,10 +205,11 @@ module('Integration | computeds', function (hooks) {
     }
 
     let person = new Person({ firstName: 'Mango' });
+
+    // TODO how do we ensure that the Card's destructor is called for test cleanup?
+
     await renderCard(person, 'edit');
-    assert
-      .dom('[data-test-field="slowName"]')
-      .containsText('Mango');
+    assert.dom('[data-test-field="slowName"]').containsText('Mango');
     await fillIn('[data-test-field="firstName"] input', 'Van Gogh');
 
     // We want to ensure data consistency, so that when the template rerenders,
@@ -216,9 +217,7 @@ module('Integration | computeds', function (hooks) {
     await waitUntil(() =>
       find('[data-test-dep-field]')?.textContent?.includes('Van Gogh')
     );
-    assert
-      .dom('[data-test-field=slowName]')
-      .containsText('Van Gogh');
+    assert.dom('[data-test-field=slowName]').containsText('Van Gogh');
   });
 
 });

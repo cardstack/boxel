@@ -3,6 +3,7 @@ import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
 import flatMap from 'lodash/flatMap';
 import { TrackedWeakMap } from 'tracked-built-ins';
+import { registerDestructor } from '@ember/destroyable';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -25,8 +26,9 @@ interface Options {
   computeVia?: string | (() => unknown);
 }
 
-const deserializedData = new WeakMap<object, Map<string, any>>();
-const serializedData = new WeakMap<object, Map<string, any>>();
+const deserializedData = new WeakMap<Card, Map<string, any>>();
+const serializedData = new WeakMap<Card, Map<string, any>>();
+const recomputePromises = new WeakMap<Card, Promise<any>>();
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
@@ -49,10 +51,17 @@ export class Card {
     return model;
   }
 
+  static async didRecompute(card: Card): Promise<void> {
+    let promise = recomputePromises.get(card);
+    await promise;
+  }
+
   constructor(data?: Record<string, any>) {
     if (data) {
       Object.assign(this, data);
     }
+
+    registerDestructor(this, Card.didRecompute.bind(this));
   }
 }
 
@@ -159,10 +168,12 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
                 let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, value);
                 serialized.delete(fieldName);
-                Promise.resolve().then(() => {
-                  // notify glimmer to rerender this card
-                  cardTracking.set(this, true);
-                });
+                // invalidate all computed fields because we don't know which ones depend on this one
+                // the compiler will optimize this for us.
+                for (let computedFieldName of Object.keys(getFields(this, true))) {
+                  deserialized.delete(computedFieldName);
+                }
+                recompute(this);
               }
             }
           )
@@ -200,6 +211,9 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
                 let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, instance);
                 serialized.delete(fieldName);
+
+                // TODO probably want to invalidate all computed fields because we don't know which ones depend on this one
+                // and also make a test for this if so
               }
             }
           )
@@ -281,7 +295,7 @@ function getComponent<CardT extends Constructable>(card: CardT, format: Format, 
 
 
 export async function prepareToRender(model: Card, format: Format): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
-  await loadModel(model); // absorb model asynchronicity
+  await recompute(model); // absorb model asynchronicity
   let set: Setter | undefined;
   if (format === 'edit') {
     set = makeSetter(model);
@@ -290,13 +304,42 @@ export async function prepareToRender(model: Card, format: Format): Promise<{ co
   return { component };
 }
 
-async function loadModel<T extends Card>(model: T): Promise<void> {
-  for (let [fieldName, field] of Object.entries(getFields(model))) {
-    let value: any = await loadField(model, fieldName as keyof T);
-    if (!(primitive in field)) {
-      await loadModel(value);
+async function recompute(card: Card): Promise<void> {
+  // Note that after each async step we check to see if we are still the
+  // current promise, otherwise we bail
+  let done: () => void;
+  let recomputePromise = new Promise<void>((res) => (done = res));
+  recomputePromises.set(card, recomputePromise);
+
+  // wait a full micro task before we start - this is simple debounce
+  await Promise.resolve();
+  if (recomputePromises.get(card) !== recomputePromise) {
+    return;
+  }
+
+  async function _loadModel<T extends Card>(model: T): Promise<void> {
+    for (let [fieldName, field] of Object.entries(getFields(model))) {
+      let value: any = await loadField(model, fieldName as keyof T);
+      if (recomputePromises.get(card) !== recomputePromise) {
+        return;
+      }
+      if (!(primitive in field)) {
+        await _loadModel(value);
+      }
     }
   }
+
+  await _loadModel(card);
+  if (recomputePromises.get(card) !== recomputePromise) {
+    return;
+  }
+
+  Promise.resolve().then(() => {
+    // notify glimmer to rerender this card
+    cardTracking.set(card, true);
+  });
+
+  done!();
 }
 
 async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K): Promise<T[K]> {
@@ -345,7 +388,7 @@ function isFieldComputed<CardT extends Constructable>(card: CardT, fieldName: st
   return false
 }
 
-function getFields<T extends Card>(card: T): { [P in keyof T]?: Constructable } {
+function getFields<T extends Card>(card: T, onlyComputeds?: boolean): { [P in keyof T]?: Constructable } {
   let obj = Reflect.getPrototypeOf(card);
   let fields: { [P in keyof T]?: Constructable } = {};
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
@@ -353,7 +396,8 @@ function getFields<T extends Card>(card: T): { [P in keyof T]?: Constructable } 
     let currentFields = flatMap(Object.keys(descs), maybeFieldName => {
       if (maybeFieldName !== 'constructor') {
         let maybeField = getField(card.constructor, maybeFieldName);
-        if (maybeField) {
+        let isComputed = isFieldComputed(card.constructor, maybeFieldName);
+        if ((maybeField && onlyComputeds && isComputed) || (maybeField && !onlyComputeds)) {
           return [[maybeFieldName, maybeField]] as [[string, Constructable]];
         }
       }
