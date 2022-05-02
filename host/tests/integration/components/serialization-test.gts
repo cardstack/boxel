@@ -43,7 +43,7 @@ module('Integration | serialization', function (hooks) {
 
     // initialize card data as deserialized to force us to serialize instead of using cached data
     let firstPost =  new Post({ title: 'First Post', created: p('2022-04-22'), published: parseISO('2022-04-27T16:30+00:00') });
-    await renderCard(firstPost, 'isolated', { dataIsDeserialized: true });
+    await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'created 2022-04-22, published 2022-04-27T16:30:00.000Z');
   });
 
@@ -110,7 +110,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     let firstPost = new Post({ title: 'First Post', author: { firstName: 'Mango', birthdate: p('2019-10-30'), species: 'canis familiaris', lastLogin: parseISO('2022-04-27T16:30+00:00') } });
-    await renderCard(firstPost, 'isolated', { dataIsDeserialized: true });
+    await renderCard(firstPost, 'isolated');
     assert.strictEqual(this.element.textContent!.trim(), `{"birthdate":"2019-10-30","firstName":"Mango","lastLogin":"2022-04-27T16:30:00.000Z","species":"canis familiaris"}`);
   });
 
@@ -128,7 +128,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     let mango =  Person.fromSerialized({ birthdate: p('2019-10-30') });
-    await renderCard(mango, 'isolated', { dataIsDeserialized: true});
+    await renderCard(mango, 'isolated');
     assert.strictEqual(this.element.textContent!.trim(), '2020-10-30');
   });
 
