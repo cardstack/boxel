@@ -9,6 +9,7 @@ export const serialize = Symbol('cardstack-serialize');
 export const deserialize = Symbol('cardstack-deserialize');
 
 const isField = Symbol('cardstack-field');
+const isComputed = Symbol('cardstack-field');
 
 type CardInstanceType<T extends Constructable> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
 
@@ -147,6 +148,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
           return value;
         };
         (get as any)[isField] = card;
+        (get as any)[isComputed] = Boolean(computeVia);
         return {
           enumerable: true,
           get,
@@ -186,6 +188,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
           return value;
         };
         (get as any)[isField] = card;
+        (get as any)[isComputed] = Boolean(computeVia);
         return {
           enumerable: true,
           get,
@@ -329,6 +332,19 @@ function getField<CardT extends Constructable>(card: CardT, fieldName: string): 
   return undefined
 }
 
+function isFieldComputed<CardT extends Constructable>(card: CardT, fieldName: string): boolean {
+  let obj = card.prototype;
+  while (obj) {
+    let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
+    let result = (desc?.get as any)?.[isComputed];
+    if (result !== undefined) {
+      return result;
+    }
+    obj = Reflect.getPrototypeOf(obj);
+  }
+  return false
+}
+
 function getFields<T extends Card>(card: T): { [P in keyof T]?: Constructable } {
   let obj = Reflect.getPrototypeOf(card);
   let fields: { [P in keyof T]?: Constructable } = {};
@@ -363,6 +379,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
       }
       // found field: get the corresponding component
       let innerModel = (model as any)[property];
+      defaultFormat = isFieldComputed(model.constructor, property) ? 'embedded' : defaultFormat;
       return getComponent(field, defaultFormat, innerModel, set?.setters[property]);
     },
     getPrototypeOf() {
