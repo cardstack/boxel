@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
 import flatMap from 'lodash/flatMap';
-import { TrackedMap } from 'tracked-built-ins';
+import { TrackedWeakMap } from 'tracked-built-ins';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -27,15 +27,19 @@ interface Options {
 const deserializedData = new WeakMap<object, Map<string, any>>();
 const serializedData = new WeakMap<object, Map<string, any>>();
 
+// our place for notifying Glimmer when a card is ready to re-render (which will
+// involve rerunning async computed fields)
+const cardTracking = new TrackedWeakMap<object, any>();
+
 function getDataBuckets<CardT extends Constructable>(instance: InstanceType<CardT>): { serialized: Map<string, any>; deserialized: Map<string, any>; } {
   let serialized = serializedData.get(instance);
   if (!serialized) {
-    serialized = new TrackedMap();
+    serialized = new Map();
     serializedData.set(instance, serialized);
   }
   let deserialized = deserializedData.get(instance);
   if (!deserialized) {
-    deserialized = new TrackedMap();
+    deserialized = new Map();
     deserializedData.set(instance, deserialized);
   }
   return { serialized, deserialized };
@@ -104,12 +108,14 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
       setupField(fieldName: string) {
         let get = computeVia ? computedGet(fieldName) : function(this: InstanceType<CardT>) {
           let { serialized, deserialized } = getDataBuckets(this);
+          // this establishes that our field should rerender when cardTracking for this card changes
+          cardTracking.get(this);
           let value = deserialized.get(fieldName);
-          let field = getField(this.constructor, fieldName);
           if (value !== undefined) {
             return value;
           }
           value = serialized.get(fieldName);
+          let field = getField(this.constructor, fieldName);
           if (typeof (field as any)[deserialize] === 'function') {
             value = (field as any)[deserialize](value);
           }
@@ -127,6 +133,10 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
                 let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, value);
                 serialized.delete(fieldName);
+                Promise.resolve().then(() => {
+                  // notify glimmer to rerender this card
+                  cardTracking.set(this, true);
+                });
               }
             }
           )
@@ -389,7 +399,6 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
 
 function makeSetter(model: any, field?: string): Setter {
   let s = (value: any) => {
-    debugger;
     if (!field) {
       throw new Error(`can't set topmost model`);
     }
