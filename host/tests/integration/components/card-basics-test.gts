@@ -239,23 +239,17 @@ module('Integration | card-basics', function (hooks) {
             <label data-test-field="reviews">Reviews <@fields.reviews /></label>
             <label data-test-field="author">Author <@fields.author /></label>
           </fieldset>
-        </template>
-      }
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h1 data-test-title><@fields.title /></h1>
-          <h2 data-test-author><@fields.author /></h2>
-          <span data-test-reviews><@fields.reviews /></span>
+
+          <div data-test-output="title">{{@model.title}}</div>
+          <div data-test-output="reviews">{{@model.reviews}}</div>
+          <div data-test-output="author.firstName">{{@model.author.firstName}}</div>
         </template>
       }
     }
 
     class HelloWorld extends Post {
-      static data = { title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } }
+      static data = { title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } };
     }
-
-    await renderCard(HelloWorld, 'isolated');
-    assert.dom('[data-test-title]').hasText('First Post');
 
     await renderCard(HelloWorld, 'edit');
     assert.dom('[data-test-field="title"] input').hasValue('First Post');
@@ -266,20 +260,9 @@ module('Integration | card-basics', function (hooks) {
     await fillIn('[data-test-field="reviews"] input', '5');
     await fillIn('[data-test-field="author"] input', 'Carl Stack');
 
-    await renderCard(HelloWorld, 'isolated');
-    assert.dom('[data-test-title]').hasText('New Title');
-    assert.dom('[data-test-reviews]').hasText('5');
-    // TODO: editing contained card fields
-    // assert.dom('[data-test-author]').hasText('Carl Stack');
-
-    await renderCard(HelloWorld, 'edit');
-    assert.dom('[data-test-field="title"] input').hasValue('New Title');
-    await fillIn('[data-test-field="title"] input', 'Different Title');
-
-    await renderCard(HelloWorld, 'isolated');
-    assert.dom('[data-test-title]').hasText('Different Title');
-    assert.dom('[data-test-reviews]').hasText('5');
-    // assert.dom('[data-test-author]').hasText('Carl Stack');
+    assert.dom('[data-test-output="title"]').hasText('New Title');
+    assert.dom('[data-test-output="reviews"]').hasText('5');
+    assert.dom('[data-test-output="author.firstName"]').hasText('Carl Stack');
   });
 });
 

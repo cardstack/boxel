@@ -1,5 +1,6 @@
 import { primitive, Component } from 'runtime-spike/lib/card-api';
 import { on } from '@ember/modifier';
+import { pick } from './pick';
 
 export default class StringCard {
   static [primitive]: string;
@@ -9,7 +10,7 @@ export default class StringCard {
   static edit = class Edit extends Component<typeof this> {
     <template>
       {{!-- template-lint-disable require-input-label --}}
-      <input type="text" value={{@model}} {{on "input" @set}} />
+      <input type="text" value={{@model}} {{on "input" (pick "target.value" @set) }} />
     </template>
   }
 }

@@ -2,6 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
 import flatMap from 'lodash/flatMap';
+import { TrackedMap } from 'tracked-built-ins';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -15,7 +16,7 @@ type FieldsTypeFor<CardT extends Constructable> = {
   [Field in keyof InstanceType<CardT>]: (new() => GlimmerComponent<{ Args: {}, Blocks: {} }>) & FieldsTypeFor<InstanceType<CardT>[Field]>;
 }
 
-type Setter = (value: any) => void;
+type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
 
 export type Format = 'isolated' | 'embedded' | 'edit';
 
@@ -25,19 +26,16 @@ interface Options {
 
 const deserializedData = new WeakMap<object, Map<string, any>>();
 const serializedData = new WeakMap<object, Map<string, any>>();
-let rawData: Record<string, any> = {}; // different format?
-let setter: Setter;
-let fields: Record<string, any> = {}; // make this a map?
 
 function getDataBuckets<CardT extends Constructable>(instance: InstanceType<CardT>): { serialized: Map<string, any>; deserialized: Map<string, any>; } {
   let serialized = serializedData.get(instance);
   if (!serialized) {
-    serialized = new Map();
+    serialized = new TrackedMap();
     serializedData.set(instance, serialized);
   }
   let deserialized = deserializedData.get(instance);
   if (!deserialized) {
-    deserialized = new Map();
+    deserialized = new TrackedMap();
     deserializedData.set(instance, deserialized);
   }
   return { serialized, deserialized };
@@ -221,17 +219,12 @@ function defaultFieldFormat(format: Format): Format {
   }
 }
 
-function getComponent<CardT extends Constructable>(card: CardT, format: Format, model: InstanceType<CardT>, fieldName?: string): ComponentLike<{ Args: never, Blocks: never }> {
+function getComponent<CardT extends Constructable>(card: CardT, format: Format, model: InstanceType<CardT>, set?: Setter): ComponentLike<{ Args: never, Blocks: never }> {
   let Implementation = (card as any)[format] ?? defaultComponent[format];
 
   // *inside* our own component, @fields is a proxy object that looks
   // up our fields on demand.
-  let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
-  let set = () => {};
-  if (fieldName && fields[fieldName]) {
-    // currenty ignoring fields inside nested cards
-    set = setter.setters[fieldName];
-  }
+  let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format), set);
   let component = <template>
     <Implementation @model={{model}} @fields={{internalFields}} @set={{set}} />
   </template>
@@ -243,7 +236,7 @@ function getComponent<CardT extends Constructable>(card: CardT, format: Format, 
   // It would be possible to use `externalFields` in place of `internalFields` above,
   // avoiding the need for two separate Proxies. But that has the uncanny property of
   // making `<@fields />` be an infinite recursion.
-  let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format));
+  let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format), set);
 
   // This cast is safe because we're returning a proxy that wraps component.
   return externalFields as unknown as typeof component;
@@ -262,7 +255,6 @@ export async function prepareToRender<CardT extends Constructable>(card: CardT, 
   let model = new card();
   let data = getInitialData(card);
   if (data) {
-    rawData = data;
     if (dataIsDeserialized) {
       Object.assign(model, data);
     } else {
@@ -271,12 +263,12 @@ export async function prepareToRender<CardT extends Constructable>(card: CardT, 
       }
     }
   }
-  fields = getFields(model);
-  if (!setter) {
-    setter = makeSetter();
-  }
   await loadModel(model); // absorb model asynchronicity
-  let component = getComponent(card, format, model);
+  let set: Setter | undefined;
+  if (format === 'edit') {
+    set = makeSetter(model);
+  }
+  let component = getComponent(card, format, model, set);
   return { component };
 }
 
@@ -341,7 +333,7 @@ function getFields<CardT extends Constructable>(card: InstanceType<CardT>): { [f
   return fields;
 }
 
-function fieldsComponentsFor<CardT extends Constructable>(target: object, model: InstanceType<CardT>, defaultFormat: Format): FieldsTypeFor<CardT> {
+function fieldsComponentsFor<CardT extends Constructable>(target: object, model: InstanceType<CardT>, defaultFormat: Format, set?: Setter): FieldsTypeFor<CardT> {
   return new Proxy(target, {
     get(target, property, received) {
       if (typeof property === 'symbol') {
@@ -355,7 +347,7 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
       }
       // found field: get the corresponding component
       let innerModel = model[property];
-      return getComponent(field, defaultFormat, innerModel, property);
+      return getComponent(field, defaultFormat, innerModel, set?.setters[property]);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
@@ -395,36 +387,25 @@ function fieldsComponentsFor<CardT extends Constructable>(target: object, model:
   }) as any;
 }
 
-function makeSetter(segments: string[] = []): Setter {
-  let s = (val: any) => {
-    let value = val.target?.value ?? val;
-    let innerSegments = segments.slice();
-    let lastSegment = innerSegments.pop();
-    if (!lastSegment) {
-      return;
+function makeSetter(model: any, field?: string): Setter {
+  let s = (value: any) => {
+    debugger;
+    if (!field) {
+      throw new Error(`can't set topmost model`);
     }
-    let cursor = rawData;
-    for (let segment of innerSegments) {
-      let nextCursor = cursor[segment];
-      if (!nextCursor) {
-        nextCursor = {};
-        cursor[segment] = nextCursor;
-      }
-      cursor = nextCursor;
-    }
-    cursor[lastSegment] = value;
+    model[field] = value;
   };
   (s as any).setters = new Proxy(
     {},
     {
       get: (target: any, prop: string, receiver: unknown) => {
         if (typeof prop === 'string') {
-          return makeSetter([...segments, prop]);
+          return makeSetter(field ? model[field] : model, prop);
         } else {
           return Reflect.get(target, prop, receiver);
         }
       },
     }
   );
-  return s;
+  return s as Setter;
 }
