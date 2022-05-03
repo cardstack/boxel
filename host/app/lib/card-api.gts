@@ -126,6 +126,8 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
   let computedGet = function (fieldName: string) {
     return function(this: InstanceType<CardT>) {
       let { deserialized } = getDataBuckets(this);
+      // this establishes that our field should rerender when cardTracking for this card changes
+      cardTracking.get(this);
       let value = deserialized.get(fieldName);
       if (value === undefined && typeof computeVia === 'function') {
         value = computeVia.bind(this)();
@@ -173,7 +175,8 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
                 for (let computedFieldName of Object.keys(getFields(this, true))) {
                   deserialized.delete(computedFieldName);
                 }
-                recompute(this);
+
+                (async () => await recompute(this))();
               }
             }
           )
@@ -334,11 +337,8 @@ async function recompute(card: Card): Promise<void> {
     return;
   }
 
-  Promise.resolve().then(() => {
-    // notify glimmer to rerender this card
-    cardTracking.set(card, true);
-  });
-
+  // notify glimmer to rerender this card
+  cardTracking.set(card, true);
   done!();
 }
 

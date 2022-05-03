@@ -219,5 +219,4 @@ module('Integration | computeds', function (hooks) {
     );
     assert.dom('[data-test-field=slowName]').containsText('Van Gogh');
   });
-
 });
