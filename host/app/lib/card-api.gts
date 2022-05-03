@@ -296,11 +296,11 @@ export async function prepareToRender(model: Card, format: Format): Promise<{ co
   return { component };
 }
 
-async function loadModel<T extends Card>(model: T, stack: T[] = []): Promise<void> {
+async function loadModel<T extends Card>(model: T, stack: { from: T, to: T, name: string}[] = []): Promise<void> {
   for (let [fieldName, field] of Object.entries(getFields(model))) {
     let value: any = await loadField(model, fieldName as keyof T);
-    if (!(primitive in field) && !stack.includes(value)) {
-      await loadModel(value, [...stack, model]);
+    if (!(primitive in field) && !stack.find(({ from, to, name }) => from === model && to === value && name === fieldName)) {
+      await loadModel(value, [...stack, { from: model, to: value, name: fieldName }]);
     }
   }
 }
