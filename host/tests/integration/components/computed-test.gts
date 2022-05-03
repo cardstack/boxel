@@ -186,37 +186,55 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can maintain data consistency for async computed fields', async function(assert) {
+    class Location extends Card {
+      @field city = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.city/></template>
+      }
+    }
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field slowName = contains(StringCard, { computeVia: 'computeSlowName'})
+      @field homeTown = contains(Location);
+      @field slowHomeTown = contains(Location, { computeVia: 'computeSlowHomeTown'})
       async computeSlowName() {
         await new Promise(resolve => setTimeout(resolve, 10));
         return this.firstName;
       }
+      async computeSlowHomeTown() {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return this.homeTown;
+      }
       static edit = class Edit extends Component<typeof this> {
         <template>
           <div data-test-field="firstName"><@fields.firstName /></div>
-          <div data-test-field="slowName">
-            <@fields.slowName />
-          </div>
-          <div data-test-dep-field>{{@model.firstName}}</div>
+          <div data-test-field="homeTown"><@fields.homeTown.city /></div>
+          <div data-test-field="slowName"><@fields.slowName /></div>
+          <div data-test-field="slowHomeTown"><@fields.slowHomeTown/></div>
+          <div data-test-dep-field="firstName">{{@model.firstName}}</div>
+          <div data-test-dep-field="homeTown">{{@model.homeTown.city}}</div>
         </template>
       }
     }
 
-    let person = new Person({ firstName: 'Mango' });
+    let person = new Person({ firstName: 'Mango', homeTown: { city: 'Bronxville' } });
 
-    // TODO how do we ensure that the Card's destructor is called for test cleanup?
 
     await renderCard(person, 'edit');
     assert.dom('[data-test-field="slowName"]').containsText('Mango');
     await fillIn('[data-test-field="firstName"] input', 'Van Gogh');
-
     // We want to ensure data consistency, so that when the template rerenders,
     // the template is always showing consistent field values
     await waitUntil(() =>
-      find('[data-test-dep-field]')?.textContent?.includes('Van Gogh')
+      find('[data-test-dep-field="firstName"]')?.textContent?.includes('Van Gogh')
     );
-    assert.dom('[data-test-field=slowName]').containsText('Van Gogh');
+    assert.dom('[data-test-field="slowName"]').containsText('Van Gogh');
+
+    assert.dom('[data-test-field="slowHomeTown"]').containsText('Bronxville');
+    await fillIn('[data-test-field="homeTown"] input', 'Scarsdale');
+    await waitUntil(() =>
+      find('[data-test-dep-field="homeTown"]')?.textContent?.includes('Scarsdale')
+    );
+    assert.dom('[data-test-field="slowHomeTown"]').containsText('Scarsdale');
   });
 });

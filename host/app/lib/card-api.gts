@@ -171,11 +171,9 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
                 deserialized.set(fieldName, value);
                 serialized.delete(fieldName);
                 // invalidate all computed fields because we don't know which ones depend on this one
-                // the compiler will optimize this for us.
                 for (let computedFieldName of Object.keys(getFields(this, true))) {
                   deserialized.delete(computedFieldName);
                 }
-
                 (async () => await recompute(this))();
               }
             }
@@ -214,9 +212,6 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
                 let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, instance);
                 serialized.delete(fieldName);
-
-                // TODO probably want to invalidate all computed fields because we don't know which ones depend on this one
-                // and also make a test for this if so
               }
             }
           )
