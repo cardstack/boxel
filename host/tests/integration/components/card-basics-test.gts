@@ -212,6 +212,9 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
   });
 
+  skip('render a containsMany primitive field');
+  skip('render a containsMany composite field');
+
   test('can adopt a card', async function (assert) {
     class Animal extends Card {
       @field species = contains(testString('species'));
