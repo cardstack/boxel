@@ -1,7 +1,8 @@
 import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
+import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
-import { contains, containsMany, field, Component, primitive } from 'runtime-spike/lib/card-api';
+import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import IntegerCard from 'runtime-spike/lib/integer';
 import { cleanWhiteSpace } from '../../helpers';
@@ -10,7 +11,7 @@ module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
 
   test('primitive field type checking', async function (assert) {
-    class Person {
+    class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard);
       @field number = contains(IntegerCard);
@@ -39,57 +40,55 @@ module('Integration | card-basics', function (hooks) {
     assert.deepEqual(readLanguages, ['english', 'japanese']);
   });
 
-
   test('access @model for primitive and composite fields', async function (assert) {
-    class Person {
+    class Person extends Card {
       @field firstName = contains(StringCard);
       @field subscribers = contains(IntegerCard);
       @field languagesSpoken = containsMany(StringCard);
     }
 
-    class Post {
+    class Post extends Card {
       @field title = contains(StringCard);
       @field author = contains(Person);
+      @field languagesSpoken = containsMany(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           {{@model.title}} by {{@model.author.firstName}}
-          speaks: {{#each @model.author.languagesSpoken as |language|}} {{language}} {{/each}}
+          speaks {{#each @model.author.languagesSpoken as |language|}} {{language}} {{/each}}
           {{@model.author.subscribers}} subscribers
         </template>
       }
     }
 
-    class HelloWorld extends Post {
-      static data = {
-        title: 'First Post',
-        author: {
+    let helloWorld = new Post({
+      title: 'First Post', 
+      author: {
           firstName: 'Arthur',
           subscribers: 5,
-          languagesSpoken:[ "english", "japanese"]
-        }
-      }
-    }
+          languagesSpoken: ['english', 'japanese']
+        },
+    });
 
-    await renderCard(HelloWorld, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Arthur speaks: english japanese 5 subscribers');
+    await renderCard(helloWorld, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Arthur speaks english japanese 5 subscribers');
   });
 
   test('render primitive field', async function (assert) {
-    class EmphasizedString {
+    class EmphasizedString extends Card {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
         <template><em data-test="name">{{@model}}</em></template>
       }
     }
 
-    class StrongInteger {
+    class StrongInteger extends Card {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template><strong data-test="integer">{{@model}}</strong></template>
       }
     }
 
-    class Person {
+    class Person extends Card {
       @field firstName = contains(EmphasizedString);
       @field number = contains(StrongInteger);
 
@@ -98,17 +97,15 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class Arthur extends Person {
-      static data = { firstName: 'Arthur', number: 10 }
-    }
+    let arthur = new Person({ firstName: 'Arthur', number: 10 });
 
-    await renderCard(Arthur, 'embedded');
+    await renderCard(arthur, 'embedded');
     assert.dom('[data-test="name"]').containsText('Arthur');
     assert.dom('[data-test="integer"]').containsText('10');
   });
 
   test('render whole composite field', async function (assert) {
-    class Person {
+    class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard);
       @field number = contains(IntegerCard);
@@ -117,78 +114,55 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class Post {
+    class Post extends Card {
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
         <template><div data-test><@fields.author /></div></template>
       }
     }
 
-    class HelloWorld extends Post {
-      static data = { author: { firstName: 'Arthur', title: 'Mr', number: 10 } }
-    }
-
-    await renderCard(HelloWorld, 'isolated');
+    let helloWorld = new Post({ author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
+    await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test]').containsText('Mr Arthur 10');
   });
 
   test('render nested composite field', async function (assert) {
-    class TestString {
+    class TestString extends Card {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
         <template><em data-test="string">{{@model}}</em></template>
       }
     }
 
-    class TestInteger {
+    class TestInteger extends Card {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template><strong data-test="integer">{{@model}}</strong></template>
       }
     }
 
-    class Person {
+    class Person extends Card {
       @field firstName = contains(TestString);
       @field number = contains(TestInteger);
     }
 
-    class Post {
+    class Post extends Card {
+      @field title = contains(TestString);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
-        <template><@fields.author.firstName /><@fields.author.number /></template>
+      <template><@fields.author.firstName /><@fields.author.number /></template>
       }
     }
 
-    class HelloWorld extends Post {
-      static data = { author: { firstName: 'Arthur', number: 10 } }
-    }
+    let helloWorld = new Post({ author: { firstName: 'Arthur', number: 10 } });
 
-    await renderCard(HelloWorld, 'isolated');
+    await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test="string"]').containsText('Arthur');
     assert.dom('[data-test="integer"]').containsText('10');
   });
 
-  // TODO what does this mean--is the base case just a {{#each}} over all the values?
-  // If you wanted to override the default template for a containsMany field where do you do that?
-  // maybe there is an additional template for "containsMany" that a field card can have?
-  // class String {
-  //   static [primitive]: string;
-  //   static embedded = class Embedded extends Component<typeof this> {
-  //     <template>{{@model}}</template>
-  //   }
-  //   static containsMany = class ContainsMany extends Component<typeof this> {
-  //     <template>
-  //       {{#each @model as |value index|}}
-  //         {{value}}{{#if (isLast @model index) '' ','}},
-  //       {{/each}}
-  //     </template>
-  //   }
-  // }
-  skip('render a containsMany primitive field');
-  skip('render a containsMany composite field');
-
-  test('render default templates', async function (assert) {
-    class Person {
+  test('render default isolated template', async function (assert) {
+    class Person extends Card {
       @field firstName = contains(testString('first-name'));
 
       static embedded = class Embedded extends Component<typeof this> {
@@ -196,24 +170,50 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class Post {
+    class Post extends Card{
       @field title = contains(testString('title'));
       @field author = contains(Person);
     }
 
-    class HelloWorld extends Post {
-      static data = { title: 'First Post', author: { firstName: 'Arthur' } }
-    }
+    let helloWorld = new Post({ title: 'First Post', author: { firstName: 'Arthur' } });
 
-    await renderCard(HelloWorld, 'isolated');
+    await renderCard(helloWorld, 'isolated');
 
     assert.dom('[data-test="first-name"]').containsText('Arthur');
     assert.dom('[data-test="title"]').containsText('First Post');
+  });
 
+  test('render default edit template', async function (assert) {
+    class TestString extends Card {
+      static [primitive]: string;
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          {{!-- template-lint-disable require-input-label --}}
+          <input value={{@model}} />
+        </template>
+      }
+    }
+
+    class Person extends Card {
+      @field firstName = contains(TestString);
+    }
+
+    class Post extends Card {
+      @field title = contains(TestString);
+      @field author = contains(Person);
+    }
+
+    let helloWorld = new Post({ title: 'My Post', author: { firstName: 'Arthur' } });
+
+    await renderCard(helloWorld, 'edit');
+    assert.dom('[data-test-field="title"]').containsText('title');
+    assert.dom('[data-test-field="title"] input').hasValue('My Post');
+    assert.dom('[data-test-field="author"]').containsText('author firstName'); // TODO: fix nested labels
+    assert.dom('[data-test-field="author"] input').hasValue('Arthur');
   });
 
   test('can adopt a card', async function (assert) {
-    class Animal {
+    class Animal extends Card {
       @field species = contains(testString('species'));
     }
     class Person extends Animal {
@@ -223,18 +223,59 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class Hassan extends Person {
-      static data = { firstName: 'Hassan', species: 'Homo Sapiens' }
-    }
+    let hassan = new Person ({ firstName: 'Hassan', species: 'Homo Sapiens' });
 
-    await renderCard(Hassan, 'embedded');
+    await renderCard(hassan, 'embedded');
     assert.dom('[data-test="first-name"]').containsText('Hassan');
     assert.dom('[data-test="species"]').containsText('Homo Sapiens');
+  });
+
+  test('can edit fields', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName /></template>
+      }
+    }
+
+    class Post extends Card {
+      @field title = contains(StringCard);
+      @field reviews = contains(IntegerCard);
+      @field author = contains(Person);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <fieldset>
+            <label data-test-field="title">Title <@fields.title /></label>
+            <label data-test-field="reviews">Reviews <@fields.reviews /></label>
+            <label data-test-field="author">Author <@fields.author /></label>
+          </fieldset>
+
+          <div data-test-output="title">{{@model.title}}</div>
+          <div data-test-output="reviews">{{@model.reviews}}</div>
+          <div data-test-output="author.firstName">{{@model.author.firstName}}</div>
+        </template>
+      }
+    }
+
+    let helloWorld = new  Post({ title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
+
+    await renderCard(helloWorld, 'edit');
+    assert.dom('[data-test-field="title"] input').hasValue('First Post');
+    assert.dom('[data-test-field="reviews"] input').hasValue('1');
+    assert.dom('[data-test-field="author"] input').hasValue('Arthur');
+
+    await fillIn('[data-test-field="title"] input', 'New Title');
+    await fillIn('[data-test-field="reviews"] input', '5');
+    await fillIn('[data-test-field="author"] input', 'Carl Stack');
+
+    assert.dom('[data-test-output="title"]').hasText('New Title');
+    assert.dom('[data-test-output="reviews"]').hasText('5');
+    assert.dom('[data-test-output="author.firstName"]').hasText('Carl Stack');
   });
 });
 
 function testString(label: string) {
-  return class TestString {
+  return class TestString extends Card {
     static [primitive]: string;
     static embedded = class Embedded extends Component<typeof this> {
       <template><em data-test={{label}}>{{@model}}</em></template>

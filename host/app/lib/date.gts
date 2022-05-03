@@ -1,4 +1,4 @@
-import { Component, primitive, serialize, deserialize } from 'runtime-spike/lib/card-api';
+import { Component, primitive, serialize, deserialize, Card } from 'runtime-spike/lib/card-api';
 import { parse, format } from 'date-fns';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
@@ -9,7 +9,7 @@ const Format = new Intl.DateTimeFormat('us-EN', {
   day: 'numeric',
 });
 
-export default class DateCard {
+export default class DateCard extends Card {
   static [primitive]: Date;
   static [serialize](date: string | Date) {
     if (typeof date === 'string') {
