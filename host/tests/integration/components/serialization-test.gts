@@ -2,7 +2,7 @@ import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import stringify from 'fast-json-stable-stringify'
 import { renderCard } from '../../helpers/render-component';
-import { contains, field, Component, Card, serializedGet } from 'runtime-spike/lib/card-api';
+import { contains, containsMany, field, Component, Card, serializedGet } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import DateCard from 'runtime-spike/lib/date';
 import DatetimeCard from 'runtime-spike/lib/datetime';
@@ -132,6 +132,18 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(this.element.textContent!.trim(), '2020-10-30');
   });
 
-  skip('can deserialize a containsMany field');
+  test('can deserialize a containsMany field', async function(assert) {
+    class Schedule extends Card {
+      @field dates = containsMany(DateCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.dates/></template>
+      }
+    }
+
+    let classSchedule = Schedule.fromSerialized({ dates: ['2022-4-1', '2022-4-4'] });
+    await renderCard(classSchedule, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Apr 1, 2022 Apr 4, 2022');
+  });
+
   skip('can serialize a containsMany field');
 });

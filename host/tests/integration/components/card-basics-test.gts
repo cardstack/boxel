@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
@@ -183,6 +183,53 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test="title"]').containsText('First Post');
   });
 
+  test('render a containsMany primitive field', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field languagesSpoken = containsMany(StringCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.firstName/> speaks <@fields.languagesSpoken/></template>
+      }
+    }
+
+    let mango = new Person({
+      firstName: 'Mango',
+      languagesSpoken: ['english', 'japanese']
+    });
+
+    await renderCard(mango, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango speaks english japanese');
+  });
+
+  test('render a containsMany composite field', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName/></template>
+      }
+    }
+
+    class Family extends Card {
+      @field people = containsMany(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.people/></template>
+      }
+    }
+    let abdelRahmans = new Family({
+      people: [
+        { firstName: 'Mango'},
+        { firstName: 'Van Gogh'},
+        { firstName: 'Hassan'},
+        { firstName: 'Mariko'},
+        { firstName: 'Yume'},
+        { firstName: 'Sakura'},
+      ]
+    });
+
+    await renderCard(abdelRahmans, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
+  });
+
   test('render default edit template', async function (assert) {
     class TestString extends Card {
       static [primitive]: string;
@@ -211,9 +258,6 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-field="author"]').containsText('author firstName'); // TODO: fix nested labels
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
   });
-
-  skip('render a containsMany primitive field');
-  skip('render a containsMany composite field');
 
   test('can adopt a card', async function (assert) {
     class Animal extends Card {

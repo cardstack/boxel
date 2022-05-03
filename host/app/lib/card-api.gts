@@ -9,6 +9,7 @@ export const serialize = Symbol('cardstack-serialize');
 export const deserialize = Symbol('cardstack-deserialize');
 
 const isField = Symbol('cardstack-field');
+const isContainsMany = Symbol('cardstack-contains-many');
 
 type CardInstanceType<T extends Constructable> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
 
@@ -22,6 +23,7 @@ export type Format = 'isolated' | 'embedded' | 'edit';
 
 interface Options {
   computeVia?: string | (() => unknown);
+  containsMany?: true;
 }
 
 const deserializedData = new WeakMap<object, Map<string, any>>();
@@ -50,7 +52,24 @@ export class Card {
 
   constructor(data?: Record<string, any>) {
     if (data) {
-      Object.assign(this, data);
+      for (let [fieldName, value] of Object.entries(data)) {
+        if (isFieldContainsMany(this.constructor, fieldName)) {
+          if (value && !Array.isArray(value)) {
+            throw new Error(`Expected array for field value ${fieldName} for card ${this.constructor.name}`);
+          }
+          let field = getField(this.constructor, fieldName);
+          if (!field) {
+            throw new Error( `Field ${fieldName} not found on card ${this.constructor.name}`);
+          }
+          if (primitive in field) {
+            (this as any)[fieldName] = value || [];
+          } else {
+            (this as any)[fieldName] = ((value || []) as any[]).map(item => new field!(item));
+          }
+        } else {
+          (this as any)[fieldName] = value;
+        }
+      }
     }
   }
 }
@@ -118,11 +137,11 @@ export function containsMany<CardT extends Constructable>(card: CardT, options?:
   // TODO need to map over values for deserialization....
   // add some state on the PropertyDescriptor to indicate 
   // that it's a containsMany field (like we do for `[isField]`)
-  return contains(card, options) as CardInstanceType<CardT>[];
+  return contains(card, { ...options, containsMany: true }) as CardInstanceType<CardT>[];
 }
 
 export function contains<CardT extends Constructable>(card: CardT, options?: Options): CardInstanceType<CardT> {
-  let { computeVia } = options ?? {};
+  let { computeVia, containsMany } = options ?? {};
   let computedGet = function (fieldName: string) {
     return function(this: InstanceType<CardT>) {
       let { deserialized } = getDataBuckets(this);
@@ -157,6 +176,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
           return value;
         };
         (get as any)[isField] = card;
+        (get as any)[isContainsMany] = Boolean(containsMany);
         return {
           enumerable: true,
           get,
@@ -196,6 +216,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
           return value;
         };
         (get as any)[isField] = card;
+        (get as any)[isContainsMany] = Boolean(containsMany);
         return {
           enumerable: true,
           get,
@@ -339,6 +360,19 @@ function getField<CardT extends Constructable>(card: CardT, fieldName: string): 
   return undefined
 }
 
+function isFieldContainsMany<CardT extends Constructable>(card: CardT, fieldName: string): boolean | undefined {
+  let obj = card.prototype;
+  while (obj) {
+    let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
+    let result = (desc?.get as any)?.[isContainsMany];
+    if (result !== undefined) {
+      return result;
+    }
+    obj = Reflect.getPrototypeOf(obj);
+  }
+  return undefined;
+}
+
 function getFields<T extends Card>(card: T): { [P in keyof T]?: Constructable } {
   let obj = Reflect.getPrototypeOf(card);
   let fields: { [P in keyof T]?: Constructable } = {};
@@ -371,8 +405,27 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
         // field doesn't exist, fall back to normal property access behavior
         return Reflect.get(target, property, received);
       }
-      // found field: get the corresponding component
       let innerModel = (model as any)[property];
+      if (isFieldContainsMany(model.constructor, property)) {
+        if (primitive in field) {
+          return class ContainsMany extends GlimmerComponent {
+            <template>
+              {{#each innerModel as |item|}}
+                {{item}}
+              {{/each}}
+            </template>
+          };
+        } else {
+          let components = (Object.values(innerModel) as T[]).map(m => getComponent(field!, defaultFormat, m, set?.setters[property])) as any[];
+          return class ContainsMany extends GlimmerComponent {
+            <template>
+              {{#each components as |Item|}}
+                <Item/>
+              {{/each}}
+            </template>
+          };
+        }
+      }
       return getComponent(field, defaultFormat, innerModel, set?.setters[property]);
     },
     getPrototypeOf() {
