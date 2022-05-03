@@ -111,7 +111,10 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field friend = contains(() => Person); // a thunk can be used to specify a circular reference
       static isolated = class Isolated extends Component<typeof this> {
-        <template>{{@model.firstName}} friend is {{@model.friend.firstName}}</template>
+        <template><@fields.firstName/> friend is <@fields.friend/></template>
+      }
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName/></template>
       }
     }
 
