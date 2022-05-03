@@ -39,6 +39,7 @@ export class Card {
   [isBaseCard] = true;
 
   declare ["constructor"]: Constructable;
+  static baseCard: undefined; // like isBaseCard, but for the class itself
 
   static fromSerialized<T extends Constructable>(this: T, data: Record<string, any>): InstanceType<T> {
     let model = new this() as InstanceType<T>;
@@ -111,7 +112,7 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
   deserialized.delete(fieldName);
 }
 
-export function contains<CardT extends Constructable>(card: CardT, options?: Options): CardInstanceType<CardT> {
+export function contains<CardT extends Constructable>(card: CardT | (() => CardT), options?: Options): CardInstanceType<CardT> {
   let { computeVia } = options ?? {};
   let computedGet = function (fieldName: string) {
     return function(this: InstanceType<CardT>) {
@@ -127,7 +128,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
     };
   }
 
-  if (primitive in card) {
+  if (primitive in card) { // primitives should not have to use thunks
     return {
       setupField(fieldName: string) {
         let get = computeVia ? computedGet(fieldName) : function(this: InstanceType<CardT>) {
@@ -170,7 +171,14 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
   } else {
     return {
       setupField(fieldName: string) {
-        let instance = new card();
+        let instance: Card | undefined;
+        function getInstance() {
+          if (!instance) {
+            let _card = "baseCard" in card ? card : (card as () => CardT)();
+            instance = new _card();
+          }
+          return instance;
+        }
         let get = computeVia ? computedGet(fieldName) : function(this: InstanceType<CardT>) {
           let { serialized, deserialized } = getDataBuckets(this);
           let value = deserialized.get(fieldName);
@@ -180,7 +188,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
           // we save these as instantiated cards in serialized set for composite fields
           value = serialized.get(fieldName);
           if (value === undefined) {
-            value = instance;
+            value = getInstance();
             serialized.set(fieldName, value);
           }
           return value;
@@ -193,6 +201,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
             ? {} // computeds don't have setters
             : {
               set(this: InstanceType<CardT>, value: any) {
+                getInstance();
                 Object.assign(instance, value);
                 let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, instance);
@@ -287,11 +296,11 @@ export async function prepareToRender(model: Card, format: Format): Promise<{ co
   return { component };
 }
 
-async function loadModel<T extends Card>(model: T): Promise<void> {
+async function loadModel<T extends Card>(model: T, stack: T[] = []): Promise<void> {
   for (let [fieldName, field] of Object.entries(getFields(model))) {
     let value: any = await loadField(model, fieldName as keyof T);
-    if (!(primitive in field)) {
-      await loadModel(value);
+    if (!(primitive in field) && !stack.includes(value)) {
+      await loadModel(value, [...stack, model]);
     }
   }
 }
@@ -320,8 +329,9 @@ function getField<CardT extends Constructable>(card: CardT, fieldName: string): 
   let obj = card.prototype;
   while (obj) {
     let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
-    let fieldCard = (desc?.get as any)?.[isField];
-    if (fieldCard) {
+    let _fieldCard = (desc?.get as any)?.[isField] as CardT | (() => CardT);
+    if (_fieldCard) {
+      let fieldCard = "baseCard" in _fieldCard ? _fieldCard : (_fieldCard as () => CardT)();
       return fieldCard;
     }
     obj = Reflect.getPrototypeOf(obj);

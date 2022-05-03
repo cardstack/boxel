@@ -109,12 +109,9 @@ module('Integration | card-basics', function (hooks) {
   test('render a field that is the enclosing card', async function(assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
-      @field friend = contains(Person);
+      @field friend = contains(() => Person);
       static isolated = class Isolated extends Component<typeof this> {
-        <template><@fields.firstName/> friend is <@fields.friend /></template>
-      }
-      static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.firstName/></template>
+        <template>{{@model.firstName}} friend is {{@model.friend.firstName}}</template>
       }
     }
 
