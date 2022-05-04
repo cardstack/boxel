@@ -5,7 +5,7 @@ export class NotReady extends Error {
   constructor(
     readonly model: any,
     readonly fieldName: string,
-    readonly computeVia: string,
+    readonly computeVia: string | Function,
     readonly cardName: string
   ) {
     super(`The field ${cardName}.${fieldName} is not ready`);
