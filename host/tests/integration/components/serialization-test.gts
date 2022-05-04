@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import stringify from 'fast-json-stable-stringify'
 import { renderCard } from '../../helpers/render-component';
