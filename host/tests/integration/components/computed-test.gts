@@ -1,8 +1,11 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
 import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import { setupRenderingTest } from 'ember-qunit';
+import { fillIn } from '@ember/test-helpers';
+import waitUntil from '@ember/test-helpers/wait-until';
+import find from '@ember/test-helpers/dom/find';
 import { cleanWhiteSpace } from '../../helpers';
 
 module('Integration | computeds', function (hooks) {
@@ -205,10 +208,68 @@ module('Integration | computeds', function (hooks) {
     assert.throws(() => card.slowName = 'Mango', /Cannot set property slowName/, 'cannot set asynchronous computed field');
   });
 
-  // TODO implement after we have the ability to edit a field
-  skip('can maintain data consistency for async computed fields');
-  skip('can recompute an async computed field when data changes');
-  // as with the compiled schema instances, I think this means that
-  // we instantiate a new model that the rendered component consumes
-  // after data changes so we don't have to worry about cached values
+  test('computed fields render as embedded in the edit format', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field alias = contains(StringCard, { computeVia: function(this: Person) { return this.firstName; } });
+    }
+
+    let person = new Person({ firstName: 'Mango' });
+    await renderCard(person, 'edit');
+    assert.dom('[data-test-field=alias]').containsText('Mango');
+    assert.dom('[data-test-field=alias] input').doesNotExist('input field not rendered for computed')
+  });
+
+  test('can maintain data consistency for async computed fields', async function(assert) {
+    class Location extends Card {
+      @field city = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.city/></template>
+      }
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field slowName = contains(StringCard, { computeVia: 'computeSlowName'})
+      @field homeTown = contains(Location);
+      @field slowHomeTown = contains(Location, { computeVia: 'computeSlowHomeTown'})
+      async computeSlowName() {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return this.firstName;
+      }
+      async computeSlowHomeTown() {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return this.homeTown;
+      }
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <div data-test-field="firstName"><@fields.firstName /></div>
+          <div data-test-field="homeTown"><@fields.homeTown.city /></div>
+          <div data-test-field="slowName"><@fields.slowName /></div>
+          <div data-test-field="slowHomeTown"><@fields.slowHomeTown/></div>
+          <div data-test-dep-field="firstName">{{@model.firstName}}</div>
+          <div data-test-dep-field="homeTown">{{@model.homeTown.city}}</div>
+        </template>
+      }
+    }
+
+    let person = new Person({ firstName: 'Mango', homeTown: { city: 'Bronxville' } });
+
+
+    await renderCard(person, 'edit');
+    assert.dom('[data-test-field="slowName"]').containsText('Mango');
+    await fillIn('[data-test-field="firstName"] input', 'Van Gogh');
+    // We want to ensure data consistency, so that when the template rerenders,
+    // the template is always showing consistent field values
+    await waitUntil(() =>
+      find('[data-test-dep-field="firstName"]')?.textContent?.includes('Van Gogh')
+    );
+    assert.dom('[data-test-field="slowName"]').containsText('Van Gogh');
+
+    assert.dom('[data-test-field="slowHomeTown"]').containsText('Bronxville');
+    await fillIn('[data-test-field="homeTown"] input', 'Scarsdale');
+    await waitUntil(() =>
+      find('[data-test-dep-field="homeTown"]')?.textContent?.includes('Scarsdale')
+    );
+    assert.dom('[data-test-field="slowHomeTown"]').containsText('Scarsdale');
+  });
 });
