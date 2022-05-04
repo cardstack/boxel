@@ -247,7 +247,15 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
   });
 
-  skip('throws if contains many value is set with a non-array'); // serialized and deserialized set
+  test('throws if contains many value is set with a non-array', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field languagesSpoken = containsMany(StringCard);
+    }
+
+    assert.throws(() => new Person({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken for card Person/);
+    assert.throws(() => Person.fromSerialized({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken for card Person/);
+  });
 
   test('render default edit template', async function (assert) {
     class TestString extends Card {

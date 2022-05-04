@@ -68,7 +68,7 @@ export class Card {
           }
           let field = getField(this.constructor, fieldName);
           if (!field) {
-            throw new Error( `Field ${fieldName} not found on card ${this.constructor.name}`);
+            continue;
           }
           if (primitive in field) {
             (this as any)[fieldName] = value || [];
@@ -136,7 +136,7 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
   let { serialized, deserialized } = getDataBuckets(model);
   let field = getField(model.constructor, fieldName);
   if (!field) {
-    throw new Error(`Field ${fieldName} does not exist on ${model.constructor.name}`);
+    throw new Error(`Field ${fieldName} does not exist in card ${model.constructor.name}`);
   }
   let isContainsMany = isFieldContainsMany(model.constructor, fieldName);
   if (isContainsMany && !Array.isArray(value)) {
