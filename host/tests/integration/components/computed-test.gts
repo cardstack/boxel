@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
 import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
@@ -191,6 +191,8 @@ module('Integration | computeds', function (hooks) {
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Mango');
   });
+
+  skip('can render a containsMany computed field');
 
   test('cannot set a computed field', async function(assert) {
     class Person extends Card {

@@ -60,7 +60,7 @@ export class Card {
   }
 
   constructor(data?: Record<string, any>) {
-    if (data) {
+    if (data !== undefined) {
       for (let [fieldName, value] of Object.entries(data)) {
         if (isFieldContainsMany(this.constructor, fieldName)) {
           if (value && !Array.isArray(value)) {
@@ -99,8 +99,6 @@ function getDataBuckets<CardT extends Constructable>(instance: InstanceType<Card
   return { serialized, deserialized };
 }
 
-// TODO think about what it means to handle a containsMany field--how would we know a field is containsMany?
-// Perhaps we stamp a little state on the PropertyDescriptor to indicate containsMany?
 export function serializedGet<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string ) {
   let { serialized, deserialized } = getDataBuckets(model);
   let field = getField(model.constructor, fieldName);
@@ -124,7 +122,6 @@ export function serializedGet<CardT extends Constructable>(model: InstanceType<C
   return value;
 }
 
-// TODO think about what it means to handle a containsMany field
 export function serializedSet<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string, value: any ) {
   let { serialized, deserialized } = getDataBuckets(model);
   let field = getField(model.constructor, fieldName);
@@ -132,14 +129,29 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
     throw new Error(`Field ${fieldName} does not exist on ${model.constructor.name}`);
   }
 
-  if (primitive in field) {
-    serialized.set(fieldName, value);
-  } else {
-    let instance = new field();
-    for (let [ interiorFieldName, interiorValue ] of Object.entries(value)) {
-      serializedSet(instance, interiorFieldName, interiorValue);
+  if (isFieldContainsMany(model.constructor, fieldName)) {
+    if (value && !Array.isArray(value)) {
+      throw new Error(`Expected array for field value ${fieldName} for card ${model.constructor.name}`);
     }
-    serialized.set(fieldName, instance);
+    if (primitive in field) {
+      serialized.set(fieldName, value || []);
+    } else {
+      value = ((value || []) as any[]).map(item => {
+        let instance = field!.fromSerialized(item);
+        return instance;
+      });
+      serialized.set(fieldName, value);
+    }
+  } else {
+    if (primitive in field) {
+      serialized.set(fieldName, value);
+    } else {
+      let instance = new field();
+      for (let [ interiorFieldName, interiorValue ] of Object.entries(value)) {
+        serializedSet(instance, interiorFieldName, interiorValue);
+      }
+      serialized.set(fieldName, instance);
+    }
   }
   deserialized.delete(fieldName);
 }
@@ -180,7 +192,11 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
           value = serialized.get(fieldName);
           let field = getField(this.constructor, fieldName);
           if (typeof (field as any)[deserialize] === 'function') {
-            value = (field as any)[deserialize](value);
+            if (isFieldContainsMany(this.constructor, fieldName)) {
+              value = (value as any[]).map(item => (field as any)[deserialize](item));
+            } else {
+              value = (field as any)[deserialize](value);
+            }
           }
           deserialized.set(fieldName, value);
           return value;
@@ -399,37 +415,26 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
 }
 
 function getField<CardT extends Constructable>(card: CardT, fieldName: string): Constructable | undefined {
-  let obj = card.prototype;
-  while (obj) {
-    let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
-    let fieldCard = (desc?.get as any)?.[isField] as CardT | (() => CardT);
-    if (fieldCard) {
-      return "baseCard" in fieldCard ? fieldCard : (fieldCard as () => CardT)();
-    }
-    obj = Reflect.getPrototypeOf(obj);
-  }
-  return undefined
-}
-
-// TODO refactor these 2 functions--they are so similar
-function isFieldContainsMany<CardT extends Constructable>(card: CardT, fieldName: string): boolean | undefined {
-  let obj = card.prototype;
-  while (obj) {
-    let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
-    let result = (desc?.get as any)?.[isContainsMany];
-    if (result !== undefined) {
-      return result;
-    }
-    obj = Reflect.getPrototypeOf(obj);
+  let result =  getFieldDescriptorAttr(card, fieldName, isField) as CardT | (() => CardT) | undefined;
+  if (result) {
+    return "baseCard" in result ? result : (result as () => CardT)();
   }
   return undefined;
 }
 
+function isFieldContainsMany<CardT extends Constructable>(card: CardT, fieldName: string): boolean | undefined {
+  return getFieldDescriptorAttr(card, fieldName, isContainsMany) as boolean | undefined;
+}
+
 function isFieldComputed<CardT extends Constructable>(card: CardT, fieldName: string): boolean | undefined {
+  return getFieldDescriptorAttr(card, fieldName, isComputed) as boolean | undefined;
+}
+
+function getFieldDescriptorAttr<CardT extends Constructable>(card: CardT, fieldName: string, attr: string | symbol): unknown | undefined {
   let obj = card.prototype;
   while (obj) {
     let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
-    let result = (desc?.get as any)?.[isComputed];
+    let result = (desc?.get as any)?.[attr];
     if (result !== undefined) {
       return result;
     }
@@ -473,26 +478,16 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
       }
       let innerModel = (model as any)[property];
       defaultFormat = isFieldComputed(model.constructor, property) ? 'embedded' : defaultFormat;
-      
+
       if (isFieldContainsMany(model.constructor, property)) {
-        if (primitive in field) {
-          return class ContainsMany extends GlimmerComponent {
-            <template>
-              {{#each innerModel as |item|}}
-                {{item}}
-              {{/each}}
-            </template>
-          };
-        } else {
-          let components = (Object.values(innerModel) as T[]).map(m => getComponent(field!, defaultFormat, m, set?.setters[property])) as any[];
-          return class ContainsMany extends GlimmerComponent {
-            <template>
-              {{#each components as |Item|}}
-                <Item/>
-              {{/each}}
-            </template>
-          };
-        }
+        let components = (Object.values(innerModel) as T[]).map(m => getComponent(field!, defaultFormat, m, set?.setters[property])) as any[];
+        return class ContainsMany extends GlimmerComponent {
+          <template>
+            {{#each components as |Item|}}
+              <Item/>
+            {{/each}}
+          </template>
+        };
       }
       return getComponent(field, defaultFormat, innerModel, set?.setters[property]);
     },

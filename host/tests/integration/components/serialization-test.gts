@@ -132,7 +132,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(this.element.textContent!.trim(), '2020-10-30');
   });
 
-  test('can deserialize a containsMany field', async function(assert) {
+  test('can deserialize a containsMany primitive field', async function(assert) {
     class Schedule extends Card {
       @field dates = containsMany(DateCard);
       static isolated = class Isolated extends Component<typeof this> {
@@ -145,5 +145,11 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Apr 1, 2022 Apr 4, 2022');
   });
 
-  skip('can serialize a containsMany field');
+  skip('can deserialize a containsMany composite field', async function(assert) {
+
+  });
+
+  skip('can serialize a containsMany primitive field');
+
+  skip('can serialize a containsMany composite field');
 });
