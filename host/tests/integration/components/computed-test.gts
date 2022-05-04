@@ -1,6 +1,6 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
-import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
+import { contains, containsMany, field, Component, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn } from '@ember/test-helpers';
@@ -192,7 +192,62 @@ module('Integration | computeds', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Mango');
   });
 
-  skip('can render a containsMany computed field');
+  test('can render a containsMany computed primitive field', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field languagesSpoken = containsMany(StringCard);
+      @field slowLanguagesSpoken = containsMany(StringCard, { computeVia: 'computeSlowLanguagesSpoken'});
+      async computeSlowLanguagesSpoken() {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return this.languagesSpoken;
+      }
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.firstName/> speaks <@fields.slowLanguagesSpoken/></template>
+      }
+    }
+
+    let mango = new Person({
+      firstName: 'Mango',
+      languagesSpoken: ['english', 'japanese']
+    });
+
+    await renderCard(mango, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango speaks english japanese');
+  });
+
+  test('can render a containsMany computed composite field', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName/></template>
+      }
+    }
+
+    class Family extends Card {
+      @field people = containsMany(Person);
+      @field slowPeople = containsMany(Person, { computeVia: 'computeSlowPeople'});
+      async computeSlowPeople() {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return this.people;
+      }
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.slowPeople/></template>
+      }
+    }
+    let abdelRahmans = new Family({
+      people: [
+        { firstName: 'Mango'},
+        { firstName: 'Van Gogh'},
+        { firstName: 'Hassan'},
+        { firstName: 'Mariko'},
+        { firstName: 'Yume'},
+        { firstName: 'Sakura'},
+      ]
+    });
+
+    await renderCard(abdelRahmans, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
+  });
 
   test('cannot set a computed field', async function(assert) {
     class Person extends Card {

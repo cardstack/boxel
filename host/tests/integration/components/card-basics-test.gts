@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
@@ -246,6 +246,8 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(abdelRahmans, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
   });
+
+  skip('throws if contains many value is set with a non-array'); // serialized and deserialized set
 
   test('render default edit template', async function (assert) {
     class TestString extends Card {
