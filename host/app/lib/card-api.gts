@@ -117,10 +117,10 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
     return function(this: InstanceType<CardT>) {
       let { deserialized } = getDataBuckets(this);
       let value = deserialized.get(fieldName);
-      if (value === undefined && typeof computeVia === 'function') {
+      if (value === undefined && typeof computeVia === 'function' && computeVia.constructor.name !== 'AsyncFunction') {
         value = computeVia.bind(this)();
         deserialized.set(fieldName, value);
-      } else if (value === undefined && typeof computeVia === 'string') {
+      } else if (value === undefined && (typeof computeVia === 'string' || typeof computeVia === 'function')) {
         throw new NotReady(this, fieldName, computeVia, this.constructor.name);
       }
       return value;
@@ -309,7 +309,11 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
         throw e;
       }
       let { model, computeVia, fieldName } = e;
-      deserialized.set(fieldName, await model[computeVia]());
+      if (typeof computeVia === 'function') {
+        deserialized.set(fieldName, await computeVia.bind(model)());
+      } else {
+        deserialized.set(fieldName, await model[computeVia]());
+      }
     }
   }
   // case OK because deserialized.set assigns it
