@@ -137,7 +137,7 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
       serialized.set(fieldName, value || []);
     } else {
       value = ((value || []) as any[]).map(item => {
-        let instance = field!.fromSerialized(item);
+        let instance = (field! as typeof Card).fromSerialized(item);
         return instance;
       });
       serialized.set(fieldName, value);

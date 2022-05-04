@@ -145,8 +145,27 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Apr 1, 2022 Apr 4, 2022');
   });
 
-  skip('can deserialize a containsMany composite field', async function(assert) {
-
+  test('can deserialize a containsMany composite field', async function(assert) {
+    class Appointment extends Card {
+      @field date = contains(DateCard);
+      @field location = contains(StringCard);
+      @field title = contains(StringCard);
+      static embedded = class Isolated extends Component<typeof this> {
+        <template><@fields.title/> on <@fields.date/> at <@fields.location/></template>
+      }
+    }
+    class Schedule extends Card {
+      @field appointments = containsMany(Appointment);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.appointments/></template>
+      }
+    }
+    let classSchedule = Schedule.fromSerialized({ appointments: [
+      { date: '2022-4-1', location: 'Room 332', title: 'Biology' },
+      { date: '2022-4-4', location: 'Room 102', title: 'Civics' }
+    ]});
+    await renderCard(classSchedule, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Biology on Apr 1, 2022 at Room 332 Civics on Apr 4, 2022 at Room 102');
   });
 
   skip('can serialize a containsMany primitive field');
