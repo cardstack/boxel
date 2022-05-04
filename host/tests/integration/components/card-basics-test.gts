@@ -126,6 +126,23 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test]').containsText('Mr Arthur 10');
   });
 
+  test('render a field that is the enclosing card', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field friend = contains(() => Person); // a thunk can be used to specify a circular reference
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.firstName/> friend is <@fields.friend/></template>
+      }
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName/></template>
+      }
+    }
+
+    let mango = new Person({ firstName: 'Mango', friend: { firstName: 'Van Gogh' } });
+    await renderCard(mango, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango friend is Van Gogh');
+  });
+
   test('render nested composite field', async function (assert) {
     class TestString extends Card {
       static [primitive]: string;

@@ -3,6 +3,7 @@ import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
 import flatMap from 'lodash/flatMap';
 import { TrackedWeakMap } from 'tracked-built-ins';
+import { registerDestructor } from '@ember/destroyable';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -10,6 +11,7 @@ export const deserialize = Symbol('cardstack-deserialize');
 
 const isField = Symbol('cardstack-field');
 const isContainsMany = Symbol('cardstack-contains-many');
+const isComputed = Symbol('cardstack-field');
 
 type CardInstanceType<T extends Constructable> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
 
@@ -26,8 +28,9 @@ interface Options {
   containsMany?: true;
 }
 
-const deserializedData = new WeakMap<object, Map<string, any>>();
-const serializedData = new WeakMap<object, Map<string, any>>();
+const deserializedData = new WeakMap<Card, Map<string, any>>();
+const serializedData = new WeakMap<Card, Map<string, any>>();
+const recomputePromises = new WeakMap<Card, Promise<any>>();
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
@@ -41,6 +44,7 @@ export class Card {
   [isBaseCard] = true;
 
   declare ["constructor"]: Constructable;
+  static baseCard: undefined; // like isBaseCard, but for the class itself
 
   static fromSerialized<T extends Constructable>(this: T, data: Record<string, any>): InstanceType<T> {
     let model = new this() as InstanceType<T>;
@@ -48,6 +52,11 @@ export class Card {
       serializedSet(model, fieldName, value);
     }
     return model;
+  }
+
+  static async didRecompute(card: Card): Promise<void> {
+    let promise = recomputePromises.get(card);
+    await promise;
   }
 
   constructor(data?: Record<string, any>) {
@@ -71,6 +80,8 @@ export class Card {
         }
       }
     }
+
+    registerDestructor(this, Card.didRecompute.bind(this));
   }
 }
 
@@ -133,30 +144,29 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
   deserialized.delete(fieldName);
 }
 
-export function containsMany<CardT extends Constructable>(card: CardT, options?: Options): CardInstanceType<CardT>[] {
-  // TODO need to map over values for deserialization....
-  // add some state on the PropertyDescriptor to indicate 
-  // that it's a containsMany field (like we do for `[isField]`)
+export function containsMany<CardT extends Constructable>(card: CardT | (() => CardT), options?: Options): CardInstanceType<CardT>[] {
   return contains(card, { ...options, containsMany: true }) as CardInstanceType<CardT>[];
 }
 
-export function contains<CardT extends Constructable>(card: CardT, options?: Options): CardInstanceType<CardT> {
+export function contains<CardT extends Constructable>(card: CardT | (() => CardT), options?: Options): CardInstanceType<CardT> {
   let { computeVia, containsMany } = options ?? {};
   let computedGet = function (fieldName: string) {
     return function(this: InstanceType<CardT>) {
       let { deserialized } = getDataBuckets(this);
+      // this establishes that our field should rerender when cardTracking for this card changes
+      cardTracking.get(this);
       let value = deserialized.get(fieldName);
-      if (value === undefined && typeof computeVia === 'function') {
+      if (value === undefined && typeof computeVia === 'function' && computeVia.constructor.name !== 'AsyncFunction') {
         value = computeVia.bind(this)();
         deserialized.set(fieldName, value);
-      } else if (value === undefined && typeof computeVia === 'string') {
+      } else if (value === undefined && (typeof computeVia === 'string' || typeof computeVia === 'function')) {
         throw new NotReady(this, fieldName, computeVia, this.constructor.name);
       }
       return value;
     };
   }
 
-  if (primitive in card) {
+  if (primitive in card) { // primitives should not have to use thunks
     return {
       setupField(fieldName: string) {
         let get = computeVia ? computedGet(fieldName) : function(this: InstanceType<CardT>) {
@@ -177,6 +187,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
         };
         (get as any)[isField] = card;
         (get as any)[isContainsMany] = Boolean(containsMany);
+        (get as any)[isComputed] = Boolean(computeVia);
         return {
           enumerable: true,
           get,
@@ -187,10 +198,11 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
                 let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, value);
                 serialized.delete(fieldName);
-                Promise.resolve().then(() => {
-                  // notify glimmer to rerender this card
-                  cardTracking.set(this, true);
-                });
+                // invalidate all computed fields because we don't know which ones depend on this one
+                for (let computedFieldName of Object.keys(getFields(this, true))) {
+                  deserialized.delete(computedFieldName);
+                }
+                (async () => await recompute(this))();
               }
             }
           )
@@ -200,7 +212,14 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
   } else {
     return {
       setupField(fieldName: string) {
-        let instance = new card();
+        let instance: Card | undefined;
+        function getInstance() {
+          if (!instance) {
+            let _card = "baseCard" in card ? card : (card as () => CardT)();
+            instance = new _card();
+          }
+          return instance;
+        }
         let get = computeVia ? computedGet(fieldName) : function(this: InstanceType<CardT>) {
           let { serialized, deserialized } = getDataBuckets(this);
           let value = deserialized.get(fieldName);
@@ -210,13 +229,14 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
           // we save these as instantiated cards in serialized set for composite fields
           value = serialized.get(fieldName);
           if (value === undefined) {
-            value = instance;
+            value = getInstance();
             serialized.set(fieldName, value);
           }
           return value;
         };
         (get as any)[isField] = card;
         (get as any)[isContainsMany] = Boolean(containsMany);
+        (get as any)[isComputed] = Boolean(computeVia);
         return {
           enumerable: true,
           get,
@@ -224,6 +244,7 @@ export function contains<CardT extends Constructable>(card: CardT, options?: Opt
             ? {} // computeds don't have setters
             : {
               set(this: InstanceType<CardT>, value: any) {
+                getInstance();
                 Object.assign(instance, value);
                 let { serialized, deserialized } = getDataBuckets(this);
                 deserialized.set(fieldName, instance);
@@ -309,7 +330,7 @@ function getComponent<CardT extends Constructable>(card: CardT, format: Format, 
 
 
 export async function prepareToRender(model: Card, format: Format): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
-  await loadModel(model); // absorb model asynchronicity
+  await recompute(model); // absorb model asynchronicity
   let set: Setter | undefined;
   if (format === 'edit') {
     set = makeSetter(model);
@@ -318,13 +339,39 @@ export async function prepareToRender(model: Card, format: Format): Promise<{ co
   return { component };
 }
 
-async function loadModel<T extends Card>(model: T): Promise<void> {
-  for (let [fieldName, field] of Object.entries(getFields(model))) {
-    let value: any = await loadField(model, fieldName as keyof T);
-    if (!(primitive in field)) {
-      await loadModel(value);
+async function recompute(card: Card): Promise<void> {
+  // Note that after each async step we check to see if we are still the
+  // current promise, otherwise we bail
+  let done: () => void;
+  let recomputePromise = new Promise<void>((res) => (done = res));
+  recomputePromises.set(card, recomputePromise);
+
+  // wait a full micro task before we start - this is simple debounce
+  await Promise.resolve();
+  if (recomputePromises.get(card) !== recomputePromise) {
+    return;
+  }
+
+  async function _loadModel<T extends Card>(model: T, stack: { from: T, to: T, name: string}[] = []): Promise<void> {
+    for (let [fieldName, field] of Object.entries(getFields(model))) {
+      let value: any = await loadField(model, fieldName as keyof T);
+      if (recomputePromises.get(card) !== recomputePromise) {
+        return;
+      }
+      if (!(primitive in field) && !stack.find(({ from, to, name }) => from === model && to === value && name === fieldName)) {
+        await _loadModel(value, [...stack, { from: model, to: value, name: fieldName }]);
+      }
     }
   }
+
+  await _loadModel(card);
+  if (recomputePromises.get(card) !== recomputePromise) {
+    return;
+  }
+
+  // notify glimmer to rerender this card
+  cardTracking.set(card, true);
+  done!();
 }
 
 async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K): Promise<T[K]> {
@@ -340,7 +387,11 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
         throw e;
       }
       let { model, computeVia, fieldName } = e;
-      deserialized.set(fieldName, await model[computeVia]());
+      if (typeof computeVia === 'function') {
+        deserialized.set(fieldName, await computeVia.bind(model)());
+      } else {
+        deserialized.set(fieldName, await model[computeVia]());
+      }
     }
   }
   // case OK because deserialized.set assigns it
@@ -351,15 +402,16 @@ function getField<CardT extends Constructable>(card: CardT, fieldName: string): 
   let obj = card.prototype;
   while (obj) {
     let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
-    let fieldCard = (desc?.get as any)?.[isField];
+    let fieldCard = (desc?.get as any)?.[isField] as CardT | (() => CardT);
     if (fieldCard) {
-      return fieldCard;
+      return "baseCard" in fieldCard ? fieldCard : (fieldCard as () => CardT)();
     }
     obj = Reflect.getPrototypeOf(obj);
   }
   return undefined
 }
 
+// TODO refactor these 2 functions--they are so similar
 function isFieldContainsMany<CardT extends Constructable>(card: CardT, fieldName: string): boolean | undefined {
   let obj = card.prototype;
   while (obj) {
@@ -373,7 +425,20 @@ function isFieldContainsMany<CardT extends Constructable>(card: CardT, fieldName
   return undefined;
 }
 
-function getFields<T extends Card>(card: T): { [P in keyof T]?: Constructable } {
+function isFieldComputed<CardT extends Constructable>(card: CardT, fieldName: string): boolean | undefined {
+  let obj = card.prototype;
+  while (obj) {
+    let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
+    let result = (desc?.get as any)?.[isComputed];
+    if (result !== undefined) {
+      return result;
+    }
+    obj = Reflect.getPrototypeOf(obj);
+  }
+  return undefined;
+}
+
+function getFields<T extends Card>(card: T, onlyComputeds = false): { [P in keyof T]?: Constructable } {
   let obj = Reflect.getPrototypeOf(card);
   let fields: { [P in keyof T]?: Constructable } = {};
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
@@ -381,7 +446,8 @@ function getFields<T extends Card>(card: T): { [P in keyof T]?: Constructable } 
     let currentFields = flatMap(Object.keys(descs), maybeFieldName => {
       if (maybeFieldName !== 'constructor') {
         let maybeField = getField(card.constructor, maybeFieldName);
-        if (maybeField) {
+        let isComputed = isFieldComputed(card.constructor, maybeFieldName);
+        if ((maybeField && onlyComputeds && isComputed) || (maybeField && !onlyComputeds)) {
           return [[maybeFieldName, maybeField]] as [[string, Constructable]];
         }
       }
@@ -406,6 +472,8 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
         return Reflect.get(target, property, received);
       }
       let innerModel = (model as any)[property];
+      defaultFormat = isFieldComputed(model.constructor, property) ? 'embedded' : defaultFormat;
+      
       if (isFieldContainsMany(model.constructor, property)) {
         if (primitive in field) {
           return class ContainsMany extends GlimmerComponent {
