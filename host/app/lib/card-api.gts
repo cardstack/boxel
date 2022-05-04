@@ -109,17 +109,27 @@ export function serializedGet<CardT extends Constructable>(model: InstanceType<C
   value = deserialized.get(fieldName);
   if (primitive in (field as any)) {
     if (typeof (field as any)[serialize] === 'function') {
-      value = (field as any)[serialize](value);
+      if (isFieldContainsMany(model.constructor, fieldName)) {
+        value = (value as any[]).map(item => (field as any)[serialize](item));
+      } else {
+        value = (field as any)[serialize](value);
+      }
     }
   } else if (value != null) {
-    let instance = {} as Record<string, any>;
-    for (let interiorFieldName of Object.keys(getFields(value))) {
-      instance[interiorFieldName] = serializedGet(value, interiorFieldName);
+    if (isFieldContainsMany(model.constructor, fieldName)) {
+      value = (Object.values(value) as Card[]).map(m => serializeModel(m));
+    } else {
+      value = serializeModel(value);
     }
-    value = instance;
   }
   serialized.set(fieldName, value);
   return value;
+}
+
+function serializeModel(model: Card) {
+  return Object.fromEntries(
+    Object.keys(getFields(model)).map(fieldName => [fieldName, serializedGet(model, fieldName)])
+  );
 }
 
 export function serializedSet<CardT extends Constructable>(model: InstanceType<CardT>, fieldName: string, value: any ) {
@@ -128,22 +138,16 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
   if (!field) {
     throw new Error(`Field ${fieldName} does not exist on ${model.constructor.name}`);
   }
+  let isContainsMany = isFieldContainsMany(model.constructor, fieldName);
+  if (isContainsMany && !Array.isArray(value)) {
+    throw new Error(`Expected array for field value ${fieldName} for card ${model.constructor.name}`);
+  }
 
-  if (isFieldContainsMany(model.constructor, fieldName)) {
-    if (value && !Array.isArray(value)) {
-      throw new Error(`Expected array for field value ${fieldName} for card ${model.constructor.name}`);
-    }
-    if (primitive in field) {
-      serialized.set(fieldName, value || []);
-    } else {
-      value = ((value || []) as any[]).map(item => {
-        let instance = (field! as typeof Card).fromSerialized(item);
-        return instance;
-      });
-      serialized.set(fieldName, value);
-    }
+  if (primitive in field) {
+    serialized.set(fieldName, isContainsMany ? value || [] : value);
   } else {
-    if (primitive in field) {
+    if (isContainsMany) {
+      value = ((value || []) as any[]).map(item => (field! as typeof Card).fromSerialized(item));
       serialized.set(fieldName, value);
     } else {
       let instance = new field();
