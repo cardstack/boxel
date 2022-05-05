@@ -8597,6 +8597,11 @@ json-stable-stringify@^1.0.0, json-stable-stringify@^1.0.1:
   dependencies:
     jsonify "~0.0.0"
 
+json-typescript@^1.1.2:
+  version "1.1.2"
+  resolved "https://registry.yarnpkg.com/json-typescript/-/json-typescript-1.1.2.tgz#033f8309856ef9054cc3384db2ce81d4e0ad4d00"
+  integrity sha512-Np07MUsYMKbB0nNlw/MMIRjUK7ehO48LA4FsrzrhCfTUxMKbvOBAo0sc0b4nQ80ge9d32sModCunCgoyUojgUA==
+
 json5@^0.5.1:
   version "0.5.1"
   resolved "https://registry.yarnpkg.com/json5/-/json5-0.5.1.tgz#1eade7acc012034ad84e2396767ead9fa5495821"
