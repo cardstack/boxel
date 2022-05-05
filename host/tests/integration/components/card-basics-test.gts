@@ -2,7 +2,7 @@ import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn, click } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
-import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
+import { contains, containsMany, field, Component, primitive, Card, addToContainsMany, removeFromContainsMany } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import IntegerCard from 'runtime-spike/lib/integer';
 import { cleanWhiteSpace } from '../../helpers';
@@ -345,9 +345,6 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('perform add and remove on a containsMany primitive field', async function (assert) {
-    function addNew(items: unknown[], model: any) {
-      model.languagesSpoken = [...items, 'french'];
-    }
     function remove(item: unknown, items: unknown[], model: any) {
       let filtered = items.filter((el: unknown) => el !== item);
       model.languagesSpoken = filtered;
@@ -366,10 +363,10 @@ module('Integration | card-basics', function (hooks) {
               {{#each @model.languagesSpoken as |language|}}
                 <li data-test-item={{language}}>
                   {{language}}
-                  <button {{on "click" (fn remove language @model.languagesSpoken @model)}} data-test-remove={{language}}>Remove</button>
+                  <button {{on "click" (fn removeFromContainsMany language "languagesSpoken" @model)}} data-test-remove={{language}}>Remove</button>
                 </li>
               {{/each}}
-              <button {{on "click" (fn addNew @model.languagesSpoken @model)}} data-test-add-new>Add New</button>
+              <button {{on "click" (fn addToContainsMany "french" "languagesSpoken" @model)}} data-test-add-new>Add New</button>
             </ul>
           </section>
           <p data-test-output>
