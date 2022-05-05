@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
-import { contains, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
+import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import IntegerCard from 'runtime-spike/lib/integer';
 import { cleanWhiteSpace } from '../../helpers';
@@ -15,42 +15,62 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard);
       @field number = contains(IntegerCard);
+      @field languagesSpoken = containsMany(StringCard);
 
       static isolated = class Isolated extends Component<typeof this> {
-        <template>{{@model.firstName}} {{@model.title}} {{@model.number}}</template>
+        <template>
+          {{@model.firstName}}
+          {{@model.title}}
+          {{@model.number}}
+          {{#each @model.languagesSpoken as |language|}}
+            {{language}}
+          {{/each}}
+        </template>
       }
     }
     let card = new Person();
     card.firstName = 'arthur';
     card.number = 42;
+    card.languagesSpoken = ['english', 'japanese'];
     let readName: string = card.firstName;
     assert.strictEqual(readName, 'arthur');
     let readNumber: number = card.number;
     assert.strictEqual(readNumber, 42);
+    let readLanguages: string[] = card.languagesSpoken;
+    assert.deepEqual(readLanguages, ['english', 'japanese']);
   });
 
   test('access @model for primitive and composite fields', async function (assert) {
-
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field subscribers = contains(IntegerCard);
+      @field languagesSpoken = containsMany(StringCard);
     }
 
     class Post extends Card {
       @field title = contains(StringCard);
       @field author = contains(Person);
+      @field languagesSpoken = containsMany(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
-        <template>{{@model.title}} by {{@model.author.firstName}}, {{@model.author.subscribers}} subscribers</template>
+        <template>
+          {{@model.title}} by {{@model.author.firstName}}
+          speaks {{#each @model.author.languagesSpoken as |language|}} {{language}} {{/each}}
+          {{@model.author.subscribers}} subscribers
+        </template>
       }
     }
 
     let helloWorld = new Post({
       title: 'First Post', 
-      author: { firstName: 'Arthur', subscribers: 5 },
+      author: {
+          firstName: 'Arthur',
+          subscribers: 5,
+          languagesSpoken: ['english', 'japanese']
+        },
     });
 
     await renderCard(helloWorld, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), 'First Post by Arthur, 5 subscribers');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Arthur speaks english japanese 5 subscribers');
   });
 
   test('render primitive field', async function (assert) {
@@ -178,6 +198,63 @@ module('Integration | card-basics', function (hooks) {
 
     assert.dom('[data-test="first-name"]').containsText('Arthur');
     assert.dom('[data-test="title"]').containsText('First Post');
+  });
+
+  test('render a containsMany primitive field', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field languagesSpoken = containsMany(StringCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.firstName/> speaks <@fields.languagesSpoken/></template>
+      }
+    }
+
+    let mango = new Person({
+      firstName: 'Mango',
+      languagesSpoken: ['english', 'japanese']
+    });
+
+    await renderCard(mango, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango speaks english japanese');
+  });
+
+  test('render a containsMany composite field', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName/></template>
+      }
+    }
+
+    class Family extends Card {
+      @field people = containsMany(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.people/></template>
+      }
+    }
+    let abdelRahmans = new Family({
+      people: [
+        { firstName: 'Mango'},
+        { firstName: 'Van Gogh'},
+        { firstName: 'Hassan'},
+        { firstName: 'Mariko'},
+        { firstName: 'Yume'},
+        { firstName: 'Sakura'},
+      ]
+    });
+
+    await renderCard(abdelRahmans, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
+  });
+
+  test('throws if contains many value is set with a non-array', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field languagesSpoken = containsMany(StringCard);
+    }
+
+    assert.throws(() => new Person({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken for card Person/);
+    assert.throws(() => Person.fromSerialized({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken for card Person/);
   });
 
   test('render default edit template', async function (assert) {
