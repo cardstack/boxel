@@ -3,6 +3,7 @@ import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
 import flatMap from 'lodash/flatMap';
 import { TrackedWeakMap } from 'tracked-built-ins';
+import * as JSON from 'json-typescript';
 import { registerDestructor } from '@ember/destroyable';
 
 export const primitive = Symbol('cardstack-primitive');
@@ -20,6 +21,14 @@ type FieldsTypeFor<T extends Card> = {
 }
 
 type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
+
+interface ResourceObject {
+  // id: string; // TODO
+  type: string;
+  attributes?: JSON.Object;
+  relationships?: JSON.Object;
+  meta?: JSON.Object;
+}
 
 export type Format = 'isolated' | 'embedded' | 'edit';
 
@@ -158,6 +167,21 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
     }
   }
   deserialized.delete(fieldName);
+}
+
+export function serializeCard<CardT extends Constructable>(model: InstanceType<CardT>): ResourceObject {
+  let resource: ResourceObject = {
+    type: 'card',
+  };
+
+  for (let fieldName of Object.keys(getFields(model))) {
+    let value = serializedGet(model, fieldName);
+    if (value) {
+      resource.attributes = resource.attributes || {};
+      resource.attributes[fieldName] = value;
+    }
+  }
+  return resource;
 }
 
 export function containsMany<CardT extends Constructable>(card: CardT | (() => CardT), options?: Options): CardInstanceType<CardT>[] {
