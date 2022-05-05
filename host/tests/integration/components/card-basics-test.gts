@@ -1,11 +1,14 @@
 import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { fillIn } from '@ember/test-helpers';
+import { fillIn, click } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import IntegerCard from 'runtime-spike/lib/integer';
 import { cleanWhiteSpace } from '../../helpers';
+
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -61,7 +64,7 @@ module('Integration | card-basics', function (hooks) {
     }
 
     let helloWorld = new Post({
-      title: 'First Post', 
+      title: 'First Post',
       author: {
           firstName: 'Arthur',
           subscribers: 5,
@@ -298,7 +301,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test="species"]').containsText('Homo Sapiens');
   });
 
-  test('can edit fields', async function (assert) {
+  test('can edit primitive and composite fields', async function (assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
@@ -340,6 +343,62 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output="reviews"]').hasText('5');
     assert.dom('[data-test-output="author.firstName"]').hasText('Carl Stack');
   });
+
+  test('perform add and remove on a containsMany primitive field', async function (assert) {
+    function addNew(items: unknown[], model: any) {
+      model.languagesSpoken = [...items, 'french'];
+    }
+    function remove(item: unknown, items: unknown[], model: any) {
+      let filtered = items.filter((el: unknown) => el !== item);
+      model.languagesSpoken = filtered;
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field languagesSpoken = containsMany(StringCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.firstName/> speaks <@fields.languagesSpoken/></template>
+      }
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <section>
+            <header>Languages Spoken:</header>
+            <ul>
+              {{#each @model.languagesSpoken as |language|}}
+                <li data-test-item={{language}}>
+                  {{language}}
+                  <button {{on "click" (fn remove language @model.languagesSpoken @model)}} data-test-remove={{language}}>Remove</button>
+                </li>
+              {{/each}}
+              <button {{on "click" (fn addNew @model.languagesSpoken @model)}} data-test-add-new>Add New</button>
+            </ul>
+          </section>
+          <p data-test-output>
+            {{@model.firstName}} speaks {{@model.languagesSpoken}}
+          </p>
+        </template>
+      }
+    }
+
+    let card = new Person({
+      firstName: 'Mango',
+      languagesSpoken: ['english', 'japanese']
+    });
+
+    await renderCard(card, 'edit');
+    assert.dom('[data-test-item]').exists({ count: 2 });
+    assert.dom('[data-test-item="english"]').hasText('english Remove');
+    assert.dom('[data-test-output]').hasText('Mango speaks english,japanese');
+
+    await click('[data-test-add-new]');
+    assert.dom('[data-test-item]').exists({ count: 3 });
+    assert.dom('[data-test-output]').hasText('Mango speaks english,japanese,french');
+
+    await click('[data-test-remove="english"]');
+    assert.dom('[data-test-item]').exists({ count: 2 });
+    assert.dom('[data-test-output]').hasText('Mango speaks japanese,french');
+    // await this.pauseTest();
+  });
+
 });
 
 function testString(label: string) {
