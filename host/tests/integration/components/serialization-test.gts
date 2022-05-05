@@ -47,6 +47,43 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'created 2022-04-22, published 2022-04-27T16:30:00.000Z');
   });
 
+  test('can deserialize a date field with null value', async function (assert) {
+    class Post extends Card {
+      @field title = contains(StringCard);
+      @field created = contains(DateCard);
+      @field published = contains(DatetimeCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.title/> created <@fields.created/> published <@fields.published /></template>
+      }
+    }
+
+    let firstPost = Post.fromSerialized({ title: 'First Post', created: null, published: null });
+    await renderCard(firstPost, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post created [no date] published [no date-time]');
+  });
+
+  test('can serialize a date field with null value', async function(assert) {
+    function asString(a: unknown): string {
+      return String(a);
+    }
+
+    class Post extends Card {
+      @field title = contains(StringCard);
+      @field created = contains(DateCard);
+      @field published = contains(DatetimeCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          created {{asString (serializedGet @model 'created')}},
+          published {{asString (serializedGet @model 'published')}}
+        </template>
+      }
+    }
+
+    let firstPost =  new Post({ title: 'First Post', created: null, published: null });
+    await renderCard(firstPost, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'created null, published null');
+  });
+
   test('can deserialize a nested field', async function(assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
