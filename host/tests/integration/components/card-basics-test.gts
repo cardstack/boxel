@@ -2,13 +2,10 @@ import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn, click } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
-import { contains, containsMany, field, Component, primitive, Card, addToContainsMany, removeFromContainsMany } from 'runtime-spike/lib/card-api';
+import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import IntegerCard from 'runtime-spike/lib/integer';
 import { cleanWhiteSpace } from '../../helpers';
-
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -345,35 +342,9 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('perform add and remove on a containsMany primitive field', async function (assert) {
-    function remove(item: unknown, items: unknown[], model: any) {
-      let filtered = items.filter((el: unknown) => el !== item);
-      model.languagesSpoken = filtered;
-    }
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template><@fields.firstName/> speaks <@fields.languagesSpoken/></template>
-      }
-      static edit = class Edit extends Component<typeof this> {
-        <template>
-          <section>
-            <header>Languages Spoken:</header>
-            <ul>
-              {{#each @model.languagesSpoken as |language|}}
-                <li data-test-item={{language}}>
-                  {{language}}
-                  <button {{on "click" (fn removeFromContainsMany language "languagesSpoken" @model)}} data-test-remove={{language}}>Remove</button>
-                </li>
-              {{/each}}
-              <button {{on "click" (fn addToContainsMany "french" "languagesSpoken" @model)}} data-test-add-new>Add New</button>
-            </ul>
-          </section>
-          <p data-test-output>
-            {{@model.firstName}} speaks {{@model.languagesSpoken}}
-          </p>
-        </template>
-      }
     }
 
     let card = new Person({
@@ -384,15 +355,20 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(card, 'edit');
     assert.dom('[data-test-item]').exists({ count: 2 });
     assert.dom('[data-test-item="english"]').hasText('english Remove');
-    assert.dom('[data-test-output]').hasText('Mango speaks english,japanese');
+    assert.dom('[data-test-output]').hasText('english japanese');
 
     await click('[data-test-add-new]');
     assert.dom('[data-test-item]').exists({ count: 3 });
-    assert.dom('[data-test-output]').hasText('Mango speaks english,japanese,french');
+    assert.dom('[data-test-output]').hasText('english japanese french');
+
+    await click('[data-test-add-new]');
+    assert.dom('[data-test-item]').exists({ count: 4 });
+    assert.dom('[data-test-output]').hasText('english japanese french french');
 
     await click('[data-test-remove="english"]');
-    assert.dom('[data-test-item]').exists({ count: 2 });
-    assert.dom('[data-test-output]').hasText('Mango speaks japanese,french');
+    await click('[data-test-remove="french"]');
+    assert.dom('[data-test-item]').exists({ count: 1 });
+    assert.dom('[data-test-output]').hasText('japanese');
     // await this.pauseTest();
   });
 
