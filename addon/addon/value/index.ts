@@ -59,8 +59,8 @@ export default class BaseValue {
       let frame = Math.min(previousFrames.length - 1, timeToFrame(time));
 
       if (previousFrames[frame]) {
-        this.currentValue = previousFrames[frame].value;
-        this.velocity = previousFrames[frame].velocity;
+        this.currentValue = previousFrames[frame]!.value;
+        this.velocity = previousFrames[frame]!.velocity;
 
         if (this.transferVelocity) {
           this.lastFrame = previousFrames[frame - 1];

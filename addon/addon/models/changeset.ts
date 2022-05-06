@@ -92,7 +92,7 @@ export default class Changeset {
     if (set.size === 0) {
       return null;
     }
-    return [...set][0];
+    return [...set][0] ?? null;
   }
 
   addInsertedSprites(freshlyAdded: Set<SpriteModifier>): void {
@@ -147,7 +147,7 @@ export default class Changeset {
         'Multiple matching removedSprites found',
         removedSprites.length < 2
       );
-      let removedSprite = removedSprites[0];
+      let removedSprite = removedSprites[0] as Sprite;
       if (this.context.hasOrphan(removedSprite.element)) {
         this.context.removeOrphan(removedSprite.element);
       }

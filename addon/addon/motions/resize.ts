@@ -69,14 +69,14 @@ export class Resize extends Motion<ResizeOptions> {
       if (widthFrames.length) {
         let width =
           widthFrames[i]?.value ?? widthFrames[widthFrames.length - 1]?.value;
-        keyframe.width = `${width}px`;
+        keyframe['width'] = `${width}px`;
       }
 
       if (heightFrames.length) {
         let height =
           heightFrames[i]?.value ??
           heightFrames[heightFrames.length - 1]?.value;
-        keyframe.height = `${height}px`;
+        keyframe['height'] = `${height}px`;
       }
 
       keyframes.push(keyframe);

@@ -50,7 +50,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
       this.currentComputedStyle = copyComputedStyle(element);
       this.alreadyTracked = true;
     }
-    once(this, 'clearTrackedPosition');
+    once(this, this.clearTrackedPosition);
   }
 
   clearTrackedPosition(): void {

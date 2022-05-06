@@ -63,6 +63,8 @@ export default class KeyframeGenerator {
       );
       this.copiedKeyframeAnimationOptions.set(
         motion,
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         Object.assign({}, motion.keyframeAnimationOptions)
       );
     }
@@ -88,12 +90,12 @@ export default class KeyframeGenerator {
   labelKeyframeOffsets(): void {
     for (let motion of this.motions) {
       let keyframes = this.keyframesFor(motion);
-      keyframes[0].offset = 0;
-      keyframes[keyframes.length - 1].offset = 1;
+      keyframes[0]!.offset = 0;
+      keyframes[keyframes.length - 1]!.offset = 1;
       for (let i = 0; i < keyframes.length; i++) {
         let keyframe = keyframes[i];
-        if (keyframe.offset === undefined) {
-          keyframe.offset = calculateOffset(keyframes, i);
+        if (keyframe!.offset === undefined) {
+          keyframe!.offset = calculateOffset(keyframes, i);
         }
       }
       for (let keyframe of keyframes) {
@@ -130,12 +132,12 @@ export default class KeyframeGenerator {
       let newDuration = delay + originalDuration;
       delete keyframeAnimationOptions.delay;
       keyframeAnimationOptions.duration = newDuration;
-      let firstKeyframe = keyframes[0];
+      let firstKeyframe = keyframes[0] as Keyframe;
       let extraKeyframe = { ...firstKeyframe };
       keyframes.unshift(extraKeyframe);
       firstKeyframe.offset = delay / newDuration;
       for (let i = 2; i < keyframes.length - 1; i++) {
-        let keyframe = keyframes[i];
+        let keyframe = keyframes[i] as Keyframe;
         if (keyframe.offset) {
           keyframe.offset =
             (keyframe.offset * originalDuration + delay) / newDuration;
@@ -156,13 +158,13 @@ export default class KeyframeGenerator {
         keyframeAnimationOptions.duration = maxDuration;
       }
       if (keyframeAnimationOptions.duration !== maxDuration) {
-        let lastKeyframe = keyframes[keyframes.length - 1];
+        let lastKeyframe = keyframes[keyframes.length - 1] as Keyframe;
         let extraKeyframe = { ...lastKeyframe };
         let originalDuration = keyframeAnimationOptions.duration as number;
         lastKeyframe.offset = originalDuration / maxDuration;
         keyframes.push(extraKeyframe);
         for (let i = 1; i < keyframes.length - 2; i++) {
-          let keyframe = keyframes[i];
+          let keyframe = keyframes[i] as Keyframe;
           if (keyframe.offset) {
             keyframe.offset =
               keyframe.offset * (originalDuration / maxDuration);
@@ -175,12 +177,12 @@ export default class KeyframeGenerator {
 }
 
 function calculateOffset(keyframes: Keyframe[], i: number): number {
-  let previousOffset = keyframes[i - 1].offset;
+  let previousOffset = keyframes[i - 1]!.offset;
   assert('previous offset has already been set', previousOffset != null);
   let indexOfNextKnownOffset;
   let j = i + 1;
   while (!indexOfNextKnownOffset) {
-    if (keyframes[j].offset) {
+    if (keyframes[j]!.offset) {
       indexOfNextKnownOffset = j;
     }
     j++;
@@ -190,7 +192,7 @@ function calculateOffset(keyframes: Keyframe[], i: number): number {
     indexOfNextKnownOffset !== undefined
   );
   let numFrames = indexOfNextKnownOffset - (i - 1);
-  let nextKnownOffset = keyframes[indexOfNextKnownOffset].offset;
+  let nextKnownOffset = keyframes[indexOfNextKnownOffset]!.offset;
   assert('nextKnownOffset is defined', nextKnownOffset);
   return (nextKnownOffset - previousOffset) / numFrames + previousOffset;
 }

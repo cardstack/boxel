@@ -22,9 +22,9 @@ function runWithoutAnimations(playAnimations: boolean) {
     });
     let result = f();
     for (let i = 0; i < animations.length; i++) {
-      animations[i].currentTime = currentTimes[i];
+      animations[i]!.currentTime = currentTimes[i] ?? null;
       if (playAnimations) {
-        animations[i].play();
+        animations[i]!.play();
       }
     }
     return result;
@@ -44,7 +44,7 @@ function runWithAnimations(playAnimations: boolean) {
     let result = f();
     if (playAnimations) {
       for (let i = 0; i < animations.length; i++) {
-        animations[i].play();
+        animations[i]!.play();
       }
     }
     return result;
@@ -64,9 +64,9 @@ function runWithAnimationOffset(offset: number, playAnimations: boolean) {
     });
     let result = f();
     for (let i = 0; i < animations.length; i++) {
-      animations[i].currentTime = currentTimes[i];
+      animations[i]!.currentTime = currentTimes[i] ?? null;
       if (playAnimations) {
-        animations[i].play();
+        animations[i]!.play();
       }
     }
     return result;

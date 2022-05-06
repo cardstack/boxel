@@ -42,11 +42,11 @@ export class CssMotion extends Motion<CssMotionOptions> {
   }
 
   get from(): Value {
-    return this.keyframeValues[0];
+    return this.keyframeValues[0] as Value;
   }
 
   get to(): Value {
-    return this.keyframeValues[1];
+    return this.keyframeValues[1] as Value;
   }
 
   get defaultKeyframeValuesFromSprite(): string[] {
@@ -59,8 +59,8 @@ export class CssMotion extends Motion<CssMotionOptions> {
       finalComputedStyle[dasherizedProperty]
     ) {
       return [
-        initialComputedStyle[dasherizedProperty],
-        finalComputedStyle[dasherizedProperty],
+        initialComputedStyle[dasherizedProperty] as string,
+        finalComputedStyle[dasherizedProperty] as string,
       ];
     }
     return [];

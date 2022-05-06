@@ -18,6 +18,8 @@ export function registerCancellation(
 export function afterRender() {
   let ticket: EmberRunTimer;
   let promise = new Promise((resolve) => {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     ticket = schedule('afterRender', resolve);
   });
   registerCancellation(promise, () => {

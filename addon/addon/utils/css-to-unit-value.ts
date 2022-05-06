@@ -10,7 +10,7 @@ export function parse(value: Value): UnitValue {
     `${value}`.match(/^([+-]?(?:\d+|\d*\.\d+))([a-z]*|%)$/) ?? [];
 
   return {
-    value: Number.parseFloat(_value),
+    value: Number.parseFloat(_value ?? ''),
     unit: unit ?? '',
   };
 }

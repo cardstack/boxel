@@ -27,7 +27,7 @@ export default class LinearBehavior implements Behavior {
     let frameCount = Math.max(timeToFrame(duration), 1);
 
     let delayFrameCount = timeToFrame(delay);
-    let frames = Array.from(new Array(delayFrameCount)).map(() => ({
+    let frames: Frame[] = Array.from(new Array(delayFrameCount)).map(() => ({
       value: from,
       velocity: 0,
     }));
@@ -52,20 +52,20 @@ export default class LinearBehavior implements Behavior {
       frameCount--;
       for (let i = 0; i <= frameCount; i++) {
         let progress = i / frameCount;
-        frames[i].value =
-          progress * frames[i].value +
-          (1 - progress) * previousFramesFromTime[i].value;
+        frames[i]!.value =
+          progress * frames[i]!.value +
+          (1 - progress) * previousFramesFromTime[i]!.value;
       }
 
       if (lastFrame) {
         // We explicitly add the lastFrame (if any) to correctly calculate the velocity at the transfer point.
-        frames[0].velocity = instantaneousVelocity(1, [lastFrame, ...frames]);
+        frames[0]!.velocity = instantaneousVelocity(1, [lastFrame, ...frames]);
       } else {
-        frames[0].velocity = instantaneousVelocity(0, frames);
+        frames[0]!.velocity = instantaneousVelocity(0, frames);
       }
 
       for (let i = 1; i <= frameCount; i++) {
-        frames[i].velocity = instantaneousVelocity(i, frames);
+        frames[i]!.velocity = instantaneousVelocity(i, frames);
       }
     }
 
