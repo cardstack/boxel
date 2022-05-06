@@ -21,6 +21,12 @@
     "module": "es6",
     "experimentalDecorators": true,
     "paths": {
+      "animations-experiment": [
+        "node_modules/animations-experiment/addon"
+      ],
+      "animations-experiment/*": [
+        "node_modules/animations-experiment/addon/*"
+      ],
       "demo-app/tests/*": [
         "tests/*"
       ],
