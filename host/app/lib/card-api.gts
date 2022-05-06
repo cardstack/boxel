@@ -5,8 +5,7 @@ import flatMap from 'lodash/flatMap';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import * as JSON from 'json-typescript';
 import { registerDestructor } from '@ember/destroyable';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import ContainsManyEditor from '../components/contains-many';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -520,37 +519,11 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
       defaultFormat = isFieldComputed(model.constructor, property) ? 'embedded' : defaultFormat;
 
       if (isFieldContainsMany(model.constructor, property) && defaultFormat === 'edit') {
-        let components = (Object.values(innerModel) as T[]).map(m => getComponent(field!, 'embedded', m)) as any[];
-        return class ContainsMany extends GlimmerComponent {
+        let components = (Object.values(innerModel) as T[]).map(m => getComponent(field!, 'embedded', m, set)) as any[];
+        return class ContainsManyEditorTemplate extends GlimmerComponent {
           <template>
-            <section>
-              <header>{{property}}</header>
-              <ul>
-                {{#each innerModel as |item|}}
-                  <li data-test-item={{item}}>
-                    {{item}}
-                    <button {{on "click" (fn this.removeItem item)}} data-test-remove={{item}}>Remove</button>
-                  </li>
-                {{/each}}
-                <button {{on "click" (fn this.addItem "french")}} data-test-add-new>Add New</button>
-              </ul>
-            </section>
-
-            <div data-test-output>
-              {{#each components as |Item|}}
-                <Item/>
-              {{/each}}
-            </div>
+            <ContainsManyEditor @model={{model}} @items={{innerModel}} @fieldName={{property}} @components={{components}} />
           </template>
-
-          addItem(newItem: unknown) {
-            (model as any)[property] = [...innerModel, newItem];
-          }
-
-          removeItem(item: unknown) {
-            let filtered = innerModel.filter((el: unknown) => el !== item);
-            (model as any)[property] = filtered;
-          }
         };
       }
       else if (isFieldContainsMany(model.constructor, property)) {
