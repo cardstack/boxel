@@ -13,10 +13,17 @@
     "node": "12.22.12",
     "yarn": "1.22.10"
   },
-  "resolutions": {
-    "@embroider/macros": "^1.5.0",
-    "@embroider/util": "^1.5.0",
-    "ember-class-names-helper": "^0.3.0",
-    "ember-useragent": "^0.12.0"
+  "pnpm": {
+    "overrides": {
+      "@embroider/macros": "^1.5.0",
+      "@embroider/util": "^1.5.0",
+      "ember-class-names-helper": "^0.3.0",
+      "ember-useragent": "^0.12.0"
+    },
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "@babel/core"
+      ]
+    }
   }
 }
