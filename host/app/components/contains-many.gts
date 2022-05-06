@@ -7,7 +7,7 @@ import { pick } from '../lib/pick';
 import { Card } from '../lib/card-api';
 
 interface Signature {
-  Args: { fieldName: string, model: Card, items: any[], components: any[] };
+  Args: { fieldName: string, model: Card, items: any[], components: any[], newItem: any };
 }
 
 export default class ContainsManyEditor extends Component<Signature> {
@@ -25,10 +25,10 @@ export default class ContainsManyEditor extends Component<Signature> {
         {{/each}}
         <label>
           Add New Item
-          <input {{on "input" (pick "target.value" this.set)}} value={{this.value}} data-test-new-item-input>
+          <input {{on "input" (pick "target.value" this.set)}} {{on "keyup" this.maybeAddItem}} value={{this.value}} data-test-new-item-input>
         </label>
         <button {{on "click" this.addItem}} type="button" data-test-add-new>
-          Add New
+          Add
         </button>
       </ul>
     </section>
@@ -43,7 +43,9 @@ export default class ContainsManyEditor extends Component<Signature> {
   @tracked value = '';
 
   @action addItem() {
-    (this.args.model as any)[this.args.fieldName] = [...this.args.items, this.value];
+    if (this.value.trim()) {
+      (this.args.model as any)[this.args.fieldName] = [...this.args.items, this.value];
+    }
     this.value = '';
   }
 
@@ -54,5 +56,11 @@ export default class ContainsManyEditor extends Component<Signature> {
 
   @action set(val: string) {
     this.value = val;
+  }
+
+  @action maybeAddItem(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      this.addItem();
+    }
   }
 }

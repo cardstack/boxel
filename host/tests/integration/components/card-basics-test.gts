@@ -1,6 +1,6 @@
 import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { fillIn, click } from '@ember/test-helpers';
+import { fillIn, click, triggerKeyEvent } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
@@ -363,7 +363,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output]').hasText('english japanese french');
 
     await fillIn('[data-test-new-item-input]', 'spanish');
-    await click('[data-test-add-new]');
+    await triggerKeyEvent('[data-test-new-item-input]', 'keyup', 'Enter');
     assert.dom('[data-test-item]').exists({ count: 4 });
     assert.dom('[data-test-output]').hasText('english japanese french spanish');
 
