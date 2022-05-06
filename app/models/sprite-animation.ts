@@ -10,13 +10,15 @@ export class SpriteAnimation {
   sprite: Sprite;
   keyframes: Keyframe[];
   keyframeAnimationOptions: KeyframeAnimationOptions;
+  keepAliveFor?: number;
 
   _finished = defer();
 
   constructor(
     sprite: Sprite,
     keyframes: Keyframe[],
-    keyframeAnimationOptions: KeyframeAnimationOptions
+    keyframeAnimationOptions: KeyframeAnimationOptions,
+    keepAliveFor?: number
   ) {
     this.sprite = sprite;
     this.keyframes = keyframes;
@@ -25,14 +27,21 @@ export class SpriteAnimation {
       fill: sprite.type === SpriteType.Removed ? 'forwards' : undefined,
       id: sprite.identifier.toString(),
     };
+    this.keepAliveFor = keepAliveFor;
   }
 
   play(): void {
     if (!this.animation) {
-      this.animation = this.sprite.element.animate(
-        this.keyframes,
-        this.keyframeAnimationOptions
-      );
+      let endDelay =
+        this.keepAliveFor &&
+        this.keepAliveFor > Number(this.keyframeAnimationOptions.duration!)
+          ? this.keepAliveFor -
+            (this.keyframeAnimationOptions.duration as number)
+          : undefined;
+      this.animation = this.sprite.element.animate(this.keyframes, {
+        ...this.keyframeAnimationOptions,
+        endDelay,
+      });
       this.animation.finished
         .then(() => this._finished.resolve(this.animation))
         .catch((error) => {

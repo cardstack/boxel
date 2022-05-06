@@ -18,7 +18,7 @@ import { assert } from '@ember/debug';
 import SpringBehavior from 'animations/behaviors/spring';
 import LinearBehavior from 'animations/behaviors/linear';
 
-class SpriteIdentifier {
+export class SpriteIdentifier {
   id: string | null;
   role: string | null;
   constructor(id: string | null, role: string | null) {
@@ -45,6 +45,7 @@ export default class Sprite {
   motions: Motion[] = [];
   time: number;
   hidden = false;
+  keepAliveFor?: number;
 
   constructor(
     element: HTMLElement,
@@ -213,41 +214,58 @@ export default class Sprite {
   }: {
     time?: number;
   } = {}): SpriteAnimation | undefined {
-    if (!this.motions.length) {
+    if (!this.motions.length && !this.keepAliveFor) {
       return;
+    } else if (this.motions.length) {
+      assert('Hidden sprite cannot be animated', !this.hidden);
+      let keyframes = this.motions.reduce((previousKeyframes, motion) => {
+        motion.applyBehavior(time);
+
+        let count = Math.max(previousKeyframes.length, motion.keyframes.length);
+        let result: Keyframe[] = [];
+        for (let i = 0; i < count; i++) {
+          // TODO: this merge algorithm is too naïve, it implies we can have only 1 of each CSS property or it will be overridden
+          // we copy the final frame of a motion if there is another motion that takes longer
+          result.push({
+            ...(previousKeyframes?.[i] ??
+              previousKeyframes[previousKeyframes.length - 1]),
+            ...(motion.keyframes?.[i] ??
+              motion.keyframes[motion.keyframes.length - 1]),
+          });
+        }
+        return result;
+      }, [] as Keyframe[]);
+
+      // We can clear these as we've compiled them already.
+      this.motions = [];
+
+      // calculate "real" duration based on amount of keyframes at the given FPS
+      let duration = Math.max(0, (keyframes.length - 1) / FPS);
+
+      let keyframeAnimationOptions = {
+        easing: 'linear',
+        duration,
+      };
+
+      return new SpriteAnimation(
+        this,
+        keyframes,
+        keyframeAnimationOptions,
+        this.keepAliveFor
+      );
+    } else {
+      this.motions = [];
+
+      return new SpriteAnimation(
+        this,
+        [],
+        {
+          easing: 'linear',
+          duration: 0,
+        },
+        this.keepAliveFor
+      );
     }
-
-    assert('Hidden sprite cannot be animated', !this.hidden);
-    let keyframes = this.motions.reduce((previousKeyframes, motion) => {
-      motion.applyBehavior(time);
-
-      let count = Math.max(previousKeyframes.length, motion.keyframes.length);
-      let result: Keyframe[] = [];
-      for (let i = 0; i < count; i++) {
-        // TODO: this merge algorithm is too naïve, it implies we can have only 1 of each CSS property or it will be overridden
-        // we copy the final frame of a motion if there is another motion that takes longer
-        result.push({
-          ...(previousKeyframes?.[i] ??
-            previousKeyframes[previousKeyframes.length - 1]),
-          ...(motion.keyframes?.[i] ??
-            motion.keyframes[motion.keyframes.length - 1]),
-        });
-      }
-      return result;
-    }, [] as Keyframe[]);
-
-    // We can clear these as we've compiled them already.
-    this.motions = [];
-
-    // calculate "real" duration based on amount of keyframes at the given FPS
-    let duration = Math.max(0, (keyframes.length - 1) / FPS);
-
-    let keyframeAnimationOptions = {
-      easing: 'linear',
-      duration,
-    };
-
-    return new SpriteAnimation(this, keyframes, keyframeAnimationOptions);
   }
 
   startAnimation({
