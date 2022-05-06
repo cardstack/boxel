@@ -1,10 +1,8 @@
 {
-  "name": "animations-experiment",
+  "name": "test-app",
   "version": "1.0.0",
-  "description": "The default blueprint for ember-cli addons.",
-  "keywords": [
-    "ember-addon"
-  ],
+  "private": true,
+  "description": "Test app for the animations experiment.",
   "repository": "",
   "license": "MIT",
   "author": "",
@@ -27,17 +25,12 @@
     "prepack": "ember ts:precompile",
     "postpack": "ember ts:clean"
   },
-  "dependencies": {
-    "ember-cli-babel": "^7.26.11",
-    "ember-cli-htmlbars": "^6.0.1",
-    "ember-cli-typescript": "^5.1.0",
-    "ember-concurrency": "^2.0.2",
-    "ember-concurrency-decorators": "^2.0.3",
-    "ember-concurrency-ts": "^0.2.2",
-    "ember-modifier": "^3.2.2",
-    "macro-decorators": "^0.1.2"
-  },
   "devDependencies": {
+    "@ember/optional-features": "^2.0.0",
+    "@ember/test-helpers": "^2.6.0",
+    "@embroider/test-setup": "^1.5.0",
+    "@glimmer/component": "^1.0.4",
+    "@glimmer/tracking": "^1.0.4",
     "@types/ember-qunit": "^5.0.0",
     "@types/ember-resolver": "^5.0.11",
     "@types/ember__application": "^4.0.0",
@@ -62,17 +55,47 @@
     "@types/rsvp": "^4.0.4",
     "@typescript-eslint/eslint-plugin": "^5.21.0",
     "@typescript-eslint/parser": "^5.21.0",
+    "animations-experiment": "^1.0.0",
+    "babel-eslint": "^10.1.0",
+    "broccoli-asset-rev": "^3.0.0",
+    "ember-auto-import": "^2.4.1",
+    "ember-cli": "~4.3.0",
+    "ember-cli-babel": "^7.26.11",
+    "ember-cli-dependency-checker": "^3.2.0",
+    "ember-cli-htmlbars": "^6.0.1",
+    "ember-cli-inject-live-reload": "^2.1.0",
+    "ember-cli-sri": "^2.1.1",
+    "ember-cli-terser": "^4.0.2",
+    "ember-cli-typescript": "^5.1.0",
+    "ember-cli-typescript-blueprints": "^3.0.0",
+    "ember-disable-prototype-extensions": "^1.1.3",
+    "ember-export-application-global": "^2.0.1",
+    "ember-load-initializers": "^2.1.2",
+    "ember-page-title": "^7.0.0",
+    "ember-qunit": "^5.1.5",
+    "ember-resolver": "^8.0.3",
+    "ember-source": "~4.3.0",
+    "ember-source-channel-url": "^3.0.0",
     "ember-template-lint": "^4.3.0",
+    "ember-try": "^2.0.0",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-ember": "^10.5.9",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-prettier": "^4.0.0",
     "eslint-plugin-qunit": "^7.2.0",
+    "loader.js": "^4.7.0",
     "npm-run-all": "^4.1.5",
     "prettier": "^2.6.1",
+    "qunit": "^2.18.0",
+    "qunit-dom": "^2.0.0",
     "typescript": "^4.6.4",
     "webpack": "^5.70.0"
+  },
+  "dependenciesMeta": {
+    "animations-experiment": {
+      "injected": true
+    }
   },
   "engines": {
     "node": "12.* || 14.* || >= 16"
@@ -80,7 +103,6 @@
   "ember": {
     "edition": "octane"
   },
-  "ember-addon": {},
   "volta": {
     "extends": "../package.json"
   }

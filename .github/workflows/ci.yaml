@@ -24,4 +24,4 @@ jobs:
       - run: yarn lint
         working-directory: addon
       - run: yarn test:ember
-        working-directory: demo-app
+        working-directory: test-app

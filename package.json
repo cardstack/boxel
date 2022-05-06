@@ -6,7 +6,8 @@
   },
   "workspaces": [
     "addon",
-    "demo-app"
+    "demo-app",
+    "test-app"
   ],
   "volta": {
     "node": "12.22.12",
