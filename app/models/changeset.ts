@@ -1,5 +1,5 @@
 import SpriteFactory from './sprite-factory';
-import Sprite, { SpriteType } from './sprite';
+import Sprite, { SpriteIdentifier, SpriteType } from './sprite';
 import AnimationContext from '../components/animation-context';
 import SpriteModifier from '../modifiers/sprite';
 import { assert } from '@ember/debug';
@@ -96,6 +96,15 @@ export default class Changeset {
   }
 
   addInsertedSprites(freshlyAdded: Set<SpriteModifier>): void {
+    assert(
+      'freshlyAdded sprites should not have identifier collisions with current inserted sprites',
+      [...freshlyAdded].every((sprite) =>
+        [...this.insertedSprites].every(
+          (s2) =>
+            !new SpriteIdentifier(sprite.id, sprite.role).equals(s2.identifier)
+        )
+      )
+    );
     for (let spriteModifier of freshlyAdded) {
       this.insertedSprites.add(
         SpriteFactory.createInsertedSprite(spriteModifier, this.context)
@@ -104,6 +113,15 @@ export default class Changeset {
   }
 
   addRemovedSprites(freshlyRemoved: Set<SpriteModifier>): void {
+    assert(
+      'freshlyRemoved sprites should not have identifier collisions with current removed sprites',
+      [...freshlyRemoved].every((sprite) =>
+        [...this.removedSprites].every(
+          (s2) =>
+            !new SpriteIdentifier(sprite.id, sprite.role).equals(s2.identifier)
+        )
+      )
+    );
     for (let spriteModifier of freshlyRemoved) {
       this.removedSprites.add(
         SpriteFactory.createRemovedSprite(spriteModifier, this.context)
@@ -112,6 +130,15 @@ export default class Changeset {
   }
 
   addKeptSprites(freshlyChanged: Set<SpriteModifier>): void {
+    assert(
+      'freshlyChanged sprites should not have identifier collisions with current kept sprites',
+      [...freshlyChanged].every((sprite) =>
+        [...this.keptSprites].every(
+          (s2) =>
+            !new SpriteIdentifier(sprite.id, sprite.role).equals(s2.identifier)
+        )
+      )
+    );
     for (let spriteModifier of freshlyChanged) {
       this.keptSprites.add(
         SpriteFactory.createKeptSprite(spriteModifier, this.context)
@@ -151,6 +178,12 @@ export default class Changeset {
       if (this.context.hasOrphan(removedSprite.element)) {
         this.context.removeOrphan(removedSprite.element);
       }
+      assert(
+        'removed sprite changing into kept sprite should not have identifier collisions with current kept sprites',
+        [...this.keptSprites].every(
+          (s2) => !removedSprite.identifier.equals(s2.identifier)
+        )
+      );
       this.removedSprites.delete(removedSprite);
 
       insertedSprite.type = SpriteType.Kept;
