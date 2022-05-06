@@ -23,6 +23,7 @@
     "test:ember": "ember test"
   },
   "devDependencies": {
+    "@babel/core": "^7.17.10",
     "@cardstack/boxel": "github:cardstack/boxel#4053e1d22f774f3619062cb25a1fd5e15b7b046e",
     "@ember/optional-features": "^2.0.0",
     "@ember/render-modifiers": "^2.0.4",
@@ -82,7 +83,7 @@
     "ember-svg-jar": "^2.3.3",
     "ember-template-lint": "^2.15.0",
     "ember-truth-helpers": "^3.0.0",
-    "eslint": "^7.21.0",
+    "eslint": "^7.32.0",
     "eslint-config-prettier": "^7.1.0",
     "eslint-plugin-ember": "^10.1.1",
     "eslint-plugin-node": "^11.1.0",

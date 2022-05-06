@@ -26,6 +26,7 @@
     "postpack": "ember ts:clean"
   },
   "devDependencies": {
+    "@babel/core": "^7.17.10",
     "@ember/optional-features": "^2.0.0",
     "@ember/test-helpers": "^2.6.0",
     "@embroider/test-setup": "^1.5.0",
@@ -97,7 +98,7 @@
     }
   },
   "engines": {
-    "node": "12.* || 14.* || >= 16"
+    "node": "14.* || >= 16"
   },
   "ember": {
     "edition": "octane"

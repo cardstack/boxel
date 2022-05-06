@@ -10,19 +10,16 @@
     "test-app"
   ],
   "volta": {
-    "node": "12.22.12"
+    "node": "16.15.0"
   },
   "pnpm": {
     "overrides": {
       "@embroider/macros": "^1.5.0",
       "@embroider/util": "^1.5.0",
+      "@types/eslint": "8.4.1",
       "ember-class-names-helper": "^0.3.0",
-      "ember-useragent": "^0.12.0"
-    },
-    "peerDependencyRules": {
-      "ignoreMissing": [
-        "@babel/core"
-      ]
+      "ember-useragent": "^0.12.0",
+      "node-sass": "^7.0.1"
     }
   }
 }

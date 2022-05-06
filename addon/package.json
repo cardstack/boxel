@@ -39,6 +39,7 @@
     "macro-decorators": "^0.1.2"
   },
   "devDependencies": {
+    "@babel/core": "^7.17.10",
     "@types/ember-qunit": "^5.0.0",
     "@types/ember-resolver": "^5.0.11",
     "@types/ember__application": "^4.0.0",
