@@ -147,7 +147,7 @@ export default class KeyframeGenerator {
   normalizeDurations(): void {
     let durations: number[] = this.motions
       .map((m) => this.keyframeAnimationOptionsFor(m).duration as number)
-      .filter(i => Boolean(i));
+      .filter((i) => Boolean(i));
     let maxDuration = Math.max(...durations);
     for (let motion of this.motions) {
       let keyframes = this.keyframesFor(motion);
