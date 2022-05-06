@@ -357,19 +357,19 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-item="english"]').hasText('english Remove');
     assert.dom('[data-test-output]').hasText('english japanese');
 
+    await fillIn('[data-test-new-item-input]', 'french');
     await click('[data-test-add-new]');
     assert.dom('[data-test-item]').exists({ count: 3 });
     assert.dom('[data-test-output]').hasText('english japanese french');
 
+    await fillIn('[data-test-new-item-input]', 'spanish');
     await click('[data-test-add-new]');
     assert.dom('[data-test-item]').exists({ count: 4 });
-    assert.dom('[data-test-output]').hasText('english japanese french french');
+    assert.dom('[data-test-output]').hasText('english japanese french spanish');
 
     await click('[data-test-remove="english"]');
-    await click('[data-test-remove="french"]');
-    assert.dom('[data-test-item]').exists({ count: 1 });
-    assert.dom('[data-test-output]').hasText('japanese');
-    // await this.pauseTest();
+    assert.dom('[data-test-item]').exists({ count: 3 });
+    assert.dom('[data-test-output]').hasText('japanese french spanish');
   });
 
 });

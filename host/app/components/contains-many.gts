@@ -2,10 +2,12 @@ import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { tracked } from '@glimmer/tracking';
+import { pick } from '../lib/pick';
 import { Card } from '../lib/card-api';
 
 interface Signature {
-  Args: { fieldName: string, model: Card, items: any[], components: any[] }
+  Args: { fieldName: string, model: Card, items: any[], components: any[] };
 }
 
 export default class ContainsManyEditor extends Component<Signature> {
@@ -21,7 +23,11 @@ export default class ContainsManyEditor extends Component<Signature> {
             </button>
           </li>
         {{/each}}
-        <button {{on "click" (fn this.addItem 'french')}} type="button" data-test-add-new>
+        <label>
+          Add New Item
+          <input {{on "input" (pick "target.value" this.set)}} value={{this.value}} data-test-new-item-input>
+        </label>
+        <button {{on "click" this.addItem}} type="button" data-test-add-new>
           Add New
         </button>
       </ul>
@@ -34,12 +40,19 @@ export default class ContainsManyEditor extends Component<Signature> {
     </div>
   </template>
 
-  @action addItem(newItem: unknown) {
-    (this.args.model as any)[this.args.fieldName] = [...this.args.items, newItem];
+  @tracked value = '';
+
+  @action addItem() {
+    (this.args.model as any)[this.args.fieldName] = [...this.args.items, this.value];
+    this.value = '';
   }
 
   @action removeItem(item: unknown) {
     let filtered = this.args.items.filter((el: unknown) => el !== item);
     (this.args.model as any)[this.args.fieldName] = filtered;
+  }
+
+  @action set(val: string) {
+    this.value = val;
   }
 }
