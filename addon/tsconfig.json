@@ -66,13 +66,6 @@
     // work with TypeScript.
     "baseUrl": ".",
     "paths": {
-      "dummy/tests/*": [
-        "tests/*"
-      ],
-      "dummy/*": [
-        "tests/dummy/app/*",
-        "app/*"
-      ],
       "animations-experiment": [
         "addon"
       ],
@@ -93,7 +86,6 @@
   "include": [
     "app/**/*",
     "addon/**/*",
-    "tests/**/*",
     "types/**/*",
     "test-support/**/*",
     "addon-test-support/**/*"

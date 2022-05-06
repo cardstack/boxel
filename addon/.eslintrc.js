@@ -10,14 +10,19 @@ module.exports = {
       legacyDecorators: true,
     },
   },
-  plugins: ['ember', '@typescript-eslint', 'prettier'],
+  plugins: ['ember', 'prefer-let'],
   extends: [
     'eslint:recommended',
+    'plugin:@typescript-eslint/recommended',
     'plugin:ember/recommended',
     'plugin:prettier/recommended',
   ],
   env: {
     browser: true,
+  },
+  rules: {
+    'prefer-let/prefer-let': 2,
+    'prefer-const': 'off',
   },
   overrides: [
     // node files
