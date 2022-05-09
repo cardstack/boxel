@@ -15,29 +15,23 @@ export default class ContainsManyEditor extends Component<Signature> {
     <section>
       <header>{{@fieldName}}</header>
       <ul>
-        {{#each @items as |item|}}
-          <li data-test-item={{item}}>
-            {{item}}
-            <button {{on "click" (fn this.removeItem item)}} type="button" data-test-remove={{item}}>
+        {{#each @components as |Item i|}}
+          <li data-test-item={{i}}>
+            <Item />
+            <button {{on "click" (fn this.removeItem i)}} type="button" data-test-remove={{i}}>
               Remove
             </button>
           </li>
         {{/each}}
-        <label>
-          Add New Item
-          <input {{on "input" (pick "target.value" this.set)}} {{on "keyup" this.maybeAddItem}} value={{this.value}} data-test-new-item-input>
-        </label>
-        <button {{on "click" this.addItem}} type="button" data-test-add-new>
-          Add
-        </button>
       </ul>
+      <label>
+        <div>Add New Item:</div>
+        <input {{on "input" (pick "target.value" this.set)}} {{on "keyup" this.maybeAddItem}} value={{this.value}} data-test-new-item-input>
+      </label>
+      <button {{on "click" this.addItem}} type="button" data-test-add-new>
+        Add
+      </button>
     </section>
-
-    <div data-test-output>
-      {{#each @components as |Item|}}
-        <Item/>
-      {{/each}}
-    </div>
   </template>
 
   @tracked value = '';
@@ -49,8 +43,8 @@ export default class ContainsManyEditor extends Component<Signature> {
     this.value = '';
   }
 
-  @action removeItem(item: unknown) {
-    let filtered = this.args.items.filter((el: unknown) => el !== item);
+  @action removeItem(item: number) {
+    let filtered = this.args.items.slice(0, item).concat(this.args.items.slice(item + 1));
     (this.args.model as any)[this.args.fieldName] = filtered;
   }
 
