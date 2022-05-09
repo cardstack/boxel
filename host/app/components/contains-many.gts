@@ -12,26 +12,26 @@ interface Signature {
 
 export default class ContainsManyEditor extends Component<Signature> {
   <template>
-    <section>
-      <header>{{@fieldName}}</header>
-      <ul>
-        {{#each @components as |Item i|}}
-          <li data-test-item={{i}}>
-            <Item />
-            <button {{on "click" (fn this.removeItem i)}} type="button" data-test-remove={{i}}>
-              Remove
-            </button>
-          </li>
-        {{/each}}
-      </ul>
-      <label>
-        <div>Add New Item:</div>
-        <input {{on "input" (pick "target.value" this.set)}} {{on "keyup" this.maybeAddItem}} value={{this.value}} data-test-new-item-input>
-      </label>
-      <button {{on "click" this.addItem}} type="button" data-test-add-new>
-        Add
-      </button>
-    </section>
+    <ul>
+      {{#each @items as |item i|}}
+        <li data-test-item={{i}}>
+          <label>
+            {{@fieldName}} {{i}}:
+            <input value={{item}} {{on "input" (pick "target.value" (fn this.edit i))}}>
+          </label>
+          <button {{on "click" (fn this.removeItem i)}} type="button" data-test-remove={{i}}>
+            Remove
+          </button>
+        </li>
+      {{/each}}
+    </ul>
+    <label>
+      <div>Add New Item:</div>
+      <input {{on "input" (pick "target.value" this.set)}} {{on "keyup" this.maybeAddItem}} value={{this.value}} data-test-new-item-input>
+    </label>
+    <button {{on "click" this.addItem}} type="button" data-test-add-new>
+      Add
+    </button>
   </template>
 
   @tracked value = '';
@@ -50,6 +50,11 @@ export default class ContainsManyEditor extends Component<Signature> {
 
   @action set(val: string) {
     this.value = val;
+  }
+
+  @action edit(i: number, val: string) {
+    this.args.items[i] = val;
+    (this.args.model as any)[this.args.fieldName] = this.args.items;
   }
 
   @action maybeAddItem(event: KeyboardEvent) {

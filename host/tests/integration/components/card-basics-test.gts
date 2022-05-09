@@ -372,6 +372,24 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output]').hasText('japanese french spanish');
   });
 
+  test('edit an item in a containsMany primitive field', async function (assert) {
+    class Person extends Card {
+      @field languagesSpoken = containsMany(StringCard);
+    }
+
+    let card = new Person({
+      languagesSpoken: ['english', 'japanese']
+    });
+
+    await renderCard(card, 'edit');
+    assert.dom('[data-test-item]').exists({ count: 2 });
+    assert.dom('[data-test-output]').hasText('english japanese');
+
+    await fillIn('[data-test-item="0"] input', 'spanish');
+    await fillIn('[data-test-item="1"] input', 'french');
+    assert.dom('[data-test-output]').hasText('spanish french');
+  });
+
 });
 
 function testString(label: string) {
