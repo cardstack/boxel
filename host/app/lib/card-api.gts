@@ -120,9 +120,9 @@ export function serializedGet<CardT extends Constructable>(model: InstanceType<C
   if (primitive in (field as any)) {
     if (typeof (field as any)[serialize] === 'function') {
       if (isFieldContainsMany(model.constructor, fieldName)) {
-        value = (value as any[]).map(item => (field as any)[serialize](item));
+        value = (value as any[]).map(item => item == null ? item : (field as any)[serialize](item));
       } else {
-        value = (field as any)[serialize](value);
+        value = value == null ? value : (field as any)[serialize](value);
       }
     }
   } else if (value != null) {
@@ -222,9 +222,9 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
           let field = getField(this.constructor, fieldName);
           if (typeof (field as any)[deserialize] === 'function') {
             if (isFieldContainsMany(this.constructor, fieldName)) {
-              value = (value as any[]).map(item => (field as any)[deserialize](item));
+              value = (value as any[]).map(item => item == null ? item : (field as any)[deserialize](item));
             } else {
-              value = (field as any)[deserialize](value);
+              value = value == null ? value : (field as any)[deserialize](value);
             }
           }
           deserialized.set(fieldName, value);
@@ -506,8 +506,8 @@ function getFields<T extends Card>(card: T, onlyComputeds = false): { [P in keyo
 function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFormat: Format, set?: Setter): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
-      if (typeof property === 'symbol') {
-        // don't handle symbols
+      if (typeof property === 'symbol' || model == null) {
+        // don't handle symbols or nulls
         return Reflect.get(target, property, received);
       }
       let field = getField(model.constructor, property);

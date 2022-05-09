@@ -26,6 +26,9 @@ export default class DateCard extends Card {
   static embedded = class Embedded extends Component<typeof this> {
     <template>{{this.formatted}}</template>
     get formatted() {
+      if (this.args.model == null) {
+        return '[no date]';
+      }
       return this.args.model ? Format.format(this.args.model) : undefined
     }
   }
