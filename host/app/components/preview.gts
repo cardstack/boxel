@@ -13,6 +13,11 @@ export default class Preview extends Component<{ Args: { filename: string } }> {
 
   imported = importResource(this, () => new URL(this.args.filename, 'http://local-realm/'));
 
+  // TODO use this to chose from amongst the exported cards in the selected module
+  // will also need to add logic to filter the exports to only those that are cards
+  get exports() {
+    return Object.keys(this.imported.module ?? {}).join();
+  }
   get component() {
     return this.imported.module?.component;
   }

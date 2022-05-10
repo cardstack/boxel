@@ -86,7 +86,7 @@ export class FetchHandler {
         getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
         templateTag: 'template',
         templateTagReplacement: '__GLIMMER_TEMPLATE',
-        includeSourceMaps: true,
+        includeSourceMaps: true, // might want to set this to false to prevent use of window.btoa in the service worker (the magic string dep used for source maps sadly uses window.btoa)
         includeTemplateTokens: true,
       }).output;
       content = babel.transformSync(content, {
