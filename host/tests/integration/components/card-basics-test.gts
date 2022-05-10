@@ -1,6 +1,6 @@
 import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { fillIn, click, triggerKeyEvent } from '@ember/test-helpers';
+import { fillIn, click } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
@@ -341,53 +341,42 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output="author.firstName"]').hasText('Carl Stack');
   });
 
-  test('perform add and remove on a containsMany primitive field', async function (assert) {
+  test('can add, remove and edit items in containsMany primitive field', async function (assert) {
     class Person extends Card {
-      @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.languagesSpoken />
+          <section data-test-output>{{@model.languagesSpoken}}</section>
+        </template>
+      }
     }
 
     let card = new Person({
-      firstName: 'Mango',
       languagesSpoken: ['english', 'japanese']
     });
 
     await renderCard(card, 'edit');
     assert.dom('[data-test-item]').exists({ count: 2 });
     assert.dom('[data-test-item="0"] input').hasValue('english');
-    assert.dom('[data-test-output]').hasText('english japanese');
+    assert.dom('[data-test-output]').hasText('english,japanese');
 
-    await fillIn('[data-test-new-item-input]', 'french');
+    await fillIn('[data-test-item="1"] input', 'italian');
+    assert.dom('[data-test-output]').hasText('english,italian');
+
     await click('[data-test-add-new]');
+    await fillIn('[data-test-item="2"] input', 'french');
     assert.dom('[data-test-item]').exists({ count: 3 });
-    assert.dom('[data-test-output]').hasText('english japanese french');
+    assert.dom('[data-test-output]').hasText('english,italian,french');
 
-    await fillIn('[data-test-new-item-input]', 'spanish');
-    await triggerKeyEvent('[data-test-new-item-input]', 'keyup', 'Enter');
+    await click('[data-test-add-new]');
+    await fillIn('[data-test-item="3"] input', 'spanish');
     assert.dom('[data-test-item]').exists({ count: 4 });
-    assert.dom('[data-test-output]').hasText('english japanese french spanish');
+    assert.dom('[data-test-output]').hasText('english,italian,french,spanish');
 
     await click('[data-test-remove="0"]');
     assert.dom('[data-test-item]').exists({ count: 3 });
-    assert.dom('[data-test-output]').hasText('japanese french spanish');
-  });
-
-  test('edit an item in a containsMany primitive field', async function (assert) {
-    class Person extends Card {
-      @field languagesSpoken = containsMany(StringCard);
-    }
-
-    let card = new Person({
-      languagesSpoken: ['english', 'japanese']
-    });
-
-    await renderCard(card, 'edit');
-    assert.dom('[data-test-item]').exists({ count: 2 });
-    assert.dom('[data-test-output]').hasText('english japanese');
-
-    await fillIn('[data-test-item="0"] input', 'spanish');
-    await fillIn('[data-test-item="1"] input', 'french');
-    assert.dom('[data-test-output]').hasText('spanish french');
+    assert.dom('[data-test-output]').hasText('italian,french,spanish');
   });
 
 });

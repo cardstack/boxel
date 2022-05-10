@@ -519,20 +519,19 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
       defaultFormat = isFieldComputed(model.constructor, property) ? 'embedded' : defaultFormat;
 
       if (isFieldContainsMany(model.constructor, property) && defaultFormat === 'edit') {
-        let editComponents = (Object.values(innerModel) as T[]).map(m => getComponent(field!, defaultFormat, m, set)) as any[];
-        let viewComponents = (Object.values(innerModel) as T[]).map(m => getComponent(field!, 'embedded', m, set?.setters[property])) as any[];
+        if (isBaseCard in innerModel) {
+          throw new Error('Cannot edit containsMany composite field');
+        }
         return class ContainsManyEditorTemplate extends GlimmerComponent {
           <template>
-            <ContainsManyEditor @model={{model}} @items={{innerModel}} @fieldName={{property}} @components={{editComponents}} />
-            <ul data-test-output>
-              {{#each viewComponents as |Item|}}
-                <li><Item/></li>
-              {{/each}}
-            </ul>
+            <ContainsManyEditor
+              @model={{model}}
+              @items={{innerModel}}
+              @fieldName={{property}}
+            />
           </template>
         };
-      }
-      else if (isFieldContainsMany(model.constructor, property)) {
+      } else if (isFieldContainsMany(model.constructor, property)) {
         let components = (Object.values(innerModel) as T[]).map(m => getComponent(field!, defaultFormat, m, set?.setters[property])) as any[];
         return class ContainsMany extends GlimmerComponent {
           <template>
