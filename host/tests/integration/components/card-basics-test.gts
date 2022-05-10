@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn, click } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
@@ -257,7 +257,7 @@ module('Integration | card-basics', function (hooks) {
     assert.throws(() => Person.fromSerialized({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken for card Person/);
   });
 
-  skip('render default edit template', async function (assert) {
+  test('render default edit template', async function (assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
