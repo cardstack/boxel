@@ -335,15 +335,6 @@ class DefaultEdit extends GlimmerComponent<{ Args: { fields: Record<string, new(
   </template>;
 }
 
-export function addToContainsMany<CardT extends Constructable>(item: unknown, fieldName: string, model: InstanceType<CardT>) {
-  (model as any)[fieldName] = [...((model as any)[fieldName] || []), item];
-}
-
-export function removeFromContainsMany<CardT extends Constructable>(item: unknown, fieldName: string, model: InstanceType<CardT>) {
-  let filtered = ((model as any)[fieldName] || []).filter((el: unknown) => el !== item);
-  (model as any)[fieldName] = filtered;
-}
-
 const defaultComponent = {
   embedded: <template><!-- Inherited from base card embedded view. Did your card forget to specify its embedded component? --></template>,
   isolated: DefaultIsolated,
@@ -522,12 +513,13 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
         if (isBaseCard in innerModel) {
           throw new Error('Cannot edit containsMany composite field');
         }
+        let fieldName = property; // to get around lint error
         return class ContainsManyEditorTemplate extends GlimmerComponent {
           <template>
             <ContainsManyEditor
               @model={{model}}
               @items={{innerModel}}
-              @fieldName={{property}}
+              @fieldName={{fieldName}}
             />
           </template>
         };

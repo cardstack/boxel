@@ -347,7 +347,11 @@ module('Integration | card-basics', function (hooks) {
       static edit = class Edit extends Component<typeof this> {
         <template>
           <@fields.languagesSpoken />
-          <section data-test-output>{{@model.languagesSpoken}}</section>
+          <ul data-test-output>
+            {{#each @model.languagesSpoken as |language|}}
+              <li>{{language}}</li>
+            {{/each}}
+          </ul>
         </template>
       }
     }
@@ -359,24 +363,24 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(card, 'edit');
     assert.dom('[data-test-item]').exists({ count: 2 });
     assert.dom('[data-test-item="0"] input').hasValue('english');
-    assert.dom('[data-test-output]').hasText('english,japanese');
+    assert.dom('[data-test-output]').hasText('english japanese');
 
     await fillIn('[data-test-item="1"] input', 'italian');
-    assert.dom('[data-test-output]').hasText('english,italian');
+    assert.dom('[data-test-output]').hasText('english italian');
 
     await click('[data-test-add-new]');
     await fillIn('[data-test-item="2"] input', 'french');
     assert.dom('[data-test-item]').exists({ count: 3 });
-    assert.dom('[data-test-output]').hasText('english,italian,french');
+    assert.dom('[data-test-output]').hasText('english italian french');
 
     await click('[data-test-add-new]');
     await fillIn('[data-test-item="3"] input', 'spanish');
     assert.dom('[data-test-item]').exists({ count: 4 });
-    assert.dom('[data-test-output]').hasText('english,italian,french,spanish');
+    assert.dom('[data-test-output]').hasText('english italian french spanish');
 
     await click('[data-test-remove="0"]');
     assert.dom('[data-test-item]').exists({ count: 3 });
-    assert.dom('[data-test-output]').hasText('italian,french,spanish');
+    assert.dom('[data-test-output]').hasText('italian french spanish');
   });
 
 });

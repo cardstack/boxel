@@ -6,7 +6,7 @@ import { pick } from '../lib/pick';
 import { Card } from '../lib/card-api';
 
 interface Signature {
-  Args: { fieldName: string, model: Card, items: any[] };
+  Args: { model: Card, items: any[], fieldName: string };
 }
 
 export default class ContainsManyEditor extends Component<Signature> {
@@ -16,8 +16,7 @@ export default class ContainsManyEditor extends Component<Signature> {
       <ul>
         {{#each @items as |item i|}}
           <li data-test-item={{i}}>
-            {{!-- template-lint-disable require-input-label --}}
-            <input value={{item}} {{on "input" (pick "target.value" (fn this.edit i))}}>
+            <input id={{item}} value={{item}} {{on "input" (pick "target.value" (fn this.edit i))}}>
             <button {{on "click" (fn this.remove i)}} type="button" data-test-remove={{i}}>Remove</button>
           </li>
         {{/each}}
