@@ -10,6 +10,21 @@ const externals = new Map([
   ['@glimmer/tracking', ['tracked']],
   ['@ember/object', ['action', 'get']],
   ['@ember/modifier', ['on']],
+  [
+    'runtime-spike/api',
+    [
+      'contains',
+      'containsMany',
+      'field',
+      'Component',
+      'Card',
+      'string',
+      'integer',
+      'date',
+      'datetime',
+      'prepareToRender',
+    ],
+  ],
 ]);
 
 export function generateExternalStub(moduleName: string): Response {

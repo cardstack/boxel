@@ -54,6 +54,7 @@ export class Card {
 
   declare ["constructor"]: Constructable;
   static baseCard: undefined; // like isBaseCard, but for the class itself
+  static data?: Record<string, any>;
 
   static fromSerialized<T extends Constructable>(this: T, data: Record<string, any>): InstanceType<T> {
     let model = new this() as InstanceType<T>;
