@@ -40,3 +40,26 @@
 .indent-4 {
   padding-left: 4rem;
 }
+
+label {
+  display: block;
+  padding: 0.75rem;
+  margin: 1rem;
+  border: solid gray 1px;
+  text-transform: capitalize;
+  border-radius: 5px;
+}
+
+input[type=text], input[type=number] {
+  width: 100%;
+  margin-top: .5rem;
+  display: block;
+}
+
+textarea {
+  vertical-align: top;
+  width: 100%;
+  min-height: 5rem;
+  margin-top: .5rem;
+  display: block;
+}

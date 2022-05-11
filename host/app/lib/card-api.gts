@@ -2,6 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
 import flatMap from 'lodash/flatMap';
+import startCase from 'lodash/startCase';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import * as JSON from 'json-typescript';
 import { registerDestructor } from '@ember/destroyable';
@@ -327,12 +328,10 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { fields: Record<string, 
 class DefaultEdit extends GlimmerComponent<{ Args: { fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
     {{#each-in @fields as |key Field|}}
-      <div>
-        <label data-test-field={{key}}>
-          {{key}}
-          <Field />
-        </label>
-      </div>
+      <label data-test-field={{key}}>
+        {{startCase key}}
+        <Field />
+      </label>
     {{/each-in}}
   </template>;
 }
