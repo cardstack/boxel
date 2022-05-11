@@ -40,7 +40,7 @@ export default class Preview extends Component<{ Args: { filename: string } }> {
           </div>
         {{/if}}
         <hr/>
-        <div>
+        <div class="card-preview">
           {{#if this.card.component}}
             <this.card.component/>
           {{/if}}

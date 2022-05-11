@@ -280,9 +280,9 @@ module('Integration | card-basics', function (hooks) {
     let helloWorld = new Post({ title: 'My Post', author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'edit');
-    assert.dom('[data-test-field="title"]').containsText('title');
+    assert.dom('[data-test-field="title"]').containsText('Title');
     assert.dom('[data-test-field="title"] input').hasValue('My Post');
-    assert.dom('[data-test-field="author"]').containsText('author firstName'); // TODO: fix nested labels
+    assert.dom('[data-test-field="author"]').containsText('Author First Name'); // TODO: fix nested labels
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
   });
 

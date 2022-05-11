@@ -41,7 +41,7 @@
   padding-left: 4rem;
 }
 
-label {
+.card-preview label {
   display: block;
   padding: 0.75rem;
   margin: 1rem;
@@ -50,14 +50,13 @@ label {
   border-radius: 5px;
 }
 
-input[type=text], input[type=number] {
+.card-preview input[type=text],.card-preview input[type=number] {
   width: 100%;
   margin-top: .5rem;
   display: block;
 }
 
-textarea {
-  vertical-align: top;
+.card-preview textarea {
   width: 100%;
   min-height: 5rem;
   margin-top: .5rem;
