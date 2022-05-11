@@ -22,6 +22,7 @@ const externals = new Map([
       'integer',
       'date',
       'datetime',
+      'textArea',
       'prepareToRender',
     ],
   ],
