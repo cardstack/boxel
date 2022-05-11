@@ -28,12 +28,8 @@ export class CardResource extends Resource<Args> {
     }
   }
 
-  @restartableTask private async _setFormat(format: Format) {
-    await taskFor(this.load).perform(format);
-  }
-
   setFormat(format: Format) {
-    taskFor(this._setFormat).perform(format);
+    taskFor(this.load).perform(format);
   }
 }
 
