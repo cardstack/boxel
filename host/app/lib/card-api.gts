@@ -327,10 +327,12 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { fields: Record<string, 
 class DefaultEdit extends GlimmerComponent<{ Args: { fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
     {{#each-in @fields as |key Field|}}
-      <label data-test-field={{key}}>
-        {{key}}
-        <Field />
-      </label>
+      <div>
+        <label data-test-field={{key}}>
+          {{key}}
+          <Field />
+        </label>
+      </div>
     {{/each-in}}
   </template>;
 }

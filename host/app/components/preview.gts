@@ -1,12 +1,12 @@
 import Component from '@glimmer/component';
 import { importResource } from '../resources/import';
-import { Format, prepareToRender, Card } from '../lib/card-api';
+import { card } from '../resources/card';
+import { Format, Card } from '../lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { eq } from '../helpers/truth-helpers';
 import { tracked } from '@glimmer/tracking';
-import { trackedFunction } from 'ember-resources';
 
 const formats: Format[] = ['isolated', 'embedded', 'edit'];
 
@@ -16,7 +16,7 @@ export default class Preview extends Component<{ Args: { filename: string } }> {
       <h2>Encountered {{this.error.type}} error</h2>
       <pre>{{this.error.message}}</pre>
     {{else if this.cards}}
-      <div>
+      <p>
         Cards:
         {{#each-in this.cards as |name card|}}
           <button {{on "click" (fn this.select name card)}}
@@ -25,10 +25,9 @@ export default class Preview extends Component<{ Args: { filename: string } }> {
             {{name}}
           </button>
         {{/each-in}}
-      </div>
+      </p>
       <div>
         {{#if this.selected}}
-          Selected Card: {{this.selectedName}}
           <div>
             Format: 
             {{#each formats as |format|}}
@@ -40,9 +39,10 @@ export default class Preview extends Component<{ Args: { filename: string } }> {
             {{/each}}
           </div>
         {{/if}}
+        <hr/>
         <div>
-          {{#if this.renderedCard.value}}
-            <this.renderedCard.value/>
+          {{#if this.card.component}}
+            <this.card.component/>
           {{/if}}
         </div>
       </div>
@@ -54,15 +54,7 @@ export default class Preview extends Component<{ Args: { filename: string } }> {
   @tracked
   format: Format = 'isolated';
   imported = importResource(this, () => new URL(this.args.filename, 'http://local-realm/'));
-
-  renderedCard = trackedFunction(this, async () => {
-    if (this.selectedCard) {
-      let card = this.selectedCard.fromSerialized(this.selectedCard.data ?? {});
-      let { component } =  await prepareToRender(card, this.format);
-      return component as any; // to gloss over template type error
-    }
-    return undefined
-  });
+  card = card(this, () => this.selectedCard);
 
   get cards() {
     let cards = {} as { [exportName: string]: typeof Card };
@@ -90,10 +82,12 @@ export default class Preview extends Component<{ Args: { filename: string } }> {
   @action
   select(name: string, card: typeof Card) {
     this.selected = { name, card };
+    this.card.setFormat(this.format);
   }
 
   @action
   setFormat(format: Format) {
     this.format = format;
+    this.card.setFormat(format);
   }
 }
