@@ -11,13 +11,15 @@ interface Signature {
 
 export default class ContainsManyEditor extends Component<Signature> {
   <template>
-    <section>
+    <section data-test-contains-many-editor={{@fieldName}}>
+      <button {{on "click" this.sortAsc}} type="button" data-test-sort-asc>Sort (Ascending)</button>
+      <button {{on "click" this.sortDesc}} type="button" data-test-sort-desc>Sort (Descending)</button>
       <header>{{@fieldName}}</header>
       <ul>
         {{#each @items as |item i|}}
           <li data-test-item={{i}}>
-            <input id={{item}} value={{item}} {{on "input" (pick "target.value" (fn this.edit i))}}>
-            <button {{on "click" (fn this.remove i)}} type="button" data-test-remove={{i}}>Remove</button>
+            <input id="{{@fieldName}}-{{i}}" value={{item}} {{on "input" (pick "target.value" (fn this.edit i))}}>
+            <button {{on "click" (fn this.remove i)}} type="button" data-test-remove="{{i}}">Remove</button>
           </li>
         {{/each}}
       </ul>
@@ -38,4 +40,23 @@ export default class ContainsManyEditor extends Component<Signature> {
     this.args.items[index] = val;
     (this.args.model as any)[this.args.fieldName] = this.args.items;
   }
+
+  @action sortAsc() {
+    if (typeof this.args.items[0] === 'number') {
+       this.args.items.sort((a, b) => a - b);
+    } else {
+      this.args.items.sort((a, b) => a.localeCompare(b));
+    }
+    (this.args.model as any)[this.args.fieldName] = this.args.items;
+  }
+
+  @action sortDesc() {
+    if (typeof this.args.items[0] === 'number') {
+      this.args.items.sort((a, b) => b - a);
+   } else {
+     this.args.items.sort((a, b) => b.localeCompare(a));
+   }
+   (this.args.model as any)[this.args.fieldName] = this.args.items;
+  }
+
 }

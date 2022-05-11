@@ -341,7 +341,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output="author.firstName"]').hasText('Carl Stack');
   });
 
-  test('can add, remove and edit items in containsMany primitive field', async function (assert) {
+  test('add, remove and edit items in containsMany primitive field', async function (assert) {
     class Person extends Card {
       @field languagesSpoken = containsMany(StringCard);
       static edit = class Edit extends Component<typeof this> {
@@ -357,7 +357,7 @@ module('Integration | card-basics', function (hooks) {
     }
 
     let card = new Person({
-      languagesSpoken: ['english', 'japanese']
+      languagesSpoken: ['english', 'japanese'],
     });
 
     await renderCard(card, 'edit');
@@ -381,6 +381,55 @@ module('Integration | card-basics', function (hooks) {
     await click('[data-test-remove="0"]');
     assert.dom('[data-test-item]').exists({ count: 3 });
     assert.dom('[data-test-output]').hasText('italian french spanish');
+  });
+
+  test('sort items in containsMany primitive field', async function (assert) {
+    class Person extends Card {
+      @field languages = containsMany(StringCard);
+      @field numbers = containsMany(IntegerCard);
+
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.languages />
+          <ul data-test-output="languages">
+            {{#each @model.languages as |language|}}
+              <li>{{language}}</li>
+            {{/each}}
+          </ul>
+
+          <@fields.numbers />
+          <ul data-test-output="numbers">
+            {{#each @model.numbers as |number|}}
+              <li>{{number}}</li>
+            {{/each}}
+          </ul>
+        </template>
+      }
+    }
+
+    let card = new Person({
+      languages: ['english', 'japanese', 'zulu', 'arabic', 'chozo'],
+      numbers: [30, 1, 4, 100000, 21],
+    });
+
+    await renderCard(card, 'edit');
+    assert.dom('[data-test-contains-many-editor="languages"] [data-test-item]').exists({ count: 5 });
+    assert.dom('[data-test-output="languages"]').hasText('english japanese zulu arabic chozo');
+
+    await click('[data-test-contains-many-editor="languages"] [data-test-sort-asc]');
+    assert.dom('[data-test-output="languages"]').hasText('arabic chozo english japanese zulu');
+
+    await click('[data-test-contains-many-editor="languages"] [data-test-sort-desc]');
+    assert.dom('[data-test-output="languages"]').hasText('zulu japanese english chozo arabic');
+
+    assert.dom('[data-test-contains-many-editor="numbers"] [data-test-item]').exists({ count: 5 });
+    assert.dom('[data-test-output="numbers"]').hasText('30 1 4 100000 21');
+
+    await click('[data-test-contains-many-editor="numbers"] [data-test-sort-asc]');
+    assert.dom('[data-test-output="numbers"]').hasText('1 4 21 30 100000');
+
+    await click('[data-test-contains-many-editor="numbers"] [data-test-sort-desc]');
+    assert.dom('[data-test-output="numbers"]').hasText('100000 30 21 4 1');
   });
 
 });
