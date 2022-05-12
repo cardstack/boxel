@@ -2,6 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
 import flatMap from 'lodash/flatMap';
+import startCase from 'lodash/startCase';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import * as JSON from 'json-typescript';
 import { registerDestructor } from '@ember/destroyable';
@@ -55,6 +56,7 @@ export class Card {
 
   declare ["constructor"]: Constructable;
   static baseCard: undefined; // like isBaseCard, but for the class itself
+  static data?: Record<string, any>;
 
   static fromSerialized<T extends Constructable>(this: T, data: Record<string, any>): InstanceType<T> {
     let model = new this() as InstanceType<T>;
@@ -324,11 +326,13 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { fields: Record<string, 
     {{/each-in}}
   </template>;
 }
+
 class DefaultEdit extends GlimmerComponent<{ Args: { fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
     {{#each-in @fields as |key Field|}}
       <label data-test-field={{key}}>
-        {{key}}
+        {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
+        {{startCase key}}
         <Field />
       </label>
     {{/each-in}}
