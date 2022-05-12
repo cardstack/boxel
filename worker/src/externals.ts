@@ -18,6 +18,7 @@ const externals = new Map([
   ['@ember/template-factory', ['createTemplateFactory']],
   ['@glimmer/tracking', ['tracked']],
   ['@ember/object', ['action', 'get']],
+  ['@ember/helper', ['get', 'fn']],
   ['@ember/modifier', ['on']],
   [
     'runtime-spike/lib/card-api',

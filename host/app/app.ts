@@ -38,6 +38,8 @@ import * as glimmerTracking from '@glimmer/tracking';
 );
 import * as emberObject from '@ember/object';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('@ember/object', emberObject);
+import * as emberHelper from '@ember/helper';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set('@ember/helper', emberHelper);
 import * as emberModifier from '@ember/modifier';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('@ember/modifier', emberModifier);
 import * as cardAPI from './lib/card-api';
