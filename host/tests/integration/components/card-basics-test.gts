@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { fillIn } from '@ember/test-helpers';
+import { fillIn, click } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
@@ -61,7 +61,7 @@ module('Integration | card-basics', function (hooks) {
     }
 
     let helloWorld = new Post({
-      title: 'First Post', 
+      title: 'First Post',
       author: {
           firstName: 'Arthur',
           subscribers: 5,
@@ -258,22 +258,12 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render default edit template', async function (assert) {
-    class TestString extends Card {
-      static [primitive]: string;
-      static edit = class Edit extends Component<typeof this> {
-        <template>
-          {{!-- template-lint-disable require-input-label --}}
-          <input value={{@model}} />
-        </template>
-      }
-    }
-
     class Person extends Card {
-      @field firstName = contains(TestString);
+      @field firstName = contains(StringCard);
     }
 
     class Post extends Card {
-      @field title = contains(TestString);
+      @field title = contains(StringCard);
       @field author = contains(Person);
     }
 
@@ -282,8 +272,12 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"]').containsText('title');
     assert.dom('[data-test-field="title"] input').hasValue('My Post');
-    assert.dom('[data-test-field="author"]').containsText('author firstName'); // TODO: fix nested labels
+    assert.dom('[data-test-field="author"]').containsText('author firstName'); // Fix nested labels
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
+
+    await fillIn('[data-test-field="title"] input', 'New Post');
+    await fillIn('[data-test-field="author"] input', 'Carl Stack');
+    // Check that outputs have changed
   });
 
   test('can adopt a card', async function (assert) {
@@ -304,7 +298,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test="species"]').containsText('Homo Sapiens');
   });
 
-  test('can edit fields', async function (assert) {
+  test('can edit primitive and composite fields', async function (assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
@@ -346,6 +340,98 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output="reviews"]').hasText('5');
     assert.dom('[data-test-output="author.firstName"]').hasText('Carl Stack');
   });
+
+  test('add, remove and edit items in containsMany primitive field', async function (assert) {
+    class Person extends Card {
+      @field languagesSpoken = containsMany(StringCard);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.languagesSpoken />
+          <ul data-test-output>
+            {{#each @model.languagesSpoken as |language|}}
+              <li>{{language}}</li>
+            {{/each}}
+          </ul>
+        </template>
+      }
+    }
+
+    let card = new Person({
+      languagesSpoken: ['english', 'japanese'],
+    });
+
+    await renderCard(card, 'edit');
+    assert.dom('[data-test-item]').exists({ count: 2 });
+    assert.dom('[data-test-item="0"] input').hasValue('english');
+    assert.dom('[data-test-output]').hasText('english japanese');
+
+    await fillIn('[data-test-item="1"] input', 'italian');
+    assert.dom('[data-test-output]').hasText('english italian');
+
+    await click('[data-test-add-new]');
+    await fillIn('[data-test-item="2"] input', 'french');
+    assert.dom('[data-test-item]').exists({ count: 3 });
+    assert.dom('[data-test-output]').hasText('english italian french');
+
+    await click('[data-test-add-new]');
+    await fillIn('[data-test-item="3"] input', 'spanish');
+    assert.dom('[data-test-item]').exists({ count: 4 });
+    assert.dom('[data-test-output]').hasText('english italian french spanish');
+
+    await click('[data-test-remove="0"]');
+    assert.dom('[data-test-item]').exists({ count: 3 });
+    assert.dom('[data-test-output]').hasText('italian french spanish');
+  });
+
+  test('sort items in containsMany primitive field', async function (assert) {
+    class Person extends Card {
+      @field languages = containsMany(StringCard);
+      @field numbers = containsMany(IntegerCard);
+
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.languages />
+          <ul data-test-output="languages">
+            {{#each @model.languages as |language|}}
+              <li>{{language}}</li>
+            {{/each}}
+          </ul>
+
+          <@fields.numbers />
+          <ul data-test-output="numbers">
+            {{#each @model.numbers as |number|}}
+              <li>{{number}}</li>
+            {{/each}}
+          </ul>
+        </template>
+      }
+    }
+
+    let card = new Person({
+      languages: ['english', 'japanese', 'zulu', 'arabic', 'chozo'],
+      numbers: [30, 1, 4, 100000, 21],
+    });
+
+    await renderCard(card, 'edit');
+    assert.dom('[data-test-contains-many-editor="languages"] [data-test-item]').exists({ count: 5 });
+    assert.dom('[data-test-output="languages"]').hasText('english japanese zulu arabic chozo');
+
+    await click('[data-test-contains-many-editor="languages"] [data-test-sort-asc]');
+    assert.dom('[data-test-output="languages"]').hasText('arabic chozo english japanese zulu');
+
+    await click('[data-test-contains-many-editor="languages"] [data-test-sort-desc]');
+    assert.dom('[data-test-output="languages"]').hasText('zulu japanese english chozo arabic');
+
+    assert.dom('[data-test-contains-many-editor="numbers"] [data-test-item]').exists({ count: 5 });
+    assert.dom('[data-test-output="numbers"]').hasText('30 1 4 100000 21');
+
+    await click('[data-test-contains-many-editor="numbers"] [data-test-sort-asc]');
+    assert.dom('[data-test-output="numbers"]').hasText('1 4 21 30 100000');
+
+    await click('[data-test-contains-many-editor="numbers"] [data-test-sort-desc]');
+    assert.dom('[data-test-output="numbers"]').hasText('100000 30 21 4 1');
+  });
+
 });
 
 function testString(label: string) {
