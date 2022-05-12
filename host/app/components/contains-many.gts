@@ -2,12 +2,10 @@ import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { pick } from '../lib/pick';
-import { get } from '@ember/helper';
-import { Card, Setter } from '../lib/card-api';
+import { Card } from '../lib/card-api';
 
 interface Signature {
-  Args: { model: Card, items: any[], fieldName: string, setters: Setter[] };
+  Args: { model: Card, items: any[], fieldName: string, components: any[] };
 }
 
 export default class ContainsManyEditor extends Component<Signature> {
@@ -17,13 +15,9 @@ export default class ContainsManyEditor extends Component<Signature> {
       <button {{on "click" this.sortDesc}} type="button" data-test-sort-desc>Sort (Descending)</button>
       <header>{{@fieldName}}</header>
       <ul>
-        {{#each @items as |item i|}}
+        {{#each @components as |Item i|}}
           <li data-test-item={{i}}>
-            <label>
-              {{#let (get @setters i) as |set|}}
-                {{i}}: <input value={{item}} {{on "input" (pick "target.value" set)}}>
-              {{/let}}
-            </label>
+            <Item />
             <button {{on "click" (fn this.remove i)}} type="button" data-test-remove="{{i}}">Remove</button>
           </li>
         {{/each}}

@@ -21,7 +21,7 @@ type FieldsTypeFor<T extends Card> = {
   [Field in keyof T]: (new() => GlimmerComponent<{ Args: {}, Blocks: {} }>) & (T[Field] extends Card ? FieldsTypeFor<T[Field]> : unknown);
 }
 
-export type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
+type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
 
 interface ResourceObject {
   // id: string; // TODO
@@ -509,24 +509,24 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
       let innerModel = (model as any)[property];
       defaultFormat = isFieldComputed(model.constructor, property) ? 'embedded' : defaultFormat;
 
-      if (isFieldContainsMany(model.constructor, property) && defaultFormat === 'edit') {
-        if (isBaseCard in innerModel) {
-          throw new Error('Cannot edit containsMany composite field');
+      if (isFieldContainsMany(model.constructor, property)) {
+        let components = (Object.values(innerModel) as T[]).map((m, i) => getComponent(field!, defaultFormat, m, makeSetter(model, property, i))) as any[];
+        if (defaultFormat === 'edit') {
+          if (isBaseCard in innerModel) {
+            throw new Error('Cannot edit containsMany composite field');
+          }
+          let fieldName = property; // to get around linting error
+          return class ContainsManyEditorTemplate extends GlimmerComponent {
+            <template>
+              <ContainsManyEditor
+                @model={{model}}
+                @items={{innerModel}}
+                @fieldName={{fieldName}}
+                @components={{components}}
+              />
+            </template>
+          };
         }
-        let setters = innerModel.map((_el: any, i: number) => makeSetter(model, property, i));
-        let fieldName = property; // to get around lint error
-        return class ContainsManyEditorTemplate extends GlimmerComponent {
-          <template>
-            <ContainsManyEditor
-              @model={{model}}
-              @items={{innerModel}}
-              @fieldName={{fieldName}}
-              @setters={{setters}}
-            />
-          </template>
-        };
-      } else if (isFieldContainsMany(model.constructor, property)) {
-        let components = (Object.values(innerModel) as T[]).map(m => getComponent(field!, defaultFormat, m, set?.setters[property])) as any[];
         return class ContainsMany extends GlimmerComponent {
           <template>
             {{#each components as |Item|}}
