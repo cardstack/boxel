@@ -1555,23 +1555,24 @@
     "@glimmer/interfaces" "^0.42.2"
     "@glimmer/util" "^0.42.2"
 
-"@glint/config@^0.7.4":
-  version "0.7.4"
-  resolved "https://registry.yarnpkg.com/@glint/config/-/config-0.7.4.tgz#d43874824a5dc96d0263712493d81d7470315b55"
-  integrity sha512-md4jRHxNcRzl/7xXtf054H3uuZxpDmQgVphDgk632yrpS2jeYbt312Lhg8kzDj3VaeqdhxqLig7y/q2qlHOZTg==
+"@glint/config@^0.8.0":
+  version "0.8.0"
+  resolved "https://registry.yarnpkg.com/@glint/config/-/config-0.8.0.tgz#91290a3841ce3b92bb533b15dd3dddd29255e70f"
+  integrity sha512-T4VL7qbvO7t4f4umfXmNd32NcJDzSimkpcfcUakq45ojGByCdIrvk/Q8cTP9pC3SlcRdYZfZTAa39Zeef1nwVg==
   dependencies:
     cosmiconfig "^6.0.0"
     escape-string-regexp "^4.0.0"
     minimatch "^3.0.4"
     resolve "^1.17.0"
+    silent-error "^1.1.1"
 
-"@glint/core@^0.7.2":
-  version "0.7.4"
-  resolved "https://registry.yarnpkg.com/@glint/core/-/core-0.7.4.tgz#19c25ed59cd9fe4c4f6a41b171cc6f6a4ec91294"
-  integrity sha512-6TfyH5H1Q74mem5ImAY5R0tXIJOzhMXvk2g8wBr1CuS5b31h0TCKWYwtuYkZhLzZC1DW659tTwG5Yrp8d+IzoQ==
+"@glint/core@^0.8.0":
+  version "0.8.0"
+  resolved "https://registry.yarnpkg.com/@glint/core/-/core-0.8.0.tgz#c46743d25b3bfb9901dc1dfc5f441969d3092a9a"
+  integrity sha512-PnYj6BUPQiuXzjwy4DldcxCv6b/S6LQS0XjZCfLyHL+VDdKFatuF5NK/2RSKV3A2KCU3wCZT/mtjtP/a6rdo+Q==
   dependencies:
-    "@glint/config" "^0.7.4"
-    "@glint/transform" "^0.7.4"
+    "@glint/config" "^0.8.0"
+    "@glint/transform" "^0.8.0"
     resolve "^1.17.0"
     uuid "^8.3.2"
     vscode-languageserver "^7.0.0"
@@ -1579,26 +1580,26 @@
     vscode-uri "^3.0.2"
     yargs "^15.3.1"
 
-"@glint/environment-ember-loose@^0.7.2":
-  version "0.7.4"
-  resolved "https://registry.yarnpkg.com/@glint/environment-ember-loose/-/environment-ember-loose-0.7.4.tgz#5cb5e2a1dfed53dde4c221a30ec148e47cabc7f6"
-  integrity sha512-d6mH+w63Ol6dpYRd/sE21wZhuNmDUulUzd0pbABqE2Nupl+bckufbC/5K6KeBaM5fSOD7aIi9g1/2YfF/LS2KQ==
+"@glint/environment-ember-loose@^0.8.0":
+  version "0.8.0"
+  resolved "https://registry.yarnpkg.com/@glint/environment-ember-loose/-/environment-ember-loose-0.8.0.tgz#e483f799e979fbda28977bdcff361000f85a520d"
+  integrity sha512-+zf+POTyiiKujGXDGvA2wBLrRvbm1GyOhOPz255SE66qc4alGgtOHq63B5X0gTSqoL1nCJUduGMc/HubvuYHyw==
   dependencies:
-    "@glint/config" "^0.7.4"
-    "@glint/template" "^0.7.4"
+    "@glint/config" "^0.8.0"
+    "@glint/template" "^0.8.0"
 
-"@glint/template@^0.7.4":
-  version "0.7.4"
-  resolved "https://registry.yarnpkg.com/@glint/template/-/template-0.7.4.tgz#44b773bd29e4908b8721a71233a0c56478576ea9"
-  integrity sha512-KGCwh/zsTGuf/4Y7w9YJWkGDAGB9vM/xzTteju5AtoRkhDMv//7SIRjj05XQ404kyw9xaGm2EYX6Qco+5haEpw==
+"@glint/template@^0.8.0":
+  version "0.8.0"
+  resolved "https://registry.yarnpkg.com/@glint/template/-/template-0.8.0.tgz#30a38a402b68650154468aa4c724bc3956414f92"
+  integrity sha512-q+e71UAe9z5641kGD0dPuc4hghd0ltN/bsiK2U6eZ7o556SDmWCZ3lT8+XkwcTakVDn6Mb4jemwgizb4mqjkaw==
 
-"@glint/transform@^0.7.4":
-  version "0.7.4"
-  resolved "https://registry.yarnpkg.com/@glint/transform/-/transform-0.7.4.tgz#947b0375e7b497503933bda701a6227ffc935934"
-  integrity sha512-jKZIUv+jT+T40YDCuWgrTOx4htpi2kBcbGeN5Qq4R0gV3H1+u5Nyq0Y6p5lfpEAOn/RgSmFza8rjX8c2jP6KYA==
+"@glint/transform@^0.8.0":
+  version "0.8.0"
+  resolved "https://registry.yarnpkg.com/@glint/transform/-/transform-0.8.0.tgz#90f85ad864d92e1038b1e8a7d815ef16ee4cedb2"
+  integrity sha512-0jRbL2Ng9T8oOjdFWFya+C2q+p2cMYQky9UIoVyc4tSUw3vmt07ckVXqZJmeMBhoAyego+flKZ1gDv7jnYr97A==
   dependencies:
     "@glimmer/syntax" "^0.68.1"
-    "@glint/config" "^0.7.4"
+    "@glint/config" "^0.8.0"
 
 "@handlebars/parser@^1.1.0":
   version "1.1.0"
@@ -7522,15 +7523,10 @@ git-repo-info@^2.1.1:
   resolved "https://registry.yarnpkg.com/git-repo-info/-/git-repo-info-2.1.1.tgz#220ffed8cbae74ef8a80e3052f2ccb5179aed058"
   integrity sha512-8aCohiDo4jwjOwma4FmYFd3i97urZulL8XL24nIPxuE+GZnfsAyy/g2Shqx6OjUiFKUXZM+Yy+KHnOmmA3FVcg==
 
-glint-environment-ember-template-imports@^0.0.2:
-  version "0.0.2"
-  resolved "https://registry.yarnpkg.com/glint-environment-ember-template-imports/-/glint-environment-ember-template-imports-0.0.2.tgz#8f84d9db8ecae7df720d3b3cecc0d47a848ed171"
-  integrity sha512-O/VlXCBaM8l/nQgXJ+3Qqos7h90wQ3mxnDNASrXHUrbildSkebPsR1qiFcYL1DwjmsX9VirWV7gZ1JIr3Zwzww==
-
-glint-environment-ember-template-imports@^0.0.3:
-  version "0.0.3"
-  resolved "https://registry.yarnpkg.com/glint-environment-ember-template-imports/-/glint-environment-ember-template-imports-0.0.3.tgz#12ae7567afdc66b6061ee90c13fa6ee1a1f8c5cd"
-  integrity sha512-dKd6rkk4ooCE7kHVrtEQEDrsIwNMdPms41s6auuuoNVAIUVelRC70CW71NL+aNb5uZZ5L20Do76y27y7fYHCQA==
+glint-environment-ember-template-imports@^0.0.4:
+  version "0.0.4"
+  resolved "https://registry.yarnpkg.com/glint-environment-ember-template-imports/-/glint-environment-ember-template-imports-0.0.4.tgz#2c01f23ad2834ffaeea2bfa352a2e01b696206f8"
+  integrity sha512-44H0r8jvaC9uW9+AfT1POT3CPFprOLTkqH0+aoDzqssgl+BgQjuCRk+vlj8joIp4/HlXKm2eT0jErfObPE2VtA==
 
 glob-parent@^3.1.0:
   version "3.1.0"

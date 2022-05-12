@@ -6,6 +6,7 @@ import startCase from 'lodash/startCase';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import * as JSON from 'json-typescript';
 import { registerDestructor } from '@ember/destroyable';
+import ContainsManyEditor from '../components/contains-many';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -21,7 +22,7 @@ type FieldsTypeFor<T extends Card> = {
   [Field in keyof T]: (new() => GlimmerComponent<{ Args: {}, Blocks: {} }>) & (T[Field] extends Card ? FieldsTypeFor<T[Field]> : unknown);
 }
 
-type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
+export type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
 
 interface ResourceObject {
   // id: string; // TODO
@@ -335,6 +336,7 @@ class DefaultEdit extends GlimmerComponent<{ Args: { fields: Record<string, new(
     {{/each-in}}
   </template>;
 }
+
 const defaultComponent = {
   embedded: <template><!-- Inherited from base card embedded view. Did your card forget to specify its embedded component? --></template>,
   isolated: DefaultIsolated,
@@ -509,7 +511,23 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
       let innerModel = (model as any)[property];
       defaultFormat = isFieldComputed(model.constructor, property) ? 'embedded' : defaultFormat;
 
-      if (isFieldContainsMany(model.constructor, property)) {
+      if (isFieldContainsMany(model.constructor, property) && defaultFormat === 'edit') {
+        if (isBaseCard in innerModel) {
+          throw new Error('Cannot edit containsMany composite field');
+        }
+        let setters = innerModel.map((_el: any, i: number) => makeSetter(model, property, i));
+        let fieldName = property; // to get around lint error
+        return class ContainsManyEditorTemplate extends GlimmerComponent {
+          <template>
+            <ContainsManyEditor
+              @model={{model}}
+              @items={{innerModel}}
+              @fieldName={{fieldName}}
+              @setters={{setters}}
+            />
+          </template>
+        };
+      } else if (isFieldContainsMany(model.constructor, property)) {
         let components = (Object.values(innerModel) as T[]).map(m => getComponent(field!, defaultFormat, m, set?.setters[property])) as any[];
         return class ContainsMany extends GlimmerComponent {
           <template>
@@ -559,18 +577,26 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
   }) as any;
 }
 
-function makeSetter(model: any, field?: string): Setter {
+function makeSetter(model: any, field?: string, index?: number): Setter {
   let s = (value: any) => {
     if (!field) {
       throw new Error(`can't set topmost model`);
     }
-    model[field] = value;
+    if (index) {
+      model[field][index] = value;
+      model[field] = model[field];
+    } else {
+      model[field] = value;
+    }
   };
   (s as any).setters = new Proxy(
     {},
     {
       get: (target: any, prop: string, receiver: unknown) => {
         if (typeof prop === 'string') {
+          if (field && index) {
+            return makeSetter(model[field][index]);
+          }
           return makeSetter(field ? model[field] : model, prop);
         } else {
           return Reflect.get(target, prop, receiver);

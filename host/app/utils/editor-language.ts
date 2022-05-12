@@ -102,7 +102,7 @@ function extendDefinition(
   };
 }
 
-export function getLangFromFileExtension(fileName: string): string | undefined {
+export function getLangFromFileExtension(fileName: string): string {
   const editorLanguages = languages.getLanguages();
   let extension = '.' + fileName.split('.').pop();
   let language = editorLanguages.find((lang) =>
