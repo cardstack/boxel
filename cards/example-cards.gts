@@ -1,8 +1,10 @@
-import { string, textArea, contains, field, Component, Card } from 'runtime-spike/api';
+import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
+import StringCard from 'runtime-spike/lib/string';
+import TextAreaCard from 'runtime-spike/lib/text-area';
 
 export class Person extends Card {
-  @field firstName = contains(string);
-  @field lastName = contains(string);
+  @field firstName = contains(StringCard);
+  @field lastName = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template><@fields.firstName/> <@fields.lastName /></template>
   }
@@ -17,8 +19,8 @@ export class Person extends Card {
 
 export class Post extends Card {
   @field author = contains(Person);
-  @field title = contains(string);
-  @field body = contains(textArea);
+  @field title = contains(StringCard);
+  @field body = contains(TextAreaCard);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <h1><@fields.title/></h1>
