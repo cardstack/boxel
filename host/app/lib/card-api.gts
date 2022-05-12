@@ -222,13 +222,15 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
           }
           value = serialized.get(fieldName);
           let field = getField(this.constructor, fieldName);
+          let isContainsMany = isFieldContainsMany(this.constructor, fieldName);
           if (typeof (field as any)[deserialize] === 'function') {
-            if (isFieldContainsMany(this.constructor, fieldName)) {
+            if (isContainsMany) {
               value = (value as any[]).map(item => item == null ? item : (field as any)[deserialize](item));
             } else {
               value = value == null ? value : (field as any)[deserialize](value);
             }
           }
+          value = isContainsMany && !value ? [] : value;
           deserialized.set(fieldName, value);
           return value;
         };
@@ -275,11 +277,7 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
           }
           // we save these as instantiated cards in serialized set for composite fields
           value = serialized.get(fieldName);
-          if (value === undefined) {
-            value = getInstance();
-            serialized.set(fieldName, value);
-          }
-          return value;
+          return isFieldContainsMany(this.constructor, fieldName) && !value ? [] : value;
         };
         (get as any)[isField] = card;
         (get as any)[isContainsMany] = Boolean(containsMany);
@@ -408,7 +406,9 @@ async function recompute(card: Card): Promise<void> {
       if (recomputePromises.get(card) !== recomputePromise) {
         return;
       }
-      if (!(primitive in field) && !stack.find(({ from, to, name }) => from === model && to === value && name === fieldName)) {
+      if (!(primitive in field) && value != null &&
+        !stack.find(({ from, to, name }) => from === model && to === value && name === fieldName)
+      ) {
         await _loadModel(value, [...stack, { from: model, to: value, name: fieldName }]);
       }
     }

@@ -218,6 +218,19 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango speaks english japanese');
   });
 
+  test('supports an empty containsMany primitive field', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field languagesSpoken = containsMany(StringCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.firstName/> speaks <@fields.languagesSpoken/></template>
+      }
+    }
+
+    let mango = new Person({ firstName: 'Mango' });
+    assert.deepEqual(mango.languagesSpoken, [], 'empty containsMany field is initialized to an empty array');
+  });
+
   test('render a containsMany composite field', async function (assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -245,6 +258,25 @@ module('Integration | card-basics', function (hooks) {
 
     await renderCard(abdelRahmans, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
+  });
+
+  test('supports an empty containsMany composite field', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName/></template>
+      }
+    }
+
+    class Family extends Card {
+      @field people = containsMany(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.people/></template>
+      }
+    }
+
+    let abdelRahmans = new Family();
+    assert.deepEqual(abdelRahmans.people, [], 'empty containsMany field is initialized to an empty array');
   });
 
   test('throws if contains many value is set with a non-array', async function(assert) {
