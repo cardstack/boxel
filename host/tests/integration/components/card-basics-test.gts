@@ -5,6 +5,7 @@ import { renderCard } from '../../helpers/render-component';
 import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import IntegerCard from 'runtime-spike/lib/integer';
+import DateCard from 'runtime-spike/lib/date';
 import { cleanWhiteSpace } from '../../helpers';
 
 module('Integration | card-basics', function (hooks) {
@@ -341,7 +342,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output="author.firstName"]').hasText('Carl Stack');
   });
 
-  test('add, remove and edit items in containsMany primitive field', async function (assert) {
+  test('add, remove and edit items in containsMany string field', async function (assert) {
     class Person extends Card {
       @field languagesSpoken = containsMany(StringCard);
       static edit = class Edit extends Component<typeof this> {
@@ -381,6 +382,44 @@ module('Integration | card-basics', function (hooks) {
     await click('[data-test-remove="0"]');
     assert.dom('[data-test-item]').exists({ count: 3 });
     assert.dom('[data-test-output]').hasText('italian french spanish');
+  });
+
+  test('add, remove and edit items in containsMany date field', async function (assert) {
+    class Person extends Card {
+      @field dates = containsMany(DateCard);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.dates />
+          <ul data-test-output>
+            {{#each @model.dates as |date|}}
+              <li>{{date}}</li>
+            {{/each}}
+          </ul>
+        </template>
+      }
+    }
+
+    let card = new Person({
+      dates: ['2022-05-12', '2022-05-11', '2021-05-13'],
+    });
+
+    await renderCard(card, 'edit');
+    assert.dom('[data-test-item]').exists({ count: 3 });
+    assert.dom('[data-test-item="0"] input').hasValue('2022-05-12');
+    assert.dom('[data-test-output]').hasText('2022-05-12 2022-05-11 2021-05-13');
+
+    await click('[data-test-add-new]');
+    await fillIn('[data-test-item="3"] input', '2022-06-01');
+    assert.dom('[data-test-item]').exists({ count: 4 });
+    assert.dom('[data-test-output]').hasText('2022-05-12 2022-05-11 2021-05-13 2022-06-01');
+
+    await click('[data-test-remove="1"]');
+    await click('[data-test-remove="2"]');
+    assert.dom('[data-test-item]').exists({ count: 2 });
+    assert.dom('[data-test-output]').hasText('2022-05-12 2021-05-13');
+
+    await fillIn('[data-test-item="1"] input', '2022-04-10');
+    assert.dom('[data-test-output]').hasText('2022-05-12 2022-04-10');
   });
 
 });

@@ -1,5 +1,7 @@
 import { Component, primitive, serialize, deserialize, Card } from 'runtime-spike/lib/card-api';
 import { parse, format } from 'date-fns';
+import { on } from '@ember/modifier';
+import { pick } from './pick';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -31,5 +33,11 @@ export default class DateCard extends Card {
       }
       return this.args.model ? Format.format(this.args.model) : undefined
     }
+  }
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      {{!-- template-lint-disable require-input-label --}}
+      <input type="date" value={{@model}} {{on "input" (pick "target.value" @set) }} />
+    </template>
   }
 }
