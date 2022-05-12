@@ -88,7 +88,7 @@ export class FetchHandler {
         templateTagReplacement: '__GLIMMER_TEMPLATE',
         // set this to false to prevent use of window.btoa in the service worker
         // (the magic-string dep used for source maps sadly uses window.btoa)
-        includeSourceMaps: false,
+        includeSourceMaps: true,
         includeTemplateTokens: true,
       }).output;
       content = babel.transformSync(content, {
