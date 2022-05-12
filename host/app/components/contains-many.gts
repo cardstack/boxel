@@ -3,7 +3,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { pick } from '../lib/pick';
-import { get } from '@ember/object';
+import { get } from '@ember/helper';
 import { Card, Setter } from '../lib/card-api';
 
 interface Signature {
@@ -20,7 +20,6 @@ export default class ContainsManyEditor extends Component<Signature> {
         {{#each @items as |item i|}}
           <li data-test-item={{i}}>
             <label>
-              {{!-- @glint-ignore --}}
               {{#let (get @setters i) as |set|}}
                 {{i}}: <input value={{item}} {{on "input" (pick "target.value" set)}}>
               {{/let}}
