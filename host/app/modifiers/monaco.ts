@@ -6,10 +6,12 @@ import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 
 interface Signature {
-  NamedArgs: {
-    content: string;
-    language: string;
-    contentChanged: (text: string) => void;
+  Args: {
+    Named: {
+      content: string;
+      language: string;
+      contentChanged: (text: string) => void;
+    };
   };
 }
 
@@ -22,7 +24,7 @@ export default class Monaco extends Modifier<Signature> {
   modify(
     element: HTMLElement,
     _positional: [],
-    { content, language, contentChanged }: Signature['NamedArgs']
+    { content, language, contentChanged }: Signature['Args']['Named']
   ) {
     if (this.model && content != null) {
       if (language !== this.lastLanguage) {
