@@ -1,0 +1,27 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Demo",
+  "steps": [
+    {
+      "file": "addon/addon/components/animation-context/index.ts",
+      "description": "This is how we know that an AnimationContext is rendering.",
+      "line": 40
+    },
+    {
+      "file": "addon/addon/services/animations.ts",
+      "description": "If we know that a context is rendering, we want to prepare it for animation. As part of that, we need to make sure that the sprites we're keeping track of and its dimension are correct and that we have a way to account for sprites that are currently being animated so we can keep their current state even if we interrupt them.",
+      "line": 128
+    },
+    {
+      "file": "addon/addon/models/transition-runner.ts",
+      "description": "Here, we are creating the changeset. The changeset is what we currently use in our transition functions that we pass to AnimationContext. ",
+      "line": 97
+    },
+    {
+      "file": "addon/addon/models/changeset.ts",
+      "description": "# A sprite new to the DOM is not always inserted!\nSometimes, we have sprites that were removed and then get inserted back into the DOM. An example of this is toggling a conditionally rendered dropdown menu. The menu contents are being animated prior to removal but before the animation completes, we click on the menu trigger again. The menu is now an inserted sprite. In this case, the menu contents are now a kept sprite.",
+      "line": 173
+    }
+  ],
+  "ref": "documentation-draft"
+}
