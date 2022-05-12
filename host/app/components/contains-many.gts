@@ -1,9 +1,8 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import { fn, get } from '@ember/helper';
 import { pick } from '../lib/pick';
-import { get } from '@ember/helper';
 import { Card, Setter } from '../lib/card-api';
 
 interface Signature {
