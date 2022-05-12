@@ -519,10 +519,9 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
           return class ContainsManyEditorTemplate extends GlimmerComponent {
             <template>
               <ContainsManyEditor
-                @model={{model}}
-                @items={{innerModel}}
-                @fieldName={{fieldName}}
                 @components={{components}}
+                @model={{model}}
+                @fieldName={{fieldName}}
               />
             </template>
           };

@@ -5,14 +5,12 @@ import { fn } from '@ember/helper';
 import { Card } from '../lib/card-api';
 
 interface Signature {
-  Args: { model: Card, items: any[], fieldName: string, components: any[] };
+  Args: { components: any[], model: Card, fieldName: string };
 }
 
 export default class ContainsManyEditor extends Component<Signature> {
   <template>
     <section data-test-contains-many-editor={{@fieldName}}>
-      <button {{on "click" this.sortAsc}} type="button" data-test-sort-asc>Sort (Ascending)</button>
-      <button {{on "click" this.sortDesc}} type="button" data-test-sort-desc>Sort (Descending)</button>
       <header>{{@fieldName}}</header>
       <ul>
         {{#each @components as |Item i|}}
@@ -26,31 +24,17 @@ export default class ContainsManyEditor extends Component<Signature> {
     </section>
   </template>
 
+  get items() {
+    return (this.args.model as any)[this.args.fieldName];
+  }
+
   @action add() {
-    (this.args.model as any)[this.args.fieldName] = [...this.args.items, ''];
+    (this.args.model as any)[this.args.fieldName] = [...this.items, ''];
   }
 
   @action remove(index: number) {
-    let filtered = this.args.items.slice(0, index).concat(this.args.items.slice(index + 1));
+    let filtered = this.items.slice(0, index).concat(this.items.slice(index + 1));
     (this.args.model as any)[this.args.fieldName] = filtered;
-  }
-
-  @action sortAsc() {
-    if (typeof this.args.items[0] === 'number') {
-       this.args.items.sort((a, b) => a - b);
-    } else {
-      this.args.items.sort((a, b) => a.localeCompare(b));
-    }
-    (this.args.model as any)[this.args.fieldName] = this.args.items;
-  }
-
-  @action sortDesc() {
-    if (typeof this.args.items[0] === 'number') {
-      this.args.items.sort((a, b) => b - a);
-   } else {
-     this.args.items.sort((a, b) => b.localeCompare(a));
-   }
-   (this.args.model as any)[this.args.fieldName] = this.args.items;
   }
 
 }
