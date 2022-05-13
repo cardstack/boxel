@@ -61,7 +61,14 @@ export default class AnimationContextComponent extends Component<AnimationContex
       element instanceof HTMLElement
     );
     this.lastBounds = this.currentBounds;
-    this.currentBounds = getDocumentPosition(element);
+    this.currentBounds = getDocumentPosition(
+      element,
+      {
+        withAnimations: false,
+        playAnimations: false,
+      },
+      element.getAnimations()
+    );
   }
 
   shouldAnimate(changeset: Changeset): boolean {

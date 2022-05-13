@@ -107,20 +107,33 @@ export default class Sprite {
     contextElement: HTMLElement,
     playAnimations?: boolean
   ): ContextAwareBounds {
+    let animations = this.element.getAnimations();
     let result = new ContextAwareBounds({
-      element: getDocumentPosition(this.element, {
-        withAnimations: true,
-        playAnimations,
-      }),
-      contextElement: getDocumentPosition(contextElement, {
-        withAnimations: true,
-        playAnimations,
-      }),
+      element: getDocumentPosition(
+        this.element,
+        {
+          withAnimations: true,
+          playAnimations,
+        },
+        animations
+      ),
+      contextElement: getDocumentPosition(
+        contextElement,
+        {
+          withAnimations: true,
+          playAnimations,
+        },
+        animations
+      ),
     });
-    let priorElementBounds = getDocumentPosition(this.element, {
-      withAnimationOffset: -100,
-      playAnimations,
-    });
+    let priorElementBounds = getDocumentPosition(
+      this.element,
+      {
+        withAnimationOffset: -100,
+        playAnimations,
+      },
+      animations
+    );
 
     // TODO: extract actual precalculated velocity instead of guesstimating
     result.velocity = calculateBoundsVelocity(

@@ -72,9 +72,19 @@ export default class TransitionRunner {
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @task *maybeTransitionTask() {
+    let animationsToPlay = [];
     let { animationContext } = this;
     animationContext.captureSnapshot();
     let contextDescendants = this.spriteTree.descendantsOf(animationContext);
+    for (let contextDescendant of contextDescendants) {
+      if (contextDescendant instanceof SpriteModifier) {
+        let spriteModifier = contextDescendant as SpriteModifier;
+        let animations = spriteModifier.prepareSnapshot();
+        if (animations.length > 0) {
+          animationsToPlay.push(...animations);
+        }
+      }
+    }
     for (let contextDescendant of contextDescendants) {
       if (contextDescendant instanceof SpriteModifier) {
         let spriteModifier = contextDescendant as SpriteModifier;
@@ -83,6 +93,13 @@ export default class TransitionRunner {
         }
       }
     }
+    for (let contextDescendant of contextDescendants) {
+      if (contextDescendant instanceof SpriteModifier) {
+        let spriteModifier = contextDescendant as SpriteModifier;
+        spriteModifier.finishSnapshot();
+      }
+    }
+
     let freshlyAdded = this.filterToContext(this.freshlyAdded);
     let freshlyRemoved = this.filterToContext(this.freshlyRemoved, {
       includeFreshlyRemoved: true,

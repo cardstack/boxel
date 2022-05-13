@@ -8,12 +8,16 @@ export type BoundsVelocity = {
   height: MeasuredSpeed;
 };
 
-function runWithoutAnimations(playAnimations: boolean) {
+function runWithoutAnimations(
+  playAnimations: boolean,
+  animations: Animation[]
+) {
   return (element: HTMLElement, f: () => DOMRect) => {
-    let animations = element.getAnimations();
     let currentTimes: number[] = [];
     animations.forEach((a) => {
-      a.pause();
+      if (a.playState !== 'paused') {
+        a.pause();
+      }
       currentTimes.push(a.currentTime || 0);
       let timing = a.effect && a.effect.getComputedTiming();
       if (timing) {
@@ -31,14 +35,13 @@ function runWithoutAnimations(playAnimations: boolean) {
   };
 }
 
-function runWithAnimations(playAnimations: boolean) {
+function runWithAnimations(playAnimations: boolean, animations: Animation[]) {
   return (element: HTMLElement, f: () => DOMRect) => {
-    let animations: Animation[] = [];
-
     if (playAnimations) {
-      animations = element.getAnimations();
       animations.forEach((a) => {
-        a.pause();
+        if (a.playState !== 'paused') {
+          a.pause();
+        }
       });
     }
     let result = f();
@@ -50,12 +53,17 @@ function runWithAnimations(playAnimations: boolean) {
     return result;
   };
 }
-function runWithAnimationOffset(offset: number, playAnimations: boolean) {
+function runWithAnimationOffset(
+  offset: number,
+  playAnimations: boolean,
+  animations: Animation[]
+) {
   return function (element: HTMLElement, f: () => DOMRect) {
-    let animations = element.getAnimations();
     let currentTimes: number[] = [];
     animations.forEach((a) => {
-      a.pause();
+      if (a.playState !== 'paused') {
+        a.pause();
+      }
       currentTimes.push(a.currentTime || 0);
       let timing = a.effect && a.effect.getComputedTiming();
       if (timing) {
@@ -84,7 +92,8 @@ export function getDocumentPosition(
     withAnimations: false,
     withAnimationOffset: undefined,
     playAnimations: true,
-  }
+  },
+  animations: Animation[]
 ): DOMRect {
   let wrapper = (_el: HTMLElement, f: () => DOMRect) => f();
   assert(
@@ -92,14 +101,15 @@ export function getDocumentPosition(
     !(opts.withAnimations && opts.withAnimationOffset)
   );
   if (opts.withAnimations === false) {
-    wrapper = runWithoutAnimations(opts.playAnimations ?? true);
+    wrapper = runWithoutAnimations(opts.playAnimations ?? true, animations);
   } else {
-    wrapper = runWithAnimations(opts.playAnimations ?? true);
+    wrapper = runWithAnimations(opts.playAnimations ?? true, animations);
   }
   if (opts.withAnimationOffset) {
     wrapper = runWithAnimationOffset(
       opts.withAnimationOffset,
-      opts.playAnimations ?? true
+      opts.playAnimations ?? true,
+      animations
     );
   }
   return wrapper(element, () => {
