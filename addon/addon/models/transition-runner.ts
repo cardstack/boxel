@@ -1,5 +1,5 @@
 import AnimationContext from 'animations-experiment/components/animation-context';
-import { task } from 'ember-concurrency-decorators';
+import { task } from 'ember-concurrency';
 import Changeset from '../models/changeset';
 import Sprite, { SpriteType } from '../models/sprite';
 import SpriteTree from './sprite-tree';
