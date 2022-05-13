@@ -32,7 +32,7 @@ export default class Accordion extends Component {
   @action
   handleFocusin(e: Event) {
     if (e.target instanceof HTMLElement) {
-      if (e.target.dataset.isAccordionTrigger) {
+      if (e.target.dataset['isAccordionTrigger']) {
         this.isTriggerFocused = true;
       }
     }
@@ -41,7 +41,7 @@ export default class Accordion extends Component {
   @action
   handleFocusout(e: Event) {
     if (e.target instanceof HTMLElement) {
-      if (e.target.dataset.isAccordionTrigger) {
+      if (e.target.dataset['isAccordionTrigger']) {
         this.isTriggerFocused = false;
       }
     }
@@ -56,7 +56,7 @@ export default class Accordion extends Component {
     if (
       !(
         document.activeElement instanceof HTMLElement &&
-        document.activeElement.dataset.isAccordionTrigger
+        document.activeElement.dataset['isAccordionTrigger']
       )
     ) {
       return;
@@ -68,9 +68,9 @@ export default class Accordion extends Component {
 
     let index = this.items.findIndex((item) => item.id === id);
     if (index < this.items.length - 1) {
-      document.getElementById(this.items[index + 1].id + '-trigger')?.focus();
+      document.getElementById(this.items[index + 1]!.id + '-trigger')?.focus();
     } else {
-      document.getElementById(this.items[0].id + '-trigger')?.focus();
+      document.getElementById(this.items[0]!.id + '-trigger')?.focus();
     }
 
     event.preventDefault();
@@ -80,7 +80,7 @@ export default class Accordion extends Component {
     if (
       !(
         document.activeElement instanceof HTMLElement &&
-        document.activeElement.dataset.isAccordionTrigger
+        document.activeElement.dataset['isAccordionTrigger']
       )
     ) {
       return;
@@ -92,10 +92,10 @@ export default class Accordion extends Component {
 
     let index = this.items.findIndex((item) => item.id === id);
     if (index > 0) {
-      document.getElementById(this.items[index - 1].id + '-trigger')?.focus();
+      document.getElementById(this.items[index - 1]!.id + '-trigger')?.focus();
     } else {
       document
-        .getElementById(this.items[this.items.length - 1].id + '-trigger')
+        .getElementById(this.items[this.items.length - 1]!.id + '-trigger')
         ?.focus();
     }
 
