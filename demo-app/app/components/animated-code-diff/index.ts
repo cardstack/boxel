@@ -110,8 +110,8 @@ function highlightLineObjects(lineObjects: LineObject[], language: string) {
   let highlightedCode = highlightCode(code, language);
 
   return highlightedCode.split('\n').map((text: string, index: number) => ({
-    id: lineObjects[index].id,
-    highlighted: lineObjects[index].highlighted,
+    id: lineObjects[index]?.id,
+    highlighted: lineObjects[index]?.highlighted,
     // htmlSafe is justified here because we generated the highlighting markup
     // ourself in highlightCode
     text: htmlSafe(text === '' ? '\n' : text),

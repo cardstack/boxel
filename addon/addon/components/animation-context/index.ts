@@ -1,4 +1,6 @@
 import Component from '@glimmer/component';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 import Ember from 'ember';
 import { reads } from 'macro-decorators';
 import Changeset from 'animations-experiment/models/changeset';

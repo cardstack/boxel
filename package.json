@@ -20,6 +20,11 @@
       "ember-class-names-helper": "^0.3.0",
       "ember-useragent": "^0.12.0",
       "node-sass": "^7.0.1"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "mustache": "3"
+      }
     }
   }
 }
