@@ -525,6 +525,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
               <ContainsManyEditor
                 @components={{components}}
                 @model={{model}}
+                @items={{innerModel}}
                 @fieldName={{fieldName}}
               />
             </template>
@@ -583,7 +584,7 @@ function makeSetter(model: any, field?: string, index?: number): Setter {
     if (!field) {
       throw new Error(`can't set topmost model`);
     }
-    if (index) {
+    if (index || index === 0) {
       model[field][index] = value;
       model[field] = model[field];
     } else {
