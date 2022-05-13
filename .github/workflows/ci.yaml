@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  PNPM_VERSION: 7.0.0
+  PNPM_VERSION: 7.1.0
 
 jobs:
   tests:
