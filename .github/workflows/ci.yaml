@@ -31,6 +31,9 @@ jobs:
       - name: Lint Test App
         run: pnpm run lint
         working-directory: test-app
+      - name: Lint Demo App
+        run: pnpm run lint
+        working-directory: demo-app
       - name: Run Tests
         run: pnpm run test:ember
         working-directory: test-app
