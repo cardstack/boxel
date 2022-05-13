@@ -5,8 +5,9 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import Changeset from 'animations-experiment/models/changeset';
 import { inject as service } from '@ember/service';
-import AnimationsService from '../services/animations';
+import AnimationsService from 'animations-experiment/services/animations';
 import SpringBehavior from 'animations-experiment/behaviors/spring';
+import { A } from '@ember/array';
 
 const FADE_DURATION = 300;
 const TRANSLATE_DURATION = 1000;
@@ -81,7 +82,7 @@ class BoxelController extends Controller {
   @tracked isCardIsolated = false;
   models = [piaMidina, luke, alex];
   get sortedCardModels(): Participant[] {
-    let result = this.models.sortBy('title');
+    let result = [...A(this.models).sortBy('title')];
     if (!this.ascendingSort) {
       result = result.reverse();
     }

@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 // import move from 'ember-animated/motions/move';
 // import { fadeIn, fadeOut } from 'ember-animated/motions/opacity';
 import { highlightCode } from '../../utils/compile-markdown';
-import { htmlSafe } from '@ember/string';
+import { htmlSafe } from '@ember/template';
 import { action } from '@ember/object';
 import Changeset from 'animations-experiment/models/changeset';
 

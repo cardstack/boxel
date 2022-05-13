@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import fade from '../../transitions/fade';
+import fade from 'animations-experiment/transitions/fade';
 import dedent from '../../utils/dedent';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
