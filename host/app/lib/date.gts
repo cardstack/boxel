@@ -38,10 +38,10 @@ export default class DateCard extends Card {
   static edit = class Edit extends Component<typeof this> {
     <template>
       {{!-- template-lint-disable require-input-label --}}
-      <input type="date" value={{this.formatted}} {{on "input" (pick "target.value" (fn this.parse @set)) }} />
+      <input type="date" value={{this.formatted}} {{on "input" (pick "target.value" (fn this.parsedValue @set)) }} />
     </template>
 
-    parse(set: Function, date: string) {
+    parsedValue(set: Function, date: string) {
       return set(parse(date, 'yyyy-MM-dd', new Date()));
     }
 
