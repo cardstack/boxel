@@ -215,6 +215,25 @@ module('Integration | computeds', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango speaks english japanese');
   });
 
+  test('supports an empty containsMany computed primitive field', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field languagesSpoken = containsMany(StringCard);
+      @field slowLanguagesSpoken = containsMany(StringCard, { computeVia: 'computeSlowLanguagesSpoken'});
+      async computeSlowLanguagesSpoken() {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return this.languagesSpoken;
+      }
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.firstName/> speaks <@fields.slowLanguagesSpoken/></template>
+      }
+    }
+
+    let mango = new Person({ firstName: 'Mango' });
+    await renderCard(mango, 'isolated'); // just using to absorb asynchronicity
+    assert.deepEqual(mango.slowLanguagesSpoken, [], 'empty containsMany field is initialized to an empty array');
+  });
+
   test('can render a containsMany computed composite field', async function(assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -247,6 +266,30 @@ module('Integration | computeds', function (hooks) {
 
     await renderCard(abdelRahmans, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
+  });
+
+  test('supports an empty containsMany computed composite field', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName/></template>
+      }
+    }
+
+    class Family extends Card {
+      @field people = containsMany(Person);
+      @field slowPeople = containsMany(Person, { computeVia: 'computeSlowPeople'});
+      async computeSlowPeople() {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return this.people;
+      }
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.slowPeople/></template>
+      }
+    }
+    let abdelRahmans = new Family();
+    await renderCard(abdelRahmans, 'isolated'); // just using to absorb asynchronicity
+    assert.deepEqual(abdelRahmans.slowPeople, [], 'empty containsMany field is initialized to an empty array');
   });
 
   test('cannot set a computed field', async function(assert) {

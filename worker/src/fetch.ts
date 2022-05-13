@@ -92,10 +92,10 @@ export class FetchHandler {
       content = babel.transformSync(content, {
         filename: handle.name,
         plugins: [
+          glimmerTemplatePlugin,
+          typescriptPlugin,
           [decoratorsProposalPlugin, { legacy: true }],
           classPropertiesProposalPlugin,
-          typescriptPlugin,
-          glimmerTemplatePlugin,
           // this "as any" is because typescript is using the Node-specific types
           // from babel-plugin-ember-template-compilation, but we're using the
           // browser interface

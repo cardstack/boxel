@@ -219,6 +219,19 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango speaks english japanese');
   });
 
+  test('supports an empty containsMany primitive field', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field languagesSpoken = containsMany(StringCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.firstName/> speaks <@fields.languagesSpoken/></template>
+      }
+    }
+
+    let mango = new Person({ firstName: 'Mango' });
+    assert.deepEqual(mango.languagesSpoken, [], 'empty containsMany field is initialized to an empty array');
+  });
+
   test('render a containsMany composite field', async function (assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -248,6 +261,25 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
   });
 
+  test('supports an empty containsMany composite field', async function (assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName/></template>
+      }
+    }
+
+    class Family extends Card {
+      @field people = containsMany(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.people/></template>
+      }
+    }
+
+    let abdelRahmans = new Family();
+    assert.deepEqual(abdelRahmans.people, [], 'empty containsMany field is initialized to an empty array');
+  });
+
   test('throws if contains many value is set with a non-array', async function(assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -271,9 +303,9 @@ module('Integration | card-basics', function (hooks) {
     let helloWorld = new Post({ title: 'My Post', author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'edit');
-    assert.dom('[data-test-field="title"]').containsText('title');
+    assert.dom('[data-test-field="title"]').containsText('Title');
     assert.dom('[data-test-field="title"] input').hasValue('My Post');
-    assert.dom('[data-test-field="author"]').containsText('author firstName'); // Fix nested labels
+    assert.dom('[data-test-field="author"]').containsText('Author First Name'); // TODO: fix nested labels
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
 
     await fillIn('[data-test-field="title"] input', 'New Post');

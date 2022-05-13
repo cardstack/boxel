@@ -4,10 +4,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
-
-function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
-  return a === b;
-}
+import { eq } from '../helpers/truth-helpers'
 
 interface Args {
   Args: {
