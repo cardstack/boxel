@@ -552,25 +552,22 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
 
       return getCachedComponent(target, property, () => {
         if (isFieldContainsMany(modelValue.constructor, property)) {
-          let innerModel = model.field(property as keyof T) as unknown as Box<Card[]>; // casts are safe because we know the field is present
-          let items = innerModel.asBoxedArray();
-          let components = items.map(element => getComponent(field, defaultFormat, element));
           if (defaultFormat === 'edit') {
-            if (isBaseCard in innerModel) {
-              throw new Error('Cannot edit containsMany composite field');
-            }
             let fieldName = property as keyof Card; // to get around linting error
             return class ContainsManyEditorTemplate extends GlimmerComponent {
               <template>
                 <ContainsManyEditor
-                  @components={{components}}
                   @model={{model}}
-                  @items={{items}}
                   @fieldName={{fieldName}}
+                  @field={{field}}
+                  @format={{defaultFormat}}
+                  @getComponent={{getComponent}}
                 />
               </template>
             };
           }
+          let innerModel = model.field(property as keyof T) as unknown as Box<Card[]>; // casts are safe because we know the field is present
+          let components = innerModel.asBoxedArray().map(element => getComponent(field, defaultFormat, element));
           return class ContainsMany extends GlimmerComponent {
             <template>
               {{#each components as |Item|}}
