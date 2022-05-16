@@ -295,11 +295,13 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
                 let { serialized, deserialized } = getDataBuckets(this);
                 let isContainsMany = isFieldContainsMany(this.constructor, fieldName);
                 getInstance(isContainsMany);
-                if (isContainsMany && Array.isArray(value)) {
-                  // using splice to mutate the instance with value
-                  (instance as any[]).splice(0, (instance as any[]).length, ...value);
-                } else {
+                if (isContainsMany && Array.isArray(value) && Array.isArray(instance)) {
+                  // using splice to mutate the array instance with this provided value
+                  instance.splice(0, instance.length, ...value);
+                } else if (!isContainsMany) {
                   Object.assign(instance, value);
+                } else {
+                  throw new Error(`should never get here when setting ${fieldName} on card ${this.constructor.name}`);
                 }
                 deserialized.set(fieldName, instance);
                 serialized.delete(fieldName);
