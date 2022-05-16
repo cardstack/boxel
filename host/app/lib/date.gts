@@ -26,36 +26,34 @@ export default class DateCard extends Card {
     }
     return parse(date, 'yyyy-MM-dd', new Date());
   }
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>{{this.formatted}}</template>
     get formatted() {
       if (this.args.model == null) {
         return '[no date]';
       }
-      return this.args.model ? Format.format(this.args.model) : undefined
+      return this.args.model ? Format.format(this.args.model) : undefined;
     }
   }
+
   static edit = class Edit extends Component<typeof this> {
     <template>
       {{!-- template-lint-disable require-input-label --}}
-      <input type="date" value={{this.formatted}} {{on "input" (pick "target.value" (fn this.parsedValue @set)) }} />
+      <input type="date" value={{this.formatted}} {{on "input" (pick "target.value" (fn this.parseInput @set)) }} />
     </template>
 
-    parsedValue(set: Function, date: string) {
-      return set(parse(date, 'yyyy-MM-dd', new Date()));
+    parseInput(set: Function, date: string) {
+      let deserialized = DateCard[deserialize](date);
+      return set(deserialized);
     }
 
     get formatted() {
       if (!this.args.model) {
         return;
       }
-      let date;
-      if (this.args.model instanceof Date) {
-        date = this.args.model;
-      } else {
-        date = parse(this.args.model, 'yyyy-MM-dd', new Date());
-      }
-      return format(date, 'yyyy-MM-dd');
+      let deserialized = DateCard[deserialize](this.args.model);
+      return DateCard[serialize](deserialized);
     }
   }
 }

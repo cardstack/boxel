@@ -29,36 +29,34 @@ export default class DatetimeCard extends Card {
     }
     return parseISO(date);
   }
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>{{this.formatted}}</template>
     get formatted() {
       if (this.args.model == null) {
         return '[no date-time]';
       }
-      return this.args.model ? Format.format(this.args.model) : undefined
+      return this.args.model ? Format.format(this.args.model) : undefined;
     }
   }
+
   static edit = class Edit extends Component<typeof this> {
     <template>
       {{!-- template-lint-disable require-input-label --}}
-      <input type="datetime-local" value={{this.formatted}} {{on "input" (pick "target.value" (fn this.parse @set))}} />
+      <input type="datetime-local" value={{this.formatted}} {{on "input" (pick "target.value" (fn this.parseInput @set))}} />
     </template>
 
-    parse(set: Function, date: string) {
-      return set(parseISO(date));
+    parseInput(set: Function, date: string) {
+      let deserialized = DatetimeCard[deserialize](date);
+      return set(deserialized);
     }
 
     get formatted() {
       if (!this.args.model) {
         return;
       }
-      let date;
-      if (this.args.model instanceof Date) {
-        date = this.args.model;
-      } else {
-        date = parseISO(this.args.model);
-      }
-      return date.toISOString().split('.')[0];
+      let deserialized = DatetimeCard[deserialize](this.args.model);
+      return DatetimeCard[serialize](deserialized).split('.')[0];
     }
   }
 }
