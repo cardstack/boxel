@@ -262,11 +262,13 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
   } else {
     return {
       setupField(fieldName: string) {
-        let instance: Card | undefined;
-        function getInstance() {
-          if (!instance) {
+        let instance: Card | any[] | undefined;
+        function getInstance(asArray = false) {
+          if (!instance && !asArray) {
             let _card = "baseCard" in card ? card : (card as () => CardT)();
             instance = new _card();
+          } else if (!instance && asArray) {
+            instance = [];
           }
           return instance;
         }
@@ -290,9 +292,15 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
             ? {} // computeds don't have setters
             : {
               set(this: InstanceType<CardT>, value: any) {
-                getInstance();
-                Object.assign(instance, value);
                 let { serialized, deserialized } = getDataBuckets(this);
+                let isContainsMany = isFieldContainsMany(this.constructor, fieldName);
+                getInstance(isContainsMany);
+                if (isContainsMany && Array.isArray(value)) {
+                  // using splice to mutate the instance with value
+                  (instance as any[]).splice(0, (instance as any[]).length, ...value);
+                } else {
+                  Object.assign(instance, value);
+                }
                 deserialized.set(fieldName, instance);
                 serialized.delete(fieldName);
               }
@@ -518,34 +526,35 @@ function getCachedComponent(target: object, property: string, makeComponent: () 
 function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defaultFormat: Format): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
-      if (typeof property === 'symbol' || model == null) {
+      if (typeof property === 'symbol' || model == null || model.value == null) {
         // don't handle symbols or nulls
         return Reflect.get(target, property, received);
       }
-      let maybeField = getField(model.value.constructor, property);
+      let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above
+      let maybeField = getField(modelValue.constructor, property);
       if (!maybeField) {
         // field doesn't exist, fall back to normal property access behavior
         return Reflect.get(target, property, received);
       }
       let field = maybeField;
-      defaultFormat = isFieldComputed(model.value.constructor, property) ? 'embedded' : defaultFormat;
+      defaultFormat = isFieldComputed(modelValue.constructor, property) ? 'embedded' : defaultFormat;
 
       return getCachedComponent(target, property, () => {
-
-        if (isFieldContainsMany(model.value.constructor, property)) {
+        if (isFieldContainsMany(modelValue.constructor, property)) {
           let innerModel = model.field(property as keyof T) as unknown as Box<Card[]>; // casts are safe because we know the field is present
-          let components = innerModel.asBoxedArray().map(element => getComponent(field, defaultFormat, element));
+          let items = innerModel.asBoxedArray();
+          let components = items.map(element => getComponent(field, defaultFormat, element));
           if (defaultFormat === 'edit') {
             if (isBaseCard in innerModel) {
               throw new Error('Cannot edit containsMany composite field');
             }
-            let fieldName = property; // to get around linting error
+            let fieldName = property as keyof Card; // to get around linting error
             return class ContainsManyEditorTemplate extends GlimmerComponent {
               <template>
                 <ContainsManyEditor
                   @components={{components}}
-                  @model={{model.value}}
-                  @items={{innerModel.value}}
+                  @model={{model}}
+                  @items={{items}}
                   @fieldName={{fieldName}}
                 />
               </template>
@@ -572,7 +581,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
     },
     ownKeys(target)  {
       let keys = Reflect.ownKeys(target);
-      for (let name in model) {
+      for (let name in model.value) {
         let field = getField(model.value.constructor, name);
         if (field) {
           keys.push(name);
@@ -581,8 +590,8 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       return keys;
     },
     getOwnPropertyDescriptor(target, property) {
-      if (typeof property === 'symbol') {
-        // don't handle symbols
+      if (typeof property === 'symbol' || model == null || model.value == null) {
+        // don't handle symbols, undefined, or nulls
         return Reflect.getOwnPropertyDescriptor(target, property);
       }
       let field = getField(model.value.constructor, property);
@@ -601,7 +610,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
   }) as any;
 }
 
-class Box<T> {
+export class Box<T> {
   static create<T>(model: T): Box<T> {
     return new Box(model);
   }
