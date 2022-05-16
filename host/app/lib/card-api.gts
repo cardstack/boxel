@@ -370,7 +370,18 @@ function getComponent<CardT extends Constructable>(card: CardT, format: Format, 
   let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
 
   function set(value: InstanceType<CardT>): void {
-    model.value = value;
+    let fieldBox = model.containingBox;
+    let cardBox = fieldBox?.containingBox;
+    if (cardBox && fieldBox && Array.isArray(fieldBox.value)) {
+      let index = model.fieldName;
+      if (typeof index !== 'number') {
+        throw new Error(`Cannot set a value on an array item with non-numeric index '${String(index)}'`);
+      }
+      fieldBox.value[index] = value;
+      cardBox.value[fieldBox.fieldName!] = [...fieldBox.value];
+    } else {
+      model.value = value;
+    }
   }
 
   let component: ComponentLike<{ Args: {}, Blocks: {} }> = <template>
@@ -615,8 +626,7 @@ export class Box<T> {
     return new Box(model);
   }
 
-  private constructor(private model: any, private fieldName?: string | number | symbol) {
-  }
+  private constructor(private model: any, readonly fieldName?: string | number | symbol, readonly containingBox?: Box<any>) { }
 
   get value(): T {
     if (this.fieldName != null) {
@@ -634,7 +644,7 @@ export class Box<T> {
   }
 
   field<K extends keyof T>(fieldName: K): Box<T[K]> {
-    return new Box(this.value, fieldName);
+    return new Box(this.value, fieldName, this);
   }
 
   asBoxedArray(): T extends (infer V)[] ? Box<V>[] : never {
@@ -642,7 +652,7 @@ export class Box<T> {
     if (!Array.isArray(value)) {
       throw new Error(`tried to call asBoxedArray on non-array value ${this.value} for ${String(this.fieldName)}`);
     }
-    return value.map((_element, index) => new Box(value, index)) as any;
+    return value.map((_element, index) => new Box(value, index, this)) as any;
   }
 
 }
