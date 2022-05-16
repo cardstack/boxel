@@ -32,20 +32,10 @@ export default class ContainsManyEditor extends Component<Signature> {
   }
 
   @action add() {
-    let fieldBox = this.args.model.field(this.safeFieldName) as unknown as Box<Card[]>;
-    let cardBox = fieldBox?.containingBox;
-    if (!cardBox) {
-      throw new Error(`cannot determine the card that ${this.safeFieldName} belongs to`);
-    }
-    cardBox.value[this.safeFieldName] = [...this.args.items.map(b => b.value), null];
+    (this.args.model.value as any)[this.safeFieldName] = [...this.args.items.map(b => b.value), null];
   }
 
   @action remove(index: number) {
-    let fieldBox = this.args.model.field(this.safeFieldName) as unknown as Box<Card[]>;
-    let cardBox = fieldBox?.containingBox;
-    if (!cardBox) {
-      throw new Error(`cannot determine the card that ${this.safeFieldName} belongs to`);
-    }
-    cardBox.value[this.safeFieldName] = this.args.items.map(b => b.value).splice(index, 1);
+    (this.args.model.value as any)[this.safeFieldName] = this.args.items.map(b => b.value).splice(index, 1);
   }
 }
