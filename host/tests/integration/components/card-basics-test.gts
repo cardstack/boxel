@@ -5,7 +5,10 @@ import { renderCard } from '../../helpers/render-component';
 import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import IntegerCard from 'runtime-spike/lib/integer';
-import { cleanWhiteSpace } from '../../helpers';
+import DateCard from 'runtime-spike/lib/date';
+import DatetimeCard from 'runtime-spike/lib/datetime';
+import { cleanWhiteSpace, p } from '../../helpers';
+import parseISO from 'date-fns/parseISO';
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -373,7 +376,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output="author.firstName"]').hasText('Carl Stack');
   });
 
-  test('add, remove and edit items in containsMany primitive field', async function (assert) {
+  test('add, remove and edit items in containsMany string field', async function (assert) {
     class Person extends Card {
       @field languagesSpoken = containsMany(StringCard);
       static edit = class Edit extends Component<typeof this> {
@@ -415,24 +418,27 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output]').hasText('italian french spanish');
   });
 
-  test('sort items in containsMany primitive field', async function (assert) {
-    class Person extends Card {
-      @field languages = containsMany(StringCard);
-      @field numbers = containsMany(IntegerCard);
+  test('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
+    function toDateString(date: Date | null) {
+      return date instanceof Date ? date.toISOString().split('T')[0] : null;
+    }
 
+    class Person extends Card {
+      @field dates = containsMany(DateCard);
+      @field appointments = containsMany(DatetimeCard);
       static edit = class Edit extends Component<typeof this> {
         <template>
-          <@fields.languages />
-          <ul data-test-output="languages">
-            {{#each @model.languages as |language|}}
-              <li>{{language}}</li>
+          <@fields.dates />
+          <ul data-test-output="dates">
+            {{#each @model.dates as |date|}}
+              <li>{{toDateString date}}</li>
             {{/each}}
           </ul>
 
-          <@fields.numbers />
-          <ul data-test-output="numbers">
-            {{#each @model.numbers as |number|}}
-              <li>{{number}}</li>
+          <@fields.appointments />
+          <ul data-test-output="appointments">
+            {{#each @model.appointments as |appointment|}}
+              <li>{{toDateString appointment}}</li>
             {{/each}}
           </ul>
         </template>
@@ -440,28 +446,34 @@ module('Integration | card-basics', function (hooks) {
     }
 
     let card = new Person({
-      languages: ['english', 'japanese', 'zulu', 'arabic', 'chozo'],
-      numbers: [30, 1, 4, 100000, 21],
+      dates: [p('2022-05-12'), p('2022-05-11'), p('2021-05-13')],
+      appointments: [parseISO('2022-05-13T13:00+00:00'), parseISO('2021-05-30T10:45+00:00')],
     });
 
     await renderCard(card, 'edit');
-    assert.dom('[data-test-contains-many-editor="languages"] [data-test-item]').exists({ count: 5 });
-    assert.dom('[data-test-output="languages"]').hasText('english japanese zulu arabic chozo');
+    assert.dom('[data-test-contains-many="dates"] [data-test-item]').exists({ count: 3 });
+    assert.dom('[data-test-contains-many="dates"] [data-test-item="0"] input').hasValue('2022-05-12');
+    assert.dom('[data-test-output="dates"]').hasText('2022-05-12 2022-05-11 2021-05-13');
 
-    await click('[data-test-contains-many-editor="languages"] [data-test-sort-asc]');
-    assert.dom('[data-test-output="languages"]').hasText('arabic chozo english japanese zulu');
+    await click('[data-test-contains-many="dates"] [data-test-add-new]');
+    await fillIn('[data-test-contains-many="dates"] [data-test-item="3"] input', '2022-06-01');
+    assert.dom('[data-test-contains-many="dates"] [data-test-item]').exists({ count: 4 });
+    assert.dom('[data-test-output="dates"]').hasText('2022-05-12 2022-05-11 2021-05-13 2022-06-01');
 
-    await click('[data-test-contains-many-editor="languages"] [data-test-sort-desc]');
-    assert.dom('[data-test-output="languages"]').hasText('zulu japanese english chozo arabic');
+    await click('[data-test-contains-many="dates"] [data-test-remove="1"]');
+    await click('[data-test-contains-many="dates"] [data-test-remove="2"]'); // note: after removing index=1, the previous indexes of the following items have shifted by 1
+    assert.dom('[data-test-contains-many="dates"] [data-test-item]').exists({ count: 2 });
+    assert.dom('[data-test-output="dates"]').hasText('2022-05-12 2021-05-13');
 
-    assert.dom('[data-test-contains-many-editor="numbers"] [data-test-item]').exists({ count: 5 });
-    assert.dom('[data-test-output="numbers"]').hasText('30 1 4 100000 21');
+    await fillIn('[data-test-contains-many="dates"] [data-test-item="1"] input', '2022-04-10');
+    assert.dom('[data-test-output]').hasText('2022-05-12 2022-04-10');
 
-    await click('[data-test-contains-many-editor="numbers"] [data-test-sort-asc]');
-    assert.dom('[data-test-output="numbers"]').hasText('1 4 21 30 100000');
+    assert.dom('[data-test-contains-many="appointments"] [data-test-item]').exists({ count: 2 });
+    assert.dom('[data-test-contains-many="appointments"] [data-test-item="0"] input').hasValue('2022-05-13T13:00:00');
+    assert.dom('[data-test-output="appointments"]').hasText('2022-05-13 2021-05-30');
 
-    await click('[data-test-contains-many-editor="numbers"] [data-test-sort-desc]');
-    assert.dom('[data-test-output="numbers"]').hasText('100000 30 21 4 1');
+    await fillIn('[data-test-contains-many="appointments"] [data-test-item="0"] input', '2022-05-01T11:01');
+    assert.dom('[data-test-output="appointments"]').hasText('2022-05-01 2021-05-30');
   });
 
 });
