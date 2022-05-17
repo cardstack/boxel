@@ -1,0 +1,41 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Route transition",
+  "steps": [
+    {
+      "file": "demo-app/app/router.js",
+      "description": "# Introduction\nOne common scenario for animation is transitioning from one route to another. In this demo, we'll be exploring how we can animate a button as we transition from `/routes` to `/routes/other`.\n\n![Shows a page transition. After clicking on the link, the link's old content slides over horizontally to allow new content from the new route to replace it.](./tour-assets/route-transition/animated.gif)",
+      "pattern": "^[^\\S\\n]*this\\.route\\('routes', function \\(\\) \\{"
+    },
+    {
+      "file": "demo-app/app/templates/routes.hbs",
+      "description": "# Background - parent route template\nHere's the template for the parent route - simple static HTML with an outlet for child route contents. ",
+      "line": 23
+    },
+    {
+      "file": "demo-app/app/templates/routes/index.hbs",
+      "description": "# Background - index route template\nIn `routes.index`, we have a `LinkTo` that will bring us to `routes.other` when clicked. Here's what the link looks like:\n\n![Preview of the link content in /routes](./tour-assets/route-transition/index-button.jpg)",
+      "line": 6
+    },
+    {
+      "file": "demo-app/app/templates/routes/other.hbs",
+      "description": "# Background - other route template\nIn `routes.other`, we have a `LinkTo` that will bring us to `routes.index` when clicked. Here's what the link looks like:\n\n![Preview of the link content in /routes](./tour-assets/route-transition/other-button.jpg)",
+      "pattern": "^[^\\S\\n]*</div>"
+    },
+    {
+      "file": "demo-app/app/templates/routes.hbs",
+      "description": "# Animation - AnimationContext\nLet's get to the API for creating an animation. To create an animation, you first need an `AnimationContext`. This component is responsible for detecting when Ember is re-rendering its contents, and deciding how to animate them based on the function that you pass to `@use`.",
+      "pattern": "^[^\\S\\n]*<AnimationContext @id=\"routes-context\" @use=\\{\\{this\\.transition\\}\\} class=\"w-1/4 m-auto mt-5 overflow-hidden\">"
+    },
+    {
+      "file": "demo-app/app/templates/routes/index.hbs",
+      "description": "# Animation - Sprites 1\nThe `AnimationContext` doesn't try to animate all of its contents. It only checks for sprites, which are created using the `sprite` modifier, as you can see above. Sprites are objects which hold a reference to a DOM element, and store information about its position, size, and other styling. \n\nTo make it easier to find a particular sprite when animating, you can pass an `id` and/or a `role` to the modifier. Here, we're giving this sprite an id so we can identify it as the index route's content, and make it move right when animated.",
+      "pattern": "^[^\\S\\n]*<div class=\"h-12 bg-indigo\" \\{\\{sprite id=\"route-content-index\"\\}\\}>"
+    },
+    {
+      "file": "demo-app/app/templates/routes/other.hbs",
+      "description": "# Animation - Sprites 2\nThe contents of `routes.other` should also contain a sprite, so that we can animate the route transition both ways. We give this sprite a different `id` from the index route so that we can make it move left when the link is clicked and we transition to `routes.index`.",
+      "pattern": "^[^\\S\\n]*<div class=\"h-12 bg-green-light\" \\{\\{sprite id=\"route-content-other\"\\}\\}>"
+    }
+  ]
+}
