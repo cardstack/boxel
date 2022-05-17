@@ -537,11 +537,13 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       if (getField(modelValue.constructor, property)?.containsMany) {
         if (defaultFormat === 'edit') {
           let fieldName = property as keyof Card; // to get around linting error
+          let arrayField = model.field(property as keyof T) as unknown as Box<Card[]>;
           return class ContainsManyEditorTemplate extends GlimmerComponent {
             <template>
               <ContainsManyEditor
                 @model={{model}}
                 @fieldName={{fieldName}}
+                @arrayField={{arrayField}}
                 @field={{field}}
                 @format={{defaultFormat}}
                 @getComponent={{getComponent}}
