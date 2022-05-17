@@ -3,7 +3,7 @@ import { ComponentLike } from '@glint/template';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { Card, Box, Constructable, Format } from '../lib/card-api';
+import { Card, Box, Constructable, Format, getCachedComponent } from '../lib/card-api';
 
 interface Signature {
   Args: {
@@ -39,7 +39,7 @@ export default class ContainsManyEditor extends Component<Signature> {
   }
 
   get components() {
-    return this.items.map(element => this.args.getComponent(this.args.field, this.args.format, element));
+    return this.items.map((element, i) => getCachedComponent(this.args.model.value, `${this.safeFieldName}_${i}`, () => this.args.getComponent(this.args.field, this.args.format, element)));
   }
 
   get items() {
