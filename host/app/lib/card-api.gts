@@ -87,10 +87,11 @@ export class Card {
           if (!field) {
             continue;
           }
-          if (primitive in field) {
+          let fieldCard = field.card;
+          if (primitive in fieldCard) {
             (this as any)[fieldName] = value || [];
           } else {
-            (this as any)[fieldName] = ((value || []) as any[]).map(item => new field!(item));
+            (this as any)[fieldName] = ((value || []) as any[]).map(item => new fieldCard(item));
           }
         } else {
           (this as any)[fieldName] = value;
@@ -124,12 +125,14 @@ export function serializedGet<CardT extends Constructable>(model: InstanceType<C
     return value;
   }
   value = deserialized.get(fieldName);
-  if (primitive in (field as any)) {
-    if (typeof (field as any)[serialize] === 'function') {
+
+  let fieldCard = field!.card;
+  if (primitive in fieldCard) {
+    if (typeof (fieldCard as any)[serialize] === 'function') {
       if (getField(model.constructor, fieldName)?.containsMany) {
-        value = (value as any[]).map(item => item == null ? item : (field as any)[serialize](item));
+        value = (value as any[]).map(item => item == null ? item : (fieldCard as any)[serialize](item));
       } else {
-        value = value == null ? value : (field as any)[serialize](value);
+        value = value == null ? value : (fieldCard as any)[serialize](value);
       }
     }
   } else if (value != null) {
@@ -158,15 +161,15 @@ export function serializedSet<CardT extends Constructable>(model: InstanceType<C
   if (field.containsMany && !Array.isArray(value)) {
     throw new Error(`Expected array for field value ${fieldName} for card ${model.constructor.name}`);
   }
-
-  if (primitive in field) {
+  let fieldCard = field.card;
+  if (primitive in fieldCard) {
     serialized.set(fieldName, field.containsMany ? value || [] : value);
   } else {
     if (field.containsMany) {
-      value = ((value || []) as any[]).map(item => (field!.card as typeof Card).fromSerialized(item));
+      value = ((value || []) as any[]).map(item => (fieldCard as typeof Card).fromSerialized(item));
       serialized.set(fieldName, value);
     } else {
-      let instance = new (field.card)();
+      let instance = new fieldCard();
       for (let [ interiorFieldName, interiorValue ] of Object.entries(value)) {
         serializedSet(instance, interiorFieldName, interiorValue);
       }
@@ -228,12 +231,13 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
           }
           value = serialized.get(fieldName);
           let field = getField(this.constructor, fieldName);
+          let fieldCard = field!.card;
           let isContainsMany = field?.containsMany;
-          if (typeof (field!.card as any)[deserialize] === 'function') {
+          if (typeof (fieldCard as any)[deserialize] === 'function') {
             if (isContainsMany) {
-              value = (value as any[]).map(item => item == null ? item : (field!.card as any)[deserialize](item));
+              value = (value as any[]).map(item => item == null ? item : (fieldCard as any)[deserialize](item));
             } else {
-              value = value == null ? value : (field!.card as any)[deserialize](value);
+              value = value == null ? value : (fieldCard as any)[deserialize](value);
             }
           }
           value = isContainsMany && !value ? [] : value;
@@ -290,7 +294,7 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
           }
           // we save these as instantiated cards in serialized set for composite fields
           value = serialized.get(fieldName);
-          return isFieldContainsMany(this.constructor, fieldName) && !value ? [] : value;
+          return getField(this.constructor, fieldName)?.containsMany && !value ? [] : value;
         };
          let handler: Field<CardT> = {
           get card() {
@@ -308,7 +312,7 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
             : {
               set(this: InstanceType<CardT>, value: any) {
                 let { serialized, deserialized } = getDataBuckets(this);
-                let isContainsMany = isFieldContainsMany(this.constructor, fieldName);
+                let isContainsMany = getField(this.constructor, fieldName)?.containsMany;
                 getInstance(isContainsMany);
                 if (isContainsMany && Array.isArray(value) && Array.isArray(instance)) {
                   // using splice to mutate the array instance with this provided value
@@ -439,7 +443,7 @@ async function recompute(card: Card): Promise<void> {
       if (recomputePromises.get(card) !== recomputePromise) {
         return;
       }
-      if (!(primitive in field) && value != null &&
+      if (!(primitive in field.card) && value != null &&
         !stack.find(({ from, to, name }) => from === model && to === value && name === fieldName)
       ) {
         await _loadModel(value, [...stack, { from: model, to: value, name: fieldName }]);
@@ -502,9 +506,9 @@ function getFields<T extends Card>(card: T, onlyComputeds = false): { [P in keyo
     let currentFields = flatMap(Object.keys(descs), maybeFieldName => {
       if (maybeFieldName !== 'constructor') {
         let maybeField = getField(card.constructor, maybeFieldName);
-        let isComputed = isFieldComputed(card.constructor, maybeFieldName);
+        let isComputed = getField(card.constructor, maybeFieldName)?.computeVia;
         if ((maybeField && onlyComputeds && isComputed) || (maybeField && !onlyComputeds)) {
-          return [[maybeFieldName, maybeField]] as [[string, Constructable]];
+          return [[maybeFieldName, maybeField]];
         }
       }
       return [];
@@ -529,8 +533,8 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
         return Reflect.get(target, property, received);
       }
       let field = maybeField;
-      defaultFormat = isFieldComputed(modelValue.constructor, property) ? 'embedded' : defaultFormat;
-      if (isFieldContainsMany(modelValue.constructor, property)) {
+      defaultFormat = getField(modelValue.constructor, property)?.computeVia ? 'embedded' : defaultFormat;
+      if (getField(modelValue.constructor, property)?.containsMany) {
         if (defaultFormat === 'edit') {
           let fieldName = property as keyof Card; // to get around linting error
           return class ContainsManyEditorTemplate extends GlimmerComponent {
@@ -549,7 +553,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
         return class ContainsMany extends GlimmerComponent {
           <template>
             {{#each arrayField.children as |boxedElement|}}
-              {{#let (getComponent field defaultFormat boxedElement) as |Item|}}
+              {{#let (getComponent field.card defaultFormat boxedElement) as |Item|}}
                 <Item/>
               {{/let}}
             {{/each}}
@@ -557,7 +561,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
         };
       }
       let innerModel = model.field(property as keyof T) as unknown as Box<Card>; // casts are safe because we know the field is present
-      return getComponent(field, defaultFormat, innerModel);
+      return getComponent(field.card, defaultFormat, innerModel);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
