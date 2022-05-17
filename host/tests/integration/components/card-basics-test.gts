@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { fillIn, click } from '@ember/test-helpers';
+import { fillIn, click, waitUntil } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
@@ -262,6 +262,50 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(abdelRahmans, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
   });
+
+  test('rerender when a primitive field changes', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><div data-test="firstName"><@fields.firstName/></div></template>
+      }
+    }
+    let child = new Person({ firstName: 'Arthur' });
+    await renderCard(child, 'embedded');
+    assert.dom('[data-test="firstName"]').containsText('Arthur');
+    child.firstName = 'Quint';
+    await waitUntil(() => document.querySelector('[data-test="firstName"]')?.textContent?.trim() === 'Quint');
+  });
+
+
+  test('rerender when a containsMany field is fully replaced', async function(assert) {
+    class Person extends Card {
+      @field pets = containsMany(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.pets/></template>
+      }
+    }
+    let person = new Person({ pets: ['Mango', 'Van Gogh'] });
+    await renderCard(person, 'embedded');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh');
+    person.pets = ['Van Gogh', 'Mango', 'Peachy'];
+    await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Van Gogh Mango Peachy');
+  });
+
+    test('rerender when a containsMany field is mutated via assignment', async function(assert) {
+    class Person extends Card {
+      @field pets = containsMany(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.pets/></template>
+      }
+    }
+    let person = new Person({ pets: ['Mango', 'Van Gogh'] });
+    await renderCard(person, 'embedded');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh');
+    person.pets[1] = 'Peachy';
+    await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Mango Peachy');
+  });
+
 
   test('supports an empty containsMany composite field', async function (assert) {
     class Person extends Card {
