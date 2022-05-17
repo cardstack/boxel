@@ -42,7 +42,7 @@ interface Options {
 const deserializedData = new WeakMap<Card, Map<string, any>>();
 const serializedData = new WeakMap<Card, Map<string, any>>();
 const recomputePromises = new WeakMap<Card, Promise<any>>();
-const componentCache = new WeakMap<object, Map<string, ComponentLike<{ Args: never; Blocks: never; }>>>();
+const componentCache = new WeakMap<object, Map<string, ComponentLike<{ Args: {}; Blocks: {}; }>>>();
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
@@ -522,19 +522,19 @@ function getFields<T extends Card>(card: T, onlyComputeds = false): { [P in keyo
   return fields;
 }
 
-function getCachedComponent(target: object, property: string, makeComponent: () => ComponentLike<{ Args: never, Blocks: never }>) {
-    let component = componentCache.get(target)?.get(property);
-    if (!component) {
-      component = makeComponent();
-      let targetCache = componentCache.get(target);
-      if (!targetCache) {
-        targetCache = new Map();
-        componentCache.set(target, targetCache);
-      }
-      targetCache.set(property, component);
+export function getCachedComponent(target: object, property: string, makeComponent: () => ComponentLike<{ Args: never, Blocks: never }>) {
+  let component = componentCache.get(target)?.get(property);
+  if (!component) {
+    component = makeComponent();
+    let targetCache = componentCache.get(target);
+    if (!targetCache) {
+      targetCache = new Map();
+      componentCache.set(target, targetCache);
     }
-    return component;
+    targetCache.set(property, component);
   }
+  return component;
+}
 
 function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defaultFormat: Format): FieldsTypeFor<T> {
   return new Proxy(target, {
