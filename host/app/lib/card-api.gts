@@ -42,6 +42,7 @@ interface Options {
 const deserializedData = new WeakMap<Card, Map<string, any>>();
 const serializedData = new WeakMap<Card, Map<string, any>>();
 const recomputePromises = new WeakMap<Card, Promise<any>>();
+const componentCache = new WeakMap<object, Map<string, ComponentLike<{ Args: {}; Blocks: {}; }>>>();
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
@@ -261,11 +262,13 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
   } else {
     return {
       setupField(fieldName: string) {
-        let instance: Card | undefined;
-        function getInstance() {
-          if (!instance) {
+        let instance: Card | any[] | undefined;
+        function getInstance(asArray = false) {
+          if (!instance && !asArray) {
             let _card = "baseCard" in card ? card : (card as () => CardT)();
             instance = new _card();
+          } else if (!instance && asArray) {
+            instance = [];
           }
           return instance;
         }
@@ -289,9 +292,17 @@ export function contains<CardT extends Constructable>(card: CardT | (() => CardT
             ? {} // computeds don't have setters
             : {
               set(this: InstanceType<CardT>, value: any) {
-                getInstance();
-                Object.assign(instance, value);
                 let { serialized, deserialized } = getDataBuckets(this);
+                let isContainsMany = isFieldContainsMany(this.constructor, fieldName);
+                getInstance(isContainsMany);
+                if (isContainsMany && Array.isArray(value) && Array.isArray(instance)) {
+                  // using splice to mutate the array instance with this provided value
+                  instance.splice(0, instance.length, ...value);
+                } else if (!isContainsMany) {
+                  Object.assign(instance, value);
+                } else {
+                  throw new Error(`should never get here when setting ${fieldName} on card ${this.constructor.name}`);
+                }
                 deserialized.set(fieldName, instance);
                 serialized.delete(fieldName);
               }
@@ -353,14 +364,30 @@ function defaultFieldFormat(format: Format): Format {
   }
 }
 
-function getComponent<CardT extends Constructable>(card: CardT, format: Format, model: InstanceType<CardT>, set?: Setter): ComponentLike<{ Args: never, Blocks: never }> {
+function getComponent<CardT extends Constructable>(card: CardT, format: Format, model: Box<InstanceType<CardT>>): ComponentLike<{ Args: {}, Blocks: {} }> {
   let Implementation = (card as any)[format] ?? defaultComponent[format];
 
   // *inside* our own component, @fields is a proxy object that looks
   // up our fields on demand.
-  let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format), set);
-  let component = <template>
-    <Implementation @model={{model}} @fields={{internalFields}} @set={{set}} />
+  let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
+
+  function set(value: InstanceType<CardT>): void {
+    let fieldBox = model.containingBox;
+    let cardBox = fieldBox?.containingBox;
+    if (cardBox && fieldBox && Array.isArray(fieldBox.value)) {
+      let index = model.fieldName;
+      if (typeof index !== 'number') {
+        throw new Error(`Cannot set a value on an array item with non-numeric index '${String(index)}'`);
+      }
+      fieldBox.value[index] = value;
+      cardBox.value[fieldBox.fieldName!] = [...fieldBox.value];
+    } else {
+      model.value = value;
+    }
+  }
+
+  let component: ComponentLike<{ Args: {}, Blocks: {} }> = <template>
+    <Implementation @model={{model.value}} @fields={{internalFields}} @set={{set}} />
   </template>
 
   // when viewed from *outside*, our component is both an invokable component
@@ -370,7 +397,7 @@ function getComponent<CardT extends Constructable>(card: CardT, format: Format, 
   // It would be possible to use `externalFields` in place of `internalFields` above,
   // avoiding the need for two separate Proxies. But that has the uncanny property of
   // making `<@fields />` be an infinite recursion.
-  let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format), set);
+  let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format));
 
   // This cast is safe because we're returning a proxy that wraps component.
   return externalFields as unknown as typeof component;
@@ -379,11 +406,8 @@ function getComponent<CardT extends Constructable>(card: CardT, format: Format, 
 
 export async function prepareToRender(model: Card, format: Format): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
   await recompute(model); // absorb model asynchronicity
-  let set: Setter | undefined;
-  if (format === 'edit') {
-    set = makeSetter(model);
-  }
-  let component = getComponent(model.constructor as Constructable, format, model, set);
+  let box = Box.create(model);
+  let component = getComponent(model.constructor as Constructable, format, box);
   return { component };
 }
 
@@ -498,48 +522,65 @@ function getFields<T extends Card>(card: T, onlyComputeds = false): { [P in keyo
   return fields;
 }
 
-function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFormat: Format, set?: Setter): FieldsTypeFor<T> {
+export function getCachedComponent(target: object, property: string, makeComponent: () => ComponentLike<{ Args: never, Blocks: never }>) {
+  let component = componentCache.get(target)?.get(property);
+  if (!component) {
+    component = makeComponent();
+    let targetCache = componentCache.get(target);
+    if (!targetCache) {
+      targetCache = new Map();
+      componentCache.set(target, targetCache);
+    }
+    targetCache.set(property, component);
+  }
+  return component;
+}
+
+function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defaultFormat: Format): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
-      if (typeof property === 'symbol' || model == null) {
+      if (typeof property === 'symbol' || model == null || model.value == null) {
         // don't handle symbols or nulls
         return Reflect.get(target, property, received);
       }
-      let field = getField(model.constructor, property);
-      if (!field) {
+      let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above
+      let maybeField = getField(modelValue.constructor, property);
+      if (!maybeField) {
         // field doesn't exist, fall back to normal property access behavior
         return Reflect.get(target, property, received);
       }
-      let innerModel = (model as any)[property];
-      defaultFormat = isFieldComputed(model.constructor, property) ? 'embedded' : defaultFormat;
+      let field = maybeField;
+      defaultFormat = isFieldComputed(modelValue.constructor, property) ? 'embedded' : defaultFormat;
 
-      if (isFieldContainsMany(model.constructor, property)) {
-        let components = (Object.values(innerModel) as T[]).map((m, i) => getComponent(field!, defaultFormat, m, makeSetter(model, property, i))) as any[];
-        if (defaultFormat === 'edit') {
-          if (isBaseCard in innerModel) {
-            throw new Error('Cannot edit containsMany composite field');
+      return getCachedComponent(target, property, () => {
+        if (isFieldContainsMany(modelValue.constructor, property)) {
+          if (defaultFormat === 'edit') {
+            let fieldName = property as keyof Card; // to get around linting error
+            return class ContainsManyEditorTemplate extends GlimmerComponent {
+              <template>
+                <ContainsManyEditor
+                  @model={{model}}
+                  @fieldName={{fieldName}}
+                  @field={{field}}
+                  @format={{defaultFormat}}
+                  @getComponent={{getComponent}}
+                />
+              </template>
+            };
           }
-          let fieldName = property; // to get around linting error
-          return class ContainsManyEditorTemplate extends GlimmerComponent {
+          let innerModel = model.field(property as keyof T) as unknown as Box<Card[]>; // casts are safe because we know the field is present
+          let components = innerModel.asBoxedArray().map(element => getComponent(field, defaultFormat, element));
+          return class ContainsMany extends GlimmerComponent {
             <template>
-              <ContainsManyEditor
-                @components={{components}}
-                @model={{model}}
-                @items={{innerModel}}
-                @fieldName={{fieldName}}
-              />
+              {{#each components as |Item|}}
+                <Item/>
+              {{/each}}
             </template>
           };
         }
-        return class ContainsMany extends GlimmerComponent {
-          <template>
-            {{#each components as |Item|}}
-              <Item/>
-            {{/each}}
-          </template>
-        };
-      }
-      return getComponent(field, defaultFormat, innerModel, set?.setters[property]);
+        let innerModel = model.field(property as keyof T) as unknown as Box<Card>; // casts are safe because we know the field is present
+        return getComponent(field, defaultFormat, innerModel);
+      });
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
@@ -550,8 +591,8 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
     },
     ownKeys(target)  {
       let keys = Reflect.ownKeys(target);
-      for (let name in model) {
-        let field = getField(model.constructor, name);
+      for (let name in model.value) {
+        let field = getField(model.value.constructor, name);
         if (field) {
           keys.push(name);
         }
@@ -559,11 +600,11 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
       return keys;
     },
     getOwnPropertyDescriptor(target, property) {
-      if (typeof property === 'symbol') {
-        // don't handle symbols
+      if (typeof property === 'symbol' || model == null || model.value == null) {
+        // don't handle symbols, undefined, or nulls
         return Reflect.getOwnPropertyDescriptor(target, property);
       }
-      let field = getField(model.constructor, property);
+      let field = getField(model.value.constructor, property);
       if (!field) {
         // field doesn't exist, fall back to normal property access behavior
         return Reflect.getOwnPropertyDescriptor(target, property);
@@ -579,32 +620,38 @@ function fieldsComponentsFor<T extends Card>(target: object, model: T, defaultFo
   }) as any;
 }
 
-function makeSetter(model: any, field?: string, index?: number): Setter {
-  let s = (value: any) => {
-    if (!field) {
+export class Box<T> {
+  static create<T>(model: T): Box<T> {
+    return new Box(model);
+  }
+
+  private constructor(private model: any, readonly fieldName?: string | number | symbol, readonly containingBox?: Box<any>) { }
+
+  get value(): T {
+    if (this.fieldName != null) {
+      return this.model[this.fieldName];
+    } else {
+      return this.model;
+    }
+  }
+
+  set value(v: T) {
+    if (this.fieldName == null) {
       throw new Error(`can't set topmost model`);
     }
-    if (index || index === 0) {
-      model[field][index] = value;
-      model[field] = model[field];
-    } else {
-      model[field] = value;
+    this.model[this.fieldName] = v;
+  }
+
+  field<K extends keyof T>(fieldName: K): Box<T[K]> {
+    return new Box(this.value, fieldName, this);
+  }
+
+  asBoxedArray(): T extends (infer V)[] ? Box<V>[] : never {
+    let value = this.value;
+    if (!Array.isArray(value)) {
+      throw new Error(`tried to call asBoxedArray on non-array value ${this.value} for ${String(this.fieldName)}`);
     }
-  };
-  (s as any).setters = new Proxy(
-    {},
-    {
-      get: (target: any, prop: string, receiver: unknown) => {
-        if (typeof prop === 'string') {
-          if (field && index) {
-            return makeSetter(model[field][index]);
-          }
-          return makeSetter(field ? model[field] : model, prop);
-        } else {
-          return Reflect.get(target, prop, receiver);
-        }
-      },
-    }
-  );
-  return s as Setter;
+    return value.map((_element, index) => new Box(value, index, this)) as any;
+  }
+
 }
