@@ -100,8 +100,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     let firstPost = Post.fromSerialized({ title: 'First Post', author: { firstName: 'Mango', birthdate: '2019-10-30', lastLogin: '2022-04-27T16:58' } });
-    debugger;
-    firstPost.author;
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM');
   });
@@ -148,7 +146,16 @@ module('Integration | serialization', function (hooks) {
       }
     }
 
-    let firstPost = new Post({ title: 'First Post', author: { firstName: 'Mango', birthdate: p('2019-10-30'), species: 'canis familiaris', lastLogin: parseISO('2022-04-27T16:30+00:00') } });
+    let firstPost = new Post({
+      title: 'First Post',
+      author: new Person({
+        firstName: 'Mango',
+        birthdate: p('2019-10-30'),
+        species: 'canis familiaris',
+        lastLogin: parseISO('2022-04-27T16:30+00:00')
+      })
+    });
+
     assert.deepEqual(serializedGet(firstPost, 'author'), {
       birthdate: "2019-10-30",
       firstName:"Mango",
@@ -278,7 +285,14 @@ module('Integration | serialization', function (hooks) {
       @field title = contains(StringCard);
       @field author = contains(Person);
     }
-    let firstPost = new Post({ title: 'First Post', author: { firstName: 'Mango', birthdate: p('2019-10-30'), species: 'canis familiaris' } });
+    let firstPost = new Post({
+      title: 'First Post',
+      author: new Person({
+        firstName: 'Mango',
+        birthdate: p('2019-10-30'),
+        species: 'canis familiaris'
+      })
+    });
     await renderCard(firstPost, 'isolated');
     let payload = serializeCard(firstPost);
     assert.deepEqual(

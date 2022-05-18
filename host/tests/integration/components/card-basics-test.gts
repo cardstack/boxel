@@ -63,7 +63,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = new Post({
+    let helloWorld = Post.fromSerialized({
       title: 'First Post',
       author: {
           firstName: 'Arthur',
@@ -124,7 +124,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = new Post({ author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
+    let helloWorld = Post.fromSerialized({ author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
     await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test]').containsText('Mr Arthur 10');
   });
@@ -141,7 +141,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let mango = new Person({ firstName: 'Mango', friend: { firstName: 'Van Gogh' } });
+    let mango = Person.fromSerialized({ firstName: 'Mango', friend: { firstName: 'Van Gogh' } });
     await renderCard(mango, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango friend is Van Gogh');
   });
@@ -174,7 +174,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = new Post({ author: { firstName: 'Arthur', number: 10 } });
+    let helloWorld = Post.fromSerialized({ author: { firstName: 'Arthur', number: 10 } });
 
     await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test="string"]').containsText('Arthur');
@@ -195,7 +195,7 @@ module('Integration | card-basics', function (hooks) {
       @field author = contains(Person);
     }
 
-    let helloWorld = new Post({ title: 'First Post', author: { firstName: 'Arthur' } });
+    let helloWorld = Post.fromSerialized({ title: 'First Post', author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'isolated');
 
@@ -344,7 +344,7 @@ module('Integration | card-basics', function (hooks) {
       @field author = contains(Person);
     }
 
-    let helloWorld = new Post({ title: 'My Post', author: { firstName: 'Arthur' } });
+    let helloWorld = Post.fromSerialized({ title: 'My Post', author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"]').containsText('Title');
@@ -402,7 +402,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = new  Post({ title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
+    let helloWorld = Post.fromSerialized({ title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"] input').hasValue('First Post');
