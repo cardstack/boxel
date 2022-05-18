@@ -100,6 +100,8 @@ module('Integration | serialization', function (hooks) {
     }
 
     let firstPost = Post.fromSerialized({ title: 'First Post', author: { firstName: 'Mango', birthdate: '2019-10-30', lastLogin: '2022-04-27T16:58' } });
+    debugger;
+    firstPost.author;
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM');
   });
