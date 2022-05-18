@@ -253,7 +253,7 @@ module('Integration | computeds', function (hooks) {
         <template><@fields.slowPeople/></template>
       }
     }
-    let abdelRahmans = new Family({
+    let abdelRahmans = Family.fromSerialized({
       people: [
         { firstName: 'Mango'},
         { firstName: 'Van Gogh'},

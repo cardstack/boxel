@@ -1,4 +1,4 @@
-import { Component, primitive, serialize, deserialize, Card } from 'runtime-spike/lib/card-api';
+import { Component, primitive, serialize, Card, CardInstanceType, CardConstructor } from 'runtime-spike/lib/card-api';
 import { parse, format } from 'date-fns';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -20,11 +20,9 @@ export default class DateCard extends Card {
     }
     return format(date, 'yyyy-MM-dd');
   }
-  static [deserialize](date: string | Date) {
-    if (date instanceof Date) {
-      return date;
-    }
-    return parse(date, 'yyyy-MM-dd', new Date());
+
+  static fromSerialized<T extends CardConstructor>(this: T, date: any): CardInstanceType<T> {
+    return parse(date, 'yyyy-MM-dd', new Date()) as CardInstanceType<T>;
   }
 
   static embedded = class Embedded extends Component<typeof this> {
@@ -44,7 +42,7 @@ export default class DateCard extends Card {
     </template>
 
     parseInput(set: Function, date: string) {
-      let deserialized = DateCard[deserialize](date);
+      let deserialized = DateCard.fromSerialized(date);
       return set(deserialized);
     }
 
@@ -52,7 +50,7 @@ export default class DateCard extends Card {
       if (!this.args.model) {
         return;
       }
-      let deserialized = DateCard[deserialize](this.args.model);
+      let deserialized = DateCard.fromSerialized(this.args.model);
       return DateCard[serialize](deserialized);
     }
   }

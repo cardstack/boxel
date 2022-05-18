@@ -147,8 +147,12 @@ module('Integration | serialization', function (hooks) {
     }
 
     let firstPost = new Post({ title: 'First Post', author: { firstName: 'Mango', birthdate: p('2019-10-30'), species: 'canis familiaris', lastLogin: parseISO('2022-04-27T16:30+00:00') } });
-    await renderCard(firstPost, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), `{"birthdate":"2019-10-30","firstName":"Mango","lastLogin":"2022-04-27T16:30:00.000Z","species":"canis familiaris"}`);
+    assert.deepEqual(serializedGet(firstPost, 'author'), {
+      birthdate: "2019-10-30",
+      firstName:"Mango",
+      lastLogin:"2022-04-27T16:30:00.000Z",
+      species:"canis familiaris"
+    });
   });
 
   test('can serialize a computed field', async function(assert) {
@@ -164,7 +168,7 @@ module('Integration | serialization', function (hooks) {
       }
     }
 
-    let mango =  Person.fromSerialized({ birthdate: p('2019-10-30') });
+    let mango =  new Person({ birthdate: p('2019-10-30') });
     await renderCard(mango, 'isolated');
     assert.strictEqual(this.element.textContent!.trim(), '2020-10-30');
   });
@@ -230,8 +234,8 @@ module('Integration | serialization', function (hooks) {
       }
     }
     let classSchedule = new Schedule({ appointments: [
-      { date: p('2022-4-1'), location: 'Room 332', title: 'Biology' },
-      { date: p('2022-4-4'), location: 'Room 102', title: 'Civics' }
+      new Appointment({ date: p('2022-4-1'), location: 'Room 332', title: 'Biology' }),
+      new Appointment({ date: p('2022-4-4'), location: 'Room 102', title: 'Civics' }),
     ]});
     await renderCard(classSchedule, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), '[{"date":"2022-04-01","location":"Room 332","title":"Biology"},{"date":"2022-04-04","location":"Room 102","title":"Civics"}]');

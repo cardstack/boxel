@@ -3,7 +3,7 @@ import { ComponentLike } from '@glint/template';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { Card, Box, Constructable, Format } from '../lib/card-api';
+import { Card, Box, CardConstructor, Format } from '../lib/card-api';
 
 interface Signature {
   Args: {
@@ -12,7 +12,7 @@ interface Signature {
     arrayField: Box<Card[]>,
     format: Format;
     field: any,
-    getComponent<CardT extends Constructable>(card: CardT, format: Format, model: Box<InstanceType<CardT>>): ComponentLike<{ Args: {}, Blocks: {} }>;
+    getComponent<CardT extends CardConstructor>(card: CardT, format: Format, model: Box<InstanceType<CardT>>): ComponentLike<{ Args: {}, Blocks: {} }>;
   };
 }
 
@@ -34,7 +34,9 @@ export default class ContainsManyEditor extends Component<Signature> {
     </section>
   </template>
 
-  getComponent = this.args.getComponent;
+  get getComponent() {
+    return this.args.getComponent;
+  }
 
   get safeFieldName() {
     if (typeof this.args.fieldName !== 'string') {

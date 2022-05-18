@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn, click, waitUntil } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
@@ -229,7 +229,6 @@ module('Integration | card-basics', function (hooks) {
         <template><@fields.firstName/> speaks <@fields.languagesSpoken/></template>
       }
     }
-
     let mango = new Person({ firstName: 'Mango' });
     assert.deepEqual(mango.languagesSpoken, [], 'empty containsMany field is initialized to an empty array');
   });
@@ -248,7 +247,7 @@ module('Integration | card-basics', function (hooks) {
         <template><@fields.people/></template>
       }
     }
-    let abdelRahmans = new Family({
+    let abdelRahmans = Family.fromSerialized({
       people: [
         { firstName: 'Mango'},
         { firstName: 'Van Gogh'},
@@ -292,7 +291,7 @@ module('Integration | card-basics', function (hooks) {
     await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Van Gogh Mango Peachy');
   });
 
-    test('rerender when a containsMany field is mutated via assignment', async function(assert) {
+  skip('rerender when a containsMany field is mutated via assignment', async function(assert) {
     class Person extends Card {
       @field pets = containsMany(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
@@ -462,7 +461,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output]').hasText('italian french spanish');
   });
 
-  test('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
+  skip('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
     function toDateString(date: Date | null) {
       return date instanceof Date ? date.toISOString().split('T')[0] : null;
     }

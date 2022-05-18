@@ -1,4 +1,4 @@
-import { Component, primitive, serialize, deserialize, Card } from 'runtime-spike/lib/card-api';
+import { Component, primitive, serialize, CardInstanceType, CardConstructor, Card } from 'runtime-spike/lib/card-api';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -23,11 +23,9 @@ export default class DatetimeCard extends Card {
     }
     return date.toISOString();
   }
-  static [deserialize](date: string | Date) {
-    if (date instanceof Date) {
-      return date;
-    }
-    return parseISO(date);
+
+  static fromSerialized<T extends CardConstructor>(this: T, date: any): CardInstanceType<T> {
+    return parseISO(date) as CardInstanceType<T>;
   }
 
   static embedded = class Embedded extends Component<typeof this> {
@@ -47,7 +45,7 @@ export default class DatetimeCard extends Card {
     </template>
 
     parseInput(set: Function, date: string) {
-      let deserialized = DatetimeCard[deserialize](date);
+      let deserialized = DatetimeCard.fromSerialized(date);
       return set(deserialized);
     }
 
@@ -55,7 +53,7 @@ export default class DatetimeCard extends Card {
       if (!this.args.model) {
         return;
       }
-      let deserialized = DatetimeCard[deserialize](this.args.model);
+      let deserialized = DatetimeCard.fromSerialized(this.args.model);
       return DatetimeCard[serialize](deserialized).split('.')[0];
     }
   }
