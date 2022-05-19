@@ -50,8 +50,7 @@ export default class DateCard extends Card {
       if (!this.args.model) {
         return;
       }
-      let deserialized = DateCard.fromSerialized(this.args.model);
-      return DateCard[serialize](deserialized);
+      return DateCard[serialize](this.args.model);
     }
   }
 }

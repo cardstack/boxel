@@ -53,8 +53,7 @@ export default class DatetimeCard extends Card {
       if (!this.args.model) {
         return;
       }
-      let deserialized = DatetimeCard.fromSerialized(this.args.model);
-      return DatetimeCard[serialize](deserialized).split('.')[0];
+      return DatetimeCard[serialize](this.args.model).split('.')[0];
     }
   }
 }
