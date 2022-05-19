@@ -649,7 +649,7 @@ export class Box<T> {
     if (!Array.isArray(this.value)) {
       throw new Error(`tried to call children() on Boxed non-array value ${this.value} for ${String(this.fieldName)}`);
     }
-    let value = this.value; // Help TS understand that value is an array in closures
+    let value = this.value;
     if (this.prevChildren) {
       let { prevChildren } = this;
       let newChildren: Box<ElementType<T>>[] = value.map((element, index) => {
