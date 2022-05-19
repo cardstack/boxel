@@ -1,6 +1,6 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { fillIn, click } from '@ember/test-helpers';
+import { fillIn, click, waitUntil } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
@@ -63,7 +63,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = new Post({
+    let helloWorld = Post.fromSerialized({
       title: 'First Post',
       author: {
           firstName: 'Arthur',
@@ -124,7 +124,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = new Post({ author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
+    let helloWorld = Post.fromSerialized({ author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
     await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test]').containsText('Mr Arthur 10');
   });
@@ -141,7 +141,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let mango = new Person({ firstName: 'Mango', friend: { firstName: 'Van Gogh' } });
+    let mango = Person.fromSerialized({ firstName: 'Mango', friend: { firstName: 'Van Gogh' } });
     await renderCard(mango, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango friend is Van Gogh');
   });
@@ -174,7 +174,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = new Post({ author: { firstName: 'Arthur', number: 10 } });
+    let helloWorld = Post.fromSerialized({ author: { firstName: 'Arthur', number: 10 } });
 
     await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test="string"]').containsText('Arthur');
@@ -195,7 +195,7 @@ module('Integration | card-basics', function (hooks) {
       @field author = contains(Person);
     }
 
-    let helloWorld = new Post({ title: 'First Post', author: { firstName: 'Arthur' } });
+    let helloWorld = Post.fromSerialized({ title: 'First Post', author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'isolated');
 
@@ -229,7 +229,6 @@ module('Integration | card-basics', function (hooks) {
         <template><@fields.firstName/> speaks <@fields.languagesSpoken/></template>
       }
     }
-
     let mango = new Person({ firstName: 'Mango' });
     assert.deepEqual(mango.languagesSpoken, [], 'empty containsMany field is initialized to an empty array');
   });
@@ -248,7 +247,7 @@ module('Integration | card-basics', function (hooks) {
         <template><@fields.people/></template>
       }
     }
-    let abdelRahmans = new Family({
+    let abdelRahmans = Family.fromSerialized({
       people: [
         { firstName: 'Mango'},
         { firstName: 'Van Gogh'},
@@ -262,6 +261,50 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(abdelRahmans, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
   });
+
+  test('rerender when a primitive field changes', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><div data-test="firstName"><@fields.firstName/></div></template>
+      }
+    }
+    let child = new Person({ firstName: 'Arthur' });
+    await renderCard(child, 'embedded');
+    assert.dom('[data-test="firstName"]').containsText('Arthur');
+    child.firstName = 'Quint';
+    await waitUntil(() => document.querySelector('[data-test="firstName"]')?.textContent?.trim() === 'Quint');
+  });
+
+
+  test('rerender when a containsMany field is fully replaced', async function(assert) {
+    class Person extends Card {
+      @field pets = containsMany(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.pets/></template>
+      }
+    }
+    let person = new Person({ pets: ['Mango', 'Van Gogh'] });
+    await renderCard(person, 'embedded');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh');
+    person.pets = ['Van Gogh', 'Mango', 'Peachy'];
+    await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Van Gogh Mango Peachy');
+  });
+
+  skip('rerender when a containsMany field is mutated via assignment', async function(assert) {
+    class Person extends Card {
+      @field pets = containsMany(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.pets/></template>
+      }
+    }
+    let person = new Person({ pets: ['Mango', 'Van Gogh'] });
+    await renderCard(person, 'embedded');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh');
+    person.pets[1] = 'Peachy';
+    await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Mango Peachy');
+  });
+
 
   test('supports an empty containsMany composite field', async function (assert) {
     class Person extends Card {
@@ -287,9 +330,8 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
     }
-
-    assert.throws(() => new Person({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken for card Person/);
-    assert.throws(() => Person.fromSerialized({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken for card Person/);
+    assert.throws(() => new Person({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken/);
+    assert.throws(() => Person.fromSerialized({ languagesSpoken: 'english' }).languagesSpoken, /Expected array for field value languagesSpoken/);
   });
 
   test('render default edit template', async function (assert) {
@@ -302,7 +344,7 @@ module('Integration | card-basics', function (hooks) {
       @field author = contains(Person);
     }
 
-    let helloWorld = new Post({ title: 'My Post', author: { firstName: 'Arthur' } });
+    let helloWorld = Post.fromSerialized({ title: 'My Post', author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"]').containsText('Title');
@@ -360,7 +402,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = new  Post({ title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
+    let helloWorld = Post.fromSerialized({ title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"] input').hasValue('First Post');
@@ -418,7 +460,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output]').hasText('italian french spanish');
   });
 
-  test('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
+  skip('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
     function toDateString(date: Date | null) {
       return date instanceof Date ? date.toISOString().split('T')[0] : null;
     }

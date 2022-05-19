@@ -58,7 +58,7 @@ module('Integration | computeds', function (hooks) {
       }
     }
 
-    let firstPost = new Post({ title: 'First Post', author: { firstName: 'Mango' } });
+    let firstPost = Post.fromSerialized({ title: 'First Post', author: { firstName: 'Mango' } });
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(this.element.textContent!.trim(), 'First Post by Mango');
   });
@@ -161,7 +161,7 @@ module('Integration | computeds', function (hooks) {
       }
     }
 
-    let firstPost = new Post({ title: 'First Post', author: { firstName: 'Mango' } });
+    let firstPost = Post.fromSerialized({ title: 'First Post', author: { firstName: 'Mango' } });
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Mango');
   });
@@ -253,7 +253,7 @@ module('Integration | computeds', function (hooks) {
         <template><@fields.slowPeople/></template>
       }
     }
-    let abdelRahmans = new Family({
+    let abdelRahmans = Family.fromSerialized({
       people: [
         { firstName: 'Mango'},
         { firstName: 'Van Gogh'},
@@ -352,7 +352,7 @@ module('Integration | computeds', function (hooks) {
       }
     }
 
-    let person = new Person({ firstName: 'Mango', homeTown: { city: 'Bronxville' } });
+    let person = Person.fromSerialized({ firstName: 'Mango', homeTown: { city: 'Bronxville' } });
 
 
     await renderCard(person, 'edit');
