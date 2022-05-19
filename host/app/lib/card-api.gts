@@ -7,6 +7,7 @@ import { TrackedWeakMap } from 'tracked-built-ins';
 import * as JSON from 'json-typescript';
 import { registerDestructor } from '@ember/destroyable';
 import ContainsManyEditor from '../components/contains-many';
+import { WatchedArray } from './watched-array';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -52,9 +53,9 @@ interface Field<CardT extends CardConstructor> {
   computeVia: undefined | string | (() => unknown);
   containsMany: boolean;
   serialize(value: any): any;
-  deserialize(value: any): any;
-  emptyValue(): any;
-  validateSet(value: any): void;
+  deserialize(instance: Card, value: any): any;
+  emptyValue(instance: Card): any;
+  prepareSet(instance: Card, value: any): void;
 }
 
 export class Card {
@@ -135,7 +136,7 @@ export function serializedGet<CardT extends CardConstructor>(model: InstanceType
   if (deserialized.has(fieldName)) {
     value = deserialized.get(fieldName);
   } else {
-    value = field.emptyValue();
+    value = field.emptyValue(model);
     deserialized.set(fieldName, value);
   }
 
@@ -166,33 +167,37 @@ export function serializeCard<CardT extends CardConstructor>(model: InstanceType
 }
 
 
-class ContainsMany<CardT extends CardConstructor> implements Field<CardT> {
-  constructor(private cardThunk: () => CardT, readonly computeVia: undefined | string | (() => unknown), readonly name: string) {
-  }
+class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
+  constructor(
+    private cardThunk: () => FieldT, 
+    readonly computeVia: undefined | string | (() => unknown), 
+    readonly name: string
+  ) {}
 
-  get card(): CardT {
+  get card(): FieldT {
     return this.cardThunk();
   }
 
-  serialize(value: InstanceType<CardT>[]): any[] {
+  serialize(value: CardInstanceType<FieldT>[]): any[] {
     return value.map(entry => this.card[serialize](entry))
   }
 
-  deserialize(value: any[]): CardInstanceType<CardT>[] {
+  deserialize(instance: Card, value: any[]): CardInstanceType<FieldT>[] {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return value.map(entry => this.card.fromSerialized(entry));
+    return new WatchedArray(() => recompute(instance), value.map(entry => this.card.fromSerialized(entry)));
   }
 
   containsMany = true;
 
-  emptyValue() { return [] }
+  emptyValue(instance: Card) { return new WatchedArray(() => recompute(instance)) }
 
-  validateSet(value: any) {
+  prepareSet(instance: Card, value: any) {
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
+    return new WatchedArray(() => recompute(instance), value);
   }
 }
 
@@ -213,7 +218,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     }
   }
 
-  deserialize(value: any): CardInstanceType<CardT> {
+  deserialize(_instance: Card, value: any): CardInstanceType<CardT> {
     if (value != null) {
       return this.card.fromSerialized(value);
     } else {
@@ -223,11 +228,11 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
 
   containsMany = false;
 
-  emptyValue() { 
+  emptyValue(_instance: Card) { 
     return undefined; 
   }
 
-  validateSet(value: any) {
+  prepareSet(_instance: Card, value: any) {
     if (primitive in this.card) {
       // todo: primitives could implement a validation symbol
     } else {
@@ -235,10 +240,11 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
         throw new Error(`tried set ${value} as field ${this.name} but it is not an instance of ${this.card.name}`);
       }
     }
+    return value;
   }
 }
 
-function getFieldValue<CardT extends CardConstructor>(instance: CardInstanceType<CardT>, field: Field<CardT>) {
+function getFieldValue<CardT extends CardConstructor, FieldT extends CardConstructor>(instance: CardInstanceType<CardT>, field: Field<FieldT>) {
   let { serialized, deserialized } = getDataBuckets(instance);
   // this establishes that our field should rerender when cardTracking for this card changes
   cardTracking.get(instance);
@@ -248,17 +254,17 @@ function getFieldValue<CardT extends CardConstructor>(instance: CardInstanceType
   }
 
   if (serialized.has(field.name)) {
-    let value = field.deserialize(serialized.get(field.name))
+    let value = field.deserialize(instance, serialized.get(field.name))
     deserialized.set(field.name, value);
     return value;
   }
 
-  let value = field.emptyValue();
+  let value = field.emptyValue(instance);
   deserialized.set(field.name, value);
   return value;
 }
 
-function makeDescriptor<CardT extends CardConstructor>(field: Field<CardT>) {
+function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstructor>(field: Field<FieldT>) {
   let descriptor: any = {
     enumerable: true,
   };
@@ -281,7 +287,7 @@ function makeDescriptor<CardT extends CardConstructor>(field: Field<CardT>) {
       return getFieldValue(this, field);
     }
     descriptor.set = function(this: CardInstanceType<CardT>, value: any) {
-      field.validateSet(value);
+      value = field.prepareSet(this, value);
       let { serialized, deserialized } = getDataBuckets(this);
       deserialized.set(field.name, value);
       // invalidate all computed fields because we don't know which ones depend on this one
@@ -318,7 +324,7 @@ export function contains<CardT extends CardConstructor>(cardOrThunk: CardT | (()
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
-export const field = function(_target: object, key: string | symbol, { initializer }: { initializer(): any }) {
+export const field = function(_target: CardConstructor, key: string | symbol, { initializer }: { initializer(): any }) {
   return initializer().setupField(key);
 } as unknown as PropertyDecorator;
 
