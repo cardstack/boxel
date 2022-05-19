@@ -46,12 +46,12 @@ export default class ContainsManyEditor extends Component<Signature> {
   }
 
   @action add() {
-    (this.args.model.value as any)[this.safeFieldName] = [...this.args.arrayField.children.map(b => b.value), null];
+    // TODO probably each field card should have the ability to say what a new item should be
+    (this.args.model.value as any)[this.safeFieldName].push(null);
   }
 
   @action remove(index: number) {
-    let value = this.args.arrayField.children.map(b => b.value);
-    value.splice(index, 1);
-    (this.args.model.value as any)[this.safeFieldName] = [ ...value];
+    let items = (this.args.model.value as any)[this.safeFieldName];
+    items.splice(index, 1);
   }
 }

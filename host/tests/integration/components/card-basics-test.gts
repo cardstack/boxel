@@ -291,7 +291,7 @@ module('Integration | card-basics', function (hooks) {
     await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Van Gogh Mango Peachy');
   });
 
-  skip('rerender when a containsMany field is mutated via assignment', async function(assert) {
+  test('rerender when a containsMany field is mutated via assignment', async function(assert) {
     class Person extends Card {
       @field pets = containsMany(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
@@ -460,7 +460,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output]').hasText('italian french spanish');
   });
 
-  skip('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
+  test('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
     function toDateString(date: Date | null) {
       return date instanceof Date ? date.toISOString().split('T')[0] : null;
     }
