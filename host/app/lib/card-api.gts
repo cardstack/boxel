@@ -646,10 +646,11 @@ export class Box<T> {
   private prevChildren: undefined | Box<ElementType<T>>[];
 
   get children(): Box<ElementType<T>>[] {
-    let value = this.value;
-    if (!Array.isArray(value)) {
+    let _value = this.value as T | T[];
+    if (!Array.isArray(_value)) {
       throw new Error(`tried to call children() on Boxed non-array value ${this.value} for ${String(this.fieldName)}`);
     }
+    let value = _value; // Help TS understand that value is an array in closures
     if (this.prevChildren) {
       let { prevChildren } = this;
       let newChildren: Box<ElementType<T>>[] = value.map((element, index) => {
@@ -665,7 +666,10 @@ export class Box<T> {
       this.prevChildren = newChildren;
       return newChildren;
     } else {
-      this.prevChildren = value.map((_element, index) => new Box(value, index, this));
+      // we need to be careful here in that value is live bound and we don't
+      // want the prevChildren changing out from underneath us when the model
+      // is mutated, so we make a new array to hold these values
+      this.prevChildren = value.map((_element, index) => new Box([...value], index, this));
       return this.prevChildren;
     }
   }
