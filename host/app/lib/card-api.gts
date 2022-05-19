@@ -54,6 +54,7 @@ interface Field<CardT extends CardConstructor> {
   serialize(value: any): any;
   deserialize(value: any): any;
   emptyValue(): any;
+  validateSet(value: any): void;
 }
 
 export class Card {
@@ -188,6 +189,11 @@ class ContainsMany<CardT extends CardConstructor> implements Field<CardT> {
 
   emptyValue() { return [] }
 
+  validateSet(value: any) {
+    if (value && !Array.isArray(value)) {
+      throw new Error(`Expected array for field value ${this.name}`);
+    }
+  }
 }
 
 
@@ -220,6 +226,16 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
   emptyValue() { 
     return undefined; 
   }
+
+  validateSet(value: any) {
+    if (primitive in this.card) {
+      // todo: primitives could implement a validation symbol
+    } else {
+      if (value != null && !(value instanceof this.card)) {
+        throw new Error(`tried set ${value} as field ${this.name} but it is not an instance of ${this.card.name}`);
+      }
+    }
+  }
 }
 
 function getFieldValue<CardT extends CardConstructor>(instance: CardInstanceType<CardT>, field: Field<CardT>) {
@@ -242,28 +258,12 @@ function getFieldValue<CardT extends CardConstructor>(instance: CardInstanceType
   return value;
 }
 
-function computedGet<CardT extends CardConstructor>(field: Field<CardT>) {
-  return function(this: InstanceType<CardT>) {
-    let { deserialized } = getDataBuckets(this);
-    // this establishes that our field should rerender when cardTracking for this card changes
-    cardTracking.get(this);
-    let value = deserialized.get(field.name);
-    if (value === undefined && typeof field.computeVia === 'function' && field.computeVia.constructor.name !== 'AsyncFunction') {
-      value = field.computeVia.bind(this)();
-      deserialized.set(field.name, value);
-    } else if (value === undefined && (typeof field.computeVia === 'string' || typeof field.computeVia === 'function')) {
-      throw new NotReady(this, field.name, field.computeVia, this.constructor.name);
-    }
-    return value;
+function makeDescriptor<CardT extends CardConstructor>(field: Field<CardT>) {
+  let descriptor: any = {
+    enumerable: true,
   };
-}
-
-
-
-function makeGetter<CardT extends CardConstructor>(field: Field<CardT>) {
-  let result;
   if (field.computeVia) {
-    result = function(this: CardInstanceType<CardT>) {
+    descriptor.get = function(this: CardInstanceType<CardT>) {
       let { deserialized } = getDataBuckets(this);
       // this establishes that our field should rerender when cardTracking for this card changes
       cardTracking.get(this);
@@ -277,70 +277,41 @@ function makeGetter<CardT extends CardConstructor>(field: Field<CardT>) {
       return value;
     };
   } else {
-    result = function(this: CardInstanceType<CardT>) {
+    descriptor.get = function(this: CardInstanceType<CardT>) {
       return getFieldValue(this, field);
     }
+    descriptor.set = function(this: CardInstanceType<CardT>, value: any) {
+      field.validateSet(value);
+      let { serialized, deserialized } = getDataBuckets(this);
+      deserialized.set(field.name, value);
+      // invalidate all computed fields because we don't know which ones depend on this one
+      for (let computedFieldName of Object.keys(getComputedFields(this))) {
+        deserialized.delete(computedFieldName);
+      }
+      serialized.delete(field.name);
+      (async () => await recompute(this))();
+    }
   }
-  (result as any)[isField] = field;
-  return result;
+  (descriptor.get as any)[isField] = field;
+  return descriptor;
+}
+
+function cardThunk<CardT extends CardConstructor>(cardOrThunk: CardT | (() => CardT)): () => CardT {
+  return ("baseCard" in cardOrThunk ? () => cardOrThunk : cardOrThunk) as () => CardT;
 }
 
 export function containsMany<CardT extends CardConstructor>(cardOrThunk: CardT | (() => CardT), options?: Options): CardInstanceType<CardT>[] {
-  let cardThunk = ("baseCard" in cardOrThunk ? () => cardOrThunk : cardOrThunk) as () => CardT;
   return {
     setupField(fieldName: string) {
-      return {
-        enumerable: true,
-        get: makeGetter(new ContainsMany(cardThunk, options?.computeVia, fieldName)),
-        ...(options?.computeVia
-          ? {} // computeds don't have setters
-          : {
-            set(this: InstanceType<CardT>, value: any) {
-              if (value && !Array.isArray(value)) {
-                throw new Error(`Expected array for field value ${fieldName} for card ${this.constructor.name}`);
-              }
-
-              // TODO with the exception of the guard above, this is identical to the contains() setter
-              let { serialized, deserialized } = getDataBuckets(this);
-              deserialized.set(fieldName, value);
-              // invalidate all computed fields because we don't know which ones depend on this one
-              for (let computedFieldName of Object.keys(getComputedFields(this))) {
-                deserialized.delete(computedFieldName);
-              }
-              (async () => await recompute(this))();
-              serialized.delete(fieldName);
-            }
-          }
-        )
-      };
+      return makeDescriptor(new ContainsMany(cardThunk(cardOrThunk), options?.computeVia, fieldName));
     }
   } as any;
 }
 
 export function contains<CardT extends CardConstructor>(cardOrThunk: CardT | (() => CardT), options?: Options): CardInstanceType<CardT> {
-  let cardThunk = ("baseCard" in cardOrThunk ? () => cardOrThunk : cardOrThunk) as () => CardT;
-  let { computeVia } = options ?? {};
   return {
     setupField(fieldName: string) {
-      return {
-        enumerable: true,
-        get: makeGetter(new Contains(cardThunk, computeVia, fieldName)),
-        ...(computeVia
-          ? {} // computeds don't have setters
-          : {
-            set(this: InstanceType<CardT>, value: any) {
-              let { serialized, deserialized } = getDataBuckets(this);
-              deserialized.set(fieldName, value);
-              // invalidate all computed fields because we don't know which ones depend on this one
-              for (let computedFieldName of Object.keys(getComputedFields(this))) {
-                deserialized.delete(computedFieldName);
-              }
-              serialized.delete(fieldName);
-              (async () => await recompute(this))();
-            }
-          }
-        )
-      };
+      return makeDescriptor(new Contains(cardThunk(cardOrThunk), options?.computeVia, fieldName));
     }
   } as any
 }
@@ -456,7 +427,6 @@ async function recompute(card: Card): Promise<void> {
       if (!(primitive in field.card) && value != null &&
         !stack.find(({ from, to, name }) => from === model && to === value && name === fieldName)
       ) {
-        debugger;
         await _loadModel(value, [...stack, { from: model, to: value, name: fieldName }]);
       }
     }

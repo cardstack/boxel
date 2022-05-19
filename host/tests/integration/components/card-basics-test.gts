@@ -330,7 +330,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
     }
-    assert.throws(() => new Person({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken for card Person/);
+    assert.throws(() => new Person({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken/);
     assert.throws(() => Person.fromSerialized({ languagesSpoken: 'english' }).languagesSpoken, /Expected array for field value languagesSpoken/);
   });
 
