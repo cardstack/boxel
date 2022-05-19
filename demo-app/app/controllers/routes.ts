@@ -48,34 +48,11 @@ export default class RoutesController extends Controller {
 
         let moveLeft = keptSprite.id === 'route-content-other';
 
-        let { x, y, width } = keptSprite.finalBounds.element;
-        let finalElementBounds;
-        if (moveLeft) {
-          finalElementBounds = new DOMRect(
-            x - width,
-            y,
-            removedSprite.initialBounds.element.width,
-            removedSprite.initialBounds.element.height
-          );
-        } else {
-          finalElementBounds = new DOMRect(
-            x + width,
-            y,
-            removedSprite.initialBounds.element.width,
-            removedSprite.initialBounds.element.height
-          );
-        }
-        removedSprite.finalBounds = new ContextAwareBounds({
-          element: finalElementBounds,
-          contextElement: context.currentBounds,
-        });
-
         let initialBounds = removedSprite.initialBounds.relativeToContext;
-        let finalBounds = removedSprite.finalBounds.relativeToContext;
 
         removedSprite.setupAnimation('position', {
           startX: initialBounds.x,
-          endX: finalBounds.x,
+          endX: (moveLeft ? -1 : 1) * initialBounds.width,
           behavior: springBehavior,
         });
       }
