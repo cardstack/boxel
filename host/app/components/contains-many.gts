@@ -51,7 +51,6 @@ export default class ContainsManyEditor extends Component<Signature> {
   }
 
   @action remove(index: number) {
-    let items = (this.args.model.value as any)[this.safeFieldName];
-    items.splice(index, 1);
+    (this.args.model.value as any)[this.safeFieldName].splice(index, 1);
   }
 }
