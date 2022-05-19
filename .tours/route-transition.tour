@@ -24,7 +24,7 @@
     },
     {
       "file": "demo-app/app/templates/routes.hbs",
-      "description": "# AnimationContext\nLet's get to the API for creating an animation. We're back in the parent template. To create an animation, we first need an `AnimationContext`. This component is responsible for detecting when Ember is re-rendering its contents, and deciding how to animate them based on the function that we pass to `@use`.",
+      "description": "# AnimationContext\nLet's get to the API for creating an animation. We're back in the parent template. To create an animation, we first need an `AnimationContext`. This component is responsible for detecting when Ember is rerendering its contents, and deciding how to animate them based on the function that we pass to `@use`.",
       "pattern": "^[^\\S\\n]*<AnimationContext @id=\"routes-context\" @use=\\{\\{this\\.transition\\}\\} class=\"w-1/4 m-auto mt-5 overflow-hidden\">",
       "title": "AnimationContext"
     },
@@ -40,7 +40,7 @@
     },
     {
       "file": "demo-app/app/controllers/routes.ts",
-      "description": "# The transition function\nThis is the transition function we passed to the `AnimationContext` [earlier](command:codetour.navigateToStep?5). In this case, it is defined as a controller's method since that is the closest containing Javascript context for the `AnimationContext`, but transition functions can be defined as component methods, or even utility functions that are imported wherever they're needed.\n\nMore importantly, transition functions need to handle a single argument - a `Changeset` that holds groups of sprites whose states have changed in the DOM, and a reference to the `AnimationContext` that is handling the transition function.",
+      "description": "# The transition function\nThis is the transition function we passed to the `AnimationContext` [earlier](command:codetour.navigateToStep?5). In this case, it is defined as a controller's method, but transition functions can be defined as component methods, or even utility functions that are imported wherever they're needed.\n\nTransition functions need to handle a single argument - a `Changeset` that holds groups of sprites whose states have changed in the DOM, and a reference to the `AnimationContext` that is handling the transition function.",
       "pattern": "^[^\\S\\n]*async transition\\(changeset: Changeset\\): Promise<void> \\{"
     },
     {
@@ -60,17 +60,17 @@
     },
     {
       "file": "demo-app/app/controllers/routes.ts",
-      "description": "# Moving the removed sprite out\nHere, we set up the animation for the removed sprite. We're animating its position - its `endX`, or horizontal position, is set so that it will move its full width either left or right, hence hiding it completely, before it is removed from the DOM when the animation completes. Its other positional property (y) is not animated, and will remain the same throughout the animation.",
-      "line": 103
+      "description": "# Moving the removed sprite out\nWe're finally going to tell our sprites how to move! Here, we're animating the removed sprite by making it move its full width horizontally, exiting the visible area of the `outlet` it lives in. For this, we use the `'position'` animation.\n\nThis animation allows us to specify `startX`, `startY`, `endX`, and `endY`. These are positions relative to the sprite's current position. \n\nBecause we want the sprite to start at its initial position when animating, there's no need to specify `startX` or `startY`. We also don't want to change the vertical position of the sprite, so we don't specify `endY` either. We only specify an `endX` equal to its width (or negative of its width) to achieve our goal of getting the sprite to slide out of view.",
+      "line": 80
     },
     {
       "file": "demo-app/app/controllers/routes.ts",
-      "description": "# Moving the inserted sprite in\nFor the inserted sprite, we put it its full width away from the viewport, effectively hiding it, and move it towards the position it's meant to be. ",
-      "line": 108
+      "description": "# Moving the inserted sprite in\nWe do the same as the [previous step](command:codetour.navigateToStep?12) here, since both the inserted sprite and the removed sprite are moving in the same direction, and have the same width.",
+      "line": 85
     },
     {
       "file": "demo-app/app/controllers/routes.ts",
-      "description": "# Aside about behaviors\nYou might have noticed a reference to `springBehavior` below. Behaviors are similar to easing functions. `SpringBehavior` makes the animation behave like a spring - it might move slower at the beginning, faster in the middle, and slower at the end, and also have a bit of a bounce.",
+      "description": "# Aside about behaviors\nYou might have noticed a reference to `springBehavior` below. Behaviors provide easing for our animations. `SpringBehavior` makes the animation behave like a spring - it might move slower at the beginning, faster in the middle, slower at the end, and also have a bit of a bounce. There's also a `LinearBehavior` that would make our sprite move at the same speed throughout the animation.",
       "line": 13
     },
     {
@@ -80,8 +80,39 @@
     },
     {
       "file": "demo-app/app/controllers/routes.ts",
-      "description": "# Interruption - Kept sprites\nKept sprites are sprites that were in the DOM the previous render. We get kept sprites in 2 ways:\n\n1. A DOM element that is not removed or inserted has its styles modified in this render.\n2. A rerender that interrupts the animation of a removed sprite, after which the sprite's DOM element should no longer be removed. \n\nIn this case, we only get kept sprites when we interrupt the transition (the 2nd way). In the example below, we click on the link in `routes.index`, then click on the link in `routes.other` before the animation has completed. In this case, we're transitioning back to `routes.index`, and because the link from `routes.index` was present in the previous render, it is now a kept sprite (as opposed to inserted).",
+      "description": "# Interruption\nIf you click on a link as it's animating in, we try to move it back out of view and bring the previous one back into view smoothly. We call this an interruption. For this interruption, we introduce a new sprite type in addition to removed and inserted sprites - kept sprites. \n\nKept sprites are sprites that were in the DOM the previous render. We get kept sprites in 2 ways:\n\n1. A DOM element that is not removed or inserted has its styles modified in this render.\n2. A rerender that interrupts the animation of a removed sprite, after which the sprite's DOM element should no longer be removed. \n\nIn this case, we only get kept sprites when we interrupt the transition (the 2nd way) - so if we see a kept sprite, we know we're dealing with an interruption. ",
       "pattern": "^[^\\S\\n]*if \\(keptSprites\\.size > 0\\) \\{"
+    },
+    {
+      "file": "demo-app/app/controllers/routes.ts",
+      "description": "# Accounting for position mid-animation\nFor the interruption to appear smooth, we need to start the animation right where the previous one was interrupted. This is the X at the start of this render, and is available as `removedSprite.initialBounds.relativeToContext.x`.",
+      "pattern": "^[^\\S\\n]*startX: initialBounds\\.x,",
+      "selection": {
+        "start": {
+          "line": 73,
+          "character": 29
+        },
+        "end": {
+          "line": 73,
+          "character": 34
+        }
+      },
+      "line": 54
+    },
+    {
+      "file": "demo-app/app/controllers/routes.ts",
+      "description": "# Determining the end position\nSimilar to [what we did with the inserted sprite's id](command:codetour.navigateToStep?11), we use the kept sprite's id to tell if we should move left (-1) or right (1) and multiply that by the width of the removed sprite.",
+      "pattern": "^[^\\S\\n]*endX: \\(moveLeft \\? -1 : 1\\) \\* initialBounds\\.width,"
+    },
+    {
+      "file": "demo-app/app/controllers/routes.ts",
+      "description": "# Magic Move\nMagic move is a utility that sets up `'position'` animations on kept sprites. It uses the sprite's current position (accounting for state mid-animation), and final position, and interpolates between them to generate a smooth animation without you having to provide specific start and end points.",
+      "pattern": "^[^\\S\\n]*magicMove\\(changeset, \\{"
+    },
+    {
+      "file": "demo-app/app/controllers/routes.ts",
+      "description": "# Back to the end\nJust like [the uninterrupted case](command:codetour.navigateToStep?15), we need to start our animations using `runAnimations`. That's it for this animation!",
+      "pattern": "^[^\\S\\n]*await runAnimations\\(\\["
     }
   ]
 }
