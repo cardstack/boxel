@@ -1,10 +1,11 @@
-import { primitive, Component, Card } from 'runtime-spike/lib/card-api';
+import { primitive, Component, Card, useIndexBasedKey } from 'runtime-spike/lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { pick } from './pick';
 
 export default class IntegerCard extends Card {
   static [primitive]: number;
+  static [useIndexBasedKey];
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>{{@model}}</template>

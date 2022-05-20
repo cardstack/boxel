@@ -11,6 +11,7 @@ import { WatchedArray } from './watched-array';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
+export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
 
 const isField = Symbol('cardstack-field');
 
@@ -529,7 +530,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       if (getField(modelValue.constructor, property)?.containsMany) {
         if (defaultFormat === 'edit') {
           let fieldName = property as keyof Card; // to get around linting error
-          let arrayField = model.field(property as keyof T) as unknown as Box<Card[]>;
+          let arrayField = model.field(property as keyof T, useIndexBasedKey in field.card) as unknown as Box<Card[]>;
           return class ContainsManyEditorTemplate extends GlimmerComponent {
             <template>
               <ContainsManyEditor
@@ -543,7 +544,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
             </template>
           };
         }
-        let arrayField = model.field(property as keyof T) as unknown as Box<Card[]>;
+        let arrayField = model.field(property as keyof T, useIndexBasedKey in field.card) as unknown as Box<Card[]>;
         return class ContainsMany extends GlimmerComponent {
           <template>
             {{#each arrayField.children as |boxedElement|}}
@@ -599,11 +600,17 @@ export class Box<T> {
   static create<T>(model: T): Box<T> {
     return new Box(model);
   }
-
-  private constructor(private model: any, private fieldName?: string | number | symbol, private containingBox?: Box<any>) { }
+  private constructor(private model: any, private fieldName?: string | number | symbol, private containingBox?: Box<any>, private useIndexBasedKeys?: boolean) { }
 
   get value(): T {
     if (this.fieldName != null) {
+      // I think we might have a consumption issue when we are rendering specific items of a contains-many
+      // it does not seem like we are rerendering specific primitive items when they are changed--perhaps because we are
+      // not consuming them at an item level? currently consumption happens at the whole field.
+      if (this.containingBox.value != null) { 
+        cardTracking.get(this.containingBox.value);
+      }
+      
       return this.model[this.fieldName];
     } else {
       return this.model;
@@ -634,10 +641,10 @@ export class Box<T> {
 
   private fieldBoxes = new Map<string, Box<unknown>>();
 
-  field<K extends keyof T>(fieldName: K): Box<T[K]> {
+  field<K extends keyof T>(fieldName: K, useIndexBasedKeys = false): Box<T[K]> {
     let box = this.fieldBoxes.get(fieldName as string);
     if (!box) {
-      box = new Box(this.value, fieldName, this);
+      box = new Box(this.value, fieldName, this, useIndexBasedKeys);
       this.fieldBoxes.set(fieldName as string, box);
     }
     return box as Box<T[K]>;
@@ -653,10 +660,18 @@ export class Box<T> {
     if (this.prevChildren) {
       let { prevChildren } = this;
       let newChildren: Box<ElementType<T>>[] = value.map((element, index) => {
-        let found = prevChildren.find(oldBox => oldBox.value === element);
+        let found = prevChildren.find((oldBox, i) =>
+          (this.useIndexBasedKeys ? index === i : oldBox.value === element) &&
+          oldBox.model === value);
         if (found) {
-          prevChildren.splice(prevChildren.indexOf(found), 1);
-          found.fieldName = index;
+          if (this.useIndexBasedKeys) {
+            // note that the underlying box already has the correct value--also, we are currently
+            // inside a rerender. mutating a watched array in a rerender will spawn another rerender--and infinitely recurse
+            // found.value = element;
+          } else {
+            prevChildren.splice(prevChildren.indexOf(found), 1);
+            found.fieldName = index;
+          }
           return found;
         } else {
           return new Box(value, index, this);
@@ -665,10 +680,7 @@ export class Box<T> {
       this.prevChildren = newChildren;
       return newChildren;
     } else {
-      // we need to be careful here in that value is live bound and we don't
-      // want the prevChildren changing out from underneath us when the model
-      // is mutated, so we make a new array to hold these values
-      this.prevChildren = value.map((_element, index) => new Box([...value], index, this));
+      this.prevChildren = value.map((_element, index) => new Box(value, index, this));
       return this.prevChildren;
     }
   }

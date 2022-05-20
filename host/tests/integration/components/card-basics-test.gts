@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn, click, waitUntil } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
@@ -309,6 +309,9 @@ module('Integration | card-basics', function (hooks) {
   });
 
 
+  skip('rerender when a containsMany field changes size');
+  // both growing and shrinking
+
   test('supports an empty containsMany composite field', async function (assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -475,6 +478,7 @@ module('Integration | card-basics', function (hooks) {
     });
 
     await renderCard(card, 'edit');
+    await this.pauseTest();
     assert.dom('[data-test-item]').exists({ count: 2 });
     assert.dom('[data-test-item="0"] input').hasValue('english');
     assert.dom('[data-test-output]').hasText('english japanese');
