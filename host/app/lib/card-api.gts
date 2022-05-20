@@ -656,8 +656,7 @@ export class Box<T> {
       let { prevChildren } = this;
       let newChildren: Box<ElementType<T>>[];
       if (prevChildren.length > 0 && prevChildren[0].model !== value) {
-        // a new array has been assigned to the field, so let's
-        // make that new array our model instead
+        // a new array has been assigned to the field, so let's make that new array our model instead
         newChildren = value.map((_, index) => new Box(value, index, this));
       } else {
         newChildren = value.map((element, index) => {
