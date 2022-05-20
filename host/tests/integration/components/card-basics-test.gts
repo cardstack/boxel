@@ -462,13 +462,15 @@ module('Integration | card-basics', function (hooks) {
     }
 
     let card = new Person({
-      languagesSpoken: ['english'],
+      languagesSpoken: ['english', "japanese"],
     });
 
     await renderCard(card, 'edit');
-    assert.dom('[data-counter]').hasAttribute('data-counter', '0');
-    await fillIn('[data-counter]', 'italian');
-    assert.dom('[data-counter]').hasAttribute('data-counter', '0');
+    assert.dom('[data-test-item="0"] [data-counter]').hasAttribute('data-counter', '0');
+    assert.dom('[data-test-item="1"] [data-counter]').hasAttribute('data-counter', '1');
+    await fillIn('[data-test-item="0"] [data-counter]', 'italian');
+    assert.dom('[data-test-item="0"] [data-counter]').hasAttribute('data-counter', '0');
+    assert.dom('[data-test-item="1"] [data-counter]').hasAttribute('data-counter', '1');
   });
 
   test('add, remove and edit items in containsMany string field', async function (assert) {
