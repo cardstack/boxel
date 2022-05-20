@@ -607,7 +607,7 @@ export class Box<T> {
       // I think we might have a consumption issue when we are rendering specific items of a contains-many
       // it does not seem like we are rerendering specific primitive items when they are changed--perhaps because we are
       // not consuming them at an item level? currently consumption happens at the whole field.
-      if (this.containingBox.value != null) { 
+      if (this.containingBox?.value != null) { 
         cardTracking.get(this.containingBox.value);
       }
       

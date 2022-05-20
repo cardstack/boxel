@@ -5,7 +5,7 @@ import { pick } from './pick';
 
 export default class IntegerCard extends Card {
   static [primitive]: number;
-  static [useIndexBasedKey];
+  static [useIndexBasedKey]: never;
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>{{@model}}</template>
