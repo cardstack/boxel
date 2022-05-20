@@ -2,13 +2,16 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn, click, waitUntil } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
-import { contains, containsMany, field, Component, primitive, Card } from 'runtime-spike/lib/card-api';
+import { contains, containsMany, field, Component, primitive, Card, SignatureFor } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import IntegerCard from 'runtime-spike/lib/integer';
 import DateCard from 'runtime-spike/lib/date';
 import DatetimeCard from 'runtime-spike/lib/datetime';
 import { cleanWhiteSpace, p } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
+import { on } from '@ember/modifier';
+import { pick } from 'runtime-spike/lib/pick';
+
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -416,6 +419,40 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output="title"]').hasText('New Title');
     assert.dom('[data-test-output="reviews"]').hasText('5');
     assert.dom('[data-test-output="author.firstName"]').hasText('Carl Stack');
+  });
+
+  test('component stability when editing containsMany primitive field', async function(assert) {
+    let counter = 0;
+    class TestString extends StringCard {
+      static edit = class Edit extends Component<typeof this> {
+        private counter: number;
+        constructor(owner: unknown, args: SignatureFor<typeof TestString>["Args"]) {
+          super(owner, args);
+          this.counter = counter++;
+        }
+        <template>
+          <input data-counter={{this.counter}} type="text" value={{@model}} {{on "input" (pick "target.value" @set) }} />
+        </template>
+      }
+    }
+
+    class Person extends Card {
+      @field languagesSpoken = containsMany(TestString);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.languagesSpoken />
+        </template>
+      }
+    }
+
+    let card = new Person({
+      languagesSpoken: ['english'],
+    });
+
+    await renderCard(card, 'edit');
+    assert.dom('[data-counter]').hasAttribute('data-counter', '0');
+    await fillIn('[data-counter]', 'italian');
+    assert.dom('[data-counter]').hasAttribute('data-counter', '0');
   });
 
   test('add, remove and edit items in containsMany string field', async function (assert) {

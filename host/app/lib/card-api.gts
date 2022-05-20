@@ -328,7 +328,7 @@ export const field = function(_target: CardConstructor, key: string | symbol, { 
   return initializer().setupField(key);
 } as unknown as PropertyDecorator;
 
-type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; } }
+export type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; } }
 
 export class Component<CardT extends CardConstructor> extends GlimmerComponent<SignatureFor<CardT>> {
 
