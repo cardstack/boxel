@@ -661,15 +661,13 @@ export class Box<T> {
         newChildren = value.map((_, index) => new Box(value, index, this));
       } else {
         newChildren = value.map((element, index) => {
-          let found = prevChildren.find((oldBox, i) =>
-            (
-              this.useIndexBasedKeys ? index === i : oldBox.value === element)
-            );
+          let found = prevChildren.find((oldBox, i) => (this.useIndexBasedKeys ? index === i : oldBox.value === element));
           if (found) {
             if (this.useIndexBasedKeys) {
-              // note that the underlying box already has the correct value--also, we are currently
-              // inside a rerender. mutating a watched array in a rerender will spawn
-              // another rerender--and infinitely recurse
+              // note that the underlying box already has the correct value so there
+              // is nothing to do in this case. also, we are currently inside a rerender.
+              // mutating a watched array in a rerender will spawn another rerender which
+              // infinitely recurses.
             } else {
               prevChildren.splice(prevChildren.indexOf(found), 1);
               found.fieldName = index;
