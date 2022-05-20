@@ -309,8 +309,21 @@ module('Integration | card-basics', function (hooks) {
   });
 
 
-  skip('rerender when a containsMany field changes size');
-  // both growing and shrinking
+  test('rerender when a containsMany field changes size', async function(assert) {
+    class Person extends Card {
+      @field pets = containsMany(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.pets/></template>
+      }
+    }
+    let person = new Person({ pets: ['Mango', 'Van Gogh'] });
+    await renderCard(person, 'embedded');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh');
+    person.pets.push('Peachy');
+    await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Mango Van Gogh Peachy');
+    person.pets.shift();
+    await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Van Gogh Peachy');
+  });
 
   test('supports an empty containsMany composite field', async function (assert) {
     class Person extends Card {
