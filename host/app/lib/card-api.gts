@@ -604,10 +604,9 @@ export class Box<T> {
 
   get value(): T {
     if (this.fieldName != null) {
-      // I think we might have a consumption issue when we are rendering specific items of a contains-many
-      // it does not seem like we are rerendering specific primitive items when they are changed--perhaps because we are
-      // not consuming them at an item level? currently consumption happens at the whole field.
-      this.containingBox?.value // consume the containing box
+      // consume the containing box so we can trigger rerenders for
+      // individual items in a watched array
+      this.containingBox?.value
       
       return this.model[this.fieldName];
     } else {
@@ -624,14 +623,12 @@ export class Box<T> {
 
   set = (value: T): void => {
     let fieldBox = this.containingBox;
-    let cardBox = fieldBox?.containingBox;
-    if (cardBox && fieldBox && Array.isArray(fieldBox.value)) {
+    if (fieldBox && Array.isArray(fieldBox.value)) {
       let index = this.fieldName;
       if (typeof index !== 'number') {
         throw new Error(`Cannot set a value on an array item with non-numeric index '${String(index)}'`);
       }
       fieldBox.value[index] = value;
-      cardBox.value[fieldBox.fieldName!] = [...fieldBox.value];
     } else {
       this.value = value;
     }
