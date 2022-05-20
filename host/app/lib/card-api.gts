@@ -607,9 +607,7 @@ export class Box<T> {
       // I think we might have a consumption issue when we are rendering specific items of a contains-many
       // it does not seem like we are rerendering specific primitive items when they are changed--perhaps because we are
       // not consuming them at an item level? currently consumption happens at the whole field.
-      if (this.containingBox?.value != null) { 
-        cardTracking.get(this.containingBox.value);
-      }
+      this.containingBox?.value // consume the containing box
       
       return this.model[this.fieldName];
     } else {
@@ -659,24 +657,32 @@ export class Box<T> {
     let value = this.value;
     if (this.prevChildren) {
       let { prevChildren } = this;
-      let newChildren: Box<ElementType<T>>[] = value.map((element, index) => {
-        let found = prevChildren.find((oldBox, i) =>
-          (this.useIndexBasedKeys ? index === i : oldBox.value === element) &&
-          oldBox.model === value);
-        if (found) {
-          if (this.useIndexBasedKeys) {
-            // note that the underlying box already has the correct value--also, we are currently
-            // inside a rerender. mutating a watched array in a rerender will spawn another rerender--and infinitely recurse
-            // found.value = element;
+      let newChildren: Box<ElementType<T>>[];
+      if (prevChildren.length > 1 && prevChildren[0].model !== value) {
+        // a new array has been assigned to the field, so let's
+        // make that new array our model instead
+        newChildren = value.map((_, index) => new Box(value, index, this));
+      } else {
+        newChildren = value.map((element, index) => {
+          let found = prevChildren.find((oldBox, i) =>
+            (
+              this.useIndexBasedKeys ? index === i : oldBox.value === element)
+            );
+          if (found) {
+            if (this.useIndexBasedKeys) {
+              // note that the underlying box already has the correct value--also, we are currently
+              // inside a rerender. mutating a watched array in a rerender will spawn
+              // another rerender--and infinitely recurse
+            } else {
+              prevChildren.splice(prevChildren.indexOf(found), 1);
+              found.fieldName = index;
+            }
+            return found;
           } else {
-            prevChildren.splice(prevChildren.indexOf(found), 1);
-            found.fieldName = index;
+            return new Box(value, index, this);
           }
-          return found;
-        } else {
-          return new Box(value, index, this);
-        }
-      });
+        });
+      }
       this.prevChildren = newChildren;
       return newChildren;
     } else {

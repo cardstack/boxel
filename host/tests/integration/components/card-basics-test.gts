@@ -478,7 +478,6 @@ module('Integration | card-basics', function (hooks) {
     });
 
     await renderCard(card, 'edit');
-    await this.pauseTest();
     assert.dom('[data-test-item]').exists({ count: 2 });
     assert.dom('[data-test-item="0"] input').hasValue('english');
     assert.dom('[data-test-output]').hasText('english japanese');
