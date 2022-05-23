@@ -598,91 +598,102 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
 
 export class Box<T> {
   static create<T>(model: T): Box<T> {
-    return new Box(model);
+    return new Box({ type: 'root', model });
   }
-  private constructor(private model: any, private fieldName?: string | number | symbol, private containingBox?: Box<any>, private useIndexBasedKeys?: boolean) { }
+
+  private state: 
+    { 
+      type: 'root';
+      model: any 
+    } | 
+    { 
+      type: 'derived';
+      containingBox: Box<any>;
+      fieldName: string | number| symbol;
+      useIndexBasedKeys: boolean;
+    };
+
+  private constructor(state: Box<T>["state"]) { 
+    this.state = state;
+  }
 
   get value(): T {
-    if (this.fieldName != null) {
-      // consume the containing box so we can trigger rerenders for
-      // individual items in a watched array
-      this.containingBox?.value
-      
-      return this.model[this.fieldName];
+    if (this.state.type === 'root') {
+      return this.state.model;
     } else {
-      return this.model;
+      return this.state.containingBox.value[this.state.fieldName];
     }
   }
 
   set value(v: T) {
-    if (this.fieldName == null) {
+    if (this.state.type === 'root') {
       throw new Error(`can't set topmost model`);
+    } else {
+      let value = this.state.containingBox.value;
+      if (Array.isArray(value) && typeof this.state.fieldName !== 'number') {
+        throw new Error(`Cannot set a value on an array item with non-numeric index '${String(this.state.fieldName)}'`);
+      }
+      this.state.containingBox.value[this.state.fieldName] = v;
     }
-    this.model[this.fieldName] = v;
   }
 
-  set = (value: T): void => {
-    let fieldBox = this.containingBox;
-    if (fieldBox && Array.isArray(fieldBox.value)) {
-      let index = this.fieldName;
-      if (typeof index !== 'number') {
-        throw new Error(`Cannot set a value on an array item with non-numeric index '${String(index)}'`);
-      }
-      fieldBox.value[index] = value;
-    } else {
-      this.value = value;
-    }
-  }
+  set = (value: T): void => { this.value = value; }
 
   private fieldBoxes = new Map<string, Box<unknown>>();
 
   field<K extends keyof T>(fieldName: K, useIndexBasedKeys = false): Box<T[K]> {
     let box = this.fieldBoxes.get(fieldName as string);
     if (!box) {
-      box = new Box(this.value, fieldName, this, useIndexBasedKeys);
+      box = new Box({
+        type: 'derived',
+        containingBox: this, 
+        fieldName, 
+        useIndexBasedKeys,
+      });
       this.fieldBoxes.set(fieldName as string, box);
     }
     return box as Box<T[K]>;
   }
 
-  private prevChildren: undefined | Box<ElementType<T>>[];
+  private prevChildren: Box<ElementType<T>>[] = [];
 
   get children(): Box<ElementType<T>>[] {
-    if (!Array.isArray(this.value)) {
-      throw new Error(`tried to call children() on Boxed non-array value ${this.value} for ${String(this.fieldName)}`);
+    if (this.state.type === 'root') {
+      throw new Error('tried to call children() on root box');
     }
     let value = this.value;
-    if (this.prevChildren) {
-      let { prevChildren } = this;
-      let newChildren: Box<ElementType<T>>[];
-      if (prevChildren.length > 0 && prevChildren[0].model !== value) {
-        // a new array has been assigned to the field, so let's make that new array our model instead
-        newChildren = value.map((_, index) => new Box(value, index, this));
-      } else {
-        newChildren = value.map((element, index) => {
-          let found = prevChildren.find((oldBox, i) => (this.useIndexBasedKeys ? index === i : oldBox.value === element));
-          if (found) {
-            if (this.useIndexBasedKeys) {
-              // note that the underlying box already has the correct value so there
-              // is nothing to do in this case. also, we are currently inside a rerender.
-              // mutating a watched array in a rerender will spawn another rerender which
-              // infinitely recurses.
-            } else {
-              prevChildren.splice(prevChildren.indexOf(found), 1);
-              found.fieldName = index;
-            }
-            return found;
-          } else {
-            return new Box(value, index, this);
+    if (!Array.isArray(value)) {
+      throw new Error(`tried to call children() on Boxed non-array value ${value} for ${String(this.state.fieldName)}`);
+    }
+
+    let { prevChildren, state } = this;
+    let newChildren: Box<ElementType<T>>[] = value.map((element, index) => {
+      let found = prevChildren.find((oldBox, i) => (state.useIndexBasedKeys ? index === i : oldBox.value === element));
+      if (found) {
+        if (state.useIndexBasedKeys) {
+          // note that the underlying box already has the correct value so there
+          // is nothing to do in this case. also, we are currently inside a rerender.
+          // mutating a watched array in a rerender will spawn another rerender which
+          // infinitely recurses.
+        } else {
+          prevChildren.splice(prevChildren.indexOf(found), 1);
+          if (found.state.type === 'root') {
+            throw new Error('bug');
           }
+          found.state.fieldName = index;
+        }
+        return found;
+      } else {
+        return new Box({ 
+          type: 'derived',
+          containingBox: this,
+          fieldName: index,
+          useIndexBasedKeys: false,
         });
       }
-      this.prevChildren = newChildren;
-      return newChildren;
-    } else {
-      this.prevChildren = value.map((_element, index) => new Box(value, index, this));
-      return this.prevChildren;
-    }
+    });
+    this.prevChildren = newChildren;
+    return newChildren;
   }
 
 }
