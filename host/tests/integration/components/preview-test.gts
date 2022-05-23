@@ -21,6 +21,10 @@ module('Integration | preview', function (hooks) {
     assert.dom('.card-chooser .card-button').exists({ count: 2}, 'Found 2 cards');
     assert.dom('.card-chooser').containsText('Person');
     assert.dom('.card-chooser').containsText('Post');
+
+    assert.dom('.card-chooser').doesNotContainText('notACard');
+    assert.dom('.card-chooser').doesNotContainText('alsoNotACard');
+
     assert.dom('.selected-card').doesNotContainText('Person');
     assert.dom('.selected-card').doesNotContainText('Post');
   });

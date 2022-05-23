@@ -32,3 +32,4 @@ export class Post extends Card {
 }
 
 export const notACard = "I'm not a card";
+export const alsoNotACard = { notACard: true };
