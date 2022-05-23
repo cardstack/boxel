@@ -11,6 +11,7 @@ import { WatchedArray } from './watched-array';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
+export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
 
 const isField = Symbol('cardstack-field');
 
@@ -328,7 +329,7 @@ export const field = function(_target: CardConstructor, key: string | symbol, { 
   return initializer().setupField(key);
 } as unknown as PropertyDecorator;
 
-type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; } }
+export type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; } }
 
 export class Component<CardT extends CardConstructor> extends GlimmerComponent<SignatureFor<CardT>> {
 
@@ -529,7 +530,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       if (getField(modelValue.constructor, property)?.containsMany) {
         if (defaultFormat === 'edit') {
           let fieldName = property as keyof Card; // to get around linting error
-          let arrayField = model.field(property as keyof T) as unknown as Box<Card[]>;
+          let arrayField = model.field(property as keyof T, useIndexBasedKey in field.card) as unknown as Box<Card[]>;
           return class ContainsManyEditorTemplate extends GlimmerComponent {
             <template>
               <ContainsManyEditor
@@ -543,7 +544,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
             </template>
           };
         }
-        let arrayField = model.field(property as keyof T) as unknown as Box<Card[]>;
+        let arrayField = model.field(property as keyof T, useIndexBasedKey in field.card) as unknown as Box<Card[]>;
         return class ContainsMany extends GlimmerComponent {
           <template>
             {{#each arrayField.children as |boxedElement|}}
@@ -599,11 +600,14 @@ export class Box<T> {
   static create<T>(model: T): Box<T> {
     return new Box(model);
   }
-
-  private constructor(private model: any, private fieldName?: string | number | symbol, private containingBox?: Box<any>) { }
+  private constructor(private model: any, private fieldName?: string | number | symbol, private containingBox?: Box<any>, private useIndexBasedKeys?: boolean) { }
 
   get value(): T {
     if (this.fieldName != null) {
+      // consume the containing box so we can trigger rerenders for
+      // individual items in a watched array
+      this.containingBox?.value
+      
       return this.model[this.fieldName];
     } else {
       return this.model;
@@ -619,14 +623,12 @@ export class Box<T> {
 
   set = (value: T): void => {
     let fieldBox = this.containingBox;
-    let cardBox = fieldBox?.containingBox;
-    if (cardBox && fieldBox && Array.isArray(fieldBox.value)) {
+    if (fieldBox && Array.isArray(fieldBox.value)) {
       let index = this.fieldName;
       if (typeof index !== 'number') {
         throw new Error(`Cannot set a value on an array item with non-numeric index '${String(index)}'`);
       }
       fieldBox.value[index] = value;
-      cardBox.value[fieldBox.fieldName!] = [...fieldBox.value];
     } else {
       this.value = value;
     }
@@ -634,10 +636,10 @@ export class Box<T> {
 
   private fieldBoxes = new Map<string, Box<unknown>>();
 
-  field<K extends keyof T>(fieldName: K): Box<T[K]> {
+  field<K extends keyof T>(fieldName: K, useIndexBasedKeys = false): Box<T[K]> {
     let box = this.fieldBoxes.get(fieldName as string);
     if (!box) {
-      box = new Box(this.value, fieldName, this);
+      box = new Box(this.value, fieldName, this, useIndexBasedKeys);
       this.fieldBoxes.set(fieldName as string, box);
     }
     return box as Box<T[K]>;
@@ -646,22 +648,35 @@ export class Box<T> {
   private prevChildren: undefined | Box<ElementType<T>>[];
 
   get children(): Box<ElementType<T>>[] {
-    let value = this.value;
-    if (!Array.isArray(value)) {
+    if (!Array.isArray(this.value)) {
       throw new Error(`tried to call children() on Boxed non-array value ${this.value} for ${String(this.fieldName)}`);
     }
+    let value = this.value;
     if (this.prevChildren) {
       let { prevChildren } = this;
-      let newChildren: Box<ElementType<T>>[] = value.map((element, index) => {
-        let found = prevChildren.find(oldBox => oldBox.value === element);
-        if (found) {
-          prevChildren.splice(prevChildren.indexOf(found), 1);
-          found.fieldName = index;
-          return found;
-        } else {
-          return new Box(value, index, this);
-        }
-      });
+      let newChildren: Box<ElementType<T>>[];
+      if (prevChildren.length > 0 && prevChildren[0].model !== value) {
+        // a new array has been assigned to the field, so let's make that new array our model instead
+        newChildren = value.map((_, index) => new Box(value, index, this));
+      } else {
+        newChildren = value.map((element, index) => {
+          let found = prevChildren.find((oldBox, i) => (this.useIndexBasedKeys ? index === i : oldBox.value === element));
+          if (found) {
+            if (this.useIndexBasedKeys) {
+              // note that the underlying box already has the correct value so there
+              // is nothing to do in this case. also, we are currently inside a rerender.
+              // mutating a watched array in a rerender will spawn another rerender which
+              // infinitely recurses.
+            } else {
+              prevChildren.splice(prevChildren.indexOf(found), 1);
+              found.fieldName = index;
+            }
+            return found;
+          } else {
+            return new Box(value, index, this);
+          }
+        });
+      }
       this.prevChildren = newChildren;
       return newChildren;
     } else {
