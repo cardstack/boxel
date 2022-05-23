@@ -1,20 +1,30 @@
 import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
 
+export interface Module {
+  [exportName: string]: any;
+}
+
 interface Args {
-  named: { url: URL };
+  named: { urlOrModule: URL | Module };
 }
 
 export class ImportResource extends Resource<Args> {
-  @tracked module: any;
+  @tracked module: Module | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    this.load(args.named.url);
+    this.load(args.named.urlOrModule);
   }
 
-  private async load(url: URL) {
+  private async load(urlOrModule: URL | Module) {
+    if (!(urlOrModule instanceof URL)) {
+      this.module = urlOrModule;
+      return;
+    }
+
+    let url = urlOrModule;
     try {
       this.module = await import(/* webpackIgnore: true */ url.href);
     } catch (err) {
@@ -39,6 +49,13 @@ Check console log for more details`,
   }
 }
 
-export function importResource(parent: object, url: () => URL) {
-  return useResource(parent, ImportResource, () => ({ named: { url: url() } }));
+export function importResource(
+  parent: object,
+  urlOrModule: () => URL | Module
+) {
+  return useResource(parent, ImportResource, () => ({
+    named: {
+      urlOrModule: urlOrModule(),
+    },
+  }));
 }
