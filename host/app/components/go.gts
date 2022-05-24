@@ -2,11 +2,12 @@ import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import monaco from '../modifiers/monaco';
 import { service } from '@ember/service';
+//@ts-ignore cached not available yet in definitely typed
 import { tracked, cached } from '@glimmer/tracking';
 import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
-import Preview from './preview';
+import SchemaInspector from './schema-inspector';
 import ImportModule from './import-module';
 import FileTree from './file-tree';
 import {
@@ -38,7 +39,7 @@ export default class Go extends Component<Signature> {
           {{#if (isRunnable this.openFile.name)}}
             <ImportModule @url={{localRealmURL this.openFile.name}}>
               <:ready as |module|>
-                <Preview @module={{module}} />
+                <SchemaInspector @module={{module}} />
               </:ready>
               <:error as |error|>
                 <h2>Encountered {{error.type}} error</h2>

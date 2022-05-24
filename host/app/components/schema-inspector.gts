@@ -10,7 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 const formats: Format[] = ['isolated', 'embedded', 'edit'];
 
-export default class Preview extends Component<{ Args: { module: Record<string, any> } }> {
+export default class SchemaInspector extends Component<{ Args: { module: Record<string, any> } }> {
   <template>
     <p class="card-chooser">
       Cards:

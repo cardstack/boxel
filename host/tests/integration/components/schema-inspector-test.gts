@@ -2,18 +2,18 @@ import { module, test } from 'qunit';
 import Component from '@glimmer/component';
 import { click } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import PreviewComponent from 'runtime-spike/components/preview';
+import SchemaInspector from 'runtime-spike/components/schema-inspector';
 import { renderComponent } from '../../helpers/render-component';
 
-module('Integration | preview', function (hooks) {
+module('Integration | schema-inspector', function (hooks) {
   setupRenderingTest(hooks);
 
-  test('renders card preview', async function (assert) {
+  test('renders card chooser', async function (assert) {
     let testModule = await import('../modules/test-module')
     await renderComponent(
       class TestDriver extends Component {
         <template>
-          <PreviewComponent @module={{testModule}} />
+          <SchemaInspector @module={{testModule}} />
         </template>
       }
     )
@@ -34,7 +34,7 @@ module('Integration | preview', function (hooks) {
     await renderComponent(
       class TestDriver extends Component {
         <template>
-          <PreviewComponent @module={{testModule}} />
+          <SchemaInspector @module={{testModule}} />
         </template>
       }
     )
