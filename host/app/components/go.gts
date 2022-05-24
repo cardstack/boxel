@@ -8,8 +8,10 @@ import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import SchemaInspector from './schema-inspector';
+import Preview from './preview';
 import ImportModule from './import-module';
 import FileTree from './file-tree';
+import { isCardJSON } from '../lib/card-api';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,
@@ -49,10 +51,9 @@ export default class Go extends Component<Signature> {
           {{else if this.openFileCardJSON}}
             <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module (localRealmURL this.openFile.name)}} >
               <:ready as |module|>
-                TODO: put together module and this.openFileCardJSON to render
+                <Preview @module={{module}} @json={{this.openFileCardJSON}} />
               </:ready>
             </ImportModule>
-            <pre>{{this.openFileCardJSON}}</pre>
           {{/if}}
         </div>
       {{/if}}
@@ -91,11 +92,11 @@ export default class Go extends Component<Signature> {
   get openFileCardJSON() {
     if (this.openFile.ready && this.openFile.name.endsWith('.json')) {
       let maybeCard = JSON.parse(this.openFile.content);
-      let adoptsFrom = maybeCard?.data?.meta?.adoptsFrom;
-      if (adoptsFrom?.module && adoptsFrom?.name) {
+      if (isCardJSON(maybeCard)) {
         return maybeCard;
       }
     }
+    return undefined;
   }
 }
 
