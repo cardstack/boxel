@@ -7,6 +7,7 @@ import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import Preview from './preview';
+import ImportModule from './import-module';
 import FileTree from './file-tree';
 import {
   getLangFromFileExtension,
@@ -35,7 +36,15 @@ export default class Go extends Component<Signature> {
                       contentChanged=this.contentChanged}}></div>
         <div class="preview">
           {{#if (isRunnable this.openFile.name)}}
-            <Preview @filename={{this.openFile.name}} />
+            <ImportModule @url="http://local-realm/{{this.openFile.name}}">
+              <:ready as |module|>
+                <Preview @module={{module}} />
+              </:ready>
+              <:error as |error|>
+                <h2>Encountered {{error.type}} error</h2>
+                <pre>{{error.message}}</pre>
+              </:error>
+            </ImportModule>
           {{/if}}
         </div>
       {{/if}}

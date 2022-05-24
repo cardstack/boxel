@@ -1,34 +1,24 @@
 import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
 
-export interface Module {
-  [exportName: string]: any;
-}
-
 interface Args {
-  named: { urlOrModule: URL | Module };
+  named: { url: string };
 }
 
 export class ImportResource extends Resource<Args> {
-  @tracked module: Module | undefined;
+  @tracked module: Record<string, any> | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    this.load(args.named.urlOrModule);
+    this.load(args.named.url);
   }
 
-  private async load(urlOrModule: URL | Module) {
-    if (!(urlOrModule instanceof URL)) {
-      this.module = urlOrModule;
-      return;
-    }
-
-    let url = urlOrModule;
+  private async load(url: string) {
     try {
-      this.module = await import(/* webpackIgnore: true */ url.href);
+      this.module = await import(/* webpackIgnore: true */ url);
     } catch (err) {
-      let errResponse = await fetch(url.href, {
+      let errResponse = await fetch(url, {
         headers: { 'content-type': 'text/javascript' },
       });
       if (!errResponse.ok) {
@@ -37,7 +27,7 @@ export class ImportResource extends Resource<Args> {
         this.error = {
           type: 'runtime',
           message: `Encountered error while evaluating
-${url.href}:
+${url}:
 
 ${err}
 
@@ -49,13 +39,10 @@ Check console log for more details`,
   }
 }
 
-export function importResource(
-  parent: object,
-  urlOrModule: () => URL | Module
-) {
+export function importResource(parent: object, url: () => string) {
   return useResource(parent, ImportResource, () => ({
     named: {
-      urlOrModule: urlOrModule(),
+      url: url(),
     },
   }));
 }
