@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import monaco from '../modifiers/monaco';
 import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
@@ -36,7 +36,7 @@ export default class Go extends Component<Signature> {
                       contentChanged=this.contentChanged}}></div>
         <div class="preview">
           {{#if (isRunnable this.openFile.name)}}
-            <ImportModule @url="http://local-realm/{{this.openFile.name}}">
+            <ImportModule @url={{localRealmURL this.openFile.name}}>
               <:ready as |module|>
                 <Preview @module={{module}} />
               </:ready>
@@ -45,6 +45,13 @@ export default class Go extends Component<Signature> {
                 <pre>{{error.message}}</pre>
               </:error>
             </ImportModule>
+          {{else if this.openFileCardJSON}}
+            <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module (localRealmURL this.openFile.name)}} >
+              <:ready as |module|>
+                TODO: put together module and this.openFileCardJSON to render
+              </:ready>
+            </ImportModule>
+            <pre>{{this.openFileCardJSON}}</pre>
           {{/if}}
         </div>
       {{/if}}
@@ -78,10 +85,29 @@ export default class Go extends Component<Signature> {
     () => this.args.file,
     () => this.localRealm.isAvailable ? this.localRealm.fsHandle : undefined,
   );
+
+  @cached
+  get openFileCardJSON() {
+    if (this.openFile.ready && this.openFile.name.endsWith('.json')) {
+      let maybeCard = JSON.parse(this.openFile.content);
+      let adoptsFrom = maybeCard?.data?.meta?.adoptsFrom;
+      if (adoptsFrom?.module && adoptsFrom?.name) {
+        return maybeCard;
+      }
+    }
+  }
 }
 
 function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
+}
+
+function localRealmURL(filename: string): string {
+  return `http://local-realm/${filename}`;
+}
+
+function relativeFrom(url: string, base: string): string {
+  return new URL(url, base).href;
 }
 
 declare module '@glint/environment-ember-loose/registry' {
