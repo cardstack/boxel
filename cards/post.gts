@@ -19,12 +19,4 @@ export class Post extends Card {
       <em><@fields.title/></em> by <@fields.author/>
     </template>
   }
-  static data = {
-    author: {
-      firstName: 'Mango',
-      lastName: 'Abdel-Rahman'
-    },
-    title: 'Things That I Like to Chew on',
-    body: "I like to chew on my toys, my bones, and my daddy's nose"
-  }
 }

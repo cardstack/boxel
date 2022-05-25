@@ -6,6 +6,8 @@ import { action } from '@ember/object';
 import { eq } from '../helpers/truth-helpers';
 import isObject from 'lodash/isObject';
 import { tracked } from '@glimmer/tracking';
+import { moduleURL } from 'runtime-spike/resources/import';
+import { renderCard, RenderedCard } from 'runtime-spike/resources/rendered-card';
 
 export default class SchemaInspector extends Component<{ Args: { module: Record<string, any> } }> {
   <template>
@@ -22,6 +24,15 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
     </p>
     <h2 class="selected-card">Selected: {{this.selected.name}}</h2>
     {{! TODO Render the card schema of the selected card }}
+    {{#if this.selected}}
+      <button {{on "click" this.create}}>Create New {{this.selected.name}}</button>
+
+      {{#if this.rendered.component}}
+        <this.rendered.component />
+        <button {{on "click" this.save}}>Save</button>
+      {{/if}}
+
+    {{/if}}
   </template>
 
   @tracked
@@ -41,16 +52,32 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
     return cards;
   }
 
-  get selectedName() {
-    return this.selected?.name ?? 'none';
-  }
-
-  get selectedCard() {
-    return this.selected?.card;
-  }
-
   @action
   select(name: string, card: typeof Card) {
     this.selected = { name, card };
   }
+
+  private newInstance: Card | undefined;
+
+  @tracked
+  private rendered: RenderedCard | undefined;
+
+  @action
+  create() {
+    if (!this.selected) {
+      return;
+    }
+    let instance = this.newInstance = new (this.selected.card)();
+    this.rendered = renderCard(this, () => instance, () => 'edit')
+  }
+
+  @action
+  save() {
+    if (!this.newInstance || !this.selected) {
+      return;
+    }
+    // TODO: pick filename and write JSON file
+    console.log(this.newInstance, moduleURL(this.args.module), this.selected.name);
+  }
+
 }
