@@ -5,6 +5,12 @@ interface Args {
   named: { url: string };
 }
 
+const moduleURLs = new WeakMap<any, string>();
+
+export function moduleURL(module: any): string | undefined {
+  return moduleURLs.get(module);
+}
+
 export class ImportResource extends Resource<Args> {
   @tracked module: Record<string, any> | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
@@ -16,7 +22,9 @@ export class ImportResource extends Resource<Args> {
 
   private async load(url: string) {
     try {
-      this.module = await import(/* webpackIgnore: true */ url);
+      let m = await import(/* webpackIgnore: true */ url);
+      moduleURLs.set(m, url);
+      this.module = m;
     } catch (err) {
       let errResponse = await fetch(url, {
         headers: { 'content-type': 'text/javascript' },
