@@ -1,48 +1,121 @@
 import { module, test } from 'qunit';
-import Component from '@glimmer/component';
-import { click } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
+import { click, fillIn } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import PreviewComponent from 'runtime-spike/components/preview';
+import Preview from 'runtime-spike/components/preview';
+import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
+import StringCard from 'runtime-spike/lib/string';
 import { renderComponent } from '../../helpers/render-component';
 
 module('Integration | preview', function (hooks) {
   setupRenderingTest(hooks);
 
-  test('renders card preview', async function (assert) {
-    let testModule = await import('../modules/test-module')
+  test('renders card', async function (assert) {
+    class TestCard extends Card {
+      @field firstName = contains(StringCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template> <div data-test-firstName><@fields.firstName/></div> </template>
+      }
+    }
+    let module = { default: TestCard };
+    let json = {
+      data: {
+        attributes: { firstName: 'Mango' },
+        meta: { adoptsFrom: { module: '', name: 'default'} }
+      }
+    };
+  
     await renderComponent(
-      class TestDriver extends Component {
+      class TestDriver extends GlimmerComponent {
         <template>
-          <PreviewComponent @module={{testModule}} />
+          <Preview @module={{module}} @json={{json}}/>
         </template>
       }
     )
 
-    assert.dom('.card-chooser .card-button').exists({ count: 2}, 'Found 2 cards');
-    assert.dom('.card-chooser').containsText('Person');
-    assert.dom('.card-chooser').containsText('Post');
-
-    assert.dom('.card-chooser').doesNotContainText('notACard');
-    assert.dom('.card-chooser').doesNotContainText('alsoNotACard');
-
-    assert.dom('.selected-card').doesNotContainText('Person');
-    assert.dom('.selected-card').doesNotContainText('Post');
+    assert.dom('[data-test-firstName]').hasText('Mango');
   });
 
-  test('clicking on a card button will select the card', async function (assert) {
-    let testModule = await import('../modules/test-module')
+  test('can change card format', async function (assert) {
+    class TestCard extends Card {
+      @field firstName = contains(StringCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template> <div data-test-isolated-firstName><@fields.firstName/></div> </template>
+      }
+      static embedded = class Embedded extends Component<typeof this> {
+        <template> <div data-test-embedded-firstName><@fields.firstName/></div> </template>
+      }
+      static edit = class Edit extends Component<typeof this> {
+        <template> <div data-test-edit-firstName><@fields.firstName/></div> </template>
+      }
+    }
+    let module = { default: TestCard };
+    let json = {
+      data: {
+        attributes: { firstName: 'Mango' },
+        meta: { adoptsFrom: { module: '', name: 'default'} }
+      }
+    };
+  
     await renderComponent(
-      class TestDriver extends Component {
+      class TestDriver extends GlimmerComponent {
         <template>
-          <PreviewComponent @module={{testModule}} />
+          <Preview @module={{module}} @json={{json}}/>
         </template>
       }
     )
 
-    await click('.card-button[data-test-card-name="Person"]');
-    assert.dom('.selected-card').containsText('Person');
+    assert.dom('[data-test-isolated-firstName]').hasText('Mango');
+    assert.dom('[data-test-embedded-firstName]').doesNotExist();
+    assert.dom('[data-test-edit-firstName]').doesNotExist();
 
-    await click('.card-button[data-test-card-name="Post"]');
-    assert.dom('.selected-card').containsText('Post');
+    await click('.format-button.embedded')
+    assert.dom('[data-test-isolated-firstName]').doesNotExist();
+    assert.dom('[data-test-embedded-firstName]').hasText('Mango');
+    assert.dom('[data-test-edit-firstName]').doesNotExist();
+
+    await click('.format-button.edit')
+    assert.dom('[data-test-isolated-firstName]').doesNotExist();
+    assert.dom('[data-test-embedded-firstName]').doesNotExist();
+    assert.dom('[data-test-edit-firstName] input').hasValue('Mango');
+  });
+
+  test('edited card data in visible in different formats', async function (assert) {
+    class TestCard extends Card {
+      @field firstName = contains(StringCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template> <div data-test-isolated-firstName><@fields.firstName/></div> </template>
+      }
+      static embedded = class Embedded extends Component<typeof this> {
+        <template> <div data-test-embedded-firstName><@fields.firstName/></div> </template>
+      }
+      static edit = class Edit extends Component<typeof this> {
+        <template> <div data-test-edit-firstName><@fields.firstName/></div> </template>
+      }
+    }
+    let module = { default: TestCard };
+    let json = {
+      data: {
+        attributes: { firstName: 'Mango' },
+        meta: { adoptsFrom: { module: '', name: 'default'} }
+      }
+    };
+  
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Preview @module={{module}} @json={{json}}/>
+        </template>
+      }
+    )
+
+    await click('.format-button.edit')
+    await fillIn('[data-test-edit-firstName] input', 'Van Gogh');
+
+    await click('.format-button.embedded');
+    assert.dom('[data-test-embedded-firstName]').hasText('Van Gogh');
+
+    await click('.format-button.isolated');
+    assert.dom('[data-test-isolated-firstName]').hasText('Van Gogh');
   });
 });
