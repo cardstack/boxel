@@ -10,7 +10,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "./example-cards.gts",
+        "module": "./post.gts",
         "name": "Post"
       }
     }

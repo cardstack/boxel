@@ -53,6 +53,10 @@ export default class Go extends Component<Signature> {
               <:ready as |module|>
                 <Preview @module={{module}} @json={{this.openFileCardJSON}} />
               </:ready>
+               <:error as |error|>
+                <h2>Encountered {{error.type}} error</h2>
+                <pre>{{error.message}}</pre>
+              </:error>
             </ImportModule>
           {{/if}}
         </div>
