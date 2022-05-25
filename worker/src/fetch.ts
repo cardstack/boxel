@@ -13,6 +13,8 @@ import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properti
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 
+const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
+
 export class FetchHandler {
   private baseURL: string;
   private livenessWatcher: LivenessWatcher;
@@ -66,11 +68,12 @@ export class FetchHandler {
     _request: Request,
     url: URL
   ): Promise<Response> {
-    let handle = await this.getLocalFile(url.pathname.slice(1));
+    let handle = await this.getLocalFileWithFallbacks(
+      url.pathname.slice(1),
+      executableExtensions
+    );
     if (
-      ['.js', '.gjs', '.ts', '.gts'].some((extension) =>
-        handle.name.endsWith(extension)
-      )
+      executableExtensions.some((extension) => handle.name.endsWith(extension))
     ) {
       return await this.makeJS(handle);
     } else {
@@ -126,6 +129,34 @@ export class FetchHandler {
     handle: FileSystemFileHandle
   ): Promise<Response> {
     return new Response(await handle.getFile());
+  }
+
+  // we bother with this because typescript is picky about allowing you to use
+  // explicit file extensions in your source code
+  private async getLocalFileWithFallbacks(
+    path: string,
+    extensions: string[]
+  ): Promise<FileSystemFileHandle> {
+    try {
+      return await this.getLocalFile(path);
+    } catch (err) {
+      if (!(err instanceof WorkerError) || err.response.status !== 404) {
+        throw err;
+      }
+      for (let extension of extensions) {
+        try {
+          return await this.getLocalFile(path + extension);
+        } catch (innerErr) {
+          if (
+            !(innerErr instanceof WorkerError) ||
+            innerErr.response.status !== 404
+          ) {
+            throw innerErr;
+          }
+        }
+      }
+      throw err;
+    }
   }
 
   private async getLocalFile(path: string): Promise<FileSystemFileHandle> {
