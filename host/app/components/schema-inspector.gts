@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { Card } from '../lib/card-api';
+import { Card, serializeCard } from '../lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -72,12 +72,37 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
   }
 
   @action
-  save() {
+  async save() {
     if (!this.newInstance || !this.selected) {
       return;
     }
     // TODO: pick filename and write JSON file
     console.log(this.newInstance, moduleURL(this.args.module), this.selected.name);
+
+    let json = serializeCard(this.newInstance);
+    let newFile = await this.createNewFile();
+    await this.writeFile(newFile, json);
+  }
+
+  // TODO: move these to a better place
+
+  async createNewFile() {
+    const options = {
+      types: [
+        {
+          accept: {
+            'application/json': ['.json'],
+          },
+        },
+      ],
+    };
+    return await window.showSaveFilePicker(options);
+  }
+
+  async writeFile(fileHandle, content) {
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
   }
 
 }
