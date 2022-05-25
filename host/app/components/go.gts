@@ -58,6 +58,9 @@ export default class Go extends Component<Signature> {
                 <pre>{{error.message}}</pre>
               </:error>
             </ImportModule>
+          {{else if this.jsonError}}
+            <h2>Encountered error parsing JSON</h2>
+            <pre>{{this.jsonError}}</pre>
           {{/if}}
         </div>
       {{/if}}
@@ -66,6 +69,7 @@ export default class Go extends Component<Signature> {
 
   @service declare localRealm: LocalRealm;
   @tracked selectedFile: Entry | undefined;
+  @tracked jsonError: string | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -94,8 +98,15 @@ export default class Go extends Component<Signature> {
 
   @cached
   get openFileCardJSON() {
+    this.jsonError = undefined;
     if (this.openFile.ready && this.openFile.name.endsWith('.json')) {
-      let maybeCard = JSON.parse(this.openFile.content);
+      let maybeCard: any;
+      try {
+        maybeCard = JSON.parse(this.openFile.content);
+      } catch(err) {
+        this.jsonError = err.message;
+        return undefined;
+      }
       if (isCardJSON(maybeCard)) {
         return maybeCard;
       }
