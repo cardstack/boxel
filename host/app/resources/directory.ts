@@ -3,7 +3,6 @@ import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import ignore from 'ignore';
 import { readFileAsText } from '@cardstack/worker/src/util';
-import isEqual from 'lodash/isEqual';
 
 interface Args {
   named: { dir: FileSystemDirectoryHandle | null };
@@ -68,16 +67,7 @@ export class DirectoryResource extends Resource<Args> {
   private async readdir() {
     if (this.dir) {
       let ignoreFile = await getIgnorePatterns(this.dir);
-      let entries = await getDirectoryEntries(this.dir, [], ignoreFile);
-      if (
-        entries.length !== this.entries.length ||
-        !isEqual(
-          entries.map((e) => e.path),
-          this.entries.map((e) => e.path)
-        )
-      ) {
-        this.entries = entries;
-      }
+      this.entries = await getDirectoryEntries(this.dir, [], ignoreFile);
     } else {
       this.entries = [];
     }
