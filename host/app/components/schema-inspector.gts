@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { Card, serializeCard } from '../lib/card-api';
+import { Card, serializeCard, CardJSON, isCardJSON } from '../lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -10,7 +10,9 @@ import { moduleURL } from 'runtime-spike/resources/import';
 import { renderCard, RenderedCard } from 'runtime-spike/resources/rendered-card';
 import LocalRealm from '../services/local-realm';
 import { service } from '@ember/service';
-
+import { restartableTask } from 'ember-concurrency';
+import { taskFor } from 'ember-concurrency-ts';
+import type RouterService from '@ember/routing/router-service';
 
 export default class SchemaInspector extends Component<{ Args: { module: Record<string, any> } }> {
   <template>
@@ -32,7 +34,12 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
 
       {{#if this.rendered.component}}
         <this.rendered.component />
-        <button {{on "click" this.save}}>Save</button>
+        {{!-- @glint-ignore glint doesn't know about EC task properties --}}
+        {{#if this.writeAndTransition.last.isRunning}}
+          <span>Saving...</span>
+        {{else}}
+          <button {{on "click" this.save}}>Save</button>
+        {{/if}}
       {{/if}}
 
     {{/if}}
@@ -42,6 +49,7 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
   selected: { name: string; card: typeof Card; } | undefined;
 
   @service declare localRealm: LocalRealm;
+  @service declare router: RouterService;
 
   get cards() {
     let cards = {} as { [exportName: string]: typeof Card };
@@ -88,10 +96,24 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
     }
 
 
-    let json = { data: serializeCard(this.newInstance, { adoptsFrom: { module: mod, name: this.selected.name} }) };
+    let json = {
+      data: serializeCard(this.newInstance, {
+        adoptsFrom: {
+          module: mod,
+          name: this.selected.name
+        }
+      })
+    };
+    if (!isCardJSON(json)) {
+      throw new Error(`can't serialize card data for ${JSON.stringify(json)}`);
+    }
+    taskFor(this.writeAndTransition).perform(this.newInstance.constructor.name, json);
+  }
 
-    // TODO: auto-pick a filename
-    let handle = await this.localRealm.fsHandle.getFileHandle('x.json', { create: true });
+  @restartableTask private async writeAndTransition(cardName: string, json: CardJSON): Promise<void> {
+    let dirHandle = await this.localRealm.fsHandle.getDirectoryHandle(cardName, { create: true });
+    let fileName = await getNextJSONFileName(dirHandle);
+    let handle = await dirHandle.getFileHandle(fileName, { create: true });
 
     // TypeScript seems to lack types for the writable stream features
     let stream = await (handle as any).createWritable();
@@ -99,6 +121,24 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
     await stream.write(JSON.stringify(json, null, 2));
     await stream.close();
 
-    // TODO: navigate to the newly saved card (this probably means we should switch to an ember-concurrency task)
+    this.router.transitionTo({ queryParams: { path: `${cardName}/${fileName}` } });
   }
+}
+
+async function getNextJSONFileName(dirHandle: FileSystemDirectoryHandle): Promise<string> {
+  let index = 0;
+  for await (let [name, handle ] of dirHandle as any as AsyncIterable<
+    [string, FileSystemDirectoryHandle | FileSystemFileHandle]
+  >) {
+    if (handle.kind === 'directory') {
+      continue;
+    }
+    if (!/^[\d]+\.json$/.test(name)) {
+      continue;
+    }
+    let num = parseInt(name.replace('.json', ''));
+    index = Math.max(index, num);
+  }
+
+  return `${++index}.json`;
 }
