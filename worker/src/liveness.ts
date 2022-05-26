@@ -37,11 +37,9 @@ export class LivenessWatcher {
           `Encountered error performing aliveness check (server is probably not running):`,
           err
         );
-        this.isAlive = false;
       }
       if (this.isAlive) {
-        // using 5 minute poll time so that we aren't penalized for a brief ember-cli server down time
-        await timeout(5 * 60 * 1000);
+        await timeout(10 * 1000);
       } else {
         console.error('shutting down service worker.');
         await Promise.all([
