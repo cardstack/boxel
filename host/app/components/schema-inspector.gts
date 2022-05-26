@@ -42,7 +42,7 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
           @onCancel={{this.onCancel}}
         />
       {{else}}
-        <button {{on "click" this.create}}>Create New {{this.selected.name}}</button>
+        <button data-test-create-card {{on "click" this.create}}>Create New {{this.selected.name}}</button>
       {{/if}}
     {{/if}}
   </template>

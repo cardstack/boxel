@@ -28,8 +28,8 @@ export default class CardCreator extends Component<Signature> {
       {{#if this.writeAndTransition.last.isRunning}}
         <span>Saving...</span>
       {{else}}
-        <button {{on "click" this.save}}>Save</button>
-        <button {{on "click" this.cancel}}>cancel</button>
+        <button data-test-save-card {{on "click" this.save}}>Save</button>
+        <button data-test-cancel-create {{on "click" this.cancel}}>cancel</button>
       {{/if}}
     {{/if}}
   </template>
