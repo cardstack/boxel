@@ -30,11 +30,9 @@ export default class Preview extends Component<Signature> {
       {{/each}}
     </div>
 
-    <div class="card-preview">
-      {{#if this.rendered.component}}
-        <this.rendered.component/>
-      {{/if}}
-    </div>
+    {{#if this.rendered.component}}
+      <this.rendered.component/>
+    {{/if}}
   </template>
 
   @tracked

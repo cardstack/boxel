@@ -400,13 +400,15 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { fields: Record<string, 
 
 class DefaultEdit extends GlimmerComponent<{ Args: { fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    {{#each-in @fields as |key Field|}}
-      <label data-test-field={{key}}>
-        {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
-        {{startCase key}}
-        <Field />
-      </label>
-    {{/each-in}}
+    <div class="card-edit">
+      {{#each-in @fields as |key Field|}}
+        <label data-test-field={{key}}>
+          {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
+          {{startCase key}}
+          <Field />
+        </label>
+      {{/each-in}}
+    </div>
   </template>;
 }
 
