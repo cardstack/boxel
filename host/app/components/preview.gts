@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { renderCard } from '../resources/rendered-card';
+import { render } from '../resources/rendered-card';
 //@ts-ignore cached not available yet in definitely typed
 import { tracked, cached } from '@glimmer/tracking';
 import { Card, CardJSON, Format } from '../lib/card-api';
@@ -37,7 +37,7 @@ export default class Preview extends Component<Signature> {
 
   @tracked
   format: Format = 'isolated';
-  rendered = renderCard(this, () => this.card, () => this.format)
+  rendered = render(this, () => this.card, () => this.format)
 
   @cached
   get card() {
