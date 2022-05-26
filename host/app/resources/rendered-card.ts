@@ -24,11 +24,7 @@ export class RenderedCard extends Resource<Args> {
   }
 }
 
-export function renderCard(
-  parent: object,
-  card: () => Card,
-  format: () => Format
-) {
+export function render(parent: object, card: () => Card, format: () => Format) {
   return useResource(parent, RenderedCard, () => ({
     named: { card: card(), format: format() },
   }));
