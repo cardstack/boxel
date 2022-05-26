@@ -20,8 +20,8 @@ import {
 
 interface Signature {
   Args: {
-    file: string | undefined;
-    onSelectedFile: (filename: string | undefined) => void;
+    path: string | undefined;
+    onSelectedFile: (path: string | undefined) => void;
   }
 }
 
@@ -30,7 +30,7 @@ export default class Go extends Component<Signature> {
     <div class="editor">
       <div class="file-tree">
         <FileTree @localRealm={{this.localRealm}}
-                  @file={{this.args.file}}
+                  @path={{this.args.path}}
                   @onSelectedFile={{this.onSelectedFile}} />
       </div>
       {{#if this.openFile.ready}}
@@ -79,7 +79,7 @@ export default class Go extends Component<Signature> {
   @action
   onSelectedFile(entry: Entry | undefined) {
     this.selectedFile = entry;
-    this.args.onSelectedFile(entry?.name);
+    this.args.onSelectedFile(entry?.path);
   }
 
   @action
@@ -92,7 +92,7 @@ export default class Go extends Component<Signature> {
   listing = directory(this, () => this.localRealm.isAvailable ? this.localRealm.fsHandle : null)
 
   openFile = file(this,
-    () => this.args.file,
+    () => this.args.path,
     () => this.localRealm.isAvailable ? this.localRealm.fsHandle : undefined,
   );
 

@@ -48,9 +48,10 @@ class _FileResource extends Resource<Args> {
     dirHandle: FileSystemDirectoryHandle | undefined
   ) {
     if (path && dirHandle) {
+      let { handle: subdir, filename } = await this.traverse(dirHandle, path);
       let handle: FileSystemFileHandle | undefined;
       try {
-        handle = await dirHandle.getFileHandle(path);
+        handle = await subdir.getFileHandle(filename);
       } catch (err: unknown) {
         if ((err as DOMException).name === 'NotFoundError') {
           console.error(`${path} was not found in the local realm`);
@@ -80,6 +81,33 @@ class _FileResource extends Resource<Args> {
       this.content = undefined;
       this.ready = false;
     }
+  }
+
+  private async traverse(
+    dirHandle: FileSystemDirectoryHandle,
+    path: string
+  ): Promise<{ handle: FileSystemDirectoryHandle; filename: string }> {
+    let pathSegments = path.split('/');
+    async function nextHandle(
+      handle: FileSystemDirectoryHandle,
+      pathSegment: string
+    ) {
+      try {
+        return await handle.getDirectoryHandle(pathSegment);
+      } catch (err: unknown) {
+        if ((err as DOMException).name === 'NotFoundError') {
+          console.error(`${path} was not found in the local realm`);
+        }
+        throw err;
+      }
+    }
+
+    let handle: FileSystemDirectoryHandle | undefined = dirHandle;
+    while (pathSegments.length > 1) {
+      let segment = pathSegments.shift()!;
+      handle = await nextHandle(handle as FileSystemDirectoryHandle, segment);
+    }
+    return { handle, filename: pathSegments[0] };
   }
 
   async write(content: string) {
