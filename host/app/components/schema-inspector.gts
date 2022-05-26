@@ -39,6 +39,7 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
           @cardClass={{this.selected.card}}
           @module={{@module}}
           @name={{this.selected.name}}
+          @onCancel={{this.onCancel}}
         />
       {{else}}
         <button {{on "click" this.create}}>Create New {{this.selected.name}}</button>
@@ -79,6 +80,11 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
   @action
   select(name: string, card: typeof Card) {
     this.selected = { name, card };
+  }
+
+  @action
+  onCancel() {
+    this.showCreate = false;
   }
 
   @action

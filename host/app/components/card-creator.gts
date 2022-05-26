@@ -16,6 +16,7 @@ interface Signature {
     cardClass: typeof Card;
     module: Record<string, any>;
     name: string;
+    onCancel: () => void;
   }
 }
 
@@ -28,6 +29,7 @@ export default class CardCreator extends Component<Signature> {
         <span>Saving...</span>
       {{else}}
         <button {{on "click" this.save}}>Save</button>
+        <button {{on "click" this.cancel}}>cancel</button>
       {{/if}}
     {{/if}}
   </template>
@@ -39,6 +41,11 @@ export default class CardCreator extends Component<Signature> {
 
   @tracked
   private rendered = render(this, () => this.newInstance, () => 'edit');
+
+  @action
+  cancel() {
+    this.args.onCancel();
+  }
 
   @action
   async save() {
