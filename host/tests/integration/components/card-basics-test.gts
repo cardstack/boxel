@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn, click, waitUntil } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
@@ -132,13 +132,14 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test]').containsText('Mr Arthur 10');
   });
 
-  test('render a field that is the enclosing card', async function(assert) {
+  // this will apply to linksTo, but doesn't apply to contains
+  skip('render a field that is the enclosing card', async function(assert) {
     class Person extends Card {
       @field firstName = contains(StringCard);
-      @field friend = contains(() => Person); // a thunk can be used to specify a circular reference
-      static isolated = class Isolated extends Component<typeof this> {
-        <template><@fields.firstName/> friend is <@fields.friend/></template>
-      }
+      // @field friend = contains(() => Person); // a thunk can be used to specify a circular reference
+      // static isolated = class Isolated extends Component<typeof this> {
+      //   <template><@fields.firstName/> friend is <@fields.friend/></template>
+      // }
       static embedded = class Embedded extends Component<typeof this> {
         <template><@fields.firstName/></template>
       }

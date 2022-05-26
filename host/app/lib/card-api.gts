@@ -360,6 +360,7 @@ function cardThunk<CardT extends CardConstructor>(cardOrThunk: CardT | (() => Ca
   return ("baseCard" in cardOrThunk ? () => cardOrThunk : cardOrThunk) as () => CardT;
 }
 
+// TODO: no thunk accepted
 export function containsMany<CardT extends CardConstructor>(cardOrThunk: CardT | (() => CardT), options?: Options): CardInstanceType<CardT>[] {
   return {
     setupField(fieldName: string) {
@@ -368,6 +369,7 @@ export function containsMany<CardT extends CardConstructor>(cardOrThunk: CardT |
   } as any;
 }
 
+// TODO: this should not accept a thunk
 export function contains<CardT extends CardConstructor>(cardOrThunk: CardT | (() => CardT), options?: Options): CardInstanceType<CardT> {
   return {
     setupField(fieldName: string) {
