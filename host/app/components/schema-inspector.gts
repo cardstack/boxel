@@ -8,6 +8,9 @@ import isObject from 'lodash/isObject';
 import { tracked } from '@glimmer/tracking';
 import { moduleURL } from 'runtime-spike/resources/import';
 import { renderCard, RenderedCard } from 'runtime-spike/resources/rendered-card';
+import LocalRealm from '../services/local-realm';
+import { service } from '@ember/service';
+
 
 export default class SchemaInspector extends Component<{ Args: { module: Record<string, any> } }> {
   <template>
@@ -37,6 +40,8 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
 
   @tracked
   selected: { name: string; card: typeof Card; } | undefined;
+
+  @service declare localRealm: LocalRealm;
 
   get cards() {
     let cards = {} as { [exportName: string]: typeof Card };
@@ -76,33 +81,24 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
     if (!this.newInstance || !this.selected) {
       return;
     }
-    // TODO: pick filename and write JSON file
-    console.log(this.newInstance, moduleURL(this.args.module), this.selected.name);
 
-    let json = serializeCard(this.newInstance);
-    let newFile = await this.createNewFile();
-    await this.writeFile(newFile, json);
+    let mod = moduleURL(this.args.module);
+    if (!mod) {
+      throw new Error(`can't save card in unknown module.`);
+    }
+
+
+    let json = { data: serializeCard(this.newInstance, { adoptsFrom: { module: mod, name: this.selected.name} }) };
+
+    // TODO: auto-pick a filename
+    let handle = await this.localRealm.fsHandle.getFileHandle('x.json', { create: true });
+
+    // TypeScript seems to lack types for the writable stream features
+    let stream = await (handle as any).createWritable();
+
+    await stream.write(JSON.stringify(json, null, 2));
+    await stream.close();
+
+    // TODO: navigate to the newly saved card (this probably means we should switch to an ember-concurrency task)
   }
-
-  // TODO: move these to a better place
-
-  async createNewFile() {
-    const options = {
-      types: [
-        {
-          accept: {
-            'application/json': ['.json'],
-          },
-        },
-      ],
-    };
-    return await window.showSaveFilePicker(options);
-  }
-
-  async writeFile(fileHandle, content) {
-    const writable = await fileHandle.createWritable();
-    await writable.write(content);
-    await writable.close();
-  }
-
 }

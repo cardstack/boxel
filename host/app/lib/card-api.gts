@@ -196,7 +196,7 @@ export function serializedSet<CardT extends CardConstructor>(model: InstanceType
   deserialized.delete(fieldName);
 }
 
-export function serializeCard<CardT extends CardConstructor>(model: InstanceType<CardT>): ResourceObject {
+export function serializeCard<CardT extends CardConstructor>(model: InstanceType<CardT>, opts?: { adoptsFrom?: { module: string, name: string } }): ResourceObject {
   let resource: ResourceObject = {
     type: 'card',
   };
@@ -208,6 +208,11 @@ export function serializeCard<CardT extends CardConstructor>(model: InstanceType
       resource.attributes[fieldName] = value;
     }
   }
+
+  if (opts?.adoptsFrom) {
+    resource.meta = { adoptsFrom: { ...opts.adoptsFrom } };
+  }
+
   return resource;
 }
 
@@ -273,8 +278,12 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
 
   containsMany = false;
 
-  emptyValue(_instance: Card) { 
-    return undefined; 
+  emptyValue(_instance: Card) {
+    if (primitive in this.card) {
+      return undefined;
+    } else {
+      return new this.card; 
+    }
   }
 
   prepareSet(_instance: Card, value: any) {
