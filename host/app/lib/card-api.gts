@@ -94,6 +94,15 @@ export class Card {
     await promise;
   }
 
+  static consumeAllFields(card: Card): void {
+    for (let [fieldName, field] of Object.entries(getFields(card))) {
+      let maybeChild = (card as any)[fieldName];
+      if (!(primitive in field.card) && maybeChild) {
+        Card.consumeAllFields(maybeChild);
+      }
+    }
+  }
+
   constructor(data?: Record<string, any>) {
     if (data !== undefined) {
       for (let [fieldName, value] of Object.entries(data)) {

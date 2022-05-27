@@ -51,7 +51,11 @@ export default class Go extends Component<Signature> {
           {{else if this.openFileCardJSON}}
             <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module (localRealmURL this.openFile.name)}} >
               <:ready as |module|>
-                <Preview @module={{module}} @json={{this.openFileCardJSON}} />
+                <Preview
+                  @module={{module}}
+                  @json={{this.openFileCardJSON}}
+                  @filename={{this.openFile.name}}
+                />
               </:ready>
                <:error as |error|>
                 <h2>Encountered {{error.type}} error</h2>

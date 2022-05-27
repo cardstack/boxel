@@ -20,6 +20,7 @@ module('Integration | preview', function (hooks) {
     let module = { default: TestCard };
     let json = {
       data: {
+        type: 'card',
         attributes: { firstName: 'Mango' },
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
@@ -28,7 +29,7 @@ module('Integration | preview', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @json={{json}}/>
+          <Preview @module={{module}} @json={{json}} @filename=""/>
         </template>
       }
     )
@@ -52,6 +53,7 @@ module('Integration | preview', function (hooks) {
     let module = { default: TestCard };
     let json = {
       data: {
+        type: 'card',
         attributes: { firstName: 'Mango' },
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
@@ -60,7 +62,7 @@ module('Integration | preview', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @json={{json}}/>
+          <Preview @module={{module}} @json={{json}} @filename=""/>
         </template>
       }
     )
@@ -96,6 +98,7 @@ module('Integration | preview', function (hooks) {
     let module = { default: TestCard };
     let json = {
       data: {
+        type: 'card',
         attributes: { firstName: 'Mango' },
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
@@ -104,7 +107,7 @@ module('Integration | preview', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @json={{json}}/>
+          <Preview @module={{module}} @json={{json}} @filename=""/>
         </template>
       }
     )
@@ -117,5 +120,66 @@ module('Integration | preview', function (hooks) {
 
     await click('.format-button.isolated');
     assert.dom('[data-test-isolated-firstName]').hasText('Van Gogh');
+  });
+
+  test('can detect when card is dirty', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName /></template>
+      }
+    }
+
+    class Post extends Card{
+      @field title = contains(StringCard);
+      @field author = contains(Person);
+    }
+
+    let module = { default: Post };
+    let json = {
+      data: {
+        type: 'card',
+        attributes: {
+          author: {
+            firstName: 'Mango'
+          },
+          title: 'We Need to Go to the Dog Park Now!'
+        },
+        meta: { adoptsFrom: { module: '', name: 'default'} }
+      }
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Preview @module={{module}} @json={{json}} @filename=""/>
+        </template>
+      }
+    )
+
+    await click('.format-button.edit')
+    assert.dom('[data-test-save-card]').doesNotExist();
+    assert.dom('[data-test-reset]').doesNotExist();
+
+    await fillIn('[data-test-field="title"] input', 'Why I Whine'); // dirty top level field
+    assert.dom('[data-test-field="title"] input').hasValue('Why I Whine');
+    assert.dom('[data-test-save-card]').exists();
+    assert.dom('[data-test-reset]').exists();
+
+    await click('[data-test-reset]');
+    assert.dom('[data-test-save-card]').doesNotExist();
+    assert.dom('[data-test-reset]').doesNotExist();
+    assert.dom('[data-test-field="title"] input').hasValue('We Need to Go to the Dog Park Now!');
+
+
+    await fillIn('[data-test-field="firstName"] input', 'Van Gogh'); // dirty nested field
+    assert.dom('[data-test-field="firstName"] input').hasValue('Van Gogh');
+    assert.dom('[data-test-save-card]').exists();
+    assert.dom('[data-test-reset]').exists();
+
+    await click('[data-test-reset]');
+    assert.dom('[data-test-save-card]').doesNotExist();
+    assert.dom('[data-test-reset]').doesNotExist();
+    assert.dom('[data-test-field="firstName"] input').hasValue('Mango');
   });
 });
