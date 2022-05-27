@@ -39,8 +39,10 @@ export default class Preview extends Component<Signature> {
     {{#if this.rendered.component}}
       <this.rendered.component/>
       {{#if this.isDirty}}
-        <button data-test-save-card {{on "click" this.save}}>Save</button>
-        <button data-test-reset {{on "click" this.reset}}>Reset</button>
+        <div>
+          <button data-test-save-card {{on "click" this.save}}>Save</button>
+          <button data-test-reset {{on "click" this.reset}}>Reset</button>
+        </div>
       {{/if}}
     {{/if}}
   </template>
