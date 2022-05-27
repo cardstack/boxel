@@ -1,10 +1,12 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import stringify from 'fast-json-stable-stringify'
+import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import { contains, containsMany, field, Component, Card, serializedGet, serializeCard } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import DateCard from 'runtime-spike/lib/date';
+import IntegerCard from 'runtime-spike/lib/integer';
 import DatetimeCard from 'runtime-spike/lib/datetime';
 import parseISO from 'date-fns/parseISO';
 import { p, cleanWhiteSpace } from '../../helpers';
@@ -162,6 +164,49 @@ module('Integration | serialization', function (hooks) {
       lastLogin:"2022-04-27T16:30:00.000Z",
       species:"canis familiaris"
     });
+  });
+
+  test('can serialize a composite field that has been edited', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName /></template>
+      }
+    }
+
+    class Post extends Card {
+      @field title = contains(StringCard);
+      @field reviews = contains(IntegerCard);
+      @field author = contains(Person);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <fieldset>
+            <label data-test-field="title">Title <@fields.title /></label>
+            <label data-test-field="reviews">Reviews <@fields.reviews /></label>
+            <label data-test-field="author">Author <@fields.author /></label>
+          </fieldset>
+
+          <div data-test-output="title">{{@model.title}}</div>
+          <div data-test-output="reviews">{{@model.reviews}}</div>
+          <div data-test-output="author.firstName">{{@model.author.firstName}}</div>
+        </template>
+      }
+    }
+
+    let helloWorld = Post.fromSerialized({ title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
+    await renderCard(helloWorld, 'edit');
+    await fillIn('[data-test-field="author"] input', 'Carl Stack');
+
+    assert.deepEqual(
+      serializeCard(helloWorld), {
+        type: 'card',
+        attributes: {
+          title: 'First Post',
+          reviews: 1,
+          author: { firstName: 'Carl Stack' }
+        }
+      }
+    )
   });
 
   test('can serialize a computed field', async function(assert) {

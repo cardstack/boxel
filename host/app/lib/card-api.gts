@@ -186,14 +186,29 @@ export function serializedGet<CardT extends CardConstructor>(model: InstanceType
   }
 
   let serializedValue = field.serialize(value);
-  serialized.set(fieldName, serializedValue);
+  if (primitive in field.card) {
+    // don't cache composite serializations since changes to the inner
+    // fields won't invalidate the enclosing serialized value
+    serialized.set(fieldName, serializedValue);
+  }
   return serializedValue;
 }
 
 export function serializedSet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string, value: any ) {
   let { serialized, deserialized } = getDataBuckets(model);
-  serialized.set(fieldName, value);
-  deserialized.delete(fieldName);
+  let field = getField(model.constructor, fieldName);
+  if (!field) {
+    throw new Error(`could not find field ${fieldName} in card ${model.constructor.name}`);
+  }
+  if (primitive in field.card) {
+    serialized.set(fieldName, value);
+    deserialized.delete(fieldName);
+  } else {
+    // don't cache composite serializations since changes to the inner
+    // fields won't invalidate the enclosing serialized value
+    let deserializedValue = field.deserialize(model, value)
+    deserialized.set(fieldName, deserializedValue);
+  }
 }
 
 export function serializeCard<CardT extends CardConstructor>(model: InstanceType<CardT>, opts?: { adoptsFrom?: { module: string, name: string } }): ResourceObject {
