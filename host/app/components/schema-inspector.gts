@@ -6,9 +6,8 @@ import { action } from '@ember/object';
 import { eq, gt } from '../helpers/truth-helpers';
 import isObject from 'lodash/isObject';
 import { tracked } from '@glimmer/tracking';
-import LocalRealm from '../services/local-realm';
 import { service } from '@ember/service';
-import CardCreator from './card-creator';
+import CardEditor, { NewCardArgs } from './card-editor';
 import type RouterService from '@ember/routing/router-service';
 
 export default class SchemaInspector extends Component<{ Args: { module: Record<string, any> } }> {
@@ -34,12 +33,12 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
 
       {{! TODO Render the card schema of the selected card }}
 
-      {{#if this.showCreate}}
-        <CardCreator
-          @cardClass={{this.selected.card}}
+      {{#if this.showEditor}}
+        <CardEditor
+          @card={{this.cardArgs}}
           @module={{@module}}
-          @name={{this.selected.name}}
           @onCancel={{this.onCancel}}
+          @onSave={{this.onSave}}
         />
       {{else}}
         <button data-test-create-card {{on "click" this.create}}>Create New {{this.selected.name}}</button>
@@ -47,7 +46,7 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
     {{/if}}
   </template>
 
-  @tracked showCreate = false;
+  @tracked showEditor = false;
   @tracked
   selected: { name: string; card: typeof Card; } | undefined =
     this.numCards > 0
@@ -56,7 +55,6 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
       ) as { name: string; card: typeof Card; }
       : undefined;
 
-  @service declare localRealm: LocalRealm;
   @service declare router: RouterService;
 
   get numCards() {
@@ -77,6 +75,17 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
     return cards;
   }
 
+  get cardArgs(): NewCardArgs {
+    if (!this.selected) {
+      throw new Error('No card selected');
+    }
+    return {
+      type: 'new',
+      class: this.selected.card,
+      name: this.selected.name,
+    }
+  }
+
   @action
   select(name: string, card: typeof Card) {
     this.selected = { name, card };
@@ -84,7 +93,12 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
 
   @action
   onCancel() {
-    this.showCreate = false;
+    this.showEditor = false;
+  }
+
+  @action
+  onSave(path: string) {
+    this.router.transitionTo({ queryParams: { path } });
   }
 
   @action
@@ -92,6 +106,6 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
     if (!this.selected) {
       return;
     }
-    this.showCreate = true;
+    this.showEditor = true;
   }
 }

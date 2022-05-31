@@ -2,12 +2,13 @@ import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { click, fillIn } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import Preview from 'runtime-spike/components/preview';
-import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
+import CardEditor, { ExistingCardArgs }  from 'runtime-spike/components/card-editor';
+import { contains, field, Component, Card, Format } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import { renderComponent } from '../../helpers/render-component';
 
-module('Integration | preview', function (hooks) {
+const formats: Format[] = ['isolated', 'embedded', 'edit'];
+module('Integration | card-editor', function (hooks) {
   setupRenderingTest(hooks);
 
   test('renders card', async function (assert) {
@@ -25,11 +26,11 @@ module('Integration | preview', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-  
+    const args: ExistingCardArgs = { type: 'existing', json, filename: '' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @json={{json}} @filename=""/>
+          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -58,11 +59,11 @@ module('Integration | preview', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-  
+    const args: ExistingCardArgs = { type: 'existing', json, filename: '' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @json={{json}} @filename=""/>
+          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -103,11 +104,11 @@ module('Integration | preview', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-  
+    const args: ExistingCardArgs = { type: 'existing', json, filename: '' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @json={{json}} @filename=""/>
+          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -148,11 +149,11 @@ module('Integration | preview', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-
+    const args: ExistingCardArgs = { type: 'existing', json, filename: '' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @json={{json}} @filename=""/>
+          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )

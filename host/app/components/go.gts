@@ -8,10 +8,10 @@ import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import SchemaInspector from './schema-inspector';
-import Preview from './preview';
+import CardEditor, { ExistingCardArgs } from './card-editor';
 import ImportModule from './import-module';
 import FileTree from './file-tree';
-import { isCardJSON } from '../lib/card-api';
+import { isCardJSON, Format } from '../lib/card-api';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,
@@ -24,6 +24,8 @@ interface Signature {
     onSelectedFile: (path: string | undefined) => void;
   }
 }
+
+const formats: Format[] = ['isolated', 'embedded', 'edit'];
 
 export default class Go extends Component<Signature> {
   <template>
@@ -51,10 +53,10 @@ export default class Go extends Component<Signature> {
           {{else if this.openFileCardJSON}}
             <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module (localRealmURL this.openFile.name)}} >
               <:ready as |module|>
-                <Preview
+                <CardEditor
                   @module={{module}}
-                  @json={{this.openFileCardJSON}}
-                  @filename={{this.openFile.name}}
+                  @card={{this.cardArgs}}
+                  @formats={{formats}}
                 />
               </:ready>
                <:error as |error|>
@@ -117,7 +119,22 @@ export default class Go extends Component<Signature> {
     }
     return undefined;
   }
+
+  get cardArgs(): ExistingCardArgs {
+    if (!this.openFile.ready) {
+      throw new Error('No file has been opened yet');
+    }
+    if (!this.openFileCardJSON) {
+      throw new Error('Card JSON is not currently available');
+    }
+    return {
+      type: 'existing',
+      json: this.openFileCardJSON,
+      filename: this.openFile.name,
+    }
+  }
 }
+
 
 function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
