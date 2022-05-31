@@ -73,7 +73,6 @@ export default class Preview extends Component<Signature> {
   // i would expect that this finds a new home after we start refactoring and
   // perhaps end up with a card model more similar to the one the compiler uses
   get isDirty() {
-    Card.consumeAllFields(this.card);
     return !isEqual(this.currentJSON, this.args.json);
   }
 
