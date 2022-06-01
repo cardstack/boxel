@@ -23,6 +23,7 @@
     "test:ember": "ember test"
   },
   "devDependencies": {
+    "@babel/core": "^7.17.8",
     "@cardstack/requirejs-monaco-ember-polyfill": "^0.0.1",
     "@cardstack/worker": "1.0.0",
     "@ember/optional-features": "^2.0.0",
@@ -113,6 +114,7 @@
     "monaco-editor": "^0.33.0",
     "monaco-editor-webpack-plugin": "^7.0.1",
     "npm-run-all": "^4.1.5",
+    "path-browserify": "^1.0.1",
     "prettier": "^2.5.1",
     "qunit": "^2.18.0",
     "qunit-dom": "^2.0.0",

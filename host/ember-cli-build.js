@@ -3,6 +3,7 @@
 const EmberApp = require('ember-cli/lib/broccoli/ember-app');
 const { compatBuild } = require('@embroider/compat');
 const { Webpack } = require('@embroider/webpack');
+const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
 module.exports = function (defaults) {
@@ -29,7 +30,19 @@ module.exports = function (defaults) {
             },
           ],
         },
-        plugins: [new MonacoWebpackPlugin()],
+        plugins: [
+          new MonacoWebpackPlugin(),
+          new webpack.ProvidePlugin({
+            process: 'process',
+            Buffer: 'buffer',
+          }),
+        ],
+        resolve: {
+          fallback: {
+            fs: false,
+            path: require.resolve('path-browserify'),
+          },
+        },
       },
     },
   });
