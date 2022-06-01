@@ -27,7 +27,7 @@ export class CardDefinitions {
 
     // Use the moduleAnalysis to work out the exported cards from this module.
     // Once approach could be to start at the imports, and look specifically for the
-    // import specifier for the `import { Card } from 'runtime-spike/lib/card-api'`,
+    // import specifier that correlates to the Card export from 'runtime-spike/lib/card-api',
     // then trace through all the classes that extend from that specifier--these will
     // be the cards. Then determine which cards are exported, and wht the exported names
     // are.
