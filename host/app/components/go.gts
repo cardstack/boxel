@@ -8,10 +8,10 @@ import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { file } from '../resources/file';
 import SchemaInspector from './schema-inspector';
-import Preview from './preview';
+import CardEditor, { ExistingCardArgs } from './card-editor';
 import ImportModule from './import-module';
 import FileTree from './file-tree';
-import { isCardJSON } from '../lib/card-api';
+import { isCardJSON, Format } from '../lib/card-api';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,
@@ -20,17 +20,19 @@ import {
 
 interface Signature {
   Args: {
-    file: string | undefined;
-    onSelectedFile: (filename: string | undefined) => void;
+    path: string | undefined;
+    onSelectedFile: (path: string | undefined) => void;
   }
 }
+
+const formats: Format[] = ['isolated', 'embedded', 'edit'];
 
 export default class Go extends Component<Signature> {
   <template>
     <div class="editor">
       <div class="file-tree">
         <FileTree @localRealm={{this.localRealm}}
-                  @file={{this.args.file}}
+                  @path={{this.args.path}}
                   @onSelectedFile={{this.onSelectedFile}} />
       </div>
       {{#if this.openFile.ready}}
@@ -51,7 +53,11 @@ export default class Go extends Component<Signature> {
           {{else if this.openFileCardJSON}}
             <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module (localRealmURL this.openFile.name)}} >
               <:ready as |module|>
-                <Preview @module={{module}} @json={{this.openFileCardJSON}} />
+                <CardEditor
+                  @module={{module}}
+                  @card={{this.cardArgs}}
+                  @formats={{formats}}
+                />
               </:ready>
                <:error as |error|>
                 <h2>Encountered {{error.type}} error</h2>
@@ -79,7 +85,7 @@ export default class Go extends Component<Signature> {
   @action
   onSelectedFile(entry: Entry | undefined) {
     this.selectedFile = entry;
-    this.args.onSelectedFile(entry?.name);
+    this.args.onSelectedFile(entry?.path);
   }
 
   @action
@@ -92,7 +98,7 @@ export default class Go extends Component<Signature> {
   listing = directory(this, () => this.localRealm.isAvailable ? this.localRealm.fsHandle : null)
 
   openFile = file(this,
-    () => this.args.file,
+    () => this.args.path,
     () => this.localRealm.isAvailable ? this.localRealm.fsHandle : undefined,
   );
 
@@ -113,7 +119,22 @@ export default class Go extends Component<Signature> {
     }
     return undefined;
   }
+
+  get cardArgs(): ExistingCardArgs {
+    if (!this.openFile.ready) {
+      throw new Error('No file has been opened yet');
+    }
+    if (!this.openFileCardJSON) {
+      throw new Error('Card JSON is not currently available');
+    }
+    return {
+      type: 'existing',
+      json: this.openFileCardJSON,
+      filename: this.openFile.name,
+    }
+  }
 }
+
 
 function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));

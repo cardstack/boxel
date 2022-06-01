@@ -3,11 +3,11 @@ import Controller from '@ember/controller';
 import { action } from '@ember/object';
 
 export default class ApplicationController extends Controller {
-  queryParams = ['file'];
+  queryParams = ['path'];
 
-  @tracked file: string | undefined;
+  @tracked path: string | undefined;
 
-  @action onSelectedFile(filename: string | undefined) {
-    this.file = filename;
+  @action onSelectedFile(path: string | undefined) {
+    this.path = path;
   }
 }

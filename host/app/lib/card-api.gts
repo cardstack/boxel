@@ -38,7 +38,6 @@ interface Options {
 }
 
 const deserializedData = new WeakMap<object, Map<string, any>>();
-const serializedData = new WeakMap<object, Map<string, any>>();
 const recomputePromises = new WeakMap<Card, Promise<any>>();
 const componentCache = new WeakMap<Box<unknown>, ComponentLike<{ Args: {}; Blocks: {}; }>>();
 
@@ -151,52 +150,32 @@ export function isCardJSON(json: any): json is CardJSON {
   return typeof module === 'string' && typeof name === 'string';
 }
 
-function getDataBuckets(instance: object): { serialized: Map<string, any>; deserialized: Map<string, any>; } {
-  let serialized = serializedData.get(instance);
-  if (!serialized) {
-    serialized = new Map();
-    serializedData.set(instance, serialized);
-  }
+function getDataBucket(instance: object): Map<string, any> {
   let deserialized = deserializedData.get(instance);
   if (!deserialized) {
     deserialized = new Map();
     deserializedData.set(instance, deserialized);
   }
-  return { serialized, deserialized };
+  return deserialized;
 }
 
 export function serializedGet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string ) {
-  let { serialized, deserialized } = getDataBuckets(model);
-
-  if (serialized.has(fieldName)) {
-    return serialized.get(fieldName);
-  }
-
   let field = getField(model.constructor, fieldName);
   if (!field) {
     throw new Error(`tried to serializedGet field ${fieldName} which does not exist in card ${model.constructor.name}`);
   }
-
-  let value;
-  if (deserialized.has(fieldName)) {
-    value = deserialized.get(fieldName);
-  } else {
-    value = field.emptyValue(model);
-    deserialized.set(fieldName, value);
-  }
-
-  let serializedValue = field.serialize(value);
-  serialized.set(fieldName, serializedValue);
-  return serializedValue;
+  return field.serialize((model as any)[fieldName]);
 }
 
 export function serializedSet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string, value: any ) {
-  let { serialized, deserialized } = getDataBuckets(model);
-  serialized.set(fieldName, value);
-  deserialized.delete(fieldName);
+  let field = getField(model.constructor, fieldName);
+  if (!field) {
+    throw new Error(`could not find field ${fieldName} in card ${model.constructor.name}`);
+  }
+  (model as any)[fieldName] = field.deserialize(model, value);
 }
 
-export function serializeCard<CardT extends CardConstructor>(model: InstanceType<CardT>): ResourceObject {
+export function serializeCard<CardT extends CardConstructor>(model: InstanceType<CardT>, opts?: { adoptsFrom?: { module: string, name: string } }): ResourceObject {
   let resource: ResourceObject = {
     type: 'card',
   };
@@ -208,6 +187,11 @@ export function serializeCard<CardT extends CardConstructor>(model: InstanceType
       resource.attributes[fieldName] = value;
     }
   }
+
+  if (opts?.adoptsFrom) {
+    resource.meta = { adoptsFrom: { ...opts.adoptsFrom } };
+  }
+
   return resource;
 }
 
@@ -273,8 +257,12 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
 
   containsMany = false;
 
-  emptyValue(_instance: Card) { 
-    return undefined; 
+  emptyValue(_instance: Card) {
+    if (primitive in this.card) {
+      return undefined;
+    } else {
+      return new this.card; 
+    }
   }
 
   prepareSet(_instance: Card, value: any) {
@@ -289,33 +277,13 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
   }
 }
 
-function getFieldValue<CardT extends CardConstructor, FieldT extends CardConstructor>(instance: CardInstanceType<CardT>, field: Field<FieldT>) {
-  let { serialized, deserialized } = getDataBuckets(instance);
-  // this establishes that our field should rerender when cardTracking for this card changes
-  cardTracking.get(instance);
-
-  if (deserialized.has(field.name)) {
-    return deserialized.get(field.name);
-  }
-
-  if (serialized.has(field.name)) {
-    let value = field.deserialize(instance, serialized.get(field.name))
-    deserialized.set(field.name, value);
-    return value;
-  }
-
-  let value = field.emptyValue(instance);
-  deserialized.set(field.name, value);
-  return value;
-}
-
 function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstructor>(field: Field<FieldT>) {
   let descriptor: any = {
     enumerable: true,
   };
   if (field.computeVia) {
     descriptor.get = function(this: CardInstanceType<CardT>) {
-      let { deserialized } = getDataBuckets(this);
+      let deserialized = getDataBucket(this);
       // this establishes that our field should rerender when cardTracking for this card changes
       cardTracking.get(this);
       let value = deserialized.get(field.name);
@@ -329,17 +297,24 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
     };
   } else {
     descriptor.get = function(this: CardInstanceType<CardT>) {
-      return getFieldValue(this, field);
+      let deserialized = getDataBucket(this);
+      // this establishes that our field should rerender when cardTracking for this card changes
+      cardTracking.get(this);
+      if (deserialized.has(field.name)) {
+        return deserialized.get(field.name);
+      }
+      let value = field.emptyValue(this);
+      deserialized.set(field.name, value);
+      return value;
     }
     descriptor.set = function(this: CardInstanceType<CardT>, value: any) {
       value = field.prepareSet(this, value);
-      let { serialized, deserialized } = getDataBuckets(this);
+      let deserialized = getDataBucket(this);
       deserialized.set(field.name, value);
       // invalidate all computed fields because we don't know which ones depend on this one
       for (let computedFieldName of Object.keys(getComputedFields(this))) {
         deserialized.delete(computedFieldName);
       }
-      serialized.delete(field.name);
       (async () => await recompute(this))();
     }
   }
@@ -351,6 +326,7 @@ function cardThunk<CardT extends CardConstructor>(cardOrThunk: CardT | (() => Ca
   return ("baseCard" in cardOrThunk ? () => cardOrThunk : cardOrThunk) as () => CardT;
 }
 
+// TODO: no thunk accepted
 export function containsMany<CardT extends CardConstructor>(cardOrThunk: CardT | (() => CardT), options?: Options): CardInstanceType<CardT>[] {
   return {
     setupField(fieldName: string) {
@@ -359,6 +335,7 @@ export function containsMany<CardT extends CardConstructor>(cardOrThunk: CardT |
   } as any;
 }
 
+// TODO: this should not accept a thunk
 export function contains<CardT extends CardConstructor>(cardOrThunk: CardT | (() => CardT), options?: Options): CardInstanceType<CardT> {
   return {
     setupField(fieldName: string) {
@@ -389,13 +366,15 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { fields: Record<string, 
 
 class DefaultEdit extends GlimmerComponent<{ Args: { fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    {{#each-in @fields as |key Field|}}
-      <label data-test-field={{key}}>
-        {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
-        {{startCase key}}
-        <Field />
-      </label>
-    {{/each-in}}
+    <div class="card-edit">
+      {{#each-in @fields as |key Field|}}
+        <label data-test-field={{key}}>
+          {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
+          {{startCase key}}
+          <Field />
+        </label>
+      {{/each-in}}
+    </div>
   </template>;
 }
 
@@ -496,7 +475,7 @@ async function recompute(card: Card): Promise<void> {
 async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K): Promise<T[K]> {
   let result: T[K];
   let isLoaded = false;
-  let { deserialized } = getDataBuckets(model);
+  let deserialized = getDataBucket(model);
   while(!isLoaded) {
     try {
       result = model[fieldName];

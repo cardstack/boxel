@@ -3,40 +3,63 @@ import { Card } from '../lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { eq } from '../helpers/truth-helpers';
+import { eq, gt } from '../helpers/truth-helpers';
 import isObject from 'lodash/isObject';
 import { tracked } from '@glimmer/tracking';
-import { moduleURL } from 'runtime-spike/resources/import';
-import { renderCard, RenderedCard } from 'runtime-spike/resources/rendered-card';
+import { service } from '@ember/service';
+import CardEditor, { NewCardArgs } from './card-editor';
+import type RouterService from '@ember/routing/router-service';
 
 export default class SchemaInspector extends Component<{ Args: { module: Record<string, any> } }> {
   <template>
-    <p class="card-chooser">
-      Cards:
-      {{#each-in this.cards as |name card|}}
-        <button {{on "click" (fn this.select name card)}}
-          class="card-button {{if (eq this.selected.name name) 'selected'}}"
-          data-test-card-name={{name}}
-          disabled={{if (eq this.selected.name name) true false}}>
-          {{name}}
-        </button>
-      {{/each-in}}
-    </p>
-    <h2 class="selected-card">Selected: {{this.selected.name}}</h2>
-    {{! TODO Render the card schema of the selected card }}
+    {{#if (gt this.numCards 1)}}
+      <p class="card-chooser">
+        Cards:
+        {{#each-in this.cards as |name card|}}
+          <button {{on "click" (fn this.select name card)}}
+            class="card-button {{if (eq this.selected.name name) 'selected'}}"
+            data-test-card-name={{name}}
+            disabled={{if (eq this.selected.name name) true false}}>
+            {{name}}
+          </button>
+        {{/each-in}}
+      </p>
+    {{else if (eq this.numCards 0)}}
+      No cards found in this module
+    {{/if}}
+
     {{#if this.selected}}
-      <button {{on "click" this.create}}>Create New {{this.selected.name}}</button>
+      <h2 class="selected-card">{{this.selected.name}} Card</h2>
 
-      {{#if this.rendered.component}}
-        <this.rendered.component />
-        <button {{on "click" this.save}}>Save</button>
+      {{! TODO Render the card schema of the selected card }}
+
+      {{#if this.showEditor}}
+        <CardEditor
+          @card={{this.cardArgs}}
+          @module={{@module}}
+          @onCancel={{this.onCancel}}
+          @onSave={{this.onSave}}
+        />
+      {{else}}
+        <button data-test-create-card {{on "click" this.create}}>Create New {{this.selected.name}}</button>
       {{/if}}
-
     {{/if}}
   </template>
 
+  @tracked showEditor = false;
   @tracked
-  selected: { name: string; card: typeof Card; } | undefined;
+  selected: { name: string; card: typeof Card; } | undefined =
+    this.numCards > 0
+      ? Object.fromEntries(
+        Object.entries(this.cards)[0].map((val, i) => i === 0 ? ['name', val] : ['card', val])
+      ) as { name: string; card: typeof Card; }
+      : undefined;
+
+  @service declare router: RouterService;
+
+  get numCards() {
+    return Object.keys(this.cards).length;
+  }
 
   get cards() {
     let cards = {} as { [exportName: string]: typeof Card };
@@ -52,32 +75,37 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
     return cards;
   }
 
+  get cardArgs(): NewCardArgs {
+    if (!this.selected) {
+      throw new Error('No card selected');
+    }
+    return {
+      type: 'new',
+      class: this.selected.card,
+      name: this.selected.name,
+    }
+  }
+
   @action
   select(name: string, card: typeof Card) {
     this.selected = { name, card };
   }
 
-  private newInstance: Card | undefined;
+  @action
+  onCancel() {
+    this.showEditor = false;
+  }
 
-  @tracked
-  private rendered: RenderedCard | undefined;
+  @action
+  onSave(path: string) {
+    this.router.transitionTo({ queryParams: { path } });
+  }
 
   @action
   create() {
     if (!this.selected) {
       return;
     }
-    let instance = this.newInstance = new (this.selected.card)();
-    this.rendered = renderCard(this, () => instance, () => 'edit')
+    this.showEditor = true;
   }
-
-  @action
-  save() {
-    if (!this.newInstance || !this.selected) {
-      return;
-    }
-    // TODO: pick filename and write JSON file
-    console.log(this.newInstance, moduleURL(this.args.module), this.selected.name);
-  }
-
 }

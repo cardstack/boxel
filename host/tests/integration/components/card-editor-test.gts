@@ -2,12 +2,13 @@ import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { click, fillIn } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import Preview from 'runtime-spike/components/preview';
-import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
+import CardEditor, { ExistingCardArgs }  from 'runtime-spike/components/card-editor';
+import { contains, field, Component, Card, Format } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 import { renderComponent } from '../../helpers/render-component';
 
-module('Integration | preview', function (hooks) {
+const formats: Format[] = ['isolated', 'embedded', 'edit'];
+module('Integration | card-editor', function (hooks) {
   setupRenderingTest(hooks);
 
   test('renders card', async function (assert) {
@@ -20,15 +21,16 @@ module('Integration | preview', function (hooks) {
     let module = { default: TestCard };
     let json = {
       data: {
+        type: 'card',
         attributes: { firstName: 'Mango' },
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-  
+    const args: ExistingCardArgs = { type: 'existing', json, filename: '' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @json={{json}}/>
+          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -52,15 +54,16 @@ module('Integration | preview', function (hooks) {
     let module = { default: TestCard };
     let json = {
       data: {
+        type: 'card',
         attributes: { firstName: 'Mango' },
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-  
+    const args: ExistingCardArgs = { type: 'existing', json, filename: '' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @json={{json}}/>
+          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -96,15 +99,16 @@ module('Integration | preview', function (hooks) {
     let module = { default: TestCard };
     let json = {
       data: {
+        type: 'card',
         attributes: { firstName: 'Mango' },
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-  
+    const args: ExistingCardArgs = { type: 'existing', json, filename: '' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @json={{json}}/>
+          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -117,5 +121,66 @@ module('Integration | preview', function (hooks) {
 
     await click('.format-button.isolated');
     assert.dom('[data-test-isolated-firstName]').hasText('Van Gogh');
+  });
+
+  test('can detect when card is dirty', async function(assert) {
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><@fields.firstName /></template>
+      }
+    }
+
+    class Post extends Card{
+      @field title = contains(StringCard);
+      @field author = contains(Person);
+    }
+
+    let module = { default: Post };
+    let json = {
+      data: {
+        type: 'card',
+        attributes: {
+          author: {
+            firstName: 'Mango'
+          },
+          title: 'We Need to Go to the Dog Park Now!'
+        },
+        meta: { adoptsFrom: { module: '', name: 'default'} }
+      }
+    };
+    const args: ExistingCardArgs = { type: 'existing', json, filename: '' };
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
+        </template>
+      }
+    )
+
+    await click('.format-button.edit')
+    assert.dom('[data-test-save-card]').doesNotExist();
+    assert.dom('[data-test-reset]').doesNotExist();
+
+    await fillIn('[data-test-field="title"] input', 'Why I Whine'); // dirty top level field
+    assert.dom('[data-test-field="title"] input').hasValue('Why I Whine');
+    assert.dom('[data-test-save-card]').exists();
+    assert.dom('[data-test-reset]').exists();
+
+    await click('[data-test-reset]');
+    assert.dom('[data-test-save-card]').doesNotExist();
+    assert.dom('[data-test-reset]').doesNotExist();
+    assert.dom('[data-test-field="title"] input').hasValue('We Need to Go to the Dog Park Now!');
+
+
+    await fillIn('[data-test-field="firstName"] input', 'Van Gogh'); // dirty nested field
+    assert.dom('[data-test-field="firstName"] input').hasValue('Van Gogh');
+    assert.dom('[data-test-save-card]').exists();
+    assert.dom('[data-test-reset]').exists();
+
+    await click('[data-test-reset]');
+    assert.dom('[data-test-save-card]').doesNotExist();
+    assert.dom('[data-test-reset]').doesNotExist();
+    assert.dom('[data-test-field="firstName"] input').hasValue('Mango');
   });
 });
