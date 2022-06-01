@@ -17,4 +17,10 @@ module('Unit | schema-util', function (_hooks) {
       'found firstName field'
     );
   });
+
+  // TODO:
+  // test default exports
+  // test reexports
+  // test namespace imports (where we import from card-api via a namespace import)
+  // test export all
 });
