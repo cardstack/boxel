@@ -1,6 +1,10 @@
 import { transformSync } from '@babel/core';
 import * as Babel from '@babel/core';
-import { schemaAnalysisPlugin, Options } from './schema-analysis-plugin';
+import {
+  schemaAnalysisPlugin,
+  Options,
+  PossibleCardClass,
+} from './schema-analysis-plugin';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -11,10 +15,21 @@ import typescriptPlugin from '@babel/plugin-transform-typescript';
 // represents the cards within an entire javascript module
 export class CardDefinitions {
   private ast: Babel.types.File;
+  private possibleCards: PossibleCardClass[];
 
-  constructor(src: string) {
-    let moduleAnalysis: Options = { imports: {}, exports: {}, classes: {} };
-    this.ast = transformSync(src, {
+  static async create(
+    src: string,
+    inspector: CardInspector
+  ): Promise<CardDefinitions> {
+    let definitions = new CardDefinitions(src, inspector);
+    await definitions.semanticPhase();
+    return definitions;
+  }
+
+  private constructor(private src: string, private inspector: CardInspector) {
+    // construct handles the synchronous syntactic phase
+    let moduleAnalysis: Options = { possibleCards: [] };
+    this.ast = transformSync(this.src, {
       code: false,
       ast: true,
       plugins: [
@@ -24,21 +39,35 @@ export class CardDefinitions {
         [schemaAnalysisPlugin, moduleAnalysis],
       ],
     })!.ast!;
-
-    // Use the moduleAnalysis to work out the exported cards from this module.
-    // Once approach could be to start at the imports, and look specifically for the
-    // import specifier that correlates to the Card export from 'runtime-spike/lib/card-api',
-    // then trace through all the classes that extend from that specifier--these will
-    // be the cards. Then determine which cards are exported, and wht the exported names
-    // are.
-
-    // question: should we only look at classes that directly extend from the base Card class?
-    debugger;
+    this.possibleCards = moduleAnalysis.possibleCards;
   }
 
-  getCard(_name: string): CardDefinition {
-    throw new Error('unimplemented');
+  // the semantic phase is async
+  private async semanticPhase() {
+    for (let card of this.possibleCards) {
+      if (await this.isCard(card)) {
+        this.cards.push(new CardDefinition());
+      }
+    }
   }
+
+  private async isCard(possibleCard: PossibleCardClass): Promise<boolean> {
+    switch (possibleCard.super.type) {
+      case 'external': {
+        let mod = await this.inspector.resolveModule(possibleCard.super.module);
+        let superClass = mod[possibleCard.super.name];
+        return typeof superClass === 'function' && 'baseCard' in superClass;
+      }
+      case 'internal':
+        return await this.isCard(
+          this.possibleCards[possibleCard.super.classIndex]
+        );
+      default:
+        throw assertNever(possibleCard.super);
+    }
+  }
+
+  cards: CardDefinition[] = [];
 }
 
 export class CardDefinition {
@@ -50,4 +79,22 @@ export class CardDefinition {
 export interface FieldDefinition {
   module: string;
   moduleExportedName: string;
+}
+
+export class CardInspector {
+  readonly resolveModule: (specifier: string) => Promise<Record<string, any>>;
+
+  constructor(params: {
+    resolveModule: (specifier: string) => Promise<Record<string, any>>;
+  }) {
+    this.resolveModule = params.resolveModule;
+  }
+
+  async inspectCards(src: string): Promise<CardDefinitions> {
+    return await CardDefinitions.create(src, this);
+  }
+}
+
+function assertNever(value: never) {
+  throw new Error(`should never happen ${value}`);
 }

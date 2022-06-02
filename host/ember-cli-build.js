@@ -43,6 +43,9 @@ module.exports = function (defaults) {
             path: require.resolve('path-browserify'),
           },
         },
+        node: {
+          global: true,
+        },
       },
     },
   });

@@ -6,133 +6,132 @@ interface State {
   opts: Options;
 }
 
-export interface Options {
-  exports: {
-    [localName: string]: string; // localName -> exportedName
-  };
-  imports: {
-    [localName: string]: {
-      importedName: string | NamespaceMarker;
-      source: string;
+export type CardReference =
+  | {
+      type: 'external';
+      module: string;
+      name: string;
+    }
+  | {
+      type: 'internal';
+      classIndex: number;
     };
-  };
-  classes: {
-    [className: string]: {
-      superClass: string | null;
-      // TODO add @field properties
-      // TODO add static properties
-    };
-  };
+
+export interface PossibleCardClass {
+  super: CardReference;
+  localName: string | undefined;
+  // exportedAs: string | undefined;
+  path: NodePath<t.ClassDeclaration>;
+  fields: Map<string, CardReference>;
 }
 
-const NamespaceMarker = { isNamespace: true };
-type NamespaceMarker = typeof NamespaceMarker;
+export interface Options {
+  possibleCards: PossibleCardClass[];
+}
 
 export function schemaAnalysisPlugin(babel: typeof Babel) {
   let t = babel.types;
   return {
     visitor: {
-      ExportDeclaration(path: NodePath<t.ExportDeclaration>, state: State) {
-        switch (path.node.type) {
-          case 'ExportNamedDeclaration':
-            for (let specifier of path.node.specifiers) {
-              switch (specifier.type) {
-                case 'ExportSpecifier':
-                  if (!t.isIdentifier(specifier.exported)) {
-                    throw error(
-                      path,
-                      'Expected exported name to be an identifier'
-                    );
-                  }
-                  if (!t.isIdentifier(specifier.local)) {
-                    throw error(
-                      path,
-                      'Exported local name to be an identifier'
-                    );
-                  }
-                  state.opts.exports[specifier.local.name] =
-                    specifier.exported.name;
-                  break;
-                case 'ExportDefaultSpecifier':
-                case 'ExportNamespaceSpecifier':
-                  throw error(path, 'unimplemented');
-                default:
-                  assertNever(specifier);
-              }
-            }
-            if (path.node.declaration) {
-              let declaration = path.node.declaration;
-              switch (declaration.type) {
-                // we could try harder to find card classes in
-                // other types of declarations
-                case 'ClassDeclaration':
-                  state.opts.exports[declaration.id.name] = declaration.id.name;
-                  break;
-              }
-            }
-            break;
+      // ExportNamedDeclaration(
+      //   path: NodePath<t.ExportNamedDeclaration>,
+      //   state: State
+      // ) {
+      //   for (let specifier of path.node.specifiers) {
+      //     switch (specifier.type) {
+      //       case 'ExportSpecifier':
+      //         if (!t.isIdentifier(specifier.exported)) {
+      //           throw error(path, 'Expected exported name to be an identifier');
+      //         }
+      //         if (!t.isIdentifier(specifier.local)) {
+      //           throw error(path, 'Exported local name to be an identifier');
+      //         }
+      //         state.opts.exports[specifier.local.name] =
+      //           specifier.exported.name;
+      //         break;
+      //       case 'ExportDefaultSpecifier':
+      //       case 'ExportNamespaceSpecifier':
+      //         throw error(path, 'unimplemented');
+      //       default:
+      //         assertNever(specifier);
+      //     }
+      //   }
+      //   if (path.node.declaration) {
+      //     let declaration = path.node.declaration;
+      //     switch (declaration.type) {
+      //       // we could try harder to find card classes in
+      //       // other types of declarations
+      //       case 'ClassDeclaration':
+      //         state.opts.exports[declaration.id.name] = declaration.id.name;
+      //         break;
+      //     }
+      //   }
+      // },
 
-          case 'ExportDefaultDeclaration':
-            if (path.node.declaration) {
-              let declaration = path.node.declaration;
-              switch (declaration.type) {
-                // we could try harder to find card classes in
-                // other types of declarations
-                case 'ClassDeclaration':
-                  state.opts.exports[declaration.id.name] = 'default';
-                  break;
-                case 'Identifier':
-                  state.opts.exports[declaration.name] = 'default';
-              }
-            }
-            break;
-
-          case 'ExportAllDeclaration':
-            throw error(path, 'unimplemented');
-
-          default:
-            assertNever(path.node);
-        }
-      },
-
-      ImportDeclaration(path: NodePath<t.ImportDeclaration>, state: State) {
-        let source = path.node.source.value;
-        for (let specifier of path.node.specifiers) {
-          switch (specifier.type) {
-            case 'ImportSpecifier':
-              if (!t.isIdentifier(specifier.imported)) {
-                throw error(path, 'Expected imported name to be an identifier');
-              }
-              if (!t.isIdentifier(specifier.local)) {
-                throw error(path, 'Exported local name to be an identifier');
-              }
-              state.opts.imports[specifier.local.name] = {
-                importedName: specifier.imported.name,
-                source,
-              };
-              break;
-            case 'ImportDefaultSpecifier':
-              state.opts.imports[specifier.local.name] = {
-                importedName: 'default',
-                source,
-              };
-              break;
-            case 'ImportNamespaceSpecifier':
-              throw error(path, 'unimplemented');
-            default:
-              assertNever(specifier);
-          }
-        }
-      },
+      // ExportDefaultDeclaration(
+      //   path: NodePath<t.ExportDefaultDeclaration>,
+      //   state: State
+      // ) {
+      //   if (path.node.declaration) {
+      //     let declaration = path.node.declaration;
+      //     switch (declaration.type) {
+      //       // we could try harder to find card classes in
+      //       // other types of declarations
+      //       case 'ClassDeclaration':
+      //         state.opts.exports[declaration.id.name] = 'default';
+      //         break;
+      //       case 'Identifier':
+      //         state.opts.exports[declaration.name] = 'default';
+      //     }
+      //   }
+      // },
 
       ClassDeclaration(path: NodePath<t.ClassDeclaration>, state: State) {
         if (path.node.superClass && !t.isIdentifier(path.node.id)) {
-          throw error(path, 'Expected super class to be an identifier');
+          return;
         }
-        state.opts.classes[path.node.id.name] = {
-          superClass:
-            (path.node.superClass as t.Identifier | null)?.name ?? null,
-        };
+
+        let sc = path.get('superClass');
+        if (sc.isReferencedIdentifier()) {
+          let binding = path.scope.getBinding(sc.node.name);
+          if (
+            binding?.path.isImportSpecifier() ||
+            binding?.path.isImportDefaultSpecifier()
+          ) {
+            let parent = binding.path
+              .parentPath as NodePath<t.ImportDeclaration>;
+            state.opts.possibleCards.push({
+              super: {
+                type: 'external',
+                module: parent.node.source.value,
+                name: binding.path.isImportDefaultSpecifier()
+                  ? 'default'
+                  : getName(binding.path.node.imported),
+              },
+              localName: path.node.id ? path.node.id.name : undefined,
+              path,
+              fields: new Map(),
+            });
+          }
+
+          if (binding?.path.isClassDeclaration()) {
+            let superClassNode = binding.path.node;
+            let superClassIndex = state.opts.possibleCards.findIndex(
+              (card) => card.path.node === superClassNode
+            );
+            if (superClassIndex >= 0) {
+              state.opts.possibleCards.push({
+                super: {
+                  type: 'internal',
+                  classIndex: superClassIndex,
+                },
+                localName: path.node.id ? path.node.id.name : undefined,
+                path,
+                fields: new Map(),
+              });
+            }
+          }
+        }
       },
     },
   };
@@ -153,6 +152,10 @@ class CompilerError extends Error {
   }
 }
 
-function assertNever(value: never) {
-  throw new Error(`should never happen ${value}`);
+function getName(node: t.Identifier | t.StringLiteral) {
+  if (node.type === 'Identifier') {
+    return node.name;
+  } else {
+    return node.value;
+  }
 }

@@ -4,11 +4,6 @@ import loadInitializers from 'ember-load-initializers';
 import config from 'runtime-spike/config/environment';
 import './lib/glint-embroider-workaround';
 
-// support assumptions that Buffer polyfill makes
-if (!('global' in window)) {
-  window.global = window;
-}
-
 /* The following modules are made available to cards as external modules.
  * This is paired with the worker/src/externals.ts file which is responsible
  * for compiling the external module stubs into the cards, which consumes the
