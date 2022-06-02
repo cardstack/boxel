@@ -4,7 +4,10 @@ import {
   schemaAnalysisPlugin,
   Options,
   PossibleCardClass,
+  CardReference,
+  PossibleField,
 } from './schema-analysis-plugin';
+import { fieldDecorator, fieldType, FieldType, isFieldType } from './card-api';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -45,40 +48,91 @@ export class CardDefinitions {
   // the semantic phase is async
   private async semanticPhase() {
     for (let card of this.possibleCards) {
-      if (await this.isCard(card)) {
-        this.cards.push(new CardDefinition());
+      if (await this.isCardReference(card.super)) {
+        let fields: Map<string, FieldDefinition> = new Map();
+        for (let [fieldName, field] of card.possibleFields) {
+          let fieldType = await this.getFieldType(field);
+          if (!fieldType) {
+            continue;
+          }
+          if (!(await this.isCardReference(field.card))) {
+            continue;
+          }
+          fields.set(fieldName, {
+            type: fieldType,
+            card: field.card,
+          });
+        }
+        this.cards.push(new CardDefinition(card, fields));
       }
     }
   }
 
-  private async isCard(possibleCard: PossibleCardClass): Promise<boolean> {
-    switch (possibleCard.super.type) {
+  private async isCardReference(
+    possibleCardRef: CardReference
+  ): Promise<boolean> {
+    switch (possibleCardRef.type) {
       case 'external': {
-        let mod = await this.inspector.resolveModule(possibleCard.super.module);
-        let superClass = mod[possibleCard.super.name];
+        let mod = await this.inspector.resolveModule(possibleCardRef.module);
+        let superClass = mod[possibleCardRef.name];
         return typeof superClass === 'function' && 'baseCard' in superClass;
       }
       case 'internal':
-        return await this.isCard(
-          this.possibleCards[possibleCard.super.classIndex]
+        return await this.isCardReference(
+          this.possibleCards[possibleCardRef.classIndex].super
         );
       default:
-        throw assertNever(possibleCard.super);
+        throw assertNever(possibleCardRef);
     }
+  }
+
+  private async getFieldType(
+    possibleField: PossibleField
+  ): Promise<FieldType | undefined> {
+    let decoratorMod = await this.inspector.resolveModule(
+      possibleField.decorator.module
+    );
+    if (!(fieldDecorator in decoratorMod[possibleField.decorator.name])) {
+      return undefined;
+    }
+    let fieldTypeMod = await this.inspector.resolveModule(
+      possibleField.type.module
+    );
+
+    if (!(await this.isCardReference(possibleField.card))) {
+      return undefined;
+    }
+    let type = fieldTypeMod[possibleField.type.name][fieldType];
+    if (!isFieldType(type)) {
+      return undefined;
+    }
+
+    return type;
   }
 
   cards: CardDefinition[] = [];
 }
 
 export class CardDefinition {
-  getField(_name: string): FieldDefinition {
-    throw new Error('unimp');
+  constructor(
+    private cardClass: PossibleCardClass,
+    private fieldDefinitions: Map<string, FieldDefinition>
+  ) {}
+
+  getField(name: string) {
+    return this.fieldDefinitions.get(name);
+  }
+  get localName() {
+    return this.cardClass.localName;
+  }
+  get fields() {
+    return [...this.fieldDefinitions];
   }
 }
 
 export interface FieldDefinition {
-  module: string;
-  moduleExportedName: string;
+  card: CardReference;
+  type: FieldType;
 }
 
 export class CardInspector {
