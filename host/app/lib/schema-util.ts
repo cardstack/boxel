@@ -1,5 +1,5 @@
 import { transformSync } from '@babel/core';
-import * as Babel from '@babel/core';
+// import * as Babel from '@babel/core';
 import {
   schemaAnalysisPlugin,
   Options,
@@ -20,7 +20,7 @@ import typescriptPlugin from '@babel/plugin-transform-typescript';
 
 // represents the cards within an entire javascript module
 export class CardDefinitions {
-  private ast: Babel.types.File;
+  // private ast: Babel.types.File;
   private possibleCards: PossibleCardClass[];
 
   static async create(
@@ -56,13 +56,13 @@ export class CardDefinitions {
     let matches = parseTemplates(this.src, 'no-filename', 'template');
     for (let match of matches) {
       output.push(this.src.slice(offset, match.start.index));
-      output.push('[templte("');
+      output.push('[templte(`'); // use back tick so we can be tolerant of newlines
       output.push(
         this.src
           .slice(match.start.index! + match.start[0].length, match.end.index)
-          .replace(/"/g, '\\"')
+          .replace(/`/g, '\\`')
       );
-      output.push('")]        ');
+      output.push('`)]        ');
       offset = match.end.index! + match.end[0].length;
     }
     output.push(this.src.slice(offset));
@@ -148,6 +148,9 @@ export class CardDefinition {
   }
   get localName() {
     return this.cardClass.localName;
+  }
+  get exportedAs() {
+    return this.cardClass.exportedAs;
   }
   get fields() {
     return [...this.fieldDefinitions];

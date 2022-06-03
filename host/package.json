@@ -28,6 +28,7 @@
     "@babel/plugin-syntax-decorators": "^7.17.12",
     "@babel/plugin-transform-typescript": "^7.18.4",
     "@cardstack/requirejs-monaco-ember-polyfill": "^0.0.1",
+    "@cardstack/runtime-common": "0.0.0",
     "@cardstack/worker": "1.0.0",
     "@ember/optional-features": "^2.0.0",
     "@ember/test-helpers": "^2.6.0",

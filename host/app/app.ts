@@ -9,7 +9,7 @@ import './lib/glint-embroider-workaround';
  * for compiling the external module stubs into the cards, which consumes the
  * modules in the window.RUNTIME_SPIKE_EXTERNALS Map. Any changes to the
  * window.RUNTIME_SPIKE_EXTERNALS Map should also be reflected in the in the
- * worker/src/externals.ts file.
+ * runtime-common/index.js file.
  */
 
 (window as any).RUNTIME_SPIKE_EXTERNALS = new Map();

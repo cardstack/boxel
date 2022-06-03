@@ -22,7 +22,7 @@ export type CardReference =
 export interface PossibleCardClass {
   super: CardReference;
   localName: string | undefined;
-  // exportedAs: string | undefined;
+  exportedAs: string | undefined;
   path: NodePath<t.ClassDeclaration>;
   possibleFields: Map<string, PossibleField>;
 }
@@ -37,65 +37,12 @@ export interface Options {
   possibleCards: PossibleCardClass[];
 }
 
-export function schemaAnalysisPlugin(babel: typeof Babel) {
-  let t = babel.types;
+export function schemaAnalysisPlugin(_babel: typeof Babel) {
+  // let t = babel.types;
   return {
     visitor: {
-      // ExportNamedDeclaration(
-      //   path: NodePath<t.ExportNamedDeclaration>,
-      //   state: State
-      // ) {
-      //   for (let specifier of path.node.specifiers) {
-      //     switch (specifier.type) {
-      //       case 'ExportSpecifier':
-      //         if (!t.isIdentifier(specifier.exported)) {
-      //           throw error(path, 'Expected exported name to be an identifier');
-      //         }
-      //         if (!t.isIdentifier(specifier.local)) {
-      //           throw error(path, 'Exported local name to be an identifier');
-      //         }
-      //         state.opts.exports[specifier.local.name] =
-      //           specifier.exported.name;
-      //         break;
-      //       case 'ExportDefaultSpecifier':
-      //       case 'ExportNamespaceSpecifier':
-      //         throw error(path, 'unimplemented');
-      //       default:
-      //         assertNever(specifier);
-      //     }
-      //   }
-      //   if (path.node.declaration) {
-      //     let declaration = path.node.declaration;
-      //     switch (declaration.type) {
-      //       // we could try harder to find card classes in
-      //       // other types of declarations
-      //       case 'ClassDeclaration':
-      //         state.opts.exports[declaration.id.name] = declaration.id.name;
-      //         break;
-      //     }
-      //   }
-      // },
-
-      // ExportDefaultDeclaration(
-      //   path: NodePath<t.ExportDefaultDeclaration>,
-      //   state: State
-      // ) {
-      //   if (path.node.declaration) {
-      //     let declaration = path.node.declaration;
-      //     switch (declaration.type) {
-      //       // we could try harder to find card classes in
-      //       // other types of declarations
-      //       case 'ClassDeclaration':
-      //         state.opts.exports[declaration.id.name] = 'default';
-      //         break;
-      //       case 'Identifier':
-      //         state.opts.exports[declaration.name] = 'default';
-      //     }
-      //   }
-      // },
-
       ClassDeclaration(path: NodePath<t.ClassDeclaration>, state: State) {
-        if (path.node.superClass && !t.isIdentifier(path.node.id)) {
+        if (!path.node.superClass) {
           return;
         }
 
@@ -103,11 +50,40 @@ export function schemaAnalysisPlugin(babel: typeof Babel) {
         if (sc.isReferencedIdentifier()) {
           let cardRef = makeCardReference(path.scope, sc.node.name, state);
           if (cardRef) {
+            let exportedAs: string | undefined;
+            let { parentPath } = path;
+            let localName = path.node.id ? path.node.id.name : undefined;
+            if (parentPath.isExportNamedDeclaration()) {
+              // the class declaration is part of a named export
+              exportedAs = localName;
+            } else if (parentPath.isExportDefaultDeclaration()) {
+              // the class declaration is part of a default export
+              exportedAs = 'default';
+            } else {
+              // the class's identifier is referenced in a node whose parent is an ExportSpecifier
+              let binding = localName
+                ? path.scope.getBinding(localName)
+                : undefined;
+              if (binding) {
+                let maybeExportSpecifierLocal = binding.referencePaths.find(
+                  (b) => b.parentPath?.isExportSpecifier()
+                ) as NodePath<t.Identifier> | undefined;
+                if (maybeExportSpecifierLocal) {
+                  exportedAs = getName(
+                    (
+                      maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>
+                    ).node.exported
+                  );
+                }
+              }
+            }
+
             state.opts.possibleCards.push({
               super: cardRef,
-              localName: path.node.id ? path.node.id.name : undefined,
+              localName,
               path,
               possibleFields: new Map(),
+              exportedAs,
             });
           }
         }

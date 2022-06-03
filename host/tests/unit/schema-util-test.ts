@@ -59,6 +59,82 @@ module('Unit | schema-util', function (hooks) {
     assert.strictEqual(definitions.cards.length, 3, 'found all cards');
   });
 
+  test('non exported card does not have an exportedAs value in its card definition', async function (assert) {
+    let src = `
+      import StringCard from 'runtime-spike/lib/string';
+      class Person extends StringCard {}
+    `;
+
+    let [definition] = (await inspector.inspectCards(src)).cards;
+    assert.strictEqual(
+      definition.exportedAs,
+      undefined,
+      'no exportedAs value exists'
+    );
+    assert.strictEqual(definition.localName, 'Person', 'localName is correct');
+  });
+
+  test('identifies a card as a named export', async function (assert) {
+    let src = `
+      import { Card } from 'runtime-spike/lib/card-api';
+      class Person extends Card {}
+      export { Person as PersonCard };
+    `;
+    let [definition] = (await inspector.inspectCards(src)).cards;
+    assert.strictEqual(
+      definition.exportedAs,
+      'PersonCard',
+      'found Person card export'
+    );
+    assert.strictEqual(definition.localName, 'Person', 'localName is correct');
+  });
+
+  test('identifies a card whose class declaration is part of a named export', async function (assert) {
+    let src = `
+      import { Card } from 'runtime-spike/lib/card-api';
+      export class Person extends Card {}
+    `;
+    let [definition] = (await inspector.inspectCards(src)).cards;
+    assert.strictEqual(
+      definition.exportedAs,
+      'Person',
+      'found Person card export'
+    );
+    assert.strictEqual(definition.localName, 'Person', 'localName is correct');
+  });
+
+  test('identifies a card whose class declaration is part of a default export', async function (assert) {
+    let src = `
+      import { Card } from 'runtime-spike/lib/card-api';
+      export default class extends Card {}
+    `;
+    let [definition] = (await inspector.inspectCards(src)).cards;
+    assert.strictEqual(
+      definition.exportedAs,
+      'default',
+      'found default card export'
+    );
+    assert.strictEqual(definition.localName, undefined, 'has no local name');
+  });
+
+  test('identifies a card whose class declaration is part of a default export but is actually named', async function (assert) {
+    let src = `
+      import { Card } from 'runtime-spike/lib/card-api';
+      export default class Person extends Card {}
+    `;
+    let [definition] = (await inspector.inspectCards(src)).cards;
+    assert.strictEqual(
+      definition.exportedAs,
+      'default',
+      'found Person card export'
+    );
+    assert.strictEqual(
+      definition.localName,
+      'Person',
+      'uses the class name as the local name for a default export'
+    );
+  });
+
   test('ignores fields that are not cards', async function (assert) {
     let src = `
       import { contains, field, Card } from 'runtime-spike/lib/card-api';

@@ -8,6 +8,7 @@
     "@babel/plugin-transform-typescript": "^7.16.8",
     "@babel/plugin-proposal-class-properties": "^7.16.7",
     "@babel/plugin-proposal-decorators": "^7.17.9",
+    "@cardstack/runtime-common": "0.0.0",
     "@types/babel__core": "^7.1.19",
     "@types/babel__traverse": "^7.14.2",
     "assert-never": "^1.2.1",

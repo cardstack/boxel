@@ -11,12 +11,14 @@ import SchemaInspector from './schema-inspector';
 import CardEditor, { ExistingCardArgs } from './card-editor';
 import ImportModule from './import-module';
 import FileTree from './file-tree';
+import { CardInspector } from '../lib/schema-util';
 import { isCardJSON, Format } from '../lib/card-api';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,
   languageConfigs
 } from '../utils/editor-language';
+import { externalsMap } from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
@@ -43,7 +45,11 @@ export default class Go extends Component<Signature> {
           {{#if (isRunnable this.openFile.name)}}
             <ImportModule @url={{localRealmURL this.openFile.name}}>
               <:ready as |module|>
-                <SchemaInspector @module={{module}} />
+                <SchemaInspector
+                  @module={{module}}
+                  @src={{this.openFile.content}}
+                  @inspector={{this.inspector}}
+                />
               </:ready>
               <:error as |error|>
                 <h2>Encountered {{error.type}} error</h2>
@@ -76,6 +82,17 @@ export default class Go extends Component<Signature> {
   @service declare localRealm: LocalRealm;
   @tracked selectedFile: Entry | undefined;
   @tracked jsonError: string | undefined;
+  private inspector = new CardInspector({
+    async resolveModule(specifier: string) {
+      if (externalsMap.has(specifier)) {
+        specifier = `http://externals/${specifier}`;
+      } else if (specifier.startsWith('.') || specifier.startsWith('/')) {
+        let url = new URL(specifier, 'http://local-realm');
+        specifier = url.href;
+      }
+      return await import(/* webpackIgnore: true */ specifier);
+    },
+  });
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
