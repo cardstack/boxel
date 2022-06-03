@@ -158,7 +158,7 @@ module('Unit | schema-util', function (hooks) {
     assert.strictEqual(definition.fields.length, 0, 'no fields were found');
   });
 
-  skip('ignores field on non-cards', async function (assert) {
+  test('ignores field on non-cards', async function (assert) {
     let src = `
       import { contains, field } from 'runtime-spike/lib/card-api';
       import StringCard from 'runtime-spike/lib/string';
@@ -168,8 +168,8 @@ module('Unit | schema-util', function (hooks) {
       }
     `;
 
-    let [definition] = (await inspector.inspectCards(src)).cards;
-    assert.strictEqual(definition.fields.length, 0, 'no fields were found');
+    let definitions = await inspector.inspectCards(src);
+    assert.strictEqual(definitions.cards.length, 0, 'found no cards');
   });
 
   test('identifies a contained field that uses an external card reference', async function (assert) {
@@ -293,6 +293,5 @@ module('Unit | schema-util', function (hooks) {
     assert.strictEqual(definitions.cards.length, 1, 'found Person card');
   });
 
-  skip('identifies a computed field that is defined by an inline function', async function (_assert) {});
-  skip('identifies a computed field that is defined by the name of a class method', async function (_assert) {});
+  skip('identifies a computed field', async function (_assert) {});
 });

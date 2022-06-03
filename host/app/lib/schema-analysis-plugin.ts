@@ -4,6 +4,7 @@ import type { NodePath, Scope } from '@babel/traverse';
 
 interface State {
   opts: Options;
+  insideCard: boolean;
 }
 
 interface ExternalReference {
@@ -41,55 +42,66 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
   // let t = babel.types;
   return {
     visitor: {
-      ClassDeclaration(path: NodePath<t.ClassDeclaration>, state: State) {
-        if (!path.node.superClass) {
-          return;
-        }
+      ClassDeclaration: {
+        enter(path: NodePath<t.ClassDeclaration>, state: State) {
+          if (!path.node.superClass) {
+            return;
+          }
 
-        let sc = path.get('superClass');
-        if (sc.isReferencedIdentifier()) {
-          let cardRef = makeCardReference(path.scope, sc.node.name, state);
-          if (cardRef) {
-            let exportedAs: string | undefined;
-            let { parentPath } = path;
-            let localName = path.node.id ? path.node.id.name : undefined;
-            if (parentPath.isExportNamedDeclaration()) {
-              // the class declaration is part of a named export
-              exportedAs = localName;
-            } else if (parentPath.isExportDefaultDeclaration()) {
-              // the class declaration is part of a default export
-              exportedAs = 'default';
-            } else {
-              // the class's identifier is referenced in a node whose parent is an ExportSpecifier
-              let binding = localName
-                ? path.scope.getBinding(localName)
-                : undefined;
-              if (binding) {
-                let maybeExportSpecifierLocal = binding.referencePaths.find(
-                  (b) => b.parentPath?.isExportSpecifier()
-                ) as NodePath<t.Identifier> | undefined;
-                if (maybeExportSpecifierLocal) {
-                  exportedAs = getName(
-                    (
-                      maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>
-                    ).node.exported
-                  );
+          let sc = path.get('superClass');
+          if (sc.isReferencedIdentifier()) {
+            let cardRef = makeCardReference(path.scope, sc.node.name, state);
+            if (cardRef) {
+              state.insideCard = true;
+              let exportedAs: string | undefined;
+              let { parentPath } = path;
+              let localName = path.node.id ? path.node.id.name : undefined;
+              if (parentPath.isExportNamedDeclaration()) {
+                // the class declaration is part of a named export
+                exportedAs = localName;
+              } else if (parentPath.isExportDefaultDeclaration()) {
+                // the class declaration is part of a default export
+                exportedAs = 'default';
+              } else {
+                // the class's identifier is referenced in a node whose parent is an ExportSpecifier
+                let binding = localName
+                  ? path.scope.getBinding(localName)
+                  : undefined;
+                if (binding) {
+                  let maybeExportSpecifierLocal = binding.referencePaths.find(
+                    (b) => b.parentPath?.isExportSpecifier()
+                  ) as NodePath<t.Identifier> | undefined;
+                  if (maybeExportSpecifierLocal) {
+                    exportedAs = getName(
+                      (
+                        maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>
+                      ).node.exported
+                    );
+                  }
                 }
               }
-            }
 
-            state.opts.possibleCards.push({
-              super: cardRef,
-              localName,
-              path,
-              possibleFields: new Map(),
-              exportedAs,
-            });
+              state.opts.possibleCards.push({
+                super: cardRef,
+                localName,
+                path,
+                possibleFields: new Map(),
+                exportedAs,
+              });
+            }
           }
-        }
+        },
+
+        exit(_path: NodePath<t.ClassDeclaration>, state: State) {
+          state.insideCard = false;
+        },
       },
 
       Decorator(path: NodePath<t.Decorator>, state: State) {
+        if (!state.insideCard) {
+          return;
+        }
+
         let expression = path.get('expression');
         if (!expression.isIdentifier()) {
           return;
