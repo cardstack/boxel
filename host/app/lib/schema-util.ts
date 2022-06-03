@@ -7,6 +7,9 @@ import {
   CardReference,
   PossibleField,
 } from './schema-analysis-plugin';
+
+import { parseTemplates } from 'ember-template-imports/lib/parse-templates';
+
 import { fieldDecorator, fieldType, FieldType, isFieldType } from './card-api';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
@@ -32,7 +35,9 @@ export class CardDefinitions {
   private constructor(private src: string, private inspector: CardInspector) {
     // construct handles the synchronous syntactic phase
     let moduleAnalysis: Options = { possibleCards: [] };
-    this.ast = transformSync(this.src, {
+    let preprocessedSrc = this.preprocessTemplateTags();
+
+    this.ast = transformSync(preprocessedSrc, {
       code: false,
       ast: true,
       plugins: [
@@ -43,6 +48,25 @@ export class CardDefinitions {
       ],
     })!.ast!;
     this.possibleCards = moduleAnalysis.possibleCards;
+  }
+
+  private preprocessTemplateTags(): string {
+    let output = [];
+    let offset = 0;
+    let matches = parseTemplates(this.src, 'no-filename', 'template');
+    for (let match of matches) {
+      output.push(this.src.slice(offset, match.start.index));
+      output.push('[templte("');
+      output.push(
+        this.src
+          .slice(match.start.index! + match.start[0].length, match.end.index)
+          .replace(/"/g, '\\"')
+      );
+      output.push('")]        ');
+      offset = match.end.index! + match.end[0].length;
+    }
+    output.push(this.src.slice(offset));
+    return output.join('');
   }
 
   // the semantic phase is async

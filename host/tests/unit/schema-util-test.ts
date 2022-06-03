@@ -199,6 +199,24 @@ module('Unit | schema-util', function (hooks) {
     }
   });
 
+  test('successfully parses first-class template syntax', async function (assert) {
+    let src = `
+      import { contains, field, Card, Component } from 'runtime-spike/lib/card-api';
+      import StringCard from 'runtime-spike/lib/string';
+
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+
+        static isolated = class Isolated extends Component<typeof this> { 
+          <template><div class="hi"><@fields.firstName /></div></template>
+        }
+      }
+    `;
+
+    let definitions = await inspector.inspectCards(src);
+    assert.strictEqual(definitions.cards.length, 1, 'found Person card');
+  });
+
   skip('identifies a computed field that is defined by an inline function', async function (_assert) {});
   skip('identifies a computed field that is defined by the name of a class method', async function (_assert) {});
 });
