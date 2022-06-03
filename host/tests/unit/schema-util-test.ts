@@ -82,6 +82,20 @@ module('Unit | schema-util', function (hooks) {
     assert.strictEqual(definition.fields.length, 0, 'no fields were found');
   });
 
+  skip('ignores field on non-cards', async function (assert) {
+    let src = `
+      import { contains, field } from 'runtime-spike/lib/card-api';
+      import StringCard from 'runtime-spike/lib/string';
+
+      class Person {
+        @field field1 = contains(StringCard);
+      }
+    `;
+
+    let [definition] = (await inspector.inspectCards(src)).cards;
+    assert.strictEqual(definition.fields.length, 0, 'no fields were found');
+  });
+
   test('identifies a contained field that uses an external card reference', async function (assert) {
     let src = `
       import { contains, field, Card } from 'runtime-spike/lib/card-api';
