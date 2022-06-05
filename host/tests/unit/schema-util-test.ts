@@ -11,6 +11,7 @@ module('Unit | schema-util', function (hooks) {
         }
         return (window as any).RUNTIME_SPIKE_EXTERNALS.get(specifier);
       },
+      currentPath: '/',
     });
   });
 

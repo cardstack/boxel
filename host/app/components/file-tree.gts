@@ -20,7 +20,7 @@ export default class FileTree extends Component<Args> {
       <button {{on "click" this.closeRealm}}>Close local realm</button>
       {{#each this.listing.entries key="path" as |entry|}}
         {{#if (eq entry.handle.kind 'file')}}
-          <div class="item file {{if (eq entry.name this.args.path) 'selected'}} indent-{{entry.indent}}"
+          <div class="item file {{if (eq entry.path this.args.path) 'selected'}} indent-{{entry.indent}}"
             {{on "click" (fn this.open entry)}}>
           {{entry.name}}
           </div>

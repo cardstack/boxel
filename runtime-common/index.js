@@ -33,3 +33,24 @@ export const externalsMap = new Map([
   ["runtime-spike/lib/datetime", ["default"]],
   ["runtime-spike/lib/integer", ["default"]],
 ]);
+
+export async function traverse(dirHandle, path) {
+  let pathSegments = path.split("/");
+  async function nextHandle(handle, pathSegment) {
+    try {
+      return await handle.getDirectoryHandle(pathSegment);
+    } catch (err) {
+      if (err.name === "NotFoundError") {
+        console.error(`${path} was not found in the local realm`);
+      }
+      throw err;
+    }
+  }
+
+  let handle = dirHandle;
+  while (pathSegments.length > 1) {
+    let segment = pathSegments.shift();
+    handle = await nextHandle(handle, segment);
+  }
+  return { handle, filename: pathSegments[0] };
+}

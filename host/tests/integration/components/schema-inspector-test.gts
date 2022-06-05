@@ -19,6 +19,7 @@ module('Integration | schema-inspector', function (hooks) {
       async resolveModule(specifier: string) {
         return (window as any).RUNTIME_SPIKE_EXTERNALS.get(specifier);
       },
+      currentPath: '/'
     });
   });
 

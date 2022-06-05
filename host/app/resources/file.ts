@@ -3,6 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
+import { traverse } from '@cardstack/runtime-common';
 
 interface Args {
   named: {
@@ -19,6 +20,7 @@ type FileResource =
       ready: true;
       content: string;
       name: string;
+      path: string;
       write(content: string): void;
     };
 
@@ -26,6 +28,7 @@ class _FileResource extends Resource<Args> {
   private handle: FileSystemFileHandle | undefined;
   private lastModified: number | undefined;
   private interval: ReturnType<typeof setInterval>;
+  private _path: string | undefined;
   @tracked content: string | undefined;
   @tracked ready = false;
 
@@ -39,6 +42,10 @@ class _FileResource extends Resource<Args> {
     registerDestructor(this, () => clearInterval(this.interval));
   }
 
+  get path() {
+    return this._path;
+  }
+
   get name() {
     return this.handle?.name;
   }
@@ -48,7 +55,7 @@ class _FileResource extends Resource<Args> {
     dirHandle: FileSystemDirectoryHandle | undefined
   ) {
     if (path && dirHandle) {
-      let { handle: subdir, filename } = await this.traverse(dirHandle, path);
+      let { handle: subdir, filename } = await traverse(dirHandle, path);
       let handle: FileSystemFileHandle | undefined;
       try {
         handle = await subdir.getFileHandle(filename);
@@ -76,38 +83,12 @@ class _FileResource extends Resource<Args> {
         reader.onerror = reject;
         reader.readAsText(file);
       });
+      this._path = path;
       this.ready = true;
     } else {
       this.content = undefined;
       this.ready = false;
     }
-  }
-
-  private async traverse(
-    dirHandle: FileSystemDirectoryHandle,
-    path: string
-  ): Promise<{ handle: FileSystemDirectoryHandle; filename: string }> {
-    let pathSegments = path.split('/');
-    async function nextHandle(
-      handle: FileSystemDirectoryHandle,
-      pathSegment: string
-    ) {
-      try {
-        return await handle.getDirectoryHandle(pathSegment);
-      } catch (err: unknown) {
-        if ((err as DOMException).name === 'NotFoundError') {
-          console.error(`${path} was not found in the local realm`);
-        }
-        throw err;
-      }
-    }
-
-    let handle: FileSystemDirectoryHandle | undefined = dirHandle;
-    while (pathSegments.length > 1) {
-      let segment = pathSegments.shift()!;
-      handle = await nextHandle(handle as FileSystemDirectoryHandle, segment);
-    }
-    return { handle, filename: pathSegments[0] };
   }
 
   async write(content: string) {

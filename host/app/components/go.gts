@@ -43,7 +43,7 @@ export default class Go extends Component<Signature> {
                       contentChanged=this.contentChanged}}></div>
         <div class="preview">
           {{#if (isRunnable this.openFile.name)}}
-            <ImportModule @url={{localRealmURL this.openFile.name}}>
+            <ImportModule @url={{localRealmURL this.openFile.path}}>
               <:ready as |module|>
                 <SchemaInspector
                   @module={{module}}
@@ -57,7 +57,7 @@ export default class Go extends Component<Signature> {
               </:error>
             </ImportModule>
           {{else if this.openFileCardJSON}}
-            <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module (localRealmURL this.openFile.name)}} >
+            <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module (localRealmURL this.openFile.path)}} >
               <:ready as |module|>
                 <CardEditor
                   @module={{module}}
@@ -87,11 +87,15 @@ export default class Go extends Component<Signature> {
       if (externalsMap.has(specifier)) {
         specifier = `http://externals/${specifier}`;
       } else if (specifier.startsWith('.') || specifier.startsWith('/')) {
-        let url = new URL(specifier, 'http://local-realm');
+        let pathSegments = this.currentPath.split('/');
+        pathSegments.pop();
+
+        let url = new URL(`${pathSegments.join()}/${specifier}`, 'http://local-realm');
         specifier = url.href;
       }
       return await import(/* webpackIgnore: true */ specifier);
     },
+    currentPath: this.args.path ?? '/'
   });
 
   constructor(owner: unknown, args: Signature['Args']) {
@@ -157,8 +161,8 @@ function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
 }
 
-function localRealmURL(filename: string): string {
-  return `http://local-realm/${filename}`;
+function localRealmURL(path: string): string {
+  return `http://local-realm/${path}`;
 }
 
 function relativeFrom(url: string, base: string): string {
