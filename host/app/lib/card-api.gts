@@ -363,7 +363,7 @@ contains[fieldType] = 'contains' as FieldType;
 export const field = function(_target: CardConstructor, key: string | symbol, { initializer }: { initializer(): any }) {
   return initializer().setupField(key);
 } as unknown as PropertyDecorator;
-field[fieldDecorator] = undefined;
+(field as any)[fieldDecorator] = undefined;
 
 export type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; } }
 

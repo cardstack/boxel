@@ -1,5 +1,5 @@
 import { transformSync } from '@babel/core';
-// import * as Babel from '@babel/core';
+import * as Babel from '@babel/core';
 import {
   schemaAnalysisPlugin,
   Options,
@@ -20,7 +20,7 @@ import typescriptPlugin from '@babel/plugin-transform-typescript';
 
 // represents the cards within an entire javascript module
 export class CardDefinitions {
-  // private ast: Babel.types.File;
+  private ast: Babel.types.File;
   private possibleCards: PossibleCardClass[];
 
   static async create(
@@ -47,6 +47,7 @@ export class CardDefinitions {
         [schemaAnalysisPlugin, moduleAnalysis],
       ],
     })!.ast!;
+    console.log(this.ast); // TODO remove this--this is just to consume this.ast and make lint happy until we start doing this for real
     this.possibleCards = moduleAnalysis.possibleCards;
   }
 
@@ -164,11 +165,14 @@ export interface FieldDefinition {
 
 export class CardInspector {
   readonly resolveModule: (specifier: string) => Promise<Record<string, any>>;
+  readonly currentPath: string;
 
   constructor(params: {
     resolveModule: (specifier: string) => Promise<Record<string, any>>;
+    currentPath: string;
   }) {
     this.resolveModule = params.resolveModule;
+    this.currentPath = params.currentPath;
   }
 
   async inspectCards(src: string): Promise<CardDefinitions> {
