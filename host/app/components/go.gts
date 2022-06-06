@@ -46,6 +46,7 @@ export default class Go extends Component<Signature> {
             <ImportModule @url={{localRealmURL this.openFile.path}}>
               <:ready as |module|>
                 <SchemaInspector
+                  @path={{this.path}}
                   @module={{module}}
                   @src={{this.openFile.content}}
                   @inspector={{this.inspector}}
@@ -121,6 +122,7 @@ export default class Go extends Component<Signature> {
   openFile = file(this,
     () => this.args.path,
     () => this.localRealm.isAvailable ? this.localRealm.fsHandle : undefined,
+    () => (newPath: string) => this.args.onSelectedFile(newPath)
   );
 
   @cached
@@ -153,6 +155,10 @@ export default class Go extends Component<Signature> {
       json: this.openFileCardJSON,
       filename: this.openFile.name,
     }
+  }
+
+  get path() {
+    return this.args.path ?? '/';
   }
 }
 

@@ -5,13 +5,20 @@ import { action } from '@ember/object';
 import { eq, gt } from '../helpers/truth-helpers';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
-import { CardInspector } from '../lib/schema-util';
+import { CardInspector, FieldDefinition } from '../lib/schema-util';
+import get from 'lodash/get';
 import CardEditor, { NewCardArgs } from './card-editor';
 import { cardDefinitions } from '../resources/card-definitions';
+import { LinkTo } from '@ember/routing';
+//@ts-ignore glint seems to this that 'hash' is unused, even though we actually use it in the template below
+import { hash } from '@ember/helper';
+import type { FieldType } from '../lib/card-api';
+import type { CardReference, ExternalReference } from '../lib/schema-analysis-plugin';
 import type RouterService from '@ember/routing/router-service';
 
 interface Signature {
   Args: {
+    path: string;
     module: Record<string, any>;
     src: string;
     inspector: CardInspector;
@@ -39,7 +46,31 @@ export default class SchemaInspector extends Component<Signature> {
     {{#if this.selectedCard}}
       <h2 class="selected-card">{{this.selectedCard.localName}} Card</h2>
 
-      {{! TODO Render the card schema of the selected card }}
+      {{#each this.selectedCard.fields as |field|}}
+        <div class="field" data-test-field={{fieldName field}}>
+          <span class="field-name">{{fieldName field}}:</span>
+          <span class="field-type">{{fieldType field}}</span>
+          <span class="field-card">
+            {{#let (fieldCard field) as |cardRef|}}
+              {{#if (eq (get cardRef 'type') 'internal')}}
+                {{#let (get this.cards (get cardRef 'classIndex')) as |fieldCard|}}
+                  '{{fieldCard.localName}}' card
+                {{/let}}
+              {{else}}
+                {{#let (getCardPath cardRef this.args.path) as |path|}}
+                  {{#if path}}
+                    <LinkTo @route="application" @query={{hash path=path}}>
+                      {{externalCardName cardRef}}
+                    </LinkTo>
+                  {{else}}
+                    {{externalCardName cardRef}}
+                  {{/if}}
+                {{/let}}
+              {{/if}}
+            {{/let}}
+          </span>
+        </div>
+      {{/each}}
 
       {{#if this.selectedCard.exportedAs}}
         {{#if this.showEditor}}
@@ -61,7 +92,7 @@ export default class SchemaInspector extends Component<Signature> {
   @tracked showEditor = false;
   @tracked selectedIndex = 0;
   @service declare router: RouterService;
-  definitions = cardDefinitions(this, () => this.args.src, () => this.args.inspector);
+  definitions = cardDefinitions(this, () => this.args.src, () => this.args.inspector, () => this.args.path);
 
   get cards() {
     return this.definitions?.cards ?? [];
@@ -108,4 +139,36 @@ export default class SchemaInspector extends Component<Signature> {
     }
     this.showEditor = true;
   }
+
+}
+
+function fieldName([fieldName, ]: [fieldName: string, fieldDefinition: FieldDefinition]): string {
+  return fieldName;
+}
+
+function fieldType([_fieldName, fieldDefinition ]: [fieldName: string, fieldDefinition: FieldDefinition]): FieldType {
+  return fieldDefinition.type;
+}
+
+function fieldCard([_fieldName, fieldDefinition ]: [fieldName: string, fieldDefinition: FieldDefinition]): CardReference {
+  return fieldDefinition.card;
+}
+
+function externalCardName(ref: ExternalReference): string {
+  if (ref.name === 'default') {
+    return `${ref.module} card`;
+  }
+
+  return `'${ref.name}' card of ${ref.module}`;
+}
+
+function getCardPath(ref: ExternalReference, currentPath: string): string | undefined {
+  if (ref.module.startsWith('.') || ref.module.startsWith('/')) {
+    let pathSegments = currentPath.split('/');
+    pathSegments.pop();
+
+    let url = new URL(`${pathSegments.join()}/${ref.module}`, 'http://local-realm');
+    return url.pathname.slice(1);
+  }
+  return undefined;
 }

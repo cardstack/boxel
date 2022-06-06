@@ -5,10 +5,12 @@ import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { traverse } from '@cardstack/runtime-common';
 
+const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 interface Args {
   named: {
     path: string | undefined;
     handle: FileSystemDirectoryHandle | undefined;
+    onRedirect: (newPath: string) => void;
   };
 }
 
@@ -34,9 +36,10 @@ class _FileResource extends Resource<Args> {
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    this.read(args.named.path, args.named.handle);
+    this.read(args.named.path, args.named.handle, args.named.onRedirect);
     this.interval = setInterval(
-      () => this.read(args.named.path, args.named.handle),
+      () =>
+        this.read(args.named.path, args.named.handle, args.named.onRedirect),
       1000
     );
     registerDestructor(this, () => clearInterval(this.interval));
@@ -52,7 +55,8 @@ class _FileResource extends Resource<Args> {
 
   private async read(
     path: string | undefined,
-    dirHandle: FileSystemDirectoryHandle | undefined
+    dirHandle: FileSystemDirectoryHandle | undefined,
+    onRedirect: (newPath: string) => void
   ) {
     if (path && dirHandle) {
       let { handle: subdir, filename } = await traverse(dirHandle, path);
@@ -60,15 +64,34 @@ class _FileResource extends Resource<Args> {
       try {
         handle = await subdir.getFileHandle(filename);
       } catch (err: unknown) {
-        if ((err as DOMException).name === 'NotFoundError') {
-          console.error(`${path} was not found in the local realm`);
+        if ((err as DOMException).name !== 'NotFoundError') {
+          throw err;
         }
-        throw err;
+        if (!filename.includes('.')) {
+          // perform some basic module resolution
+          for (let extension of executableExtensions) {
+            try {
+              console.info(
+                `retrying with ${filename + extension} in the local realm`
+              );
+              handle = await subdir.getFileHandle(filename + extension);
+            } catch (innerErr: unknown) {
+              if ((err as DOMException).name !== 'NotFoundError') {
+                throw err;
+              }
+            }
+          }
+          if (handle) {
+            let pathSegments = path.split('/');
+            pathSegments.pop();
+            pathSegments.push(handle.name);
+            path = pathSegments.join('/');
+            onRedirect(path);
+          }
+        }
       }
       if (!handle) {
-        throw new Error(
-          `can't obtain file ${path} from the local realm, perhaps this is a directory?`
-        );
+        throw new Error(`can't obtain file ${path} from the local realm`);
       }
 
       this.handle = handle;
@@ -109,9 +132,10 @@ class _FileResource extends Resource<Args> {
 export function file(
   parent: object,
   path: () => string | undefined,
-  handle: () => FileSystemDirectoryHandle | undefined
+  handle: () => FileSystemDirectoryHandle | undefined,
+  onRedirect: () => (newPath: string) => void
 ): FileResource {
   return useResource(parent, _FileResource, () => ({
-    named: { path: path(), handle: handle() },
+    named: { path: path(), handle: handle(), onRedirect: onRedirect() },
   })) as FileResource;
 }

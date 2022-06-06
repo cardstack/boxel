@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { click } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
@@ -17,6 +17,11 @@ module('Integration | schema-inspector', function (hooks) {
   hooks.before(function () {
     inspector = new CardInspector({
       async resolveModule(specifier: string) {
+        if (specifier === './person') {
+          return {
+            Person
+          }
+        }
         return (window as any).RUNTIME_SPIKE_EXTERNALS.get(specifier);
       },
       currentPath: '/'
@@ -31,6 +36,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{multipleCardsModule}}
             @src={{multipleCardsSrc}}
             @inspector={{inspector}}
+            @path="/"
           />
         </template>
       }
@@ -48,6 +54,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{multipleCardsModule}}
             @src={{multipleCardsSrc}}
             @inspector={{inspector}}
+            @path="/"
           />
         </template>
       }
@@ -65,6 +72,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{singleCardModule}}
             @src={{singleCardSrc}}
             @inspector={{inspector}}
+            @path="/"
           />
         </template>
       }
@@ -82,6 +90,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{noCardsModule}}
             @src={{noCardsSrc}}
             @inspector={{inspector}}
+            @path="/"
           />
         </template>
       }
@@ -100,6 +109,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{singleCardModule}}
             @src={{singleCardSrc}}
             @inspector={{inspector}}
+            @path="/"
           />
         </template>
       }
@@ -118,6 +128,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{singleCardModule}}
             @src={{singleCardSrc}}
             @inspector={{inspector}}
+            @path="/"
           />
         </template>
       }
@@ -128,6 +139,64 @@ module('Integration | schema-inspector', function (hooks) {
     assert.dom('[data-test-field="firstName"] input').doesNotExist();
     assert.dom('[data-test-field="lastName"] input').doesNotExist();
   });
+
+  test('Can render field that uses base field card', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <SchemaInspector
+            @module={{singleCardModule}}
+            @src={{singleCardSrc}}
+            @inspector={{inspector}}
+            @path="/"
+          />
+        </template>
+      }
+    );
+
+    assert.dom('[data-test-field="firstName"]').containsText('firstName: contains runtime-spike/lib/string card');
+    assert.dom('[data-test-field="firstName"] a').doesNotExist();
+    assert.dom('[data-test-field="lastName"]').containsText('lastName: contains runtime-spike/lib/string card');
+    assert.dom('[data-test-field="lastName"] a').doesNotExist();
+  });
+
+  test('Can render field that uses a user defined external card', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <SchemaInspector
+            @module={{usesExternalCardModule}}
+            @src={{usesExternalCardSrc}}
+            @inspector={{inspector}}
+            @path="/"
+          />
+        </template>
+      }
+    );
+    assert.dom('[data-test-field="author"]').containsText("author: contains 'Person' card of ./person");
+    assert.dom('[data-test-field="author"] a[href="/?path=person"').containsText("'Person' card of ./person");
+  });
+
+  test('Can render field that uses card internal to the module', async function(assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <SchemaInspector
+            @module={{multipleCardsModule}}
+            @src={{multipleCardsSrc}}
+            @inspector={{inspector}}
+            @path="/"
+          />
+        </template>
+      }
+    )
+
+    await click('.card-button[data-test-card-name="Post"]');
+    assert.dom('[data-test-field="author"]').containsText("author: contains 'Person' card");
+  });
+
+  skip('Can render field that uses contains-many field');
+  skip('Can render field that uses computed field');
 });
 
 
@@ -147,9 +216,6 @@ const multipleCardsSrc = `
     static embedded = class Embedded extends Component<typeof this> {
       <template><@fields.firstName/> <@fields.lastName /></template>
     }
-    static isolated = class Isolated extends Component<typeof this> {
-      <template><h1><@fields.firstName/> <@fields.lastName /></h1></template>
-    }
   }
 
   export class Post extends Card {
@@ -163,11 +229,6 @@ const multipleCardsSrc = `
         <p><@fields.body/></p>
       </template>
     }
-    static embedded = class Embedded extends Component<typeof this> {
-      <template>
-        <em><@fields.title/></em> by <@fields.author/>
-      </template>
-    }
   }
 
   export const notACard = "I'm not a card";
@@ -179,9 +240,6 @@ class Person extends Card {
   static embedded = class Embedded extends Component<typeof this> {
     <template><@fields.firstName/> <@fields.lastName /></template>
   }
-  static isolated = class Isolated extends Component<typeof this> {
-    <template><h1><@fields.firstName/> <@fields.lastName /></h1></template>
-  }
 }
 class Post extends Card {
   @field author = contains(Person);
@@ -192,11 +250,6 @@ class Post extends Card {
       <h1><@fields.title/></h1>
       <h3>by <@fields.author/></h3>
       <p><@fields.body/></p>
-    </template>
-  }
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <em><@fields.title/></em> by <@fields.author/>
     </template>
   }
 }
@@ -214,9 +267,6 @@ const singleCardSrc = `
   export class Human extends Card {
     @field firstName = contains(StringCard);
     @field lastName = contains(StringCard);
-    static embedded = class Embedded extends Component<typeof this> {
-      <template><@fields.firstName/> <@fields.lastName /></template>
-    }
     static isolated = class Isolated extends Component<typeof this> {
       <template><h1><@fields.firstName/> <@fields.lastName /></h1></template>
     }
@@ -225,14 +275,43 @@ const singleCardSrc = `
 class Human extends Card {
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
-  static embedded = class Embedded extends Component<typeof this> {
-    <template><@fields.firstName/> <@fields.lastName /></template>
-  }
   static isolated = class Isolated extends Component<typeof this> {
     <template><h1><@fields.firstName/> <@fields.lastName /></h1></template>
   }
 }
 const singleCardModule = { Human };
+
+const usesExternalCardSrc = `
+  import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
+  import StringCard from 'runtime-spike/lib/string';
+  import { Person } from './person';
+
+  export class BlogPost extends Card {
+    @field author = contains(Person);
+    @field title = contains(StringCard);
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <h1><@fields.title/></h1>
+        <h3>by <@fields.author/></h3>
+      </template>
+    }
+  }
+`;
+class BlogPost extends Card {
+  @field author = contains(Person);
+  @field title = contains(StringCard);
+  @field body = contains(TextAreaCard);
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <h1><@fields.title/></h1>
+      <h3>by <@fields.author/></h3>
+      <p><@fields.body/></p>
+    </template>
+  }
+}
+const usesExternalCardModule = {
+  BlogPost
+};
 
 const noCardsSrc = `
   export const noCards = 'nothing to see here';

@@ -7,7 +7,7 @@ interface State {
   insideCard: boolean;
 }
 
-interface ExternalReference {
+export interface ExternalReference {
   type: 'external';
   module: string;
   name: string;

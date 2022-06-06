@@ -165,7 +165,10 @@ export interface FieldDefinition {
 
 export class CardInspector {
   readonly resolveModule: (specifier: string) => Promise<Record<string, any>>;
-  readonly currentPath: string;
+  // this is intentionally manipulated by the outside in order to set the
+  // current path for relative imports--seems like not such a great
+  // abstraction...
+  currentPath: string;
 
   constructor(params: {
     resolveModule: (specifier: string) => Promise<Record<string, any>>;
