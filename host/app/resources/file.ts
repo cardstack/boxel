@@ -1,28 +1,33 @@
-import { Resource, useResource } from 'ember-resources';
+import { Resource, TaskInstance, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { traverse } from '@cardstack/runtime-common';
 
-const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 interface Args {
   named: {
     path: string | undefined;
     handle: FileSystemDirectoryHandle | undefined;
-    onRedirect: (newPath: string) => void;
   };
 }
 
-type FileResource =
+export type FileResource =
   | {
-      ready: false;
+      state: 'not-ready';
+      loading: TaskInstance<void> | null;
     }
   | {
-      ready: true;
+      state: 'not-found';
+      path: string;
+      loading: TaskInstance<void> | null;
+    }
+  | {
+      state: 'ready';
       content: string;
       name: string;
       path: string;
+      loading: TaskInstance<void> | null;
       write(content: string): void;
     };
 
@@ -32,14 +37,13 @@ class _FileResource extends Resource<Args> {
   private interval: ReturnType<typeof setInterval>;
   private _path: string | undefined;
   @tracked content: string | undefined;
-  @tracked ready = false;
+  @tracked state = 'not-ready';
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    this.read(args.named.path, args.named.handle, args.named.onRedirect);
+    taskFor(this.read).perform(args.named.path, args.named.handle);
     this.interval = setInterval(
-      () =>
-        this.read(args.named.path, args.named.handle, args.named.onRedirect),
+      () => taskFor(this.read).perform(args.named.path, args.named.handle),
       1000
     );
     registerDestructor(this, () => clearInterval(this.interval));
@@ -53,45 +57,28 @@ class _FileResource extends Resource<Args> {
     return this.handle?.name;
   }
 
-  private async read(
+  get loading() {
+    return taskFor(this.read).last;
+  }
+
+  @restartableTask private async read(
     path: string | undefined,
-    dirHandle: FileSystemDirectoryHandle | undefined,
-    onRedirect: (newPath: string) => void
+    dirHandle: FileSystemDirectoryHandle | undefined
   ) {
     if (path && dirHandle) {
-      let { handle: subdir, filename } = await traverse(dirHandle, path);
+      this._path = path;
       let handle: FileSystemFileHandle | undefined;
       try {
+        let { handle: subdir, filename } = await traverse(dirHandle, path);
         handle = await subdir.getFileHandle(filename);
       } catch (err: unknown) {
+        clearInterval(this.interval);
         if ((err as DOMException).name !== 'NotFoundError') {
           throw err;
         }
-        if (!filename.includes('.')) {
-          // perform some basic module resolution
-          for (let extension of executableExtensions) {
-            try {
-              console.info(
-                `retrying with ${filename + extension} in the local realm`
-              );
-              handle = await subdir.getFileHandle(filename + extension);
-            } catch (innerErr: unknown) {
-              if ((err as DOMException).name !== 'NotFoundError') {
-                throw err;
-              }
-            }
-          }
-          if (handle) {
-            let pathSegments = path.split('/');
-            pathSegments.pop();
-            pathSegments.push(handle.name);
-            path = pathSegments.join('/');
-            onRedirect(path);
-          }
-        }
-      }
-      if (!handle) {
-        throw new Error(`can't obtain file ${path} from the local realm`);
+        console.log(`can't find file ${path} from the local realm`);
+        this.state = 'not-found';
+        return;
       }
 
       this.handle = handle;
@@ -106,11 +93,10 @@ class _FileResource extends Resource<Args> {
         reader.onerror = reject;
         reader.readAsText(file);
       });
-      this._path = path;
-      this.ready = true;
+      this.state = 'ready';
     } else {
       this.content = undefined;
-      this.ready = false;
+      this.state = 'not-ready';
     }
   }
 
@@ -132,10 +118,9 @@ class _FileResource extends Resource<Args> {
 export function file(
   parent: object,
   path: () => string | undefined,
-  handle: () => FileSystemDirectoryHandle | undefined,
-  onRedirect: () => (newPath: string) => void
+  handle: () => FileSystemDirectoryHandle | undefined
 ): FileResource {
   return useResource(parent, _FileResource, () => ({
-    named: { path: path(), handle: handle(), onRedirect: onRedirect() },
+    named: { path: path(), handle: handle() },
   })) as FileResource;
 }

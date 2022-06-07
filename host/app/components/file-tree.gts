@@ -5,12 +5,13 @@ import { action } from '@ember/object';
 import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { eq } from '../helpers/truth-helpers'
+import type RouterService from '@ember/routing/router-service';
+import { service } from '@ember/service';
 
 interface Args {
   Args: {
     localRealm: LocalRealm;
     path: string | undefined;
-    onSelectedFile: (entry: Entry | undefined) => void;
   }
 }
 
@@ -38,6 +39,7 @@ export default class FileTree extends Component<Args> {
   </template>
     
   listing = directory(this, () => this.args.localRealm.isAvailable ? this.args.localRealm.fsHandle : null)
+  @service declare router: RouterService;
 
   @action
   openRealm() {
@@ -48,12 +50,13 @@ export default class FileTree extends Component<Args> {
   closeRealm() {
     if (this.args.localRealm.isAvailable) {
       this.args.localRealm.close();
-      this.args.onSelectedFile(undefined);
+      this.router.transitionTo({ queryParams: { path: undefined } });
     }
   }
 
   @action
   open(handle: Entry) {
-    this.args.onSelectedFile(handle);
+    let { path } = handle;
+    this.router.transitionTo({ queryParams: { path } });
   }
 }

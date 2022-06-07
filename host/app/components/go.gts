@@ -5,8 +5,6 @@ import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { tracked, cached } from '@glimmer/tracking';
 import LocalRealm from '../services/local-realm';
-import { directory, Entry } from '../resources/directory';
-import { file } from '../resources/file';
 import SchemaInspector from './schema-inspector';
 import CardEditor, { ExistingCardArgs } from './card-editor';
 import ImportModule from './import-module';
@@ -19,11 +17,12 @@ import {
   languageConfigs
 } from '../utils/editor-language';
 import { externalsMap } from '@cardstack/runtime-common';
+import type { FileResource } from '../resources/file';
 
 interface Signature {
   Args: {
-    path: string | undefined;
-    onSelectedFile: (path: string | undefined) => void;
+    openFile: FileResource | undefined;
+    path: string | undefined
   }
 }
 
@@ -34,10 +33,9 @@ export default class Go extends Component<Signature> {
     <div class="editor">
       <div class="file-tree">
         <FileTree @localRealm={{this.localRealm}}
-                  @path={{this.args.path}}
-                  @onSelectedFile={{this.onSelectedFile}} />
+                  @path={{this.args.path}} />
       </div>
-      {{#if this.openFile.ready}}
+      {{#if this.openFile}}
         <div {{monaco content=this.openFile.content
                       language=(getLangFromFileExtension this.openFile.name)
                       contentChanged=this.contentChanged}}></div>
@@ -81,7 +79,6 @@ export default class Go extends Component<Signature> {
   </template>
 
   @service declare localRealm: LocalRealm;
-  @tracked selectedFile: Entry | undefined;
   @tracked jsonError: string | undefined;
   private inspector = new CardInspector({
     async resolveModule(specifier: string, currentPath: string) {
@@ -104,33 +101,19 @@ export default class Go extends Component<Signature> {
   }
 
   @action
-  onSelectedFile(entry: Entry | undefined) {
-    this.selectedFile = entry;
-    this.args.onSelectedFile(entry?.path);
-  }
-
-  @action
   contentChanged(content: string) {
-    if (this.openFile.ready && content !== this.openFile.content) {
-      this.openFile.write(content);
+    if (this.args.openFile?.state === 'ready' && content !== this.args.openFile.content) {
+      this.args.openFile.write(content);
     }
   }
-
-  listing = directory(this, () => this.localRealm.isAvailable ? this.localRealm.fsHandle : null)
-
-  openFile = file(this,
-    () => this.args.path,
-    () => this.localRealm.isAvailable ? this.localRealm.fsHandle : undefined,
-    () => (newPath: string) => this.args.onSelectedFile(newPath)
-  );
 
   @cached
   get openFileCardJSON() {
     this.jsonError = undefined;
-    if (this.openFile.ready && this.openFile.name.endsWith('.json')) {
+    if (this.args.openFile?.state === 'ready' && this.args.openFile.name.endsWith('.json')) {
       let maybeCard: any;
       try {
-        maybeCard = JSON.parse(this.openFile.content);
+        maybeCard = JSON.parse(this.args.openFile.content);
       } catch(err) {
         this.jsonError = err.message;
         return undefined;
@@ -143,7 +126,7 @@ export default class Go extends Component<Signature> {
   }
 
   get cardArgs(): ExistingCardArgs {
-    if (!this.openFile.ready) {
+    if (this.args.openFile?.state !== 'ready') {
       throw new Error('No file has been opened yet');
     }
     if (!this.openFileCardJSON) {
@@ -152,8 +135,15 @@ export default class Go extends Component<Signature> {
     return {
       type: 'existing',
       json: this.openFileCardJSON,
-      filename: this.openFile.name,
+      filename: this.args.openFile.name,
     }
+  }
+
+  get openFile() {
+    if (this.args.openFile?.state !== 'ready') {
+      return undefined;
+    }
+    return this.args.openFile;
   }
 
   get path() {

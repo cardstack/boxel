@@ -11,7 +11,6 @@ module('Unit | schema-util', function (hooks) {
         }
         return (window as any).RUNTIME_SPIKE_EXTERNALS.get(specifier);
       },
-      currentPath: '/',
     });
   });
 
@@ -24,7 +23,7 @@ module('Unit | schema-util', function (hooks) {
       class Y extends X {};
       class Z extends window.getMyClass() {};
     `;
-    let definitions = await inspector.inspectCards(src);
+    let definitions = await inspector.inspectCards(src, '/');
     assert.strictEqual(definitions.cards.length, 0, 'found no cards');
   });
 
@@ -34,7 +33,7 @@ module('Unit | schema-util', function (hooks) {
       class Person extends C {}
     `;
 
-    let definitions = await inspector.inspectCards(src);
+    let definitions = await inspector.inspectCards(src, '/');
     assert.strictEqual(definitions.cards.length, 1, 'found Person card');
   });
 
@@ -44,7 +43,7 @@ module('Unit | schema-util', function (hooks) {
       class Person extends StringCard {}
     `;
 
-    let definitions = await inspector.inspectCards(src);
+    let definitions = await inspector.inspectCards(src, '/');
     assert.strictEqual(definitions.cards.length, 1, 'found Person card');
   });
 
@@ -56,7 +55,7 @@ module('Unit | schema-util', function (hooks) {
       class EmployeeOfTheMonth extends Employee {}
     `;
 
-    let definitions = await inspector.inspectCards(src);
+    let definitions = await inspector.inspectCards(src, '/');
     assert.strictEqual(definitions.cards.length, 3, 'found all cards');
   });
 
@@ -66,7 +65,7 @@ module('Unit | schema-util', function (hooks) {
       class Person extends StringCard {}
     `;
 
-    let [definition] = (await inspector.inspectCards(src)).cards;
+    let [definition] = (await inspector.inspectCards(src, '/')).cards;
     assert.strictEqual(
       definition.exportedAs,
       undefined,
@@ -81,7 +80,7 @@ module('Unit | schema-util', function (hooks) {
       class Person extends Card {}
       export { Person as PersonCard };
     `;
-    let [definition] = (await inspector.inspectCards(src)).cards;
+    let [definition] = (await inspector.inspectCards(src, '/')).cards;
     assert.strictEqual(
       definition.exportedAs,
       'PersonCard',
@@ -95,7 +94,7 @@ module('Unit | schema-util', function (hooks) {
       import { Card } from 'runtime-spike/lib/card-api';
       export class Person extends Card {}
     `;
-    let [definition] = (await inspector.inspectCards(src)).cards;
+    let [definition] = (await inspector.inspectCards(src, '/')).cards;
     assert.strictEqual(
       definition.exportedAs,
       'Person',
@@ -109,7 +108,7 @@ module('Unit | schema-util', function (hooks) {
       import { Card } from 'runtime-spike/lib/card-api';
       export default class extends Card {}
     `;
-    let [definition] = (await inspector.inspectCards(src)).cards;
+    let [definition] = (await inspector.inspectCards(src, '/')).cards;
     assert.strictEqual(
       definition.exportedAs,
       'default',
@@ -123,7 +122,7 @@ module('Unit | schema-util', function (hooks) {
       import { Card } from 'runtime-spike/lib/card-api';
       export default class Person extends Card {}
     `;
-    let [definition] = (await inspector.inspectCards(src)).cards;
+    let [definition] = (await inspector.inspectCards(src, '/')).cards;
     assert.strictEqual(
       definition.exportedAs,
       'default',
@@ -155,7 +154,7 @@ module('Unit | schema-util', function (hooks) {
       }
     `;
 
-    let [definition] = (await inspector.inspectCards(src)).cards;
+    let [definition] = (await inspector.inspectCards(src, '/')).cards;
     assert.strictEqual(definition.fields.length, 0, 'no fields were found');
   });
 
@@ -169,7 +168,7 @@ module('Unit | schema-util', function (hooks) {
       }
     `;
 
-    let definitions = await inspector.inspectCards(src);
+    let definitions = await inspector.inspectCards(src, '/');
     assert.strictEqual(definitions.cards.length, 0, 'found no cards');
   });
 
@@ -182,7 +181,7 @@ module('Unit | schema-util', function (hooks) {
       }
     `;
 
-    let [definition] = (await inspector.inspectCards(src)).cards;
+    let [definition] = (await inspector.inspectCards(src, '/')).cards;
     let field = definition.getField('firstName');
     assert.strictEqual(field?.card.type, 'external');
     if (field?.card.type === 'external') {
@@ -201,7 +200,7 @@ module('Unit | schema-util', function (hooks) {
       }
     `;
 
-    let [definition] = (await inspector.inspectCards(src)).cards;
+    let [definition] = (await inspector.inspectCards(src, '/')).cards;
     assert.strictEqual(definition.getField('nicknames')?.type, 'contains-many');
   });
 
@@ -216,7 +215,7 @@ module('Unit | schema-util', function (hooks) {
       }
     `;
 
-    let definitions = (await inspector.inspectCards(src)).cards;
+    let definitions = (await inspector.inspectCards(src, '/')).cards;
     let [, , definition] = definitions; // our card under test is the 3rd card in the module
     let field = definition.getField('firstName');
     assert.strictEqual(field?.card.type, 'internal');
@@ -242,7 +241,7 @@ module('Unit | schema-util', function (hooks) {
       }
     `;
 
-    let definitions = (await inspector.inspectCards(src)).cards;
+    let definitions = (await inspector.inspectCards(src, '/')).cards;
     let [person, post] = definitions;
     {
       let { fields } = person;
@@ -290,7 +289,7 @@ module('Unit | schema-util', function (hooks) {
       }
     `;
 
-    let definitions = await inspector.inspectCards(src);
+    let definitions = await inspector.inspectCards(src, '/');
     assert.strictEqual(definitions.cards.length, 1, 'found Person card');
   });
 

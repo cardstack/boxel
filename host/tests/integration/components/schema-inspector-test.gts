@@ -24,7 +24,6 @@ module('Integration | schema-inspector', function (hooks) {
         }
         return (window as any).RUNTIME_SPIKE_EXTERNALS.get(specifier);
       },
-      currentPath: '/'
     });
   });
 
