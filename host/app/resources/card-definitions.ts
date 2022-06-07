@@ -9,7 +9,7 @@ interface Args {
 }
 
 export class CardDefinitionsResource extends Resource<Args> {
-  // TODO move tracking down to the individual fields
+  // TODO probably want to move tracking down to the individual fields
   @tracked cards: CardDefinition[] | undefined;
 
   constructor(owner: unknown, args: Args) {
@@ -23,11 +23,7 @@ export class CardDefinitionsResource extends Resource<Args> {
     inspector: CardInspector,
     currentPath: string
   ) {
-    // I wonder if we could figure out a better answer here for making the
-    // current path available to the inspector so that it can derive relative
-    // module imports
-    inspector.currentPath = currentPath;
-    this.cards = (await inspector.inspectCards(src)).cards;
+    this.cards = (await inspector.inspectCards(src, currentPath)).cards;
   }
 }
 

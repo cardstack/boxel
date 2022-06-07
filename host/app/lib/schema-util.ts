@@ -25,14 +25,19 @@ export class CardDefinitions {
 
   static async create(
     src: string,
+    currentPath: string,
     inspector: CardInspector
   ): Promise<CardDefinitions> {
-    let definitions = new CardDefinitions(src, inspector);
+    let definitions = new CardDefinitions(src, currentPath, inspector);
     await definitions.semanticPhase();
     return definitions;
   }
 
-  private constructor(private src: string, private inspector: CardInspector) {
+  private constructor(
+    private src: string,
+    private currentPath: string,
+    private inspector: CardInspector
+  ) {
     // construct handles the synchronous syntactic phase
     let moduleAnalysis: Options = { possibleCards: [] };
     let preprocessedSrc = this.preprocessTemplateTags();
@@ -98,7 +103,10 @@ export class CardDefinitions {
   ): Promise<boolean> {
     switch (possibleCardRef.type) {
       case 'external': {
-        let mod = await this.inspector.resolveModule(possibleCardRef.module);
+        let mod = await this.inspector.resolveModule(
+          possibleCardRef.module,
+          this.currentPath
+        );
         let superClass = mod[possibleCardRef.name];
         return typeof superClass === 'function' && 'baseCard' in superClass;
       }
@@ -115,13 +123,15 @@ export class CardDefinitions {
     possibleField: PossibleField
   ): Promise<FieldType | undefined> {
     let decoratorMod = await this.inspector.resolveModule(
-      possibleField.decorator.module
+      possibleField.decorator.module,
+      this.currentPath
     );
     if (!(fieldDecorator in decoratorMod[possibleField.decorator.name])) {
       return undefined;
     }
     let fieldTypeMod = await this.inspector.resolveModule(
-      possibleField.type.module
+      possibleField.type.module,
+      this.currentPath
     );
 
     if (!(await this.isCardReference(possibleField.card))) {
@@ -164,22 +174,25 @@ export interface FieldDefinition {
 }
 
 export class CardInspector {
-  readonly resolveModule: (specifier: string) => Promise<Record<string, any>>;
-  // this is intentionally manipulated by the outside in order to set the
-  // current path for relative imports--seems like not such a great
-  // abstraction...
-  currentPath: string;
+  readonly resolveModule: (
+    specifier: string,
+    currentPath: string
+  ) => Promise<Record<string, any>>;
 
   constructor(params: {
-    resolveModule: (specifier: string) => Promise<Record<string, any>>;
-    currentPath: string;
+    resolveModule: (
+      specifier: string,
+      currentPath: string
+    ) => Promise<Record<string, any>>;
   }) {
     this.resolveModule = params.resolveModule;
-    this.currentPath = params.currentPath;
   }
 
-  async inspectCards(src: string): Promise<CardDefinitions> {
-    return await CardDefinitions.create(src, this);
+  async inspectCards(
+    src: string,
+    currentPath: string
+  ): Promise<CardDefinitions> {
+    return await CardDefinitions.create(src, currentPath, this);
   }
 }
 

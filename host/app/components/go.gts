@@ -84,11 +84,11 @@ export default class Go extends Component<Signature> {
   @tracked selectedFile: Entry | undefined;
   @tracked jsonError: string | undefined;
   private inspector = new CardInspector({
-    async resolveModule(specifier: string) {
+    async resolveModule(specifier: string, currentPath: string) {
       if (externalsMap.has(specifier)) {
         specifier = `http://externals/${specifier}`;
       } else if (specifier.startsWith('.') || specifier.startsWith('/')) {
-        let pathSegments = this.currentPath.split('/');
+        let pathSegments = currentPath.split('/');
         pathSegments.pop();
 
         let url = new URL(`${pathSegments.join()}/${specifier}`, 'http://local-realm');
@@ -96,7 +96,6 @@ export default class Go extends Component<Signature> {
       }
       return await import(/* webpackIgnore: true */ specifier);
     },
-    currentPath: this.args.path ?? '/'
   });
 
   constructor(owner: unknown, args: Signature['Args']) {
