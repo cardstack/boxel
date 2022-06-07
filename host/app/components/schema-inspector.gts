@@ -1,94 +1,125 @@
 import Component from '@glimmer/component';
-import { Card } from '../lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { eq, gt } from '../helpers/truth-helpers';
-import isObject from 'lodash/isObject';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
+import { CardInspector, FieldDefinition } from '../lib/schema-util';
+import get from 'lodash/get';
 import CardEditor, { NewCardArgs } from './card-editor';
+import { cardDefinitions } from '../resources/card-definitions';
+import { LinkTo } from '@ember/routing';
+//@ts-ignore glint seems to this that 'hash' is unused, even though we actually use it in the template below
+import { hash } from '@ember/helper';
+import type { FieldType } from '../lib/card-api';
+import type { CardReference, ExternalReference } from '../lib/schema-analysis-plugin';
 import type RouterService from '@ember/routing/router-service';
 
-export default class SchemaInspector extends Component<{ Args: { module: Record<string, any> } }> {
+interface Signature {
+  Args: {
+    path: string;
+    module: Record<string, any>;
+    src: string;
+    inspector: CardInspector;
+  }
+}
+
+export default class SchemaInspector extends Component<Signature> {
   <template>
-    {{#if (gt this.numCards 1)}}
+    {{#if (gt this.cards.length 1)}}
       <p class="card-chooser">
         Cards:
-        {{#each-in this.cards as |name card|}}
-          <button {{on "click" (fn this.select name card)}}
-            class="card-button {{if (eq this.selected.name name) 'selected'}}"
-            data-test-card-name={{name}}
-            disabled={{if (eq this.selected.name name) true false}}>
-            {{name}}
+        {{#each this.cards as |card index|}}
+          <button {{on "click" (fn this.select index)}}
+            class="card-button {{if (eq this.selectedIndex index) 'selected'}}"
+            data-test-card-name={{card.localName}}
+            disabled={{if (eq this.selectedIndex index) true false}}>
+            {{card.localName}}
           </button>
-        {{/each-in}}
+        {{/each}}
       </p>
-    {{else if (eq this.numCards 0)}}
+    {{else if (eq this.cards.length 0)}}
       No cards found in this module
     {{/if}}
 
-    {{#if this.selected}}
-      <h2 class="selected-card">{{this.selected.name}} Card</h2>
+    {{#if this.selectedCard}}
+      <h2 class="selected-card">{{this.selectedCard.localName}} Card</h2>
 
-      {{! TODO Render the card schema of the selected card }}
+      {{#each this.selectedCard.fields as |field|}}
+        <div class="field" data-test-field={{fieldName field}}>
+          <span class="field-name">{{fieldName field}}:</span>
+          <span class="field-type">{{fieldType field}}</span>
+          <span class="field-card">
+            {{#let (fieldCard field) as |cardRef|}}
+              {{#if (eq (get cardRef 'type') 'internal')}}
+                {{#let (get this.cards (get cardRef 'classIndex')) as |fieldCard|}}
+                  '{{fieldCard.localName}}' card
+                {{/let}}
+              {{else}}
+                {{#let (getCardPath cardRef this.args.path) as |path|}}
+                  {{#if path}}
+                    <LinkTo @route="application" @query={{hash path=path}}>
+                      {{externalCardName cardRef}}
+                    </LinkTo>
+                  {{else}}
+                    {{externalCardName cardRef}}
+                  {{/if}}
+                {{/let}}
+              {{/if}}
+            {{/let}}
+          </span>
+        </div>
+      {{/each}}
 
-      {{#if this.showEditor}}
-        <CardEditor
-          @card={{this.cardArgs}}
-          @module={{@module}}
-          @onCancel={{this.onCancel}}
-          @onSave={{this.onSave}}
-        />
+      {{#if this.selectedCard.exportedAs}}
+        {{#if this.showEditor}}
+          <CardEditor
+            @card={{this.cardArgs}}
+            @module={{@module}}
+            @onCancel={{this.onCancel}}
+            @onSave={{this.onSave}}
+          />
+        {{else}}
+          <button data-test-create-card {{on "click" this.create}}>Create New {{this.selectedCard.localName}}</button>
+        {{/if}}
       {{else}}
-        <button data-test-create-card {{on "click" this.create}}>Create New {{this.selected.name}}</button>
+        (Note that non-exported cards are not able to be instantiated)
       {{/if}}
     {{/if}}
   </template>
 
   @tracked showEditor = false;
-  @tracked
-  selected: { name: string; card: typeof Card; } | undefined =
-    this.numCards > 0
-      ? Object.fromEntries(
-        Object.entries(this.cards)[0].map((val, i) => i === 0 ? ['name', val] : ['card', val])
-      ) as { name: string; card: typeof Card; }
-      : undefined;
-
+  @tracked selectedIndex = 0;
   @service declare router: RouterService;
-
-  get numCards() {
-    return Object.keys(this.cards).length;
-  }
+  definitions = cardDefinitions(this, () => this.args.src, () => this.args.inspector, () => this.args.path);
 
   get cards() {
-    let cards = {} as { [exportName: string]: typeof Card };
-    for (let [ exportName, value ] of Object.entries(this.args.module)) {
-      let maybeCard = value as typeof Card;
-      if (!isObject(maybeCard)) {
-        continue;
-      }
-      if ('baseCard' in maybeCard) {
-        cards[exportName] = maybeCard;
-      }
-    }
-    return cards;
+    return this.definitions?.cards ?? [];
   }
 
   get cardArgs(): NewCardArgs {
-    if (!this.selected) {
+    if (!this.selectedCard) {
       throw new Error('No card selected');
     }
+    if (!this.selectedCard.exportedAs) {
+      throw new Error(`Cannot instantiate internal card ${this.selectedCard.localName}`);
+    }
+
     return {
       type: 'new',
-      class: this.selected.card,
-      name: this.selected.name,
+      class: this.args.module[this.selectedCard.exportedAs],
+      name: this.selectedCard.exportedAs,
     }
   }
 
+  get selectedCard() {
+    return this.cards[this.selectedIndex];
+  }
+
   @action
-  select(name: string, card: typeof Card) {
-    this.selected = { name, card };
+  select(index: number) {
+    this.selectedIndex = index;
   }
 
   @action
@@ -103,9 +134,41 @@ export default class SchemaInspector extends Component<{ Args: { module: Record<
 
   @action
   create() {
-    if (!this.selected) {
+    if (!this.selectedCard) {
       return;
     }
     this.showEditor = true;
   }
+
+}
+
+function fieldName([fieldName, ]: [fieldName: string, fieldDefinition: FieldDefinition]): string {
+  return fieldName;
+}
+
+function fieldType([_fieldName, fieldDefinition ]: [fieldName: string, fieldDefinition: FieldDefinition]): FieldType {
+  return fieldDefinition.type;
+}
+
+function fieldCard([_fieldName, fieldDefinition ]: [fieldName: string, fieldDefinition: FieldDefinition]): CardReference {
+  return fieldDefinition.card;
+}
+
+function externalCardName(ref: ExternalReference): string {
+  if (ref.name === 'default') {
+    return `${ref.module} card`;
+  }
+
+  return `'${ref.name}' card of ${ref.module}`;
+}
+
+function getCardPath(ref: ExternalReference, currentPath: string): string | undefined {
+  if (ref.module.startsWith('.') || ref.module.startsWith('/')) {
+    let pathSegments = currentPath.split('/');
+    pathSegments.pop();
+
+    let url = new URL(`${pathSegments.join()}/${ref.module}`, 'http://local-realm');
+    return url.pathname.slice(1);
+  }
+  return undefined;
 }

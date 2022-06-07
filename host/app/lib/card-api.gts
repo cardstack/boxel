@@ -12,6 +12,8 @@ import { WatchedArray } from './watched-array';
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
 export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
+export const fieldDecorator = Symbol('cardstack-field-decorator');
+export const fieldType = Symbol('cardstack-field-type');
 
 const isField = Symbol('cardstack-field');
 
@@ -57,6 +59,16 @@ interface Field<CardT extends CardConstructor> {
   emptyValue(instance: Card): any;
   prepareSet(instance: Card, value: any): void;
 }
+
+export type FieldType = 'contains' | 'contains-many';
+
+export function isFieldType(type: any): type is FieldType {
+  if (typeof type !== 'string') {
+    return false;
+  }
+  return ['contains', 'contains-many'].includes(type);
+}
+
 
 export class Card {
   // this is here because Card has no public instance methods, so without it
@@ -334,6 +346,7 @@ export function containsMany<CardT extends CardConstructor>(cardOrThunk: CardT |
     }
   } as any;
 }
+containsMany[fieldType] = 'contains-many' as FieldType;
 
 // TODO: this should not accept a thunk
 export function contains<CardT extends CardConstructor>(cardOrThunk: CardT | (() => CardT), options?: Options): CardInstanceType<CardT> {
@@ -343,12 +356,14 @@ export function contains<CardT extends CardConstructor>(cardOrThunk: CardT | (()
     }
   } as any
 }
+contains[fieldType] = 'contains' as FieldType;
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
 export const field = function(_target: CardConstructor, key: string | symbol, { initializer }: { initializer(): any }) {
   return initializer().setupField(key);
 } as unknown as PropertyDecorator;
+(field as any)[fieldDecorator] = undefined;
 
 export type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; } }
 

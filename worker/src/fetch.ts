@@ -12,6 +12,7 @@ import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
 import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-transform-typescript';
+import { traverse } from '@cardstack/runtime-common';
 
 const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 
@@ -169,7 +170,8 @@ export class FetchHandler {
       );
     }
     try {
-      return await this.messageHandler.fs.getFileHandle(path);
+      let { handle, filename } = await traverse(this.messageHandler.fs, path);
+      return await handle.getFileHandle(filename);
     } catch (err) {
       if ((err as DOMException).name === 'NotFoundError') {
         throw WorkerError.withResponse(

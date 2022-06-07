@@ -1,7 +1,7 @@
 import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
 import StringCard from 'runtime-spike/lib/string';
 
-export class Person extends Card {
+export class BlogPerson extends Card {
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {

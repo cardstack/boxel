@@ -6,7 +6,8 @@
   "workspaces": [
     "host",
     "worker",
-    "cards"
+    "cards",
+    "runtime-common"
   ],
   "private": true,
   "volta": {

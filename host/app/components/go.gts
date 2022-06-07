@@ -5,23 +5,24 @@ import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { tracked, cached } from '@glimmer/tracking';
 import LocalRealm from '../services/local-realm';
-import { directory, Entry } from '../resources/directory';
-import { file } from '../resources/file';
 import SchemaInspector from './schema-inspector';
 import CardEditor, { ExistingCardArgs } from './card-editor';
 import ImportModule from './import-module';
 import FileTree from './file-tree';
+import { CardInspector } from '../lib/schema-util';
 import { isCardJSON, Format } from '../lib/card-api';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,
   languageConfigs
 } from '../utils/editor-language';
+import { externalsMap } from '@cardstack/runtime-common';
+import type { FileResource } from '../resources/file';
 
 interface Signature {
   Args: {
-    path: string | undefined;
-    onSelectedFile: (path: string | undefined) => void;
+    openFile: FileResource | undefined;
+    path: string | undefined
   }
 }
 
@@ -32,18 +33,22 @@ export default class Go extends Component<Signature> {
     <div class="editor">
       <div class="file-tree">
         <FileTree @localRealm={{this.localRealm}}
-                  @path={{this.args.path}}
-                  @onSelectedFile={{this.onSelectedFile}} />
+                  @path={{this.args.path}} />
       </div>
-      {{#if this.openFile.ready}}
+      {{#if this.openFile}}
         <div {{monaco content=this.openFile.content
                       language=(getLangFromFileExtension this.openFile.name)
                       contentChanged=this.contentChanged}}></div>
         <div class="preview">
           {{#if (isRunnable this.openFile.name)}}
-            <ImportModule @url={{localRealmURL this.openFile.name}}>
+            <ImportModule @url={{localRealmURL this.openFile.path}}>
               <:ready as |module|>
-                <SchemaInspector @module={{module}} />
+                <SchemaInspector
+                  @path={{this.path}}
+                  @module={{module}}
+                  @src={{this.openFile.content}}
+                  @inspector={{this.inspector}}
+                />
               </:ready>
               <:error as |error|>
                 <h2>Encountered {{error.type}} error</h2>
@@ -51,7 +56,7 @@ export default class Go extends Component<Signature> {
               </:error>
             </ImportModule>
           {{else if this.openFileCardJSON}}
-            <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module (localRealmURL this.openFile.name)}} >
+            <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module (localRealmURL this.openFile.path)}} >
               <:ready as |module|>
                 <CardEditor
                   @module={{module}}
@@ -74,8 +79,21 @@ export default class Go extends Component<Signature> {
   </template>
 
   @service declare localRealm: LocalRealm;
-  @tracked selectedFile: Entry | undefined;
   @tracked jsonError: string | undefined;
+  private inspector = new CardInspector({
+    async resolveModule(specifier: string, currentPath: string) {
+      if (externalsMap.has(specifier)) {
+        specifier = `http://externals/${specifier}`;
+      } else if (specifier.startsWith('.') || specifier.startsWith('/')) {
+        let pathSegments = currentPath.split('/');
+        pathSegments.pop();
+
+        let url = new URL(`${pathSegments.join()}/${specifier}`, 'http://local-realm');
+        specifier = url.href;
+      }
+      return await import(/* webpackIgnore: true */ specifier);
+    },
+  });
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -83,32 +101,19 @@ export default class Go extends Component<Signature> {
   }
 
   @action
-  onSelectedFile(entry: Entry | undefined) {
-    this.selectedFile = entry;
-    this.args.onSelectedFile(entry?.path);
-  }
-
-  @action
   contentChanged(content: string) {
-    if (this.openFile.ready && content !== this.openFile.content) {
-      this.openFile.write(content);
+    if (this.args.openFile?.state === 'ready' && content !== this.args.openFile.content) {
+      this.args.openFile.write(content);
     }
   }
-
-  listing = directory(this, () => this.localRealm.isAvailable ? this.localRealm.fsHandle : null)
-
-  openFile = file(this,
-    () => this.args.path,
-    () => this.localRealm.isAvailable ? this.localRealm.fsHandle : undefined,
-  );
 
   @cached
   get openFileCardJSON() {
     this.jsonError = undefined;
-    if (this.openFile.ready && this.openFile.name.endsWith('.json')) {
+    if (this.args.openFile?.state === 'ready' && this.args.openFile.name.endsWith('.json')) {
       let maybeCard: any;
       try {
-        maybeCard = JSON.parse(this.openFile.content);
+        maybeCard = JSON.parse(this.args.openFile.content);
       } catch(err) {
         this.jsonError = err.message;
         return undefined;
@@ -121,7 +126,7 @@ export default class Go extends Component<Signature> {
   }
 
   get cardArgs(): ExistingCardArgs {
-    if (!this.openFile.ready) {
+    if (this.args.openFile?.state !== 'ready') {
       throw new Error('No file has been opened yet');
     }
     if (!this.openFileCardJSON) {
@@ -130,8 +135,19 @@ export default class Go extends Component<Signature> {
     return {
       type: 'existing',
       json: this.openFileCardJSON,
-      filename: this.openFile.name,
+      filename: this.args.openFile.name,
     }
+  }
+
+  get openFile() {
+    if (this.args.openFile?.state !== 'ready') {
+      return undefined;
+    }
+    return this.args.openFile;
+  }
+
+  get path() {
+    return this.args.path ?? '/';
   }
 }
 
@@ -140,8 +156,8 @@ function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
 }
 
-function localRealmURL(filename: string): string {
-  return `http://local-realm/${filename}`;
+function localRealmURL(path: string): string {
+  return `http://local-realm/${path}`;
 }
 
 function relativeFrom(url: string, base: string): string {
