@@ -65,10 +65,35 @@ export class FetchHandler {
     }
   }
 
+  /*
+    http://local-realm/
+
+    http://local-realm/sources/path/to/file.gts -> file contents
+    http://local-realm/sources/path/to/file -> 304 to file.gts
+    http://local-realm/sources/path/to/ -> json directory listing
+
+    http://local-realm/cards/path/to/source-module.gts -> forbid this
+    http://local-realm/cards/path/to/source-module.js -> require this to trigger executable mode
+     - searches for other executable extensions to actually handle the request
+
+    http://local-realm/cards/path/to/some-json-data.json
+     - means a json asset, with no special processing
+
+    http://local-realm/cards/path/to/some-json-data
+    with Accept: application/vnd.api+json.
+      - means a card's data
+ 
+    http://local-realm/cards/path/to/some-image.png
+     - matches no specific extension, so is just an asset with no special handling
+     - this is the same as the "json asset" example above
+
+  */
+
   private async handleLocalRealm(
     _request: Request,
     url: URL
   ): Promise<Response> {
+    debugger;
     let handle = await this.getLocalFileWithFallbacks(
       url.pathname.slice(1),
       executableExtensions
