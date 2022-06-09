@@ -75,6 +75,11 @@ export class FetchHandler {
     http://local-realm/cards/path/to/source-module.gts -> forbid this
     http://local-realm/cards/path/to/source-module.js -> require this to trigger executable mode
      - searches for other executable extensions to actually handle the request
+     - includes X-Typescript-Types response header that points to the .d.ts file corresponding to
+       the requested module
+     - author maintains a file that includes a list of external realms referenced by cards in local-realm.
+       this feeds into the build step that rewrites import sources to use .js for both local-realm
+       cards and external realm cards
 
     http://local-realm/cards/path/to/some-json-data.json
      - means a json asset, with no special processing
@@ -86,6 +91,23 @@ export class FetchHandler {
     http://local-realm/cards/path/to/some-image.png
      - matches no specific extension, so is just an asset with no special handling
      - this is the same as the "json asset" example above
+
+
+    Additional Notes:
+    - we can consume npm packages from skypack. use pinned URL's to lock package deps.
+      the convention can be to use reexports to manage package versions (that are pinned)
+    - build a CLI tool to import types from skypack for type support in VS code.
+      - this tool searches through your local-realm source to find imports from skypack
+        or external card realms
+      - for the imports that it finds use the ?dts query param to obtain the .d.ts file
+        from the X-Typescript-types response header and write these to a temp folder
+      - update the tsconfig for the project that contains the local realm. note that
+        this tsconfig file might likely live outside of the local-realm boundary depending
+        on how the local-realm was mounted to the service/service-worker--hence the 
+        need for it to be a CLI tool.
+      - future versions of this tool might be able to run as a daemon that can monitor
+        your package.json or external card realm list file and automatically add types
+        as the card author adds npm and card dependencies.
 
   */
 
