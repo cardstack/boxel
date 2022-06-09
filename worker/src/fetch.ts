@@ -96,7 +96,8 @@ export class FetchHandler {
     Additional Notes:
     - we can consume npm packages from skypack. use pinned URL's to lock package deps.
       the convention can be to use reexports to manage package versions (that are pinned)
-    - build a CLI tool to import types from skypack for type support in VS code.
+    - build a CLI tool to import types from skypack and external card realms for type 
+      support in VS code.
       - this tool searches through your local-realm source to find imports from skypack
         or external card realms
       - for the imports that it finds use the ?dts query param to obtain the .d.ts file
@@ -105,9 +106,10 @@ export class FetchHandler {
         this tsconfig file might likely live outside of the local-realm boundary depending
         on how the local-realm was mounted to the service/service-worker--hence the 
         need for it to be a CLI tool.
-      - future versions of this tool might be able to run as a daemon that can monitor
-        your package.json or external card realm list file and automatically add types
-        as the card author adds npm and card dependencies.
+      - future versions of this tool might be able to run part of POSTs to the
+        the realm's executable source files endpoint and automatically add/remove types
+        as the card source changes. (we'll need to figure out how to deal with the location
+        of tsconfig so it is within realm's sphere of influence)
 
   */
 
