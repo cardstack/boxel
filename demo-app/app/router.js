@@ -18,4 +18,5 @@ Router.map(function () {
     this.route('details', { path: '/:id' });
   });
   this.route('accordion');
+  this.route('nested-contexts');
 });

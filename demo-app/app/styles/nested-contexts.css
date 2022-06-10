@@ -1,0 +1,35 @@
+.page {
+  padding: 25px;
+}
+
+.level-1-context {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 25px;
+  padding: 25px;
+  border: 2px solid #000;
+  border-radius: 30px;
+}
+
+.level-2-context {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 25px;
+  border: 2px solid #AAA;
+  border-radius: 20px;
+}
+
+.level-3-context {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 25px;
+  border: 2px solid #DDD;
+  border-radius: 10px;
+}
+
+.level-3-sprite {
+  box-sizing: border-box;
+  background: yellow;
+  border-radius: 5px;
+  padding: 10px 15px;
+}
