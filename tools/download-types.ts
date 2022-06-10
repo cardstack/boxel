@@ -85,7 +85,7 @@ console.log(`Adding type information to ${typesDir}`);
     let pkgPathSegments = join(typesDir, dtsURL.pathname).split("/");
     pkgPathSegments.pop();
     let pkgPath = pkgPathSegments.join("/");
-    tsConfig.compilerOptions.paths[importHref] = [`${pkgPath}/*`];
+    tsConfig.compilerOptions.paths[importHref] = [pkgPath];
     writeJSONSync("tsconfig.json", tsConfig, { spaces: 2 });
   }
 
