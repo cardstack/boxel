@@ -21,13 +21,24 @@
     "module": "es2022",
     "experimentalDecorators": true,
     "paths": {
-      "runtime-spike/tests/*": ["host/tests/*"],
-      "runtime-spike/*": ["host/app/*"],
-      "//cardstack.com/base/*": ["host/app/lib/*"],
-      "//local-realm/*": ["cards/*"],
-      "https://cdn.skypack.dev/*": ["/tmp/tmp-11845-uJwhS3K5vjuV/*"],
-      "cards": ["cards/*"],
-      "*": ["host/types/*"]
+      "runtime-spike/tests/*": [
+        "host/tests/*"
+      ],
+      "runtime-spike/*": [
+        "host/app/*"
+      ],
+      "//cardstack.com/base/*": [
+        "host/app/lib/*"
+      ],
+      "//local-realm/*": [
+        "cards/*"
+      ],
+      "cards": [
+        "cards/*"
+      ],
+      "*": [
+        "host/types/*"
+      ]
     }
   },
   "include": [

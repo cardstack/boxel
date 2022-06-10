@@ -4,9 +4,11 @@ import {
   readFileSync,
   ensureFileSync,
   writeFileSync,
+  readJSONSync,
+  writeJSONSync,
 } from "fs-extra";
 import { join } from "path";
-import { dirSync } from "tmp";
+// import { dirSync } from "tmp";
 import * as babel from "@babel/core";
 import type * as BabelType from "@babel/core";
 import type { types as t } from "@babel/core";
@@ -21,9 +23,15 @@ import typescriptPlugin from "@babel/plugin-syntax-typescript";
 //@ts-ignore unsure where these types live
 import typescriptPlugin from "@babel/plugin-transform-typescript";
 import fetch from "node-fetch";
+import {
+  createSourceFile,
+  createProgram,
+  ScriptTarget,
+  CompilerHost,
+} from "typescript";
 
 const executableGlob = "**/*.{js,ts,gjs,gts}";
-const skyPackURL = "https://cdn.skypack.dev";
+const skyPackURL = "//cdn.skypack.dev";
 
 let localRealmDir = process.argv[2];
 if (!localRealmDir) {
@@ -54,24 +62,31 @@ if (imports.size === 0) {
   console.log("No skypack imports found");
   process.exit(0);
 }
-let { name: tmpdir } = dirSync();
-console.log(`Adding type information to ${tmpdir}`);
+let typesDir = join("types", "skypack");
+console.log(`Adding type information to ${typesDir}`);
 (async () => {
   for (let importHref of imports) {
-    let response = await fetch(`${importHref}?dts`);
+    let importHrefWithProtocol = !importHref.startsWith("http")
+      ? "https:" + importHref
+      : importHref;
+    let response = await fetch(`${importHrefWithProtocol}?dts`);
     let dtsHref = response.headers.get("X-TypeScript-Types");
     if (!dtsHref) {
       console.error(`could not determine dts location for ${importHref}`);
       continue;
     }
-    let importName = importHref.slice(skyPackURL.length + 1).replace("/", "_");
+    let importName = importHref.slice(
+      importHref.indexOf(skyPackURL) + skyPackURL.length + 1
+    );
     console.log(`found dts for ${importName}: ${dtsHref}`);
-    let dtsURL = new URL(dtsHref, skyPackURL);
-    let dts = await (await fetch(dtsURL.href)).text();
-    let dtsPath = join(tmpdir, importName, ".d.ts");
-    ensureFileSync(dtsPath);
-    writeFileSync(dtsPath, dts);
-    console.log(`wrote DTS file for ${importHref}: ${dtsPath}`);
+    let dtsURL = new URL(dtsHref, importHrefWithProtocol);
+    await crawl(importName, dtsURL);
+    let tsConfig = readJSONSync("tsconfig.json");
+    let pkgPathSegments = join(typesDir, dtsURL.pathname).split("/");
+    pkgPathSegments.pop();
+    let pkgPath = pkgPathSegments.join("/");
+    tsConfig.compilerOptions.paths[importHref] = [`${pkgPath}/*`];
+    writeJSONSync("tsconfig.json", tsConfig, { spaces: 2 });
   }
 
   console.log("done");
@@ -81,36 +96,28 @@ console.log(`Adding type information to ${tmpdir}`);
   process.exit(1);
 });
 
-// async function crawl(
-//   importName: string,
-//   dtsHref: string,
-//   visited: string[] = []
-// ) {
-//   if (visited.includes(dtsHref)) {
-//     return;
-//   }
+async function crawl(
+  importFolder: string,
+  dtsURL: URL,
+  visited: string[] = []
+) {
+  if (visited.includes(dtsURL.href)) {
+    return;
+  }
 
-//   let dtsURL = new URL(dtsHref, skyPackURL);
-//   let dts = await (await fetch(dtsURL.href)).text();
-//   let dtsPath = join(tmpdir, importName, "index.d.ts");
-//   ensureFileSync(dtsPath);
-//   writeFileSync(dtsPath, dts);
-//   console.log(`wrote DTS file for ${importName}: ${dtsPath}`);
-//   let references = findImports(dts);
-//   let parts = dtsURL.pathname.split("/").pop()!.split(",");
-//   let mode = parts.find((p) => p.startsWith("mode="));
-//   if (mode) {
-//     let modeSegments = mode.split("/");
-//     modeSegments.pop();
-//     for (let reference of references) {
-//       let refHref = dtsURL.href.replace(
-//         mode,
-//         [...modeSegments, reference].join("/")
-//       );
-//       crawl(importName, refHref, [...visited, dtsHref]);
-//     }
-//   }
-// }
+  let source = await (await fetch(dtsURL.href)).text();
+  let localPath = join(typesDir, dtsURL.pathname);
+  ensureFileSync(localPath);
+  writeFileSync(localPath, source);
+  console.log(`wrote DTS file for ${dtsURL.href}: ${localPath}`);
+  let references = findReferences(localPath, source);
+  for (let reference of references) {
+    await crawl(importFolder, new URL(reference, dtsURL.href), [
+      ...visited,
+      dtsURL.href,
+    ]);
+  }
+}
 
 interface State {
   opts: Set<string>;
@@ -156,19 +163,32 @@ function preprocessTemplateTags(path: string): string {
   return output.join("");
 }
 
-// function findImports(source: string): string[] {
-//   let regexs = [
-//     /\bpath\s*=\s*"([^"]*)"/g,
-//     /\bpath\s*=\s*'([^']*)'/g,
-//     /\s+from\s+"([^"]+)"/g,
-//     /\s+from\s+'([^']+)'/g,
-//   ];
-//   let imports = new Set<string>();
-//   for (let regex of regexs) {
-//     let matches = source.matchAll(regex);
-//     for (let match of matches) {
-//       imports.add(match[1]);
-//     }
-//   }
-//   return [...imports];
-// }
+function findReferences(filename: string, source: string): string[] {
+  const compilerHost: CompilerHost = {
+    fileExists: () => true,
+    getCanonicalFileName: (_filename) => _filename,
+    getCurrentDirectory: () => "",
+    getDefaultLibFileName: () => "lib.d.ts",
+    getNewLine: () => "\n",
+    getSourceFile: (_filename) => {
+      return createSourceFile(_filename, source, ScriptTarget.Latest, true);
+    },
+    readFile: () => undefined,
+    useCaseSensitiveFileNames: () => true,
+    writeFile: () => null,
+  };
+  const program = createProgram(
+    [filename],
+    {
+      noResolve: true,
+      target: ScriptTarget.Latest,
+    },
+    compilerHost
+  );
+  const sourceFile = program.getSourceFile(filename);
+  if (!sourceFile) {
+    throw new Error(`unable to parse ${filename}`);
+  }
+
+  return sourceFile.referencedFiles.map((r) => r.fileName);
+}

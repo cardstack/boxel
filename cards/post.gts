@@ -2,10 +2,10 @@ import { contains, field, Component, Card } from '//cardstack.com/base/card-api'
 import StringCard from '//cardstack.com/base/string';
 import TextAreaCard from '//cardstack.com/base/text-area';
 import { Person } from './person';
-import isObject from 'https://cdn.skypack.dev/lodash';
+import lodash from '//cdn.skypack.dev/lodash';
 
 let imageURL = new URL('./logo.png', import.meta.url).href;
-let test = isObject({});
+let test = lodash.isObject({});
 console.log(`{} is object? ${test}`);
 
 export class Post extends Card {
