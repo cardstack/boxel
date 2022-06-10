@@ -148,7 +148,7 @@ export default class AnimationsService extends Service {
     )?.children;
     if (contextNodeChildren) {
       for (let child of contextNodeChildren) {
-        if (child.nodeType === SpriteTreeNodeType.Sprite) {
+        if (child.nodeType.has(SpriteTreeNodeType.Sprite)) {
           spriteModifiers.add(child.model as SpriteModifier);
         }
       }

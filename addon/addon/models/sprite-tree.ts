@@ -20,7 +20,7 @@ export class SpriteTreeNode {
   parent: SpriteTreeNode | SpriteTree;
   children: Set<SpriteTreeNode> = new Set();
   freshlyRemovedChildren: Set<SpriteTreeNode> = new Set();
-  nodeType: SpriteTreeNodeType;
+  nodeType: Set<SpriteTreeNodeType> = new Set();
 
   constructor(
     model: SpriteTreeModel,
@@ -28,7 +28,7 @@ export class SpriteTreeNode {
     parentNode: SpriteTreeNode | SpriteTree
   ) {
     this.model = model;
-    this.nodeType = nodeType;
+    this.nodeType.add(nodeType);
     this.parent = parentNode;
     parentNode.addChild(this);
   }
@@ -100,19 +100,26 @@ export class SpriteTreeNode {
 
 export default class SpriteTree {
   model = null;
-  nodeType = SpriteTreeNodeType.Root;
+  nodeType = new Set([SpriteTreeNodeType.Root]);
 
   nodesByElement = new WeakMap<Element, SpriteTreeNode>();
   rootNodes: Set<SpriteTreeNode> = new Set();
   addAnimationContext(context: ContextModel): SpriteTreeNode {
-    let parentNode = this.findParentNode(context.element);
-    let node = new SpriteTreeNode(
-      context,
-      SpriteTreeNodeType.Context,
-      parentNode || this
-    );
-    this.nodesByElement.set(context.element, node);
-    return node;
+    let existingNode = this.nodesByElement.get(context.element);
+
+    if (existingNode) {
+      existingNode.nodeType.add(SpriteTreeNodeType.Context);
+      return existingNode;
+    } else {
+      let parentNode = this.findParentNode(context.element);
+      let node = new SpriteTreeNode(
+        context,
+        SpriteTreeNodeType.Context,
+        parentNode || this
+      );
+      this.nodesByElement.set(context.element, node);
+      return node;
+    }
   }
   removeAnimationContext(context: ContextModel): void {
     let node = this.lookupNodeByElement(context.element);
@@ -122,14 +129,21 @@ export default class SpriteTree {
     }
   }
   addSpriteModifier(spriteModifier: SpriteModel): SpriteTreeNode {
-    let parentNode = this.findParentNode(spriteModifier.element);
-    let node = new SpriteTreeNode(
-      spriteModifier,
-      SpriteTreeNodeType.Sprite,
-      parentNode || this
-    );
-    this.nodesByElement.set(spriteModifier.element, node);
-    return node;
+    let existingNode = this.nodesByElement.get(spriteModifier.element);
+
+    if (existingNode) {
+      existingNode.nodeType.add(SpriteTreeNodeType.Sprite);
+      return existingNode;
+    } else {
+      let parentNode = this.findParentNode(spriteModifier.element);
+      let node = new SpriteTreeNode(
+        spriteModifier,
+        SpriteTreeNodeType.Sprite,
+        parentNode || this
+      );
+      this.nodesByElement.set(spriteModifier.element, node);
+      return node;
+    }
   }
   removeSpriteModifier(spriteModifer: SpriteModel): void {
     let node = this.lookupNodeByElement(spriteModifer.element);
@@ -174,7 +188,7 @@ export default class SpriteTree {
       let node = this.lookupNodeByElement(context.element);
       let ancestor = node && node.parent;
       while (ancestor) {
-        if (ancestor.nodeType === SpriteTreeNodeType.Context) {
+        if (ancestor.nodeType.has(SpriteTreeNodeType.Context)) {
           if (result.indexOf(ancestor.model as ContextModel) === -1) {
             result.push(ancestor.model as ContextModel);
           }
