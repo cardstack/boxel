@@ -1,0 +1,26 @@
+{
+  "name": "@cardstack/runtime-tools",
+  "version": "0.0.0",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.17.8",
+    "@babel/plugin-syntax-class-properties": "^7.12.13",
+    "@babel/plugin-syntax-decorators": "^7.17.12",
+    "@babel/plugin-syntax-typescript": "^7.17.12",
+    "@types/babel__core": "^7.1.19",
+    "@types/babel__traverse": "^7.14.2",
+    "@types/node-fetch": "^2.6.1",
+    "@types/tmp": "^0.2.3",
+    "babel-loader": "^8.2.4",
+    "babel-plugin-ember-template-compilation": "^1.0.2",
+    "fs-extra": "^10.1.0",
+    "glob": "^8.0.3",
+    "node-fetch": "^2.6.7",
+    "tmp": "^0.2.1",
+    "ts-node": "^10.8.1"
+  },
+  "volta": {
+    "node": "14.19.1",
+    "yarn": "1.22.18"
+  }
+}
