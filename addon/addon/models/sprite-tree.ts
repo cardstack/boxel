@@ -126,6 +126,40 @@ export default class SpriteTree {
 
   nodesByElement = new WeakMap<Element, SpriteTreeNode>();
   rootNodes: Set<SpriteTreeNode> = new Set();
+  _pendingAdditions: (
+    | { item: ContextModel; type: 'CONTEXT' }
+    | { item: SpriteModel; type: 'SPRITE' }
+  )[] = [];
+
+  addPendingAnimationContext(item: ContextModel) {
+    this._pendingAdditions.push({ item, type: 'CONTEXT' });
+  }
+
+  addPendingSpriteModifier(item: SpriteModel) {
+    this._pendingAdditions.push({ item, type: 'SPRITE' });
+  }
+
+  flushPendingAdditions() {
+    this._pendingAdditions.sort((a, b) =>
+      a.item.element.compareDocumentPosition(b.item.element) &
+      Node.DOCUMENT_POSITION_FOLLOWING
+        ? -1
+        : 1
+    );
+
+    for (let { item, type } of this._pendingAdditions) {
+      if (type === 'CONTEXT') {
+        this.addAnimationContext(item);
+      } else if (type === 'SPRITE') {
+        this.addSpriteModifier(item);
+      } else {
+        throw new Error('unexpected pending addition');
+      }
+    }
+
+    this._pendingAdditions = [];
+  }
+
   addAnimationContext(context: ContextModel): SpriteTreeNode {
     let existingNode = this.nodesByElement.get(context.element);
 

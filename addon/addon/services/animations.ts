@@ -35,7 +35,7 @@ export default class AnimationsService extends Service {
   runningAnimations: Map<string, Set<Animation>> = new Map();
 
   registerContext(context: AnimationContext): void {
-    this.spriteTree.addAnimationContext(context);
+    this.spriteTree.addPendingAnimationContext(context);
   }
 
   unregisterContext(context: AnimationContext): void {
@@ -44,7 +44,7 @@ export default class AnimationsService extends Service {
   }
 
   registerSpriteModifier(spriteModifier: SpriteModifier): void {
-    this.spriteTree.addSpriteModifier(spriteModifier);
+    this.spriteTree.addPendingSpriteModifier(spriteModifier);
     this.freshlyAdded.add(spriteModifier);
   }
 
@@ -178,6 +178,8 @@ export default class AnimationsService extends Service {
   }
 
   async maybeTransition(): Promise<TaskInstance<void>> {
+    this.spriteTree.flushPendingAdditions();
+
     return taskFor(this.maybeTransitionTask)
       .perform()
       .catch((error) => {
