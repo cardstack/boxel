@@ -43,6 +43,14 @@ export class FetchHandler {
 
       let url = new URL(request.url);
 
+      if (
+        url.origin === 'http://cardstack.com' &&
+        url.pathname.startsWith('/base/')
+      ) {
+        return generateExternalStub(
+          url.pathname.replace('/base/', 'runtime-spike/lib/')
+        );
+      }
       if (url.origin === 'http://local-realm') {
         return await this.handleLocalRealm(request, url);
       }
@@ -117,7 +125,6 @@ export class FetchHandler {
     _request: Request,
     url: URL
   ): Promise<Response> {
-    debugger;
     let handle = await this.getLocalFileWithFallbacks(
       url.pathname.slice(1),
       executableExtensions

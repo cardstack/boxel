@@ -7,8 +7,7 @@
     "host",
     "worker",
     "cards",
-    "runtime-common",
-    "tools"
+    "runtime-common"
   ],
   "private": true,
   "volta": {

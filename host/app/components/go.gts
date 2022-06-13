@@ -44,7 +44,7 @@ export default class Go extends Component<Signature> {
             <ImportModule @url={{localRealmURL this.openFile.path}}>
               <:ready as |module|>
                 <SchemaInspector
-                  @path={{this.path}}
+                  @path={{localRealmURL this.openFile.path}}
                   @module={{module}}
                   @src={{this.openFile.content}}
                   @inspector={{this.inspector}}
@@ -84,11 +84,8 @@ export default class Go extends Component<Signature> {
     async resolveModule(specifier: string, currentPath: string) {
       if (externalsMap.has(specifier)) {
         specifier = `http://externals/${specifier}`;
-      } else if (specifier.startsWith('.') || specifier.startsWith('/')) {
-        let pathSegments = currentPath.split('/');
-        pathSegments.pop();
-
-        let url = new URL(`${pathSegments.join()}/${specifier}`, 'http://local-realm');
+      } else {
+        let url = new URL(specifier, currentPath);
         specifier = url.href;
       }
       return await import(/* webpackIgnore: true */ specifier);

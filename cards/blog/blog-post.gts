@@ -1,6 +1,6 @@
-import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
-import StringCard from 'runtime-spike/lib/string';
-import TextAreaCard from 'runtime-spike/lib/text-area';
+import { contains, field, Component, Card } from '//cardstack.com/base/card-api';
+import StringCard from '//cardstack.com/base/string';
+import TextAreaCard from '//cardstack.com/base/text-area';
 import { BlogPerson } from './blog-person';
 
 export class BlogPost extends Card {

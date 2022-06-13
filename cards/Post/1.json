@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "author": {
+        "firstName": "A2",
+        "lastName": "F"
+      },
+      "title": "The title",
+      "body": "Hello"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/post.gts",
+        "name": "Post"
+      }
+    }
+  }
+}
