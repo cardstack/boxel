@@ -11,9 +11,10 @@ class MockAnimationContext implements ContextModel {
   isAnimationContext = true;
   constructor(
     parentEl: Element | null = null,
-    id: string | undefined = undefined
+    id: string | undefined = undefined,
+    element: Element | null = null
   ) {
-    this.element = document.createElement('div');
+    this.element = element ?? document.createElement('div');
     if (parentEl) {
       parentEl.appendChild(this.element);
     }
@@ -24,9 +25,14 @@ class MockAnimationContext implements ContextModel {
 class MockSpriteModifier implements SpriteModel {
   element: Element;
   farMatch = false;
-  id = 'Mock';
-  constructor(parentEl: Element | null = null) {
-    this.element = document.createElement('div');
+  id: string;
+  constructor(
+    parentEl: Element | null = null,
+    id = 'Mock',
+    element: Element | null = null
+  ) {
+    this.element = element ?? document.createElement('div');
+    this.id = id;
     if (parentEl) {
       parentEl.appendChild(this.element);
     }
@@ -408,4 +414,100 @@ module('Unit | Models | SpriteTree', function (hooks) {
       );
     });
   });
+  module(
+    'with two nested contexts of which one is also a sprite',
+    function (hooks) {
+      let parentContext: MockAnimationContext,
+        childContext: MockAnimationContext;
+      let contextSpriteModifier: MockSpriteModifier,
+        leafSpriteModifier: MockSpriteModifier;
+
+      hooks.beforeEach(function () {
+        /*
+          The structure looks like:
+          - parentContext
+            - childContext / contextSpriteModifier
+              - leafSpriteModifier
+         */
+        parentContext = new MockAnimationContext(null, 'parentContext');
+        subject.addAnimationContext(parentContext);
+        childContext = new MockAnimationContext(
+          parentContext.element,
+          'childContext'
+        );
+        subject.addAnimationContext(childContext);
+
+        contextSpriteModifier = new MockSpriteModifier(
+          parentContext.element,
+          'ContextAsSprite',
+          childContext.element
+        );
+        subject.addSpriteModifier(contextSpriteModifier);
+
+        leafSpriteModifier = new MockSpriteModifier(
+          childContext.element,
+          'LeafSprite'
+        );
+        subject.addSpriteModifier(leafSpriteModifier);
+      });
+      test('nodes are correctly added and typed', function (assert) {
+        let childNode = subject.lookupNodeByElement(
+          childContext.element
+        ) as SpriteTreeNode;
+
+        assert.ok(childNode, 'child node exists');
+        assert.strictEqual(childNode.isContext, true, 'node is context');
+        assert.strictEqual(childNode.isSprite, true, 'node is sprite');
+        assert.strictEqual(
+          childNode.children.size,
+          1,
+          'context node has a single child'
+        );
+
+        let leafSprites = [...childNode.children];
+        assert.strictEqual(
+          leafSprites.length,
+          1,
+          'childContext node has a single child'
+        );
+
+        let leafSprite = leafSprites[0] as SpriteTreeNode;
+        assert.ok(leafSprite.isSprite);
+        assert.notOk(leafSprite.isContext);
+        assert.strictEqual(leafSprite.spriteModel, leafSpriteModifier);
+      });
+      test('getting descendants', function (assert) {
+        let parentContextDescendants = subject.descendantsOf(parentContext);
+        assert.deepEqual(
+          parentContextDescendants,
+          [childContext, contextSpriteModifier, leafSpriteModifier],
+          'includes childContext as AnimationContext instance, childContext as SpriteModifier instance, and leafSprite as SpriteModifier instance'
+        );
+
+        let childContextDescendants = subject.descendantsOf(childContext);
+        assert.deepEqual(
+          childContextDescendants,
+          [leafSpriteModifier],
+          'includes leafSprite as SpriteModifier instance'
+        );
+      });
+      test('getting a context run list', function (assert) {
+        assert.deepEqual(
+          subject.getContextRunList(new Set([parentContext])),
+          [parentContext],
+          'run list for the parent context just includes the parent context'
+        );
+        assert.deepEqual(
+          subject.getContextRunList(new Set([parentContext, childContext])),
+          [childContext, parentContext],
+          'when both parent and child are specified both are returned, with child first'
+        );
+        assert.deepEqual(
+          subject.getContextRunList(new Set([childContext])),
+          [childContext, parentContext],
+          'when a child is specified, the run list includes the child then the parent'
+        );
+      });
+    }
+  );
 });
