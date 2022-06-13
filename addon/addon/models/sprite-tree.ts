@@ -16,19 +16,34 @@ export enum SpriteTreeNodeType {
   Sprite,
 }
 export class SpriteTreeNode {
-  model: SpriteTreeModel;
+  contextModel: ContextModel | undefined;
+  spriteModel: SpriteModel | undefined;
+
   parent: SpriteTreeNode | SpriteTree;
   children: Set<SpriteTreeNode> = new Set();
   freshlyRemovedChildren: Set<SpriteTreeNode> = new Set();
-  nodeType: Set<SpriteTreeNodeType> = new Set();
+
+  get isContext() {
+    return Boolean(this.contextModel);
+  }
+
+  get isSprite() {
+    return Boolean(this.spriteModel);
+  }
 
   constructor(
     model: SpriteTreeModel,
     nodeType: SpriteTreeNodeType,
     parentNode: SpriteTreeNode | SpriteTree
   ) {
-    this.model = model;
-    this.nodeType.add(nodeType);
+    if (nodeType === SpriteTreeNodeType.Context) {
+      this.contextModel = model;
+    } else if (nodeType === SpriteTreeNodeType.Sprite) {
+      this.spriteModel = model;
+    } else {
+      throw new Error('Passed model is not a context or sprite');
+    }
+
     this.parent = parentNode;
     parentNode.addChild(this);
   }
@@ -38,7 +53,7 @@ export class SpriteTreeNode {
   }
 
   get element(): Element {
-    return this.model.element;
+    return (this.spriteModel?.element ?? this.contextModel?.element) as Element;
   }
 
   get ancestors(): SpriteTreeNode[] {
@@ -70,7 +85,12 @@ export class SpriteTreeNode {
   freshlyRemovedDescendants(stopNode: SpriteTreeNode): SpriteTreeModel[] {
     let result: SpriteTreeModel[] = [];
     for (let childNode of this.freshlyRemovedChildren) {
-      result.push(childNode.model);
+      if (childNode.contextModel) {
+        result.push(childNode.contextModel);
+      }
+      if (childNode.spriteModel) {
+        result.push(childNode.spriteModel);
+      }
     }
     let allChildren = [...this.children].concat([
       ...this.freshlyRemovedChildren,
@@ -99,8 +119,10 @@ export class SpriteTreeNode {
 }
 
 export default class SpriteTree {
-  model = null;
-  nodeType = new Set([SpriteTreeNodeType.Root]);
+  contextModel = undefined;
+  spriteModel = undefined;
+  isContext = false;
+  isSprite = false;
 
   nodesByElement = new WeakMap<Element, SpriteTreeNode>();
   rootNodes: Set<SpriteTreeNode> = new Set();
@@ -108,7 +130,12 @@ export default class SpriteTree {
     let existingNode = this.nodesByElement.get(context.element);
 
     if (existingNode) {
-      existingNode.nodeType.add(SpriteTreeNodeType.Context);
+      assert(
+        'Cannot add an AnimationContext which was already added',
+        !existingNode.isContext
+      );
+
+      existingNode.contextModel = context;
       return existingNode;
     } else {
       let parentNode = this.findParentNode(context.element);
@@ -132,7 +159,12 @@ export default class SpriteTree {
     let existingNode = this.nodesByElement.get(spriteModifier.element);
 
     if (existingNode) {
-      existingNode.nodeType.add(SpriteTreeNodeType.Sprite);
+      assert(
+        'Cannot add a SpriteModifier which was already added',
+        !existingNode.isSprite
+      );
+
+      existingNode.spriteModel = spriteModifier;
       return existingNode;
     } else {
       let parentNode = this.findParentNode(spriteModifier.element);
@@ -161,7 +193,15 @@ export default class SpriteTree {
   ): SpriteTreeModel[] {
     let node = this.lookupNodeByElement(model.element);
     if (node) {
-      return node.getDescendantNodes(opts).map((n) => n.model);
+      return node.getDescendantNodes(opts).reduce((result, n) => {
+        if (n.contextModel) {
+          result.push(n.contextModel);
+        }
+        if (n.spriteModel) {
+          result.push(n.spriteModel);
+        }
+        return result;
+      }, [] as SpriteTreeModel[]);
     } else {
       return [];
     }
@@ -188,9 +228,9 @@ export default class SpriteTree {
       let node = this.lookupNodeByElement(context.element);
       let ancestor = node && node.parent;
       while (ancestor) {
-        if (ancestor.nodeType.has(SpriteTreeNodeType.Context)) {
-          if (result.indexOf(ancestor.model as ContextModel) === -1) {
-            result.push(ancestor.model as ContextModel);
+        if (ancestor.isContext) {
+          if (result.indexOf(ancestor.contextModel as ContextModel) === -1) {
+            result.push(ancestor.contextModel as ContextModel);
           }
         }
         ancestor = (ancestor as SpriteTreeNode).parent;

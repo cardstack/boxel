@@ -2,7 +2,7 @@ import Service from '@ember/service';
 
 import AnimationContext from '../components/animation-context';
 import SpriteModifier from '../modifiers/sprite';
-import SpriteTree, { SpriteTreeNodeType } from '../models/sprite-tree';
+import SpriteTree from '../models/sprite-tree';
 import TransitionRunner from '../models/transition-runner';
 import { scheduleOnce } from '@ember/runloop';
 import { taskFor } from 'ember-concurrency-ts';
@@ -148,8 +148,8 @@ export default class AnimationsService extends Service {
     )?.children;
     if (contextNodeChildren) {
       for (let child of contextNodeChildren) {
-        if (child.nodeType.has(SpriteTreeNodeType.Sprite)) {
-          spriteModifiers.add(child.model as SpriteModifier);
+        if (child.isSprite) {
+          spriteModifiers.add(child.spriteModel as SpriteModifier);
         }
       }
     }
