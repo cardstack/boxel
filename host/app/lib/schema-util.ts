@@ -16,7 +16,7 @@ import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
 import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 //@ts-ignore unsure where these types live
-import typescriptPlugin from '@babel/plugin-transform-typescript';
+import typescriptPlugin from '@babel/plugin-syntax-typescript';
 
 // represents the cards within an entire javascript module
 export class CardDefinitions {

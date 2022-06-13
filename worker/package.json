@@ -13,7 +13,6 @@
     "@types/babel__traverse": "^7.14.2",
     "assert-never": "^1.2.1",
     "babel-loader": "^8.2.4",
-    "babel-plugin-ember-template-compilation": "^1.0.2",
     "ember-source": "~4.2.0",
     "ember-template-imports": "^2.0.1",
     "path-browserify": "^1.0.1",

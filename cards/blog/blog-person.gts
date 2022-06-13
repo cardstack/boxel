@@ -1,5 +1,5 @@
-import { contains, field, Component, Card } from 'runtime-spike/lib/card-api';
-import StringCard from 'runtime-spike/lib/string';
+import { contains, field, Component, Card } from '//cardstack.com/base/card-api';
+import StringCard from '//cardstack.com/base/string';
 
 export class BlogPerson extends Card {
   @field firstName = contains(StringCard);

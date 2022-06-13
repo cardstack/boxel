@@ -43,6 +43,14 @@ export class FetchHandler {
 
       let url = new URL(request.url);
 
+      if (
+        url.origin === 'http://cardstack.com' &&
+        url.pathname.startsWith('/base/')
+      ) {
+        return generateExternalStub(
+          url.pathname.replace('/base/', 'runtime-spike/lib/')
+        );
+      }
       if (url.origin === 'http://local-realm') {
         return await this.handleLocalRealm(request, url);
       }
@@ -64,6 +72,37 @@ export class FetchHandler {
       });
     }
   }
+
+  /*
+    http://local-realm/
+
+    http://local-realm/sources/path/to/file.gts -> file contents
+    http://local-realm/sources/path/to/file -> 304 to file.gts
+    http://local-realm/sources/path/to/ -> json directory listing
+
+    http://local-realm/cards/path/to/source-module ->
+     - unless source-module literally exists
+       - try matching source-module + ['.gts', '.gjs', '.ts', '.js']
+       (this is only because typescript is forcing our hand)
+     - if file matches an executable exention, do the JS handling stuff
+     - else do the asset serving
+
+    http://local-realm/cards/path/to/some-json-data.json
+     - means a json asset, with no special processing
+
+    http://local-realm/cards/path/to/some-json-data
+    with Accept: application/vnd.api+json.
+      - means a card's data
+ 
+    http://local-realm/cards/path/to/some-image.png
+     - matches no specific extension, so is just an asset with no special handling
+     - this is the same as the "json asset" example above
+
+
+    Additional Notes:
+    - we can consume npm packages from skypack. use pinned URL's to lock package deps.
+      the convention can be to use reexports to manage package versions (that are pinned)
+  */
 
   private async handleLocalRealm(
     _request: Request,
