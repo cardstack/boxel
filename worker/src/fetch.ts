@@ -80,14 +80,12 @@ export class FetchHandler {
     http://local-realm/sources/path/to/file -> 304 to file.gts
     http://local-realm/sources/path/to/ -> json directory listing
 
-    http://local-realm/cards/path/to/source-module.gts -> forbid this
-    http://local-realm/cards/path/to/source-module.js -> require this to trigger executable mode
-     - searches for other executable extensions to actually handle the request
-     - includes X-Typescript-Types response header that points to the .d.ts file corresponding to
-       the requested module
-     - author maintains a file that includes a list of external realms referenced by cards in local-realm.
-       this feeds into the build step that rewrites import sources to use .js for both local-realm
-       cards and external realm cards
+    http://local-realm/cards/path/to/source-module ->
+     - unless source-module literally exists
+       - try matching source-module + ['.gts', '.gjs', '.ts', '.js']
+       (this is only because typescript is forcing our hand)
+     - if file matches an executable exention, do the JS handling stuff
+     - else do the asset serving
 
     http://local-realm/cards/path/to/some-json-data.json
      - means a json asset, with no special processing
