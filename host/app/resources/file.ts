@@ -14,6 +14,11 @@ interface Args {
 
 export type FileResource =
   | {
+      state: 'server-error';
+      path: string;
+      loading: TaskInstance<void> | null;
+    }
+  | {
       state: 'not-found';
       path: string;
       loading: TaskInstance<void> | null;
@@ -85,6 +90,8 @@ class _FileResource extends Resource<Args> {
       );
       if (response.status === 404) {
         this.state = 'not-found';
+      } else {
+        this.state = 'server-error';
       }
       return;
     }
