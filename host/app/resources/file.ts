@@ -6,16 +6,13 @@ import { registerDestructor } from '@ember/destroyable';
 
 interface Args {
   named: {
-    url: string | undefined;
+    url: string;
     content: string | undefined;
     lastModified: string | undefined;
   };
 }
 
 export type FileResource =
-  | {
-      state: 'not-ready';
-    }
   | {
       state: 'not-found';
       path: string;
@@ -32,16 +29,15 @@ export type FileResource =
 
 class _FileResource extends Resource<Args> {
   private interval: ReturnType<typeof setInterval>;
-  private _url: string | undefined;
+  private _url: string;
   private lastModified: string | undefined;
   @tracked content: string | undefined;
-  @tracked state = 'not-ready';
+  @tracked state = 'ready';
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
     this._url = args.named.url;
     if (args.named.content !== undefined) {
-      this.state = 'ready';
       this.content = args.named.content;
       this.lastModified = args.named.lastModified;
     } else {
@@ -57,11 +53,11 @@ class _FileResource extends Resource<Args> {
   }
 
   get path() {
-    return this._url ? new URL(this._url).pathname : undefined;
+    return new URL(this._url).pathname;
   }
 
   get name() {
-    return this.path ? this.path.split('/').pop()! : undefined;
+    return this.path.split('/').pop()!;
   }
 
   get loading() {
@@ -69,50 +65,44 @@ class _FileResource extends Resource<Args> {
   }
 
   @restartableTask private async read() {
-    if (this.url) {
-      let response: Response | undefined;
-      try {
-        response = await fetch(this.url, {
-          headers: {
-            Accept: 'application/vnd.card+source',
-          },
-        });
-      } catch (err: unknown) {
-        clearInterval(this.interval);
-        throw err;
-      }
-      if (!response.ok) {
-        clearInterval(this.interval);
-        console.error(
-          `Could not get file ${this.url}, status ${response.status}: ${
-            response.statusText
-          } - ${await response.text()}`
-        );
-        return;
-      }
-      let lastModified = response.headers.get('Last-Modified') || undefined;
-      if (this.lastModified === lastModified) {
-        return;
-      }
-      this.lastModified = lastModified;
-      this.content = await response.text();
-      this.state = 'ready';
-    } else {
-      this.content = undefined;
-      this.state = 'not-ready';
+    let response: Response | undefined;
+    try {
+      response = await fetch(this.url, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      });
+    } catch (err: unknown) {
+      clearInterval(this.interval);
+      throw err;
     }
+    if (!response.ok) {
+      clearInterval(this.interval);
+      console.error(
+        `Could not get file ${this.url}, status ${response.status}: ${
+          response.statusText
+        } - ${await response.text()}`
+      );
+      if (response.status === 404) {
+        this.state = 'not-found';
+      }
+      return;
+    }
+    let lastModified = response.headers.get('Last-Modified') || undefined;
+    if (this.lastModified === lastModified) {
+      return;
+    }
+    this.lastModified = lastModified;
+    this.content = await response.text();
+    this.state = 'ready';
   }
 
   async write(content: string) {
     taskFor(this.doWrite).perform(content);
   }
 
-  @restartableTask private async doWrite(this: _FileResource, content: string) {
-    if (!this._url) {
-      throw new Error(`cannot write file because we ahve no URL`);
-    }
-
-    let response = await fetch(this._url, {
+  @restartableTask private async doWrite(content: string) {
+    let response = await fetch(this.url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -141,7 +131,7 @@ class _FileResource extends Resource<Args> {
 
 export function file(
   parent: object,
-  url: () => string | undefined,
+  url: () => string,
   content: () => string | undefined,
   lastModified: () => string | undefined
 ): FileResource {
