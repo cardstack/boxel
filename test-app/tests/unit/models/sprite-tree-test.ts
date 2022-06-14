@@ -510,4 +510,119 @@ module('Unit | Models | SpriteTree', function (hooks) {
       });
     }
   );
+
+  test('it can ensure that nodes have the correct hierarchy', async function (assert) {
+    let divs = {
+      parentContext: document.createElement('div'),
+      childContext: document.createElement('div'),
+      grandchildSprite: document.createElement('div'),
+      childSprite: document.createElement('div'),
+      grandchildContext: document.createElement('div'),
+    };
+
+    let parentContext = new MockAnimationContext(
+      null,
+      'parent-context',
+      divs.parentContext
+    );
+    let childContext = new MockAnimationContext(
+      divs.parentContext,
+      'child-context',
+      divs.childContext
+    );
+    let childSprite = new MockSpriteModifier(
+      divs.parentContext,
+      'child-sprite',
+      divs.childSprite
+    );
+    let grandchildSprite = new MockSpriteModifier(
+      divs.childContext,
+      'grandchild-sprite',
+      divs.grandchildSprite
+    );
+    let grandchildContext = new MockAnimationContext(
+      divs.childSprite,
+      'grandchild-context',
+      divs.grandchildContext
+    );
+
+    assert.equal(subject._pendingAdditions.length, 0);
+
+    // insert out of order
+    subject.addPendingAnimationContext(grandchildContext);
+    subject.addPendingSpriteModifier(childSprite);
+    subject.addPendingAnimationContext(parentContext);
+
+    assert.equal(subject._pendingAdditions.length, 3);
+
+    subject.flushPendingAdditions();
+
+    assert.equal(subject._pendingAdditions.length, 0);
+
+    let rootNodes = [...subject.rootNodes];
+    assert.equal(rootNodes.length, 1);
+
+    let rootNode = rootNodes[0]!;
+    assert.ok(
+      rootNode.isContext &&
+        !rootNode.isSprite &&
+        (rootNode.contextModel as MockAnimationContext).id === 'parent-context',
+      'The root node is the parent context'
+    );
+
+    let children = [...rootNode.children];
+    assert.equal(children.length, 1);
+    let child = children[0]!;
+    assert.ok(
+      child.isSprite &&
+        !child.isContext &&
+        (child.spriteModel as MockSpriteModifier).id === 'child-sprite',
+      'The child node is correct'
+    );
+
+    let grandchildren = [...child.children];
+    assert.equal(grandchildren.length, 1);
+    let grandchild = grandchildren[0]!;
+
+    assert.ok(
+      grandchild.isContext &&
+        !grandchild.isSprite &&
+        (grandchild.contextModel as MockAnimationContext).id ===
+          'grandchild-context',
+      'The grandchild is correct'
+    );
+
+    // insert in order
+    subject.addPendingAnimationContext(childContext);
+    subject.addPendingSpriteModifier(grandchildSprite);
+
+    subject.flushPendingAdditions();
+
+    assert.equal(rootNode.children.size, 2);
+
+    children = [...rootNode.children];
+
+    child = children[0]!;
+    assert.ok(
+      child.isSprite &&
+        !child.isContext &&
+        (child.spriteModel as MockSpriteModifier).id === 'child-sprite',
+      'The child node is correct'
+    );
+    child = children[1]!;
+    assert.ok(
+      child.isContext &&
+        !child.isSprite &&
+        (child.contextModel as MockAnimationContext).id === 'child-context',
+      'The child node is correct'
+    );
+    grandchild = [...children[1]!.children][0]!;
+    assert.ok(
+      grandchild.isSprite &&
+        !grandchild.isContext &&
+        (grandchild.spriteModel as MockAnimationContext).id ===
+          'grandchild-sprite',
+      'The grandchild is correct'
+    );
+  });
 });
