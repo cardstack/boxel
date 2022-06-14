@@ -140,12 +140,20 @@ export default class SpriteTree {
   }
 
   flushPendingAdditions() {
-    this._pendingAdditions.sort((a, b) =>
-      a.item.element.compareDocumentPosition(b.item.element) &
-      Node.DOCUMENT_POSITION_FOLLOWING
-        ? -1
-        : 1
-    );
+    // sort by document position because parents must always be added before children
+    this._pendingAdditions.sort((a, b) => {
+      let bitmask = a.item.element.compareDocumentPosition(b.item.element);
+
+      assert(
+        'Document position is not implementation-specific or disconnected',
+        !(
+          bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
+          bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
+        )
+      );
+
+      return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
 
     for (let { item, type } of this._pendingAdditions) {
       if (type === 'CONTEXT') {
