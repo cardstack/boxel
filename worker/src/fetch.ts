@@ -74,34 +74,35 @@ export class FetchHandler {
   }
 
   /*
-    http://local-realm/
 
-    http://local-realm/sources/path/to/file.gts -> file contents
-    http://local-realm/sources/path/to/file -> 304 to file.gts
-    http://local-realm/sources/path/to/ -> json directory listing
+    If we have `Accept: application/vnd.api+json`
 
-    http://local-realm/cards/path/to/source-module ->
-     - unless source-module literally exists
-       - try matching source-module + ['.gts', '.gjs', '.ts', '.js']
-       (this is only because typescript is forcing our hand)
-     - if file matches an executable exention, do the JS handling stuff
-     - else do the asset serving
+      If request ends in slash, we're serving a JSON directory listing. It will
+      be an error if we don't find a matching directory.
 
-    http://local-realm/cards/path/to/some-json-data.json
-     - means a json asset, with no special processing
+      Else this is a card data request. It will be an error if we don't find a
+      matching json file. (The .json extension is assumed, not explicit in the
+      request url)
 
-    http://local-realm/cards/path/to/some-json-data
-    with Accept: application/vnd.api+json.
-      - means a card's data
- 
-    http://local-realm/cards/path/to/some-image.png
-     - matches no specific extension, so is just an asset with no special handling
-     - this is the same as the "json asset" example above
+    Else if `Accept: application/vnd.card+source`
 
+      If file exists, serve it with no preprocessing. This is for source inspection & editing.
 
-    Additional Notes:
-    - we can consume npm packages from skypack. use pinned URL's to lock package deps.
-      the convention can be to use reexports to manage package versions (that are pinned)
+      Else keep appending extensions to look for  match: gts, gjs, ts, js
+        if found, serve a 302
+        else serve a 404
+
+    Else
+
+      Locate a file, by first trying the exact URL and then appending extensions
+
+      if a file is found
+
+        if it ends in an executable extension, apply the JS preprocessing rules
+
+      serve the file
+    
+
   */
 
   private async handleLocalRealm(
