@@ -44,7 +44,7 @@ export default class Go extends Component<Signature> {
             <ImportModule @url={{localRealmURL this.openFile.path}}>
               <:ready as |module|>
                 <SchemaInspector
-                  @path={{localRealmURL this.openFile.path}}
+                  @url={{localRealmURL this.openFile.path}}
                   @module={{module}}
                   @src={{this.openFile.content}}
                   @inspector={{this.inspector}}
