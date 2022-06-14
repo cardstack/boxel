@@ -13,6 +13,7 @@ import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properti
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 import { traverse } from '@cardstack/runtime-common';
+import { formatRFC7231 } from 'date-fns';
 
 const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 
@@ -106,9 +107,31 @@ export class FetchHandler {
   */
 
   private async handleLocalRealm(
-    _request: Request,
+    request: Request,
     url: URL
   ): Promise<Response> {
+    if (request.headers.get('Accept')?.includes('application/vnd.api+json')) {
+      throw new Error('unimplemented');
+    } else if (
+      request.headers.get('Accept')?.includes('application/vnd.card+source')
+    ) {
+      let handle = await this.getLocalFileWithFallbacks(
+        url.pathname.slice(1),
+        executableExtensions
+      );
+      let pathSegments = url.pathname.split('/');
+      let requestedName = pathSegments.pop()!;
+      if (handle.name !== requestedName) {
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: [...pathSegments, handle.name].join('/'),
+          },
+        });
+      }
+      return await this.serveLocalFile(handle);
+    }
+
     let handle = await this.getLocalFileWithFallbacks(
       url.pathname.slice(1),
       executableExtensions
@@ -169,7 +192,13 @@ export class FetchHandler {
   private async serveLocalFile(
     handle: FileSystemFileHandle
   ): Promise<Response> {
-    return new Response(await handle.getFile());
+    let file = await handle.getFile();
+    let lastModified = formatRFC7231(file.lastModified);
+    return new Response(file, {
+      headers: {
+        'Last-Modified': lastModified,
+      },
+    });
   }
 
   // we bother with this because typescript is picky about allowing you to use

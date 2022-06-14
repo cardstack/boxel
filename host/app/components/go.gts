@@ -154,7 +154,7 @@ function isRunnable(filename: string): boolean {
 }
 
 function localRealmURL(path: string): string {
-  return `http://local-realm/${path}`;
+  return `http://local-realm${path}`;
 }
 
 function relativeFrom(url: string, base: string): string {

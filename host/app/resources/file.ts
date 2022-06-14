@@ -3,12 +3,12 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
-import { traverse } from '@cardstack/runtime-common';
 
 interface Args {
   named: {
-    path: string | undefined;
-    handle: FileSystemDirectoryHandle | undefined;
+    url: string | undefined;
+    content: string | undefined;
+    lastModified: string | undefined;
   };
 }
 
@@ -32,67 +32,71 @@ export type FileResource =
     };
 
 class _FileResource extends Resource<Args> {
-  private handle: FileSystemFileHandle | undefined;
-  private lastModified: number | undefined;
   private interval: ReturnType<typeof setInterval>;
-  private _path: string | undefined;
+  private _url: string | undefined;
+  private lastModified: string | undefined;
   @tracked content: string | undefined;
   @tracked state = 'not-ready';
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    taskFor(this.read).perform(args.named.path, args.named.handle);
-    this.interval = setInterval(
-      () => taskFor(this.read).perform(args.named.path, args.named.handle),
-      1000
-    );
+    this._url = args.named.url;
+    if (args.named.content !== undefined) {
+      this.state = 'ready';
+      this.content = args.named.content;
+      this.lastModified = args.named.lastModified;
+    } else {
+      // get the initial content if we haven't already been seeded with initial content
+      taskFor(this.read).perform();
+    }
+    this.interval = setInterval(() => taskFor(this.read).perform(), 1000);
     registerDestructor(this, () => clearInterval(this.interval));
   }
 
+  get url() {
+    return this._url;
+  }
+
   get path() {
-    return this._path;
+    return this._url ? new URL(this._url).pathname : undefined;
   }
 
   get name() {
-    return this.handle?.name;
+    return this.path ? this.path.split('/').pop()! : undefined;
   }
 
   get loading() {
     return taskFor(this.read).last;
   }
 
-  @restartableTask private async read(
-    path: string | undefined,
-    dirHandle: FileSystemDirectoryHandle | undefined
-  ) {
-    if (path && dirHandle) {
-      this._path = path;
-      let handle: FileSystemFileHandle | undefined;
+  @restartableTask private async read() {
+    if (this.url) {
+      let response: Response | undefined;
       try {
-        let { handle: subdir, filename } = await traverse(dirHandle, path);
-        handle = await subdir.getFileHandle(filename);
+        response = await fetch(this.url, {
+          headers: {
+            Accept: 'application/vnd.card+source',
+          },
+        });
       } catch (err: unknown) {
         clearInterval(this.interval);
-        if ((err as DOMException).name !== 'NotFoundError') {
-          throw err;
-        }
-        console.log(`can't find file ${path} from the local realm`);
-        this.state = 'not-found';
+        throw err;
+      }
+      if (!response.ok) {
+        clearInterval(this.interval);
+        console.error(
+          `Could not get file ${this.url}, status ${response.status}: ${
+            response.statusText
+          } - ${await response.text()}`
+        );
         return;
       }
-
-      this.handle = handle;
-      let file = await this.handle.getFile();
-      if (file.lastModified === this.lastModified) {
+      let lastModified = response.headers.get('Last-Modified') || undefined;
+      if (this.lastModified === lastModified) {
         return;
       }
-      this.lastModified = file.lastModified;
-      let reader = new FileReader();
-      this.content = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsText(file);
-      });
+      this.lastModified = lastModified;
+      this.content = await response.text();
       this.state = 'ready';
     } else {
       this.content = undefined;
@@ -104,23 +108,19 @@ class _FileResource extends Resource<Args> {
     taskFor(this.doWrite).perform(content);
   }
 
-  @restartableTask private async doWrite(content: string) {
-    if (!this.handle) {
-      throw new Error(`can't write to not ready FileResource`);
-    }
-    // TypeScript seems to lack types for the writable stream features
-    let stream = await (this.handle as any).createWritable();
-    await stream.write(content);
-    await stream.close();
+  @restartableTask private async doWrite(_content: string) {
+    throw new Error('unimplemented');
+    // TODO need to support POST on our API.
   }
 }
 
 export function file(
   parent: object,
-  path: () => string | undefined,
-  handle: () => FileSystemDirectoryHandle | undefined
+  url: () => string | undefined,
+  content: () => string | undefined,
+  lastModified: () => string | undefined
 ): FileResource {
   return useResource(parent, _FileResource, () => ({
-    named: { path: path(), handle: handle() },
+    named: { url: url(), content: content(), lastModified: lastModified() },
   })) as FileResource;
 }
