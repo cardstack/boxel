@@ -34,11 +34,13 @@ export const externalsMap = new Map([
   ["runtime-spike/lib/integer", ["default"]],
 ]);
 
-export async function traverse(dirHandle, path) {
+// TODO move this into the worker as soon as the host stops interacting with file handles
+export async function traverse(dirHandle, path, opts) {
   let pathSegments = path.split("/");
+  let create = opts?.create;
   async function nextHandle(handle, pathSegment) {
     try {
-      return await handle.getDirectoryHandle(pathSegment);
+      return await handle.getDirectoryHandle(pathSegment, { create });
     } catch (err) {
       if (err.name === "NotFoundError") {
         console.error(`${path} was not found in the local realm`);

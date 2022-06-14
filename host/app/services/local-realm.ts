@@ -121,6 +121,14 @@ export default class LocalRealm extends Service {
 
   @restartableTask private async openDirectory() {
     let handle = await showDirectoryPicker();
+
+    // write a sacrificial file in order to prompt the browser to ask the user
+    // for permission to write files
+    let file = await handle.getFileHandle('.tmp', { create: true });
+    let stream = await (file as any).createWritable();
+    await stream.write('');
+    await stream.close();
+
     if (this.state.type !== 'empty') {
       throw new Error(
         `tried to chooseDirectory when we already have a local realm`

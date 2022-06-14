@@ -110,6 +110,19 @@ export class FetchHandler {
     request: Request,
     url: URL
   ): Promise<Response> {
+    if (request.method === 'POST') {
+      let lastModified = await this.write(
+        new URL(request.url).pathname.slice(1),
+        await request.text()
+      );
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Last-Modified': formatRFC7231(lastModified),
+        },
+      });
+    }
+
     if (request.headers.get('Accept')?.includes('application/vnd.api+json')) {
       throw new Error('unimplemented');
     } else if (
@@ -193,12 +206,33 @@ export class FetchHandler {
     handle: FileSystemFileHandle
   ): Promise<Response> {
     let file = await handle.getFile();
-    let lastModified = formatRFC7231(file.lastModified);
     return new Response(file, {
       headers: {
-        'Last-Modified': lastModified,
+        'Last-Modified': formatRFC7231(file.lastModified),
       },
     });
+  }
+
+  private async write(path: string, contents: string): Promise<number> {
+    if (!this.messageHandler.fs) {
+      throw WorkerError.withResponse(
+        new Response('no local realm is available', {
+          status: 404,
+          headers: { 'content-type': 'text/html' },
+        })
+      );
+    }
+    let { handle: dirHandle, filename } = await traverse(
+      this.messageHandler.fs,
+      path,
+      { create: true }
+    );
+    let handle = await dirHandle.getFileHandle(filename, { create: true });
+    // TypeScript seems to lack types for the writable stream features
+    let stream = await (handle as any).createWritable();
+    await stream.write(contents);
+    await stream.close();
+    return (await handle.getFile()).lastModified;
   }
 
   // we bother with this because typescript is picky about allowing you to use

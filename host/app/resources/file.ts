@@ -15,7 +15,6 @@ interface Args {
 export type FileResource =
   | {
       state: 'not-ready';
-      loading: TaskInstance<void> | null;
     }
   | {
       state: 'not-found';
@@ -108,9 +107,35 @@ class _FileResource extends Resource<Args> {
     taskFor(this.doWrite).perform(content);
   }
 
-  @restartableTask private async doWrite(_content: string) {
-    throw new Error('unimplemented');
-    // TODO need to support POST on our API.
+  @restartableTask private async doWrite(this: _FileResource, content: string) {
+    if (!this._url) {
+      throw new Error(`cannot write file because we ahve no URL`);
+    }
+
+    let response = await fetch(this._url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+      body: content,
+    });
+    if (!response.ok) {
+      console.error(
+        `Could not write file ${this.url}, status ${response.status}: ${
+          response.statusText
+        } - ${await response.text()}`
+      );
+      return;
+    }
+    if (this.state === 'not-found') {
+      // TODO think about the "unauthorized" scenario
+      throw new Error(
+        'this should be impossible--we are creating the specified path'
+      );
+    }
+
+    this.content = content;
+    this.lastModified = response.headers.get('Last-Modified') || undefined;
   }
 }
 
