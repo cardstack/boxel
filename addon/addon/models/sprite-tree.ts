@@ -1,5 +1,5 @@
 import { assert } from '@ember/debug';
-import { formatTreeString } from './format-tree';
+import { formatTreeString } from '../utils/format-tree';
 export interface ContextModel {
   element: Element;
 }
