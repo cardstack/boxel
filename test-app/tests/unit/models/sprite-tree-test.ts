@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import SpriteTree, {
   ContextModel,
   SpriteModel,
@@ -510,4 +511,167 @@ module('Unit | Models | SpriteTree', function (hooks) {
       });
     }
   );
+
+  module('insertion follows dom hierarchy', function (hooks) {
+    let models = {} as {
+      parentContext: MockAnimationContext;
+      childContext: MockAnimationContext;
+      childSprite: MockSpriteModifier;
+      grandchildSprite: MockSpriteModifier;
+      grandchildContext: MockAnimationContext;
+    };
+    let divs = {} as {
+      parentContext: HTMLElement;
+      childContext: HTMLElement;
+      grandchildSprite: HTMLElement;
+      childSprite: HTMLElement;
+      grandchildContext: HTMLElement;
+    };
+
+    hooks.beforeEach(function () {
+      divs = {
+        parentContext: document.createElement('div'),
+        childContext: document.createElement('div'),
+        grandchildSprite: document.createElement('div'),
+        childSprite: document.createElement('div'),
+        grandchildContext: document.createElement('div'),
+      };
+
+      models.parentContext = new MockAnimationContext(
+        null,
+        'parent-context',
+        divs.parentContext
+      );
+      models.childContext = new MockAnimationContext(
+        divs.parentContext,
+        'child-context',
+        divs.childContext
+      );
+      models.childSprite = new MockSpriteModifier(
+        divs.parentContext,
+        'child-sprite',
+        divs.childSprite
+      );
+      models.grandchildSprite = new MockSpriteModifier(
+        divs.childContext,
+        'grandchild-sprite',
+        divs.grandchildSprite
+      );
+      models.grandchildContext = new MockAnimationContext(
+        divs.childSprite,
+        'grandchild-context',
+        divs.grandchildContext
+      );
+    });
+
+    test('it holds inserted nodes in an array to be sorted prior to insertion', async function (assert) {
+      assert.equal(subject._pendingAdditions.length, 0);
+
+      subject.addPendingAnimationContext(models.grandchildContext);
+      subject.addPendingSpriteModifier(models.childSprite);
+      subject.addPendingAnimationContext(models.parentContext);
+
+      assert.equal(subject._pendingAdditions.length, 3);
+
+      subject.flushPendingAdditions();
+
+      assert.equal(subject._pendingAdditions.length, 0);
+    });
+
+    test('it can ensure that nodes have the correct hierarchy', async function (assert) {
+      // insert out of order
+
+      subject.addPendingAnimationContext(models.grandchildContext);
+      subject.addPendingSpriteModifier(models.childSprite);
+      subject.addPendingAnimationContext(models.parentContext);
+      subject.flushPendingAdditions();
+
+      let rootNodes = [...subject.rootNodes];
+      assert.equal(rootNodes.length, 1);
+
+      let rootNode = rootNodes[0]!;
+      assert.ok(
+        rootNode.isContext &&
+          !rootNode.isSprite &&
+          (rootNode.contextModel as MockAnimationContext).id ===
+            'parent-context',
+        'The root node is the parent context'
+      );
+      assert.equal(rootNode.children.size, 1);
+
+      let children = [...rootNode.children];
+
+      let childSpriteNode = children.find(
+        (v) => (v.spriteModel as MockSpriteModifier)?.id === 'child-sprite'
+      )!;
+      assert.ok(!childSpriteNode.isContext, 'The child sprite node is correct');
+      assert.equal(childSpriteNode.children.size, 1);
+      let grandchildContextNode = [...childSpriteNode.children][0]!;
+      assert.ok(
+        grandchildContextNode.isContext &&
+          !grandchildContextNode.isSprite &&
+          (grandchildContextNode.contextModel as MockAnimationContext).id ===
+            'grandchild-context',
+        'The grandchild context node is correct'
+      );
+    });
+
+    test('inserting a second time still keeps the correct node hierarchy', async function (assert) {
+      subject.addPendingAnimationContext(models.grandchildContext);
+      subject.addPendingSpriteModifier(models.childSprite);
+      subject.addPendingAnimationContext(models.parentContext);
+      subject.flushPendingAdditions();
+
+      // insert in order
+      subject.addPendingAnimationContext(models.childContext);
+      subject.addPendingSpriteModifier(models.grandchildSprite);
+      subject.flushPendingAdditions();
+
+      let rootNodes = [...subject.rootNodes];
+      assert.equal(rootNodes.length, 1);
+
+      let rootNode = rootNodes[0]!;
+      assert.ok(
+        rootNode.isContext &&
+          !rootNode.isSprite &&
+          (rootNode.contextModel as MockAnimationContext).id ===
+            'parent-context',
+        'The root node is the parent context'
+      );
+      assert.equal(rootNode.children.size, 2);
+
+      let children = [...rootNode.children];
+
+      let childSpriteNode = children.find(
+        (v) => (v.spriteModel as MockSpriteModifier)?.id === 'child-sprite'
+      )!;
+      assert.ok(!childSpriteNode.isContext, 'The child sprite node is correct');
+      assert.equal(childSpriteNode.children.size, 1);
+      let grandchildContextNode = [...childSpriteNode.children][0]!;
+      assert.ok(
+        grandchildContextNode.isContext &&
+          !grandchildContextNode.isSprite &&
+          (grandchildContextNode.contextModel as MockAnimationContext).id ===
+            'grandchild-context',
+        'The grandchild context node is correct'
+      );
+
+      let childContextNode = children.find(
+        (v) => (v.contextModel as MockAnimationContext)?.id === 'child-context'
+      )!;
+      assert.ok(
+        !childContextNode.isSprite,
+        'The child context node is correct'
+      );
+      assert.equal(childContextNode.children.size, 1);
+      let grandchildSpriteNode = [...childContextNode.children][0]!;
+      assert.ok(
+        grandchildSpriteNode.isSprite &&
+          !grandchildSpriteNode.isContext &&
+          (grandchildSpriteNode.spriteModel as MockAnimationContext).id ===
+            'grandchild-sprite',
+        'The grandchild sprite node is correct'
+      );
+    });
+  });
 });
