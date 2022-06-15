@@ -86,8 +86,8 @@ export class SpriteTreeNode {
       children = new Set([...children, ...this.freshlyRemovedChildren]);
     }
     for (let childNode of children) {
-      if (!opts.filter(childNode)) continue;
       result.push(childNode);
+      if (!opts.filter(childNode)) continue;
       result = result.concat(childNode.getDescendantNodes(opts));
     }
     return result;
