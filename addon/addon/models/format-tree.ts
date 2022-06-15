@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 // vendored from https://github.com/luvies/format-tree/ because I can't get install to work... Deno??
-function stringLength(str: string){
+function stringLength(str: string) {
   return str.length;
 }
 
@@ -86,7 +87,10 @@ export interface TreeNode {
  * @param options The options to pass to the formatter.
  * @returns The formatted string.
  */
-export function formatTreeString(tree: TreeNode | TreeNode[], options?: Options): string {
+export function formatTreeString(
+  tree: TreeNode | TreeNode[],
+  options?: Options
+): string {
   return formatTree(tree, options).join('\n');
 }
 
@@ -97,21 +101,24 @@ export function formatTreeString(tree: TreeNode | TreeNode[], options?: Options)
  * @param options The options to pass to the formatter.
  * @returns The formatted lines.
  */
-export function formatTree(tree: TreeNode | TreeNode[], options: Options = {}): string[] {
-  const toBuild: Array<{ line: string, extra?: string }> = [];
+export function formatTree(
+  tree: TreeNode | TreeNode[],
+  options: Options = {}
+): string[] {
+  let toBuild: Array<{ line: string; extra?: string }> = [];
   let shouldFirstCap = true;
-  const inset = options.inset || 0;
+  let inset = options.inset || 0;
 
   // process nodes function
-  const processNodes = (nodes: TreeNode[], prefix: string) => {
+  let processNodes = (nodes: TreeNode[], prefix: string) => {
     for (let i = 0; i < nodes.length; i++) {
       // shorthands
-      const node = nodes[i];
+      let node = nodes[i];
 
       // set up guide for current node
       let guide: string;
-      const last = i === nodes.length - 1;
-      const hasChildren = node.children && node.children.length;
+      let last = i === nodes.length - 1;
+      let hasChildren = node.children && node.children.length;
       if (shouldFirstCap) {
         if (last) {
           guide = '─';
@@ -146,19 +153,17 @@ export function formatTree(tree: TreeNode | TreeNode[], options: Options = {}): 
       // build current line
       toBuild.push({
         line: prefix + guide + node.text,
-        extra: node.extra
+        extra: node.extra,
       });
 
       // build children
       if (hasChildren) {
-        let nprefix = prefix + (last ? ' ' : '│') + ' ' + (inset === 1 ? ' ' : '');
+        let nprefix =
+          prefix + (last ? ' ' : '│') + ' ' + (inset === 1 ? ' ' : '');
         if (options.guideFormat) {
           nprefix = options.guideFormat(nprefix);
         }
-        processNodes(
-          node.children!,
-          nprefix
-        );
+        processNodes(node.children!, nprefix);
       }
     }
   };
@@ -170,7 +175,7 @@ export function formatTree(tree: TreeNode | TreeNode[], options: Options = {}): 
   } else {
     toBuild.push({
       line: tree.text,
-      extra: tree.extra
+      extra: tree.extra,
     });
     tr = tree.children;
     shouldFirstCap = false;
@@ -181,17 +186,20 @@ export function formatTree(tree: TreeNode | TreeNode[], options: Options = {}): 
 
   // get the longest name so we can format the extra text occordingly
   let maxLen = 0;
-  for (const item of toBuild) {
+  for (let item of toBuild) {
     maxLen = Math.max(maxLen, stringLength(item.line));
   }
 
   // add extra text and build full output
-  const output: string[] = [];
-  const extraSplit = typeof options.extraSplit === 'undefined' ? ' | ' : options.extraSplit;
-  for (const item of toBuild) {
+  let output: string[] = [];
+  let extraSplit =
+    typeof options.extraSplit === 'undefined' ? ' | ' : options.extraSplit;
+  for (let item of toBuild) {
     let line = item.line;
     if (item.extra) {
-      line += ' '.repeat(maxLen - stringLength(item.line)) + `${extraSplit}${item.extra}`;
+      line +=
+        ' '.repeat(maxLen - stringLength(item.line)) +
+        `${extraSplit}${item.extra}`;
     }
     output.push(line);
   }
