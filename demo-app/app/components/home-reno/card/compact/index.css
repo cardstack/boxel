@@ -5,13 +5,16 @@
 .home-reno-card.small {
   width: 90%;
   height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 24px 12px;
 }
 
 .home-reno-card.medium {
   width: 100%;
   height: 200px;
   position: relative;
-  padding: 24px 12px;
+  padding: 24px calc(5% + 6px);
 }
 
 .home-reno-card.placeholder {
