@@ -165,7 +165,7 @@ function externalCardName(ref: ExternalReference): string {
 function getCardPath(ref: ExternalReference, currentPath: string): string | undefined {
   if ((ref.module.startsWith('.') || ref.module.startsWith('/')) && !ref.module.startsWith('//')) {
     let url = new URL(ref.module, currentPath);
-    return url.pathname.slice(1);
+    return url.pathname;
   }
   return undefined;
 }

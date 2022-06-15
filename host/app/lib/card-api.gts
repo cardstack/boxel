@@ -4,10 +4,10 @@ import { NotReady, isNotReadyError} from './not-ready';
 import flatMap from 'lodash/flatMap';
 import startCase from 'lodash/startCase';
 import { TrackedWeakMap } from 'tracked-built-ins';
-import * as JSON from 'json-typescript';
 import { registerDestructor } from '@ember/destroyable';
 import ContainsManyEditor from '../components/contains-many';
 import { WatchedArray } from './watched-array';
+import type { ResourceObject } from '@cardstack/runtime-common';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -25,13 +25,6 @@ type FieldsTypeFor<T extends Card> = {
 
 type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
 
-interface ResourceObject {
-  // id: string; // TODO
-  type: string;
-  attributes?: JSON.Object;
-  relationships?: JSON.Object;
-  meta?: JSON.Object;
-}
 
 export type Format = 'isolated' | 'embedded' | 'edit';
 

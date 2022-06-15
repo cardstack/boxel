@@ -26,7 +26,7 @@ export default class Application extends Route<Model> {
         return { path, openFile };
       }
 
-      let url = `http://local-realm/${path}`;
+      let url = `http://local-realm${path}`;
       let response = await fetch(url, {
         headers: {
           Accept: path.endsWith('.json')
@@ -46,7 +46,7 @@ export default class Application extends Route<Model> {
       }
       if (response.url !== url) {
         this.router.transitionTo('application', {
-          queryParams: { path: new URL(response.url).pathname.slice(1) },
+          queryParams: { path: new URL(response.url).pathname },
         });
       } else {
         let contents = await response.text();

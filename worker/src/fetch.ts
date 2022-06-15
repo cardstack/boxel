@@ -14,7 +14,8 @@ import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properti
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 import { traverse } from '@cardstack/runtime-common';
 import { formatRFC7231 } from 'date-fns';
-import { isCardJSON } from '@cardstack/runtime-common';
+import { isCardJSON, ResourceObjectWithId } from '@cardstack/runtime-common';
+import ignore from 'ignore';
 
 const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 
@@ -160,7 +161,23 @@ export class FetchHandler {
   }
 
   private async handleJSONAPI(url: URL): Promise<Response> {
-    // handle directories
+    if (url.pathname.endsWith('/')) {
+      let jsonapi = await this.getDirectoryListing(url);
+      if (!jsonapi) {
+        new Response(
+          JSON.stringify({ errors: [`Could not find directory ${url.href}`] }),
+          {
+            status: 404,
+            headers: { 'content-type': 'application/vnd.api+json' },
+          }
+        );
+      }
+
+      return new Response(JSON.stringify(jsonapi, null, 2), {
+        headers: { 'content-type': 'application/vnd.api+json' },
+      });
+    }
+
     let handle = await this.getLocalFile(url.pathname.slice(1));
     if (handle.name.endsWith('.json')) {
       let file = await handle.getFile();
@@ -185,6 +202,142 @@ export class FetchHandler {
 
     // otherwise, just serve the asset
     return await this.serveLocalFile(handle);
+  }
+
+  /*
+    Directory listing is a JSON-API document that looks like:
+
+    with this file system
+
+    /
+    /cards
+    /cards/file1.ts
+    /cards/file2.ts
+    /cards/nested/
+    /cards/nested-file1.json
+    /cards/nested-file2.json
+
+    if you request http://local-realm/, then this is the response:
+
+    {
+      data: {
+        type: "directory",
+        id: "http://local-realm/",
+        relationships: {
+          listing: [
+            { data: { type: "directory", id: "http://local-realm/cards/"} },
+            { data: { type: "file", id: "http://local-realm/file1.ts"} },
+            { data: { type: "file", id: "http://local-realm/file2.ts"} },
+          ]
+        }
+
+      },
+      included: [
+        {
+          id: "http://local-realm/cards/",
+          type: "directory",
+          relationships: {
+            listing: [
+              { data: { type: "directory", id: "http://local-realm/cards/nested/"} },
+              { data: { type: "file", id: "http://local-realm/cards/nested-file1.json"} },
+              { data: { type: "file", id: "http://local-realm/cards/nested-file2.json"} },
+            ]
+          }
+        },
+        { id: "http://local-realm/cards/file1.ts", type: "file" },
+        { id: "http://local-realm/cards/file2.ts", type: "file" },
+        {
+          id: "http://local-realm/cards/nested/",
+          type: "directory",
+          relationships: {
+            listing: []
+          }
+        },
+        { id: "http://local-realm/cards/nested-file1.json", type: "file" },
+        { id: "http://local-realm/cards/nested-file2.json", type: "file" },
+      ]
+    }
+  */
+
+  private async getDirectoryListing(
+    url: URL
+  ): Promise<
+    { data: ResourceObjectWithId; included: ResourceObjectWithId[] } | undefined
+  > {
+    if (!this.messageHandler.fs) {
+      throw WorkerError.withResponse(
+        new Response('no local realm is available', {
+          status: 404,
+          headers: { 'content-type': 'text/html' },
+        })
+      );
+    }
+    let path = url.pathname;
+
+    let dirHandle: FileSystemDirectoryHandle;
+    if (path === '/') {
+      dirHandle = this.messageHandler.fs;
+    } else {
+      try {
+        let { handle, filename: dirname } = await traverse(
+          this.messageHandler.fs,
+          path.slice(1)
+        );
+        // we assume that the final handle is a directory because we asked for a
+        // path that ended in a '/'
+        dirHandle = await handle.getDirectoryHandle(dirname);
+      } catch (err: unknown) {
+        if ((err as DOMException).name !== 'NotFoundError') {
+          throw err;
+        }
+        console.log(`can't find file ${path} from the local realm`);
+        return undefined;
+      }
+    }
+    let ignoreFile = await getIgnorePatterns(dirHandle);
+    let entries = await getDirectoryEntries(dirHandle, ignoreFile);
+    let included: ResourceObjectWithId[] = [];
+
+    let data: ResourceObjectWithId = {
+      id: url.href,
+      type: 'directory',
+      relationships: {
+        listing: [],
+      },
+    };
+
+    // Note that the entries are sorted such that the parent directory always
+    // appears before the children
+    for (let entry of entries) {
+      let resource: ResourceObjectWithId = {
+        type: entry.handle.kind,
+        id: new URL(entry.path, url.href).href,
+      };
+      if (entry.handle.kind === 'directory') {
+        resource.relationships = {
+          listing: [],
+        };
+      }
+      included.push(resource);
+      let parentId =
+        resource.id.replace(/\/$/, '').split('/').slice(0, -1).join('/') + '/';
+      if (data.id === parentId) {
+        (data.relationships!.listing as any[]).push({
+          data: { id: resource.id, type: resource.type },
+        });
+      } else {
+        let parentResource = included.find(
+          (p) => p.id === parentId && p.type === 'directory'
+        );
+        if (parentResource) {
+          (parentResource.relationships!.listing as any[]).push({
+            data: { id: resource.id, type: resource.type },
+          });
+        }
+      }
+    }
+
+    return { data, included };
   }
 
   private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
@@ -337,4 +490,74 @@ async function getContents(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsText(file);
   });
+}
+
+interface Entry {
+  name: string;
+  handle: FileSystemDirectoryHandle | FileSystemFileHandle;
+  path: string;
+  indent: number;
+}
+
+async function getDirectoryEntries(
+  directoryHandle: FileSystemDirectoryHandle,
+  ignoreFile = '',
+  dir: string[] = []
+): Promise<Entry[]> {
+  let entries: Entry[] = [];
+  for await (let [name, handle] of directoryHandle as any as AsyncIterable<
+    [string, FileSystemDirectoryHandle | FileSystemFileHandle]
+  >) {
+    if (
+      handle.kind === 'directory' &&
+      filterIgnored([`${name}/`], ignoreFile).length === 0
+    ) {
+      // without this, trying to open large root dirs causes the browser to hang
+      continue;
+    }
+    let path = ['', ...dir, name].join('/');
+    entries.push({
+      name,
+      handle,
+      path: handle.kind === 'directory' ? `${path}/` : path,
+      indent: dir.length,
+    });
+
+    // TODO currently this is getting directory listings recursively , but
+    // probably we should use a query param to indicate that we want a recursive
+    // directory listing
+    if (handle.kind === 'directory') {
+      entries.push(
+        ...(await getDirectoryEntries(handle, ignoreFile, [...dir, name]))
+      );
+    }
+  }
+  let filteredEntries = filterIgnoredEntries(entries, ignoreFile);
+  return filteredEntries.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+async function getIgnorePatterns(fileDir: FileSystemDirectoryHandle) {
+  let fileHandle;
+  try {
+    fileHandle = await fileDir.getFileHandle('.monacoignore');
+  } catch (e) {
+    try {
+      fileHandle = await fileDir.getFileHandle('.gitignore');
+    } catch (e) {
+      return '';
+    }
+  }
+  return await readFileAsText(fileHandle);
+}
+
+function filterIgnoredEntries(entries: Entry[], patterns: string): Entry[] {
+  let filteredPaths = filterIgnored(
+    entries.map((e) => e.path.slice(1)),
+    patterns
+  );
+  return entries.filter((entry) => filteredPaths.includes(entry.path.slice(1)));
+}
+
+function filterIgnored(paths: string[], patterns: string): string[] {
+  return ignore().add(patterns).filter(paths);
 }

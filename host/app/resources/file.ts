@@ -1,6 +1,6 @@
-import { Resource, TaskInstance, useResource } from 'ember-resources';
+import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 

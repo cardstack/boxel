@@ -1,110 +1,87 @@
 import { Resource, useResource } from 'ember-resources';
-import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
-import ignore from 'ignore';
-import { readFileAsText } from '@cardstack/worker/src/util';
+import { tracked } from '@glimmer/tracking';
+import { restartableTask } from 'ember-concurrency';
+import { taskFor } from 'ember-concurrency-ts';
+import { ResourceObjectWithId } from '@cardstack/runtime-common';
 
 interface Args {
-  named: { dir: FileSystemDirectoryHandle | null };
-}
-
-async function getDirectoryEntries(
-  directoryHandle: FileSystemDirectoryHandle,
-  dir: string[] = [],
-  ignoreFile = ''
-): Promise<Entry[]> {
-  let entries: Entry[] = [];
-  for await (let [name, handle] of directoryHandle as any as AsyncIterable<
-    [string, FileSystemDirectoryHandle | FileSystemFileHandle]
-  >) {
-    if (
-      handle.kind === 'directory' &&
-      filterIgnored([`${name}/`], ignoreFile).length === 0
-    ) {
-      // without this, trying to open large root dirs causes the browser to hang
-      continue;
-    }
-    let path = [...dir, name].join('/');
-    entries.push({
-      name,
-      handle,
-      path: handle.kind === 'directory' ? `${path}/` : path,
-      indent: dir.length,
-    });
-    if (handle.kind === 'directory') {
-      entries.push(
-        ...(await getDirectoryEntries(handle, [...dir, name], ignoreFile))
-      );
-    }
-  }
-  let filteredEntries = filterIgnoredEntries(entries, ignoreFile);
-  return filteredEntries.sort((a, b) => a.path.localeCompare(b.path));
+  named: { url: string | undefined };
 }
 
 export interface Entry {
   name: string;
-  handle: FileSystemDirectoryHandle | FileSystemFileHandle;
+  kind: 'directory' | 'file';
   path: string;
-  indent: number;
+  indent: number; // get rid of this once we have collapse-able directory trees
 }
 
 export class DirectoryResource extends Resource<Args> {
-  private dir: FileSystemDirectoryHandle | null;
-
   @tracked entries: Entry[] = [];
   private interval: ReturnType<typeof setInterval>;
+  private url: string | undefined;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
     registerDestructor(this, () => {
       clearInterval(this.interval);
     });
-    this.dir = args.named.dir;
-    this.interval = setInterval(() => this.readdir(), 1000);
-    this.readdir();
-  }
-
-  private async readdir() {
-    if (this.dir) {
-      let ignoreFile = await getIgnorePatterns(this.dir);
-      this.entries = await getDirectoryEntries(this.dir, [], ignoreFile);
-    } else {
-      this.entries = [];
+    this.interval = setInterval(() => taskFor(this.readdir).perform(), 1000);
+    if (args.named.url) {
+      if (!args.named.url.endsWith('/')) {
+        throw new Error(`A directory URL must end with a "/"`);
+      }
+      this.url = args.named.url;
+      taskFor(this.readdir).perform();
     }
   }
-}
 
-export function directory(
-  parent: object,
-  dir: () => FileSystemDirectoryHandle | null
-) {
-  return useResource(parent, DirectoryResource, () => ({
-    named: { dir: dir() },
-  }));
-}
-
-async function getIgnorePatterns(fileDir: FileSystemDirectoryHandle) {
-  let fileHandle;
-  try {
-    fileHandle = await fileDir.getFileHandle('.monacoignore');
-  } catch (e) {
+  @restartableTask private async readdir() {
+    if (!this.url) {
+      return;
+    }
+    let response: Response | undefined;
     try {
-      fileHandle = await fileDir.getFileHandle('.gitignore');
-    } catch (e) {
-      return '';
+      response = await fetch(this.url, {
+        headers: { Accept: 'application/vnd.api+json' },
+      });
+    } catch (err: unknown) {
+      clearInterval(this.interval);
+      throw err;
     }
+    if (!response.ok) {
+      // the server takes a moment to become ready do be tolerant of errors at boot
+      // clearInterval(this.interval);
+      console.log(
+        `Could not get directory listing ${this.url}, status ${
+          response.status
+        }: ${response.statusText} - ${await response.text()}`
+      );
+      return;
+    }
+
+    let {
+      included,
+    }: { data: ResourceObjectWithId; included: ResourceObjectWithId[] } =
+      await response.json();
+    let entries: Entry[] = [];
+    entries.push(
+      ...included.map((i) => ({
+        name:
+          i.id.replace(/\/$/, '').split('/').pop()! +
+          (i.type === 'directory' ? '/' : ''),
+        kind: i.type as 'directory' | 'file',
+        path: new URL(i.id).pathname,
+        indent: new URL(i.id).pathname.replace(/\/$/, '').split('/').length - 1,
+      }))
+    );
+
+    this.entries = entries;
   }
-  return await readFileAsText(fileHandle);
 }
 
-function filterIgnoredEntries(entries: Entry[], patterns: string): Entry[] {
-  let filteredPaths = filterIgnored(
-    entries.map((e) => e.path),
-    patterns
-  );
-  return entries.filter((entry) => filteredPaths.includes(entry.path));
-}
-
-function filterIgnored(paths: string[], patterns: string): string[] {
-  return ignore().add(patterns).filter(paths);
+export function directory(parent: object, url: () => string | undefined) {
+  return useResource(parent, DirectoryResource, () => ({
+    named: { url: url() },
+  }));
 }
