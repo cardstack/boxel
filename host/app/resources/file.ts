@@ -30,6 +30,7 @@ export type FileResource =
       path: string;
       loading: TaskInstance<void> | null;
       write(content: string): void;
+      close(): void;
     };
 
 class _FileResource extends Resource<Args> {
@@ -67,6 +68,10 @@ class _FileResource extends Resource<Args> {
 
   get loading() {
     return taskFor(this.read).last;
+  }
+
+  close() {
+    clearInterval(this.interval);
   }
 
   @restartableTask private async read() {

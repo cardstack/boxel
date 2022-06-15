@@ -1,5 +1,6 @@
 import Route from '@ember/routing/route';
 import { service } from '@ember/service';
+import { action } from '@ember/object';
 import { file, FileResource } from '../resources/file';
 import type RouterService from '@ember/routing/router-service';
 
@@ -55,5 +56,15 @@ export default class Application extends Route<Model> {
     }
 
     return { path, openFile };
+  }
+
+  @action
+  willTransition(transition: any) {
+    if (transition.from?.attributes.openFile) {
+      // is there a more concise way to do this? openFile is a Proxy and it
+      // seems like this was the only way we could get a handle on the close()
+      // method for openFile
+      Reflect.get(transition.from.attributes.openFile, 'close')();
+    }
   }
 }
