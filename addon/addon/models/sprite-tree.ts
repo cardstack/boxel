@@ -8,6 +8,11 @@ export interface SpriteModel {
   element: Element;
 }
 
+export interface GetDescendantNodesOptions {
+  includeFreshlyRemoved: boolean;
+  filter?(childNode: SpriteTreeNode): boolean;
+}
+
 type SpriteTreeModel = ContextModel | SpriteModel;
 
 export enum SpriteTreeNodeType {
@@ -69,14 +74,19 @@ export class SpriteTreeNode {
   }
 
   getDescendantNodes(
-    opts = { includeFreshlyRemoved: false }
+    opts: GetDescendantNodesOptions = {
+      includeFreshlyRemoved: false,
+      filter: (_childNode: SpriteTreeNode) => true,
+    }
   ): SpriteTreeNode[] {
+    if (!opts.filter) opts.filter = () => true;
     let result: SpriteTreeNode[] = [];
     let children = this.children;
     if (opts.includeFreshlyRemoved) {
       children = new Set([...children, ...this.freshlyRemovedChildren]);
     }
     for (let childNode of children) {
+      if (!opts.filter(childNode)) continue;
       result.push(childNode);
       result = result.concat(childNode.getDescendantNodes(opts));
     }
@@ -231,7 +241,7 @@ export default class SpriteTree {
   }
   descendantsOf(
     model: SpriteTreeModel,
-    opts = { includeFreshlyRemoved: false }
+    opts: GetDescendantNodesOptions = { includeFreshlyRemoved: false }
   ): SpriteTreeModel[] {
     let node = this.lookupNodeByElement(model.element);
     if (node) {
