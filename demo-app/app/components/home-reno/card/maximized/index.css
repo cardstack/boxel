@@ -6,6 +6,7 @@
   flex-direction: column;
   position: relative;
   border: 1px solid black;
+  overflow-y: auto;
 }
 
 .corner-button {
