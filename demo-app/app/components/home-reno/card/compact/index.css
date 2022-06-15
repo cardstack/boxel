@@ -1,15 +1,40 @@
-.home-reno-card.small {
+.home-reno-card {
   border: 1px solid black;
-  width: 200px;
+}
+
+.home-reno-card.small {
+  width: 90%;
   height: 60px;
 }
 
 .home-reno-card.medium {
-  border: 1px solid black;
-  width: 220px;
+  width: 100%;
   height: 200px;
+  position: relative;
+  padding: 24px 12px;
 }
 
-.home-reno-card.placeholder {}
+.home-reno-card.placeholder {
+  height: 120px;
+  width: 100%;
+  filter: grayscale(90%);
+}
 
-.corner-button {}
+.corner-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: block;
+  justify-content: center;
+  height: min-content;
+  width: min-content;
+  align-items: center;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  font-size: 11px;
+}
+
+.corner-button.left {
+  left: 0;
+}

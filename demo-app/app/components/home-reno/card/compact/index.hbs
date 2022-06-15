@@ -3,7 +3,7 @@
     local-class="home-reno-card medium"
     ...attributes
   >
-    <button type="button" {{on "click" @toggleExpansion}}>
+    <button local-class="corner-button left" type="button" {{on "click" @toggleExpansion}}>
       Minimize
     </button>
     {{#if @maximize}}
