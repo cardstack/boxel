@@ -1,5 +1,7 @@
 import { assert } from '@ember/debug';
-import { formatTreeString } from '../utils/format-tree';
+import AnimationContextComponent from 'animations-experiment/components/animation-context';
+import SpriteModifier from 'animations-experiment/modifiers/sprite';
+import { formatTreeString, TreeNode } from '../utils/format-tree';
 export interface ContextModel {
   element: Element;
 }
@@ -118,14 +120,16 @@ export class SpriteTreeNode {
     this.freshlyRemovedChildren.add(childNode);
   }
 
-  toLoggableForm(): { text: string; children: any[] } {
+  toLoggableForm(): TreeNode {
     let text = '';
     if (this.isContext) {
-      let contextId = (this.contextModel as unknown as any).id;
+      let contextId = (
+        this.contextModel as unknown as AnimationContextComponent
+      ).id;
       text += `🥡${contextId ? ` ${contextId}` : ''} `;
     }
     if (this.isSprite) {
-      let spriteId = (this.spriteModel as unknown as any).id;
+      let spriteId = (this.spriteModel as unknown as SpriteModifier).id;
       text += `🥠${spriteId ? ` ${spriteId}` : ''}`;
     }
     return {
