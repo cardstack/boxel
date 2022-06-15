@@ -173,7 +173,7 @@ module('Integration | schema-inspector', function (hooks) {
       }
     );
     assert.dom('[data-test-field="author"]').containsText("author: contains 'Person' card of ./person");
-    assert.dom('[data-test-field="author"] a[href="/?path=person"').containsText("'Person' card of ./person");
+    assert.dom('[data-test-field="author"] a[href="/?path=%2Fperson"').containsText("'Person' card of ./person");
   });
 
   test('Can render field that uses card internal to the module', async function(assert) {
