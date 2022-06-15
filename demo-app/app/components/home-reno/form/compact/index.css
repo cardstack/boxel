@@ -1,0 +1,3 @@
+.card {
+  composes: form from '../../index';
+}
