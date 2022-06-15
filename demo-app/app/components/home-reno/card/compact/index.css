@@ -1,5 +1,6 @@
 .home-reno-card {
   border: 1px solid black;
+  box-shadow: 4px 4px 4px 0px rgba(125,104,104,0.25);
 }
 
 .home-reno-card.small {
