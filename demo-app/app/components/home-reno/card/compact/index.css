@@ -20,7 +20,8 @@
 
 .home-reno-card.placeholder {
   height: 120px;
-  width: 100%;
+  width: 95%;
+  padding: 12px calc(2% + 6px);
   filter: grayscale(90%);
 }
 
