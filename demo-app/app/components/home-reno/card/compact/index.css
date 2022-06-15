@@ -1,0 +1,15 @@
+.home-reno-card.small {
+  border: 1px solid black;
+  width: 200px;
+  height: 60px;
+}
+
+.home-reno-card.medium {
+  border: 1px solid black;
+  width: 220px;
+  height: 200px;
+}
+
+.home-reno-card.placeholder {}
+
+.corner-button {}
