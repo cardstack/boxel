@@ -29,7 +29,12 @@ export default class Application extends Route<Model> {
       let url = `http://local-realm/${path}`;
       let response = await fetch(url, {
         headers: {
-          Accept: 'application/vnd.card+source',
+          Accept: path.endsWith('.json')
+            ? // assume we want JSON-API for .json files, if the server determines
+              // that it is not actually card data, then it will just return in the
+              // native format
+              'application/vnd.api+json'
+            : 'application/vnd.card+source',
         },
       });
       if (!response.ok) {

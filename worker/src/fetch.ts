@@ -14,6 +14,7 @@ import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properti
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 import { traverse } from '@cardstack/runtime-common';
 import { formatRFC7231 } from 'date-fns';
+import { isCardJSON } from '@cardstack/runtime-common';
 
 const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 
@@ -124,7 +125,7 @@ export class FetchHandler {
     }
 
     if (request.headers.get('Accept')?.includes('application/vnd.api+json')) {
-      throw new Error('unimplemented');
+      return this.handleJSONAPI(url);
     } else if (
       request.headers.get('Accept')?.includes('application/vnd.card+source')
     ) {
@@ -156,6 +157,34 @@ export class FetchHandler {
     } else {
       return await this.serveLocalFile(handle);
     }
+  }
+
+  private async handleJSONAPI(url: URL): Promise<Response> {
+    // handle directories
+    let handle = await this.getLocalFile(url.pathname.slice(1));
+    if (handle.name.endsWith('.json')) {
+      let file = await handle.getFile();
+      let json: object | undefined;
+      try {
+        json = JSON.parse(await getContents(file));
+      } catch (err: unknown) {
+        console.log(`The file ${url.href} is not parsable JSON`);
+      }
+      if (isCardJSON(json)) {
+        // the only JSON API thing missing from the file serialization for our
+        // card data is the ID
+        (json as any).data.id = url.href; // should we trim the ".json" from the ID?
+        return new Response(JSON.stringify(json, null, 2), {
+          headers: {
+            'Last-Modified': formatRFC7231(file.lastModified),
+            'Content-Type': 'application/vnd.api+json',
+          },
+        });
+      }
+    }
+
+    // otherwise, just serve the asset
+    return await this.serveLocalFile(handle);
   }
 
   private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
@@ -299,4 +328,13 @@ export class FetchHandler {
       },
     });
   }
+}
+
+async function getContents(file: File): Promise<string> {
+  let reader = new FileReader();
+  return await new Promise<string>((resolve, reject) => {
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
 }

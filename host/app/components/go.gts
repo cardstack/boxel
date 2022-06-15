@@ -10,13 +10,13 @@ import CardEditor, { ExistingCardArgs } from './card-editor';
 import ImportModule from './import-module';
 import FileTree from './file-tree';
 import { CardInspector } from '../lib/schema-util';
-import { isCardJSON, Format } from '../lib/card-api';
+import { Format } from '../lib/card-api';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,
   languageConfigs
 } from '../utils/editor-language';
-import { externalsMap } from '@cardstack/runtime-common';
+import { externalsMap, isCardJSON } from '@cardstack/runtime-common';
 import type { FileResource } from '../resources/file';
 
 interface Signature {

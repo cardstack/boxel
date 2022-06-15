@@ -118,50 +118,6 @@ export class Card {
 
 export type CardConstructor = typeof Card;
 
-export interface CardJSON {
-  data: {
-    attributes?: Record<string, any>;
-    // TODO add relationships
-    meta: {
-      adoptsFrom: {
-        module: string;
-        name: string;
-      };
-    };
-  };
-  // TODO add included
-}
-
-export function isCardJSON(json: any): json is CardJSON {
-  if (typeof json !== 'object' || !("data" in json)) {
-    return false; 
-  }
-  let { data } = json;
-  if (typeof data !== 'object') {
-    return false;
-  }
-
-  let { meta, attributes } = data;
-  if (typeof meta !== 'object' || ("attributes" in data && typeof attributes !== 'object')) {
-    return false;
-  }
-
-  if (!("adoptsFrom" in meta)) {
-    return false;
-  }
-  
-  let { adoptsFrom } = meta;
-  if (typeof adoptsFrom !== 'object') {
-    return false;
-  }
-  if (!("module" in adoptsFrom) || !("name" in adoptsFrom)) {
-    return false;
-  }
-
-  let { module, name } = adoptsFrom;
-  return typeof module === 'string' && typeof name === 'string';
-}
-
 function getDataBucket(instance: object): Map<string, any> {
   let deserialized = deserializedData.get(instance);
   if (!deserialized) {

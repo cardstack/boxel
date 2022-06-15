@@ -56,3 +56,36 @@ export async function traverse(dirHandle, path, opts) {
   }
   return { handle, filename: pathSegments[0] };
 }
+
+export function isCardJSON(json) {
+  if (typeof json !== "object" || !("data" in json)) {
+    return false;
+  }
+  let { data } = json;
+  if (typeof data !== "object") {
+    return false;
+  }
+
+  let { meta, attributes } = data;
+  if (
+    typeof meta !== "object" ||
+    ("attributes" in data && typeof attributes !== "object")
+  ) {
+    return false;
+  }
+
+  if (!("adoptsFrom" in meta)) {
+    return false;
+  }
+
+  let { adoptsFrom } = meta;
+  if (typeof adoptsFrom !== "object") {
+    return false;
+  }
+  if (!("module" in adoptsFrom) || !("name" in adoptsFrom)) {
+    return false;
+  }
+
+  let { module, name } = adoptsFrom;
+  return typeof module === "string" && typeof name === "string";
+}

@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { render } from '../resources/rendered-card';
 //@ts-ignore cached not available yet in definitely typed
 import { tracked, cached } from '@glimmer/tracking';
-import { Card, CardJSON, Format, serializeCard, isCardJSON } from '../lib/card-api';
+import { Card, Format, serializeCard } from '../lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { moduleURL } from 'runtime-spike/resources/import';
@@ -13,6 +13,7 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
+import { CardJSON, isCardJSON } from '@cardstack/runtime-common';
 
 export interface NewCardArgs {
   type: 'new';
