@@ -31,8 +31,6 @@ export default class AnimationContextComponent extends Component<AnimationContex
   currentBounds: DOMRect | undefined;
   isInitialRenderCompleted = false;
 
-  @reads('args.initialInsertion', false) initialInsertion: boolean | undefined;
-
   willDestroy(): void {
     super.willDestroy();
     this.animations.unregisterContext(this);
@@ -65,11 +63,7 @@ export default class AnimationContextComponent extends Component<AnimationContex
   }
 
   shouldAnimate(changeset: Changeset): boolean {
-    return !!(
-      changeset &&
-      this.args.use &&
-      (this.isInitialRenderCompleted || this.initialInsertion)
-    );
+    return !!(changeset && this.args.use && this.isInitialRenderCompleted);
   }
 
   hasOrphan(spriteOrElement: Sprite | HTMLElement): boolean {
