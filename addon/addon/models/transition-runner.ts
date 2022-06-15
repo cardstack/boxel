@@ -56,20 +56,6 @@ export default class TransitionRunner {
     this.runningAnimations = opts.runningAnimations;
   }
 
-  filterToContext(
-    spriteModifiers: Set<SpriteModifier>,
-    opts = { includeFreshlyRemoved: false }
-  ): Set<SpriteModifier> {
-    let contextDescendants = this.spriteTree.descendantsOf(
-      this.animationContext,
-      opts
-    );
-    let result = new Set(
-      [...spriteModifiers].filter((m) => contextDescendants.includes(m))
-    );
-    return result;
-  }
-
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @task *maybeTransitionTask() {
     let { animationContext } = this;
@@ -83,10 +69,8 @@ export default class TransitionRunner {
         }
       }
     }
-    let freshlyAdded = this.filterToContext(this.freshlyAdded);
-    let freshlyRemoved = this.filterToContext(this.freshlyRemoved, {
-      includeFreshlyRemoved: true,
-    });
+    let freshlyAdded = this.freshlyAdded;
+    let freshlyRemoved = this.freshlyRemoved;
     if (
       this.freshlyChanged.size === 0 &&
       freshlyAdded.size === 0 &&

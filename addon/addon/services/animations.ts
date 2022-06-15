@@ -24,6 +24,19 @@ export type AnimateFunction = (
   sprite: Sprite,
   motion: Motion
 ) => SpriteAnimation;
+
+function filterToContext(
+  spriteTree: SpriteTree,
+  animationContext: AnimationContext,
+  spriteModifiers: Set<SpriteModifier>,
+  opts = { includeFreshlyRemoved: false }
+): Set<SpriteModifier> {
+  let contextDescendants = spriteTree.descendantsOf(animationContext, opts);
+  let result = new Set(
+    [...spriteModifiers].filter((m) => contextDescendants.includes(m))
+  );
+  return result;
+}
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
   freshlyAdded: Set<SpriteModifier> = new Set();
@@ -92,26 +105,16 @@ export default class AnimationsService extends Service {
     }
   }
 
-  filterToContext(
-    animationContext: AnimationContext,
-    spriteModifiers: Set<SpriteModifier>,
-    opts = { includeFreshlyRemoved: false }
-  ): Set<SpriteModifier> {
-    let contextDescendants = this.spriteTree.descendantsOf(
-      animationContext,
-      opts
-    );
-    let result = new Set(
-      [...spriteModifiers].filter((m) => contextDescendants.includes(m))
-    );
-    return result;
-  }
-
   // When we interrupt, we can clean certain sprites marked for garbage collection
   cleanupSprites(context: AnimationContext): void {
-    let removedSprites = this.filterToContext(context, this.freshlyRemoved, {
-      includeFreshlyRemoved: true,
-    });
+    let removedSprites = filterToContext(
+      this.spriteTree,
+      context,
+      this.freshlyRemoved,
+      {
+        includeFreshlyRemoved: true,
+      }
+    );
 
     // cleanup removedSprites
     removedSprites.forEach((sm) => {
@@ -136,7 +139,8 @@ export default class AnimationsService extends Service {
       context.captureSnapshot();
     }
 
-    let spriteModifiers: Set<SpriteModifier> = this.filterToContext(
+    let spriteModifiers: Set<SpriteModifier> = filterToContext(
+      this.spriteTree,
       context,
       this.freshlyRemoved,
       { includeFreshlyRemoved: true }
@@ -208,8 +212,17 @@ export default class AnimationsService extends Service {
       //  It may also be good enough to rewrite maybeTransition into a Task.
       let transitionRunner = new TransitionRunner(context as AnimationContext, {
         spriteTree: this.spriteTree,
-        freshlyAdded: this.freshlyAdded,
-        freshlyRemoved: this.freshlyRemoved,
+        freshlyAdded: filterToContext(
+          this.spriteTree,
+          context,
+          this.freshlyAdded
+        ),
+        freshlyRemoved: filterToContext(
+          this.spriteTree,
+          context,
+          this.freshlyRemoved,
+          { includeFreshlyRemoved: true }
+        ),
         intent: this.intent,
         intermediateSprites: intermediateSprites.get(context),
         runningAnimations,
