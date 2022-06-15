@@ -1,0 +1,68 @@
+<div local-class="home-reno-list">
+  <HomeReno::Card::Maximized>
+    This is the entrypoint.
+
+    <div local-class="compact-list">
+      <HomeReno::Outline::Compact
+        @state={{this.compactCardState.outline}}
+        @toggleExpansion={{fn this.toggleExpansion "outline"}}
+        @maximize={{fn this.maximize "outline"}}
+      />
+      <HomeReno::Gallery::Compact
+        @state={{this.compactCardState.gallery}}
+        @toggleExpansion={{fn this.toggleExpansion "gallery"}}
+        @maximize={{fn this.maximize "gallery"}}
+      />
+      <HomeReno::Form::Compact
+        @state={{this.compactCardState.form}}
+        @toggleExpansion={{fn this.toggleExpansion "form"}}
+        @maximize={{fn this.maximize "form"}}
+      />
+    </div>
+  </HomeReno::Card::Maximized>
+
+  {{#if this.currentMaximizedItems.outline}}
+    <HomeReno::Card::Maximized
+      @minimize={{fn this.minimize "outline"}}
+      local-class="outline"
+    >
+      Outline
+      <div local-class="compact-list">
+        <HomeReno::Gallery::Compact
+          @state={{this.secondaryItemState.outline}}
+          @toggleExpansion={{fn this.toggleSecondaryItemExpansion "outline"}}
+        />
+      </div>
+    </HomeReno::Card::Maximized>
+  {{/if}}
+
+  {{#if this.currentMaximizedItems.gallery}}
+    <HomeReno::Card::Maximized
+      @minimize={{fn this.minimize "gallery"}}
+      local-class="gallery"
+    >
+      Gallery
+      <div local-class="compact-list">
+        <HomeReno::Outline::Compact
+          @state={{this.secondaryItemState.gallery}}
+          @toggleExpansion={{fn this.toggleSecondaryItemExpansion "gallery"}}
+        />
+      </div>
+    </HomeReno::Card::Maximized>
+  {{/if}}
+
+  {{#if this.currentMaximizedItems.form}}
+    <HomeReno::Card::Maximized
+      @minimize={{fn this.minimize "form"}}
+      local-class="form"
+    >
+      Form
+      <div local-class="compact-list">
+        <HomeReno::Outline::Compact
+          @state={{this.secondaryItemState.form}}
+          @toggleExpansion={{fn this.toggleSecondaryItemExpansion "form"}}
+        />
+      </div>
+    </HomeReno::Card::Maximized>
+  {{/if}}
+</div>
