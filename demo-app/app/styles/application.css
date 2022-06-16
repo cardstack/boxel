@@ -1,0 +1,13 @@
+.menu {
+  padding: 15px;
+}
+
+.menu > li {
+  display: inline-block;
+  margin: 0 10px 5px;
+  padding: 0;
+}
+
+.menu > li > a {
+  display: block;
+}
