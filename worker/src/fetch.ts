@@ -306,7 +306,7 @@ export class FetchHandler {
         );
         // we assume that the final handle is a directory because we asked for a
         // path that ended in a '/'
-        dirHandle = await handle.getDirectoryHandle(dirname);
+        dirHandle = await handle.getDirectoryHandle(dirname, { create: true });
       } catch (err: unknown) {
         if ((err as DOMException).name !== 'NotFoundError') {
           throw err;
