@@ -93,11 +93,6 @@
     "typescript": "^4.6.4",
     "webpack": "^5.70.0"
   },
-  "dependenciesMeta": {
-    "animations-experiment": {
-      "injected": true
-    }
-  },
   "engines": {
     "node": "14.* || >= 16"
   },
