@@ -34,29 +34,6 @@ export const externalsMap = new Map([
   ["runtime-spike/lib/integer", ["default"]],
 ]);
 
-// TODO move this into the worker as soon as the host stops interacting with file handles
-export async function traverse(dirHandle, path, opts) {
-  let pathSegments = path.split("/");
-  let create = opts?.create;
-  async function nextHandle(handle, pathSegment) {
-    try {
-      return await handle.getDirectoryHandle(pathSegment, { create });
-    } catch (err) {
-      if (err.name === "NotFoundError") {
-        console.error(`${path} was not found in the local realm`);
-      }
-      throw err;
-    }
-  }
-
-  let handle = dirHandle;
-  while (pathSegments.length > 1) {
-    let segment = pathSegments.shift();
-    handle = await nextHandle(handle, segment);
-  }
-  return { handle, filename: pathSegments[0] };
-}
-
 export function isCardJSON(json) {
   if (typeof json !== "object" || !("data" in json)) {
     return false;

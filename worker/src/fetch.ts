@@ -12,10 +12,7 @@ import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
 import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-transform-typescript';
-import {
-  traverse,
-  DirectoryEntryRelationship,
-} from '@cardstack/runtime-common';
+import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
 import { formatRFC7231 } from 'date-fns';
 import { isCardJSON, ResourceObjectWithId } from '@cardstack/runtime-common';
 import ignore from 'ignore';
@@ -553,4 +550,33 @@ function filterIgnoredEntries(entries: Entry[], patterns: string): Entry[] {
 
 function filterIgnored(paths: string[], patterns: string): string[] {
   return ignore().add(patterns).filter(paths);
+}
+
+async function traverse(
+  dirHandle: FileSystemDirectoryHandle,
+  path: string,
+  opts?: { create?: boolean }
+): Promise<{ handle: FileSystemDirectoryHandle; filename: string }> {
+  let pathSegments = path.split('/');
+  let create = opts?.create;
+  async function nextHandle(
+    handle: FileSystemDirectoryHandle,
+    pathSegment: string
+  ) {
+    try {
+      return await handle.getDirectoryHandle(pathSegment, { create });
+    } catch (err: any) {
+      if (err.name === 'NotFoundError') {
+        console.error(`${path} was not found in the local realm`);
+      }
+      throw err;
+    }
+  }
+
+  let handle = dirHandle;
+  while (pathSegments.length > 1) {
+    let segment = pathSegments.shift()!;
+    handle = await nextHandle(handle, segment);
+  }
+  return { handle, filename: pathSegments[0] };
 }
