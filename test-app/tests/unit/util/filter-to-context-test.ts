@@ -120,7 +120,7 @@ module('Unit | Util | filterToContext', function () {
     ]);
   });
 
-  test('it returns children of unstable descendant contexts too, for depth > 1 <= Infinity', async function (assert) {
+  test('it returns children of unstable descendant contexts too, for depth > 1 < Infinity', async function (assert) {
     let rootDiv = document.createElement('div');
 
     let siblingContext = new MockAnimationContext(rootDiv, 'control-root');
