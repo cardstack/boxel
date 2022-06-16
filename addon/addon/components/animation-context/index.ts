@@ -31,6 +31,12 @@ export default class AnimationContextComponent extends Component<AnimationContex
   currentBounds: DOMRect | undefined;
   isInitialRenderCompleted = false;
 
+  get isStable() {
+    return (
+      this.isInitialRenderCompleted && !this.isDestroying && !this.isDestroyed
+    );
+  }
+
   willDestroy(): void {
     super.willDestroy();
     this.animations.unregisterContext(this);

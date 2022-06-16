@@ -2,7 +2,10 @@ import Service from '@ember/service';
 
 import AnimationContext from '../components/animation-context';
 import SpriteModifier from '../modifiers/sprite';
-import SpriteTree from '../models/sprite-tree';
+import SpriteTree, {
+  GetDescendantNodesOptions,
+  SpriteTreeNode,
+} from '../models/sprite-tree';
 import TransitionRunner from '../models/transition-runner';
 import { scheduleOnce } from '@ember/runloop';
 import { taskFor } from 'ember-concurrency-ts';
@@ -25,13 +28,21 @@ export type AnimateFunction = (
   motion: Motion
 ) => SpriteAnimation;
 
-function filterToContext(
+export function filterToContext(
   spriteTree: SpriteTree,
   animationContext: AnimationContext,
   spriteModifiers: Set<SpriteModifier>,
-  opts = { includeFreshlyRemoved: false }
+  opts: GetDescendantNodesOptions = { includeFreshlyRemoved: false }
 ): Set<SpriteModifier> {
-  let contextDescendants = spriteTree.descendantsOf(animationContext, opts);
+  let contextDescendants = spriteTree.descendantsOf(animationContext, {
+    ...opts,
+    filter(childNode: SpriteTreeNode) {
+      return !(
+        childNode.isContext &&
+        (childNode.contextModel as AnimationContext).isStable
+      );
+    },
+  });
   let result = new Set(
     [...spriteModifiers].filter((m) => contextDescendants.includes(m))
   );
