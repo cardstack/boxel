@@ -12,7 +12,10 @@ import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
 import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-transform-typescript';
-import { traverse } from '@cardstack/runtime-common';
+import {
+  traverse,
+  DirectoryEntryRelationship,
+} from '@cardstack/runtime-common';
 import { formatRFC7231 } from 'date-fns';
 import { isCardJSON, ResourceObjectWithId } from '@cardstack/runtime-common';
 import ignore from 'ignore';
@@ -178,7 +181,9 @@ export class FetchHandler {
       });
     }
 
-    let handle = await this.getLocalFile(url.pathname.slice(1));
+    let handle = await this.getLocalFileWithFallbacks(url.pathname.slice(1), [
+      '.json',
+    ]);
     if (handle.name.endsWith('.json')) {
       let file = await handle.getFile();
       let json: object | undefined;
@@ -190,7 +195,7 @@ export class FetchHandler {
       if (isCardJSON(json)) {
         // the only JSON API thing missing from the file serialization for our
         // card data is the ID
-        (json as any).data.id = url.href; // should we trim the ".json" from the ID?
+        (json as any).data.id = url.href.replace(/\.json$/, '');
         return new Response(JSON.stringify(json, null, 2), {
           headers: {
             'Last-Modified': formatRFC7231(file.lastModified),
@@ -224,45 +229,41 @@ export class FetchHandler {
         type: "directory",
         id: "http://local-realm/",
         relationships: {
-          listing: [
-            { data: { type: "directory", id: "http://local-realm/cards/"} },
-            { data: { type: "file", id: "http://local-realm/file1.ts"} },
-            { data: { type: "file", id: "http://local-realm/file2.ts"} },
-          ]
-        }
+          "cards": {
+            links: {
+              related: "http://local-realm/cards/"
+            },
+            meta: {
+              kind: "directory"
+            }
+          },
+          "file1.ts": {
+            links: {
+              related: "http://local-realm/file1.ts"
+            },
+            meta: {
+              kind: "file"
+            }
+          },
+          "file2.ts": {
+            links: {
+              related: "http://local-realm/file1.ts"
+            },
+            meta: {
+              kind: "file"
+            }
+          },
 
-      },
-      included: [
-        {
-          id: "http://local-realm/cards/",
-          type: "directory",
-          relationships: {
-            listing: [
-              { data: { type: "directory", id: "http://local-realm/cards/nested/"} },
-              { data: { type: "file", id: "http://local-realm/cards/nested-file1.json"} },
-              { data: { type: "file", id: "http://local-realm/cards/nested-file2.json"} },
-            ]
-          }
-        },
-        { id: "http://local-realm/cards/file1.ts", type: "file" },
-        { id: "http://local-realm/cards/file2.ts", type: "file" },
-        {
-          id: "http://local-realm/cards/nested/",
-          type: "directory",
-          relationships: {
-            listing: []
-          }
-        },
-        { id: "http://local-realm/cards/nested-file1.json", type: "file" },
-        { id: "http://local-realm/cards/nested-file2.json", type: "file" },
-      ]
+        }
+      }
     }
   */
 
   private async getDirectoryListing(
     url: URL
   ): Promise<
-    { data: ResourceObjectWithId; included: ResourceObjectWithId[] } | undefined
+    | { data: ResourceObjectWithId; included?: ResourceObjectWithId[] }
+    | undefined
   > {
     if (!this.messageHandler.fs) {
       throw WorkerError.withResponse(
@@ -281,7 +282,7 @@ export class FetchHandler {
       try {
         let { handle, filename: dirname } = await traverse(
           this.messageHandler.fs,
-          path.slice(1)
+          path.slice(1).replace(/\/$/, '')
         );
         // we assume that the final handle is a directory because we asked for a
         // path that ended in a '/'
@@ -295,49 +296,32 @@ export class FetchHandler {
       }
     }
     let ignoreFile = await getIgnorePatterns(dirHandle);
-    let entries = await getDirectoryEntries(dirHandle, ignoreFile);
-    let included: ResourceObjectWithId[] = [];
+    let entries = await getDirectoryEntries(dirHandle, path, ignoreFile);
 
     let data: ResourceObjectWithId = {
       id: url.href,
       type: 'directory',
-      relationships: {
-        listing: [],
-      },
+      relationships: {},
     };
 
     // Note that the entries are sorted such that the parent directory always
     // appears before the children
     for (let entry of entries) {
-      let resource: ResourceObjectWithId = {
-        type: entry.handle.kind,
-        id: new URL(entry.path, url.href).href,
+      let relationship: DirectoryEntryRelationship = {
+        links: {
+          related: new URL(entry.path, url.href).href,
+        },
+        meta: {
+          kind: entry.handle.kind as 'directory' | 'file',
+        },
       };
-      if (entry.handle.kind === 'directory') {
-        resource.relationships = {
-          listing: [],
-        };
-      }
-      included.push(resource);
-      let parentId =
-        resource.id.replace(/\/$/, '').split('/').slice(0, -1).join('/') + '/';
-      if (data.id === parentId) {
-        (data.relationships!.listing as any[]).push({
-          data: { id: resource.id, type: resource.type },
-        });
-      } else {
-        let parentResource = included.find(
-          (p) => p.id === parentId && p.type === 'directory'
-        );
-        if (parentResource) {
-          (parentResource.relationships!.listing as any[]).push({
-            data: { id: resource.id, type: resource.type },
-          });
-        }
-      }
+
+      data.relationships![
+        entry.handle.name + (entry.handle.kind === 'directory' ? '/' : '')
+      ] = relationship;
     }
 
-    return { data, included };
+    return { data };
   }
 
   private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
@@ -493,16 +477,14 @@ async function getContents(file: File): Promise<string> {
 }
 
 interface Entry {
-  name: string;
   handle: FileSystemDirectoryHandle | FileSystemFileHandle;
   path: string;
-  indent: number;
 }
 
 async function getDirectoryEntries(
   directoryHandle: FileSystemDirectoryHandle,
-  ignoreFile = '',
-  dir: string[] = []
+  parentDir: string,
+  ignoreFile = ''
 ): Promise<Entry[]> {
   let entries: Entry[] = [];
   for await (let [name, handle] of directoryHandle as any as AsyncIterable<
@@ -515,25 +497,13 @@ async function getDirectoryEntries(
       // without this, trying to open large root dirs causes the browser to hang
       continue;
     }
-    let path = ['', ...dir, name].join('/');
+    let path = `${parentDir}${handle.name}`;
     entries.push({
-      name,
       handle,
       path: handle.kind === 'directory' ? `${path}/` : path,
-      indent: dir.length,
     });
-
-    // TODO currently this is getting directory listings recursively , but
-    // probably we should use a query param to indicate that we want a recursive
-    // directory listing
-    if (handle.kind === 'directory') {
-      entries.push(
-        ...(await getDirectoryEntries(handle, ignoreFile, [...dir, name]))
-      );
-    }
   }
-  let filteredEntries = filterIgnoredEntries(entries, ignoreFile);
-  return filteredEntries.sort((a, b) => a.path.localeCompare(b.path));
+  return filterIgnoredEntries(entries, ignoreFile);
 }
 
 async function getIgnorePatterns(fileDir: FileSystemDirectoryHandle) {

@@ -1,5 +1,3 @@
-import * as JSON from "json-typescript";
-
 export const externalsMap: Map<string, string[]>;
 export function traverse(
   dirHandle: FileSystemDirectoryHandle,
@@ -24,11 +22,20 @@ export function isCardJSON(json: any): json is CardJSON;
 
 export interface ResourceObject {
   type: string;
-  attributes?: JSON.Object;
-  relationships?: JSON.Object;
-  meta?: JSON.Object;
+  attributes?: Record<string, any>;
+  relationships?: Record<string, any>;
+  meta?: Record<string, any>;
 }
 
 export interface ResourceObjectWithId extends ResourceObject {
   id: string;
+}
+
+export interface DirectoryEntryRelationship {
+  links: {
+    related: string;
+  };
+  meta: {
+    kind: "directory" | "file";
+  };
 }

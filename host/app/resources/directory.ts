@@ -3,7 +3,8 @@ import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
-import { ResourceObjectWithId } from '@cardstack/runtime-common';
+import flatMap from 'lodash/flatMap';
+import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
 
 interface Args {
   named: { url: string | undefined };
@@ -40,40 +41,8 @@ export class DirectoryResource extends Resource<Args> {
     if (!this.url) {
       return;
     }
-    let response: Response | undefined;
-    try {
-      response = await fetch(this.url, {
-        headers: { Accept: 'application/vnd.api+json' },
-      });
-    } catch (err: unknown) {
-      clearInterval(this.interval);
-      throw err;
-    }
-    if (!response.ok) {
-      // the server takes a moment to become ready do be tolerant of errors at boot
-      console.log(
-        `Could not get directory listing ${this.url}, status ${
-          response.status
-        }: ${response.statusText} - ${await response.text()}`
-      );
-      return;
-    }
-
-    let {
-      included,
-    }: { data: ResourceObjectWithId; included: ResourceObjectWithId[] } =
-      await response.json();
-    let entries: Entry[] = [];
-    entries.push(
-      ...included.map((i) => ({
-        name:
-          i.id.replace(/\/$/, '').split('/').pop()! +
-          (i.type === 'directory' ? '/' : ''),
-        kind: i.type as 'directory' | 'file',
-        path: new URL(i.id).pathname,
-        indent: new URL(i.id).pathname.replace(/\/$/, '').split('/').length - 1,
-      }))
-    );
+    let entries = await getEntries(this.url);
+    entries.sort((a, b) => a.path.localeCompare(b.path));
 
     this.entries = entries;
   }
@@ -83,4 +52,45 @@ export function directory(parent: object, url: () => string | undefined) {
   return useResource(parent, DirectoryResource, () => ({
     named: { url: url() },
   }));
+}
+
+// TODO when we want to include actual real file-tree behavior, let's stop
+// recursing blindly into directories
+async function getEntries(url: string): Promise<Entry[]> {
+  let response: Response | undefined;
+  response = await fetch(url, {
+    headers: { Accept: 'application/vnd.api+json' },
+  });
+  if (!response.ok) {
+    // the server takes a moment to become ready do be tolerant of errors at boot
+    console.log(
+      `Could not get directory listing ${url}, status ${response.status}: ${
+        response.statusText
+      } - ${await response.text()}`
+    );
+    return [];
+  }
+  let {
+    data: { relationships },
+  } = await response.json();
+
+  let newEntries: Entry[] = Object.entries(relationships).map(
+    ([name, info]: [string, DirectoryEntryRelationship]) => ({
+      name,
+      kind: info.meta.kind,
+      path: new URL(info.links.related).pathname,
+      indent:
+        new URL(info.links.related).pathname.replace(/\/$/, '').split('/')
+          .length - 1,
+    })
+  );
+  let nestedDirs = flatMap(
+    Object.values(relationships) as DirectoryEntryRelationship[],
+    (rel) => (rel.meta.kind === 'directory' ? [rel.links.related] : [])
+  );
+  let nestedEntries: Entry[] = [];
+  for (let dir of nestedDirs) {
+    nestedEntries.push(...(await getEntries(dir)));
+  }
+  return [...newEntries, ...nestedEntries];
 }

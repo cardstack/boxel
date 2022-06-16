@@ -66,10 +66,7 @@ export default class Application extends Route<Model> {
   @action
   willTransition(transition: any) {
     if (transition.from?.attributes.openFile) {
-      // is there a more concise way to do this? openFile is a Proxy and it
-      // seems like this was the only way we could get a handle on the close()
-      // method for openFile
-      Reflect.get(transition.from.attributes.openFile, 'close')();
+      transition.from.attributes.openFile.close();
     }
   }
 }
