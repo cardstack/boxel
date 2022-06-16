@@ -139,6 +139,8 @@ export default class AnimationsService extends Service {
       context.captureSnapshot();
     }
 
+    // Get only the freshlyRemoved (that are now going to be kept) direct descendants for this context.
+    // This will only return sprites if an interruption happened.
     let spriteModifiers: Set<SpriteModifier> = filterToContext(
       this.spriteTree,
       context,
@@ -147,6 +149,7 @@ export default class AnimationsService extends Service {
     );
 
     // TODO: we only look at direct descendants here, not all
+    // Get the rest of the direct descendants for this context/
     let contextNodeChildren = this.spriteTree.lookupNodeByElement(
       context.element
     )?.children;
