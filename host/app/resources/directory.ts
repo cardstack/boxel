@@ -51,7 +51,6 @@ export class DirectoryResource extends Resource<Args> {
     }
     if (!response.ok) {
       // the server takes a moment to become ready do be tolerant of errors at boot
-      // clearInterval(this.interval);
       console.log(
         `Could not get directory listing ${this.url}, status ${
           response.status
