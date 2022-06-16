@@ -79,12 +79,12 @@ module('Unit | Util | filterToContext', function () {
     );
     let targetContext = new MockAnimationContext(rootDiv, 'root');
     let thread1 = nestEachInPrevious(targetContext.element, [
-      new MockSpriteModifier(null, 'level-1-1'),
+      new MockSpriteModifier(null, 'included-1'),
       new MockAnimationContext(null, 'level-2-1').stable(),
       new MockSpriteModifier(null, 'level-3-1'), // not included
     ]);
     let thread2 = nestEachInPrevious(targetContext.element, [
-      new MockSpriteModifier(null, 'level-1-2'),
+      new MockSpriteModifier(null, 'included-2'),
       new MockAnimationContext(null, 'level-2-2').stable(),
       new MockSpriteModifier(null, 'level-3-2'), // not included
     ]);
@@ -114,10 +114,10 @@ module('Unit | Util | filterToContext', function () {
       new Set(sprites) as unknown as Set<SpriteModifier>
     );
 
-    assert.deepEqual(
-      [...descendants].map((v) => v.id),
-      ['level-1-1', 'level-1-2']
-    );
+    assert.deepEqual([...descendants].map((v) => v.id).sort(), [
+      'included-1',
+      'included-2',
+    ]);
   });
 
   test('it returns children of unstable descendant contexts too, for depth > 1 <= Infinity', async function (assert) {
@@ -131,18 +131,18 @@ module('Unit | Util | filterToContext', function () {
 
     let targetContext = new MockAnimationContext(rootDiv, 'root');
     let thread1 = nestEachInPrevious(targetContext.element, [
-      new MockSpriteModifier(null, 'level-1-1'),
+      new MockSpriteModifier(null, 'included-1'),
       new MockAnimationContext(null, 'level-2-1').unstable(),
-      new MockSpriteModifier(null, 'level-3-1'),
+      new MockSpriteModifier(null, 'included-2'),
       new MockAnimationContext(null, 'level-4-1').stable(),
       new MockSpriteModifier(null, 'level-5-1'), // not included
     ]);
     let thread2 = nestEachInPrevious(targetContext.element, [
-      new MockSpriteModifier(null, 'level-1-2'),
+      new MockSpriteModifier(null, 'included-3'),
       new MockAnimationContext(null, 'level-2-2').unstable(),
-      new MockSpriteModifier(null, 'level-3-2'),
+      new MockSpriteModifier(null, 'included-4'),
       new MockAnimationContext(null, 'level-4-2').unstable(),
-      new MockSpriteModifier(null, 'level-5-2'),
+      new MockSpriteModifier(null, 'included-5'),
     ]);
     let tree = new SpriteTree();
     let allItems = [
@@ -170,25 +170,20 @@ module('Unit | Util | filterToContext', function () {
       new Set(sprites) as unknown as Set<SpriteModifier>
     );
 
-    assert.deepEqual(
-      [...descendants].map((v) => v.id),
-      ['level-1-1', 'level-3-1', 'level-1-2', 'level-3-2', 'level-5-2']
-    );
+    assert.deepEqual([...descendants].map((v) => v.id).sort(), [
+      'included-1',
+      'included-2',
+      'included-3',
+      'included-4',
+      'included-5',
+    ]);
   });
 
   test('it includes descendant sprites which are stable contexts themselves but not their descendants', async function (assert) {
-    let rootDiv = document.createElement('div');
-
-    let siblingContext = new MockAnimationContext(rootDiv, 'control-root');
-    let controlSpriteModifier = new MockSpriteModifier(
-      siblingContext.element,
-      'control'
-    );
-
-    let targetContext = new MockAnimationContext(rootDiv, 'root');
+    let targetContext = new MockAnimationContext(null, 'root');
     let sharedNodeSprite = new MockSpriteModifier(
       targetContext.element,
-      'level-1-1'
+      'included-1'
     );
     let sharedNodeContext = new MockAnimationContext(
       null,
@@ -201,8 +196,6 @@ module('Unit | Util | filterToContext', function () {
     );
     let tree = new SpriteTree();
     let allItems = [
-      siblingContext,
-      controlSpriteModifier,
       targetContext,
       sharedNodeSprite,
       sharedNodeContext,
@@ -228,7 +221,7 @@ module('Unit | Util | filterToContext', function () {
 
     assert.deepEqual(
       [...descendants].map((v) => v.id),
-      ['level-1-1']
+      ['included-1']
     );
   });
 });
