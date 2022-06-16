@@ -45,7 +45,7 @@ export default class FileTree extends Component<Args> {
 
   @action
   openRealm() {
-    this.args.localRealm.chooseDirectory();
+    this.args.localRealm.chooseDirectory(() => this.router.refresh());
   }
 
   @action
