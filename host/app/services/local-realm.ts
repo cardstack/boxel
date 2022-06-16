@@ -122,6 +122,8 @@ export default class LocalRealm extends Service {
     await stream.write('');
     await stream.close();
 
+    await handle.removeEntry('.tmp');
+
     if (this.state.type !== 'empty') {
       throw new Error(
         `tried to chooseDirectory when we already have a local realm`
