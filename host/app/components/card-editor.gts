@@ -11,9 +11,11 @@ import isEqual from 'lodash/isEqual';
 import { eq } from '../helpers/truth-helpers';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
-import { service } from '@ember/service';
-import LocalRealm from '../services/local-realm';
 import { CardJSON, isCardJSON } from '@cardstack/runtime-common';
+import {
+  DirectoryEntryRelationship,
+} from '@cardstack/runtime-common';
+import cloneDeep from 'lodash/cloneDeep';
 
 export interface NewCardArgs {
   type: 'new';
@@ -23,7 +25,7 @@ export interface NewCardArgs {
 export interface ExistingCardArgs {
   type: 'existing';
   json: CardJSON;
-  filename: string;
+  url: string;
 }
 
 interface Signature {
@@ -31,7 +33,7 @@ interface Signature {
     module: Record<string, typeof Card>;
     formats?: Format[];
     onCancel?: () => void;
-    onSave?: (cardPath: string) => void;
+    onSave?: (url: string) => void;
     card: NewCardArgs | ExistingCardArgs;
   }
 }
@@ -71,7 +73,6 @@ export default class Preview extends Component<Signature> {
     {{/if}}
   </template>
 
-  @service declare localRealm: LocalRealm;
   @tracked
   format: Format = this.args.card.type === 'new' ? 'edit' : 'isolated';
   @tracked
@@ -118,7 +119,21 @@ export default class Preview extends Component<Signature> {
     if (this.args.card.type === 'new') {
       return true;
     }
-    return !isEqual(this.currentJSON, this.args.card.json);
+    let json = cloneDeep(this.currentJSON);
+    delete (json.data as any).id;
+
+    return !isEqual(json, this.initialComparisonJSON);
+  }
+
+  @cached
+  get initialComparisonJSON() {
+    if (this.args.card.type === 'new') {
+      return undefined;
+    }
+
+    let json = cloneDeep(this.args.card.json);
+    delete (json.data as any).id;
+    return json;
   }
   
   @action
@@ -146,44 +161,51 @@ export default class Preview extends Component<Signature> {
   }
 
   @restartableTask private async write(): Promise<void> {
-    let handle: FileSystemFileHandle;
-    let path: string
-    let dirHandle = await this.localRealm.fsHandle.getDirectoryHandle(this.card.constructor.name, { create: true });
-    if (this.args.card.type === 'new') {
-      let filename = await getNextJSONFileName(dirHandle);
-      handle = await dirHandle.getFileHandle(filename, { create: true });
-      path = `${this.card.constructor.name}/${filename}`;
-    } else {
-      handle = await dirHandle.getFileHandle(this.args.card.filename, { create: true });
-      path = `${this.card.constructor.name}/${this.args.card.filename}`;
+    let url = this.args.card.type === 'new' ? await getNextJsonURL(this.card): this.args.card.url;
+    let response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/vnd.api+json'
+      },
+      body: JSON.stringify(this.currentJSON, null, 2)
+    });
+    if (!response.ok) {
+      throw new Error(`could not save file ${url}, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
     }
-
-    // TypeScript seems to lack types for the writable stream features
-    let stream = await (handle as any).createWritable();
-
-    await stream.write(JSON.stringify(this.currentJSON, null, 2));
-    await stream.close();
-
     if (this.args.onSave) {
-      this.args.onSave(path);
+      this.args.onSave(url);
     }
   }
 }
 
-async function getNextJSONFileName(dirHandle: FileSystemDirectoryHandle): Promise<string> {
+async function getNextJsonURL(cardClass: Card): Promise<string> {
+  let response = await fetch(`http://local-realm/${cardClass.constructor.name}/`, {
+    headers: {
+      'Accept': 'application/vnd.api+json'
+    }
+  });
   let index = 0;
-  for await (let [name, handle ] of dirHandle as any as AsyncIterable<
-    [string, FileSystemDirectoryHandle | FileSystemFileHandle]
-  >) {
-    if (handle.kind === 'directory') {
-      continue;
-    }
-    if (!/^[\d]+\.json$/.test(name)) {
-      continue;
-    }
-    let num = parseInt(name.replace('.json', ''));
-    index = Math.max(index, num);
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`could not determine details for directory http://local-realm/${cardClass.constructor.name}. status: ${response.status} - ${response.statusText}. ${await response.text()}`);
   }
-
-  return `${++index}.json`;
+  if (response.ok) {
+    let {
+      data: { relationships }
+    }: {
+      data: {
+        relationships: { [name: string]: DirectoryEntryRelationship }
+      }
+    } = await response.json();
+    for (let [name, info ] of Object.entries(relationships)) {
+      if (info.meta.kind === 'directory') {
+        continue;
+      }
+      if (!/^[\d]+\.json$/.test(name)) {
+        continue;
+      }
+      let num = parseInt(name.replace('.json', ''));
+      index = Math.max(index, num);
+    }
+  }
+  return `http://local-realm/${cardClass.constructor.name}/${++index}.json`;
 }

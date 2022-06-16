@@ -132,7 +132,7 @@ export default class Go extends Component<Signature> {
     return {
       type: 'existing',
       json: this.openFileCardJSON,
-      filename: this.args.openFile.name,
+      url: this.args.openFile.url,
     }
   }
 

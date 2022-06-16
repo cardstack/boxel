@@ -115,39 +115,12 @@ export class FetchHandler {
     request: Request,
     url: URL
   ): Promise<Response> {
-    if (request.method === 'POST') {
-      let lastModified = await this.write(
-        new URL(request.url).pathname.slice(1),
-        await request.text()
-      );
-      return new Response(null, {
-        status: 204,
-        headers: {
-          'Last-Modified': formatRFC7231(lastModified),
-        },
-      });
-    }
-
     if (request.headers.get('Accept')?.includes('application/vnd.api+json')) {
-      return this.handleJSONAPI(url);
+      return this.handleJSONAPI(request, url);
     } else if (
       request.headers.get('Accept')?.includes('application/vnd.card+source')
     ) {
-      let handle = await this.getLocalFileWithFallbacks(
-        url.pathname.slice(1),
-        executableExtensions
-      );
-      let pathSegments = url.pathname.split('/');
-      let requestedName = pathSegments.pop()!;
-      if (handle.name !== requestedName) {
-        return new Response(null, {
-          status: 302,
-          headers: {
-            Location: [...pathSegments, handle.name].join('/'),
-          },
-        });
-      }
-      return await this.serveLocalFile(handle);
+      return this.handleCardSource(request, url);
     }
 
     let handle = await this.getLocalFileWithFallbacks(
@@ -163,7 +136,57 @@ export class FetchHandler {
     }
   }
 
-  private async handleJSONAPI(url: URL): Promise<Response> {
+  private async handleCardSource(
+    request: Request,
+    url: URL
+  ): Promise<Response> {
+    if (request.method === 'POST') {
+      let lastModified = await this.write(
+        new URL(request.url).pathname.slice(1),
+        await request.text()
+      );
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Last-Modified': formatRFC7231(lastModified),
+        },
+      });
+    }
+    let handle = await this.getLocalFileWithFallbacks(
+      url.pathname.slice(1),
+      executableExtensions
+    );
+    let pathSegments = url.pathname.split('/');
+    let requestedName = pathSegments.pop()!;
+    if (handle.name !== requestedName) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: [...pathSegments, handle.name].join('/'),
+        },
+      });
+    }
+    return await this.serveLocalFile(handle);
+  }
+
+  private async handleJSONAPI(request: Request, url: URL): Promise<Response> {
+    if (request.method === 'POST') {
+      let requestBody = await request.json();
+      delete requestBody.data.id;
+      let path = new URL(request.url).pathname.slice(1);
+      path = path.endsWith('.json') ? path : `${path}.json`;
+      let lastModified = await this.write(
+        path,
+        JSON.stringify(requestBody, null, 2)
+      );
+      requestBody.data.id = request.url.replace(/\/.json$/, '');
+      return new Response(JSON.stringify(requestBody, null, 2), {
+        headers: {
+          'Last-Modified': formatRFC7231(lastModified),
+        },
+      });
+    }
+
     if (url.pathname.endsWith('/')) {
       let jsonapi = await this.getDirectoryListing(url);
       if (!jsonapi) {

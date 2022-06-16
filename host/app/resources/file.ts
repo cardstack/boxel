@@ -16,11 +16,13 @@ export type FileResource =
   | {
       state: 'server-error';
       path: string;
+      url: string;
       loading: TaskInstance<void> | null;
     }
   | {
       state: 'not-found';
       path: string;
+      url: string;
       loading: TaskInstance<void> | null;
     }
   | {
@@ -28,6 +30,7 @@ export type FileResource =
       content: string;
       name: string;
       path: string;
+      url: string;
       loading: TaskInstance<void> | null;
       write(content: string): void;
       close(): void;

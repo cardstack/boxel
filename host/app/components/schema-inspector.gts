@@ -128,7 +128,8 @@ export default class SchemaInspector extends Component<Signature> {
   }
 
   @action
-  onSave(path: string) {
+  onSave(url: string) {
+    let path = new URL(url).pathname;
     this.router.transitionTo({ queryParams: { path } });
   }
 

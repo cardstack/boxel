@@ -82,13 +82,6 @@ export default class LocalRealm extends Service {
     return this.state.type === 'available';
   }
 
-  get fsHandle(): FileSystemDirectoryHandle {
-    if (this.state.type !== 'available') {
-      throw new Error(`fsHandle is not available in state ${this.state.type}`);
-    }
-    return this.state.handle;
-  }
-
   get isEmpty(): boolean {
     this.maybeSetup();
     return this.state.type === 'empty';
@@ -149,10 +142,10 @@ export default class LocalRealm extends Service {
       // if we see a new service worker version getting installed, and if we
       // already have an open file handle, send it to the new worker so we don't
       // lose access
-      if (this.isAvailable) {
+      if (this.state.type === 'available') {
         send(registration.installing!, {
           type: 'setDirectoryHandle',
-          handle: this.fsHandle,
+          handle: this.state.handle,
         });
       }
     });
