@@ -470,6 +470,14 @@ export class FetchHandler {
           })
         );
       }
+      if ((err as DOMException).name === 'TypeMismatchError') {
+        throw WorkerError.withResponse(
+          new Response(`${path} is a directory, but we expected a file`, {
+            status: 404,
+            headers: { 'content-type': 'text/html' },
+          })
+        );
+      }
       throw err;
     }
   }
