@@ -120,7 +120,7 @@ export class SpriteTreeNode {
     this.freshlyRemovedChildren.add(childNode);
   }
 
-  toLoggableForm(): TreeNode {
+  toLoggableForm(isRemoved?: boolean): TreeNode {
     let text = '';
     if (this.isContext) {
       let contextId = (
@@ -132,9 +132,17 @@ export class SpriteTreeNode {
       let spriteId = (this.spriteModel as unknown as SpriteModifier).id;
       text += `🥠${spriteId ? ` ${spriteId}` : ''}`;
     }
+    let extra = isRemoved ? '❌' : undefined;
     return {
       text,
-      children: Array.from(this.children).map((v) => v.toLoggableForm()),
+      extra,
+      children: Array.from(this.children)
+        .map((v) => v.toLoggableForm(isRemoved))
+        .concat(
+          Array.from(this.freshlyRemovedChildren).map((v) =>
+            v.toLoggableForm(true)
+          )
+        ),
     };
   }
 }
