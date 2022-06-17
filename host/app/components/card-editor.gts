@@ -12,9 +12,6 @@ import { eq } from '../helpers/truth-helpers';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { CardJSON, isCardJSON } from '@cardstack/runtime-common';
-import {
-  DirectoryEntryRelationship,
-} from '@cardstack/runtime-common';
 import cloneDeep from 'lodash/cloneDeep';
 
 export interface NewCardArgs {
