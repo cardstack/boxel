@@ -187,7 +187,7 @@ export class FetchHandler {
     if (url.pathname.endsWith('/')) {
       let jsonapi = await this.getDirectoryListing(url);
       if (!jsonapi) {
-        new Response(
+        return new Response(
           JSON.stringify({ errors: [`Could not find directory ${url.href}`] }),
           {
             status: 404,
@@ -306,7 +306,7 @@ export class FetchHandler {
         );
         // we assume that the final handle is a directory because we asked for a
         // path that ended in a '/'
-        dirHandle = await handle.getDirectoryHandle(dirname, { create: true });
+        dirHandle = await handle.getDirectoryHandle(dirname);
       } catch (err: unknown) {
         if ((err as DOMException).name !== 'NotFoundError') {
           throw err;
