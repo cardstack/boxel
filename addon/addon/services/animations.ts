@@ -22,6 +22,7 @@ import {
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
+import { SpriteSnapshotNodeBuilder } from 'animations-experiment/models/sprite-snapshot-node-builder';
 
 export type AnimateFunction = (
   sprite: Sprite,
@@ -211,6 +212,14 @@ export default class AnimationsService extends Service {
   *maybeTransitionTask() {
     this.didNotifyContextRendering = false;
 
+    // This classifies sprites and puts them under the correct first stable ancestor context.
+    let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
+      this.spriteTree,
+      this.eligibleContexts,
+      this.freshlyAdded,
+      this.freshlyRemoved
+    );
+
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
     let intermediateSprites = this.intermediateSprites;
     let runningAnimations = this.runningAnimations;
@@ -219,27 +228,25 @@ export default class AnimationsService extends Service {
 
     let promises = [];
     for (let context of contexts as AnimationContext[]) {
-      // TODO: Should we keep a "current" transition runner while it is running so we can actually interrupt it?
-      //  It may also be good enough to rewrite maybeTransition into a Task.
-      let transitionRunner = new TransitionRunner(context as AnimationContext, {
-        spriteTree: this.spriteTree,
-        freshlyAdded: filterToContext(
-          this.spriteTree,
-          context,
-          this.freshlyAdded
-        ),
-        freshlyRemoved: filterToContext(
-          this.spriteTree,
-          context,
-          this.freshlyRemoved,
-          { includeFreshlyRemoved: true }
-        ),
-        intent: this.intent,
-        intermediateSprites: intermediateSprites.get(context),
-        runningAnimations,
-      });
-      let task = taskFor(transitionRunner.maybeTransitionTask);
-      promises.push(task.perform());
+      let spriteSnapshotNode =
+        spriteSnapshotNodeBuilder.contextToNode.get(context);
+      if (spriteSnapshotNode && spriteSnapshotNode.hasSprites) {
+        let { insertedSprites, keptSprites, removedSprites } =
+          spriteSnapshotNode;
+
+        let changeset = new Changeset(context, undefined);
+        changeset.addSprites([
+          ...insertedSprites,
+          ...keptSprites,
+          ...removedSprites,
+        ]);
+
+        // TODO: add intermediateSprites
+
+        let transitionRunner = new TransitionRunner(context);
+        let task = taskFor(transitionRunner.maybeTransitionTask);
+        promises.push(task.perform(changeset));
+      }
     }
     yield all(promises);
     // TODO: check for async leaks

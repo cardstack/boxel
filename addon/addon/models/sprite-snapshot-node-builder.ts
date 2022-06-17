@@ -9,6 +9,7 @@ import SpriteTree, {
 } from 'animations-experiment/models/sprite-tree';
 import SpriteModifier from 'animations-experiment/modifiers/sprite';
 import { assert } from '@ember/debug';
+import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
 
 function checkForChanges(
   spriteModifier: SpriteModifier,
@@ -62,12 +63,82 @@ export class SpriteSnapshotNode {
     this.controllingContext = context;
   }
 
-  addSprite(sprite: Sprite) {
+  addSprite(
+    sprite: Sprite,
+    spriteModifier: SpriteModifier,
+    context: AnimationContext,
+    counterpartModifier?: SpriteModifier
+  ) {
     if (sprite.type === SpriteType.Kept) {
+      assert(
+        'kept sprite should have lastBounds and currentBounds',
+        spriteModifier.lastBounds &&
+          context.lastBounds &&
+          spriteModifier.currentBounds &&
+          context.currentBounds
+      );
+
+      sprite.initialBounds = new ContextAwareBounds({
+        element: spriteModifier.lastBounds,
+        contextElement: context.lastBounds,
+      });
+      sprite.finalBounds = new ContextAwareBounds({
+        element: spriteModifier.currentBounds,
+        contextElement: context.currentBounds,
+      });
+      sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
+      sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
+
+      if (sprite.counterpart) {
+        assert(
+          'counterpart modifier should have been passed',
+          counterpartModifier
+        );
+
+        assert(
+          'kept sprite counterpart should have lastBounds and currentBounds',
+          counterpartModifier.lastBounds && counterpartModifier.currentBounds
+        );
+
+        // TODO: double check if we're setting the correct bounds here
+        if (counterpartModifier) {
+          sprite.counterpart.initialBounds = new ContextAwareBounds({
+            element: counterpartModifier.currentBounds,
+            contextElement: context.lastBounds,
+          });
+          sprite.counterpart.initialComputedStyle =
+            counterpartModifier.lastComputedStyle;
+          sprite.counterpart.finalBounds = sprite.finalBounds;
+          sprite.counterpart.finalComputedStyle = sprite.finalComputedStyle;
+        }
+      }
+
       this.keptSprites.add(sprite);
     } else if (sprite.type === SpriteType.Inserted) {
+      assert(
+        'inserted sprite should have currentBounds',
+        spriteModifier.currentBounds && context.currentBounds
+      );
+
+      sprite.finalBounds = new ContextAwareBounds({
+        element: spriteModifier.currentBounds,
+        contextElement: context.currentBounds,
+      });
+      sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
+
       this.insertedSprites.add(sprite);
     } else if (sprite.type === SpriteType.Removed) {
+      assert(
+        'removed sprite should have currentBounds',
+        spriteModifier.currentBounds && context.lastBounds
+      );
+
+      sprite.initialBounds = new ContextAwareBounds({
+        element: spriteModifier.currentBounds,
+        contextElement: context.lastBounds,
+      });
+      sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
+
       this.removedSprites.add(sprite);
     }
   }
@@ -93,7 +164,7 @@ export class SpriteSnapshotNodeBuilder {
   ) {
     this.spriteTree = spriteTree;
 
-    // Lookup natural KeptSprites
+    // Capture snapshots & lookup natural KeptSprites
     let freshlyChanged: Set<SpriteModifier> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
@@ -102,6 +173,7 @@ export class SpriteSnapshotNodeBuilder {
         if (contextDescendant instanceof SpriteModifier) {
           let spriteModifier = contextDescendant as SpriteModifier;
           spriteModifier.captureSnapshot();
+          // TODO: what about refactoring away checkForChanges and simply treating all leftover sprites in the SpriteTree as KeptSprites
           if (checkForChanges(spriteModifier, context)) {
             freshlyChanged.add(spriteModifier);
           }
@@ -109,11 +181,11 @@ export class SpriteSnapshotNodeBuilder {
       }
     }
 
-    let { spriteModifiers, spriteModifierToSpriteMap } = this.classifySprites(
-      freshlyAdded,
-      freshlyRemoved,
-      freshlyChanged
-    );
+    let {
+      spriteModifiers,
+      spriteModifierToSpriteMap,
+      spriteModifierToCounterpartModifierMap,
+    } = this.classifySprites(freshlyAdded, freshlyRemoved, freshlyChanged);
 
     for (let context of contexts) {
       if (context.isStable) {
@@ -130,8 +202,15 @@ export class SpriteSnapshotNodeBuilder {
         );
 
         for (let spriteModifier of spriteModifiersForContext) {
+          let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
+          let counterpartModifier =
+            spriteModifierToCounterpartModifierMap.get(spriteModifier);
+
           spriteSnapshotNode.addSprite(
-            spriteModifierToSpriteMap.get(spriteModifier) as Sprite
+            sprite,
+            spriteModifier,
+            context,
+            counterpartModifier
           );
         }
 
@@ -158,6 +237,10 @@ export class SpriteSnapshotNodeBuilder {
 
     let spriteModifiers: Set<SpriteModifier> = new Set();
     let spriteModifierToSpriteMap = new WeakMap<SpriteModifier, Sprite>();
+    let spriteModifierToCounterpartModifierMap = new WeakMap<
+      SpriteModifier,
+      SpriteModifier
+    >();
 
     // Collect intersecting sprite identifiers
     let insertedIds = insertedSpritesArr.map(
@@ -207,6 +290,10 @@ export class SpriteSnapshotNodeBuilder {
       );
       spriteModifiers.add(insertedSpriteModifier);
       spriteModifierToSpriteMap.set(insertedSpriteModifier, keptSprite);
+      spriteModifierToCounterpartModifierMap.set(
+        insertedSpriteModifier,
+        removedSpriteModifier
+      );
     }
 
     for (let insertedSpriteModifier of classifiedInsertedSpriteModifiers) {
@@ -251,6 +338,7 @@ export class SpriteSnapshotNodeBuilder {
     return {
       spriteModifiers,
       spriteModifierToSpriteMap,
+      spriteModifierToCounterpartModifierMap,
     };
   }
 }
