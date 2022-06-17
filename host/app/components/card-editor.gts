@@ -42,7 +42,7 @@ export default class Preview extends Component<Signature> {
   <template>
     {{#if this.args.formats}}
       <div>
-        Format: 
+        Format:
         {{#each this.args.formats as |format|}}
           <button {{on "click" (fn this.setFormat format)}}
             class="format-button {{format}} {{if (eq this.format format) 'selected'}}"
@@ -135,7 +135,7 @@ export default class Preview extends Component<Signature> {
     delete (json.data as any).id;
     return json;
   }
-  
+
   @action
   setFormat(format: Format) {
     this.format = format;
@@ -161,15 +161,6 @@ export default class Preview extends Component<Signature> {
   }
 
   @restartableTask private async write(): Promise<void> {
-    // let url = this.args.card.type === 'new' ? await getNextJsonURL(this.card): this.args.card.url;
-    // let response = await fetch(url, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Accept': 'application/vnd.api+json'
-    //   },
-    //   body: JSON.stringify(this.currentJSON, null, 2)
-    // });
-
     let response: Response;
     if (this.args.card.type === 'new') {
       response = await fetch('http://local-realm/', {
@@ -180,9 +171,14 @@ export default class Preview extends Component<Signature> {
         body: JSON.stringify(this.currentJSON, null, 2)
       });
     } else {
-      throw new Error('unimplemented');
+      response = await fetch(this.args.card.url, {
+        method: 'PATCH',
+        headers: {
+          'Accept': 'application/vnd.api+json'
+        },
+        body: JSON.stringify(this.currentJSON, null, 2)
+      });
     }
-
 
     if (!response.ok) {
       throw new Error(`could not save file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);

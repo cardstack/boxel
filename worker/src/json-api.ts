@@ -137,22 +137,35 @@ export async function handle(
   }
 
   if (request.method === 'PATCH') {
-    throw new Error('unimplemented');
-    // let requestBody = await request.json();
-    // delete requestBody.data.id;
-    // let path = new URL(request.url).pathname.slice(1);
-    // path = path.endsWith('.json') ? path : `${path}.json`;
-    // let lastModified = await write(
-    //   this.messageHandler.fs,
-    //   path,
-    //   JSON.stringify(requestBody, null, 2)
-    // );
-    // requestBody.data.id = request.url.replace(/\/.json$/, '');
-    // return new Response(JSON.stringify(requestBody, null, 2), {
-    //   headers: {
-    //     'Last-Modified': formatRFC7231(lastModified),
-    //   },
-    // });
+    let json = await request.json();
+
+    if (!isCardJSON(json)) {
+      return new Response(
+        JSON.stringify({
+          errors: [`Request body is not valid card JSON-API`],
+        }),
+        {
+          status: 404,
+          headers: { 'content-type': 'application/vnd.api+json' },
+        }
+      );
+    }
+
+    let lastModified = await write(
+      fs,
+      url.pathname.slice(1),
+      JSON.stringify(json, null, 2)
+    );
+
+    let newURL = url.href.replace(/\.json$/, '');
+    (json.data as any).id = newURL;
+    (json.data as any).links = { self: newURL };
+
+    return new Response(JSON.stringify(json, null, 2), {
+      headers: {
+        'Last-Modified': formatRFC7231(lastModified),
+      },
+    });
   }
 
   if (url.pathname.endsWith('/')) {
