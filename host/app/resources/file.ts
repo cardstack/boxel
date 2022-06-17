@@ -9,6 +9,7 @@ interface Args {
     url: string;
     content: string | undefined;
     lastModified: string | undefined;
+    onNotFound?: () => void;
   };
 }
 
@@ -40,15 +41,18 @@ class _FileResource extends Resource<Args> {
   private interval: ReturnType<typeof setInterval>;
   private _url: string;
   private lastModified: string | undefined;
+  private onNotFound: (() => void) | undefined;
   @tracked content: string | undefined;
   @tracked state = 'ready';
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    this._url = args.named.url;
-    if (args.named.content !== undefined) {
-      this.content = args.named.content;
-      this.lastModified = args.named.lastModified;
+    let { url, content, lastModified, onNotFound } = args.named;
+    this._url = url;
+    this.onNotFound = onNotFound;
+    if (content !== undefined) {
+      this.content = content;
+      this.lastModified = lastModified;
     } else {
       // get the initial content if we haven't already been seeded with initial content
       taskFor(this.read).perform();
@@ -103,6 +107,9 @@ class _FileResource extends Resource<Args> {
       );
       if (response.status === 404) {
         this.state = 'not-found';
+        if (this.onNotFound) {
+          this.onNotFound();
+        }
       } else {
         this.state = 'server-error';
       }
@@ -153,9 +160,15 @@ export function file(
   parent: object,
   url: () => string,
   content: () => string | undefined,
-  lastModified: () => string | undefined
+  lastModified: () => string | undefined,
+  onNotFound?: () => void
 ): FileResource {
   return useResource(parent, _FileResource, () => ({
-    named: { url: url(), content: content(), lastModified: lastModified() },
+    named: {
+      url: url(),
+      content: content(),
+      lastModified: lastModified(),
+      onNotFound,
+    },
   })) as FileResource;
 }

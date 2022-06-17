@@ -59,7 +59,11 @@ export default class Application extends Route<Model> {
         this,
         () => url,
         () => contents,
-        () => response.headers.get('Last-Modified') || undefined
+        () => response.headers.get('Last-Modified') || undefined,
+        () =>
+          this.router.transitionTo('application', {
+            queryParams: { path: undefined },
+          })
       );
       await openFile.loading;
     }
