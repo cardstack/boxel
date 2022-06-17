@@ -21,46 +21,46 @@
     </div>
   </HomeReno::Card::Maximized>
 
-  {{#if this.currentMaximizedItems.outline}}
+  {{#if (eq this.currentMaximizedItem "outline")}}
     <HomeReno::Card::Maximized
-      @minimize={{fn this.minimize "outline"}}
+      @minimize={{this.minimize}}
       local-class="outline"
     >
       Outline
       <div local-class="compact-list">
         <HomeReno::Gallery::Compact
-          @state={{this.secondaryItemState.outline}}
-          @toggleExpansion={{fn this.toggleSecondaryItemExpansion "outline"}}
+          @state={{this.secondaryItemState}}
+          @toggleExpansion={{this.toggleSecondaryItemExpansion}}
         />
       </div>
     </HomeReno::Card::Maximized>
   {{/if}}
 
-  {{#if this.currentMaximizedItems.gallery}}
+  {{#if (eq this.currentMaximizedItem "gallery")}}
     <HomeReno::Card::Maximized
-      @minimize={{fn this.minimize "gallery"}}
+      @minimize={{this.minimize}}
       local-class="gallery"
     >
       Gallery
       <div local-class="compact-list">
         <HomeReno::Outline::Compact
-          @state={{this.secondaryItemState.gallery}}
-          @toggleExpansion={{fn this.toggleSecondaryItemExpansion "gallery"}}
+          @state={{this.secondaryItemState}}
+          @toggleExpansion={{this.toggleSecondaryItemExpansion}}
         />
       </div>
     </HomeReno::Card::Maximized>
   {{/if}}
 
-  {{#if this.currentMaximizedItems.form}}
+  {{#if (eq this.currentMaximizedItem "form")}}
     <HomeReno::Card::Maximized
-      @minimize={{fn this.minimize "form"}}
+      @minimize={{this.minimize}}
       local-class="form"
     >
       Form
       <div local-class="compact-list">
         <HomeReno::Outline::Compact
-          @state={{this.secondaryItemState.form}}
-          @toggleExpansion={{fn this.toggleSecondaryItemExpansion "form"}}
+          @state={{this.secondaryItemState}}
+          @toggleExpansion={{this.toggleSecondaryItemExpansion}}
         />
       </div>
     </HomeReno::Card::Maximized>
