@@ -11,6 +11,7 @@ import {
   serveLocalFile,
 } from './file-system';
 import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
+import merge from 'lodash/merge';
 
 /*
   Directory listing is a JSON-API document that looks like:
@@ -62,11 +63,14 @@ import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
   }
 */
 
+// TODO let's refactor this method so it's not a huge pile of if's. maybe use a
+// strategy pattern
 export async function handle(
   fs: FileSystemDirectoryHandle,
   request: Request,
   url: URL
 ): Promise<Response> {
+  // create card data
   if (request.method === 'POST') {
     if (url.pathname !== '/') {
       return new Response(
@@ -135,84 +139,126 @@ export async function handle(
     (json.data as any).id = newURL;
     (json.data as any).links = { self: newURL };
     return new Response(JSON.stringify(json, null, 2), {
+      status: 201,
       headers: {
         'Last-Modified': formatRFC7231(lastModified),
       },
     });
   }
 
+  // Update card data
   if (request.method === 'PATCH') {
-    let json = await request.json();
-
-    if (!isCardJSON(json)) {
+    let handle = await getLocalFileWithFallbacks(fs, url.pathname.slice(1), [
+      '.json',
+    ]);
+    if (!handle.name.endsWith('.json')) {
       return new Response(
         JSON.stringify({
-          errors: [`Request body is not valid card JSON-API`],
+          errors: [`PATCH not allowed for ${url.href}`],
         }),
         {
-          status: 404,
+          status: 405,
           headers: { 'content-type': 'application/vnd.api+json' },
         }
       );
     }
 
+    let file = await handle.getFile();
+    let original = JSON.parse(await getContents(file));
+    if (!isCardJSON(original)) {
+      return new Response(
+        JSON.stringify({
+          errors: [`PATCH not allowed for ${url.href}`],
+        }),
+        {
+          status: 405,
+          headers: { 'content-type': 'application/vnd.api+json' },
+        }
+      );
+    }
+
+    let patch = await request.json();
+    delete patch.data.meta;
+    delete patch.data.id;
+    delete patch.data.type;
+    let contents = merge(original, patch);
+    let path = url.pathname.endsWith('.json')
+      ? url.pathname
+      : url.pathname + '.json';
     let lastModified = await write(
       fs,
-      url.pathname.slice(1),
-      JSON.stringify(json, null, 2)
+      path.slice(1),
+      JSON.stringify(contents, null, 2)
     );
-
-    return new Response(JSON.stringify(json, null, 2), {
+    contents.data.id = url.pathname.replace(/\.json$/, '');
+    return new Response(JSON.stringify(contents, null, 2), {
       headers: {
         'Last-Modified': formatRFC7231(lastModified),
       },
     });
   }
 
-  if (url.pathname.endsWith('/')) {
-    let jsonapi = await getDirectoryListing(fs, url);
-    if (!jsonapi) {
-      return new Response(
-        JSON.stringify({ errors: [`Could not find directory ${url.href}`] }),
-        {
-          status: 404,
-          headers: { 'content-type': 'application/vnd.api+json' },
-        }
-      );
-    }
+  if (request.method === 'GET') {
+    // Get directory listing
+    if (url.pathname.endsWith('/')) {
+      let jsonapi = await getDirectoryListing(fs, url);
+      if (!jsonapi) {
+        return new Response(
+          JSON.stringify({ errors: [`Could not find directory ${url.href}`] }),
+          {
+            status: 404,
+            headers: { 'content-type': 'application/vnd.api+json' },
+          }
+        );
+      }
 
-    return new Response(JSON.stringify(jsonapi, null, 2), {
-      headers: { 'content-type': 'application/vnd.api+json' },
-    });
-  }
-
-  let handle = await getLocalFileWithFallbacks(fs, url.pathname.slice(1), [
-    '.json',
-  ]);
-  if (handle.name.endsWith('.json')) {
-    let file = await handle.getFile();
-    let json: object | undefined;
-    try {
-      json = JSON.parse(await getContents(file));
-    } catch (err: unknown) {
-      console.log(`The file ${url.href} is not parsable JSON`);
-    }
-    if (isCardJSON(json)) {
-      // the only JSON API thing missing from the file serialization for our
-      // card data is the ID
-      (json as any).data.id = url.href.replace(/\.json$/, '');
-      (json.data as any).links = { self: url.href.replace(/\.json$/, '') };
-      return new Response(JSON.stringify(json, null, 2), {
-        headers: {
-          'Last-Modified': formatRFC7231(file.lastModified),
-          'Content-Type': 'application/vnd.api+json',
-        },
+      return new Response(JSON.stringify(jsonapi, null, 2), {
+        headers: { 'content-type': 'application/vnd.api+json' },
       });
     }
+
+    let handle = await getLocalFileWithFallbacks(fs, url.pathname.slice(1), [
+      '.json',
+    ]);
+    if (handle.name.endsWith('.json')) {
+      let file = await handle.getFile();
+      let json: object | undefined;
+      try {
+        json = JSON.parse(await getContents(file));
+      } catch (err: unknown) {
+        console.log(`The file ${url.href} is not parsable JSON`);
+      }
+      if (isCardJSON(json)) {
+        // the only JSON API thing missing from the file serialization for our
+        // card data is the ID
+        (json as any).data.id = url.href.replace(/\.json$/, '');
+        (json.data as any).links = { self: url.href.replace(/\.json$/, '') };
+        return new Response(JSON.stringify(json, null, 2), {
+          headers: {
+            'Last-Modified': formatRFC7231(file.lastModified),
+            'Content-Type': 'application/vnd.api+json',
+          },
+        });
+      }
+    }
+
+    // otherwise, just serve the asset
+    return await serveLocalFile(handle);
   }
 
-  // otherwise, just serve the asset
-  return await serveLocalFile(handle);
+  return new Response(
+    JSON.stringify({
+      errors: [
+        `Don't know how to handle JSON-API request ${request.method} for ${url.href}`,
+      ],
+    }),
+    {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+      },
+    }
+  );
 }
 
 async function getDirectoryListing(
