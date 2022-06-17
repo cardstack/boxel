@@ -41,6 +41,18 @@ export default class Changeset {
     this.intent = intent;
   }
 
+  addSprites(sprites: Sprite[]) {
+    for (let sprite of sprites) {
+      if (sprite.type === SpriteType.Kept) {
+        this.keptSprites.add(sprite);
+      } else if (sprite.type === SpriteType.Inserted) {
+        this.insertedSprites.add(sprite);
+      } else if (sprite.type === SpriteType.Removed) {
+        this.removedSprites.add(sprite);
+      }
+    }
+  }
+
   spritesFor(criteria: SpritesForArgs): Set<Sprite> {
     assert(
       'expect spritesFor to be called with some criteria',
