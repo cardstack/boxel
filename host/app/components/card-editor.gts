@@ -161,51 +161,35 @@ export default class Preview extends Component<Signature> {
   }
 
   @restartableTask private async write(): Promise<void> {
-    let url = this.args.card.type === 'new' ? await getNextJsonURL(this.card): this.args.card.url;
-    let response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      },
-      body: JSON.stringify(this.currentJSON, null, 2)
-    });
-    if (!response.ok) {
-      throw new Error(`could not save file ${url}, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
-    }
-    if (this.args.onSave) {
-      this.args.onSave(url);
-    }
-  }
-}
+    // let url = this.args.card.type === 'new' ? await getNextJsonURL(this.card): this.args.card.url;
+    // let response = await fetch(url, {
+    //   method: 'POST',
+    //   headers: {
+    //     'Accept': 'application/vnd.api+json'
+    //   },
+    //   body: JSON.stringify(this.currentJSON, null, 2)
+    // });
 
-async function getNextJsonURL(cardClass: Card): Promise<string> {
-  let response = await fetch(`http://local-realm/${cardClass.constructor.name}/`, {
-    headers: {
-      'Accept': 'application/vnd.api+json'
+    let response: Response;
+    if (this.args.card.type === 'new') {
+      response = await fetch('http://local-realm/', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/vnd.api+json'
+        },
+        body: JSON.stringify(this.currentJSON, null, 2)
+      });
+    } else {
+      throw new Error('unimplemented');
     }
-  });
-  let index = 0;
-  if (!response.ok && response.status !== 404) {
-    throw new Error(`could not determine details for directory http://local-realm/${cardClass.constructor.name}. status: ${response.status} - ${response.statusText}. ${await response.text()}`);
-  }
-  if (response.ok) {
-    let {
-      data: { relationships }
-    }: {
-      data: {
-        relationships: { [name: string]: DirectoryEntryRelationship }
-      }
-    } = await response.json();
-    for (let [name, info ] of Object.entries(relationships)) {
-      if (info.meta.kind === 'directory') {
-        continue;
-      }
-      if (!/^[\d]+\.json$/.test(name)) {
-        continue;
-      }
-      let num = parseInt(name.replace('.json', ''));
-      index = Math.max(index, num);
+
+
+    if (!response.ok) {
+      throw new Error(`could not save file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
+    }
+    let json = await response.json();
+    if (this.args.onSave) {
+      this.args.onSave(json.data.links.self + '.json');
     }
   }
-  return `http://local-realm/${cardClass.constructor.name}/${++index}.json`;
 }

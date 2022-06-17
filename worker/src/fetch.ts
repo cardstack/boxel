@@ -12,10 +12,13 @@ import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
 import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-transform-typescript';
-import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
 import { formatRFC7231 } from 'date-fns';
-import { isCardJSON, ResourceObjectWithId } from '@cardstack/runtime-common';
-import ignore from 'ignore';
+import {
+  write,
+  getLocalFileWithFallbacks,
+  serveLocalFile,
+} from './file-system';
+import { handle as handleJSONAPI } from './json-api';
 
 const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 
@@ -112,15 +115,25 @@ export class FetchHandler {
     request: Request,
     url: URL
   ): Promise<Response> {
+    if (!this.messageHandler.fs) {
+      throw WorkerError.withResponse(
+        new Response('no local realm is available', {
+          status: 404,
+          headers: { 'content-type': 'text/html' },
+        })
+      );
+    }
+
     if (request.headers.get('Accept')?.includes('application/vnd.api+json')) {
-      return this.handleJSONAPI(request, url);
+      return handleJSONAPI(this.messageHandler.fs, request, url);
     } else if (
       request.headers.get('Accept')?.includes('application/vnd.card+source')
     ) {
       return this.handleCardSource(request, url);
     }
 
-    let handle = await this.getLocalFileWithFallbacks(
+    let handle = await getLocalFileWithFallbacks(
+      this.messageHandler.fs,
       url.pathname.slice(1),
       executableExtensions
     );
@@ -129,7 +142,7 @@ export class FetchHandler {
     ) {
       return await this.makeJS(handle);
     } else {
-      return await this.serveLocalFile(handle);
+      return await serveLocalFile(handle);
     }
   }
 
@@ -137,8 +150,18 @@ export class FetchHandler {
     request: Request,
     url: URL
   ): Promise<Response> {
+    if (!this.messageHandler.fs) {
+      throw WorkerError.withResponse(
+        new Response('no local realm is available', {
+          status: 404,
+          headers: { 'content-type': 'text/html' },
+        })
+      );
+    }
+
     if (request.method === 'POST') {
-      let lastModified = await this.write(
+      let lastModified = await write(
+        this.messageHandler.fs,
         new URL(request.url).pathname.slice(1),
         await request.text()
       );
@@ -149,7 +172,8 @@ export class FetchHandler {
         },
       });
     }
-    let handle = await this.getLocalFileWithFallbacks(
+    let handle = await getLocalFileWithFallbacks(
+      this.messageHandler.fs,
       url.pathname.slice(1),
       executableExtensions
     );
@@ -163,185 +187,7 @@ export class FetchHandler {
         },
       });
     }
-    return await this.serveLocalFile(handle);
-  }
-
-  private async handleJSONAPI(request: Request, url: URL): Promise<Response> {
-    if (request.method === 'POST') {
-      let requestBody = await request.json();
-      delete requestBody.data.id;
-      let path = new URL(request.url).pathname.slice(1);
-      path = path.endsWith('.json') ? path : `${path}.json`;
-      let lastModified = await this.write(
-        path,
-        JSON.stringify(requestBody, null, 2)
-      );
-      requestBody.data.id = request.url.replace(/\/.json$/, '');
-      return new Response(JSON.stringify(requestBody, null, 2), {
-        headers: {
-          'Last-Modified': formatRFC7231(lastModified),
-        },
-      });
-    }
-
-    if (url.pathname.endsWith('/')) {
-      let jsonapi = await this.getDirectoryListing(url);
-      if (!jsonapi) {
-        return new Response(
-          JSON.stringify({ errors: [`Could not find directory ${url.href}`] }),
-          {
-            status: 404,
-            headers: { 'content-type': 'application/vnd.api+json' },
-          }
-        );
-      }
-
-      return new Response(JSON.stringify(jsonapi, null, 2), {
-        headers: { 'content-type': 'application/vnd.api+json' },
-      });
-    }
-
-    let handle = await this.getLocalFileWithFallbacks(url.pathname.slice(1), [
-      '.json',
-    ]);
-    if (handle.name.endsWith('.json')) {
-      let file = await handle.getFile();
-      let json: object | undefined;
-      try {
-        json = JSON.parse(await getContents(file));
-      } catch (err: unknown) {
-        console.log(`The file ${url.href} is not parsable JSON`);
-      }
-      if (isCardJSON(json)) {
-        // the only JSON API thing missing from the file serialization for our
-        // card data is the ID
-        (json as any).data.id = url.href.replace(/\.json$/, '');
-        return new Response(JSON.stringify(json, null, 2), {
-          headers: {
-            'Last-Modified': formatRFC7231(file.lastModified),
-            'Content-Type': 'application/vnd.api+json',
-          },
-        });
-      }
-    }
-
-    // otherwise, just serve the asset
-    return await this.serveLocalFile(handle);
-  }
-
-  /*
-    Directory listing is a JSON-API document that looks like:
-
-    with this file system
-
-    /
-    /cards
-    /cards/file1.ts
-    /cards/file2.ts
-    /cards/nested/
-    /cards/nested-file1.json
-    /cards/nested-file2.json
-
-    if you request http://local-realm/, then this is the response:
-
-    {
-      data: {
-        type: "directory",
-        id: "http://local-realm/",
-        relationships: {
-          "cards": {
-            links: {
-              related: "http://local-realm/cards/"
-            },
-            meta: {
-              kind: "directory"
-            }
-          },
-          "file1.ts": {
-            links: {
-              related: "http://local-realm/file1.ts"
-            },
-            meta: {
-              kind: "file"
-            }
-          },
-          "file2.ts": {
-            links: {
-              related: "http://local-realm/file1.ts"
-            },
-            meta: {
-              kind: "file"
-            }
-          },
-
-        }
-      }
-    }
-  */
-
-  private async getDirectoryListing(
-    url: URL
-  ): Promise<
-    | { data: ResourceObjectWithId; included?: ResourceObjectWithId[] }
-    | undefined
-  > {
-    if (!this.messageHandler.fs) {
-      throw WorkerError.withResponse(
-        new Response('no local realm is available', {
-          status: 404,
-          headers: { 'content-type': 'text/html' },
-        })
-      );
-    }
-    let path = url.pathname;
-
-    let dirHandle: FileSystemDirectoryHandle;
-    if (path === '/') {
-      dirHandle = this.messageHandler.fs;
-    } else {
-      try {
-        let { handle, filename: dirname } = await traverse(
-          this.messageHandler.fs,
-          path.slice(1).replace(/\/$/, '')
-        );
-        // we assume that the final handle is a directory because we asked for a
-        // path that ended in a '/'
-        dirHandle = await handle.getDirectoryHandle(dirname);
-      } catch (err: unknown) {
-        if ((err as DOMException).name !== 'NotFoundError') {
-          throw err;
-        }
-        console.log(`can't find file ${path} from the local realm`);
-        return undefined;
-      }
-    }
-    let ignoreFile = await getIgnorePatterns(dirHandle);
-    let entries = await getDirectoryEntries(dirHandle, path, ignoreFile);
-
-    let data: ResourceObjectWithId = {
-      id: url.href,
-      type: 'directory',
-      relationships: {},
-    };
-
-    // Note that the entries are sorted such that the parent directory always
-    // appears before the children
-    for (let entry of entries) {
-      let relationship: DirectoryEntryRelationship = {
-        links: {
-          related: new URL(entry.path, url.href).href,
-        },
-        meta: {
-          kind: entry.handle.kind as 'directory' | 'file',
-        },
-      };
-
-      data.relationships![
-        entry.handle.name + (entry.handle.kind === 'directory' ? '/' : '')
-      ] = relationship;
-    }
-
-    return { data };
+    return await serveLocalFile(handle);
   }
 
   private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
@@ -388,100 +234,6 @@ export class FetchHandler {
     });
   }
 
-  private async serveLocalFile(
-    handle: FileSystemFileHandle
-  ): Promise<Response> {
-    let file = await handle.getFile();
-    return new Response(file, {
-      headers: {
-        'Last-Modified': formatRFC7231(file.lastModified),
-      },
-    });
-  }
-
-  private async write(path: string, contents: string): Promise<number> {
-    if (!this.messageHandler.fs) {
-      throw WorkerError.withResponse(
-        new Response('no local realm is available', {
-          status: 404,
-          headers: { 'content-type': 'text/html' },
-        })
-      );
-    }
-    let { handle: dirHandle, filename } = await traverse(
-      this.messageHandler.fs,
-      path,
-      { create: true }
-    );
-    let handle = await dirHandle.getFileHandle(filename, { create: true });
-    // TypeScript seems to lack types for the writable stream features
-    let stream = await (handle as any).createWritable();
-    await stream.write(contents);
-    await stream.close();
-    return (await handle.getFile()).lastModified;
-  }
-
-  // we bother with this because typescript is picky about allowing you to use
-  // explicit file extensions in your source code
-  private async getLocalFileWithFallbacks(
-    path: string,
-    extensions: string[]
-  ): Promise<FileSystemFileHandle> {
-    try {
-      return await this.getLocalFile(path);
-    } catch (err) {
-      if (!(err instanceof WorkerError) || err.response.status !== 404) {
-        throw err;
-      }
-      for (let extension of extensions) {
-        try {
-          return await this.getLocalFile(path + extension);
-        } catch (innerErr) {
-          if (
-            !(innerErr instanceof WorkerError) ||
-            innerErr.response.status !== 404
-          ) {
-            throw innerErr;
-          }
-        }
-      }
-      throw err;
-    }
-  }
-
-  private async getLocalFile(path: string): Promise<FileSystemFileHandle> {
-    if (!this.messageHandler.fs) {
-      throw WorkerError.withResponse(
-        new Response('no local realm is available', {
-          status: 404,
-          headers: { 'content-type': 'text/html' },
-        })
-      );
-    }
-    try {
-      let { handle, filename } = await traverse(this.messageHandler.fs, path);
-      return await handle.getFileHandle(filename);
-    } catch (err) {
-      if ((err as DOMException).name === 'NotFoundError') {
-        throw WorkerError.withResponse(
-          new Response(`${path} not found in local realm`, {
-            status: 404,
-            headers: { 'content-type': 'text/html' },
-          })
-        );
-      }
-      if ((err as DOMException).name === 'TypeMismatchError') {
-        throw WorkerError.withResponse(
-          new Response(`${path} is a directory, but we expected a file`, {
-            status: 404,
-            headers: { 'content-type': 'text/html' },
-          })
-        );
-      }
-      throw err;
-    }
-  }
-
   private async doCacheDrop() {
     let names = await globalThis.caches.keys();
     for (let name of names) {
@@ -493,98 +245,4 @@ export class FetchHandler {
       },
     });
   }
-}
-
-async function getContents(file: File): Promise<string> {
-  let reader = new FileReader();
-  return await new Promise<string>((resolve, reject) => {
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsText(file);
-  });
-}
-
-interface Entry {
-  handle: FileSystemDirectoryHandle | FileSystemFileHandle;
-  path: string;
-}
-
-async function getDirectoryEntries(
-  directoryHandle: FileSystemDirectoryHandle,
-  parentDir: string,
-  ignoreFile = ''
-): Promise<Entry[]> {
-  let entries: Entry[] = [];
-  for await (let [name, handle] of directoryHandle as any as AsyncIterable<
-    [string, FileSystemDirectoryHandle | FileSystemFileHandle]
-  >) {
-    if (
-      handle.kind === 'directory' &&
-      filterIgnored([`${name}/`], ignoreFile).length === 0
-    ) {
-      // without this, trying to open large root dirs causes the browser to hang
-      continue;
-    }
-    let path = `${parentDir}${handle.name}`;
-    entries.push({
-      handle,
-      path: handle.kind === 'directory' ? `${path}/` : path,
-    });
-  }
-  return filterIgnoredEntries(entries, ignoreFile);
-}
-
-async function getIgnorePatterns(fileDir: FileSystemDirectoryHandle) {
-  let fileHandle;
-  try {
-    fileHandle = await fileDir.getFileHandle('.monacoignore');
-  } catch (e) {
-    try {
-      fileHandle = await fileDir.getFileHandle('.gitignore');
-    } catch (e) {
-      return '';
-    }
-  }
-  return await readFileAsText(fileHandle);
-}
-
-function filterIgnoredEntries(entries: Entry[], patterns: string): Entry[] {
-  let filteredPaths = filterIgnored(
-    entries.map((e) => e.path.slice(1)),
-    patterns
-  );
-  return entries.filter((entry) => filteredPaths.includes(entry.path.slice(1)));
-}
-
-function filterIgnored(paths: string[], patterns: string): string[] {
-  return ignore().add(patterns).filter(paths);
-}
-
-async function traverse(
-  dirHandle: FileSystemDirectoryHandle,
-  path: string,
-  opts?: { create?: boolean }
-): Promise<{ handle: FileSystemDirectoryHandle; filename: string }> {
-  let pathSegments = path.split('/');
-  let create = opts?.create;
-  async function nextHandle(
-    handle: FileSystemDirectoryHandle,
-    pathSegment: string
-  ) {
-    try {
-      return await handle.getDirectoryHandle(pathSegment, { create });
-    } catch (err: any) {
-      if (err.name === 'NotFoundError') {
-        console.error(`${path} was not found in the local realm`);
-      }
-      throw err;
-    }
-  }
-
-  let handle = dirHandle;
-  while (pathSegments.length > 1) {
-    let segment = pathSegments.shift()!;
-    handle = await nextHandle(handle, segment);
-  }
-  return { handle, filename: pathSegments[0] };
 }
