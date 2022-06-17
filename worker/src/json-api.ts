@@ -125,7 +125,12 @@ export async function handle(
       }
     }
     let pathname = `${dirName}/${++index}.json`;
-    let lastModified = await write(fs, pathname, JSON.stringify(json, null, 2));
+    let lastModified = await write(
+      fs,
+      pathname,
+      JSON.stringify(json, null, 2),
+      { create: true }
+    );
     let newURL = new URL(pathname, url.origin).href.replace(/\.json$/, '');
     (json.data as any).id = newURL;
     (json.data as any).links = { self: newURL };
@@ -156,10 +161,6 @@ export async function handle(
       url.pathname.slice(1),
       JSON.stringify(json, null, 2)
     );
-
-    let newURL = url.href.replace(/\.json$/, '');
-    (json.data as any).id = newURL;
-    (json.data as any).links = { self: newURL };
 
     return new Response(JSON.stringify(json, null, 2), {
       headers: {

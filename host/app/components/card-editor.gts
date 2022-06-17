@@ -161,30 +161,21 @@ export default class Preview extends Component<Signature> {
   }
 
   @restartableTask private async write(): Promise<void> {
-    let response: Response;
-    if (this.args.card.type === 'new') {
-      response = await fetch('http://local-realm/', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/vnd.api+json'
-        },
-        body: JSON.stringify(this.currentJSON, null, 2)
-      });
-    } else {
-      response = await fetch(this.args.card.url, {
-        method: 'PATCH',
-        headers: {
-          'Accept': 'application/vnd.api+json'
-        },
-        body: JSON.stringify(this.currentJSON, null, 2)
-      });
-    }
+    let url = this.args.card.type === 'new' ? 'http://local-realm/' : this.args.card.url;
+    let method = this.args.card.type === 'new' ? 'POST' : 'PATCH';
+    let response = await fetch(url, {
+      method,
+      headers: {
+        'Accept': 'application/vnd.api+json'
+      },
+      body: JSON.stringify(this.currentJSON, null, 2)
+    });
 
     if (!response.ok) {
       throw new Error(`could not save file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
     }
     let json = await response.json();
-    if (this.args.onSave) {
+    if (json.data.links?.self && this.args.onSave) {
       this.args.onSave(json.data.links.self + '.json');
     }
   }

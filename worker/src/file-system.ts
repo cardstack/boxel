@@ -17,12 +17,13 @@ export async function serveLocalFile(
 export async function write(
   fs: FileSystemDirectoryHandle,
   path: string,
-  contents: string
+  contents: string,
+  create?: {
+    create: boolean;
+  }
 ): Promise<number> {
-  let { handle: dirHandle, filename } = await traverse(fs, path, {
-    create: true,
-  });
-  let handle = await dirHandle.getFileHandle(filename, { create: true });
+  let { handle: dirHandle, filename } = await traverse(fs, path, create);
+  let handle = await dirHandle.getFileHandle(filename, create);
   // TypeScript seems to lack types for the writable stream features
   let stream = await (handle as any).createWritable();
   await stream.write(contents);
