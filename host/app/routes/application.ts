@@ -27,6 +27,7 @@ export default class Application extends Route<Model> {
       return { path, openFile };
     }
 
+    await this.localRealm.startedUp;
     if (!this.localRealm.isAvailable) {
       return { path, openFile };
     }
