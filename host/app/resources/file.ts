@@ -82,24 +82,17 @@ class _FileResource extends Resource<Args> {
   }
 
   @restartableTask private async read() {
-    let response: Response | undefined;
-    try {
-      response = await fetch(this.url, {
-        headers: {
-          Accept: this.url.endsWith('.json')
-            ? // assume we want JSON-API for .json files, if the server determines
-              // that it is not actually card data, then it will just return in the
-              // native format
-              'application/vnd.api+json'
-            : 'application/vnd.card+source',
-        },
-      });
-    } catch (err: unknown) {
-      clearInterval(this.interval);
-      throw err;
-    }
+    let response = await fetch(this.url, {
+      headers: {
+        Accept: this.url.endsWith('.json')
+          ? // assume we want JSON-API for .json files, if the server determines
+            // that it is not actually card data, then it will just return in the
+            // native format
+            'application/vnd.api+json'
+          : 'application/vnd.card+source',
+      },
+    });
     if (!response.ok) {
-      clearInterval(this.interval);
       console.error(
         `Could not get file ${this.url}, status ${response.status}: ${
           response.statusText
