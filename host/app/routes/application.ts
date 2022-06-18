@@ -51,16 +51,18 @@ export default class Application extends Route<Model> {
       });
     } else {
       let contents = await response.text();
-      openFile = file(
-        this,
-        () => url,
-        () => contents,
-        () => response.headers.get('Last-Modified') || undefined,
-        () =>
-          this.router.transitionTo('application', {
-            queryParams: { path: undefined },
-          })
-      );
+      openFile = file(this, {
+        url: () => url,
+        content: () => contents,
+        lastModified: () => response.headers.get('Last-Modified') || undefined,
+        onStateChange: (state) => {
+          if (state === 'not-found') {
+            this.router.transitionTo('application', {
+              queryParams: { path: undefined },
+            });
+          }
+        },
+      });
       await openFile.loading;
     }
 

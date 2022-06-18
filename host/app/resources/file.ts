@@ -9,7 +9,7 @@ interface Args {
     url: string;
     content: string | undefined;
     lastModified: string | undefined;
-    onNotFound?: () => void;
+    onStateChange?: (state: FileResource['state']) => void;
   };
 }
 
@@ -41,15 +41,15 @@ class _FileResource extends Resource<Args> {
   private interval: ReturnType<typeof setInterval>;
   private _url: string;
   private lastModified: string | undefined;
-  private onNotFound: (() => void) | undefined;
+  private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   @tracked content: string | undefined;
-  @tracked state = 'ready';
+  @tracked state: FileResource['state'] = 'ready';
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    let { url, content, lastModified, onNotFound } = args.named;
+    let { url, content, lastModified, onStateChange } = args.named;
     this._url = url;
-    this.onNotFound = onNotFound;
+    this.onStateChange = onStateChange;
     if (content !== undefined) {
       this.content = content;
       this.lastModified = lastModified;
@@ -82,6 +82,7 @@ class _FileResource extends Resource<Args> {
   }
 
   @restartableTask private async read() {
+    let prevState = this.state;
     let response = await fetch(this.url, {
       headers: {
         Accept: this.url.endsWith('.json')
@@ -100,11 +101,11 @@ class _FileResource extends Resource<Args> {
       );
       if (response.status === 404) {
         this.state = 'not-found';
-        if (this.onNotFound) {
-          this.onNotFound();
-        }
       } else {
         this.state = 'server-error';
+      }
+      if (this.onStateChange && this.state !== prevState) {
+        this.onStateChange(this.state);
       }
       return;
     }
@@ -115,6 +116,9 @@ class _FileResource extends Resource<Args> {
     this.lastModified = lastModified;
     this.content = await response.text();
     this.state = 'ready';
+    if (this.onStateChange && this.state !== prevState) {
+      this.onStateChange(this.state);
+    }
   }
 
   async write(content: string) {
@@ -149,19 +153,21 @@ class _FileResource extends Resource<Args> {
   }
 }
 
-export function file(
-  parent: object,
-  url: () => string,
-  content: () => string | undefined,
-  lastModified: () => string | undefined,
-  onNotFound?: () => void
-): FileResource {
+interface FileArgs {
+  url: () => string;
+  content: () => string | undefined;
+  lastModified: () => string | undefined;
+  onStateChange?: (state: FileResource['state']) => void;
+}
+
+export function file(parent: object, args: FileArgs): FileResource {
+  let { url, content, lastModified, onStateChange } = args;
   return useResource(parent, _FileResource, () => ({
     named: {
       url: url(),
       content: content(),
       lastModified: lastModified(),
-      onNotFound,
+      onStateChange,
     },
   })) as FileResource;
 }
