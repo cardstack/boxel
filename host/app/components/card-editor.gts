@@ -12,7 +12,6 @@ import { eq } from '../helpers/truth-helpers';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { CardJSON, isCardJSON } from '@cardstack/runtime-common';
-import cloneDeep from 'lodash/cloneDeep';
 
 export interface NewCardArgs {
   type: 'new';
@@ -21,8 +20,11 @@ export interface NewCardArgs {
 }
 export interface ExistingCardArgs {
   type: 'existing';
-  json: CardJSON;
   url: string;
+  // this is just used for test fixture data. as soon as we
+  // have an actual ember service for the API we should just
+  //  mock that instead
+  json?: CardJSON;
 }
 
 interface Signature {
@@ -75,6 +77,15 @@ export default class Preview extends Component<Signature> {
   @tracked
   resetTime = Date.now();
   rendered = render(this, () => this.card, () => this.format)
+  @tracked
+  initialCardData: CardJSON | undefined;
+
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+    if (this.args.card.type === 'existing') {
+      taskFor(this.loadData).perform(this.args.card.url);
+    }
+  }
 
   @cached
   get card() {
@@ -82,13 +93,19 @@ export default class Preview extends Component<Signature> {
     if (this.args.card.type === 'new') {
       return new this.args.card.class();
     }
-    let cardClass = this.args.module[this.args.card.json.data.meta.adoptsFrom.name];
-    return cardClass.fromSerialized(this.args.card.json.data.attributes ?? {});
+    if (this.initialCardData) {
+      let cardClass = this.args.module[this.initialCardData.data.meta.adoptsFrom.name];
+      return cardClass.fromSerialized(this.initialCardData.data.attributes ?? {});
+    }
+    return undefined;
   }
 
   get currentJSON() {
     let json;
     if (this.args.card.type === 'new') {
+      if (this.card === undefined) {
+        throw new Error('bug: this should never happen');
+      }
       let mod = moduleURL(this.args.module);
       if (!mod) {
         throw new Error(`can't save card in unknown module.`);
@@ -102,7 +119,11 @@ export default class Preview extends Component<Signature> {
         })
       };
     } else {
-      json = { data: serializeCard(this.card, { adoptsFrom: this.args.card.json.data.meta.adoptsFrom }) };
+      if (this.card && this.initialCardData) {
+        json = { data: serializeCard(this.card, { adoptsFrom: this.initialCardData.data.meta.adoptsFrom }) };
+      } else {
+        return undefined;
+      }
     }
     if (!isCardJSON(json)) {
       throw new Error(`can't serialize card data for ${JSON.stringify(json)}`);
@@ -116,21 +137,10 @@ export default class Preview extends Component<Signature> {
     if (this.args.card.type === 'new') {
       return true;
     }
-    let json = cloneDeep(this.currentJSON);
-    delete (json.data as any).id;
-
-    return !isEqual(json, this.initialComparisonJSON);
-  }
-
-  @cached
-  get initialComparisonJSON() {
-    if (this.args.card.type === 'new') {
-      return undefined;
+    if (!this.currentJSON) {
+      return false;
     }
-
-    let json = cloneDeep(this.args.card.json);
-    delete (json.data as any).id;
-    return json;
+    return !isEqual(this.currentJSON, this.initialCardData);
   }
 
   @action
@@ -157,6 +167,31 @@ export default class Preview extends Component<Signature> {
     taskFor(this.write).perform();
   }
 
+  @restartableTask private async loadData(url: string): Promise<void> {
+    // this is just for loading fixtures for testing. remove once we
+    // have an actual service we can mock
+    if (this.args.card.type === 'existing' && this.args.card.json) {
+      this.initialCardData = this.args.card.json;
+      return;
+    }
+
+    let response = await fetch(url, {
+      headers: {
+        'Accept': 'application/vnd.api+json'
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`could not load card data: ${response.status} - ${response.statusText}. ${await response.text()}`);
+    }
+    let json = await response.json();
+    delete json.data.links;
+    delete json.data.id;
+    if (!isCardJSON(json)) {
+      throw new Error(`the url ${url} is not card data`);
+    }
+    this.initialCardData = json;
+  }
+
   @restartableTask private async write(): Promise<void> {
     let url = this.args.card.type === 'new' ? 'http://local-realm/' : this.args.card.url;
     let method = this.args.card.type === 'new' ? 'POST' : 'PATCH';
@@ -173,6 +208,8 @@ export default class Preview extends Component<Signature> {
     }
     let json = await response.json();
     if (json.data.links?.self && this.args.onSave) {
+      // this is to notify the application route to load a
+      // new source path, so we use the actual .json extension
       this.args.onSave(json.data.links.self + '.json');
     }
   }
