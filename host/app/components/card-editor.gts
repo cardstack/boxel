@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { render } from '../resources/rendered-card';
 //@ts-ignore cached not available yet in definitely typed
 import { tracked, cached } from '@glimmer/tracking';
-import { Card, CardJSON, Format, serializeCard, isCardJSON } from '../lib/card-api';
+import { Card, Format, serializeCard } from '../lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { moduleURL } from 'runtime-spike/resources/import';
@@ -11,8 +11,7 @@ import isEqual from 'lodash/isEqual';
 import { eq } from '../helpers/truth-helpers';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
-import { service } from '@ember/service';
-import LocalRealm from '../services/local-realm';
+import { CardJSON, isCardJSON } from '@cardstack/runtime-common';
 
 export interface NewCardArgs {
   type: 'new';
@@ -21,8 +20,11 @@ export interface NewCardArgs {
 }
 export interface ExistingCardArgs {
   type: 'existing';
-  json: CardJSON;
-  filename: string;
+  url: string;
+  // this is just used for test fixture data. as soon as we
+  // have an actual ember service for the API we should just
+  //  mock that instead
+  json?: CardJSON;
 }
 
 interface Signature {
@@ -30,7 +32,7 @@ interface Signature {
     module: Record<string, typeof Card>;
     formats?: Format[];
     onCancel?: () => void;
-    onSave?: (cardPath: string) => void;
+    onSave?: (url: string) => void;
     card: NewCardArgs | ExistingCardArgs;
   }
 }
@@ -39,7 +41,7 @@ export default class Preview extends Component<Signature> {
   <template>
     {{#if this.args.formats}}
       <div>
-        Format: 
+        Format:
         {{#each this.args.formats as |format|}}
           <button {{on "click" (fn this.setFormat format)}}
             class="format-button {{format}} {{if (eq this.format format) 'selected'}}"
@@ -70,12 +72,20 @@ export default class Preview extends Component<Signature> {
     {{/if}}
   </template>
 
-  @service declare localRealm: LocalRealm;
   @tracked
   format: Format = this.args.card.type === 'new' ? 'edit' : 'isolated';
   @tracked
   resetTime = Date.now();
   rendered = render(this, () => this.card, () => this.format)
+  @tracked
+  initialCardData: CardJSON | undefined;
+
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+    if (this.args.card.type === 'existing') {
+      taskFor(this.loadData).perform(this.args.card.url);
+    }
+  }
 
   @cached
   get card() {
@@ -83,13 +93,19 @@ export default class Preview extends Component<Signature> {
     if (this.args.card.type === 'new') {
       return new this.args.card.class();
     }
-    let cardClass = this.args.module[this.args.card.json.data.meta.adoptsFrom.name];
-    return cardClass.fromSerialized(this.args.card.json.data.attributes ?? {});
+    if (this.initialCardData) {
+      let cardClass = this.args.module[this.initialCardData.data.meta.adoptsFrom.name];
+      return cardClass.fromSerialized(this.initialCardData.data.attributes ?? {});
+    }
+    return undefined;
   }
 
   get currentJSON() {
     let json;
     if (this.args.card.type === 'new') {
+      if (this.card === undefined) {
+        throw new Error('bug: this should never happen');
+      }
       let mod = moduleURL(this.args.module);
       if (!mod) {
         throw new Error(`can't save card in unknown module.`);
@@ -103,7 +119,11 @@ export default class Preview extends Component<Signature> {
         })
       };
     } else {
-      json = { data: serializeCard(this.card, { adoptsFrom: this.args.card.json.data.meta.adoptsFrom }) };
+      if (this.card && this.initialCardData) {
+        json = { data: serializeCard(this.card, { adoptsFrom: this.initialCardData.data.meta.adoptsFrom }) };
+      } else {
+        return undefined;
+      }
     }
     if (!isCardJSON(json)) {
       throw new Error(`can't serialize card data for ${JSON.stringify(json)}`);
@@ -117,9 +137,12 @@ export default class Preview extends Component<Signature> {
     if (this.args.card.type === 'new') {
       return true;
     }
-    return !isEqual(this.currentJSON, this.args.card.json);
+    if (!this.currentJSON) {
+      return false;
+    }
+    return !isEqual(this.currentJSON, this.initialCardData);
   }
-  
+
   @action
   setFormat(format: Format) {
     this.format = format;
@@ -144,45 +167,50 @@ export default class Preview extends Component<Signature> {
     taskFor(this.write).perform();
   }
 
+  @restartableTask private async loadData(url: string): Promise<void> {
+    // this is just for loading fixtures for testing. remove once we
+    // have an actual service we can mock
+    if (this.args.card.type === 'existing' && this.args.card.json) {
+      this.initialCardData = this.args.card.json;
+      return;
+    }
+
+    let response = await fetch(url, {
+      headers: {
+        'Accept': 'application/vnd.api+json'
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`could not load card data: ${response.status} - ${response.statusText}. ${await response.text()}`);
+    }
+    let json = await response.json();
+    delete json.data.links;
+    delete json.data.id;
+    if (!isCardJSON(json)) {
+      throw new Error(`the url ${url} is not card data`);
+    }
+    this.initialCardData = json;
+  }
+
   @restartableTask private async write(): Promise<void> {
-    let handle: FileSystemFileHandle;
-    let path: string
-    let dirHandle = await this.localRealm.fsHandle.getDirectoryHandle(this.card.constructor.name, { create: true });
-    if (this.args.card.type === 'new') {
-      let filename = await getNextJSONFileName(dirHandle);
-      handle = await dirHandle.getFileHandle(filename, { create: true });
-      path = `${this.card.constructor.name}/${filename}`;
-    } else {
-      handle = await dirHandle.getFileHandle(this.args.card.filename, { create: true });
-      path = `${this.card.constructor.name}/${this.args.card.filename}`;
+    let url = this.args.card.type === 'new' ? 'http://local-realm/' : this.args.card.url;
+    let method = this.args.card.type === 'new' ? 'POST' : 'PATCH';
+    let response = await fetch(url, {
+      method,
+      headers: {
+        'Accept': 'application/vnd.api+json'
+      },
+      body: JSON.stringify(this.currentJSON, null, 2)
+    });
+
+    if (!response.ok) {
+      throw new Error(`could not save file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
     }
-
-    // TypeScript seems to lack types for the writable stream features
-    let stream = await (handle as any).createWritable();
-
-    await stream.write(JSON.stringify(this.currentJSON, null, 2));
-    await stream.close();
-
-    if (this.args.onSave) {
-      this.args.onSave(path);
+    let json = await response.json();
+    if (json.data.links?.self && this.args.onSave) {
+      // this is to notify the application route to load a
+      // new source path, so we use the actual .json extension
+      this.args.onSave(json.data.links.self + '.json');
     }
   }
-}
-
-async function getNextJSONFileName(dirHandle: FileSystemDirectoryHandle): Promise<string> {
-  let index = 0;
-  for await (let [name, handle ] of dirHandle as any as AsyncIterable<
-    [string, FileSystemDirectoryHandle | FileSystemFileHandle]
-  >) {
-    if (handle.kind === 'directory') {
-      continue;
-    }
-    if (!/^[\d]+\.json$/.test(name)) {
-      continue;
-    }
-    let num = parseInt(name.replace('.json', ''));
-    index = Math.max(index, num);
-  }
-
-  return `${++index}.json`;
 }

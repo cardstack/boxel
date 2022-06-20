@@ -34,23 +34,35 @@ export const externalsMap = new Map([
   ["runtime-spike/lib/integer", ["default"]],
 ]);
 
-export async function traverse(dirHandle, path) {
-  let pathSegments = path.split("/");
-  async function nextHandle(handle, pathSegment) {
-    try {
-      return await handle.getDirectoryHandle(pathSegment);
-    } catch (err) {
-      if (err.name === "NotFoundError") {
-        console.error(`${path} was not found in the local realm`);
-      }
-      throw err;
-    }
+export function isCardJSON(json) {
+  if (typeof json !== "object" || !("data" in json)) {
+    return false;
+  }
+  let { data } = json;
+  if (typeof data !== "object") {
+    return false;
   }
 
-  let handle = dirHandle;
-  while (pathSegments.length > 1) {
-    let segment = pathSegments.shift();
-    handle = await nextHandle(handle, segment);
+  let { meta, attributes } = data;
+  if (
+    typeof meta !== "object" ||
+    ("attributes" in data && typeof attributes !== "object")
+  ) {
+    return false;
   }
-  return { handle, filename: pathSegments[0] };
+
+  if (!("adoptsFrom" in meta)) {
+    return false;
+  }
+
+  let { adoptsFrom } = meta;
+  if (typeof adoptsFrom !== "object") {
+    return false;
+  }
+  if (!("module" in adoptsFrom) || !("name" in adoptsFrom)) {
+    return false;
+  }
+
+  let { module, name } = adoptsFrom;
+  return typeof module === "string" && typeof name === "string";
 }

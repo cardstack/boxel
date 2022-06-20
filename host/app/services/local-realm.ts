@@ -82,13 +82,6 @@ export default class LocalRealm extends Service {
     return this.state.type === 'available';
   }
 
-  get fsHandle(): FileSystemDirectoryHandle {
-    if (this.state.type !== 'available') {
-      throw new Error(`fsHandle is not available in state ${this.state.type}`);
-    }
-    return this.state.handle;
-  }
-
   get isEmpty(): boolean {
     this.maybeSetup();
     return this.state.type === 'empty';
@@ -104,8 +97,8 @@ export default class LocalRealm extends Service {
     return taskFor(this.setup).last;
   }
 
-  chooseDirectory(): void {
-    taskFor(this.openDirectory).perform();
+  chooseDirectory(cb?: () => void): void {
+    taskFor(this.openDirectory).perform(cb);
   }
 
   close(): void {
@@ -119,8 +112,18 @@ export default class LocalRealm extends Service {
     this.state = { type: 'empty', worker: this.state.worker };
   }
 
-  @restartableTask private async openDirectory() {
+  @restartableTask private async openDirectory(cb?: () => void) {
     let handle = await showDirectoryPicker();
+
+    // write a sacrificial file in order to prompt the browser to ask the user
+    // for permission to write files
+    let file = await handle.getFileHandle('.tmp', { create: true });
+    let stream = await (file as any).createWritable();
+    await stream.write('');
+    await stream.close();
+
+    await handle.removeEntry('.tmp');
+
     if (this.state.type !== 'empty') {
       throw new Error(
         `tried to chooseDirectory when we already have a local realm`
@@ -131,6 +134,10 @@ export default class LocalRealm extends Service {
       handle,
     });
     this.state = { type: 'available', handle, worker: this.state.worker };
+
+    if (cb) {
+      cb();
+    }
   }
 
   private async ensureWorker() {
@@ -141,10 +148,10 @@ export default class LocalRealm extends Service {
       // if we see a new service worker version getting installed, and if we
       // already have an open file handle, send it to the new worker so we don't
       // lose access
-      if (this.isAvailable) {
+      if (this.state.type === 'available') {
         send(registration.installing!, {
           type: 'setDirectoryHandle',
-          handle: this.fsHandle,
+          handle: this.state.handle,
         });
       }
     });

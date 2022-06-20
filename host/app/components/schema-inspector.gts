@@ -18,7 +18,7 @@ import type RouterService from '@ember/routing/router-service';
 
 interface Signature {
   Args: {
-    path: string;
+    url: string;
     module: Record<string, any>;
     src: string;
     inspector: CardInspector;
@@ -57,7 +57,7 @@ export default class SchemaInspector extends Component<Signature> {
                   '{{fieldCard.localName}}' card
                 {{/let}}
               {{else}}
-                {{#let (getCardPath cardRef this.args.path) as |path|}}
+                {{#let (getCardPath cardRef this.args.url) as |path|}}
                   {{#if path}}
                     <LinkTo @route="application" @query={{hash path=path}}>
                       {{externalCardName cardRef}}
@@ -92,7 +92,7 @@ export default class SchemaInspector extends Component<Signature> {
   @tracked showEditor = false;
   @tracked selectedIndex = 0;
   @service declare router: RouterService;
-  definitions = cardDefinitions(this, () => this.args.src, () => this.args.inspector, () => this.args.path);
+  definitions = cardDefinitions(this, () => this.args.src, () => this.args.inspector, () => this.args.url);
 
   get cards() {
     return this.definitions?.cards ?? [];
@@ -128,7 +128,8 @@ export default class SchemaInspector extends Component<Signature> {
   }
 
   @action
-  onSave(path: string) {
+  onSave(url: string) {
+    let path = new URL(url).pathname;
     this.router.transitionTo({ queryParams: { path } });
   }
 
@@ -163,12 +164,9 @@ function externalCardName(ref: ExternalReference): string {
 }
 
 function getCardPath(ref: ExternalReference, currentPath: string): string | undefined {
-  if (ref.module.startsWith('.') || ref.module.startsWith('/')) {
-    let pathSegments = currentPath.split('/');
-    pathSegments.pop();
-
-    let url = new URL(`${pathSegments.join()}/${ref.module}`, 'http://local-realm');
-    return url.pathname.slice(1);
+  if ((ref.module.startsWith('.') || ref.module.startsWith('/')) && !ref.module.startsWith('//')) {
+    let url = new URL(ref.module, currentPath);
+    return url.pathname;
   }
   return undefined;
 }

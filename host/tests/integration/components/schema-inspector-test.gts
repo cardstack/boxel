@@ -35,7 +35,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{multipleCardsModule}}
             @src={{multipleCardsSrc}}
             @inspector={{inspector}}
-            @path="/"
+            @url="http://local-realm/"
           />
         </template>
       }
@@ -53,7 +53,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{multipleCardsModule}}
             @src={{multipleCardsSrc}}
             @inspector={{inspector}}
-            @path="/"
+            @url="http://local-realm/"
           />
         </template>
       }
@@ -71,7 +71,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{singleCardModule}}
             @src={{singleCardSrc}}
             @inspector={{inspector}}
-            @path="/"
+            @url="http://local-realm/"
           />
         </template>
       }
@@ -89,7 +89,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{noCardsModule}}
             @src={{noCardsSrc}}
             @inspector={{inspector}}
-            @path="/"
+            @url="http://local-realm/"
           />
         </template>
       }
@@ -108,7 +108,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{singleCardModule}}
             @src={{singleCardSrc}}
             @inspector={{inspector}}
-            @path="/"
+            @url="http://local-realm/"
           />
         </template>
       }
@@ -127,7 +127,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{singleCardModule}}
             @src={{singleCardSrc}}
             @inspector={{inspector}}
-            @path="/"
+            @url="http://local-realm/"
           />
         </template>
       }
@@ -147,7 +147,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{singleCardModule}}
             @src={{singleCardSrc}}
             @inspector={{inspector}}
-            @path="/"
+            @url="http://local-realm/"
           />
         </template>
       }
@@ -167,13 +167,13 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{usesExternalCardModule}}
             @src={{usesExternalCardSrc}}
             @inspector={{inspector}}
-            @path="/"
+            @url="http://local-realm/"
           />
         </template>
       }
     );
     assert.dom('[data-test-field="author"]').containsText("author: contains 'Person' card of ./person");
-    assert.dom('[data-test-field="author"] a[href="/?path=person"').containsText("'Person' card of ./person");
+    assert.dom('[data-test-field="author"] a[href="/?path=%2Fperson"').containsText("'Person' card of ./person");
   });
 
   test('Can render field that uses card internal to the module', async function(assert) {
@@ -184,7 +184,7 @@ module('Integration | schema-inspector', function (hooks) {
             @module={{multipleCardsModule}}
             @src={{multipleCardsSrc}}
             @inspector={{inspector}}
-            @path="/"
+            @url="http://local-realm/"
           />
         </template>
       }

@@ -12,7 +12,13 @@ import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
 import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-transform-typescript';
-import { traverse } from '@cardstack/runtime-common';
+import { formatRFC7231 } from 'date-fns';
+import {
+  write,
+  getLocalFileWithFallbacks,
+  serveLocalFile,
+} from './file-system';
+import { handle as handleJSONAPI } from './json-api';
 
 const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 
@@ -106,10 +112,28 @@ export class FetchHandler {
   */
 
   private async handleLocalRealm(
-    _request: Request,
+    request: Request,
     url: URL
   ): Promise<Response> {
-    let handle = await this.getLocalFileWithFallbacks(
+    if (!this.messageHandler.fs) {
+      throw WorkerError.withResponse(
+        new Response('no local realm is available', {
+          status: 404,
+          headers: { 'content-type': 'text/html' },
+        })
+      );
+    }
+
+    if (request.headers.get('Accept')?.includes('application/vnd.api+json')) {
+      return handleJSONAPI(this.messageHandler.fs, request, url);
+    } else if (
+      request.headers.get('Accept')?.includes('application/vnd.card+source')
+    ) {
+      return this.handleCardSource(request, url);
+    }
+
+    let handle = await getLocalFileWithFallbacks(
+      this.messageHandler.fs,
       url.pathname.slice(1),
       executableExtensions
     );
@@ -118,8 +142,52 @@ export class FetchHandler {
     ) {
       return await this.makeJS(handle);
     } else {
-      return await this.serveLocalFile(handle);
+      return await serveLocalFile(handle);
     }
+  }
+
+  private async handleCardSource(
+    request: Request,
+    url: URL
+  ): Promise<Response> {
+    if (!this.messageHandler.fs) {
+      throw WorkerError.withResponse(
+        new Response('no local realm is available', {
+          status: 404,
+          headers: { 'content-type': 'text/html' },
+        })
+      );
+    }
+
+    if (request.method === 'POST') {
+      let lastModified = await write(
+        this.messageHandler.fs,
+        new URL(request.url).pathname.slice(1),
+        await request.text()
+      );
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Last-Modified': formatRFC7231(lastModified),
+        },
+      });
+    }
+    let handle = await getLocalFileWithFallbacks(
+      this.messageHandler.fs,
+      url.pathname.slice(1),
+      executableExtensions
+    );
+    let pathSegments = url.pathname.split('/');
+    let requestedName = pathSegments.pop()!;
+    if (handle.name !== requestedName) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: [...pathSegments, handle.name].join('/'),
+        },
+      });
+    }
+    return await serveLocalFile(handle);
   }
 
   private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
@@ -164,65 +232,6 @@ export class FetchHandler {
         'content-type': 'text/javascript',
       },
     });
-  }
-
-  private async serveLocalFile(
-    handle: FileSystemFileHandle
-  ): Promise<Response> {
-    return new Response(await handle.getFile());
-  }
-
-  // we bother with this because typescript is picky about allowing you to use
-  // explicit file extensions in your source code
-  private async getLocalFileWithFallbacks(
-    path: string,
-    extensions: string[]
-  ): Promise<FileSystemFileHandle> {
-    try {
-      return await this.getLocalFile(path);
-    } catch (err) {
-      if (!(err instanceof WorkerError) || err.response.status !== 404) {
-        throw err;
-      }
-      for (let extension of extensions) {
-        try {
-          return await this.getLocalFile(path + extension);
-        } catch (innerErr) {
-          if (
-            !(innerErr instanceof WorkerError) ||
-            innerErr.response.status !== 404
-          ) {
-            throw innerErr;
-          }
-        }
-      }
-      throw err;
-    }
-  }
-
-  private async getLocalFile(path: string): Promise<FileSystemFileHandle> {
-    if (!this.messageHandler.fs) {
-      throw WorkerError.withResponse(
-        new Response('no local realm is available', {
-          status: 404,
-          headers: { 'content-type': 'text/html' },
-        })
-      );
-    }
-    try {
-      let { handle, filename } = await traverse(this.messageHandler.fs, path);
-      return await handle.getFileHandle(filename);
-    } catch (err) {
-      if ((err as DOMException).name === 'NotFoundError') {
-        throw WorkerError.withResponse(
-          new Response(`${path} not found in local realm`, {
-            status: 404,
-            headers: { 'content-type': 'text/html' },
-          })
-        );
-      }
-      throw err;
-    }
   }
 
   private async doCacheDrop() {

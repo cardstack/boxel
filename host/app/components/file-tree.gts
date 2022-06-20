@@ -10,6 +10,8 @@ import { service } from '@ember/service';
 
 interface Args {
   Args: {
+    // we want to use the local realm so that we can show a button
+    // to open or close it.
     localRealm: LocalRealm;
     path: string | undefined;
   }
@@ -20,14 +22,14 @@ export default class FileTree extends Component<Args> {
     {{#if @localRealm.isAvailable}}
       <button {{on "click" this.closeRealm}}>Close local realm</button>
       {{#each this.listing.entries key="path" as |entry|}}
-        {{#if (eq entry.handle.kind 'file')}}
+        {{#if (eq entry.kind 'file')}}
           <div class="item file {{if (eq entry.path this.args.path) 'selected'}} indent-{{entry.indent}}"
             {{on "click" (fn this.open entry)}}>
           {{entry.name}}
           </div>
         {{else}}
           <div class="item directory indent-{{entry.indent}}">
-            {{entry.name}}/
+            {{entry.name}}
           </div>
         {{/if}}
       {{/each}}
@@ -38,12 +40,12 @@ export default class FileTree extends Component<Args> {
     {{/if}}
   </template>
     
-  listing = directory(this, () => this.args.localRealm.isAvailable ? this.args.localRealm.fsHandle : null)
+  listing = directory(this, () => this.args.localRealm.isAvailable ? "http://local-realm/" : undefined)
   @service declare router: RouterService;
 
   @action
   openRealm() {
-    this.args.localRealm.chooseDirectory();
+    this.args.localRealm.chooseDirectory(() => this.router.refresh());
   }
 
   @action
@@ -55,8 +57,8 @@ export default class FileTree extends Component<Args> {
   }
 
   @action
-  open(handle: Entry) {
-    let { path } = handle;
+  open(entry: Entry) {
+    let { path } = entry;
     this.router.transitionTo({ queryParams: { path } });
   }
 }

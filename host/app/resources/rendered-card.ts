@@ -6,7 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import { ComponentLike } from '@glint/template';
 
 interface Args {
-  named: { card: Card; format: Format };
+  named: { card: Card | undefined; format: Format };
 }
 
 export class RenderedCard extends Resource<Args> {
@@ -15,7 +15,9 @@ export class RenderedCard extends Resource<Args> {
   constructor(owner: unknown, args: Args) {
     super(owner, args);
     let { card, format } = args.named;
-    taskFor(this.load).perform(card, format);
+    if (card) {
+      taskFor(this.load).perform(card, format);
+    }
   }
 
   @restartableTask private async load(card: Card, format: Format) {
@@ -24,7 +26,11 @@ export class RenderedCard extends Resource<Args> {
   }
 }
 
-export function render(parent: object, card: () => Card, format: () => Format) {
+export function render(
+  parent: object,
+  card: () => Card | undefined,
+  format: () => Format
+) {
   return useResource(parent, RenderedCard, () => ({
     named: { card: card(), format: format() },
   }));
