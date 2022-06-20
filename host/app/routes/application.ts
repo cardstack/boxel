@@ -50,11 +50,11 @@ export default class Application extends Route<Model> {
         queryParams: { path: new URL(response.url).pathname },
       });
     } else {
-      let contents = await response.text();
-      openFile = file(this, {
-        url: () => url,
-        content: () => contents,
-        lastModified: () => response.headers.get('Last-Modified') || undefined,
+      let content = await response.text();
+      openFile = file(this, () => ({
+        url,
+        content,
+        lastModified: response.headers.get('Last-Modified') || undefined,
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.router.transitionTo('application', {
@@ -62,7 +62,7 @@ export default class Application extends Route<Model> {
             });
           }
         },
-      });
+      }));
       await openFile.loading;
     }
 

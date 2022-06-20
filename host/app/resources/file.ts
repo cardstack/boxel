@@ -154,20 +154,14 @@ class _FileResource extends Resource<Args> {
 }
 
 interface FileArgs {
-  url: () => string;
-  content: () => string | undefined;
-  lastModified: () => string | undefined;
+  url: string;
+  content: string | undefined;
+  lastModified: string | undefined;
   onStateChange?: (state: FileResource['state']) => void;
 }
 
-export function file(parent: object, args: FileArgs): FileResource {
-  let { url, content, lastModified, onStateChange } = args;
+export function file(parent: object, args: () => FileArgs): FileResource {
   return useResource(parent, _FileResource, () => ({
-    named: {
-      url: url(),
-      content: content(),
-      lastModified: lastModified(),
-      onStateChange,
-    },
+    named: args(),
   })) as FileResource;
 }
