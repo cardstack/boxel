@@ -5,7 +5,7 @@ import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 
 interface Args {
-  named: () => {
+  named: {
     url: string;
     content: string | undefined;
     lastModified: string | undefined;
@@ -47,7 +47,7 @@ class _FileResource extends Resource<Args> {
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    let { url, content, lastModified, onStateChange } = args.named();
+    let { url, content, lastModified, onStateChange } = args.named;
     this._url = url;
     this.onStateChange = onStateChange;
     if (content !== undefined) {
@@ -153,8 +153,8 @@ class _FileResource extends Resource<Args> {
   }
 }
 
-export function file(parent: object, args: Args['named']): FileResource {
+export function file(parent: object, args: () => Args['named']): FileResource {
   return useResource(parent, _FileResource, () => ({
-    named: args,
+    named: args(),
   })) as FileResource;
 }
