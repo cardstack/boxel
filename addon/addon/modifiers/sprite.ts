@@ -17,7 +17,11 @@ interface SpriteModifierArgs {
   };
 }
 
+export const SPRITE_MODIFIER = Symbol('SPRITE_MODIFIER');
+
 export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
+  [SPRITE_MODIFIER] = true;
+
   id: string | null = null;
   role: string | null = null;
   lastBounds: DOMRect | undefined;

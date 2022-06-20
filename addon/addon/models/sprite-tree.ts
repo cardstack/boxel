@@ -1,19 +1,13 @@
 import { assert } from '@ember/debug';
-
-export interface ContextModel {
-  element: Element;
-}
-
-export interface SpriteModel {
-  element: Element;
-}
+import AnimationContext from 'animations-experiment/components/animation-context';
+import SpriteModifier from 'animations-experiment/modifiers/sprite';
 
 export interface GetDescendantNodesOptions {
   includeFreshlyRemoved: boolean;
   filter?(childNode: SpriteTreeNode): boolean;
 }
 
-type SpriteTreeModel = ContextModel | SpriteModel;
+type SpriteTreeModel = AnimationContext | SpriteModifier;
 
 export enum SpriteTreeNodeType {
   Root,
@@ -21,8 +15,8 @@ export enum SpriteTreeNodeType {
   Sprite,
 }
 export class SpriteTreeNode {
-  contextModel: ContextModel | undefined;
-  spriteModel: SpriteModel | undefined;
+  contextModel: AnimationContext | undefined;
+  spriteModel: SpriteModifier | undefined;
 
   parent: SpriteTreeNode | SpriteTree;
   children: Set<SpriteTreeNode> = new Set();
@@ -42,9 +36,9 @@ export class SpriteTreeNode {
     parentNode: SpriteTreeNode | SpriteTree
   ) {
     if (nodeType === SpriteTreeNodeType.Context) {
-      this.contextModel = model;
+      this.contextModel = model as AnimationContext;
     } else if (nodeType === SpriteTreeNodeType.Sprite) {
-      this.spriteModel = model;
+      this.spriteModel = model as SpriteModifier;
     } else {
       throw new Error('Passed model is not a context or sprite');
     }
@@ -137,15 +131,15 @@ export default class SpriteTree {
   nodesByElement = new WeakMap<Element, SpriteTreeNode>();
   rootNodes: Set<SpriteTreeNode> = new Set();
   _pendingAdditions: (
-    | { item: ContextModel; type: 'CONTEXT' }
-    | { item: SpriteModel; type: 'SPRITE' }
+    | { item: AnimationContext; type: 'CONTEXT' }
+    | { item: SpriteModifier; type: 'SPRITE' }
   )[] = [];
 
-  addPendingAnimationContext(item: ContextModel) {
+  addPendingAnimationContext(item: AnimationContext) {
     this._pendingAdditions.push({ item, type: 'CONTEXT' });
   }
 
-  addPendingSpriteModifier(item: SpriteModel) {
+  addPendingSpriteModifier(item: SpriteModifier) {
     this._pendingAdditions.push({ item, type: 'SPRITE' });
   }
 
@@ -167,9 +161,9 @@ export default class SpriteTree {
 
     for (let { item, type } of this._pendingAdditions) {
       if (type === 'CONTEXT') {
-        this.addAnimationContext(item);
+        this.addAnimationContext(item as AnimationContext);
       } else if (type === 'SPRITE') {
-        this.addSpriteModifier(item);
+        this.addSpriteModifier(item as SpriteModifier);
       } else {
         throw new Error('unexpected pending addition');
       }
@@ -178,7 +172,7 @@ export default class SpriteTree {
     this._pendingAdditions = [];
   }
 
-  addAnimationContext(context: ContextModel): SpriteTreeNode {
+  addAnimationContext(context: AnimationContext): SpriteTreeNode {
     let existingNode = this.nodesByElement.get(context.element);
 
     if (existingNode) {
@@ -200,14 +194,14 @@ export default class SpriteTree {
       return node;
     }
   }
-  removeAnimationContext(context: ContextModel): void {
+  removeAnimationContext(context: AnimationContext): void {
     let node = this.lookupNodeByElement(context.element);
     if (node) {
       node.parent?.removeChild(node);
       this.nodesByElement.delete(context.element);
     }
   }
-  addSpriteModifier(spriteModifier: SpriteModel): SpriteTreeNode {
+  addSpriteModifier(spriteModifier: SpriteModifier): SpriteTreeNode {
     let existingNode = this.nodesByElement.get(spriteModifier.element);
 
     if (existingNode) {
@@ -229,7 +223,7 @@ export default class SpriteTree {
       return node;
     }
   }
-  removeSpriteModifier(spriteModifer: SpriteModel): void {
+  removeSpriteModifier(spriteModifer: SpriteModifier): void {
     let node = this.lookupNodeByElement(spriteModifer.element);
     if (node) {
       node.parent?.removeChild(node);
@@ -258,22 +252,26 @@ export default class SpriteTree {
       return [];
     }
   }
-  farMatchCandidatesFor(context: ContextModel): SpriteModel[] {
+  farMatchCandidatesFor(context: AnimationContext): SpriteModifier[] {
     // all freshlyRemovedChildren except those under given context node
-    let result: SpriteModel[] = [];
+    let result: SpriteModifier[] = [];
     let contextNode = this.lookupNodeByElement(context.element);
     if (!contextNode) {
       return [];
     }
     for (let rootNode of this.rootNodes) {
       if (rootNode === contextNode) continue;
-      result = result.concat(rootNode.freshlyRemovedDescendants(contextNode));
+      result = result.concat(
+        rootNode.freshlyRemovedDescendants(contextNode) as SpriteModifier[]
+      );
     }
     return result;
   }
 
-  getContextRunList(requestedContexts: Set<ContextModel>): ContextModel[] {
-    let result: ContextModel[] = [];
+  getContextRunList(
+    requestedContexts: Set<AnimationContext>
+  ): AnimationContext[] {
+    let result: AnimationContext[] = [];
     for (let context of requestedContexts) {
       if (result.indexOf(context) !== -1) continue;
       result.unshift(context);
@@ -281,8 +279,10 @@ export default class SpriteTree {
       let ancestor = node && node.parent;
       while (ancestor) {
         if (ancestor.isContext) {
-          if (result.indexOf(ancestor.contextModel as ContextModel) === -1) {
-            result.push(ancestor.contextModel as ContextModel);
+          if (
+            result.indexOf(ancestor.contextModel as AnimationContext) === -1
+          ) {
+            result.push(ancestor.contextModel as AnimationContext);
           }
         }
         ancestor = (ancestor as SpriteTreeNode).parent;

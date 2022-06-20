@@ -1,9 +1,6 @@
-import SpriteFactory from './sprite-factory';
 import Sprite, { SpriteType } from './sprite';
 import AnimationContext from '../components/animation-context';
-import SpriteModifier from '../modifiers/sprite';
 import { assert } from '@ember/debug';
-import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
 
 export type SpritesForArgs = {
   type?: SpriteType | undefined;
@@ -107,74 +104,7 @@ export default class Changeset {
     return [...set][0] ?? null;
   }
 
-  addInsertedSprites(freshlyAdded: Set<SpriteModifier>): void {
-    for (let spriteModifier of freshlyAdded) {
-      this.insertedSprites.add(
-        SpriteFactory.createInsertedSprite(spriteModifier, this.context)
-      );
-    }
-  }
-
-  addRemovedSprites(freshlyRemoved: Set<SpriteModifier>): void {
-    for (let spriteModifier of freshlyRemoved) {
-      this.removedSprites.add(
-        SpriteFactory.createRemovedSprite(spriteModifier, this.context)
-      );
-    }
-  }
-
-  addKeptSprites(freshlyChanged: Set<SpriteModifier>): void {
-    for (let spriteModifier of freshlyChanged) {
-      this.keptSprites.add(
-        SpriteFactory.createKeptSprite(spriteModifier, this.context)
-      );
-    }
-  }
-
-  finalizeSpriteCategories(): void {
-    let insertedSpritesArr = [...this.insertedSprites];
-    let removedSpritesArr = [...this.removedSprites];
-    let insertedIds = insertedSpritesArr.map((s) => s.identifier);
-    let removedIds = removedSpritesArr.map((s) => s.identifier);
-    let intersectingIds = insertedIds.filter(
-      (identifier) => !!removedIds.find((o) => o.equals(identifier))
-    );
-    for (let intersectingId of intersectingIds) {
-      let removedSprites = removedSpritesArr.filter((s) =>
-        s.identifier.equals(intersectingId)
-      );
-      let insertedSprite = insertedSpritesArr.find((s) =>
-        s.identifier.equals(intersectingId)
-      );
-      if (!insertedSprite || removedSprites.length === 0) {
-        throw new Error(
-          'intersection check should always result in removedSprite and insertedSprite being found'
-        );
-      }
-      this.insertedSprites.delete(insertedSprite);
-
-      // TODO: verify if this is correct, we might need to handle it on a different level.
-      //  We only get multiple ones in case of an interruption.
-      assert(
-        'Multiple matching removedSprites found',
-        removedSprites.length < 2
-      );
-      let removedSprite = removedSprites[0] as Sprite;
-      if (this.context.hasOrphan(removedSprite.element)) {
-        this.context.removeOrphan(removedSprite.element);
-      }
-      this.removedSprites.delete(removedSprite);
-
-      insertedSprite.type = SpriteType.Kept;
-      insertedSprite.initialBounds = removedSprite.initialBounds;
-      insertedSprite.initialComputedStyle = removedSprite.initialComputedStyle;
-      removedSprite.finalBounds = insertedSprite.finalBounds;
-      removedSprite.finalComputedStyle = insertedSprite.finalComputedStyle;
-      insertedSprite.counterpart = removedSprite;
-      this.keptSprites.add(insertedSprite);
-    }
-  }
-
+  /*
   addIntermediateSprites(
     intermediateSprites: Set<Sprite>,
     runningAnimations: Map<string, Set<Animation>>
@@ -286,5 +216,5 @@ export default class Changeset {
         animationsToCancel.forEach((a) => a.cancel());
       },
     };
-  }
+  }*/
 }

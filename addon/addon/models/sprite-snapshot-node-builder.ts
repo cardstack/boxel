@@ -7,7 +7,9 @@ import SpriteTree, {
   GetDescendantNodesOptions,
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';
-import SpriteModifier from 'animations-experiment/modifiers/sprite';
+import SpriteModifier, {
+  SPRITE_MODIFIER,
+} from 'animations-experiment/modifiers/sprite';
 import { assert } from '@ember/debug';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
 

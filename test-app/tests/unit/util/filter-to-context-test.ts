@@ -37,7 +37,7 @@ class MockAnimationContext
   }
 }
 
-class MockSpriteModifier implements SpriteModel {
+class MockSpriteModifier implements Partial<SpriteModifier> {
   element: HTMLElement;
   farMatch = false;
   id: string;
@@ -99,10 +99,12 @@ module('Unit | Util | filterToContext', function () {
     let sprites = [];
     for (let item of allItems) {
       if (item instanceof MockSpriteModifier) {
-        tree.addPendingSpriteModifier(item);
+        tree.addPendingSpriteModifier(item as unknown as SpriteModifier);
         sprites.push(item);
       } else {
-        tree.addPendingAnimationContext(item);
+        tree.addPendingAnimationContext(
+          item as unknown as AnimationContextComponent
+        );
       }
     }
 
@@ -155,10 +157,12 @@ module('Unit | Util | filterToContext', function () {
     let sprites = [];
     for (let item of allItems) {
       if (item instanceof MockSpriteModifier) {
-        tree.addPendingSpriteModifier(item);
+        tree.addPendingSpriteModifier(item as unknown as SpriteModifier);
         sprites.push(item);
       } else {
-        tree.addPendingAnimationContext(item);
+        tree.addPendingAnimationContext(
+          item as unknown as AnimationContextComponent
+        );
       }
     }
 
@@ -204,10 +208,12 @@ module('Unit | Util | filterToContext', function () {
     let sprites = [];
     for (let item of allItems) {
       if (item instanceof MockSpriteModifier) {
-        tree.addPendingSpriteModifier(item);
+        tree.addPendingSpriteModifier(item as unknown as SpriteModifier);
         sprites.push(item);
       } else {
-        tree.addPendingAnimationContext(item);
+        tree.addPendingAnimationContext(
+          item as unknown as AnimationContextComponent
+        );
       }
     }
 
