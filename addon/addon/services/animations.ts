@@ -2,10 +2,7 @@ import Service from '@ember/service';
 
 import AnimationContext from '../components/animation-context';
 import SpriteModifier from '../modifiers/sprite';
-import SpriteTree, {
-  GetDescendantNodesOptions,
-  SpriteTreeNode,
-} from '../models/sprite-tree';
+import SpriteTree, { SpriteTreeNode } from '../models/sprite-tree';
 import TransitionRunner from '../models/transition-runner';
 import { scheduleOnce } from '@ember/runloop';
 import { taskFor } from 'ember-concurrency-ts';
@@ -22,33 +19,16 @@ import {
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
-import { SpriteSnapshotNodeBuilder } from 'animations-experiment/models/sprite-snapshot-node-builder';
+import {
+  filterToContext,
+  SpriteSnapshotNodeBuilder,
+} from 'animations-experiment/models/sprite-snapshot-node-builder';
 
 export type AnimateFunction = (
   sprite: Sprite,
   motion: Motion
 ) => SpriteAnimation;
 
-export function filterToContext(
-  spriteTree: SpriteTree,
-  animationContext: AnimationContext,
-  spriteModifiers: Set<SpriteModifier>,
-  opts: GetDescendantNodesOptions = { includeFreshlyRemoved: false }
-): Set<SpriteModifier> {
-  let contextDescendants = spriteTree.descendantsOf(animationContext, {
-    ...opts,
-    filter(childNode: SpriteTreeNode) {
-      return !(
-        childNode.isContext &&
-        (childNode.contextModel as AnimationContext).isStable
-      );
-    },
-  });
-  let result = new Set(
-    [...spriteModifiers].filter((m) => contextDescendants.includes(m))
-  );
-  return result;
-}
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
   freshlyAdded: Set<SpriteModifier> = new Set();
@@ -139,36 +119,30 @@ export default class AnimationsService extends Service {
     });
   }
 
-  willTransition(context: AnimationContext): void {
-    // TODO: what about intents
-    // TODO: it might be possible to only measure if we know something changed since last we measured.
+  createIntermediateSpritesForContext(context: AnimationContext) {
+    // We do not care about "stableness of contexts here".
+    // For intermediate sprites it is good enough to measure direct children only.
 
-    this.cleanupSprites(context);
+    let contextNode = this.spriteTree.nodesByElement.get(
+      context.element
+    ) as SpriteTreeNode;
 
-    // We need to measure if this was an already rendered context in case the window has resized.
-    // The element check is there because the renderDetector may fire this before the actual element exists.
-    if (context.element) {
-      context.captureSnapshot();
-    }
-
-    let spriteModifiers: Set<SpriteModifier> = filterToContext(
-      this.spriteTree,
-      context,
-      this.freshlyRemoved,
-      { includeFreshlyRemoved: true }
+    let freshlyRemovedSpriteNodes = [
+      ...contextNode.freshlyRemovedChildren,
+    ].filter(
+      (node) =>
+        node.spriteModel &&
+        this.freshlyRemoved.has(node.spriteModel as SpriteModifier) // we have to filter by global freshlyRemoved as the SpriteTree can contain old removed sprites
+    );
+    let otherSpriteNodes = [...contextNode.children].filter(
+      (node) => node.spriteModel
     );
 
-    // TODO: we only look at direct descendants here, not all
-    let contextNodeChildren = this.spriteTree.lookupNodeByElement(
-      context.element
-    )?.children;
-    if (contextNodeChildren) {
-      for (let child of contextNodeChildren) {
-        if (child.isSprite) {
-          spriteModifiers.add(child.spriteModel as SpriteModifier);
-        }
-      }
-    }
+    let spriteModifiers = new Set<SpriteModifier>(
+      [...freshlyRemovedSpriteNodes, ...otherSpriteNodes].map(
+        (n) => n.spriteModel as SpriteModifier
+      )
+    );
 
     let intermediateSprites: Set<Sprite> = new Set();
     for (let spriteModifier of spriteModifiers) {
@@ -185,12 +159,29 @@ export default class AnimationsService extends Service {
 
       intermediateSprites.add(sprite);
     }
+    return intermediateSprites;
+  }
+
+  willTransition(context: AnimationContext): void {
+    // TODO: what about intents
+    // TODO: it might be possible to only measure if we know something changed since last we measured.
+
+    this.cleanupSprites(context);
+
+    // We need to measure if this was an already rendered context in case the window has resized.
+    // The element check is there because the renderDetector may fire this before the actual element exists.
+    if (context.element) {
+      context.captureSnapshot();
+    }
 
     assert(
       'Context already present in intermediateSprites',
       !this.intermediateSprites.has(context)
     );
-    this.intermediateSprites.set(context, intermediateSprites);
+    this.intermediateSprites.set(
+      context,
+      this.createIntermediateSpritesForContext(context)
+    );
   }
 
   async maybeTransition(): Promise<TaskInstance<void>> {
