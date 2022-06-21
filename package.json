@@ -19,7 +19,7 @@
       "@types/eslint": "8.4.1",
       "ember-class-names-helper": "^0.3.0",
       "ember-useragent": "^0.12.0",
-      "node-sass": "^7.0.1"
+      "ember-cli-sass": "^11.0.0"
     },
     "peerDependencyRules": {
       "allowedVersions": {
