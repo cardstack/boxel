@@ -204,6 +204,7 @@ export default class AnimationsService extends Service {
 
     // Update the SpriteTree
     this.spriteTree.flushPendingAdditions();
+    this.spriteTree.log();
 
     // This classifies sprites and puts them under the correct first stable ancestor context.
     let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
