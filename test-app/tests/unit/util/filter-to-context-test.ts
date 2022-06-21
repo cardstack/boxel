@@ -2,9 +2,9 @@ import { module, test } from 'qunit';
 import SpriteTree, {
   SpriteModel,
 } from 'animations-experiment/models/sprite-tree';
-import { filterToContext } from 'animations-experiment/services/animations';
-import AnimationContextComponent from 'animations-experiment/addon/components/animation-context';
-import SpriteModifier from 'animations-experiment/addon/modifiers/sprite';
+import { filterToContext } from 'animations-experiment/models/sprite-snapshot-node-builder';
+import AnimationContextComponent from 'animations-experiment/components/animation-context';
+import SpriteModifier from 'animations-experiment/modifiers/sprite';
 
 class MockAnimationContext
   implements Pick<AnimationContextComponent, 'element' | 'isStable'>

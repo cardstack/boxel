@@ -18,7 +18,7 @@ import { assert } from '@ember/debug';
 import SpringBehavior from 'animations-experiment/behaviors/spring';
 import LinearBehavior from 'animations-experiment/behaviors/linear';
 
-class SpriteIdentifier {
+export class SpriteIdentifier {
   id: string | null;
   role: string | null;
   constructor(id: string | null, role: string | null) {

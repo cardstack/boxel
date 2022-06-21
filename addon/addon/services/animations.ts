@@ -2,60 +2,49 @@ import Service from '@ember/service';
 
 import AnimationContext from '../components/animation-context';
 import SpriteModifier from '../modifiers/sprite';
-import SpriteTree, {
-  GetDescendantNodesOptions,
-  SpriteTreeNode,
-} from '../models/sprite-tree';
+import SpriteTree, { SpriteTreeNode } from '../models/sprite-tree';
 import TransitionRunner from '../models/transition-runner';
 import { scheduleOnce } from '@ember/runloop';
 import { taskFor } from 'ember-concurrency-ts';
-import Sprite from '../models/sprite';
+import Sprite, { SpriteIdentifier } from '../models/sprite';
 import Motion from '../motions/base';
 import { SpriteAnimation } from '../models/sprite-animation';
 import Changeset from 'animations-experiment/models/changeset';
-import { copyComputedStyle } from 'animations-experiment/utils/measurement';
+import {
+  CopiedCSS,
+  copyComputedStyle,
+  getDocumentPosition,
+} from 'animations-experiment/utils/measurement';
 import { assert } from '@ember/debug';
-import SpriteFactory from 'animations-experiment/models/sprite-factory';
 import {
   all,
   didCancel,
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
+import {
+  filterToContext,
+  SpriteSnapshotNodeBuilder,
+} from 'animations-experiment/models/sprite-snapshot-node-builder';
 
 export type AnimateFunction = (
   sprite: Sprite,
   motion: Motion
 ) => SpriteAnimation;
 
-export function filterToContext(
-  spriteTree: SpriteTree,
-  animationContext: AnimationContext,
-  spriteModifiers: Set<SpriteModifier>,
-  opts: GetDescendantNodesOptions = { includeFreshlyRemoved: false }
-): Set<SpriteModifier> {
-  let contextDescendants = spriteTree.descendantsOf(animationContext, {
-    ...opts,
-    filter(childNode: SpriteTreeNode) {
-      return !(
-        childNode.isContext &&
-        (childNode.contextModel as AnimationContext).isStable
-      );
-    },
-  });
-  let result = new Set(
-    [...spriteModifiers].filter((m) => contextDescendants.includes(m))
-  );
-  return result;
+export interface IntermediateSprite {
+  modifier: SpriteModifier;
+  intermediateBounds: DOMRect;
+  intermediateStyles: CopiedCSS;
 }
+
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
   freshlyAdded: Set<SpriteModifier> = new Set();
   freshlyRemoved: Set<SpriteModifier> = new Set();
   eligibleContexts: Set<AnimationContext> = new Set();
   intent: string | undefined;
-  currentChangesets: Changeset[] = [];
-  intermediateSprites: WeakMap<AnimationContext, Set<Sprite>> = new WeakMap();
+  intermediateSprites: Map<string, IntermediateSprite> = new Map();
   runningAnimations: Map<string, Set<Animation>> = new Map();
 
   registerContext(context: AnimationContext): void {
@@ -138,6 +127,46 @@ export default class AnimationsService extends Service {
     });
   }
 
+  createIntermediateSpritesForContext(context: AnimationContext) {
+    // We do not care about "stableness of contexts here".
+    // For intermediate sprites it is good enough to measure direct children only.
+
+    let contextNode = this.spriteTree.nodesByElement.get(
+      context.element
+    ) as SpriteTreeNode;
+
+    for (let node of [
+      ...contextNode.freshlyRemovedChildren,
+      ...contextNode.children,
+    ]) {
+      if (node.spriteModel && node.spriteModel.element.getAnimations().length) {
+        let spriteModifier = node.spriteModel as SpriteModifier;
+        let identifier = new SpriteIdentifier(
+          spriteModifier.id,
+          spriteModifier.role
+        );
+        let identifierString = identifier.toString();
+
+        assert(
+          `IntermediateSprite already exists for identifier ${identifierString}`,
+          !this.intermediateSprites.has(identifierString)
+        );
+
+        this.intermediateSprites.set(identifierString, {
+          modifier: spriteModifier,
+          intermediateBounds: getDocumentPosition(
+            spriteModifier.element as HTMLElement,
+            {
+              withAnimations: true,
+              playAnimations: false,
+            }
+          ),
+          intermediateStyles: copyComputedStyle(spriteModifier.element),
+        });
+      }
+    }
+  }
+
   willTransition(context: AnimationContext): void {
     // TODO: what about intents
     // TODO: it might be possible to only measure if we know something changed since last we measured.
@@ -148,53 +177,15 @@ export default class AnimationsService extends Service {
     // The element check is there because the renderDetector may fire this before the actual element exists.
     if (context.element) {
       context.captureSnapshot();
+      this.createIntermediateSpritesForContext(context);
+      let contextNode = this.spriteTree.nodesByElement.get(
+        context.element
+      ) as SpriteTreeNode;
+      contextNode.freshlyRemovedChildren.clear();
     }
-
-    let spriteModifiers: Set<SpriteModifier> = filterToContext(
-      this.spriteTree,
-      context,
-      this.freshlyRemoved,
-      { includeFreshlyRemoved: true }
-    );
-
-    // TODO: we only look at direct descendants here, not all
-    let contextNodeChildren = this.spriteTree.lookupNodeByElement(
-      context.element
-    )?.children;
-    if (contextNodeChildren) {
-      for (let child of contextNodeChildren) {
-        if (child.isSprite) {
-          spriteModifiers.add(child.spriteModel as SpriteModifier);
-        }
-      }
-    }
-
-    let intermediateSprites: Set<Sprite> = new Set();
-    for (let spriteModifier of spriteModifiers) {
-      let sprite = SpriteFactory.createIntermediateSprite(spriteModifier);
-
-      // We cannot know which animations we need to cancel until afterRender, so we will pause them so they don't
-      // progress after we did our measurements.
-      //sprite.element.getAnimations().forEach((a) => a.pause());
-      // TODO: we could leave these measurements to the SpriteFactory as they are unique to the SpriteType
-      let bounds = sprite.captureAnimatingBounds(context.element, false);
-      let styles = copyComputedStyle(sprite.element);
-      sprite.initialBounds = bounds;
-      sprite.initialComputedStyle = styles;
-
-      intermediateSprites.add(sprite);
-    }
-
-    assert(
-      'Context already present in intermediateSprites',
-      !this.intermediateSprites.has(context)
-    );
-    this.intermediateSprites.set(context, intermediateSprites);
   }
 
   async maybeTransition(): Promise<TaskInstance<void>> {
-    this.spriteTree.flushPendingAdditions();
-
     return taskFor(this.maybeTransitionTask)
       .perform()
       .catch((error) => {
@@ -211,42 +202,50 @@ export default class AnimationsService extends Service {
   *maybeTransitionTask() {
     this.didNotifyContextRendering = false;
 
-    let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
-    let intermediateSprites = this.intermediateSprites;
-    let runningAnimations = this.runningAnimations;
-    this.intermediateSprites = new WeakMap();
-    this.runningAnimations = new Map();
+    // Update the SpriteTree
+    this.spriteTree.flushPendingAdditions();
 
-    let promises = [];
-    for (let context of contexts as AnimationContext[]) {
-      // TODO: Should we keep a "current" transition runner while it is running so we can actually interrupt it?
-      //  It may also be good enough to rewrite maybeTransition into a Task.
-      let transitionRunner = new TransitionRunner(context as AnimationContext, {
-        spriteTree: this.spriteTree,
-        freshlyAdded: filterToContext(
-          this.spriteTree,
-          context,
-          this.freshlyAdded
-        ),
-        freshlyRemoved: filterToContext(
-          this.spriteTree,
-          context,
-          this.freshlyRemoved,
-          { includeFreshlyRemoved: true }
-        ),
-        intent: this.intent,
-        intermediateSprites: intermediateSprites.get(context),
-        runningAnimations,
-      });
-      let task = taskFor(transitionRunner.maybeTransitionTask);
-      promises.push(task.perform());
-    }
-    yield all(promises);
-    // TODO: check for async leaks
+    // This classifies sprites and puts them under the correct first stable ancestor context.
+    let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
+      this.spriteTree,
+      this.eligibleContexts,
+      this.freshlyAdded,
+      this.freshlyRemoved,
+      this.intermediateSprites
+    );
+
+    // We can already do cleanup here so that we're guaranteed to have the
+    // correct starting point for the next run even if an interruption happens.
     this.freshlyAdded.clear();
     this.freshlyRemoved.clear();
-    this.spriteTree.clearFreshlyRemovedChildren();
+    this.intermediateSprites = new Map();
+    this.runningAnimations = new Map();
     this.intent = undefined;
+
+    // TODO: let runningAnimations = this.runningAnimations;
+
+    let promises = [];
+    let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
+    for (let context of contexts as AnimationContext[]) {
+      let spriteSnapshotNode =
+        spriteSnapshotNodeBuilder.contextToNode.get(context);
+      if (spriteSnapshotNode && spriteSnapshotNode.hasSprites) {
+        let { insertedSprites, keptSprites, removedSprites } =
+          spriteSnapshotNode;
+
+        let changeset = new Changeset(context, undefined);
+        changeset.addSprites([
+          ...insertedSprites,
+          ...keptSprites,
+          ...removedSprites,
+        ]);
+
+        let transitionRunner = new TransitionRunner(context);
+        let task = taskFor(transitionRunner.maybeTransitionTask);
+        promises.push(task.perform(changeset));
+      }
+    }
+    yield all(promises);
   }
 
   setIntent(intentDescription: string): void {
