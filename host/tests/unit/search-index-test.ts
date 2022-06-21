@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import { TestRealm } from '../helpers';
 
@@ -23,21 +23,15 @@ module('Unit | search-index', function () {
     assert.strictEqual(cards.length, 1, 'found the card');
   });
 
-  test('full indexing discovers card sources', async function (assert) {
+  test('full indexing discovers card source where superclass card comes from outside local realm', async function (assert) {
     let realm = new TestRealm({
       'person.gts': `
-        import { contains, field, Component, Card } from '//cardstack.com/base/card-api';
+        import { contains, field, Card } from '//cardstack.com/base/card-api';
         import StringCard from '//cardstack.com/base/string';
         
         export class Person extends Card {
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
-          static embedded = class Embedded extends Component<typeof this> {
-            <template><@fields.firstName/> <@fields.lastName /></template>
-          }
-          static isolated = class Isolated extends Component<typeof this> {
-            <template><h1><@fields.firstName/> <@fields.lastName /></h1></template>
-          }
         }
       `,
     });
@@ -48,4 +42,115 @@ module('Unit | search-index', function () {
       'found Person definition'
     );
   });
+
+  skip('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
+    let realm = new TestRealm({
+      'person.gts': `
+        import { contains, field, Card } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+        
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+        }
+      `,
+      'fancy-person.gts': `
+        import { contains, field } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+        import { Person } from './person';
+        
+        export class FancyPerson extends Person {
+          @field favoriteColor = contains(StringCard);
+        }
+      `,
+    });
+    let indexer = new SearchIndex(realm);
+    await indexer.run();
+    assert.ok(
+      await indexer.typeOf('fancy-person.gts', 'FancyPerson'),
+      'found FancyPerson definition'
+    );
+  });
+
+  skip('full indexing discovers card source where superclass card comes same module', async function (assert) {
+    let realm = new TestRealm({
+      'person.gts': `
+        import { contains, field, Card } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+        
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+        }
+
+        export class FancyPerson extends Person {
+          @field favoriteColor = contains(StringCard);
+        }
+      `,
+    });
+    let indexer = new SearchIndex(realm);
+    await indexer.run();
+    assert.ok(
+      await indexer.typeOf('person.gts', 'FancyPerson'),
+      'found Person definition'
+    );
+  });
+
+  skip('full indexing ignores card source where super class in a different module is not actually a card', async function (assert) {
+    let realm = new TestRealm({
+      'person.gts': `
+        import { contains, field } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+        
+        class NotACard {};
+        
+        export class Person extends NotACard {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+        }
+      `,
+      'fancy-person.gts': `
+        import { contains, field } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+        import { Person } from './person';
+        
+        export class FancyPerson extends Person {
+          @field favoriteColor = contains(StringCard);
+        }
+      `,
+    });
+    let indexer = new SearchIndex(realm);
+    await indexer.run();
+    assert.strictEqual(
+      await indexer.typeOf('fancy-person.gts', 'FancyPerson'),
+      undefined,
+      'FancyPerson is not actually a card'
+    );
+  });
+
+  skip('full indexing ignores card source where the super class is in the same module and not actually a card', async function (assert) {
+    let realm = new TestRealm({
+      'person.gts': `
+        import { contains, field } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+        
+        class NotACard {}
+
+        export class FancyPerson extends NotACard {
+          @field favoriteColor = contains(StringCard);
+        }
+      `,
+    });
+    let indexer = new SearchIndex(realm);
+    await indexer.run();
+    assert.strictEqual(
+      await indexer.typeOf('person.gts', 'FancyPerson'),
+      undefined,
+      'FancyPerson is not actually a card'
+    );
+  });
+
+  skip(
+    'full indexing ignores card source where super class is in a different realm, but the realm says that the export is not actually a card'
+  );
 });
