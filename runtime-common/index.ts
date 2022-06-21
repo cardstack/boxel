@@ -100,3 +100,8 @@ export function isCardJSON(json: any): json is CardJSON {
   let { module, name } = adoptsFrom;
   return typeof module === "string" && typeof name === "string";
 }
+
+export interface Realm {
+  url: string;
+  eachFile(): AsyncGenerator<{ path: string; contents: string }, void>;
+}

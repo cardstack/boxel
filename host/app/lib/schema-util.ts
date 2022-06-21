@@ -6,7 +6,7 @@ import {
   PossibleCardClass,
   CardReference,
   PossibleField,
-} from './schema-analysis-plugin';
+} from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import { parseTemplates } from 'ember-template-imports/lib/parse-templates';
 
