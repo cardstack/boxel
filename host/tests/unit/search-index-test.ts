@@ -37,10 +37,18 @@ module('Unit | search-index', function () {
     });
     let indexer = new SearchIndex(realm);
     await indexer.run();
-    assert.ok(
-      await indexer.typeOf('person.gts', 'Person'),
-      'found Person definition'
-    );
+
+    let definition = await indexer.typeOf('person.gts', 'Person');
+    assert.deepEqual(definition?.id, {
+      module: 'http://test-realm/person.gts',
+      name: 'Person',
+    });
+    assert.deepEqual(definition?.adoptionChain, [
+      {
+        module: 'http://cardstack.com/base/card-api',
+        name: 'Card',
+      },
+    ]);
   });
 
   skip('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
@@ -155,4 +163,6 @@ module('Unit | search-index', function () {
   skip(
     'full indexing ignores card source where super class is in a different realm, but the realm says that the export is not actually a card'
   );
+
+  // TODO test fields in card definitions
 });
