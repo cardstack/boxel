@@ -158,11 +158,46 @@ module('Unit | search-index', function () {
     );
   });
 
-  skip('full indexing ignores cards that are not exported from their module');
+  skip('full indexing ignores cards that are not exported from their module', async function (assert) {
+    let realm = new TestRealm({
+      'person.gts': `
+        import { contains, field, Card } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+        
+        class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+        }
+      `,
+    });
+    let indexer = new SearchIndex(realm);
+    await indexer.run();
+    assert.strictEqual(
+      await indexer.typeOf('person.gts', 'Person'),
+      undefined,
+      'Person is not actually a card (that is exported)'
+    );
+  });
 
-  skip(
-    'full indexing ignores card source where super class is in a different realm, but the realm says that the export is not actually a card'
-  );
+  skip('full indexing ignores card source where super class is in a different realm, but the realm says that the export is not actually a card', async function (assert) {
+    let realm = new TestRealm({
+      'person.gts': `
+        import { contains, field, NotACard } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+        
+        export class FancyPerson extends NotACard {
+          @field favoriteColor = contains(StringCard);
+        }
+      `,
+    });
+    let indexer = new SearchIndex(realm);
+    await indexer.run();
+    assert.strictEqual(
+      await indexer.typeOf('person.gts', 'FancyPerson'),
+      undefined,
+      'FancyPerson is not actually a card'
+    );
+  });
 
   // TODO test fields in card definitions
 });
