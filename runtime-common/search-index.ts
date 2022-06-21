@@ -108,7 +108,10 @@ export class SearchIndex {
               name: possibleCard.exportedAs,
             },
             adoptionChain,
-            fields: new Map(), //TODO
+
+            //TODO use the same or similar logic to ascertain the field cards
+            //from the possibleCard.possibleFields Map
+            fields: new Map(),
           });
         }
       } else {
@@ -141,9 +144,16 @@ export class SearchIndex {
         case "/base/integer":
         case "/base/date":
         case "/base/datetime":
-        case "/base/text-area":
           return exportName === "default"
             ? Promise.resolve([{ module, name: "default" }, ...chain])
+            : Promise.resolve(undefined);
+        case "/base/text-area":
+          return exportName === "default"
+            ? Promise.resolve([
+                { module, name: "default" },
+                { module: "http://cardstack.com/base/string", name: "default" },
+                ...chain,
+              ])
             : Promise.resolve(undefined);
       }
       return Promise.resolve(undefined);
