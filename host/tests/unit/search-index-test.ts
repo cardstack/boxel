@@ -150,6 +150,8 @@ module('Unit | search-index', function () {
     );
   });
 
+  skip('full indexing ignores cards that are not exported from their module');
+
   skip(
     'full indexing ignores card source where super class is in a different realm, but the realm says that the export is not actually a card'
   );

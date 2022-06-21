@@ -4,8 +4,19 @@ import { ModuleSyntax } from "./module-syntax";
 // TODO
 type CardResource = unknown;
 type Query = unknown;
-type CardDefinition = unknown;
+interface CardDefinition {
+  id: { module: string; name: string };
+  adoptionChain: { module: string; name: string }[];
+  fields: Map<
+    string,
+    {
+      fieldType: "contains" | "containsMany";
+      fieldCard: { module: string; name: string };
+    }
+  >;
+}
 
+const base = "//cardstack.com/base/";
 export class SearchIndex {
   private instances = new Map<string, CardResource>();
   private modules = new Map<string, ModuleSyntax>();
@@ -78,6 +89,27 @@ export class SearchIndex {
         } else {
           // ask remote realm here. Initially, hard code base realm answers and
           // treat everything else as not a realm, so return no answer.
+          let adoptionChain = await this.getExternalRealmCardType(
+            possibleCard.super.module,
+            possibleCard.super.name
+          );
+          if (!adoptionChain) {
+            // the export isn't a card
+            continue;
+          }
+          if (!possibleCard.exportedAs) {
+            // the card is not exported, hence it is not possible to use
+            // directly, so it probably shouldn't appear in search results
+            continue;
+          }
+          ourDefinitions.set(possibleCard.exportedAs, {
+            id: {
+              module: new URL(path, this.realm.url).href,
+              name: possibleCard.exportedAs,
+            },
+            adoptionChain,
+            fields: new Map(), //TODO
+          });
         }
       } else {
         // lookup our previous work above for the possibleCard we extend, then
@@ -85,6 +117,40 @@ export class SearchIndex {
       }
     }
     return ourDefinitions;
+  }
+
+  // This returns the adoption chain, which is an array of card ID objects
+  private getExternalRealmCardType(
+    url: string,
+    exportName: string
+  ): Promise<{ module: string; name: string }[] | undefined> {
+    // TODO This is scaffolding for the base realm, implement for real once we
+    // have this realm endpoint fleshed out
+    if (url.startsWith(base)) {
+      let chain = [
+        { module: "http://cardstack.com/base/card-api", name: "Card" },
+      ];
+      let module = url.startsWith("http:") ? url : `http:${url}`;
+      let path = new URL(url).pathname;
+      switch (path) {
+        case "/base/card-api":
+          return exportName === "Card"
+            ? Promise.resolve(chain)
+            : Promise.resolve(undefined);
+        case "/base/string":
+        case "/base/integer":
+        case "/base/date":
+        case "/base/datetime":
+        case "/base/text-area":
+          return exportName === "default"
+            ? Promise.resolve([{ module, name: "default" }, ...chain])
+            : Promise.resolve(undefined);
+      }
+      return Promise.resolve(undefined);
+    }
+    throw new Error(
+      `unimplemented: don't know how to look up card types for ${url}`
+    );
   }
 
   private isLocal(url: string): boolean {

@@ -1,6 +1,6 @@
-import type * as Babel from '@babel/core';
-import type { types as t } from '@babel/core';
-import type { NodePath, Scope } from '@babel/traverse';
+import type * as Babel from "@babel/core";
+import type { types as t } from "@babel/core";
+import type { NodePath, Scope } from "@babel/traverse";
 
 interface State {
   opts: Options;
@@ -8,7 +8,7 @@ interface State {
 }
 
 export interface ExternalReference {
-  type: 'external';
+  type: "external";
   module: string;
   name: string;
 }
@@ -16,7 +16,7 @@ export interface ExternalReference {
 export type CardReference =
   | ExternalReference
   | {
-      type: 'internal';
+      type: "internal";
       classIndex: number;
     };
 
@@ -48,7 +48,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
             return;
           }
 
-          let sc = path.get('superClass');
+          let sc = path.get("superClass");
           if (sc.isReferencedIdentifier()) {
             let cardRef = makeCardReference(path.scope, sc.node.name, state);
             if (cardRef) {
@@ -61,7 +61,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
                 exportedAs = localName;
               } else if (parentPath.isExportDefaultDeclaration()) {
                 // the class declaration is part of a default export
-                exportedAs = 'default';
+                exportedAs = "default";
               } else {
                 // the class's identifier is referenced in a node whose parent is an ExportSpecifier
                 let binding = localName
@@ -102,7 +102,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
           return;
         }
 
-        let expression = path.get('expression');
+        let expression = path.get("expression");
         if (!expression.isIdentifier()) {
           return;
         }
@@ -117,21 +117,21 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
         let maybeClassProperty = path.parentPath;
         if (
           !maybeClassProperty.isClassProperty() ||
-          maybeClassProperty.node.key.type !== 'Identifier'
+          maybeClassProperty.node.key.type !== "Identifier"
         ) {
           return;
         }
 
         let maybeCallExpression = maybeClassProperty.node.value;
         if (
-          maybeCallExpression?.type !== 'CallExpression' ||
+          maybeCallExpression?.type !== "CallExpression" ||
           maybeCallExpression.arguments.length === 0
         ) {
           return; // our field type function (e.g. contains()) must have at least one argument (the field card)
         }
 
         let maybeFieldTypeFunction = maybeCallExpression.callee;
-        if (maybeFieldTypeFunction.type !== 'Identifier') {
+        if (maybeFieldTypeFunction.type !== "Identifier") {
           return;
         }
 
@@ -144,7 +144,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
         }
 
         let [maybeFieldCard] = maybeCallExpression.arguments; // note that the 2nd argument is the computeVia
-        if (maybeFieldCard.type !== 'Identifier') {
+        if (maybeFieldCard.type !== "Identifier") {
           return;
         }
 
@@ -160,12 +160,12 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
         let possibleField: PossibleField = {
           card: fieldCard,
           type: {
-            type: 'external',
+            type: "external",
             module: getName(fieldTypeInfo.declaration.node.source),
             name: getName(fieldTypeInfo.specifier.node.imported),
           },
           decorator: {
-            type: 'external',
+            type: "external",
             module: getName(decoratorInfo.declaration.node.source),
             name: getName(decoratorInfo.specifier.node.imported),
           },
@@ -186,8 +186,8 @@ export function error(path: NodePath<any>, message: string) {
 class CompilerError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'CompilerError';
-    if (typeof Error.captureStackTrace === 'function') {
+    this.name = "CompilerError";
+    if (typeof Error.captureStackTrace === "function") {
       Error.captureStackTrace(this, this.constructor);
     } else if (!this.stack) {
       this.stack = new Error(message).stack;
@@ -207,10 +207,10 @@ function makeCardReference(
   ) {
     let parent = binding.path.parentPath as NodePath<t.ImportDeclaration>;
     return {
-      type: 'external',
+      type: "external",
       module: parent.node.source.value,
       name: binding.path.isImportDefaultSpecifier()
-        ? 'default'
+        ? "default"
         : getName(binding.path.node.imported),
     };
   }
@@ -222,7 +222,7 @@ function makeCardReference(
     );
     if (superClassIndex >= 0) {
       return {
-        type: 'internal',
+        type: "internal",
         classIndex: superClassIndex,
       };
     }
@@ -252,7 +252,7 @@ function getNamedImportInfo(
 }
 
 function getName(node: t.Identifier | t.StringLiteral) {
-  if (node.type === 'Identifier') {
+  if (node.type === "Identifier") {
     return node.name;
   } else {
     return node.value;
