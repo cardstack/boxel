@@ -10,7 +10,7 @@
     "test-app"
   ],
   "volta": {
-    "node": "16.15.0"
+    "node": "14.18.3"
   },
   "pnpm": {
     "overrides": {
