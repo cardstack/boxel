@@ -10,6 +10,7 @@ import SpriteTree, {
 import SpriteModifier from 'animations-experiment/modifiers/sprite';
 import { assert } from '@ember/debug';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
+import { IntermediateSprite } from 'animations-experiment/services/animations';
 
 function checkForChanges(
   spriteModifier: SpriteModifier,
@@ -67,7 +68,8 @@ export class SpriteSnapshotNode {
     sprite: Sprite,
     spriteModifier: SpriteModifier,
     context: AnimationContext,
-    counterpartModifier?: SpriteModifier
+    counterpartModifier?: SpriteModifier,
+    intermediateSprite?: IntermediateSprite
   ) {
     if (sprite.type === SpriteType.Kept) {
       assert(
@@ -78,15 +80,25 @@ export class SpriteSnapshotNode {
           context.currentBounds
       );
 
-      sprite.initialBounds = new ContextAwareBounds({
-        element: spriteModifier.lastBounds,
-        contextElement: context.lastBounds,
-      });
+      if (intermediateSprite) {
+        // If an interruption happened we set the intermediate sprite's bounds as the starting point.
+        sprite.initialBounds = new ContextAwareBounds({
+          element: intermediateSprite.intermediateBounds,
+          contextElement: context.lastBounds,
+        });
+        sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
+      } else {
+        sprite.initialBounds = new ContextAwareBounds({
+          element: spriteModifier.lastBounds,
+          contextElement: context.lastBounds,
+        });
+        sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
+      }
+
       sprite.finalBounds = new ContextAwareBounds({
         element: spriteModifier.currentBounds,
         contextElement: context.currentBounds,
       });
-      sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
       sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
 
       if (sprite.counterpart) {
@@ -94,20 +106,30 @@ export class SpriteSnapshotNode {
           'counterpart modifier should have been passed',
           counterpartModifier
         );
-
         assert(
           'kept sprite counterpart should have lastBounds and currentBounds',
           counterpartModifier.lastBounds && counterpartModifier.currentBounds
         );
 
-        // TODO: double check if we're setting the correct bounds here
         if (counterpartModifier) {
-          sprite.counterpart.initialBounds = new ContextAwareBounds({
-            element: counterpartModifier.currentBounds,
-            contextElement: context.lastBounds,
-          });
-          sprite.counterpart.initialComputedStyle =
-            counterpartModifier.lastComputedStyle;
+          if (intermediateSprite) {
+            // If an interruption happened the counterpart starts at the same point as the sprite.
+            sprite.counterpart.initialBounds = sprite.initialBounds;
+            sprite.counterpart.initialComputedStyle =
+              sprite.initialComputedStyle;
+          } else {
+            sprite.counterpart.initialBounds = new ContextAwareBounds({
+              element: counterpartModifier.currentBounds,
+              contextElement: context.lastBounds,
+            });
+            sprite.counterpart.initialComputedStyle =
+              counterpartModifier.lastComputedStyle;
+
+            // If we have a counterpart the sprite should start there.
+            sprite.initialBounds = sprite.counterpart.initialBounds;
+            sprite.initialComputedStyle =
+              sprite.counterpart.initialComputedStyle;
+          }
           sprite.counterpart.finalBounds = sprite.finalBounds;
           sprite.counterpart.finalComputedStyle = sprite.finalComputedStyle;
         }
@@ -118,6 +140,10 @@ export class SpriteSnapshotNode {
       assert(
         'inserted sprite should have currentBounds',
         spriteModifier.currentBounds && context.currentBounds
+      );
+      assert(
+        'there should not be an intermediate sprite for an inserted sprite',
+        !intermediateSprite
       );
 
       sprite.finalBounds = new ContextAwareBounds({
@@ -133,11 +159,19 @@ export class SpriteSnapshotNode {
         spriteModifier.currentBounds && context.lastBounds
       );
 
-      sprite.initialBounds = new ContextAwareBounds({
-        element: spriteModifier.currentBounds,
-        contextElement: context.lastBounds,
-      });
-      sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
+      if (intermediateSprite) {
+        sprite.initialBounds = new ContextAwareBounds({
+          element: intermediateSprite.intermediateBounds,
+          contextElement: context.lastBounds,
+        });
+        sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
+      } else {
+        sprite.initialBounds = new ContextAwareBounds({
+          element: spriteModifier.currentBounds,
+          contextElement: context.lastBounds,
+        });
+        sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
+      }
 
       this.removedSprites.add(sprite);
     }
@@ -160,7 +194,8 @@ export class SpriteSnapshotNodeBuilder {
     spriteTree: SpriteTree,
     contexts: Set<AnimationContext>,
     freshlyAdded: Set<SpriteModifier>,
-    freshlyRemoved: Set<SpriteModifier>
+    freshlyRemoved: Set<SpriteModifier>,
+    intermediateSprites: Map<string, IntermediateSprite>
   ) {
     this.spriteTree = spriteTree;
 
@@ -185,7 +220,12 @@ export class SpriteSnapshotNodeBuilder {
       spriteModifiers,
       spriteModifierToSpriteMap,
       spriteModifierToCounterpartModifierMap,
-    } = this.classifySprites(freshlyAdded, freshlyRemoved, freshlyChanged);
+    } = this.classifySprites(
+      freshlyAdded,
+      freshlyRemoved,
+      freshlyChanged,
+      intermediateSprites
+    );
 
     for (let context of contexts) {
       if (context.isStable) {
@@ -205,12 +245,16 @@ export class SpriteSnapshotNodeBuilder {
           let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
           let counterpartModifier =
             spriteModifierToCounterpartModifierMap.get(spriteModifier);
+          let intermediateSprite = intermediateSprites.get(
+            sprite.identifier.toString()
+          );
 
           spriteSnapshotNode.addSprite(
             sprite,
             spriteModifier,
             context,
-            counterpartModifier
+            counterpartModifier,
+            intermediateSprite
           );
         }
 
@@ -226,7 +270,8 @@ export class SpriteSnapshotNodeBuilder {
   classifySprites(
     freshlyAdded: Set<SpriteModifier>,
     freshlyRemoved: Set<SpriteModifier>,
-    freshlyChanged: Set<SpriteModifier>
+    freshlyChanged: Set<SpriteModifier>,
+    intermediateSprites: Map<string, IntermediateSprite>
   ) {
     let insertedSpritesArr = [...freshlyAdded];
     let removedSpritesArr = [...freshlyRemoved];
@@ -252,6 +297,36 @@ export class SpriteSnapshotNodeBuilder {
     let intersectingIds = insertedIds.filter(
       (identifier) => !!removedIds.find((o) => o.equals(identifier))
     );
+
+    for (let insertedSpriteModifier of classifiedInsertedSpriteModifiers) {
+      let intermediateSprite = intermediateSprites.get(
+        new SpriteIdentifier(
+          insertedSpriteModifier.id,
+          insertedSpriteModifier.role
+        ).toString()
+      );
+      if (intermediateSprite) {
+        classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
+        let keptSprite = new Sprite(
+          insertedSpriteModifier.element as HTMLElement,
+          insertedSpriteModifier.id,
+          insertedSpriteModifier.role,
+          SpriteType.Kept
+        );
+        keptSprite.counterpart = new Sprite(
+          intermediateSprite.modifier.element as HTMLElement,
+          intermediateSprite.modifier.id,
+          intermediateSprite.modifier.role,
+          SpriteType.Removed
+        );
+        spriteModifiers.add(insertedSpriteModifier);
+        spriteModifierToSpriteMap.set(insertedSpriteModifier, keptSprite);
+        spriteModifierToCounterpartModifierMap.set(
+          insertedSpriteModifier,
+          intermediateSprite.modifier
+        );
+      }
+    }
 
     // Classify non-natural KeptSprites
     for (let intersectingId of intersectingIds) {
