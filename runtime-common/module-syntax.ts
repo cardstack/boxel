@@ -10,7 +10,7 @@ import {
 
 export { CardReference, ExternalReference };
 
-import { parseTemplates } from "ember-template-imports/lib/parse-templates";
+import { parseTemplates } from "./vendor/ember-template-imports/parse-templates";
 
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from "@babel/plugin-syntax-decorators";
