@@ -1,5 +1,7 @@
 import { assert } from '@ember/debug';
-
+import AnimationContextComponent from 'animations-experiment/components/animation-context';
+import SpriteModifier from 'animations-experiment/modifiers/sprite';
+import { formatTreeString, TreeNode } from '../utils/format-tree';
 export interface ContextModel {
   element: Element;
 }
@@ -20,6 +22,7 @@ export enum SpriteTreeNodeType {
   Context,
   Sprite,
 }
+
 export class SpriteTreeNode {
   contextModel: ContextModel | undefined;
   spriteModel: SpriteModel | undefined;
@@ -125,6 +128,32 @@ export class SpriteTreeNode {
   removeChild(childNode: SpriteTreeNode): void {
     this.children.delete(childNode);
     this.freshlyRemovedChildren.add(childNode);
+  }
+
+  toLoggableForm(isRemoved?: boolean): TreeNode {
+    let text = '';
+    if (this.isContext) {
+      let contextId = (
+        this.contextModel as unknown as AnimationContextComponent
+      ).id;
+      text += `🥡${contextId ? ` ${contextId}` : ''} `;
+    }
+    if (this.isSprite) {
+      let spriteId = (this.spriteModel as unknown as SpriteModifier).id;
+      text += `🥠${spriteId ? ` ${spriteId}` : ''}`;
+    }
+    let extra = isRemoved ? '❌' : undefined;
+    return {
+      text,
+      extra,
+      children: Array.from(this.children)
+        .map((v) => v.toLoggableForm(isRemoved))
+        .concat(
+          Array.from(this.freshlyRemovedChildren).map((v) =>
+            v.toLoggableForm(true)
+          )
+        ),
+    };
   }
 }
 
@@ -321,5 +350,14 @@ export default class SpriteTree {
       element = element.parentElement;
     }
     return null;
+  }
+
+  log() {
+    console.log(
+      formatTreeString({
+        text: 'ROOT',
+        children: Array.from(this.rootNodes).map((v) => v.toLoggableForm()),
+      })
+    );
   }
 }

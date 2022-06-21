@@ -20,6 +20,7 @@ export default class TransitionRunner {
     //playUnrelatedAnimations();
 
     if (animationContext.shouldAnimate(changeset)) {
+      this.spriteTree.log();
       this.logChangeset(changeset, animationContext); // For debugging
       let animation = animationContext.args.use?.(changeset);
       try {
