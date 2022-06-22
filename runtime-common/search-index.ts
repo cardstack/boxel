@@ -1,4 +1,4 @@
-import { Realm } from ".";
+import { Realm, executableExtensions } from ".";
 import { ModuleSyntax } from "./module-syntax";
 import { PossibleCardClass } from "./schema-analysis-plugin";
 
@@ -24,7 +24,7 @@ type Query = unknown;
 
 interface CardDefinition {
   id: CardRef;
-  super: CardRef;
+  super: CardRef | undefined; // base card has no super
   // fields: Map<
   //   string,
   //   {
@@ -45,7 +45,24 @@ function internalKeyFor(ref: CardRef): string {
   }
 }
 
-const base = "//cardstack.com/base/";
+function hasExecutableExtension(path: string): boolean {
+  for (let extension of executableExtensions) {
+    if (path.endsWith(extension)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function trimExecutableExtension(path: string): string {
+  for (let extension of executableExtensions) {
+    if (path.endsWith(extension)) {
+      return path.replace(new RegExp(`\\${extension}$`), "");
+    }
+  }
+  return path;
+}
+
 export class SearchIndex {
   private instances = new Map<string, CardResource>();
   private modules = new Map<string, ModuleSyntax>();
@@ -71,10 +88,12 @@ export class SearchIndex {
       let json = JSON.parse(contents);
       json.data.id = path;
       this.instances.set(path, json);
-    } else if (path.endsWith(".gts")) {
-      // TODO: make a shared list of executable extensions
+    } else if (hasExecutableExtension(path)) {
       this.modules.set(path, new ModuleSyntax(contents));
-      // TODO also add entry for path without extension since the extension is optional for import specifiers
+      this.modules.set(
+        trimExecutableExtension(path),
+        new ModuleSyntax(contents)
+      );
     }
   }
 
@@ -146,8 +165,10 @@ export class SearchIndex {
           inner.possibleCard
         );
       } else {
-        // todo: lookup external realm
-        return undefined;
+        superDef = await this.getExternalCardDefinition(
+          possibleCard.super.module,
+          possibleCard.super.name
+        );
       }
     }
     if (!superDef) {
@@ -177,45 +198,63 @@ export class SearchIndex {
     return { mod, possibleCard };
   }
 
-  // This returns the adoption chain, which is an array of card ID objects
-  private getExternalRealmCardType(
+  private getExternalCardDefinition(
     url: string,
     exportName: string
-  ): Promise<{ module: string; name: string }[] | undefined> {
+  ): Promise<CardDefinition | undefined> {
     // TODO This is scaffolding for the base realm, implement for real once we
     // have this realm endpoint fleshed out
-    if (url.startsWith(base)) {
-      let chain = [
-        { module: "http://cardstack.com/base/card-api", name: "Card" },
-      ];
-      let module = url.startsWith("http:") ? url : `http:${url}`;
-      let moduleURL = new URL(module);
-      if (moduleURL.origin !== "http://cardstack.com") {
-        return Promise.resolve(undefined);
-      }
-      let path = moduleURL.pathname;
-      switch (path) {
-        case "/base/card-api":
-          return exportName === "Card"
-            ? Promise.resolve(chain)
-            : Promise.resolve(undefined);
-        case "/base/string":
-        case "/base/integer":
-        case "/base/date":
-        case "/base/datetime":
-          return exportName === "default"
-            ? Promise.resolve([{ module, name: "default" }, ...chain])
-            : Promise.resolve(undefined);
-        case "/base/text-area":
-          return exportName === "default"
-            ? Promise.resolve([
-                { module, name: "default" },
-                { module: "http://cardstack.com/base/string", name: "default" },
-                ...chain,
-              ])
-            : Promise.resolve(undefined);
-      }
+    let module = url.startsWith("http:") ? url : `http:${url}`;
+    let moduleURL = new URL(module);
+    if (moduleURL.origin !== "http://cardstack.com") {
       return Promise.resolve(undefined);
+    }
+    let path = moduleURL.pathname;
+    switch (path) {
+      case "/base/card-api":
+        return exportName === "Card"
+          ? Promise.resolve({
+              id: {
+                type: "exportedCard",
+                module: url,
+                name: exportName,
+              },
+              super: undefined,
+            })
+          : Promise.resolve(undefined);
+      case "/base/string":
+      case "/base/integer":
+      case "/base/date":
+      case "/base/datetime":
+        return exportName === "default"
+          ? Promise.resolve({
+              id: {
+                type: "exportedCard",
+                module: url,
+                name: exportName,
+              },
+              super: {
+                type: "exportedCard",
+                module: "http://cardstack.com/base/card-api",
+                name: "Card",
+              },
+            })
+          : Promise.resolve(undefined);
+      case "/base/text-area":
+        return exportName === "default"
+          ? Promise.resolve({
+              id: {
+                type: "exportedCard",
+                module: url,
+                name: exportName,
+              },
+              super: {
+                type: "exportedCard",
+                module: "http://cardstack.com/base/string",
+                name: "default",
+              },
+            })
+          : Promise.resolve(undefined);
     }
     throw new Error(
       `unimplemented: don't know how to look up card types for ${url}`
@@ -237,7 +276,8 @@ export class SearchIndex {
     exportName: string
   ): Promise<CardDefinition | undefined> {
     path = new URL(path, this.realm.url).href;
-    let mod = this.definitions.get(path);
-    return mod?.get(exportName);
+    return this.definitions.get(
+      internalKeyFor({ type: "exportedCard", module: path, name: exportName })
+    );
   }
 }

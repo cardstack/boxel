@@ -40,15 +40,15 @@ module('Unit | search-index', function () {
 
     let definition = await indexer.typeOf('person.gts', 'Person');
     assert.deepEqual(definition?.id, {
+      type: 'exportedCard',
       module: 'http://test-realm/person.gts',
       name: 'Person',
     });
-    assert.deepEqual(definition?.adoptionChain, [
-      {
-        module: 'http://cardstack.com/base/card-api',
-        name: 'Card',
-      },
-    ]);
+    assert.deepEqual(definition?.super, {
+      type: 'exportedCard',
+      module: '//cardstack.com/base/card-api',
+      name: 'Card',
+    });
   });
 
   skip('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
@@ -75,21 +75,16 @@ module('Unit | search-index', function () {
     let indexer = new SearchIndex(realm);
     await indexer.run();
     let definition = await indexer.typeOf('fancy-person.gts', 'FancyPerson');
-    assert.ok(definition, 'found FancyPerson definition');
     assert.deepEqual(definition?.id, {
+      type: 'exportedCard',
       module: 'http://test-realm/fancy-person.gts',
       name: 'FancyPerson',
     });
-    assert.deepEqual(definition?.adoptionChain, [
-      {
-        module: 'http://test-realm/person.gts',
-        name: 'Person',
-      },
-      {
-        module: 'http://cardstack.com/base/card-api',
-        name: 'Card',
-      },
-    ]);
+    assert.deepEqual(definition?.super, {
+      type: 'exportedCard',
+      module: 'http://test-realm/person.gts',
+      name: 'Person',
+    });
   });
 
   skip('full indexing discovers card source where superclass card comes same module', async function (assert) {

@@ -32,6 +32,8 @@ export interface DirectoryEntryRelationship {
   };
 }
 
+export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
+
 /* Any new externally consumed modules should be added here,
  * along with the exports from the modules that are consumed.
  * These exports are paired with the host/app/app.ts which is
