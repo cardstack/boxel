@@ -51,7 +51,7 @@ module('Unit | search-index', function () {
     ]);
   });
 
-  test('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
+  skip('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
     let realm = new TestRealm({
       'person.gts': `
         import { contains, field, Card } from '//cardstack.com/base/card-api';
