@@ -45,6 +45,7 @@ export class SearchIndex {
     } else if (path.endsWith(".gts")) {
       // TODO: make a shared list of executable extensions
       this.modules.set(path, new ModuleSyntax(contents));
+      // TODO also add entry for path without extension since the extension is optional for import specifiers
     }
   }
 
