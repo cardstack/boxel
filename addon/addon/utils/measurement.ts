@@ -91,10 +91,10 @@ export function getDocumentPosition(
     'cannot set withAnimations true and withAnimationOffset',
     !(opts.withAnimations && opts.withAnimationOffset)
   );
-  if (opts.withAnimations === false) {
-    wrapper = runWithoutAnimations(opts.playAnimations ?? true);
-  } else {
+  if (opts.withAnimations === true) {
     wrapper = runWithAnimations(opts.playAnimations ?? true);
+  } else {
+    wrapper = runWithoutAnimations(opts.playAnimations ?? true);
   }
   if (opts.withAnimationOffset) {
     wrapper = runWithAnimationOffset(
