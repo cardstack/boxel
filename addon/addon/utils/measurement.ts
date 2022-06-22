@@ -73,7 +73,7 @@ function runWithAnimationOffset(offset: number, playAnimations: boolean) {
   };
 }
 
-type DocumentPositionArgs = {
+export type DocumentPositionArgs = {
   withAnimations: boolean;
   withAnimationOffset: number;
   playAnimations: boolean;

@@ -203,15 +203,20 @@ export class SpriteSnapshotNodeBuilder {
     let freshlyChanged: Set<SpriteModifier> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
-      let contextDescendants = this.spriteTree.descendantsOf(context);
-      for (let contextDescendant of contextDescendants) {
-        if (contextDescendant instanceof SpriteModifier) {
-          let spriteModifier = contextDescendant as SpriteModifier;
-          spriteModifier.captureSnapshot();
-          // TODO: what about refactoring away checkForChanges and simply treating all leftover sprites in the SpriteTree as KeptSprites
-          if (checkForChanges(spriteModifier, context)) {
-            freshlyChanged.add(spriteModifier);
-          }
+      let contextNode = this.spriteTree.nodesByElement.get(context.element);
+      let contextChildren: SpriteModifier[] = [...(contextNode?.children ?? [])]
+        .map((c) => c.spriteModel as SpriteModifier)
+        .filter(Boolean);
+
+      for (let spriteModifier of contextChildren) {
+        spriteModifier.captureSnapshot({
+          withAnimations: false,
+          playAnimations: false,
+        });
+
+        // TODO: what about refactoring away checkForChanges and simply treating all leftover sprites in the SpriteTree as KeptSprites
+        if (checkForChanges(spriteModifier, context)) {
+          freshlyChanged.add(spriteModifier);
         }
       }
     }
