@@ -134,7 +134,11 @@ export class SearchIndex {
         { module: "http://cardstack.com/base/card-api", name: "Card" },
       ];
       let module = url.startsWith("http:") ? url : `http:${url}`;
-      let path = new URL(module).pathname;
+      let moduleURL = new URL(module);
+      if (moduleURL.origin !== "http://cardstack.com") {
+        return Promise.resolve(undefined);
+      }
+      let path = moduleURL.pathname;
       switch (path) {
         case "/base/card-api":
           return exportName === "Card"
