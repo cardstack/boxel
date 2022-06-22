@@ -23,7 +23,7 @@ module('Unit | search-index', function () {
     assert.strictEqual(cards.length, 1, 'found the card');
   });
 
-  test('full indexing discovers card source where superclass card comes from outside local realm', async function (assert) {
+  test('full indexing discovers card source where super class card comes from outside local realm', async function (assert) {
     let realm = new TestRealm({
       'person.gts': `
         import { contains, field, Card } from '//cardstack.com/base/card-api';
@@ -51,7 +51,7 @@ module('Unit | search-index', function () {
     ]);
   });
 
-  skip('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
+  test('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
     let realm = new TestRealm({
       'person.gts': `
         import { contains, field, Card } from '//cardstack.com/base/card-api';
@@ -74,10 +74,22 @@ module('Unit | search-index', function () {
     });
     let indexer = new SearchIndex(realm);
     await indexer.run();
-    assert.ok(
-      await indexer.typeOf('fancy-person.gts', 'FancyPerson'),
-      'found FancyPerson definition'
-    );
+    let definition = await indexer.typeOf('fancy-person.gts', 'FancyPerson');
+    assert.ok(definition, 'found FancyPerson definition');
+    assert.deepEqual(definition?.id, {
+      module: 'http://test-realm/fancy-person.gts',
+      name: 'FancyPerson',
+    });
+    assert.deepEqual(definition?.adoptionChain, [
+      {
+        module: 'http://test-realm/person.gts',
+        name: 'Person',
+      },
+      {
+        module: 'http://cardstack.com/base/card-api',
+        name: 'Card',
+      },
+    ]);
   });
 
   skip('full indexing discovers card source where superclass card comes same module', async function (assert) {

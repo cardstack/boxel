@@ -76,16 +76,29 @@ export class SearchIndex {
         if (this.isLocal(possibleCard.super.module)) {
           let theirDefinitions = await this.buildDefinitions(
             definitions,
-            possibleCard.super.module
+            new URL(possibleCard.super.module, this.realm.url).href // TODO: module name might contain extension
           );
           let theirDef = theirDefinitions.get(possibleCard.super.name);
           if (!theirDef) {
             // the export isn't a card
             continue;
           }
-          // NEXT TODO: our possibleCard is indeed a card that extends from theirDef. So we
-          // need to build our definition for it and make sure it goes into
-          // ourDefinitions.
+          if (!possibleCard.exportedAs) {
+            // the card is not exported, hence it is not possible to use
+            // directly, so it probably shouldn't appear in search results
+            continue;
+          }
+          ourDefinitions.set(possibleCard.exportedAs, {
+            id: {
+              module: new URL(path, this.realm.url).href,
+              name: possibleCard.exportedAs,
+            },
+            adoptionChain: [theirDef.id, ...theirDef.adoptionChain],
+
+            //TODO use the same or similar logic to ascertain the field cards
+            //from the possibleCard.possibleFields Map
+            fields: new Map(),
+          });
         } else {
           // ask remote realm here. Initially, hard code base realm answers and
           // treat everything else as not a realm, so return no answer.
