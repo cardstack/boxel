@@ -139,30 +139,38 @@ export default class AnimationsService extends Service {
       ...contextNode.freshlyRemovedChildren,
       ...contextNode.children,
     ]) {
-      if (node.spriteModel && node.spriteModel.element.getAnimations().length) {
-        let spriteModifier = node.spriteModel as SpriteModifier;
-        let identifier = new SpriteIdentifier(
-          spriteModifier.id,
-          spriteModifier.role
-        );
-        let identifierString = identifier.toString();
+      let spriteModifier = node.spriteModel as SpriteModifier;
+      if (spriteModifier) {
+        let animations = node.spriteModel?.element.getAnimations();
+        if (animations?.length) {
+          spriteModifier.captureSnapshot({
+            withAnimations: true,
+            playAnimations: false,
+          });
 
-        assert(
-          `IntermediateSprite already exists for identifier ${identifierString}`,
-          !this.intermediateSprites.has(identifierString)
-        );
+          let identifier = new SpriteIdentifier(
+            spriteModifier.id,
+            spriteModifier.role
+          );
+          let identifierString = identifier.toString();
 
-        this.intermediateSprites.set(identifierString, {
-          modifier: spriteModifier,
-          intermediateBounds: getDocumentPosition(
-            spriteModifier.element as HTMLElement,
-            {
-              withAnimations: true,
-              playAnimations: false,
-            }
-          ),
-          intermediateStyles: copyComputedStyle(spriteModifier.element),
-        });
+          assert(
+            `IntermediateSprite already exists for identifier ${identifierString}`,
+            !this.intermediateSprites.has(identifierString)
+          );
+
+          this.intermediateSprites.set(identifierString, {
+            modifier: spriteModifier,
+            intermediateBounds: spriteModifier.currentBounds as DOMRect,
+            intermediateStyles:
+              spriteModifier.currentComputedStyle as CopiedCSS,
+          });
+
+          // TODO: this may not be the best spot for this
+          animations.forEach((a) => a.cancel());
+        } else {
+          spriteModifier.captureSnapshot();
+        }
       }
     }
   }
