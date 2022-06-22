@@ -13,7 +13,7 @@ import { LinkTo } from '@ember/routing';
 //@ts-ignore glint seems to this that 'hash' is unused, even though we actually use it in the template below
 import { hash } from '@ember/helper';
 import type { FieldType } from '../lib/card-api';
-import type { CardReference, ExternalReference } from '@cardstack/runtime-common/module-syntax';
+import type { ClassReference, ExternalReference } from '@cardstack/runtime-common/module-syntax';
 import type RouterService from '@ember/routing/router-service';
 
 interface Signature {
@@ -151,7 +151,7 @@ function fieldType([_fieldName, fieldDefinition ]: [fieldName: string, fieldDefi
   return fieldDefinition.type;
 }
 
-function fieldCard([_fieldName, fieldDefinition ]: [fieldName: string, fieldDefinition: FieldDefinition]): CardReference {
+function fieldCard([_fieldName, fieldDefinition ]: [fieldName: string, fieldDefinition: FieldDefinition]): ClassReference {
   return fieldDefinition.card;
 }
 

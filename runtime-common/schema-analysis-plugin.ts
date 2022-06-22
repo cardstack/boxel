@@ -13,7 +13,7 @@ export interface ExternalReference {
   name: string;
 }
 
-export type CardReference =
+export type ClassReference =
   | ExternalReference
   | {
       type: "internal";
@@ -21,7 +21,7 @@ export type CardReference =
     };
 
 export interface PossibleCardClass {
-  super: CardReference;
+  super: ClassReference;
   localName: string | undefined;
   exportedAs: string | undefined;
   path: NodePath<t.ClassDeclaration>;
@@ -29,7 +29,7 @@ export interface PossibleCardClass {
 }
 
 export interface PossibleField {
-  card: CardReference;
+  card: ClassReference;
   type: ExternalReference;
   decorator: ExternalReference;
 }
@@ -50,8 +50,8 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
 
           let sc = path.get("superClass");
           if (sc.isReferencedIdentifier()) {
-            let cardRef = makeCardReference(path.scope, sc.node.name, state);
-            if (cardRef) {
+            let classRef = makeClassReference(path.scope, sc.node.name, state);
+            if (classRef) {
               state.insideCard = true;
               let exportedAs: string | undefined;
               let { parentPath } = path;
@@ -82,7 +82,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
               }
 
               state.opts.possibleCards.push({
-                super: cardRef,
+                super: classRef,
                 localName,
                 path,
                 possibleFields: new Map(),
@@ -148,7 +148,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
           return;
         }
 
-        let fieldCard = makeCardReference(
+        let fieldCard = makeClassReference(
           path.scope,
           maybeFieldCard.name,
           state
@@ -195,11 +195,11 @@ class CompilerError extends Error {
   }
 }
 
-function makeCardReference(
+function makeClassReference(
   scope: Scope,
   name: string,
   state: State
-): CardReference | undefined {
+): ClassReference | undefined {
   let binding = scope.getBinding(name);
   if (
     binding?.path.isImportSpecifier() ||

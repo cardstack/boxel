@@ -4,11 +4,11 @@ import {
   schemaAnalysisPlugin,
   Options,
   PossibleCardClass,
-  CardReference,
+  ClassReference,
   ExternalReference,
 } from "./schema-analysis-plugin";
 
-export { CardReference, ExternalReference };
+export { ClassReference, ExternalReference };
 
 import { parseTemplates } from "./vendor/ember-template-imports/parse-templates";
 

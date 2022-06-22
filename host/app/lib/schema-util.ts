@@ -4,7 +4,7 @@ import {
   schemaAnalysisPlugin,
   Options,
   PossibleCardClass,
-  CardReference,
+  ClassReference,
   PossibleField,
 } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -78,14 +78,14 @@ export class CardDefinitions {
   // the semantic phase is async
   private async semanticPhase() {
     for (let card of this.possibleCards) {
-      if (await this.isCardReference(card.super)) {
+      if (await this.isClassReference(card.super)) {
         let fields: Map<string, FieldDefinition> = new Map();
         for (let [fieldName, field] of card.possibleFields) {
           let fieldType = await this.getFieldType(field);
           if (!fieldType) {
             continue;
           }
-          if (!(await this.isCardReference(field.card))) {
+          if (!(await this.isClassReference(field.card))) {
             continue;
           }
           fields.set(fieldName, {
@@ -98,8 +98,8 @@ export class CardDefinitions {
     }
   }
 
-  private async isCardReference(
-    possibleCardRef: CardReference
+  private async isClassReference(
+    possibleCardRef: ClassReference
   ): Promise<boolean> {
     switch (possibleCardRef.type) {
       case 'external': {
@@ -111,7 +111,7 @@ export class CardDefinitions {
         return typeof superClass === 'function' && 'baseCard' in superClass;
       }
       case 'internal':
-        return await this.isCardReference(
+        return await this.isClassReference(
           this.possibleCards[possibleCardRef.classIndex].super
         );
       default:
@@ -134,7 +134,7 @@ export class CardDefinitions {
       this.currentPath
     );
 
-    if (!(await this.isCardReference(possibleField.card))) {
+    if (!(await this.isClassReference(possibleField.card))) {
       return undefined;
     }
     let type = fieldTypeMod[possibleField.type.name][fieldType];
@@ -169,7 +169,7 @@ export class CardDefinition {
 }
 
 export interface FieldDefinition {
-  card: CardReference;
+  card: ClassReference;
   type: FieldType;
 }
 

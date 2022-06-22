@@ -1,26 +1,55 @@
 import { Realm } from ".";
 import { ModuleSyntax } from "./module-syntax";
+import { PossibleCardClass } from "./schema-analysis-plugin";
+
+type CardRef =
+  | {
+      type: "exportedCard";
+      module: string;
+      name: string;
+    }
+  | {
+      type: "ancestorOf";
+      card: CardRef;
+    }
+  | {
+      type: "fieldOf";
+      card: CardRef;
+      field: string;
+    };
 
 // TODO
 type CardResource = unknown;
 type Query = unknown;
+
 interface CardDefinition {
-  id: { module: string; name: string };
-  adoptionChain: { module: string; name: string }[];
-  fields: Map<
-    string,
-    {
-      fieldType: "contains" | "containsMany";
-      fieldCard: { module: string; name: string };
-    }
-  >;
+  id: CardRef;
+  super: CardRef;
+  // fields: Map<
+  //   string,
+  //   {
+  //     fieldType: "contains" | "containsMany";
+  //     fieldCard: CardRef;
+  //   }
+  // >;
+}
+
+function internalKeyFor(ref: CardRef): string {
+  switch (ref.type) {
+    case "exportedCard":
+      return `${ref.module}/${ref.name}`;
+    case "ancestorOf":
+      return `${internalKeyFor(ref.card)}/ancestor`;
+    case "fieldOf":
+      return `${internalKeyFor(ref.card)}/fields/${ref.field}`;
+  }
 }
 
 const base = "//cardstack.com/base/";
 export class SearchIndex {
   private instances = new Map<string, CardResource>();
   private modules = new Map<string, ModuleSyntax>();
-  private definitions = new Map<string, Map<string, CardDefinition>>();
+  private definitions = new Map<string, CardDefinition>();
 
   constructor(private realm: Realm) {}
 
@@ -50,90 +79,102 @@ export class SearchIndex {
   }
 
   private async semanticPhase(): Promise<void> {
-    let newDefinitions: Map<string, Map<string, CardDefinition>> = new Map();
-    for (let path of this.modules.keys()) {
-      await this.buildDefinitions(newDefinitions, path);
-    }
-    this.definitions = newDefinitions;
-  }
-
-  private async buildDefinitions(
-    definitions: Map<string, Map<string, CardDefinition>>,
-    path: string
-  ): Promise<Map<string, CardDefinition>> {
-    let ourDefinitions = definitions.get(path);
-    if (ourDefinitions) {
-      return ourDefinitions;
-    }
-    ourDefinitions = new Map();
-    definitions.set(path, ourDefinitions);
-    let mod = this.modules.get(path);
-    if (!mod) {
-      console.warn(`TODO: do something to inform people about a broken link`);
-      return ourDefinitions;
-    }
-    for (let possibleCard of mod.possibleCards) {
-      if (possibleCard.super.type === "external") {
-        if (this.isLocal(possibleCard.super.module)) {
-          let theirDefinitions = await this.buildDefinitions(
-            definitions,
-            new URL(possibleCard.super.module, this.realm.url).href // TODO: module name might contain extension
-          );
-          let theirDef = theirDefinitions.get(possibleCard.super.name);
-          if (!theirDef) {
-            // the export isn't a card
-            continue;
-          }
-          if (!possibleCard.exportedAs) {
-            // the card is not exported, hence it is not possible to use
-            // directly, so it probably shouldn't appear in search results
-            continue;
-          }
-          ourDefinitions.set(possibleCard.exportedAs, {
-            id: {
-              module: new URL(path, this.realm.url).href,
+    let newDefinitions: Map<string, CardDefinition> = new Map();
+    for (let [path, mod] of this.modules) {
+      for (let possibleCard of mod.possibleCards) {
+        if (possibleCard.exportedAs) {
+          await this.buildDefinition(
+            newDefinitions,
+            path,
+            mod,
+            {
+              type: "exportedCard",
+              module: path,
               name: possibleCard.exportedAs,
             },
-            adoptionChain: [theirDef.id, ...theirDef.adoptionChain],
-
-            //TODO use the same or similar logic to ascertain the field cards
-            //from the possibleCard.possibleFields Map
-            fields: new Map(),
-          });
-        } else {
-          // ask remote realm here. Initially, hard code base realm answers and
-          // treat everything else as not a realm, so return no answer.
-          let adoptionChain = await this.getExternalRealmCardType(
-            possibleCard.super.module,
-            possibleCard.super.name
+            possibleCard
           );
-          if (!adoptionChain) {
-            // the export isn't a card
-            continue;
-          }
-          if (!possibleCard.exportedAs) {
-            // the card is not exported, hence it is not possible to use
-            // directly, so it probably shouldn't appear in search results
-            continue;
-          }
-          ourDefinitions.set(possibleCard.exportedAs, {
-            id: {
-              module: new URL(path, this.realm.url).href,
-              name: possibleCard.exportedAs,
-            },
-            adoptionChain,
-
-            //TODO use the same or similar logic to ascertain the field cards
-            //from the possibleCard.possibleFields Map
-            fields: new Map(),
-          });
         }
-      } else {
-        // lookup our previous work above for the possibleCard we extend, then
-        // build our definition off it as before
       }
     }
-    return ourDefinitions;
+  }
+
+  private async buildDefinition(
+    definitions: Map<string, CardDefinition>,
+    path: string,
+    mod: ModuleSyntax,
+    ref: CardRef,
+    possibleCard: PossibleCardClass
+  ): Promise<CardDefinition | undefined> {
+    let id: CardRef = possibleCard.exportedAs
+      ? {
+          type: "exportedCard",
+          module: path,
+          name: possibleCard.exportedAs,
+        }
+      : ref;
+
+    let def = definitions.get(internalKeyFor(id));
+    if (def) {
+      definitions.set(internalKeyFor(ref), def);
+      return def;
+    }
+
+    let superDef: CardDefinition | undefined;
+    if (possibleCard.super.type === "internal") {
+      superDef = await this.buildDefinition(
+        definitions,
+        path,
+        mod,
+        { card: id, type: "ancestorOf" },
+        mod.possibleCards[possibleCard.super.classIndex]
+      );
+    } else {
+      if (this.isLocal(possibleCard.super.module)) {
+        let inner = this.lookupPossibleCard(
+          possibleCard.super.module,
+          possibleCard.super.name
+        );
+        if (!inner) {
+          return undefined;
+        }
+        superDef = await this.buildDefinition(
+          definitions,
+          possibleCard.super.module,
+          inner.mod,
+          { type: "ancestorOf", card: id },
+          inner.possibleCard
+        );
+      } else {
+        // todo: lookup external realm
+        return undefined;
+      }
+    }
+    if (!superDef) {
+      return undefined;
+    }
+
+    def = { id, super: superDef.id };
+    this.definitions.set(internalKeyFor(def.id), def);
+    return def;
+  }
+
+  private lookupPossibleCard(
+    module: string,
+    exportedName: string
+  ): { mod: ModuleSyntax; possibleCard: PossibleCardClass } | undefined {
+    let mod = this.modules.get(module);
+    if (!mod) {
+      // TODO: broken import seems bad
+      return undefined;
+    }
+    let possibleCard = mod.possibleCards.find(
+      (c) => c.exportedAs === exportedName
+    );
+    if (!possibleCard) {
+      return undefined;
+    }
+    return { mod, possibleCard };
   }
 
   // This returns the adoption chain, which is an array of card ID objects
