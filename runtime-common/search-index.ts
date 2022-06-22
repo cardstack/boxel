@@ -34,17 +34,6 @@ interface CardDefinition {
   // >;
 }
 
-function internalKeyFor(ref: CardRef): string {
-  switch (ref.type) {
-    case "exportedCard":
-      return `${ref.module}/${ref.name}`;
-    case "ancestorOf":
-      return `${internalKeyFor(ref.card)}/ancestor`;
-    case "fieldOf":
-      return `${internalKeyFor(ref.card)}/fields/${ref.field}`;
-  }
-}
-
 function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {
     if (path.endsWith(extension)) {
@@ -89,11 +78,9 @@ export class SearchIndex {
       json.data.id = path;
       this.instances.set(path, json);
     } else if (hasExecutableExtension(path)) {
-      this.modules.set(path, new ModuleSyntax(contents));
-      this.modules.set(
-        trimExecutableExtension(path),
-        new ModuleSyntax(contents)
-      );
+      let mod = new ModuleSyntax(contents);
+      this.modules.set(path, mod);
+      this.modules.set(trimExecutableExtension(path), mod);
     }
   }
 
@@ -116,6 +103,7 @@ export class SearchIndex {
         }
       }
     }
+    this.definitions = newDefinitions; // atomically update the search index
   }
 
   private async buildDefinition(
@@ -128,14 +116,14 @@ export class SearchIndex {
     let id: CardRef = possibleCard.exportedAs
       ? {
           type: "exportedCard",
-          module: path,
+          module: new URL(path, this.realm.url).href,
           name: possibleCard.exportedAs,
         }
       : ref;
 
-    let def = definitions.get(internalKeyFor(id));
+    let def = definitions.get(this.internalKeyFor(id));
     if (def) {
-      definitions.set(internalKeyFor(ref), def);
+      definitions.set(this.internalKeyFor(ref), def);
       return def;
     }
 
@@ -176,14 +164,27 @@ export class SearchIndex {
     }
 
     def = { id, super: superDef.id };
-    this.definitions.set(internalKeyFor(def.id), def);
+    definitions.set(this.internalKeyFor(def.id), def);
     return def;
+  }
+
+  private internalKeyFor(ref: CardRef): string {
+    switch (ref.type) {
+      case "exportedCard":
+        let module = new URL(ref.module, this.realm.url).href;
+        return `${module}/${ref.name}`;
+      case "ancestorOf":
+        return `${this.internalKeyFor(ref.card)}/ancestor`;
+      case "fieldOf":
+        return `${this.internalKeyFor(ref.card)}/fields/${ref.field}`;
+    }
   }
 
   private lookupPossibleCard(
     module: string,
     exportedName: string
   ): { mod: ModuleSyntax; possibleCard: PossibleCardClass } | undefined {
+    module = new URL(module, this.realm.url).href;
     let mod = this.modules.get(module);
     if (!mod) {
       // TODO: broken import seems bad
@@ -277,7 +278,11 @@ export class SearchIndex {
   ): Promise<CardDefinition | undefined> {
     path = new URL(path, this.realm.url).href;
     return this.definitions.get(
-      internalKeyFor({ type: "exportedCard", module: path, name: exportName })
+      this.internalKeyFor({
+        type: "exportedCard",
+        module: path,
+        name: exportName,
+      })
     );
   }
 }

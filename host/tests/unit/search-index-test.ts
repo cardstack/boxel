@@ -51,7 +51,7 @@ module('Unit | search-index', function () {
     });
   });
 
-  skip('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
+  test('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
     let realm = new TestRealm({
       'person.gts': `
         import { contains, field, Card } from '//cardstack.com/base/card-api';
@@ -82,7 +82,7 @@ module('Unit | search-index', function () {
     });
     assert.deepEqual(definition?.super, {
       type: 'exportedCard',
-      module: 'http://test-realm/person.gts',
+      module: 'http://test-realm/person', // this does not have the ".gts" extension because we import it as just "./person"
       name: 'Person',
     });
   });
