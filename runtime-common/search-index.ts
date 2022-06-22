@@ -271,18 +271,7 @@ export class SearchIndex {
     return [...this.instances.values()];
   }
 
-  // TODO: complete these types
-  async typeOf(
-    path: string,
-    exportName: string
-  ): Promise<CardDefinition | undefined> {
-    path = new URL(path, this.realm.url).href;
-    return this.definitions.get(
-      this.internalKeyFor({
-        type: "exportedCard",
-        module: path,
-        name: exportName,
-      })
-    );
+  async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
+    return this.definitions.get(this.internalKeyFor(ref));
   }
 }
