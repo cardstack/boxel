@@ -1,10 +1,6 @@
 import { Realm, executableExtensions } from ".";
 import { ModuleSyntax } from "./module-syntax";
-import {
-  ClassReference,
-  ExternalReference,
-  PossibleCardClass,
-} from "./schema-analysis-plugin";
+import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 
 type CardRef =
   | {
