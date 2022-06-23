@@ -20,4 +20,5 @@ Router.map(function () {
   this.route('accordion');
   this.route('nested-contexts');
   this.route('context-selection');
+  this.route('nested-sprites');
 });
