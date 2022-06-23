@@ -3,6 +3,7 @@ import {
   getDocumentPosition,
   copyComputedStyle,
   CopiedCSS,
+  DocumentPositionArgs,
 } from '../utils/measurement';
 import { assert } from '@ember/debug';
 import { inject as service } from '@ember/service';
@@ -37,7 +38,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
     this.captureSnapshot();
   }
 
-  captureSnapshot(): void {
+  captureSnapshot(opts: Partial<DocumentPositionArgs> = {}): void {
     if (!this.alreadyTracked) {
       let { element } = this;
       assert(
@@ -46,7 +47,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
       );
       this.lastBounds = this.currentBounds;
       this.lastComputedStyle = this.currentComputedStyle;
-      this.currentBounds = getDocumentPosition(element);
+      this.currentBounds = getDocumentPosition(element, opts);
       this.currentComputedStyle = copyComputedStyle(element);
       this.alreadyTracked = true;
     }
