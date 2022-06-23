@@ -77,6 +77,29 @@ export class SpriteTreeNode {
     return result;
   }
 
+  allChildSprites({ includeFreshlyRemoved = false }) {
+    let result: SpriteModel[] = [];
+
+    for (let child of this.children) {
+      if (child.isSprite) {
+        result.push(child.spriteModel as SpriteModel);
+      }
+
+      if (
+        (child.isSprite ||
+          (child.isContext &&
+            !(child.contextModel as AnimationContextComponent).isStable)) &&
+        child.children?.size
+      ) {
+        child
+          .allChildSprites({ includeFreshlyRemoved })
+          .forEach((c) => result.push(c));
+      }
+    }
+
+    return result;
+  }
+
   getDescendantNodes(
     opts: GetDescendantNodesOptions = {
       includeFreshlyRemoved: false,
