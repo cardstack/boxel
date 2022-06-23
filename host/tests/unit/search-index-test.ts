@@ -53,6 +53,22 @@ module('Unit | search-index', function () {
       module: '//cardstack.com/base/card-api',
       name: 'Card',
     });
+    assert.deepEqual(definition?.fields.get('firstName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+    assert.deepEqual(definition?.fields.get('lastName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
   });
 
   test('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
@@ -92,6 +108,24 @@ module('Unit | search-index', function () {
       type: 'exportedCard',
       module: 'http://test-realm/person', // this does not have the ".gts" extension because we import it as just "./person"
       name: 'Person',
+    });
+
+    assert.deepEqual(definition?.fields.get('lastName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+
+    assert.deepEqual(definition?.fields.get('favoriteColor'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
     });
   });
 
