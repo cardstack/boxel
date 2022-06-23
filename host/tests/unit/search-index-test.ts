@@ -20,7 +20,48 @@ module('Unit | search-index', function () {
     let indexer = new SearchIndex(realm);
     await indexer.run();
     let cards = await indexer.search({});
-    assert.strictEqual(cards.length, 1, 'found the card');
+    assert.deepEqual(cards, [
+      {
+        data: {
+          id: 'http://test-realm/empty.json',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: '//cardstack.com/base/card-api',
+              name: 'Card',
+            },
+          },
+        },
+      },
+    ]);
+  });
+
+  test('full indexing identifies the exported cards in a module', async function (assert) {
+    let realm = new TestRealm({
+      'person.gts': `
+        import { contains, field, Card } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+        
+        class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+        }
+
+        export class FancyPerson extends Person {
+          @field favoriteColor = contains(StringCard);
+        }
+      `,
+    });
+    let indexer = new SearchIndex(realm);
+    await indexer.run();
+    let refs = await indexer.exportedCardsOf('person.gts');
+    assert.deepEqual(refs, [
+      {
+        type: 'exportedCard',
+        module: 'http://test-realm/person.gts',
+        name: 'FancyPerson',
+      },
+    ]);
   });
 
   test('full indexing discovers card source where super class card comes from outside local realm', async function (assert) {

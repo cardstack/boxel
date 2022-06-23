@@ -56,6 +56,7 @@ export class SearchIndex {
   private instances = new Map<string, CardResource>();
   private modules = new Map<string, ModuleSyntax>();
   private definitions = new Map<string, CardDefinition>();
+  private exportedCardRefs = new Map<string, CardRef[]>();
 
   constructor(private realm: Realm) {}
 
@@ -103,7 +104,23 @@ export class SearchIndex {
         }
       }
     }
-    this.definitions = newDefinitions; // atomically update the search index
+    let newExportedCardRefs = new Map<string, CardRef[]>();
+    for (let def of newDefinitions.values()) {
+      if (def.id.type !== "exportedCard") {
+        continue;
+      }
+      let { module } = def.id;
+      let refs = newExportedCardRefs.get(module);
+      if (!refs) {
+        refs = [];
+        newExportedCardRefs.set(module, refs);
+      }
+      refs.push(def.id);
+    }
+
+    // atomically update the search index
+    this.definitions = newDefinitions;
+    this.exportedCardRefs = newExportedCardRefs;
   }
 
   private async buildDefinition(
@@ -273,5 +290,10 @@ export class SearchIndex {
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
     return this.definitions.get(this.internalKeyFor(ref));
+  }
+
+  async exportedCardsOf(module: string): Promise<CardRef[]> {
+    module = new URL(module, this.realm.url).href;
+    return this.exportedCardRefs.get(module) ?? [];
   }
 }
