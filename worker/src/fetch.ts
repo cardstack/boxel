@@ -19,8 +19,7 @@ import {
   serveLocalFile,
 } from './file-system';
 import { handle as handleJSONAPI } from './json-api';
-
-const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
+import { executableExtensions } from '@cardstack/runtime-common';
 
 export class FetchHandler {
   private baseURL: string;

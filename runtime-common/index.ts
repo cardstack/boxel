@@ -1,3 +1,39 @@
+export interface CardJSON {
+  data: {
+    attributes?: Record<string, any>;
+    // TODO add relationships
+    meta: {
+      adoptsFrom: {
+        module: string;
+        name: string;
+      };
+    };
+  };
+  // TODO add included
+}
+
+export interface ResourceObject {
+  type: string;
+  attributes?: Record<string, any>;
+  relationships?: Record<string, any>;
+  meta?: Record<string, any>;
+}
+
+export interface ResourceObjectWithId extends ResourceObject {
+  id: string;
+}
+
+export interface DirectoryEntryRelationship {
+  links: {
+    related: string;
+  };
+  meta: {
+    kind: "directory" | "file";
+  };
+}
+
+export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
+
 /* Any new externally consumed modules should be added here,
  * along with the exports from the modules that are consumed.
  * These exports are paired with the host/app/app.ts which is
@@ -7,7 +43,7 @@
  * host/app/app.ts file.
  */
 
-export const externalsMap = new Map([
+export const externalsMap: Map<string, string[]> = new Map([
   ["@glimmer/component", ["default"]],
   ["@ember/component", ["setComponentTemplate", "default"]],
   ["@ember/component/template-only", ["default"]],
@@ -34,7 +70,7 @@ export const externalsMap = new Map([
   ["runtime-spike/lib/integer", ["default"]],
 ]);
 
-export function isCardJSON(json) {
+export function isCardJSON(json: any): json is CardJSON {
   if (typeof json !== "object" || !("data" in json)) {
     return false;
   }
@@ -65,4 +101,9 @@ export function isCardJSON(json) {
 
   let { module, name } = adoptsFrom;
   return typeof module === "string" && typeof name === "string";
+}
+
+export interface Realm {
+  url: string;
+  eachFile(): AsyncGenerator<{ path: string; contents: string }, void>;
 }

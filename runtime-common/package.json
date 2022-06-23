@@ -2,5 +2,12 @@
   "name": "@cardstack/runtime-common",
   "version": "0.0.0",
   "license": "MIT",
-  "main": "index.js"
+  "main": "index.js",
+  "dependencies": {
+    "@babel/core": "^7.17.8",
+    "@babel/traverse": "^7.17.9",
+    "@babel/plugin-syntax-class-properties": "^7.12.13",
+    "@babel/plugin-syntax-decorators": "^7.17.12",
+    "@babel/plugin-syntax-typescript": "^7.17.12"
+  }
 }
