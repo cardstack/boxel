@@ -156,6 +156,35 @@ export async function getDirectoryEntries(
   return filterIgnoredEntries(entries, ignoreFile);
 }
 
+export async function getRecursiveDirectoryEntries(
+  directoryHandle: FileSystemDirectoryHandle,
+  parentDir = '/',
+  ignoreFile = ''
+): Promise<Entry[]> {
+  let entries: Entry[] = [];
+  for (let entry of await getDirectoryEntries(
+    directoryHandle,
+    parentDir,
+    ignoreFile
+  )) {
+    if (entry.handle.kind === 'file') {
+      entries = [...entries, entry];
+    } else {
+      entries = [
+        ...entries,
+        ...(await getDirectoryEntries(
+          entry.handle,
+          `${parentDir}${entry.handle.name}/`,
+          ignoreFile
+        )),
+      ];
+    }
+  }
+
+  entries.sort((a, b) => a.path.localeCompare(b.path));
+  return entries;
+}
+
 export async function getIgnorePatterns(fileDir: FileSystemDirectoryHandle) {
   let fileHandle;
   try {

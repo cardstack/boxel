@@ -12,6 +12,10 @@ import {
 } from './file-system';
 import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
 import merge from 'lodash/merge';
+import { SearchIndex } from '@cardstack/runtime-common/search-index';
+
+// TODO there is a potential for namespace collision for these paths. We should sort this out
+const reservedPathNames = ['/type-of', '/cards-of'];
 
 /*
   Directory listing is a JSON-API document that looks like:
@@ -67,17 +71,21 @@ import merge from 'lodash/merge';
 // strategy pattern
 export async function handle(
   fs: FileSystemDirectoryHandle,
+  searchIndex: SearchIndex,
   request: Request,
   url: URL
 ): Promise<Response> {
   // create card data
   if (request.method === 'POST') {
+    if (reservedPathNames.includes(url.pathname)) {
+      return methodNotAllowed(request);
+    }
     if (url.pathname !== '/') {
       return new Response(
         JSON.stringify({ errors: [`Can't POST to ${url.href}`] }),
         {
           status: 404,
-          headers: { 'content-type': 'application/vnd.api+json' },
+          headers: { 'Content-Type': 'application/vnd.api+json' },
         }
       );
     }
@@ -89,7 +97,7 @@ export async function handle(
         }),
         {
           status: 404,
-          headers: { 'content-type': 'application/vnd.api+json' },
+          headers: { 'Content-Type': 'application/vnd.api+json' },
         }
       );
     }
@@ -105,7 +113,7 @@ export async function handle(
             `/${dirName} is already file, but we expected a directory (so that we can make a new file in this directory)`,
             {
               status: 404,
-              headers: { 'content-type': 'text/html' },
+              headers: { 'Content-Type': 'text/html' },
             }
           )
         );
@@ -142,39 +150,27 @@ export async function handle(
       status: 201,
       headers: {
         'Last-Modified': formatRFC7231(lastModified),
+        'Content-Type': 'application/vnd.api+json',
       },
     });
   }
 
   // Update card data
   if (request.method === 'PATCH') {
+    if (reservedPathNames.includes(url.pathname)) {
+      return methodNotAllowed(request);
+    }
     let handle = await getLocalFileWithFallbacks(fs, url.pathname.slice(1), [
       '.json',
     ]);
     if (!handle.name.endsWith('.json')) {
-      return new Response(
-        JSON.stringify({
-          errors: [`PATCH not allowed for ${url.href}`],
-        }),
-        {
-          status: 405,
-          headers: { 'content-type': 'application/vnd.api+json' },
-        }
-      );
+      return methodNotAllowed(request);
     }
 
     let file = await handle.getFile();
     let original = JSON.parse(await getContents(file));
     if (!isCardJSON(original)) {
-      return new Response(
-        JSON.stringify({
-          errors: [`PATCH not allowed for ${url.href}`],
-        }),
-        {
-          status: 405,
-          headers: { 'content-type': 'application/vnd.api+json' },
-        }
-      );
+      return methodNotAllowed(request);
     }
 
     let patch = await request.json();
@@ -194,11 +190,19 @@ export async function handle(
     return new Response(JSON.stringify(contents, null, 2), {
       headers: {
         'Last-Modified': formatRFC7231(lastModified),
+        'Content-Type': 'application/vnd.api+json',
       },
     });
   }
 
   if (request.method === 'GET') {
+    if (url.pathname === '/cards-of') {
+      return await getCardsOf(searchIndex, request);
+    }
+    if (url.pathname === '/type-of') {
+      return await getTypeOf(searchIndex, request);
+    }
+
     // Get directory listing
     if (url.pathname.endsWith('/')) {
       let jsonapi = await getDirectoryListing(fs, url);
@@ -207,13 +211,13 @@ export async function handle(
           JSON.stringify({ errors: [`Could not find directory ${url.href}`] }),
           {
             status: 404,
-            headers: { 'content-type': 'application/vnd.api+json' },
+            headers: { 'Content-Type': 'application/vnd.api+json' },
           }
         );
       }
 
       return new Response(JSON.stringify(jsonapi, null, 2), {
-        headers: { 'content-type': 'application/vnd.api+json' },
+        headers: { 'Content-Type': 'application/vnd.api+json' },
       });
     }
 
@@ -316,4 +320,62 @@ async function getDirectoryListing(
   }
 
   return { data };
+}
+
+async function getCardsOf(
+  searchIndex: SearchIndex,
+  request: Request
+): Promise<Response> {
+  let module = new URL(request.url).searchParams.get('module');
+  if (!module) {
+    return new Response(
+      JSON.stringify({
+        errors: [`?module param was not specified`],
+      }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+      }
+    );
+  }
+  let refs = await searchIndex.exportedCardsOf(module);
+  return new Response(
+    JSON.stringify(
+      {
+        data: {
+          type: 'module',
+          id: new URL(module, 'http://local-realm').href,
+          attributes: {
+            cardExports: refs,
+          },
+        },
+      },
+      null,
+      2
+    ),
+    {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+      },
+    }
+  );
+}
+
+async function getTypeOf(
+  _searchIndex: SearchIndex,
+  _request: Request
+): Promise<Response> {
+  throw new Error('unimplemented');
+}
+
+function methodNotAllowed(request: Request): Response {
+  return new Response(
+    JSON.stringify({
+      errors: [`${request.method} not allowed for ${request.url}`],
+    }),
+    {
+      status: 405,
+      headers: { 'Content-Type': 'application/vnd.api+json' },
+    }
+  );
 }

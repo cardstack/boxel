@@ -1,4 +1,4 @@
-import { Realm, executableExtensions } from ".";
+import { Realm, executableExtensions, isCardJSON } from ".";
 import { ModuleSyntax } from "./module-syntax";
 import { PossibleCardClass } from "./schema-analysis-plugin";
 
@@ -76,8 +76,10 @@ export class SearchIndex {
   private syntacticPhase(path: string, contents: string) {
     if (path.endsWith(".json")) {
       let json = JSON.parse(contents);
-      json.data.id = path;
-      this.instances.set(path, json);
+      if (isCardJSON(json)) {
+        (json.data as any).id = path;
+        this.instances.set(path, json);
+      }
     } else if (hasExecutableExtension(path)) {
       let mod = new ModuleSyntax(contents);
       this.modules.set(path, mod);
