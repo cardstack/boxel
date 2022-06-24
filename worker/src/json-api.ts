@@ -1,5 +1,9 @@
 import { formatRFC7231 } from 'date-fns';
-import { isCardJSON, ResourceObjectWithId } from '@cardstack/runtime-common';
+import {
+  isCardJSON,
+  Realm,
+  ResourceObjectWithId,
+} from '@cardstack/runtime-common';
 import { WorkerError } from './error';
 import {
   write,
@@ -12,7 +16,12 @@ import {
 } from './file-system';
 import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
 import merge from 'lodash/merge';
-import { SearchIndex } from '@cardstack/runtime-common/search-index';
+import {
+  SearchIndex,
+  isCardRef,
+  CardRef,
+} from '@cardstack/runtime-common/search-index';
+import { parse, stringify } from 'qs';
 
 // TODO there is a potential for namespace collision for these paths. We should sort this out
 const reservedPathNames = [
@@ -76,6 +85,7 @@ const reservedPathNames = [
 export async function handle(
   fs: FileSystemDirectoryHandle,
   searchIndex: SearchIndex,
+  ownRealm: Realm,
   request: Request,
   url: URL
 ): Promise<Response> {
@@ -201,10 +211,10 @@ export async function handle(
 
   if (request.method === 'GET') {
     if (url.pathname === '/cardstack/cards-of') {
-      return await getCardsOf(searchIndex, request);
+      return await getCardsOf(searchIndex, ownRealm, request);
     }
     if (url.pathname === '/cardstack/type-of') {
-      return await getTypeOf(searchIndex, request);
+      return await getTypeOf(searchIndex, ownRealm, request);
     }
     if (url.pathname === '/cardstack/search') {
       return await search(searchIndex, request);
@@ -331,13 +341,15 @@ async function getDirectoryListing(
 
 async function getCardsOf(
   searchIndex: SearchIndex,
+  ownRealm: Realm,
   request: Request
 ): Promise<Response> {
-  let module = new URL(request.url).searchParams.get('module');
-  if (!module) {
+  let { module } =
+    parse(new URL(request.url).search, { ignoreQueryPrefix: true }) ?? {};
+  if (typeof module !== 'string') {
     return new Response(
       JSON.stringify({
-        errors: [`?module param was not specified`],
+        errors: [`'module' param was not specified or invalid`],
       }),
       {
         status: 400,
@@ -351,7 +363,7 @@ async function getCardsOf(
       {
         data: {
           type: 'module',
-          id: new URL(module, 'http://local-realm').href,
+          id: new URL(module, ownRealm.url).href,
           attributes: {
             cardExports: refs,
           },
@@ -368,18 +380,131 @@ async function getCardsOf(
   );
 }
 
+/*
+  The card definition response looks like:
+
+  {
+    data: {
+      type: "card-definition",
+      id: "http://local-realm/some/card",
+      relationships: {
+        _: {
+          links: {
+            related: "http://local-realm/cardstack/type-of?type=exportedCard&module=%2Fsuper%2Fcard&name=SuperCard"
+          }
+          meta: {
+            type: "super"
+          }
+        },
+        firstName: {
+          links: {
+            related: "http://cardstack.com/cardstack/type-of?type=exportedCard&module%2Fstring&name=default"
+          },
+          meta: {
+            type: "contains"
+          }
+        },
+        lastName: {
+          links: {
+            related: "http://cardstack.com/cardstack/type-of?type=exportedCard&module%2Fstring&name=default"
+          },
+          meta: {
+            type: "contains"
+          }
+        }
+      }
+    }
+  }
+
+  random musing based on example above: maybe the base realm should be:
+  http://base.cardstack.com
+  and not
+  http://cardstack.com/base
+
+  the realm API URL's read a little nicer this way....
+*/
+
 async function getTypeOf(
-  _searchIndex: SearchIndex,
-  _request: Request
+  searchIndex: SearchIndex,
+  ownRealm: Realm,
+  request: Request
 ): Promise<Response> {
-  throw new Error('unimplemented');
+  let ref = parse(new URL(request.url).search, { ignoreQueryPrefix: true });
+  if (!isCardRef(ref)) {
+    return new Response(
+      JSON.stringify({
+        errors: [`a valid card reference was not specified`],
+      }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+      }
+    );
+  }
+  let def = await searchIndex.typeOf(ref);
+  if (!def) {
+    return new Response(
+      JSON.stringify({
+        errors: [`Could not find card reference ${JSON.stringify(ref)}`],
+      }),
+      {
+        status: 404,
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+      }
+    );
+  }
+  let data: ResourceObjectWithId = {
+    id: request.url,
+    type: 'card-definition',
+    relationships: {},
+  };
+  if (!data.relationships) {
+    throw new Error('bug: this should never happen');
+  }
+
+  if (def.super) {
+    data.relationships._ = {
+      links: {
+        related: cardRefToTypeURL(def.super, ownRealm),
+      },
+      meta: {
+        type: 'super',
+      },
+    };
+  }
+  for (let [fieldName, field] of def.fields) {
+    data.relationships[fieldName] = {
+      links: {
+        related: cardRefToTypeURL(field.fieldCard, ownRealm),
+      },
+      meta: {
+        type: field.fieldType,
+      },
+    };
+  }
+  return new Response(JSON.stringify(data, null, 2), {
+    headers: { 'Content-Type': 'application/vnd.api+json' },
+  });
 }
 
 async function search(
-  _searchIndex: SearchIndex,
+  searchIndex: SearchIndex,
   _request: Request
 ): Promise<Response> {
-  throw new Error('unimplemented');
+  // TODO process query param....
+  let data = await searchIndex.search({});
+  return new Response(
+    JSON.stringify(
+      {
+        data,
+      },
+      null,
+      2
+    ),
+    {
+      headers: { 'Content-Type': 'application/vnd.api+json' },
+    }
+  );
 }
 
 function methodNotAllowed(request: Request): Response {
@@ -392,4 +517,17 @@ function methodNotAllowed(request: Request): Response {
       headers: { 'Content-Type': 'application/vnd.api+json' },
     }
   );
+}
+
+function cardRefToTypeURL(ref: CardRef, realm: Realm): string {
+  let modRealm = new URL(getModuleContext(ref), realm.url).origin;
+  return `${modRealm}/cardstack/type-of?${stringify(ref)}`;
+}
+
+function getModuleContext(ref: CardRef): string {
+  if (ref.type === 'exportedCard') {
+    return ref.module;
+  } else {
+    return getModuleContext(ref.card);
+  }
 }

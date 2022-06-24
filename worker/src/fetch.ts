@@ -163,6 +163,7 @@ export class FetchHandler {
       return handleJSONAPI(
         this.messageHandler.fs,
         this.searchIndex,
+        this.localRealm,
         request,
         url
       );

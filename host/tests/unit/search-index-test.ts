@@ -7,6 +7,7 @@ module('Unit | search-index', function () {
     let realm = new TestRealm({
       'empty.json': {
         data: {
+          type: 'card',
           attributes: {},
           meta: {
             adoptsFrom: {
@@ -22,14 +23,13 @@ module('Unit | search-index', function () {
     let cards = await indexer.search({});
     assert.deepEqual(cards, [
       {
-        data: {
-          id: 'http://test-realm/empty.json',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: '//cardstack.com/base/card-api',
-              name: 'Card',
-            },
+        id: 'http://test-realm/empty.json',
+        type: 'card',
+        attributes: {},
+        meta: {
+          adoptsFrom: {
+            module: '//cardstack.com/base/card-api',
+            name: 'Card',
           },
         },
       },

@@ -1,8 +1,8 @@
-import { Realm, executableExtensions, isCardJSON } from ".";
+import { Realm, executableExtensions } from ".";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 
-type CardRef =
+export type CardRef =
   | {
       type: "exportedCard";
       module: string;
@@ -18,8 +18,89 @@ type CardRef =
       field: string;
     };
 
+export function isCardRef(ref: any): ref is CardRef {
+  if (typeof ref !== "object") {
+    return false;
+  }
+  if (!("type" in ref)) {
+    return false;
+  }
+  if (ref.type === "exportedCard") {
+    if (!("module" in ref) || !("name" in ref)) {
+      return false;
+    }
+    return typeof ref.module === "string" && typeof ref.name === "string";
+  } else if (ref.type === "ancestorOf") {
+    if (!("card" in ref)) {
+      return false;
+    }
+    return isCardRef(ref.card);
+  } else if (ref.type === "fieldOf") {
+    if (!("card" in ref) || !("field" in ref)) {
+      return false;
+    }
+    if (typeof ref.card !== "object" || typeof ref.field !== "string") {
+      return false;
+    }
+    return isCardRef(ref.card);
+  }
+  return false;
+}
+
 // TODO
-type CardResource = unknown;
+export type Saved = string;
+export type Unsaved = string | undefined;
+export interface CardResource<Identity extends Unsaved = Saved> {
+  id: Identity;
+  type: "card";
+  attributes?: Record<string, any>;
+  // TODO add relationships
+  meta: {
+    adoptsFrom: {
+      module: string;
+      name: string;
+    };
+  };
+}
+export interface CardDocument<Identity extends Unsaved = Saved> {
+  data: CardResource<Identity>;
+}
+
+export function isCardResource(resource: any): resource is CardResource {
+  if (typeof resource !== "object") {
+    return false;
+  }
+  if ("id" in resource && typeof resource.id !== "string") {
+    return false;
+  }
+  if (!("type" in resource) || resource.type !== "card") {
+    return false;
+  }
+  if ("attributes" in resource && typeof resource.attributes !== "object") {
+    return false;
+  }
+  if (!("meta" in resource) || typeof resource.meta !== "object") {
+    return false;
+  }
+  let { meta } = resource;
+  if (!("adoptsFrom" in meta) && typeof meta.adoptsFrom !== "object") {
+    return false;
+  }
+  let { adoptsFrom } = meta;
+  return (
+    "module" in adoptsFrom &&
+    typeof adoptsFrom.module === "string" &&
+    "name" in adoptsFrom &&
+    typeof adoptsFrom.name === "string"
+  );
+}
+export function isCardDocument(doc: any): doc is CardDocument {
+  if (typeof doc !== "object") {
+    return false;
+  }
+  return "data" in doc && isCardResource(doc.data);
+}
+
 type Query = unknown;
 
 interface CardDefinition {
@@ -76,9 +157,9 @@ export class SearchIndex {
   private syntacticPhase(path: string, contents: string) {
     if (path.endsWith(".json")) {
       let json = JSON.parse(contents);
-      if (isCardJSON(json)) {
-        (json.data as any).id = path;
-        this.instances.set(path, json);
+      if (isCardDocument(json)) {
+        json.data.id = path;
+        this.instances.set(path, json.data);
       }
     } else if (hasExecutableExtension(path)) {
       let mod = new ModuleSyntax(contents);
