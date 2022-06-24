@@ -95,6 +95,7 @@ export class SpriteTreeNode {
     }
     return result;
   }
+
   freshlyRemovedDescendants(stopNode: SpriteTreeNode): SpriteTreeModel[] {
     let result: SpriteTreeModel[] = [];
     for (let childNode of this.freshlyRemovedChildren) {
@@ -237,8 +238,8 @@ export default class SpriteTree {
     }
   }
   addSpriteModifier(spriteModifier: SpriteModel): SpriteTreeNode {
+    let resultNode: SpriteTreeNode;
     let existingNode = this.nodesByElement.get(spriteModifier.element);
-
     if (existingNode) {
       assert(
         'Cannot add a SpriteModifier which was already added',
@@ -246,7 +247,7 @@ export default class SpriteTree {
       );
 
       existingNode.spriteModel = spriteModifier;
-      return existingNode;
+      resultNode = existingNode;
     } else {
       let parentNode = this.findParentNode(spriteModifier.element);
       let node = new SpriteTreeNode(
@@ -255,8 +256,18 @@ export default class SpriteTree {
         parentNode || this
       );
       this.nodesByElement.set(spriteModifier.element, node);
-      return node;
+      resultNode = node;
     }
+
+    if (!resultNode.parent.isContext) {
+      console.error(
+        `Sprite "${
+          (spriteModifier as SpriteModifier).id
+        }" cannot have another Sprite as a direct parent. An extra AnimationContext will need to be added.`
+      );
+    }
+
+    return resultNode;
   }
   removeSpriteModifier(spriteModifer: SpriteModel): void {
     let node = this.lookupNodeByElement(spriteModifer.element);

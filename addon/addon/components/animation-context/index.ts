@@ -68,8 +68,8 @@ export default class AnimationContextComponent extends Component<AnimationContex
     this.currentBounds = getDocumentPosition(element);
   }
 
-  shouldAnimate(changeset: Changeset): boolean {
-    return !!(changeset && this.args.use && this.isInitialRenderCompleted);
+  shouldAnimate(): boolean {
+    return Boolean(this.args.use && this.isStable);
   }
 
   hasOrphan(spriteOrElement: Sprite | HTMLElement): boolean {

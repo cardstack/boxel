@@ -2,6 +2,7 @@ import AnimationContext from 'animations-experiment/components/animation-context
 import { task } from 'ember-concurrency';
 import Changeset from '../models/changeset';
 import Sprite, { SpriteType } from '../models/sprite';
+import { assert } from '@ember/debug';
 
 export default class TransitionRunner {
   animationContext: AnimationContext;
@@ -13,13 +14,15 @@ export default class TransitionRunner {
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   @task *maybeTransitionTask(changeset: Changeset) {
+    assert('No changeset was passed to the TransitionRunner', !!changeset);
+
     let { animationContext } = this;
 
     // TODO: fix these
     //cancelInterruptedAnimations();
     //playUnrelatedAnimations();
 
-    if (animationContext.shouldAnimate(changeset)) {
+    if (animationContext.shouldAnimate()) {
       this.logChangeset(changeset, animationContext); // For debugging
       let animation = animationContext.args.use?.(changeset);
       try {
