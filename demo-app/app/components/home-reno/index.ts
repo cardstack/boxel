@@ -46,33 +46,17 @@ export default class HomeReno extends Component {
   }
 
   async insideTransition(changeset: Changeset) {
-    let spritesToRunAnimationsFor = [];
-    let keptCompactCards = [
-      ...changeset.spritesFor({
-        type: SpriteType.Kept,
-      }),
-    ];
-    let counterparted = keptCompactCards.find((sprite) => sprite.counterpart);
-    if (counterparted) {
-      changeset.context.appendOrphan(counterparted.counterpart!.element);
-      counterparted.counterpart!.lockStyles();
-      magicMove(
-        {
-          keptSprites: new Set([counterparted.counterpart]),
-        } as Changeset,
-        {
-          duration: 650,
-        }
-      );
-      spritesToRunAnimationsFor.push(counterparted.counterpart as Sprite);
-    } else {
-      for (let sprite of keptCompactCards) {
-        sprite.setupAnimation('size', {});
-        spritesToRunAnimationsFor.push(sprite);
-      }
-    }
+    let { keptSprites } = changeset;
 
-    await runAnimations(spritesToRunAnimationsFor);
+    let keptSprite = [...keptSprites].find(
+      (sprite) => sprite.counterpart
+    ) as Sprite;
+    if (keptSprite) {
+      magicMove({ keptSprites: new Set([keptSprite]) } as Changeset, {
+        duration: 650,
+      });
+      await runAnimations([keptSprite]);
+    }
   }
 
   async transition(changeset: Changeset) {
@@ -82,22 +66,29 @@ export default class HomeReno extends Component {
         type: SpriteType.Kept,
       }),
     ];
-    let counterparted = keptCompactCards.find((sprite) => sprite.counterpart);
-    if (counterparted) {
-      changeset.context.appendOrphan(counterparted.counterpart!.element);
-      counterparted.counterpart!.lockStyles();
+    let keptSprite = keptCompactCards.find((sprite) => sprite.counterpart);
+    if (keptSprite) {
+      changeset.context.appendOrphan(keptSprite.counterpart!.element);
+      keptSprite.counterpart!.lockStyles();
+      keptSprite.element.style.visibility = 'hidden';
+      keptSprite.counterpart!.element.style.zIndex = '1';
       magicMove(
         {
-          keptSprites: new Set([counterparted.counterpart]),
+          keptSprites: new Set([keptSprite.counterpart]),
         } as Changeset,
         {
           duration: 650,
         }
       );
-      spritesToRunAnimationsFor.push(counterparted.counterpart as Sprite);
+      spritesToRunAnimationsFor.push(keptSprite.counterpart as Sprite);
     }
 
     await runAnimations(spritesToRunAnimationsFor);
+
+    if (keptSprite) {
+      keptSprite.element.style.visibility = 'initial';
+      keptSprite.counterpart!.element.style.zIndex = '';
+    }
   }
 
   @action toggleExpansion(item: ExistingCards) {
