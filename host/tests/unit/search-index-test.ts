@@ -94,6 +94,22 @@ module('Unit | search-index', function () {
       module: '//cardstack.com/base/card-api',
       name: 'Card',
     });
+    assert.deepEqual(definition?.fields.get('firstName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+    assert.deepEqual(definition?.fields.get('lastName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
   });
 
   test('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
@@ -134,9 +150,27 @@ module('Unit | search-index', function () {
       module: 'http://test-realm/person', // this does not have the ".gts" extension because we import it as just "./person"
       name: 'Person',
     });
+
+    assert.deepEqual(definition?.fields.get('lastName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+
+    assert.deepEqual(definition?.fields.get('favoriteColor'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
   });
 
-  test('full indexing discovers card source where superclass card comes same module', async function (assert) {
+  test('full indexing discovers card source where super class card comes same module', async function (assert) {
     let realm = new TestRealm({
       'person.gts': `
         import { contains, field, Card } from '//cardstack.com/base/card-api';
@@ -168,6 +202,22 @@ module('Unit | search-index', function () {
       type: 'exportedCard',
       module: 'http://test-realm/person.gts',
       name: 'Person',
+    });
+    assert.deepEqual(definition?.fields.get('lastName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+    assert.deepEqual(definition?.fields.get('favoriteColor'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
     });
   });
 
@@ -210,6 +260,19 @@ module('Unit | search-index', function () {
       module: '//cardstack.com/base/card-api',
       name: 'Card',
     });
+    assert.deepEqual(definition?.fields.get('firstName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+    assert.strictEqual(
+      definition?.fields.get('favoriteColor'),
+      undefined,
+      'favoriteColor field does not exist on card'
+    );
   });
 
   test('full indexing ignores card source where super class in a different module is not actually a card', async function (assert) {
@@ -323,5 +386,119 @@ module('Unit | search-index', function () {
     );
   });
 
-  // TODO test fields in card definitions
+  test('full indexing discovers internal field cards that are consumed by an exported card', async function (assert) {
+    let realm = new TestRealm({
+      'person.gts': `
+        import { contains, field, Card } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+
+        class NewFieldCard extends Card {}
+        
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(NewFieldCard);
+        }
+      `,
+    });
+    let indexer = new SearchIndex(realm);
+    await indexer.run();
+    let definition = await indexer.typeOf({
+      type: 'fieldOf',
+      card: {
+        type: 'exportedCard',
+        module: 'person.gts',
+        name: 'Person',
+      },
+      field: 'lastName',
+    });
+    assert.deepEqual(definition?.id, {
+      type: 'fieldOf',
+      card: {
+        type: 'exportedCard',
+        module: 'http://test-realm/person.gts',
+        name: 'Person',
+      },
+      field: 'lastName',
+    });
+    assert.deepEqual(definition?.super, {
+      type: 'exportedCard',
+      module: '//cardstack.com/base/card-api',
+      name: 'Card',
+    });
+    assert.equal(definition?.fields.size, 0);
+
+    let cardDefinition = await indexer.typeOf({
+      type: 'exportedCard',
+      module: 'person.gts',
+      name: 'Person',
+    });
+    assert.deepEqual(cardDefinition?.fields.get('firstName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+    assert.deepEqual(cardDefinition?.fields.get('lastName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'fieldOf',
+        card: {
+          type: 'exportedCard',
+          module: 'http://test-realm/person.gts',
+          name: 'Person',
+        },
+        field: 'lastName',
+      },
+    });
+  });
+
+  test('full indexing ignores fields that are not actually fields', async function (assert) {
+    let realm = new TestRealm({
+      'person.gts': `
+        import { contains, field, Card, notAFieldDecorator, notAFieldType } from '//cardstack.com/base/card-api';
+        import StringCard from '//cardstack.com/base/string';
+
+        class NotAFieldCard {}
+        
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(NotAFieldCard);
+          @notAFieldDecorator notAField = contains(StringCard);
+          @field alsoNotAField = notAFieldType(StringCard);
+        }
+      `,
+    });
+    let indexer = new SearchIndex(realm);
+    await indexer.run();
+    let definition = await indexer.typeOf({
+      type: 'exportedCard',
+      module: 'person.gts',
+      name: 'Person',
+    });
+    assert.deepEqual(definition?.fields.get('firstName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: '//cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+    assert.strictEqual(
+      definition?.fields.get('lastName'),
+      undefined,
+      'lastName field does not exist'
+    );
+    assert.strictEqual(
+      definition?.fields.get('notAField'),
+      undefined,
+      'notAField field does not exist'
+    );
+    assert.strictEqual(
+      definition?.fields.get('alsoNotAField'),
+      undefined,
+      'alsoNotAField field does not exist'
+    );
+  });
 });

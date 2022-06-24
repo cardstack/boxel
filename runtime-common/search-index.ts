@@ -1,6 +1,6 @@
 import { Realm, executableExtensions, isCardJSON } from ".";
 import { ModuleSyntax } from "./module-syntax";
-import { PossibleCardClass } from "./schema-analysis-plugin";
+import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 
 type CardRef =
   | {
@@ -25,13 +25,13 @@ type Query = unknown;
 interface CardDefinition {
   id: CardRef;
   super: CardRef | undefined; // base card has no super
-  // fields: Map<
-  //   string,
-  //   {
-  //     fieldType: "contains" | "containsMany";
-  //     fieldCard: CardRef;
-  //   }
-  // >;
+  fields: Map<
+    string,
+    {
+      fieldType: "contains" | "containsMany";
+      fieldCard: CardRef;
+    }
+  >;
 }
 
 function hasExecutableExtension(path: string): boolean {
@@ -146,45 +146,77 @@ export class SearchIndex {
       return def;
     }
 
-    let superDef: CardDefinition | undefined;
-    if (possibleCard.super.type === "internal") {
-      superDef = await this.buildDefinition(
-        definitions,
-        path,
-        mod,
-        { card: id, type: "ancestorOf" },
-        mod.possibleCards[possibleCard.super.classIndex]
-      );
-    } else {
-      if (this.isLocal(possibleCard.super.module)) {
-        let inner = this.lookupPossibleCard(
-          possibleCard.super.module,
-          possibleCard.super.name
-        );
-        if (!inner) {
-          return undefined;
-        }
-        superDef = await this.buildDefinition(
-          definitions,
-          possibleCard.super.module,
-          inner.mod,
-          { type: "ancestorOf", card: id },
-          inner.possibleCard
-        );
-      } else {
-        superDef = await this.getExternalCardDefinition(
-          possibleCard.super.module,
-          possibleCard.super.name
-        );
-      }
-    }
+    let superDef = await this.definitionForClassRef(
+      definitions,
+      path,
+      mod,
+      possibleCard.super,
+      { type: "ancestorOf", card: id }
+    );
+
     if (!superDef) {
       return undefined;
     }
 
-    def = { id, super: superDef.id };
+    let fields: CardDefinition["fields"] = new Map(superDef.fields);
+
+    for (let [fieldName, possibleField] of possibleCard.possibleFields) {
+      if (!isOurFieldDecorator(possibleField.decorator, path)) {
+        continue;
+      }
+      let fieldType = getFieldType(possibleField.type, path);
+      if (!fieldType) {
+        continue;
+      }
+      let fieldDef = await this.definitionForClassRef(
+        definitions,
+        path,
+        mod,
+        possibleField.card,
+        { type: "fieldOf", card: id, field: fieldName }
+      );
+      if (fieldDef) {
+        fields.set(fieldName, { fieldType, fieldCard: fieldDef.id });
+      }
+    }
+
+    def = { id, super: superDef.id, fields };
     definitions.set(this.internalKeyFor(def.id), def);
     return def;
+  }
+
+  private async definitionForClassRef(
+    definitions: Map<string, CardDefinition>,
+    path: string,
+    mod: ModuleSyntax,
+    ref: ClassReference,
+    targetRef: CardRef
+  ): Promise<CardDefinition | undefined> {
+    if (ref.type === "internal") {
+      return await this.buildDefinition(
+        definitions,
+        path,
+        mod,
+        targetRef,
+        mod.possibleCards[ref.classIndex]
+      );
+    } else {
+      if (this.isLocal(ref.module)) {
+        let inner = this.lookupPossibleCard(ref.module, ref.name);
+        if (!inner) {
+          return undefined;
+        }
+        return await this.buildDefinition(
+          definitions,
+          ref.module,
+          inner.mod,
+          targetRef,
+          inner.possibleCard
+        );
+      } else {
+        return await this.getExternalCardDefinition(ref.module, ref.name);
+      }
+    }
   }
 
   private internalKeyFor(ref: CardRef): string {
@@ -240,6 +272,7 @@ export class SearchIndex {
                 name: exportName,
               },
               super: undefined,
+              fields: new Map(),
             })
           : Promise.resolve(undefined);
       case "/base/string":
@@ -258,6 +291,7 @@ export class SearchIndex {
                 module: "http://cardstack.com/base/card-api",
                 name: "Card",
               },
+              fields: new Map(),
             })
           : Promise.resolve(undefined);
       case "/base/text-area":
@@ -273,6 +307,7 @@ export class SearchIndex {
                 module: "http://cardstack.com/base/string",
                 name: "default",
               },
+              fields: new Map(),
             })
           : Promise.resolve(undefined);
     }
@@ -298,4 +333,28 @@ export class SearchIndex {
     module = new URL(module, this.realm.url).href;
     return this.exportedCardRefs.get(module) ?? [];
   }
+}
+
+function isOurFieldDecorator(ref: ClassReference, inModule: string): boolean {
+  return (
+    ref.type === "external" &&
+    new URL(ref.module, inModule).href ===
+      new URL("//cardstack.com/base/card-api", inModule).href &&
+    ref.name === "field"
+  );
+}
+
+function getFieldType(
+  ref: ClassReference,
+  inModule: string
+): "contains" | "containsMany" | undefined {
+  if (
+    ref.type === "external" &&
+    new URL(ref.module, inModule).href ===
+      "http://cardstack.com/base/card-api" &&
+    ["contains", "containsMany"].includes(ref.name)
+  ) {
+    return ref.name as ReturnType<typeof getFieldType>;
+  }
+  return undefined;
 }
