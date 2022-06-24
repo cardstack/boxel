@@ -24,9 +24,6 @@ export class MessageHandler {
           type: 'directoryHandleResponse',
           handle: this.fs,
         });
-        if (this.fs) {
-          this.finishedStarting();
-        }
         return;
       case 'setDirectoryHandle':
         this.fs = data.handle;

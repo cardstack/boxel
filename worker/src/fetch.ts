@@ -29,20 +29,20 @@ export class FetchHandler {
   private messageHandler: MessageHandler;
   private searchIndex: SearchIndex | undefined;
   private localRealm: LocalRealm | undefined;
-  private finishedStarting!: () => void;
-  startingUp: Promise<void>;
+  private finishedIndexing!: () => void;
+  runningIndexing: Promise<void>;
 
   constructor(worker: ServiceWorkerGlobalScope) {
     this.baseURL = worker.registration.scope;
-    this.startingUp = new Promise((res) => (this.finishedStarting = res));
+    this.runningIndexing = new Promise((res) => (this.finishedIndexing = res));
     this.livenessWatcher = new LivenessWatcher(worker, async () => {
       await this.doCacheDrop();
     });
     this.messageHandler = new MessageHandler(worker);
-    (async () => await this.boot())();
+    (async () => await this.runIndexAll())();
   }
 
-  private async boot() {
+  private async runIndexAll() {
     await this.messageHandler.startingUp;
     if (!this.messageHandler.fs) {
       throw new Error(`could not get FileSystem`);
@@ -50,7 +50,7 @@ export class FetchHandler {
     this.localRealm = new LocalRealm(this.messageHandler.fs);
     this.searchIndex = new SearchIndex(this.localRealm);
     await this.searchIndex.run();
-    this.finishedStarting();
+    this.finishedIndexing();
   }
 
   async handleFetch(request: Request): Promise<Response> {
@@ -143,10 +143,18 @@ export class FetchHandler {
     }
 
     if (request.headers.get('Accept')?.includes('application/vnd.api+json')) {
-      await this.startingUp;
+      await this.runningIndexing;
       if (!this.searchIndex) {
         throw WorkerError.withResponse(
           new Response('search index is not available', {
+            status: 500,
+            headers: { 'content-type': 'text/html' },
+          })
+        );
+      }
+      if (!this.localRealm) {
+        throw WorkerError.withResponse(
+          new Response('local realm is not available', {
             status: 500,
             headers: { 'content-type': 'text/html' },
           })
