@@ -307,23 +307,11 @@ export class SpriteSnapshotNodeBuilder {
 
     // Classify non-natural KeptSprites
     for (let insertedSpriteModifier of classifiedInsertedSpriteModifiers) {
-      let counterpartSpriteModifier: SpriteModifier;
+      let counterpartSpriteModifier: SpriteModifier | undefined;
 
-      let intermediateSprite = intermediateSprites.get(
-        new SpriteIdentifier(
-          insertedSpriteModifier.id,
-          insertedSpriteModifier.role
-        ).toString()
-      );
-      if (intermediateSprite) {
-        // a matching IntermediateSprite always wins from a natural counterpart
-        counterpartSpriteModifier = intermediateSprite.modifier;
-        classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
-      } else {
-        // find a suitable RemovedSprite counterpart
-        let removedSpriteModifiers = [
-          ...classifiedRemovedSpriteModifiers,
-        ].filter((removedSpriteModifier) =>
+      // find a suitable RemovedSprite counterpart if any
+      let removedSpriteModifiers = [...classifiedRemovedSpriteModifiers].filter(
+        (removedSpriteModifier) =>
           new SpriteIdentifier(
             insertedSpriteModifier.id,
             insertedSpriteModifier.role
@@ -333,26 +321,36 @@ export class SpriteSnapshotNodeBuilder {
               removedSpriteModifier.role
             )
           )
-        );
+      );
 
-        assert(
-          'Multiple matching removedSpriteModifiers found',
-          removedSpriteModifiers.length < 2
-        );
+      assert(
+        'Multiple matching removedSpriteModifiers found',
+        removedSpriteModifiers.length < 2
+      );
 
-        if (removedSpriteModifiers.length) {
-          let removedSpriteModifier =
-            removedSpriteModifiers[0] as SpriteModifier;
-          classifiedKeptSpriteModifiers.add(insertedSpriteModifier);
-          classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
-          classifiedRemovedSpriteModifiers.delete(removedSpriteModifier);
-
-          counterpartSpriteModifier = removedSpriteModifier;
-        }
+      let removedSpriteModifier = removedSpriteModifiers[0] as SpriteModifier;
+      if (removedSpriteModifier) {
+        classifiedRemovedSpriteModifiers.delete(removedSpriteModifier);
       }
 
-      if (counterpartSpriteModifier!) {
-        // Find a Stable shared ancestor AnimationContext
+      let intermediateSprite = intermediateSprites.get(
+        new SpriteIdentifier(
+          insertedSpriteModifier.id,
+          insertedSpriteModifier.role
+        ).toString()
+      );
+
+      if (intermediateSprite || removedSpriteModifier) {
+        classifiedKeptSpriteModifiers.add(insertedSpriteModifier);
+        classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
+
+        // a matching IntermediateSprite always wins from a RemovedSprite counterpart
+        counterpartSpriteModifier =
+          intermediateSprite?.modifier ?? removedSpriteModifier;
+      }
+
+      if (counterpartSpriteModifier) {
+        // Find a stable shared ancestor AnimationContext
         let sharedContext = this.spriteTree.findStableSharedAncestor(
           insertedSpriteModifier,
           counterpartSpriteModifier
