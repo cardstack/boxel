@@ -7,7 +7,7 @@
   width: 90%;
   height: 60px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   padding: 24px 12px;
 }
 

@@ -55,20 +55,19 @@ export default function (
 
     assert('kept sprite should always have finalBounds', s.finalBounds);
     let finalBounds = s.finalBounds.relativeToContext;
-    let deltaX = finalBounds.left - initialBounds.left;
-    let deltaY = finalBounds.top - initialBounds.top;
+    //let deltaX = finalBounds.left - initialBounds.left;
+    //let deltaY = finalBounds.top - initialBounds.top;
     let velocity = initialVelocity;
 
-    if (!(approximatelyEqual(deltaX, 0) && approximatelyEqual(deltaY, 0))) {
-      s.setupAnimation('position', {
-        startX: -deltaX,
-        startY: -deltaY,
-        duration,
-        velocity,
-        behavior,
-        delay,
-      });
-    }
+    // TODO: these are probably not correct in every case
+    //if (!(approximatelyEqual(deltaX, 0) && approximatelyEqual(deltaY, 0))) {
+    s.setupAnimation('position', {
+      duration,
+      velocity,
+      behavior,
+      delay,
+    });
+    //}
 
     // TODO: we probably do not want to animate extremely tiny difference (i.e. decimals in the measurements)
     if (
@@ -76,8 +75,6 @@ export default function (
       !approximatelyEqual(initialBounds?.height, finalBounds.height)
     ) {
       s.setupAnimation('size', {
-        startWidth: initialBounds?.width,
-        startHeight: initialBounds?.height,
         duration,
         velocity,
         behavior,

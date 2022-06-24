@@ -225,6 +225,7 @@ export class SpriteSnapshotNodeBuilder {
       spriteModifiers,
       spriteModifierToSpriteMap,
       spriteModifierToCounterpartModifierMap,
+      contextToKeptSpriteModifierMap,
     } = this.classifySprites(
       freshlyAdded,
       freshlyRemoved,
@@ -236,7 +237,6 @@ export class SpriteSnapshotNodeBuilder {
       if (context.isStable) {
         let spriteSnapshotNode = new SpriteSnapshotNode(context);
 
-        // TODO: add sprites for context
         let spriteModifiersForContext = filterToContext(
           this.spriteTree,
           context,
@@ -245,6 +245,14 @@ export class SpriteSnapshotNodeBuilder {
             includeFreshlyRemoved: true,
           }
         );
+
+        // add the sprites with counterparts here, if necessary
+        if (contextToKeptSpriteModifierMap.has(context)) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          for (let modifier of contextToKeptSpriteModifierMap.get(context)!) {
+            spriteModifiersForContext.add(modifier);
+          }
+        }
 
         for (let spriteModifier of spriteModifiersForContext) {
           let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
@@ -278,31 +286,23 @@ export class SpriteSnapshotNodeBuilder {
     freshlyChanged: Set<SpriteModifier>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
-    let insertedSpritesArr = [...freshlyAdded];
-    let removedSpritesArr = [...freshlyRemoved];
-
-    let classifiedInsertedSpriteModifiers = new Set(insertedSpritesArr);
-    let classifiedRemovedSpriteModifiers = new Set(removedSpritesArr);
+    let classifiedInsertedSpriteModifiers = new Set([...freshlyAdded]);
+    let classifiedRemovedSpriteModifiers = new Set([...freshlyRemoved]);
     let classifiedKeptSpriteModifiers = new Set([...freshlyChanged]);
 
     let spriteModifiers: Set<SpriteModifier> = new Set();
     let spriteModifierToSpriteMap = new WeakMap<SpriteModifier, Sprite>();
-    let spriteModifierToCounterpartModifierMap = new WeakMap<
+    let spriteModifierToCounterpartModifierMap = new Map<
       SpriteModifier,
       SpriteModifier
     >();
+    // non-natural kept sprites only
+    let contextToKeptSpriteModifierMap = new WeakMap<
+      AnimationContext,
+      Set<SpriteModifier>
+    >();
 
-    // Collect intersecting sprite identifiers
-    let insertedIds = insertedSpritesArr.map(
-      (s) => new SpriteIdentifier(s.id, s.role)
-    );
-    let removedIds = removedSpritesArr.map(
-      (s) => new SpriteIdentifier(s.id, s.role)
-    );
-    let intersectingIds = insertedIds.filter(
-      (identifier) => !!removedIds.find((o) => o.equals(identifier))
-    );
-
+    // Classify non-natural KeptSprites
     for (let insertedSpriteModifier of classifiedInsertedSpriteModifiers) {
       let intermediateSprite = intermediateSprites.get(
         new SpriteIdentifier(
@@ -311,6 +311,18 @@ export class SpriteSnapshotNodeBuilder {
         ).toString()
       );
       if (intermediateSprite) {
+        let sharedContext = this.spriteTree.findStableSharedAncestor(
+          insertedSpriteModifier,
+          intermediateSprite.modifier
+        ) as AnimationContext;
+
+        if (!sharedContext) {
+          console.warn(
+            `Non-natural kept sprite with id ${insertedSpriteModifier.id} will not animate because there is no shared animation context that encloses both it and its counterpart`
+          );
+          continue;
+        }
+
         classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
         let keptSprite = new Sprite(
           insertedSpriteModifier.element as HTMLElement,
@@ -324,22 +336,51 @@ export class SpriteSnapshotNodeBuilder {
           intermediateSprite.modifier.role,
           SpriteType.Removed
         );
-        spriteModifiers.add(insertedSpriteModifier);
+
         spriteModifierToSpriteMap.set(insertedSpriteModifier, keptSprite);
         spriteModifierToCounterpartModifierMap.set(
           insertedSpriteModifier,
           intermediateSprite.modifier
         );
+        if (contextToKeptSpriteModifierMap.has(sharedContext)) {
+          contextToKeptSpriteModifierMap
+            .get(sharedContext)
+            ?.add(insertedSpriteModifier);
+        } else {
+          contextToKeptSpriteModifierMap.set(
+            sharedContext,
+            new Set([insertedSpriteModifier])
+          );
+        }
       }
     }
 
+    // Collect intersecting sprite identifiers
+    let insertedIds = [...classifiedInsertedSpriteModifiers].map(
+      (s) => new SpriteIdentifier(s.id, s.role)
+    );
+    let removedIds = [...classifiedRemovedSpriteModifiers].map(
+      (s) => new SpriteIdentifier(s.id, s.role)
+    );
+    let intersectingIds = insertedIds.filter(
+      (identifier) => !!removedIds.find((o) => o.equals(identifier))
+    );
+
     // Classify non-natural KeptSprites
     for (let intersectingId of intersectingIds) {
-      let insertedSpriteModifier = insertedSpritesArr.find((s) =>
-        new SpriteIdentifier(s.id, s.role).equals(intersectingId)
+      let insertedSpriteModifier = [...classifiedInsertedSpriteModifiers].find(
+        (s) => new SpriteIdentifier(s.id, s.role).equals(intersectingId)
       );
-      let removedSpriteModifiers = removedSpritesArr.filter((s) =>
-        new SpriteIdentifier(s.id, s.role).equals(intersectingId)
+
+      assert(
+        'Non-natural KeptSprite was already detected during an interruption',
+        !spriteModifierToCounterpartModifierMap.has(
+          insertedSpriteModifier as SpriteModifier
+        )
+      );
+
+      let removedSpriteModifiers = [...classifiedRemovedSpriteModifiers].filter(
+        (s) => new SpriteIdentifier(s.id, s.role).equals(intersectingId)
       );
 
       assert(
@@ -356,6 +397,18 @@ export class SpriteSnapshotNodeBuilder {
       classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
       classifiedRemovedSpriteModifiers.delete(removedSpriteModifier);
 
+      let sharedContext = this.spriteTree.findStableSharedAncestor(
+        insertedSpriteModifier,
+        removedSpriteModifier
+      ) as AnimationContext;
+
+      if (!sharedContext) {
+        console.warn(
+          `Non-natural kept sprite with id ${insertedSpriteModifier.id} will not animate because there is no shared animation context that encloses both it and its counterpart`
+        );
+        continue;
+      }
+
       let keptSprite = new Sprite(
         insertedSpriteModifier.element as HTMLElement,
         insertedSpriteModifier.id,
@@ -368,12 +421,22 @@ export class SpriteSnapshotNodeBuilder {
         removedSpriteModifier.role,
         SpriteType.Removed
       );
-      spriteModifiers.add(insertedSpriteModifier);
+
       spriteModifierToSpriteMap.set(insertedSpriteModifier, keptSprite);
       spriteModifierToCounterpartModifierMap.set(
         insertedSpriteModifier,
         removedSpriteModifier
       );
+      if (contextToKeptSpriteModifierMap.has(sharedContext)) {
+        contextToKeptSpriteModifierMap
+          .get(sharedContext)
+          ?.add(insertedSpriteModifier);
+      } else {
+        contextToKeptSpriteModifierMap.set(
+          sharedContext,
+          new Set([insertedSpriteModifier])
+        );
+      }
     }
 
     for (let insertedSpriteModifier of classifiedInsertedSpriteModifiers) {
@@ -419,6 +482,7 @@ export class SpriteSnapshotNodeBuilder {
       spriteModifiers,
       spriteModifierToSpriteMap,
       spriteModifierToCounterpartModifierMap,
+      contextToKeptSpriteModifierMap,
     };
   }
 }

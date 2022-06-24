@@ -1,6 +1,7 @@
 {{#if (eq @state this.STATES.EXPANDED)}}
   <div
     local-class="home-reno-card medium"
+    {{sprite id=@identifier }}
     ...attributes
   >
     <button local-class="corner-button left" type="button" {{on "click" @toggleExpansion}}>
@@ -22,6 +23,7 @@
     local-class="home-reno-card small"
     type="button"
     {{on "click" @toggleExpansion}}
+    {{sprite id=@identifier }}
     ...attributes
   >
     {{yield}}
