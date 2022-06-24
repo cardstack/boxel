@@ -2,6 +2,7 @@ import { assert } from '@ember/debug';
 import AnimationContextComponent from 'animations-experiment/components/animation-context';
 import SpriteModifier from 'animations-experiment/modifiers/sprite';
 import { formatTreeString, TreeNode } from '../utils/format-tree';
+import AnimationContext from 'animations-experiment/components/animation-context';
 export interface ContextModel {
   element: Element;
 }
@@ -170,6 +171,7 @@ export default class SpriteTree {
     | { item: ContextModel; type: 'CONTEXT' }
     | { item: SpriteModel; type: 'SPRITE' }
   )[] = [];
+  freshlyRemovedToNode: WeakMap<SpriteModifier, SpriteTreeNode> = new WeakMap();
 
   addPendingAnimationContext(item: ContextModel) {
     this._pendingAdditions.push({ item, type: 'CONTEXT' });
@@ -234,6 +236,11 @@ export default class SpriteTree {
     let node = this.lookupNodeByElement(context.element);
     if (node) {
       node.parent?.removeChild(node);
+      if (node.isSprite) {
+        // TODO: we might need to do some cleanup? This is currently a WeakMap but..
+        // situation where this matters is SpriteModifier hanging around when it should be removed
+        this.freshlyRemovedToNode.set(node.spriteModel as SpriteModifier, node);
+      }
       this.nodesByElement.delete(context.element);
     }
   }
@@ -273,6 +280,11 @@ export default class SpriteTree {
     let node = this.lookupNodeByElement(spriteModifer.element);
     if (node) {
       node.parent?.removeChild(node);
+      if (node.isSprite) {
+        // TODO: we might need to do some cleanup? This is currently a WeakMap but..
+        // situation where this matters is SpriteModifier hanging around when it should be removed
+        this.freshlyRemovedToNode.set(node.spriteModel as SpriteModifier, node);
+      }
       this.nodesByElement.delete(spriteModifer.element);
     }
   }
@@ -361,6 +373,19 @@ export default class SpriteTree {
       element = element.parentElement;
     }
     return null;
+  }
+
+  findStableSharedAncestor(spriteA: SpriteModifier, spriteB: SpriteModifier) {
+    let ancestorsOfKeptSprite = this.nodesByElement
+      .get(spriteA.element)
+      ?.ancestors.filter((v) => (v.contextModel as AnimationContext)?.isStable);
+    let ancestorsOfCounterpartSprite = this.freshlyRemovedToNode
+      .get(spriteB)
+      ?.ancestors.filter((v) => (v.contextModel as AnimationContext)?.isStable);
+
+    return ancestorsOfKeptSprite?.find((v) =>
+      ancestorsOfCounterpartSprite?.includes(v)
+    )?.contextModel;
   }
 
   log() {
