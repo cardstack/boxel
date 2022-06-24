@@ -57,7 +57,7 @@ class _FileResource extends Resource<Args> {
       // get the initial content if we haven't already been seeded with initial content
       taskFor(this.read).perform();
     }
-    this.interval = setInterval(() => taskFor(this.read).perform(), 1000);
+    // this.interval = setInterval(() => taskFor(this.read).perform(), 1000);
     registerDestructor(this, () => clearInterval(this.interval));
   }
 

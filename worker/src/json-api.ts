@@ -17,6 +17,27 @@ import { SearchIndex } from '@cardstack/runtime-common/search-index';
 // TODO there is a potential for namespace collision for these paths. We should sort this out
 const reservedPathNames = ['/type-of', '/cards-of'];
 
+interface Route {
+  path: string | RegExp;
+  method: 'GET' | 'POST' | 'PATCH'; // add others as necessary
+}
+interface Context<T> {
+  request: Request;
+  opts: T;
+}
+type Middleware<T> = (cxt: Context<T>, next: () => void) => Promise<void>;
+export class JSONAPIRouter<T> {
+  private routes: Route[] = [];
+  constructor(
+    private fs: FileSystemDirectoryHandle,
+    private searchIndex: SearchIndex
+  ) {}
+
+  get(path: Route['path'], ...middleware: Middleware<T>[]) {}
+  post(path: Route['path'], ...middleware: Middleware<T>[]) {}
+  patch(path: Route['path'], ...middleware: Middleware<T>[]) {}
+}
+
 /*
   Directory listing is a JSON-API document that looks like:
 

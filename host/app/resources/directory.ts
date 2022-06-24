@@ -27,7 +27,7 @@ export class DirectoryResource extends Resource<Args> {
     registerDestructor(this, () => {
       clearInterval(this.interval);
     });
-    this.interval = setInterval(() => taskFor(this.readdir).perform(), 1000);
+    // this.interval = setInterval(() => taskFor(this.readdir).perform(), 1000);
     if (args.named.url) {
       if (!args.named.url.endsWith('/')) {
         throw new Error(`A directory URL must end with a "/"`);
