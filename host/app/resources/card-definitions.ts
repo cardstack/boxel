@@ -23,16 +23,6 @@ export class CardDefinitionsResource extends Resource<Args> {
     inspector: CardInspector,
     currentPath: string
   ) {
-    // let response = await fetch(
-    //   `http://local-realm/cards-of?module=${encodeURIComponent(currentPath)}`,
-    //   {
-    //     headers: {
-    //       Accept: 'application/vnd.api+json',
-    //     },
-    //   }
-    // );
-    // let json = await response.json();
-    // debugger;
     this.cards = (await inspector.inspectCards(src, currentPath)).cards;
   }
 }
