@@ -215,7 +215,10 @@ export class SpriteSnapshotNodeBuilder {
         });
 
         // TODO: what about refactoring away checkForChanges and simply treating all leftover sprites in the SpriteTree as KeptSprites
-        if (checkForChanges(spriteModifier, context)) {
+        if (
+          !freshlyAdded.has(spriteModifier) &&
+          checkForChanges(spriteModifier, context)
+        ) {
           freshlyChanged.add(spriteModifier);
         }
       }
@@ -466,6 +469,10 @@ export class SpriteSnapshotNodeBuilder {
     }
 
     for (let keptSpriteModifier of freshlyChanged) {
+      assert(
+        'Freshly changed sprite modifier has already been processed as a non-natural kept sprite',
+        !spriteModifierToCounterpartModifierMap.has(keptSpriteModifier)
+      );
       spriteModifiers.add(keptSpriteModifier);
       spriteModifierToSpriteMap.set(
         keptSpriteModifier,
