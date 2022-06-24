@@ -21,7 +21,9 @@ import LinearBehavior from 'animations-experiment/behaviors/linear';
 export class SpriteIdentifier {
   id: string | null;
   role: string | null;
-  constructor(id: string | null, role: string | null) {
+
+  // assign defaults here because we get inconsistent results from non-typesafe arguments from modifiers
+  constructor(id: string | null = null, role: string | null = null) {
     this.id = id;
     this.role = role;
   }
