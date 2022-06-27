@@ -20,18 +20,37 @@ import {
 } from './file-system';
 import { handle as handleJSONAPI } from './json-api';
 import { executableExtensions } from '@cardstack/runtime-common';
+import { SearchIndex } from '@cardstack/runtime-common/search-index';
+import { LocalRealm } from './local-realm';
 
 export class FetchHandler {
   private baseURL: string;
   private livenessWatcher: LivenessWatcher;
   private messageHandler: MessageHandler;
+  private searchIndex: SearchIndex | undefined;
+  private localRealm: LocalRealm | undefined;
+  private finishedIndexing!: () => void;
+  runningIndexing: Promise<void>;
 
   constructor(worker: ServiceWorkerGlobalScope) {
     this.baseURL = worker.registration.scope;
+    this.runningIndexing = new Promise((res) => (this.finishedIndexing = res));
     this.livenessWatcher = new LivenessWatcher(worker, async () => {
       await this.doCacheDrop();
     });
     this.messageHandler = new MessageHandler(worker);
+    (async () => await this.runIndexAll())();
+  }
+
+  private async runIndexAll() {
+    await this.messageHandler.startingUp;
+    if (!this.messageHandler.fs) {
+      throw new Error(`could not get FileSystem`);
+    }
+    this.localRealm = new LocalRealm(this.messageHandler.fs);
+    this.searchIndex = new SearchIndex(this.localRealm);
+    await this.searchIndex.run();
+    this.finishedIndexing();
   }
 
   async handleFetch(request: Request): Promise<Response> {
@@ -124,7 +143,30 @@ export class FetchHandler {
     }
 
     if (request.headers.get('Accept')?.includes('application/vnd.api+json')) {
-      return handleJSONAPI(this.messageHandler.fs, request, url);
+      await this.runningIndexing;
+      if (!this.searchIndex) {
+        throw WorkerError.withResponse(
+          new Response('search index is not available', {
+            status: 500,
+            headers: { 'content-type': 'text/html' },
+          })
+        );
+      }
+      if (!this.localRealm) {
+        throw WorkerError.withResponse(
+          new Response('local realm is not available', {
+            status: 500,
+            headers: { 'content-type': 'text/html' },
+          })
+        );
+      }
+      return handleJSONAPI(
+        this.messageHandler.fs,
+        this.searchIndex,
+        this.localRealm,
+        request,
+        url
+      );
     } else if (
       request.headers.get('Accept')?.includes('application/vnd.card+source')
     ) {

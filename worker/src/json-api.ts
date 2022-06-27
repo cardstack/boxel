@@ -1,5 +1,9 @@
 import { formatRFC7231 } from 'date-fns';
-import { isCardJSON, ResourceObjectWithId } from '@cardstack/runtime-common';
+import {
+  isCardJSON,
+  Realm,
+  ResourceObjectWithId,
+} from '@cardstack/runtime-common';
 import { WorkerError } from './error';
 import {
   write,
@@ -8,10 +12,15 @@ import {
   getContents,
   getIgnorePatterns,
   getDirectoryEntries,
-  serveLocalFile,
 } from './file-system';
 import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
 import merge from 'lodash/merge';
+import {
+  SearchIndex,
+  isCardRef,
+  CardRef,
+} from '@cardstack/runtime-common/search-index';
+import { parse, stringify } from 'qs';
 
 /*
   Directory listing is a JSON-API document that looks like:
@@ -67,17 +76,22 @@ import merge from 'lodash/merge';
 // strategy pattern
 export async function handle(
   fs: FileSystemDirectoryHandle,
+  searchIndex: SearchIndex,
+  ownRealm: Realm,
   request: Request,
   url: URL
 ): Promise<Response> {
   // create card data
   if (request.method === 'POST') {
+    if (url.pathname.startsWith('_')) {
+      return methodNotAllowed(request);
+    }
     if (url.pathname !== '/') {
       return new Response(
         JSON.stringify({ errors: [`Can't POST to ${url.href}`] }),
         {
           status: 404,
-          headers: { 'content-type': 'application/vnd.api+json' },
+          headers: { 'Content-Type': 'application/vnd.api+json' },
         }
       );
     }
@@ -89,7 +103,7 @@ export async function handle(
         }),
         {
           status: 404,
-          headers: { 'content-type': 'application/vnd.api+json' },
+          headers: { 'Content-Type': 'application/vnd.api+json' },
         }
       );
     }
@@ -105,7 +119,7 @@ export async function handle(
             `/${dirName} is already file, but we expected a directory (so that we can make a new file in this directory)`,
             {
               status: 404,
-              headers: { 'content-type': 'text/html' },
+              headers: { 'Content-Type': 'text/html' },
             }
           )
         );
@@ -142,39 +156,27 @@ export async function handle(
       status: 201,
       headers: {
         'Last-Modified': formatRFC7231(lastModified),
+        'Content-Type': 'application/vnd.api+json',
       },
     });
   }
 
   // Update card data
   if (request.method === 'PATCH') {
+    if (url.pathname.startsWith('_')) {
+      return methodNotAllowed(request);
+    }
     let handle = await getLocalFileWithFallbacks(fs, url.pathname.slice(1), [
       '.json',
     ]);
     if (!handle.name.endsWith('.json')) {
-      return new Response(
-        JSON.stringify({
-          errors: [`PATCH not allowed for ${url.href}`],
-        }),
-        {
-          status: 405,
-          headers: { 'content-type': 'application/vnd.api+json' },
-        }
-      );
+      return methodNotAllowed(request);
     }
 
     let file = await handle.getFile();
     let original = JSON.parse(await getContents(file));
     if (!isCardJSON(original)) {
-      return new Response(
-        JSON.stringify({
-          errors: [`PATCH not allowed for ${url.href}`],
-        }),
-        {
-          status: 405,
-          headers: { 'content-type': 'application/vnd.api+json' },
-        }
-      );
+      return methodNotAllowed(request);
     }
 
     let patch = await request.json();
@@ -194,11 +196,22 @@ export async function handle(
     return new Response(JSON.stringify(contents, null, 2), {
       headers: {
         'Last-Modified': formatRFC7231(lastModified),
+        'Content-Type': 'application/vnd.api+json',
       },
     });
   }
 
   if (request.method === 'GET') {
+    if (url.pathname === '/_cardsOf') {
+      return await getCardsOf(searchIndex, ownRealm, request);
+    }
+    if (url.pathname === '/_typeOf') {
+      return await getTypeOf(searchIndex, ownRealm, request);
+    }
+    if (url.pathname === '/_search') {
+      return await search(searchIndex, request);
+    }
+
     // Get directory listing
     if (url.pathname.endsWith('/')) {
       let jsonapi = await getDirectoryListing(fs, url);
@@ -207,13 +220,13 @@ export async function handle(
           JSON.stringify({ errors: [`Could not find directory ${url.href}`] }),
           {
             status: 404,
-            headers: { 'content-type': 'application/vnd.api+json' },
+            headers: { 'Content-Type': 'application/vnd.api+json' },
           }
         );
       }
 
       return new Response(JSON.stringify(jsonapi, null, 2), {
-        headers: { 'content-type': 'application/vnd.api+json' },
+        headers: { 'Content-Type': 'application/vnd.api+json' },
       });
     }
 
@@ -242,8 +255,13 @@ export async function handle(
       }
     }
 
-    // otherwise, just serve the asset
-    return await serveLocalFile(handle);
+    return new Response(
+      JSON.stringify({ errors: [`No such JSON-API resource ${url.href}`] }),
+      {
+        status: 404,
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+      }
+    );
   }
 
   return new Response(
@@ -316,4 +334,197 @@ async function getDirectoryListing(
   }
 
   return { data };
+}
+
+async function getCardsOf(
+  searchIndex: SearchIndex,
+  ownRealm: Realm,
+  request: Request
+): Promise<Response> {
+  let { module } =
+    parse(new URL(request.url).search, { ignoreQueryPrefix: true }) ?? {};
+  if (typeof module !== 'string') {
+    return new Response(
+      JSON.stringify({
+        errors: [`'module' param was not specified or invalid`],
+      }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+      }
+    );
+  }
+  let refs = await searchIndex.exportedCardsOf(module);
+  return new Response(
+    JSON.stringify(
+      {
+        data: {
+          type: 'module',
+          id: new URL(module, ownRealm.url).href,
+          attributes: {
+            cardExports: refs,
+          },
+        },
+      },
+      null,
+      2
+    ),
+    {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+      },
+    }
+  );
+}
+
+/*
+  The card definition response looks like:
+
+  {
+    data: {
+      type: "card-definition",
+      id: "http://local-realm/some/card",
+      relationships: {
+        _: {
+          links: {
+            related: "http://local-realm/cardstack/type-of?type=exportedCard&module=%2Fsuper%2Fcard&name=SuperCard"
+          }
+          meta: {
+            type: "super"
+          }
+        },
+        firstName: {
+          links: {
+            related: "http://cardstack.com/cardstack/type-of?type=exportedCard&module%2Fstring&name=default"
+          },
+          meta: {
+            type: "contains"
+          }
+        },
+        lastName: {
+          links: {
+            related: "http://cardstack.com/cardstack/type-of?type=exportedCard&module%2Fstring&name=default"
+          },
+          meta: {
+            type: "contains"
+          }
+        }
+      }
+    }
+  }
+
+  random musing based on example above: maybe the base realm should be:
+  http://base.cardstack.com
+  and not
+  http://cardstack.com/base
+
+  the realm API URL's read a little nicer this way....
+*/
+
+async function getTypeOf(
+  searchIndex: SearchIndex,
+  ownRealm: Realm,
+  request: Request
+): Promise<Response> {
+  let ref = parse(new URL(request.url).search, { ignoreQueryPrefix: true });
+  if (!isCardRef(ref)) {
+    return new Response(
+      JSON.stringify({
+        errors: [`a valid card reference was not specified`],
+      }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+      }
+    );
+  }
+  let def = await searchIndex.typeOf(ref);
+  if (!def) {
+    return new Response(
+      JSON.stringify({
+        errors: [`Could not find card reference ${JSON.stringify(ref)}`],
+      }),
+      {
+        status: 404,
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+      }
+    );
+  }
+  let data: ResourceObjectWithId = {
+    id: def.key,
+    type: 'card-definition',
+    relationships: {},
+  };
+  if (!data.relationships) {
+    throw new Error('bug: this should never happen');
+  }
+
+  if (def.super) {
+    data.relationships._super = {
+      links: {
+        related: cardRefToTypeURL(def.super, ownRealm),
+      },
+      meta: {
+        type: 'super',
+      },
+    };
+  }
+  for (let [fieldName, field] of def.fields) {
+    data.relationships[fieldName] = {
+      links: {
+        related: cardRefToTypeURL(field.fieldCard, ownRealm),
+      },
+      meta: {
+        type: field.fieldType,
+      },
+    };
+  }
+  return new Response(JSON.stringify(data, null, 2), {
+    headers: { 'Content-Type': 'application/vnd.api+json' },
+  });
+}
+
+async function search(
+  searchIndex: SearchIndex,
+  _request: Request
+): Promise<Response> {
+  // TODO process query param....
+  let data = await searchIndex.search({});
+  return new Response(
+    JSON.stringify(
+      {
+        data,
+      },
+      null,
+      2
+    ),
+    {
+      headers: { 'Content-Type': 'application/vnd.api+json' },
+    }
+  );
+}
+
+function methodNotAllowed(request: Request): Response {
+  return new Response(
+    JSON.stringify({
+      errors: [`${request.method} not allowed for ${request.url}`],
+    }),
+    {
+      status: 405,
+      headers: { 'Content-Type': 'application/vnd.api+json' },
+    }
+  );
+}
+
+function cardRefToTypeURL(ref: CardRef, realm: Realm): string {
+  let modRealm = new URL(getModuleContext(ref), realm.url).origin;
+  return `${modRealm}/cardstack/type-of?${stringify(ref)}`;
+}
+
+function getModuleContext(ref: CardRef): string {
+  if (ref.type === 'exportedCard') {
+    return ref.module;
+  } else {
+    return getModuleContext(ref.card);
+  }
 }

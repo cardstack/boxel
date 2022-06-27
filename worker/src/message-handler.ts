@@ -3,8 +3,11 @@ import assertNever from 'assert-never';
 
 export class MessageHandler {
   fs: FileSystemDirectoryHandle | null = null;
+  private finishedStarting!: () => void;
+  startingUp: Promise<void>;
 
   constructor(worker: ServiceWorkerGlobalScope) {
+    this.startingUp = new Promise((res) => (this.finishedStarting = res));
     worker.addEventListener('message', (event) => {
       this.handle(event);
     });
@@ -24,6 +27,7 @@ export class MessageHandler {
         return;
       case 'setDirectoryHandle':
         this.fs = data.handle;
+        this.finishedStarting();
         return;
       default:
         throw assertNever(data);
