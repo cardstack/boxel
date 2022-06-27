@@ -263,8 +263,13 @@ export async function handle(
       }
     }
 
-    // otherwise, just serve the asset
-    return await serveLocalFile(handle);
+    return new Response(
+      JSON.stringify({ errors: [`No such JSON-API resource ${url.href}`] }),
+      {
+        status: 404,
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+      }
+    );
   }
 
   return new Response(
