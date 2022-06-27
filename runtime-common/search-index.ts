@@ -1,8 +1,11 @@
-import { Realm, executableExtensions } from ".";
+import {
+  Realm,
+  executableExtensions,
+  baseOrigin,
+  protocolRelativeBaseOrigin,
+} from ".";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
-
-const baseOrigin = "http://cardstack.com";
 
 export type CardRef =
   | {
@@ -427,7 +430,7 @@ function isOurFieldDecorator(ref: ClassReference, inModule: string): boolean {
   return (
     ref.type === "external" &&
     new URL(ref.module, inModule).href ===
-      new URL("//cardstack.com/base/card-api", inModule).href &&
+      new URL(`${protocolRelativeBaseOrigin}/base/card-api`, inModule).href &&
     ref.name === "field"
   );
 }
@@ -439,7 +442,7 @@ function getFieldType(
   if (
     ref.type === "external" &&
     new URL(ref.module, inModule).href ===
-      "http://cardstack.com/base/card-api" &&
+      new URL(`${protocolRelativeBaseOrigin}/base/card-api`, inModule).href &&
     ["contains", "containsMany"].includes(ref.name)
   ) {
     return ref.name as ReturnType<typeof getFieldType>;

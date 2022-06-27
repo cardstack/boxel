@@ -19,7 +19,7 @@ import {
   serveLocalFile,
 } from './file-system';
 import { handle as handleJSONAPI } from './json-api';
-import { executableExtensions } from '@cardstack/runtime-common';
+import { executableExtensions, baseOrigin } from '@cardstack/runtime-common';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import { LocalRealm } from './local-realm';
 
@@ -67,10 +67,7 @@ export class FetchHandler {
 
       let url = new URL(request.url);
 
-      if (
-        url.origin === 'http://cardstack.com' &&
-        url.pathname.startsWith('/base/')
-      ) {
+      if (url.origin === baseOrigin && url.pathname.startsWith('/base/')) {
         return generateExternalStub(
           url.pathname.replace('/base/', 'runtime-spike/lib/')
         );
