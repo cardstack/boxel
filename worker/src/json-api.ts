@@ -12,7 +12,6 @@ import {
   getContents,
   getIgnorePatterns,
   getDirectoryEntries,
-  serveLocalFile,
 } from './file-system';
 import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
 import merge from 'lodash/merge';
