@@ -28,6 +28,9 @@ export class MessageHandler {
       case 'setDirectoryHandle':
         this.fs = data.handle;
         this.finishedStarting();
+        if (this.fs) {
+          send(source, { type: 'setDirectoryHandleAcknowledged' });
+        }
         return;
       default:
         throw assertNever(data);

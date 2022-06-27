@@ -33,6 +33,13 @@ export default class LocalRealm extends Service {
           this.state.response.fulfill(data);
           return;
         }
+        break;
+      case 'wait-for-worker-handle-receipt':
+        if (data.type === 'setDirectoryHandleAcknowledged') {
+          this.state.wait.fulfill();
+          return;
+        }
+        break;
     }
     console.log(`did not handle worker message`, data);
   }
@@ -75,6 +82,12 @@ export default class LocalRealm extends Service {
         type: 'available';
         handle: FileSystemDirectoryHandle;
         worker: ServiceWorker;
+      }
+    | {
+        type: 'wait-for-worker-handle-receipt';
+        worker: ServiceWorker;
+        handle: FileSystemDirectoryHandle;
+        wait: Deferred<void>;
       } = { type: 'starting-up' };
 
   get isAvailable(): boolean {
@@ -129,10 +142,19 @@ export default class LocalRealm extends Service {
         `tried to chooseDirectory when we already have a local realm`
       );
     }
+    this.state = {
+      type: 'wait-for-worker-handle-receipt',
+      handle,
+      worker: this.state.worker,
+      wait: new Deferred<void>(),
+    };
+
     send(this.state.worker, {
       type: 'setDirectoryHandle',
       handle,
     });
+    await this.state.wait.promise;
+
     this.state = { type: 'available', handle, worker: this.state.worker };
 
     if (cb) {

@@ -4,6 +4,9 @@
 export interface RequestDirectoryHandle {
   type: 'requestDirectoryHandle';
 }
+export interface SetDirectoryHandleAcknowledged {
+  type: 'setDirectoryHandleAcknowledged';
+}
 
 export interface DirectoryHandleResponse {
   type: 'directoryHandleResponse';
@@ -16,7 +19,9 @@ export interface SetDirectoryHandle {
 }
 
 export type ClientMessage = RequestDirectoryHandle | SetDirectoryHandle;
-export type WorkerMessage = DirectoryHandleResponse;
+export type WorkerMessage =
+  | DirectoryHandleResponse
+  | SetDirectoryHandleAcknowledged;
 export type Message = ClientMessage | WorkerMessage;
 
 function isMessageLike(
@@ -59,6 +64,8 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
         ((message as any).handle === null ||
           (message as any).handle instanceof FileSystemDirectoryHandle)
       );
+    case 'setDirectoryHandleAcknowledged':
+      return true;
     default:
       return false;
   }

@@ -31,6 +31,8 @@ export interface DirectoryEntryRelationship {
     kind: "directory" | "file";
   };
 }
+export const protocolRelativeBaseOrigin = "//cardstack.com";
+export const baseOrigin = `http:${protocolRelativeBaseOrigin}`;
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 
