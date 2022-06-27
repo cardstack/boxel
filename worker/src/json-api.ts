@@ -22,13 +22,6 @@ import {
 } from '@cardstack/runtime-common/search-index';
 import { parse, stringify } from 'qs';
 
-// TODO there is a potential for namespace collision for these paths. We should sort this out
-const reservedPathNames = [
-  '/cardstack/type-of',
-  '/cardstack/cards-of',
-  '/cardstack/search',
-];
-
 /*
   Directory listing is a JSON-API document that looks like:
 
@@ -90,7 +83,7 @@ export async function handle(
 ): Promise<Response> {
   // create card data
   if (request.method === 'POST') {
-    if (reservedPathNames.includes(url.pathname)) {
+    if (url.pathname.startsWith('_')) {
       return methodNotAllowed(request);
     }
     if (url.pathname !== '/') {
@@ -170,7 +163,7 @@ export async function handle(
 
   // Update card data
   if (request.method === 'PATCH') {
-    if (reservedPathNames.includes(url.pathname)) {
+    if (url.pathname.startsWith('_')) {
       return methodNotAllowed(request);
     }
     let handle = await getLocalFileWithFallbacks(fs, url.pathname.slice(1), [
@@ -209,13 +202,13 @@ export async function handle(
   }
 
   if (request.method === 'GET') {
-    if (url.pathname === '/cardstack/cards-of') {
+    if (url.pathname === '/_cardsOf') {
       return await getCardsOf(searchIndex, ownRealm, request);
     }
-    if (url.pathname === '/cardstack/type-of') {
+    if (url.pathname === '/_typeOf') {
       return await getTypeOf(searchIndex, ownRealm, request);
     }
-    if (url.pathname === '/cardstack/search') {
+    if (url.pathname === '/_search') {
       return await search(searchIndex, request);
     }
 
@@ -458,7 +451,7 @@ async function getTypeOf(
     );
   }
   let data: ResourceObjectWithId = {
-    id: request.url,
+    id: def.key,
     type: 'card-definition',
     relationships: {},
   };
@@ -467,7 +460,7 @@ async function getTypeOf(
   }
 
   if (def.super) {
-    data.relationships._ = {
+    data.relationships._super = {
       links: {
         related: cardRefToTypeURL(def.super, ownRealm),
       },

@@ -2,6 +2,8 @@ import { Realm, executableExtensions } from ".";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 
+const baseOrigin = "http://cardstack.com";
+
 export type CardRef =
   | {
       type: "exportedCard";
@@ -105,6 +107,7 @@ type Query = unknown;
 
 interface CardDefinition {
   id: CardRef;
+  key: string; // this is used to help for JSON-API serialization
   super: CardRef | undefined; // base card has no super
   fields: Map<
     string,
@@ -261,8 +264,9 @@ export class SearchIndex {
       }
     }
 
-    def = { id, super: superDef.id, fields };
-    definitions.set(this.internalKeyFor(def.id), def);
+    let key = this.internalKeyFor(id);
+    def = { id, key, super: superDef.id, fields };
+    definitions.set(key, def);
     return def;
   }
 
@@ -339,7 +343,7 @@ export class SearchIndex {
     // have this realm endpoint fleshed out
     let module = url.startsWith("http:") ? url : `http:${url}`;
     let moduleURL = new URL(module);
-    if (moduleURL.origin !== "http://cardstack.com") {
+    if (moduleURL.origin !== baseOrigin) {
       return Promise.resolve(undefined);
     }
     let path = moduleURL.pathname;
@@ -352,6 +356,7 @@ export class SearchIndex {
                 module: url,
                 name: exportName,
               },
+              key: `${baseOrigin}${path}/Card`,
               super: undefined,
               fields: new Map(),
             })
@@ -369,9 +374,10 @@ export class SearchIndex {
               },
               super: {
                 type: "exportedCard",
-                module: "http://cardstack.com/base/card-api",
+                module: `${baseOrigin}/base/card-api`,
                 name: "Card",
               },
+              key: `${baseOrigin}${path}/default`,
               fields: new Map(),
             })
           : Promise.resolve(undefined);
@@ -385,9 +391,10 @@ export class SearchIndex {
               },
               super: {
                 type: "exportedCard",
-                module: "http://cardstack.com/base/string",
+                module: `${baseOrigin}/base/string`,
                 name: "default",
               },
+              key: `${baseOrigin}${path}/default`,
               fields: new Map(),
             })
           : Promise.resolve(undefined);
