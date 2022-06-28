@@ -291,13 +291,13 @@ async function getDirectoryListing(
     dirHandle = fs;
   } else {
     try {
-      let { handle, filename: dirname } = await traverse(
+      dirHandle = (await traverse(
         fs,
-        path.slice(1).replace(/\/$/, '')
-      );
+        path.slice(1).replace(/\/$/, ''),
+        'directory'
+      )) as FileSystemDirectoryHandle;
       // we assume that the final handle is a directory because we asked for a
       // path that ended in a '/'
-      dirHandle = await handle.getDirectoryHandle(dirname);
     } catch (err: unknown) {
       if ((err as DOMException).name !== 'NotFoundError') {
         throw err;

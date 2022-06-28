@@ -15,4 +15,8 @@ export class LocalRealm extends Realm {
       yield { path, contents };
     }
   }
+
+  async loadFile(_path: string): Promise<ArrayBuffer> {
+    throw new Error('Not implemented');
+  }
 }

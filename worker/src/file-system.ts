@@ -22,8 +22,12 @@ export async function write(
     create: boolean;
   }
 ): Promise<number> {
-  let { handle: dirHandle, filename } = await traverse(fs, path, create);
-  let handle = await dirHandle.getFileHandle(filename, create);
+  let handle = (await traverse(
+    fs,
+    path,
+    'file',
+    create
+  )) as FileSystemFileHandle;
   // TypeScript seems to lack types for the writable stream features
   let stream = await (handle as any).createWritable();
   await stream.write(contents);
@@ -65,8 +69,7 @@ export async function getLocalFile(
   path: string
 ): Promise<FileSystemFileHandle> {
   try {
-    let { handle, filename } = await traverse(fs, path);
-    return await handle.getFileHandle(filename);
+    return (await traverse(fs, path, 'file')) as FileSystemFileHandle;
   } catch (err) {
     if ((err as DOMException).name === 'NotFoundError') {
       throw WorkerError.withResponse(
@@ -88,11 +91,17 @@ export async function getLocalFile(
   }
 }
 
+type Kind = 'file' | 'directory';
+type HandleKind<T extends Kind> = T extends 'file'
+  ? FileSystemFileHandle
+  : FileSystemDirectoryHandle;
+
 export async function traverse(
   dirHandle: FileSystemDirectoryHandle,
   path: string,
+  targetKind: Kind,
   opts?: { create?: boolean }
-): Promise<{ handle: FileSystemDirectoryHandle; filename: string }> {
+): Promise<HandleKind<typeof targetKind>> {
   let pathSegments = path.split('/');
   let create = opts?.create;
   async function nextHandle(
@@ -114,7 +123,15 @@ export async function traverse(
     let segment = pathSegments.shift()!;
     handle = await nextHandle(handle, segment);
   }
-  return { handle, filename: pathSegments[0] };
+
+  if (targetKind === 'file') {
+    return (await handle.getFileHandle(pathSegments[0], opts)) as HandleKind<
+      typeof targetKind
+    >;
+  }
+  return (await handle.getDirectoryHandle(pathSegments[0], opts)) as HandleKind<
+    typeof targetKind
+  >;
 }
 
 export async function getContents(file: File): Promise<string> {
@@ -137,6 +154,9 @@ export async function getDirectoryEntries(
   ignoreFile = ''
 ): Promise<Entry[]> {
   let entries: Entry[] = [];
+  if (!directoryHandle) {
+    return [];
+  }
   for await (let [name, handle] of directoryHandle as any as AsyncIterable<
     [string, FileSystemDirectoryHandle | FileSystemFileHandle]
   >) {

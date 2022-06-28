@@ -10,6 +10,12 @@ export abstract class Realm {
   }
 
   abstract eachFile(): AsyncGenerator<{ path: string; contents: string }, void>;
+  abstract readdir(): AsyncGenerator<
+    { path: string; kind: "file" | "directory" },
+    void
+  >;
+
+  abstract loadFile(path: string): Promise<ArrayBuffer>;
 
   async #startup() {
     // Wait a microtask because our derived class will still be inside its
