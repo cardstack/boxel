@@ -1,4 +1,3 @@
-import { LivenessWatcher } from './liveness';
 import { MessageHandler } from './message-handler';
 import { readFileAsText } from './util';
 import { WorkerError } from './error';
@@ -29,13 +28,9 @@ export class FetchHandler {
   private realm: Realm | undefined;
 
   constructor(
-    private livenessWatcher: LivenessWatcher,
-    private messageHandler: MessageHandler
-  ) {
-    this.livenessWatcher.registerShutdownListener(async () => {
-      await this.doCacheDrop();
-    });
-  }
+    private messageHandler: MessageHandler,
+    private livenessWatcher?: { alive: boolean }
+  ) {}
 
   addRealm(realm: Realm) {
     this.realm = realm;
@@ -43,14 +38,14 @@ export class FetchHandler {
 
   async handleFetch(request: Request): Promise<Response> {
     try {
-      if (!this.livenessWatcher.alive) {
+      if (this.livenessWatcher && !this.livenessWatcher.alive) {
         // if we're shutting down, let all requests pass through unchanged
         return await fetch(request);
       }
 
       let searchParams = new URL(request.url).searchParams;
       if (searchParams.get('dropcache') != null) {
-        return await this.doCacheDrop();
+        return await this.dropCaches();
       }
 
       let url = new URL(request.url);
@@ -250,7 +245,7 @@ export class FetchHandler {
     });
   }
 
-  private async doCacheDrop() {
+  async dropCaches() {
     let names = await globalThis.caches.keys();
     for (let name of names) {
       await self.caches.delete(name);

@@ -7,7 +7,11 @@ const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
 const livenessWatcher = new LivenessWatcher(worker);
 const messageHandler = new MessageHandler(worker);
-const fetchHandler = new FetchHandler(livenessWatcher, messageHandler);
+const fetchHandler = new FetchHandler(messageHandler, livenessWatcher);
+
+livenessWatcher.registerShutdownListener(async () => {
+  await fetchHandler.dropCaches();
+});
 
 // TODO: this should be a more event-driven capability driven from the message
 // handler
