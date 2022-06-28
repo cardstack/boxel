@@ -9,7 +9,8 @@ import {
   DirectoryHandleResponse,
   send,
 } from '@cardstack/worker/src/messages';
-import { timeout, Deferred } from '@cardstack/worker/src/util';
+import { timeout } from '@cardstack/worker/src/util';
+import { Deferred } from '@cardstack/runtime-common';
 import { TaskInstance } from 'ember-resources';
 
 export default class LocalRealm extends Service {

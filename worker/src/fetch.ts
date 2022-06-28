@@ -19,37 +19,26 @@ import {
   serveLocalFile,
 } from './file-system';
 import { handle as handleJSONAPI } from './json-api';
-import { executableExtensions, baseOrigin } from '@cardstack/runtime-common';
-import { SearchIndex } from '@cardstack/runtime-common/search-index';
-import { LocalRealm } from './local-realm';
+import {
+  executableExtensions,
+  baseOrigin,
+  Realm,
+} from '@cardstack/runtime-common';
 
 export class FetchHandler {
-  private livenessWatcher: LivenessWatcher;
-  private messageHandler: MessageHandler;
-  private searchIndex: SearchIndex | undefined;
-  private localRealm: LocalRealm | undefined;
-  private finishedIndexing!: () => void;
-  runningIndexing: Promise<void>;
+  private realm: Realm | undefined;
 
-  constructor(worker: ServiceWorkerGlobalScope) {
-    this.runningIndexing = new Promise((res) => (this.finishedIndexing = res));
-    this.livenessWatcher = new LivenessWatcher(worker);
+  constructor(
+    private livenessWatcher: LivenessWatcher,
+    private messageHandler: MessageHandler
+  ) {
     this.livenessWatcher.registerShutdownListener(async () => {
       await this.doCacheDrop();
     });
-    this.messageHandler = new MessageHandler(worker);
-    (async () => await this.runIndexAll())();
   }
 
-  private async runIndexAll() {
-    await this.messageHandler.startingUp;
-    if (!this.messageHandler.fs) {
-      throw new Error(`could not get FileSystem`);
-    }
-    this.localRealm = new LocalRealm(this.messageHandler.fs);
-    this.searchIndex = new SearchIndex(this.localRealm);
-    await this.searchIndex.run();
-    this.finishedIndexing();
+  addRealm(realm: Realm) {
+    this.realm = realm;
   }
 
   async handleFetch(request: Request): Promise<Response> {
@@ -127,7 +116,7 @@ export class FetchHandler {
     request: Request,
     url: URL
   ): Promise<Response> {
-    if (!this.messageHandler.fs) {
+    if (!this.realm) {
       throw WorkerError.withResponse(
         new Response('no local realm is available', {
           status: 404,
@@ -137,8 +126,8 @@ export class FetchHandler {
     }
 
     if (request.headers.get('Accept')?.includes('application/vnd.api+json')) {
-      await this.runningIndexing;
-      if (!this.searchIndex) {
+      await this.realm.ready;
+      if (!this.realm.searchIndex) {
         throw WorkerError.withResponse(
           new Response('search index is not available', {
             status: 500,
@@ -146,18 +135,10 @@ export class FetchHandler {
           })
         );
       }
-      if (!this.localRealm) {
-        throw WorkerError.withResponse(
-          new Response('local realm is not available', {
-            status: 500,
-            headers: { 'content-type': 'text/html' },
-          })
-        );
-      }
       return handleJSONAPI(
-        this.messageHandler.fs,
-        this.searchIndex,
-        this.localRealm,
+        this.messageHandler.fs!,
+        this.realm.searchIndex,
+        this.realm,
         request,
         url
       );
@@ -168,7 +149,7 @@ export class FetchHandler {
     }
 
     let handle = await getLocalFileWithFallbacks(
-      this.messageHandler.fs,
+      this.messageHandler.fs!,
       url.pathname.slice(1),
       executableExtensions
     );
