@@ -24,7 +24,6 @@ import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import { LocalRealm } from './local-realm';
 
 export class FetchHandler {
-  private baseURL: string;
   private livenessWatcher: LivenessWatcher;
   private messageHandler: MessageHandler;
   private searchIndex: SearchIndex | undefined;
@@ -33,9 +32,9 @@ export class FetchHandler {
   runningIndexing: Promise<void>;
 
   constructor(worker: ServiceWorkerGlobalScope) {
-    this.baseURL = worker.registration.scope;
     this.runningIndexing = new Promise((res) => (this.finishedIndexing = res));
-    this.livenessWatcher = new LivenessWatcher(worker, async () => {
+    this.livenessWatcher = new LivenessWatcher(worker);
+    this.livenessWatcher.registerShutdownListener(async () => {
       await this.doCacheDrop();
     });
     this.messageHandler = new MessageHandler(worker);
@@ -79,9 +78,7 @@ export class FetchHandler {
         return generateExternalStub(url.pathname.slice(1));
       }
 
-      console.log(
-        `Service worker on ${this.baseURL} passing through ${request.url}`
-      );
+      console.log(`Service worker passing through ${request.url}`);
       return await fetch(request);
     } catch (err) {
       if (err instanceof WorkerError) {

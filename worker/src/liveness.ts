@@ -2,10 +2,10 @@ import { timeout } from './util';
 
 export class LivenessWatcher {
   private isAlive = true;
+  private listeners: (() => Promise<void>)[] = [];
 
   constructor(
     private worker: ServiceWorkerGlobalScope,
-    private onShutdown?: () => Promise<void>
   ) {
     this.watch();
   }
@@ -44,9 +44,13 @@ export class LivenessWatcher {
         console.error('shutting down service worker.');
         await Promise.all([
           this.worker.registration.unregister(),
-          this.onShutdown?.(),
+          ...this.listeners.map(l => l())
         ]);
       }
     }
+  }
+
+  registerShutdownListener(fn: () => Promise<void>) {
+    this.listeners.push(fn);
   }
 }
