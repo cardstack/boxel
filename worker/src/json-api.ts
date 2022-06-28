@@ -76,7 +76,6 @@ import { parse, stringify } from 'qs';
 // strategy pattern
 export async function handle(
   fs: FileSystemDirectoryHandle,
-  searchIndex: SearchIndex,
   ownRealm: Realm,
   request: Request,
   url: URL
@@ -203,13 +202,13 @@ export async function handle(
 
   if (request.method === 'GET') {
     if (url.pathname === '/_cardsOf') {
-      return await getCardsOf(searchIndex, ownRealm, request);
+      return await getCardsOf(ownRealm.searchIndex, ownRealm, request);
     }
     if (url.pathname === '/_typeOf') {
-      return await getTypeOf(searchIndex, ownRealm, request);
+      return await getTypeOf(ownRealm.searchIndex, ownRealm, request);
     }
     if (url.pathname === '/_search') {
-      return await search(searchIndex, request);
+      return await search(ownRealm.searchIndex, request);
     }
 
     // Get directory listing

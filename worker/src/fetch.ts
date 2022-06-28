@@ -130,13 +130,7 @@ export class FetchHandler {
           })
         );
       }
-      return handleJSONAPI(
-        this.messageHandler.fs!,
-        this.realm.searchIndex,
-        this.realm,
-        request,
-        url
-      );
+      return handleJSONAPI(this.messageHandler.fs!, this.realm, request, url);
     } else if (
       request.headers.get('Accept')?.includes('application/vnd.card+source')
     ) {
