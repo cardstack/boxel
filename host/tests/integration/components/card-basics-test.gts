@@ -545,7 +545,7 @@ module('Integration | card-basics', function (hooks) {
 
     let card = new Person({
       dates: [p('2022-05-12'), p('2022-05-11'), p('2021-05-13')],
-      appointments: [parseISO('2022-05-13T13:00+00:00'), parseISO('2021-05-30T10:45+00:00')],
+      appointments: [parseISO('2022-05-13T13:00'), parseISO('2021-05-30T10:45')],
     });
 
     await renderCard(card, 'edit');
@@ -567,7 +567,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output]').hasText('2022-05-12 2022-04-10');
 
     assert.dom('[data-test-contains-many="appointments"] [data-test-item]').exists({ count: 2 });
-    assert.dom('[data-test-contains-many="appointments"] [data-test-item="0"] input').hasValue('2022-05-13T13:00:00');
+    assert.strictEqual(getDateFromInput('[data-test-contains-many="appointments"] [data-test-item="0"] input')?.getTime(), parseISO('2022-05-13T13:00').getTime());
     assert.dom('[data-test-output="appointments"]').hasText('2022-05-13 2021-05-30');
 
     await fillIn('[data-test-contains-many="appointments"] [data-test-item="0"] input', '2022-05-01T11:01');
@@ -583,4 +583,12 @@ function testString(label: string) {
       <template><em data-test={{label}}>{{@model}}</em></template>
     }
   }
+}
+
+function getDateFromInput(selector: string): Date | undefined {
+  let input = document.querySelector(selector) as HTMLInputElement | undefined ;
+  if (input?.value) {
+    return parseISO(input.value);
+  }
+  return undefined;
 }

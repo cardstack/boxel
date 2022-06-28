@@ -1,4 +1,5 @@
 import { Component, primitive, serialize, CardInstanceType, CardConstructor, Card } from 'runtime-spike/lib/card-api';
+import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -53,7 +54,7 @@ export default class DatetimeCard extends Card {
       if (!this.args.model) {
         return;
       }
-      return DatetimeCard[serialize](this.args.model).split('.')[0];
+      return format(this.args.model, `yyyy-MM-dd'T'HH:mm`);
     }
   }
 }
