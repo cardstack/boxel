@@ -563,7 +563,7 @@ export class SearchIndex {
       }
       try {
         return await this.readFileAsText(new URL(".gitignore", url).pathname);
-      } catch (e) {
+      } catch (e: any) {
         if (e.name !== "NotFoundError" && e.name !== "TypeMismatchError") {
           throw e;
         }
