@@ -36,6 +36,7 @@ export async function getLocalFileWithFallbacks(
   path: string,
   extensions: string[]
 ): Promise<FileSystemFileHandle> {
+  // TODO refactor to use search index
   try {
     return await getLocalFile(fs, path);
   } catch (err) {
@@ -95,6 +96,14 @@ export async function traverse<Target extends Kind>(
   targetKind: Target,
   opts?: { create?: boolean }
 ): Promise<HandleKind<Target>> {
+  // the leading and trailing "/" will result in a superflous items in our path segments
+  if (path.startsWith('/')) {
+    path = path.slice(1);
+  }
+  if (path.endsWith('/')) {
+    path = path.slice(0, -1);
+  }
+
   let pathSegments = path.split('/');
   let create = opts?.create;
   async function nextHandle(

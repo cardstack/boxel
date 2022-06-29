@@ -4,15 +4,7 @@ import {
   Realm,
   ResourceObjectWithId,
 } from '@cardstack/runtime-common';
-import { WorkerError } from './error';
-import {
-  write,
-  getLocalFileWithFallbacks,
-  traverse,
-  getContents,
-  getIgnorePatterns,
-  getDirectoryEntries,
-} from './file-system';
+import { write, getLocalFileWithFallbacks } from './file-system';
 import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
 import merge from 'lodash/merge';
 import {
@@ -86,59 +78,38 @@ export async function handle(
       return methodNotAllowed(request);
     }
     if (url.pathname !== '/') {
-      return new Response(
-        JSON.stringify({ errors: [`Can't POST to ${url.href}`] }),
-        {
-          status: 404,
-          headers: { 'Content-Type': 'application/vnd.api+json' },
-        }
-      );
+      return notFound(request, `Can't POST to ${url.href}`);
     }
     let json = await request.json();
     if (!isCardJSON(json)) {
-      return new Response(
-        JSON.stringify({
-          errors: [`Request body is not valid card JSON-API`],
-        }),
-        {
-          status: 404,
-          headers: { 'Content-Type': 'application/vnd.api+json' },
-        }
-      );
+      return badRequest(`Request body is not valid card JSON-API`);
     }
 
-    let dirHandle: FileSystemDirectoryHandle | undefined;
+    // new instances are created in a folder named after the card
     let dirName = json.data.meta.adoptsFrom.name;
+    let index = 0;
     try {
-      dirHandle = await fs.getDirectoryHandle(dirName);
+      for await (let { name, kind } of ownRealm.readdir(dirName, {
+        create: true,
+      })) {
+        if (kind === 'directory') {
+          continue;
+        }
+        if (!/^[\d]+\.json$/.test(name)) {
+          continue;
+        }
+        let num = parseInt(name.replace('.json', ''));
+        index = Math.max(index, num);
+      }
     } catch (err: any) {
       if ((err as DOMException).name === 'TypeMismatchError') {
-        throw WorkerError.withResponse(
-          new Response(
-            `/${dirName} is already file, but we expected a directory (so that we can make a new file in this directory)`,
-            {
-              status: 404,
-              headers: { 'Content-Type': 'text/html' },
-            }
-          )
+        return notFound(
+          request,
+          `${dirName} is already file, but we expected a directory (so that we can make a new file in this directory)`
         );
       }
       if ((err as DOMException).name !== 'NotFoundError') {
         throw err;
-      }
-    }
-    let index = 0;
-    if (dirHandle) {
-      let entries = await getDirectoryEntries(dirHandle, '/');
-      for (let entry of entries) {
-        if (entry.handle.kind === 'directory') {
-          continue;
-        }
-        if (!/^[\d]+\.json$/.test(entry.handle.name)) {
-          continue;
-        }
-        let num = parseInt(entry.handle.name.replace('.json', ''));
-        index = Math.max(index, num);
       }
     }
     let pathname = `${dirName}/${++index}.json`;
@@ -172,9 +143,8 @@ export async function handle(
       return methodNotAllowed(request);
     }
 
-    let file = await handle.getFile();
-    let original = JSON.parse(await getContents(file));
-    if (!isCardJSON(original)) {
+    let original = await ownRealm.searchIndex.card(url);
+    if (!original) {
       return methodNotAllowed(request);
     }
 
@@ -213,15 +183,12 @@ export async function handle(
 
     // Get directory listing
     if (url.pathname.endsWith('/')) {
-      let jsonapi = await getDirectoryListing(fs, url);
+      let jsonapi = await getDirectoryListingAsJSONAPI(
+        ownRealm.searchIndex,
+        url
+      );
       if (!jsonapi) {
-        return new Response(
-          JSON.stringify({ errors: [`Could not find directory ${url.href}`] }),
-          {
-            status: 404,
-            headers: { 'Content-Type': 'application/vnd.api+json' },
-          }
-        );
+        return notFound(request);
       }
 
       return new Response(JSON.stringify(jsonapi, null, 2), {
@@ -233,19 +200,11 @@ export async function handle(
       '.json',
     ]);
     if (handle.name.endsWith('.json')) {
-      let file = await handle.getFile();
-      let json: object | undefined;
-      try {
-        json = JSON.parse(await getContents(file));
-      } catch (err: unknown) {
-        console.log(`The file ${url.href} is not parsable JSON`);
-      }
-      if (isCardJSON(json)) {
-        // the only JSON API thing missing from the file serialization for our
-        // card data is the ID
-        (json as any).data.id = url.href.replace(/\.json$/, '');
-        (json.data as any).links = { self: url.href.replace(/\.json$/, '') };
-        return new Response(JSON.stringify(json, null, 2), {
+      let data = await ownRealm.searchIndex.card(url);
+      if (data) {
+        (data as any).links = { self: url.href };
+        let file = await handle.getFile();
+        return new Response(JSON.stringify({ data }, null, 2), {
           headers: {
             'Last-Modified': formatRFC7231(file.lastModified),
             'Content-Type': 'application/vnd.api+json',
@@ -254,13 +213,7 @@ export async function handle(
       }
     }
 
-    return new Response(
-      JSON.stringify({ errors: [`No such JSON-API resource ${url.href}`] }),
-      {
-        status: 404,
-        headers: { 'Content-Type': 'application/vnd.api+json' },
-      }
-    );
+    return notFound(request, `No such JSON-API resource ${url.href}`);
   }
 
   return new Response(
@@ -278,36 +231,17 @@ export async function handle(
   );
 }
 
-async function getDirectoryListing(
-  fs: FileSystemDirectoryHandle,
+async function getDirectoryListingAsJSONAPI(
+  searchIndex: SearchIndex,
   url: URL
 ): Promise<
   { data: ResourceObjectWithId; included?: ResourceObjectWithId[] } | undefined
 > {
-  let path = url.pathname;
-
-  let dirHandle: FileSystemDirectoryHandle;
-  if (path === '/') {
-    dirHandle = fs;
-  } else {
-    try {
-      dirHandle = (await traverse(
-        fs,
-        path.slice(1).replace(/\/$/, ''),
-        'directory'
-      )) as FileSystemDirectoryHandle;
-      // we assume that the final handle is a directory because we asked for a
-      // path that ended in a '/'
-    } catch (err: unknown) {
-      if ((err as DOMException).name !== 'NotFoundError') {
-        throw err;
-      }
-      console.log(`can't find file ${path} from the local realm`);
-      return undefined;
-    }
+  let entries = await searchIndex.directory(url);
+  if (!entries) {
+    console.log(`can't find directory ${url.href}`);
+    return undefined;
   }
-  let ignoreFile = await getIgnorePatterns(dirHandle);
-  let entries = await getDirectoryEntries(dirHandle, path, ignoreFile);
 
   let data: ResourceObjectWithId = {
     id: url.href,
@@ -315,21 +249,23 @@ async function getDirectoryListing(
     relationships: {},
   };
 
-  // Note that the entries are sorted such that the parent directory always
+  // the entries are sorted such that the parent directory always
   // appears before the children
+  entries.sort((a, b) => a.kind.localeCompare(b.kind));
   for (let entry of entries) {
     let relationship: DirectoryEntryRelationship = {
       links: {
-        related: new URL(entry.path, url.href).href,
+        related:
+          new URL(entry.name, url).href +
+          (entry.kind === 'directory' ? '/' : ''),
       },
       meta: {
-        kind: entry.handle.kind as 'directory' | 'file',
+        kind: entry.kind as 'directory' | 'file',
       },
     };
 
-    data.relationships![
-      entry.handle.name + (entry.handle.kind === 'directory' ? '/' : '')
-    ] = relationship;
+    data.relationships![entry.name + (entry.kind === 'directory' ? '/' : '')] =
+      relationship;
   }
 
   return { data };
@@ -439,14 +375,9 @@ async function getTypeOf(
   }
   let def = await searchIndex.typeOf(ref);
   if (!def) {
-    return new Response(
-      JSON.stringify({
-        errors: [`Could not find card reference ${JSON.stringify(ref)}`],
-      }),
-      {
-        status: 404,
-        headers: { 'Content-Type': 'application/vnd.api+json' },
-      }
+    return notFound(
+      request,
+      `Could not find card reference ${JSON.stringify(ref)}`
     );
   }
   let data: ResourceObjectWithId = {
@@ -510,6 +441,33 @@ function methodNotAllowed(request: Request): Response {
     }),
     {
       status: 405,
+      headers: { 'Content-Type': 'application/vnd.api+json' },
+    }
+  );
+}
+
+function notFound(
+  request: Request,
+  message = `Could not find ${request.url}`
+): Response {
+  return new Response(
+    JSON.stringify({
+      errors: [message],
+    }),
+    {
+      status: 404,
+      headers: { 'Content-Type': 'application/vnd.api+json' },
+    }
+  );
+}
+
+function badRequest(message: string): Response {
+  return new Response(
+    JSON.stringify({
+      errors: [message],
+    }),
+    {
+      status: 400,
       headers: { 'Content-Type': 'application/vnd.api+json' },
     }
   );

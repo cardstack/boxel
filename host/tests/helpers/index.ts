@@ -21,7 +21,7 @@ export class TestRealm extends Realm {
     for (let [path, content] of Object.entries(flatFiles)) {
       let segments = path.split('/');
       let last = segments.pop()!;
-      let dir = this.#traverse(segments);
+      let dir = this.#traverse(segments, 'directory', segments.join('/'));
       if (typeof dir === 'string') {
         throw new Error(`tried to use file as directory`);
       }
@@ -33,7 +33,11 @@ export class TestRealm extends Realm {
     }
   }
 
-  #traverse(segments: string[]): string | Dir {
+  #traverse(
+    segments: string[],
+    targetKind: Kind,
+    originalPath: string
+  ): string | Dir {
     let dir: Dir | string = this.#files;
     while (segments.length > 0) {
       if (typeof dir === 'string') {
@@ -41,7 +45,16 @@ export class TestRealm extends Realm {
       }
       let name = segments.shift()!;
       if (!dir[name]) {
-        dir[name] = {};
+        if (
+          segments.length > 0 ||
+          (segments.length === 0 && targetKind === 'directory')
+        ) {
+          dir[name] = {};
+        } else if (segments.length === 0 && targetKind === 'file') {
+          let err = new Error(`${originalPath} not found`);
+          err.name = 'NotFoundError'; // duck type to the same as what the FileSystem API looks like
+          throw err;
+        }
       }
       dir = dir[name];
     }
@@ -51,11 +64,14 @@ export class TestRealm extends Realm {
   async *readdir(
     path: string
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
-    let dir = path === '' ? this.#files : this.#traverse(path.split('/'));
+    let dir =
+      path === ''
+        ? this.#files
+        : this.#traverse(path.split('/'), 'directory', path);
     for (let [name, content] of Object.entries(dir)) {
       yield {
         name,
-        path: path === '' ? name : `${path}/${name}`,
+        path: path === '' ? name : `${path}${name}`,
         kind: typeof content === 'string' ? 'file' : 'directory',
       };
     }
@@ -66,7 +82,11 @@ export class TestRealm extends Realm {
   }
 
   async openFile(path: string): Promise<string> {
-    let contents = this.#traverse(path.split('/'));
+    let contents = this.#traverse(
+      path.replace(/^\//, '').split('/'),
+      'file',
+      path
+    );
     if (typeof contents !== 'string') {
       throw new Error('treated directory as a file');
     }

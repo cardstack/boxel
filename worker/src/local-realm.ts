@@ -7,15 +7,17 @@ export class LocalRealm extends Realm {
   }
 
   async *readdir(
-    path: string
+    path: string,
+    opts?: { create?: true }
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
     let dirHandle = isTopPath(path)
       ? this.fs
-      : await traverse(this.fs, path, 'directory');
+      : await traverse(this.fs, path, 'directory', opts);
     for await (let [name, handle] of dirHandle as unknown as AsyncIterable<
       [string, FileSystemDirectoryHandle | FileSystemFileHandle]
     >) {
-      let innerPath = isTopPath(path) ? name : `${path}/${name}`;
+      // note that the path of a directory always ends in "/"
+      let innerPath = isTopPath(path) ? name : `${path}${name}`;
       yield { name, path: innerPath, kind: handle.kind };
     }
   }

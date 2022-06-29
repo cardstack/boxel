@@ -13,7 +13,8 @@ export abstract class Realm {
   }
 
   abstract readdir(
-    path: string
+    path: string,
+    opts?: { create?: true }
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
 
   abstract openFile(

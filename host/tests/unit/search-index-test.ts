@@ -23,7 +23,7 @@ module('Unit | search-index', function () {
     let cards = await indexer.search({});
     assert.deepEqual(cards, [
       {
-        id: 'http://test-realm/empty.json',
+        id: 'http://test-realm/empty',
         type: 'card',
         attributes: {},
         meta: {
