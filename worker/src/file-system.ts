@@ -22,12 +22,7 @@ export async function write(
     create: boolean;
   }
 ): Promise<number> {
-  let handle = (await traverse(
-    fs,
-    path,
-    'file',
-    create
-  )) as FileSystemFileHandle;
+  let handle = await traverse(fs, path, 'file', create);
   // TypeScript seems to lack types for the writable stream features
   let stream = await (handle as any).createWritable();
   await stream.write(contents);
@@ -69,7 +64,7 @@ export async function getLocalFile(
   path: string
 ): Promise<FileSystemFileHandle> {
   try {
-    return (await traverse(fs, path, 'file')) as FileSystemFileHandle;
+    return await traverse(fs, path, 'file');
   } catch (err) {
     if ((err as DOMException).name === 'NotFoundError') {
       throw WorkerError.withResponse(
@@ -96,12 +91,12 @@ type HandleKind<T extends Kind> = T extends 'file'
   ? FileSystemFileHandle
   : FileSystemDirectoryHandle;
 
-export async function traverse(
+export async function traverse<Target extends Kind>(
   dirHandle: FileSystemDirectoryHandle,
   path: string,
-  targetKind: Kind,
+  targetKind: Target,
   opts?: { create?: boolean }
-): Promise<HandleKind<typeof targetKind>> {
+): Promise<HandleKind<Target>> {
   let pathSegments = path.split('/');
   let create = opts?.create;
   async function nextHandle(
@@ -125,13 +120,15 @@ export async function traverse(
   }
 
   if (targetKind === 'file') {
-    return (await handle.getFileHandle(pathSegments[0], opts)) as HandleKind<
-      typeof targetKind
-    >;
+    return (await handle.getFileHandle(
+      pathSegments[0],
+      opts
+    )) as HandleKind<Target>;
   }
-  return (await handle.getDirectoryHandle(pathSegments[0], opts)) as HandleKind<
-    typeof targetKind
-  >;
+  return (await handle.getDirectoryHandle(
+    pathSegments[0],
+    opts
+  )) as HandleKind<Target>;
 }
 
 export async function getContents(file: File): Promise<string> {
