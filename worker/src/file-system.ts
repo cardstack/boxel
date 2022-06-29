@@ -1,7 +1,6 @@
 import { WorkerError } from './error';
-import { readFileAsText } from './util';
-import ignore from 'ignore';
 import { formatRFC7231 } from 'date-fns';
+import { Kind } from '@cardstack/runtime-common';
 
 export async function serveLocalFile(
   handle: FileSystemFileHandle
@@ -86,7 +85,6 @@ export async function getLocalFile(
   }
 }
 
-type Kind = 'file' | 'directory';
 type HandleKind<T extends Kind> = T extends 'file'
   ? FileSystemFileHandle
   : FileSystemDirectoryHandle;
@@ -138,92 +136,4 @@ export async function getContents(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsText(file);
   });
-}
-
-interface Entry {
-  handle: FileSystemDirectoryHandle | FileSystemFileHandle;
-  path: string;
-}
-
-export async function getDirectoryEntries(
-  directoryHandle: FileSystemDirectoryHandle,
-  parentDir: string,
-  ignoreFile = ''
-): Promise<Entry[]> {
-  let entries: Entry[] = [];
-  if (!directoryHandle) {
-    return [];
-  }
-  for await (let [name, handle] of directoryHandle as any as AsyncIterable<
-    [string, FileSystemDirectoryHandle | FileSystemFileHandle]
-  >) {
-    if (
-      handle.kind === 'directory' &&
-      filterIgnored([`${name}/`], ignoreFile).length === 0
-    ) {
-      // without this, trying to open large root dirs causes the browser to hang
-      continue;
-    }
-    let path = `${parentDir}${handle.name}`;
-    entries.push({
-      handle,
-      path: handle.kind === 'directory' ? `${path}/` : path,
-    });
-  }
-  return filterIgnoredEntries(entries, ignoreFile);
-}
-
-export async function getRecursiveDirectoryEntries(
-  directoryHandle: FileSystemDirectoryHandle,
-  parentDir = '/',
-  ignoreFile = ''
-): Promise<Entry[]> {
-  let entries: Entry[] = [];
-  for (let entry of await getDirectoryEntries(
-    directoryHandle,
-    parentDir,
-    ignoreFile
-  )) {
-    if (entry.handle.kind === 'file') {
-      entries = [...entries, entry];
-    } else {
-      entries = [
-        ...entries,
-        ...(await getDirectoryEntries(
-          entry.handle,
-          `${parentDir}${entry.handle.name}/`,
-          ignoreFile
-        )),
-      ];
-    }
-  }
-
-  entries.sort((a, b) => a.path.localeCompare(b.path));
-  return entries;
-}
-
-export async function getIgnorePatterns(fileDir: FileSystemDirectoryHandle) {
-  let fileHandle;
-  try {
-    fileHandle = await fileDir.getFileHandle('.monacoignore');
-  } catch (e) {
-    try {
-      fileHandle = await fileDir.getFileHandle('.gitignore');
-    } catch (e) {
-      return '';
-    }
-  }
-  return await readFileAsText(fileHandle);
-}
-
-function filterIgnoredEntries(entries: Entry[], patterns: string): Entry[] {
-  let filteredPaths = filterIgnored(
-    entries.map((e) => e.path.slice(1)),
-    patterns
-  );
-  return entries.filter((entry) => filteredPaths.includes(entry.path.slice(1)));
-}
-
-function filterIgnored(paths: string[], patterns: string): string[] {
-  return ignore().add(patterns).filter(paths);
 }

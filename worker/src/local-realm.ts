@@ -1,22 +1,32 @@
-import { Realm } from '@cardstack/runtime-common';
-import { getContents, getRecursiveDirectoryEntries } from './file-system';
+import { Realm, Kind } from '@cardstack/runtime-common';
+import { traverse } from './file-system';
 
 export class LocalRealm extends Realm {
   constructor(private fs: FileSystemDirectoryHandle) {
     super('http://local-realm');
   }
 
-  async *eachFile(): AsyncGenerator<{ path: string; contents: string }, void> {
-    for (let { path, handle } of await getRecursiveDirectoryEntries(this.fs)) {
-      if (handle.kind === 'directory') {
-        continue;
-      }
-      let contents = await getContents(await handle.getFile());
-      yield { path, contents };
+  async *readdir(
+    path: string
+  ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
+    let dirHandle = isTopPath(path)
+      ? this.fs
+      : await traverse(this.fs, path, 'directory');
+    for await (let [name, handle] of dirHandle as unknown as AsyncIterable<
+      [string, FileSystemDirectoryHandle | FileSystemFileHandle]
+    >) {
+      let innerPath = isTopPath(path) ? name : `${path}/${name}`;
+      yield { name, path: innerPath, kind: handle.kind };
     }
   }
 
-  async loadFile(_path: string): Promise<ArrayBuffer> {
-    throw new Error('Not implemented');
+  async openFile(path: string): Promise<ReadableStream<Uint8Array>> {
+    let fileHandle = await traverse(this.fs, path, 'file');
+    let file = await fileHandle.getFile();
+    return file.stream() as unknown as ReadableStream<Uint8Array>;
   }
+}
+
+function isTopPath(path: string): boolean {
+  return path === '';
 }

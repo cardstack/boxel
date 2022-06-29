@@ -5,17 +5,20 @@ export abstract class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex = new SearchIndex(this);
 
-  constructor(readonly url: string) {
+  readonly url: string;
+
+  constructor(url: string) {
+    this.url = url.replace(/\/$/, "") + "/";
     this.#startedUp.fulfill((() => this.#startup())());
   }
 
-  abstract eachFile(): AsyncGenerator<{ path: string; contents: string }, void>;
-  abstract readdir(): AsyncGenerator<
-    { path: string; kind: "file" | "directory" },
-    void
-  >;
+  abstract readdir(
+    path: string
+  ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
 
-  abstract loadFile(path: string): Promise<ArrayBuffer>;
+  abstract openFile(
+    path: string
+  ): Promise<ReadableStream<Uint8Array> | Uint8Array | string>;
 
   async #startup() {
     // Wait a microtask because our derived class will still be inside its
@@ -36,3 +39,5 @@ export abstract class Realm {
     return this.#searchIndex;
   }
 }
+
+export type Kind = "file" | "directory";

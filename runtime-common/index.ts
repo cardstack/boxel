@@ -12,7 +12,7 @@ export interface CardJSON {
   // TODO add included
 }
 
-export { Deferred } from './deferred';
+export { Deferred } from "./deferred";
 
 export interface ResourceObject {
   type: string;
@@ -107,4 +107,4 @@ export function isCardJSON(json: any): json is CardJSON {
   return typeof module === "string" && typeof name === "string";
 }
 
-export { Realm } from './realm';
+export { Realm, Kind } from "./realm";
