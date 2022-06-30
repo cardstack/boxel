@@ -11,6 +11,7 @@ import isEqual from 'lodash/isEqual';
 import { eq } from '../helpers/truth-helpers';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
+import { registerDestructor } from '@ember/destroyable';
 import { CardJSON, isCardJSON } from '@cardstack/runtime-common';
 
 export interface NewCardArgs {
@@ -79,12 +80,15 @@ export default class Preview extends Component<Signature> {
   rendered = render(this, () => this.card, () => this.format)
   @tracked
   initialCardData: CardJSON | undefined;
+  private interval: ReturnType<typeof setInterval>;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
     if (this.args.card.type === 'existing') {
       taskFor(this.loadData).perform(this.args.card.url);
     }
+    this.interval = setInterval(() => taskFor(this.loadData).perform((this.args.card as any).url ?? ''), 1000);
+    registerDestructor(this, () => clearInterval(this.interval));
   }
 
   @cached
