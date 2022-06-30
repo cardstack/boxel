@@ -6,7 +6,7 @@ export class LocalRealm extends Realm {
     super('http://local-realm');
   }
 
-  async *readdir(
+  protected async *readdir(
     path: string,
     opts?: { create?: true }
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
@@ -22,7 +22,7 @@ export class LocalRealm extends Realm {
     }
   }
 
-  async openFile(path: string): Promise<ReadableStream<Uint8Array>> {
+  protected async openFile(path: string): Promise<ReadableStream<Uint8Array>> {
     let fileHandle = await traverse(this.fs, path, 'file');
     let file = await fileHandle.getFile();
     return file.stream() as unknown as ReadableStream<Uint8Array>;

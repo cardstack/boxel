@@ -12,12 +12,12 @@ export abstract class Realm {
     this.#startedUp.fulfill((() => this.#startup())());
   }
 
-  abstract readdir(
+  protected abstract readdir(
     path: string,
     opts?: { create?: true }
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
 
-  abstract openFile(
+  protected abstract openFile(
     path: string
   ): Promise<ReadableStream<Uint8Array> | Uint8Array | string>;
 

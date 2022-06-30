@@ -86,12 +86,13 @@ export async function handle(
     }
 
     // new instances are created in a folder named after the card
-    let dirName = json.data.meta.adoptsFrom.name;
+    let dirName = json.data.meta.adoptsFrom.name + '/';
+    let entries = await ownRealm.searchIndex.directory(
+      new URL(dirName, ownRealm.url)
+    );
     let index = 0;
-    try {
-      for await (let { name, kind } of ownRealm.readdir(dirName, {
-        create: true,
-      })) {
+    if (entries) {
+      for (let { name, kind } of entries) {
         if (kind === 'directory') {
           continue;
         }
@@ -101,18 +102,8 @@ export async function handle(
         let num = parseInt(name.replace('.json', ''));
         index = Math.max(index, num);
       }
-    } catch (err: any) {
-      if ((err as DOMException).name === 'TypeMismatchError') {
-        return notFound(
-          request,
-          `${dirName} is already file, but we expected a directory (so that we can make a new file in this directory)`
-        );
-      }
-      if ((err as DOMException).name !== 'NotFoundError') {
-        throw err;
-      }
     }
-    let pathname = `${dirName}/${++index}.json`;
+    let pathname = `${dirName}${++index}.json`;
     let lastModified = await write(
       fs,
       pathname,
