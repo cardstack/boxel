@@ -67,6 +67,7 @@ export interface CardResource<Identity extends Unsaved = Saved> {
       module: string;
       name: string;
     };
+    lastModified?: number;
   };
 }
 export interface CardDocument<Identity extends Unsaved = Saved> {
@@ -187,7 +188,13 @@ export class SearchIndex {
   private exportedCardRefs = new Map<string, CardRef[]>();
   private ignoreMap = new URLMap<Ignore>();
 
-  constructor(private realm: Realm) {}
+  constructor(
+    private realm: Realm,
+    private readdir: (
+      path: string
+    ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
+    private readFileAsText: (path: string) => Promise<string>
+  ) {}
 
   async run() {
     let newDirectories = new URLMap<{ name: string; kind: Kind }[]>();
@@ -219,7 +226,7 @@ export class SearchIndex {
       entries = [];
       directories.set(path, entries);
     }
-    for await (let { path: innerPath, kind } of this.realm.readdir(
+    for await (let { path: innerPath, kind } of this.readdir(
       this.localPath(path)
     )) {
       let innerURL = new URL(innerPath, this.realm.url);
@@ -244,31 +251,6 @@ export class SearchIndex {
     await this.visitFile(url);
     await this.semanticPhase();
     //TODO update this.directories as necessary
-  }
-
-  private async readFileAsText(path: string): Promise<string> {
-    let result = await this.realm.openFile(path);
-    if (typeof result === "string") {
-      return result;
-    }
-    let decoder = new TextDecoder();
-    let pieces: string[] = [];
-    if (result instanceof Uint8Array) {
-      pieces.push(decoder.decode(result));
-    } else {
-      let reader = result.getReader();
-      while (true) {
-        let { done, value } = await reader.read();
-        if (done) {
-          pieces.push(decoder.decode(undefined, { stream: false }));
-          break;
-        }
-        if (value) {
-          pieces.push(decoder.decode(value, { stream: true }));
-        }
-      }
-    }
-    return pieces.join("");
   }
 
   private async visitFile(url: URL) {

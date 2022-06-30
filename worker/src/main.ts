@@ -7,7 +7,7 @@ const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
 const livenessWatcher = new LivenessWatcher(worker);
 const messageHandler = new MessageHandler(worker);
-const fetchHandler = new FetchHandler(messageHandler, livenessWatcher);
+const fetchHandler = new FetchHandler(livenessWatcher);
 
 livenessWatcher.registerShutdownListener(async () => {
   await fetchHandler.dropCaches();

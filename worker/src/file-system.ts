@@ -1,4 +1,6 @@
-import { WorkerError } from './error';
+// TODO After our refactors are over, this file should not exist anymore
+
+import { WorkerError } from '@cardstack/runtime-common/error';
 import { formatRFC7231 } from 'date-fns';
 import { Kind } from '@cardstack/runtime-common';
 
@@ -11,22 +13,6 @@ export async function serveLocalFile(
       'Last-Modified': formatRFC7231(file.lastModified),
     },
   });
-}
-
-export async function write(
-  fs: FileSystemDirectoryHandle,
-  path: string,
-  contents: string,
-  create?: {
-    create: boolean;
-  }
-): Promise<number> {
-  let handle = await traverse(fs, path, 'file', create);
-  // TypeScript seems to lack types for the writable stream features
-  let stream = await (handle as any).createWritable();
-  await stream.write(contents);
-  await stream.close();
-  return (await handle.getFile()).lastModified;
 }
 
 // we bother with this because typescript is picky about allowing you to use
@@ -136,13 +122,4 @@ export async function traverse<Target extends Kind>(
     pathSegments[0],
     opts
   )) as HandleKind<Target>;
-}
-
-export async function getContents(file: File): Promise<string> {
-  let reader = new FileReader();
-  return await new Promise<string>((resolve, reject) => {
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsText(file);
-  });
 }
