@@ -203,7 +203,7 @@ export class SpriteSnapshotNodeBuilder {
     let freshlyChanged: Set<SpriteModifier> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
-      let contextNode = this.spriteTree.nodesByElement.get(context.element);
+      let contextNode = this.spriteTree.lookupNodeByElement(context.element);
       let contextChildren: SpriteModifier[] = [...(contextNode?.children ?? [])]
         .map((c) => c.spriteModel as SpriteModifier)
         .filter(Boolean);

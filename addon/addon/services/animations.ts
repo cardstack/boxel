@@ -131,7 +131,7 @@ export default class AnimationsService extends Service {
     // We do not care about "stableness of contexts here".
     // For intermediate sprites it is good enough to measure direct children only.
 
-    let contextNode = this.spriteTree.nodesByElement.get(
+    let contextNode = this.spriteTree.lookupNodeByElement(
       context.element
     ) as SpriteTreeNode;
 
@@ -186,7 +186,7 @@ export default class AnimationsService extends Service {
     if (context.element) {
       context.captureSnapshot();
       this.createIntermediateSpritesForContext(context);
-      let contextNode = this.spriteTree.nodesByElement.get(
+      let contextNode = this.spriteTree.lookupNodeByElement(
         context.element
       ) as SpriteTreeNode;
       contextNode.freshlyRemovedChildren.clear();
