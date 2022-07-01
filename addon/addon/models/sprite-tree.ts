@@ -97,26 +97,6 @@ export class SpriteTreeNode {
     return result;
   }
 
-  freshlyRemovedDescendants(stopNode: SpriteTreeNode): SpriteTreeModel[] {
-    let result: SpriteTreeModel[] = [];
-    for (let childNode of this.freshlyRemovedChildren) {
-      if (childNode.contextModel) {
-        result.push(childNode.contextModel);
-      }
-      if (childNode.spriteModel) {
-        result.push(childNode.spriteModel);
-      }
-    }
-    let allChildren = [...this.children].concat([
-      ...this.freshlyRemovedChildren,
-    ]);
-    for (let childNode of allChildren) {
-      if (childNode === stopNode) continue;
-      result = result.concat(childNode.freshlyRemovedDescendants(stopNode));
-    }
-    return result;
-  }
-
   clearFreshlyRemovedChildren(): void {
     for (let rootNode of this.children) {
       rootNode.freshlyRemovedChildren.clear();
