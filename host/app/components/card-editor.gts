@@ -87,7 +87,7 @@ export default class Preview extends Component<Signature> {
     if (this.args.card.type === 'existing') {
       taskFor(this.loadData).perform(this.args.card.url);
     }
-    this.interval = setInterval(() => taskFor(this.loadData).perform((this.args.card as any).url ?? ''), 1000);
+    this.interval = setInterval(() => taskFor(this.loadData).perform((this.args.card as any).url), 1000);
     registerDestructor(this, () => clearInterval(this.interval));
   }
 
