@@ -343,6 +343,7 @@ export class SpriteSnapshotNodeBuilder {
         classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
 
         // a matching IntermediateSprite always wins from a RemovedSprite counterpart
+        // as it is more up-to-date (mid-animation interruption).
         let counterpartSpriteModifier =
           intermediateSprite?.modifier ?? removedSpriteModifier;
 
