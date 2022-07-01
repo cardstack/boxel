@@ -211,7 +211,7 @@ export default class SpriteTree {
   }
 
   addAnimationContext(context: ContextModel): SpriteTreeNode {
-    let existingNode = this.nodesByElement.get(context.element);
+    let existingNode = this.lookupNodeByElement(context.element);
 
     if (existingNode) {
       assert(
@@ -246,7 +246,7 @@ export default class SpriteTree {
   }
   addSpriteModifier(spriteModifier: SpriteModel): SpriteTreeNode {
     let resultNode: SpriteTreeNode;
-    let existingNode = this.nodesByElement.get(spriteModifier.element);
+    let existingNode = this.lookupNodeByElement(spriteModifier.element);
     if (existingNode) {
       assert(
         'Cannot add a SpriteModifier which was already added',
