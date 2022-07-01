@@ -310,19 +310,6 @@ export default class SpriteTree {
       return [];
     }
   }
-  farMatchCandidatesFor(context: ContextModel): SpriteModel[] {
-    // all freshlyRemovedChildren except those under given context node
-    let result: SpriteModel[] = [];
-    let contextNode = this.lookupNodeByElement(context.element);
-    if (!contextNode) {
-      return [];
-    }
-    for (let rootNode of this.rootNodes) {
-      if (rootNode === contextNode) continue;
-      result = result.concat(rootNode.freshlyRemovedDescendants(contextNode));
-    }
-    return result;
-  }
 
   getContextRunList(requestedContexts: Set<ContextModel>): ContextModel[] {
     let result: ContextModel[] = [];

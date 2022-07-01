@@ -39,7 +39,6 @@ class MockAnimationContext
 
 class MockSpriteModifier implements SpriteModel {
   element: HTMLElement;
-  farMatch = false;
   id: string;
   constructor(
     parentEl: HTMLElement | null = null,

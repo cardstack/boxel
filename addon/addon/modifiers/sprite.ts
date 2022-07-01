@@ -26,7 +26,6 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   lastComputedStyle: CopiedCSS | undefined;
   currentComputedStyle: CopiedCSS | undefined;
 
-  farMatch: SpriteModifier | undefined; // Gets set to the "received" sprite modifier when this is becoming a "sent" sprite
   alreadyTracked = false;
 
   @service declare animations: AnimationsService;
