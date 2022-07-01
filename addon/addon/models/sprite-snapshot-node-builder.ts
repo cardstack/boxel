@@ -307,8 +307,6 @@ export class SpriteSnapshotNodeBuilder {
 
     // Classify non-natural KeptSprites
     for (let insertedSpriteModifier of classifiedInsertedSpriteModifiers) {
-      let counterpartSpriteModifier: SpriteModifier | undefined;
-
       // find a suitable RemovedSprite counterpart if any
       let removedSpriteModifiers = [...classifiedRemovedSpriteModifiers].filter(
         (removedSpriteModifier) =>
@@ -345,11 +343,9 @@ export class SpriteSnapshotNodeBuilder {
         classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
 
         // a matching IntermediateSprite always wins from a RemovedSprite counterpart
-        counterpartSpriteModifier =
+        let counterpartSpriteModifier =
           intermediateSprite?.modifier ?? removedSpriteModifier;
-      }
 
-      if (counterpartSpriteModifier) {
         // Find a stable shared ancestor AnimationContext
         let sharedContext = this.spriteTree.findStableSharedAncestor(
           insertedSpriteModifier,
