@@ -25,7 +25,6 @@ class MockAnimationContext implements ContextModel {
 
 class MockSpriteModifier implements SpriteModel {
   element: Element;
-  farMatch = false;
   id: string;
   constructor(
     parentEl: Element | null = null,
@@ -298,16 +297,6 @@ module('Unit | Models | SpriteTree', function (hooks) {
       subject.addSpriteModifier(sprite2);
     });
 
-    test('if a sprite is removed from one context, it is eligible for farmatching to another', function (assert) {
-      subject.removeSpriteModifier(sprite1);
-      assert.equal(subject.farMatchCandidatesFor(context2).length, 1);
-      assert.equal(subject.farMatchCandidatesFor(context2)[0], sprite1);
-      assert.equal(subject.farMatchCandidatesFor(context1).length, 0);
-
-      subject.clearFreshlyRemovedChildren();
-      assert.equal(subject.farMatchCandidatesFor(context2).length, 0);
-      assert.equal(subject.farMatchCandidatesFor(context1).length, 0);
-    });
     test('getting a context run list', function (assert) {
       assert.deepEqual(subject.getContextRunList(new Set([context1])), [
         context1,
@@ -347,14 +336,6 @@ module('Unit | Models | SpriteTree', function (hooks) {
           spriteNode,
           'nested sprite node has its parent set correctly'
         );
-        let farMatchCandidates = subject.farMatchCandidatesFor(otherContext);
-        assert.equal(
-          farMatchCandidates.length,
-          2,
-          'farMatchCandidates include both removed sprites'
-        );
-        assert.equal(farMatchCandidates[0], spriteModifer);
-        assert.equal(farMatchCandidates[1], nestedSpriteModifer);
       });
     }
   );

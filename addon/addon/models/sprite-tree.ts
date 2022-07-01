@@ -97,26 +97,6 @@ export class SpriteTreeNode {
     return result;
   }
 
-  freshlyRemovedDescendants(stopNode: SpriteTreeNode): SpriteTreeModel[] {
-    let result: SpriteTreeModel[] = [];
-    for (let childNode of this.freshlyRemovedChildren) {
-      if (childNode.contextModel) {
-        result.push(childNode.contextModel);
-      }
-      if (childNode.spriteModel) {
-        result.push(childNode.spriteModel);
-      }
-    }
-    let allChildren = [...this.children].concat([
-      ...this.freshlyRemovedChildren,
-    ]);
-    for (let childNode of allChildren) {
-      if (childNode === stopNode) continue;
-      result = result.concat(childNode.freshlyRemovedDescendants(stopNode));
-    }
-    return result;
-  }
-
   clearFreshlyRemovedChildren(): void {
     for (let rootNode of this.children) {
       rootNode.freshlyRemovedChildren.clear();
@@ -309,19 +289,6 @@ export default class SpriteTree {
     } else {
       return [];
     }
-  }
-  farMatchCandidatesFor(context: ContextModel): SpriteModel[] {
-    // all freshlyRemovedChildren except those under given context node
-    let result: SpriteModel[] = [];
-    let contextNode = this.lookupNodeByElement(context.element);
-    if (!contextNode) {
-      return [];
-    }
-    for (let rootNode of this.rootNodes) {
-      if (rootNode === contextNode) continue;
-      result = result.concat(rootNode.freshlyRemovedDescendants(contextNode));
-    }
-    return result;
   }
 
   getContextRunList(requestedContexts: Set<ContextModel>): ContextModel[] {
