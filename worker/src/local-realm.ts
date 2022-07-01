@@ -94,7 +94,9 @@ export class LocalRealm extends Realm {
   }
 
   private async makeJS(handle: FileSystemFileHandle): Promise<Response> {
+    // TODO use this.searchIndex.module to get the module source file
     let content = await readFileAsText(handle);
+
     try {
       content = preprocessEmbeddedTemplates(content, {
         relativePath: handle.name,
@@ -153,6 +155,7 @@ export class LocalRealm extends Realm {
         },
       });
     }
+    // TODO use this.searchIndex.module to get the module source file
     let handle = await getLocalFileWithFallbacks(
       this.fs,
       url.pathname.slice(1),

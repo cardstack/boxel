@@ -564,6 +564,11 @@ export class SearchIndex {
     return this.instances.get(url);
   }
 
+  // TODO merge this into the .search() API after we get the queries working
+  async module(url: URL): Promise<string | undefined> {
+    return this.modules.get(url)?.src;
+  }
+
   private async getIgnorePatterns(url: URL): Promise<string | undefined> {
     try {
       return await this.readFileAsText(new URL(".monacoignore", url).pathname);
