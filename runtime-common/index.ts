@@ -108,3 +108,9 @@ export function isCardJSON(json: any): json is CardJSON {
 }
 
 export { Realm, Kind } from "./realm";
+export {
+  CardResource,
+  CardDocument,
+  isCardResource,
+  isCardDocument,
+} from "./search-index";

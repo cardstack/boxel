@@ -49,7 +49,7 @@ export class LocalRealm extends Realm {
     return { lastModified };
   }
 
-  protected async write(
+  protected async doWrite(
     path: string,
     contents: string
   ): Promise<{ lastModified: number }> {

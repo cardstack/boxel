@@ -50,7 +50,17 @@ export abstract class Realm {
     path: string
   ): Promise<{ lastModified: number } | undefined>;
 
-  protected abstract write(
+  protected async write(
+    path: string,
+    contents: string
+  ): Promise<{ lastModified: number }> {
+    let results = await this.doWrite(path, contents);
+    await this.#searchIndex.update(new URL(path, this.url));
+
+    return results;
+  }
+
+  protected abstract doWrite(
     path: string,
     contents: string
   ): Promise<{ lastModified: number }>;
@@ -113,8 +123,13 @@ export abstract class Realm {
       let pathname = `${dirName}${++index}.json`;
       await this.write(pathname, JSON.stringify(json, null, 2));
       let newURL = new URL(pathname, url.origin).href.replace(/\.json$/, "");
-      (json.data as any).id = newURL;
-      (json.data as any).links = { self: newURL };
+      if (!isCardDocument(json)) {
+        return badRequest(
+          `bug: the card document is not actually a card document`
+        );
+      }
+      json.data.id = newURL;
+      json.data.links = { self: newURL };
       if (!isCardDocument(json)) {
         return systemError(
           `bug: constructed non-card document resource in JSON-API request for ${newURL}`
@@ -156,6 +171,7 @@ export abstract class Realm {
         : url.pathname + ".json";
       await this.write(path, JSON.stringify(card, null, 2));
       card.data.id = url.href.replace(/\.json$/, "");
+      card.data.links = { self: url.href };
       await this.addLastModifiedToCardDoc(card, path);
       return new Response(JSON.stringify(card, null, 2), {
         headers: {

@@ -69,6 +69,9 @@ export interface CardResource<Identity extends Unsaved = Saved> {
     };
     lastModified?: number;
   };
+  links?: {
+    self?: string;
+  };
 }
 export interface CardDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>;
@@ -145,7 +148,10 @@ function trimExecutableExtension(url: URL): URL {
 // Forces callers to use URL (which avoids accidentally using relative url
 // strings without a base)
 class URLMap<T> {
-  #map = new Map<string, T>();
+  #map: Map<string, T>;
+  constructor(mapTuple: [key: URL, value: T][] = []) {
+    this.#map = new Map(mapTuple.map(([key, value]) => [key.href, value]));
+  }
   get(url: URL): T | undefined {
     return this.#map.get(url.href);
   }
@@ -210,24 +216,24 @@ export class SearchIndex {
   }
 
   private async visitDirectory(
-    path: URL,
+    url: URL,
     directories: URLMap<{ name: string; kind: Kind }[]>
   ): Promise<void> {
     // TODO we should be using ignore patterns for the current context so the
     // ignores are consistent with the index, i.e. don't use ignore file from a
     // previous search index run on a new search index
-    let ignorePatterns = await this.getIgnorePatterns(path);
+    let ignorePatterns = await this.getIgnorePatterns(url);
     if (ignorePatterns) {
-      this.ignoreMap.set(path, ignore().add(ignorePatterns));
+      this.ignoreMap.set(url, ignore().add(ignorePatterns));
     }
 
-    let entries = directories.get(path);
+    let entries = directories.get(url);
     if (!entries) {
       entries = [];
-      directories.set(path, entries);
+      directories.set(url, entries);
     }
     for await (let { path: innerPath, kind } of this.readdir(
-      this.localPath(path)
+      this.localPath(url)
     )) {
       let innerURL = new URL(innerPath, this.realm.url);
       if (this.isIgnored(innerURL)) {
@@ -246,11 +252,33 @@ export class SearchIndex {
     }
   }
 
-  // TODO START HERE ON THURSDAY SO WE CAN CREATE NEW CARDS
-  async update(url: URL): Promise<void> {
+  async update(url: URL, opts?: { delete?: true }): Promise<void> {
     await this.visitFile(url);
-    await this.semanticPhase();
-    //TODO update this.directories as necessary
+
+    let newDirectories = new URLMap([...this.directories]);
+    let segments = url.href.split("/");
+    let name = segments.pop()!;
+    let dirURL = new URL(segments.join("/") + "/");
+
+    if (opts?.delete) {
+      let entries = newDirectories.get(dirURL);
+      if (entries) {
+        let index = entries.findIndex((e) => e.name === name);
+        if (index > -1) {
+          entries.splice(index, 1);
+        }
+      }
+    } else {
+      let entries = newDirectories.get(dirURL);
+      if (!entries) {
+        entries = [];
+        newDirectories.set(dirURL, entries);
+      }
+      if (!entries.find((e) => e.name === name)) {
+        entries.push({ name, kind: "file" });
+      }
+    }
+    await this.semanticPhase(newDirectories);
   }
 
   private async visitFile(url: URL) {

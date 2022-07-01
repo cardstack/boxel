@@ -91,6 +91,10 @@ export class TestRealm extends Realm {
     return this.#lastModified;
   }
 
+  getSearchIndex() {
+    return this.searchIndex;
+  }
+
   async handle(request: Request): Promise<Response> {
     if (request.headers.get('Accept')?.includes('application/vnd.api+json')) {
       return await this.handleJSONAPI(request);
@@ -124,7 +128,7 @@ export class TestRealm extends Realm {
     return { lastModified };
   }
 
-  protected async write(
+  protected async doWrite(
     path: string,
     contents: string | object
   ): Promise<{ lastModified: number }> {

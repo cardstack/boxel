@@ -12,7 +12,7 @@ import { eq } from '../helpers/truth-helpers';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
-import { CardJSON, isCardJSON } from '@cardstack/runtime-common';
+import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common';
 
 export interface NewCardArgs {
   type: 'new';
@@ -81,6 +81,7 @@ export default class Preview extends Component<Signature> {
   @tracked
   initialCardData: CardJSON | undefined;
   private interval: ReturnType<typeof setInterval>;
+  private lastModified: number | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -171,7 +172,10 @@ export default class Preview extends Component<Signature> {
     taskFor(this.write).perform();
   }
 
-  @restartableTask private async loadData(url: string): Promise<void> {
+  @restartableTask private async loadData(url: string | undefined): Promise<void> {
+    if (!url) {
+      return;
+    }
     // this is just for loading fixtures for testing. remove once we
     // have an actual service we can mock
     if (this.args.card.type === 'existing' && this.args.card.json) {
@@ -188,12 +192,16 @@ export default class Preview extends Component<Signature> {
       throw new Error(`could not load card data: ${response.status} - ${response.statusText}. ${await response.text()}`);
     }
     let json = await response.json();
-    delete json.data.links;
-    delete json.data.id;
-    if (!isCardJSON(json)) {
-      throw new Error(`the url ${url} is not card data`);
+    if (!isCardDocument(json)) {
+      throw new Error(`bug: server returned a non card document to us for ${url}`);
     }
-    this.initialCardData = json;
+    if (this.lastModified !== json.data.meta.lastModified) {
+      this.lastModified = json.data.meta.lastModified;
+      delete json.data.links;
+      delete json.data.meta.lastModified
+      delete (json as any).data.id;
+      this.initialCardData = json;
+    }
   }
 
   @restartableTask private async write(): Promise<void> {

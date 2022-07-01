@@ -53,13 +53,42 @@ module('Unit | realm', function () {
   test('realm can serve create card requests', async function (assert) {
     let realm = new TestRealm({});
     await realm.ready;
-    let response = await realm.handle(
-      new Request('http://test-realm/', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.api+json',
-        },
-        body: JSON.stringify(
+    {
+      let response = await realm.handle(
+        new Request('http://test-realm/', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+          body: JSON.stringify(
+            {
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: '//cardstack.com/base/card-api',
+                    name: 'Card',
+                  },
+                },
+              },
+            },
+            null,
+            2
+          ),
+        })
+      );
+      assert.strictEqual(response.status, 201, 'successful http status');
+      let json = await response.json();
+      if (isCardDocument(json)) {
+        assert.strictEqual(
+          json.data.id,
+          'http://test-realm/Card/1',
+          'the id is correct'
+        );
+        assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+        assert.deepEqual(
+          JSON.parse((realm.files?.Card as Dir)?.['1.json'] as string),
           {
             data: {
               type: 'card',
@@ -72,43 +101,90 @@ module('Unit | realm', function () {
               },
             },
           },
-          null,
-          2
-        ),
-      })
-    );
-    assert.strictEqual(response.status, 201, 'successful http status');
-    let json = await response.json();
-    if (isCardDocument(json)) {
+          'file contents are correct'
+        );
+      } else {
+        assert.ok(false, 'response body is not a card document');
+      }
+
+      let searchIndex = realm.getSearchIndex();
+      let card = await searchIndex.card(new URL(json.data.links.self));
       assert.strictEqual(
-        json.data.id,
+        card?.id,
         'http://test-realm/Card/1',
-        'the id is correct'
+        'found card in index'
       );
-      assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+      let dirEntries = await searchIndex.directory(
+        new URL('http://test-realm/Card/')
+      );
       assert.deepEqual(
-        JSON.parse((realm.files?.Card as Dir)?.['1.json'] as string),
-        {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: '//cardstack.com/base/card-api',
-                name: 'Card',
-              },
-            },
-          },
-        }
+        dirEntries,
+        [{ name: '1.json', kind: 'file' }],
+        'found new file in directory entries'
       );
-    } else {
-      assert.ok(false, 'response body is not a card document');
     }
 
-    // try adding a second file after we support incremental search index
-    // updates and assert that the new card is created as /Card/2.json
+    // create second file
+    {
+      let response = await realm.handle(
+        new Request('http://test-realm/', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+          body: JSON.stringify(
+            {
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: '//cardstack.com/base/card-api',
+                    name: 'Card',
+                  },
+                },
+              },
+            },
+            null,
+            2
+          ),
+        })
+      );
+      assert.strictEqual(response.status, 201, 'successful http status');
+      let json = await response.json();
+      if (isCardDocument(json)) {
+        assert.strictEqual(
+          json.data.id,
+          'http://test-realm/Card/2',
+          'the id is correct'
+        );
+        assert.ok(
+          (realm.files?.Card as Dir)?.['2.json'],
+          'file contents exist'
+        );
+      } else {
+        assert.ok(false, 'response body is not a card document');
+      }
 
-    // TODO also assert that search index is updated
+      let searchIndex = realm.getSearchIndex();
+      let card = await searchIndex.card(new URL(json.data.links.self));
+      assert.strictEqual(
+        card?.id,
+        'http://test-realm/Card/2',
+        'found card in index'
+      );
+      let dirEntries = await searchIndex.directory(
+        new URL('http://test-realm/Card/')
+      );
+      assert.deepEqual(
+        dirEntries,
+        [
+          { name: '1.json', kind: 'file' },
+          { name: '2.json', kind: 'file' },
+        ],
+        'found new file in directory entries'
+      );
+    }
   });
 
   test('realm can serve patch card requests', async function (assert) {
@@ -164,8 +240,16 @@ module('Unit | realm', function () {
         'http://test-realm/dir/card',
         'the id is correct'
       );
-      assert.strictEqual(json.data.attributes?.firstName, 'Van Gogh');
-      assert.strictEqual(json.data.attributes?.lastName, 'Abdel-Rahman');
+      assert.strictEqual(
+        json.data.attributes?.firstName,
+        'Van Gogh',
+        'field value is correct'
+      );
+      assert.strictEqual(
+        json.data.attributes?.lastName,
+        'Abdel-Rahman',
+        'field value is correct'
+      );
       assert.ok(json.data.meta.lastModified, 'lastModified is populated');
       assert.deepEqual(
         JSON.parse((realm.files?.dir as Dir)?.['card.json'] as string),
@@ -183,12 +267,37 @@ module('Unit | realm', function () {
               },
             },
           },
-        }
+        },
+        'file contents are correct'
       );
     } else {
       assert.ok(false, 'response body is not a card document');
     }
 
-    // TODO also assert that search index is updated
+    let searchIndex = realm.getSearchIndex();
+    let card = await searchIndex.card(new URL(json.data.links.self));
+    assert.strictEqual(
+      card?.id,
+      'http://test-realm/dir/card',
+      'found card in index'
+    );
+    assert.strictEqual(
+      card?.attributes?.firstName,
+      'Van Gogh',
+      'field value is correct'
+    );
+    assert.strictEqual(
+      card?.attributes?.lastName,
+      'Abdel-Rahman',
+      'field value is correct'
+    );
+    let dirEntries = await searchIndex.directory(
+      new URL('http://test-realm/dir/')
+    );
+    assert.deepEqual(
+      dirEntries,
+      [{ name: 'card.json', kind: 'file' }],
+      'directory entries is correct'
+    );
   });
 });
