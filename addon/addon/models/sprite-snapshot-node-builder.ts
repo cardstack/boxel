@@ -80,9 +80,9 @@ export class SpriteSnapshotNode {
       assert(
         'kept sprite should have lastBounds and currentBounds',
         spriteModifier.lastBounds &&
-        context.lastBounds &&
-        spriteModifier.currentBounds &&
-        context.currentBounds
+          context.lastBounds &&
+          spriteModifier.currentBounds &&
+          context.currentBounds
       );
 
       if (intermediateSprite) {
@@ -220,7 +220,7 @@ export class SpriteSnapshotNodeBuilder {
           playAnimations: false,
         });
 
-        let closestAnchor = this.spriteTree.closestAnchor(spriteModifier);
+        let closestAnchor = this.spriteTree.closestAnchor(spriteModifier) ?? context;
         // TODO: what about refactoring away checkForChanges and simply treating all leftover sprites in the SpriteTree as KeptSprites
         if (
           !freshlyAdded.has(spriteModifier) &&

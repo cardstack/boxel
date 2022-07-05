@@ -42,8 +42,9 @@ export class SpriteTreeNode {
 
   get isAnchor() {
     return Boolean(
-      (this.contextModel as AnimationContext)?.isAnchor ||
-      (this.spriteModel as SpriteModifier)?.isAnchor
+      ((this.contextModel as AnimationContext)?.isStable &&
+        (this.contextModel as AnimationContext)?.isAnchor) ||
+        (this.spriteModel as SpriteModifier)?.isAnchor
     );
   }
 
@@ -278,7 +279,8 @@ export default class SpriteTree {
 
     if (!resultNode.parent.isContext) {
       console.error(
-        `Sprite "${(spriteModifier as SpriteModifier).id
+        `Sprite "${
+          (spriteModifier as SpriteModifier).id
         }" cannot have another Sprite as a direct parent. An extra AnimationContext will need to be added.`
       );
     }
@@ -300,10 +302,12 @@ export default class SpriteTree {
   lookupNodeByElement(element: Element): SpriteTreeNode | undefined {
     return this.nodesByElement.get(element);
   }
-  closestAnchor(modifier: SpriteModifier): {
-    currentBounds?: DOMRect;
-    lastBounds?: DOMRect;
-  } {
+  closestAnchor(modifier: SpriteModifier):
+    | {
+        currentBounds?: DOMRect;
+        lastBounds?: DOMRect;
+      }
+    | undefined {
     let node = this.lookupNodeByElement(modifier.element);
     let parent = node?.parent;
     while (parent) {
@@ -322,7 +326,6 @@ export default class SpriteTree {
       }
       parent = (parent as SpriteTreeNode).parent;
     }
-    throw new Error(`Could not find anchor for sprite modifier ${modifier.id}`);
   }
   descendantsOf(
     model: SpriteTreeModel,
