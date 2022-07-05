@@ -30,6 +30,7 @@ export default class AnimationContextComponent extends Component<AnimationContex
   lastBounds: DOMRect | undefined;
   currentBounds: DOMRect | undefined;
   isInitialRenderCompleted = false;
+  isAnchor = true;
 
   get isStable() {
     return (

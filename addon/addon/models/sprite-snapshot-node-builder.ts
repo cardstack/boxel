@@ -12,9 +12,14 @@ import { assert } from '@ember/debug';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
 import { IntermediateSprite } from 'animations-experiment/services/animations';
 
+export interface MeasuredObject {
+  currentBounds?: DOMRect;
+  lastBounds?: DOMRect;
+}
+
 function checkForChanges(
-  spriteModifier: SpriteModifier,
-  animationContext: AnimationContext
+  spriteModifier: MeasuredObject,
+  animationContext: MeasuredObject
 ): boolean {
   let spriteCurrent = spriteModifier.currentBounds;
   let spriteLast = spriteModifier.lastBounds;
@@ -75,9 +80,9 @@ export class SpriteSnapshotNode {
       assert(
         'kept sprite should have lastBounds and currentBounds',
         spriteModifier.lastBounds &&
-          context.lastBounds &&
-          spriteModifier.currentBounds &&
-          context.currentBounds
+        context.lastBounds &&
+        spriteModifier.currentBounds &&
+        context.currentBounds
       );
 
       if (intermediateSprite) {
@@ -203,8 +208,9 @@ export class SpriteSnapshotNodeBuilder {
     let freshlyChanged: Set<SpriteModifier> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
-      let contextNode = this.spriteTree.lookupNodeByElement(context.element);
-      let contextChildren: SpriteModifier[] = [...(contextNode?.children ?? [])]
+      let contextNode = this.spriteTree.lookupNodeByElement(context.element)!;
+      let contextChildren: SpriteModifier[] = contextNode
+        .getDescendantNodes()
         .map((c) => c.spriteModel as SpriteModifier)
         .filter(Boolean);
 
@@ -214,10 +220,11 @@ export class SpriteSnapshotNodeBuilder {
           playAnimations: false,
         });
 
+        let closestAnchor = this.spriteTree.closestAnchor(spriteModifier);
         // TODO: what about refactoring away checkForChanges and simply treating all leftover sprites in the SpriteTree as KeptSprites
         if (
           !freshlyAdded.has(spriteModifier) &&
-          checkForChanges(spriteModifier, context)
+          checkForChanges(spriteModifier, closestAnchor)
         ) {
           freshlyChanged.add(spriteModifier);
         }

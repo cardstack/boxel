@@ -12,7 +12,7 @@
   </AnimationContext>
 
   <AnimationContext @use={{this.transition}} local-class="context">
-    <div {{sprite id="outer-no-context"}} local-class="outer {{if this.moveOuter "right"}}">
+    <div {{sprite id="outer-no-context" isAnchor=true}} local-class="outer {{if this.moveOuter "right"}}">
       Outer Sprite
       <div {{sprite id="inner-no-context"}} local-class="inner {{if this.moveInner "right"}}">Inner Sprite</div>
     </div>
