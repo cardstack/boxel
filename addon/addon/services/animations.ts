@@ -100,7 +100,9 @@ export default class AnimationsService extends Service {
       let animationsToCancel: Animation[] = [];
       for (let context of this.eligibleContexts) {
         // We can't schedule this, if we don't deal with it immediately the animations will already be gone
-        animationsToCancel = animationsToCancel.concat(this.willTransition(context));
+        animationsToCancel = animationsToCancel.concat(
+          this.willTransition(context)
+        );
       }
 
       animationsToCancel.forEach((a) => a.cancel());
