@@ -26,7 +26,7 @@ module('Integration | card-editor', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-    const args: ExistingCardArgs = { type: 'existing', json, url: '' };
+    const args: ExistingCardArgs = { type: 'existing', json, url: 'http://test-realm/card' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -59,7 +59,7 @@ module('Integration | card-editor', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-    const args: ExistingCardArgs = { type: 'existing', json, url: '' };
+    const args: ExistingCardArgs = { type: 'existing', json, url: 'http://test-realm/card' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -104,7 +104,7 @@ module('Integration | card-editor', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-    const args: ExistingCardArgs = { type: 'existing', json, url: '' };
+    const args: ExistingCardArgs = { type: 'existing', json, url: 'http://test-realm/card' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -149,7 +149,7 @@ module('Integration | card-editor', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-    const args: ExistingCardArgs = { type: 'existing', json, url: '' };
+    const args: ExistingCardArgs = { type: 'existing', json, url: 'http://test-realm/card' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

@@ -1,11 +1,13 @@
 import {
   Realm,
+  Kind,
   executableExtensions,
   baseOrigin,
   protocolRelativeBaseOrigin,
 } from ".";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
+import ignore, { Ignore } from "ignore";
 
 export type CardRef =
   | {
@@ -65,6 +67,10 @@ export interface CardResource<Identity extends Unsaved = Saved> {
       module: string;
       name: string;
     };
+    lastModified?: number;
+  };
+  links?: {
+    self?: string;
   };
 }
 export interface CardDocument<Identity extends Unsaved = Saved> {
@@ -130,51 +136,171 @@ function hasExecutableExtension(path: string): boolean {
   return false;
 }
 
-function trimExecutableExtension(path: string): string {
+function trimExecutableExtension(url: URL): URL {
   for (let extension of executableExtensions) {
-    if (path.endsWith(extension)) {
-      return path.replace(new RegExp(`\\${extension}$`), "");
+    if (url.href.endsWith(extension)) {
+      return new URL(url.href.replace(new RegExp(`\\${extension}$`), ""));
     }
   }
-  return path;
+  return url;
+}
+
+// Forces callers to use URL (which avoids accidentally using relative url
+// strings without a base)
+class URLMap<T> {
+  #map: Map<string, T>;
+  constructor(mapTuple: [key: URL, value: T][] = []) {
+    this.#map = new Map(mapTuple.map(([key, value]) => [key.href, value]));
+  }
+  get(url: URL): T | undefined {
+    return this.#map.get(url.href);
+  }
+  set(url: URL, value: T) {
+    return this.#map.set(url.href, value);
+  }
+  get [Symbol.iterator]() {
+    let self = this;
+    return function* () {
+      for (let [key, value] of self.#map) {
+        yield [new URL(key), value] as [URL, T];
+      }
+    };
+  }
+  values() {
+    return this.#map.values();
+  }
+  keys() {
+    let self = this;
+    return {
+      get [Symbol.iterator]() {
+        return function* () {
+          for (let key of self.#map.keys()) {
+            yield new URL(key);
+          }
+        };
+      },
+    };
+  }
+  get size() {
+    return this.#map.size;
+  }
 }
 
 export class SearchIndex {
-  private instances = new Map<string, CardResource>();
-  private modules = new Map<string, ModuleSyntax>();
+  private instances = new URLMap<CardResource>();
+  private modules = new URLMap<ModuleSyntax>();
+  private directories = new URLMap<{ name: string; kind: Kind }[]>();
   private definitions = new Map<string, CardDefinition>();
   private exportedCardRefs = new Map<string, CardRef[]>();
+  private ignoreMap = new URLMap<Ignore>();
 
-  constructor(private realm: Realm) {}
+  constructor(
+    private realm: Realm,
+    private readdir: (
+      path: string
+    ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
+    private readFileAsText: (path: string) => Promise<string>
+  ) {}
 
   async run() {
-    for await (let { path, contents } of this.realm.eachFile()) {
-      path = new URL(path, this.realm.url).href;
-      this.syntacticPhase(path, contents);
+    let newDirectories = new URLMap<{ name: string; kind: Kind }[]>();
+    await this.visitDirectory(new URL(this.realm.url), newDirectories);
+    await this.semanticPhase(newDirectories);
+  }
+
+  private localPath(url: URL): string {
+    if (url.href.startsWith(this.realm.url)) {
+      return url.href.slice(this.realm.url.length);
     }
-    await this.semanticPhase();
+    throw new Error(`${url.href} does not belong to realm ${this.realm.url}`);
   }
 
-  async update(path: string, contents: string): Promise<void> {
-    this.syntacticPhase(path, contents);
-    await this.semanticPhase();
-  }
+  private async visitDirectory(
+    url: URL,
+    directories: URLMap<{ name: string; kind: Kind }[]>
+  ): Promise<void> {
+    // TODO we should be using ignore patterns for the current context so the
+    // ignores are consistent with the index, i.e. don't use ignore file from a
+    // previous search index run on a new search index
+    let ignorePatterns = await this.getIgnorePatterns(url);
+    if (ignorePatterns) {
+      this.ignoreMap.set(url, ignore().add(ignorePatterns));
+    }
 
-  private syntacticPhase(path: string, contents: string) {
-    if (path.endsWith(".json")) {
-      let json = JSON.parse(contents);
-      if (isCardDocument(json)) {
-        json.data.id = path;
-        this.instances.set(path, json.data);
+    let entries = directories.get(url);
+    if (!entries) {
+      entries = [];
+      directories.set(url, entries);
+    }
+    for await (let { path: innerPath, kind } of this.readdir(
+      this.localPath(url)
+    )) {
+      let innerURL = new URL(innerPath, this.realm.url);
+      if (this.isIgnored(innerURL)) {
+        return;
       }
-    } else if (hasExecutableExtension(path)) {
-      let mod = new ModuleSyntax(contents);
-      this.modules.set(path, mod);
-      this.modules.set(trimExecutableExtension(path), mod);
+
+      let name = innerPath.split("/").pop()!;
+      if (kind === "file") {
+        entries.push({ name, kind: "file" });
+        await this.visitFile(innerURL);
+      } else {
+        entries.push({ name, kind: "directory" });
+        innerURL = assertURLEndsWithSlash(innerURL);
+        await this.visitDirectory(innerURL, directories);
+      }
     }
   }
 
-  private async semanticPhase(): Promise<void> {
+  async update(url: URL, opts?: { delete?: true }): Promise<void> {
+    await this.visitFile(url);
+
+    let newDirectories = new URLMap([...this.directories]);
+    let segments = url.href.split("/");
+    let name = segments.pop()!;
+    let dirURL = new URL(segments.join("/") + "/");
+
+    if (opts?.delete) {
+      let entries = newDirectories.get(dirURL);
+      if (entries) {
+        let index = entries.findIndex((e) => e.name === name);
+        if (index > -1) {
+          entries.splice(index, 1);
+        }
+      }
+    } else {
+      let entries = newDirectories.get(dirURL);
+      if (!entries) {
+        entries = [];
+        newDirectories.set(dirURL, entries);
+      }
+      if (!entries.find((e) => e.name === name)) {
+        entries.push({ name, kind: "file" });
+      }
+    }
+    await this.semanticPhase(newDirectories);
+  }
+
+  private async visitFile(url: URL) {
+    if (url.href.endsWith(".json")) {
+      let json = JSON.parse(await this.readFileAsText(this.localPath(url)));
+      if (isCardDocument(json)) {
+        let instanceURL = new URL(url.href.replace(/\.json$/, ""));
+        json.data.id = instanceURL.href;
+        this.instances.set(instanceURL, json.data);
+      }
+    } else if (hasExecutableExtension(url.href)) {
+      let mod = new ModuleSyntax(
+        await this.readFileAsText(this.localPath(url))
+      );
+      this.modules.set(url, mod);
+      this.modules.set(trimExecutableExtension(url), mod);
+    }
+  }
+
+  private async semanticPhase(
+    directories?: URLMap<{ name: string; kind: Kind }[]>
+  ): Promise<void> {
     let newDefinitions: Map<string, CardDefinition> = new Map();
     for (let [path, mod] of this.modules) {
       for (let possibleCard of mod.possibleCards) {
@@ -185,7 +311,7 @@ export class SearchIndex {
             mod,
             {
               type: "exportedCard",
-              module: path,
+              module: path.href,
               name: possibleCard.exportedAs,
             },
             possibleCard
@@ -210,11 +336,14 @@ export class SearchIndex {
     // atomically update the search index
     this.definitions = newDefinitions;
     this.exportedCardRefs = newExportedCardRefs;
+    if (directories) {
+      this.directories = directories;
+    }
   }
 
   private async buildDefinition(
     definitions: Map<string, CardDefinition>,
-    path: string,
+    url: URL,
     mod: ModuleSyntax,
     ref: CardRef,
     possibleCard: PossibleCardClass
@@ -222,7 +351,7 @@ export class SearchIndex {
     let id: CardRef = possibleCard.exportedAs
       ? {
           type: "exportedCard",
-          module: new URL(path, this.realm.url).href,
+          module: new URL(url, this.realm.url).href,
           name: possibleCard.exportedAs,
         }
       : ref;
@@ -235,7 +364,7 @@ export class SearchIndex {
 
     let superDef = await this.definitionForClassRef(
       definitions,
-      path,
+      url,
       mod,
       possibleCard.super,
       { type: "ancestorOf", card: id }
@@ -248,16 +377,16 @@ export class SearchIndex {
     let fields: CardDefinition["fields"] = new Map(superDef.fields);
 
     for (let [fieldName, possibleField] of possibleCard.possibleFields) {
-      if (!isOurFieldDecorator(possibleField.decorator, path)) {
+      if (!isOurFieldDecorator(possibleField.decorator, url)) {
         continue;
       }
-      let fieldType = getFieldType(possibleField.type, path);
+      let fieldType = getFieldType(possibleField.type, url);
       if (!fieldType) {
         continue;
       }
       let fieldDef = await this.definitionForClassRef(
         definitions,
-        path,
+        url,
         mod,
         possibleField.card,
         { type: "fieldOf", card: id, field: fieldName }
@@ -275,7 +404,7 @@ export class SearchIndex {
 
   private async definitionForClassRef(
     definitions: Map<string, CardDefinition>,
-    path: string,
+    url: URL,
     mod: ModuleSyntax,
     ref: ClassReference,
     targetRef: CardRef
@@ -283,20 +412,20 @@ export class SearchIndex {
     if (ref.type === "internal") {
       return await this.buildDefinition(
         definitions,
-        path,
+        url,
         mod,
         targetRef,
         mod.possibleCards[ref.classIndex]
       );
     } else {
-      if (this.isLocal(ref.module)) {
-        let inner = this.lookupPossibleCard(ref.module, ref.name);
+      if (this.isLocal(new URL(ref.module, url))) {
+        let inner = this.lookupPossibleCard(new URL(ref.module, url), ref.name);
         if (!inner) {
           return undefined;
         }
         return await this.buildDefinition(
           definitions,
-          ref.module,
+          new URL(ref.module, url),
           inner.mod,
           targetRef,
           inner.possibleCard
@@ -320,10 +449,9 @@ export class SearchIndex {
   }
 
   private lookupPossibleCard(
-    module: string,
+    module: URL,
     exportedName: string
   ): { mod: ModuleSyntax; possibleCard: PossibleCardClass } | undefined {
-    module = new URL(module, this.realm.url).href;
     let mod = this.modules.get(module);
     if (!mod) {
       // TODO: broken import seems bad
@@ -339,12 +467,12 @@ export class SearchIndex {
   }
 
   private getExternalCardDefinition(
-    url: string,
+    href: string,
     exportName: string
   ): Promise<CardDefinition | undefined> {
     // TODO This is scaffolding for the base realm, implement for real once we
     // have this realm endpoint fleshed out
-    let module = url.startsWith("http:") ? url : `http:${url}`;
+    let module = href.startsWith("http:") ? href : `http:${href}`;
     let moduleURL = new URL(module);
     if (moduleURL.origin !== baseOrigin) {
       return Promise.resolve(undefined);
@@ -356,7 +484,7 @@ export class SearchIndex {
           ? Promise.resolve({
               id: {
                 type: "exportedCard",
-                module: url,
+                module: href,
                 name: exportName,
               },
               key: `${baseOrigin}${path}/Card`,
@@ -372,7 +500,7 @@ export class SearchIndex {
           ? Promise.resolve({
               id: {
                 type: "exportedCard",
-                module: url,
+                module: href,
                 name: exportName,
               },
               super: {
@@ -389,7 +517,7 @@ export class SearchIndex {
           ? Promise.resolve({
               id: {
                 type: "exportedCard",
-                module: url,
+                module: href,
                 name: exportName,
               },
               super: {
@@ -403,12 +531,12 @@ export class SearchIndex {
           : Promise.resolve(undefined);
     }
     throw new Error(
-      `unimplemented: don't know how to look up card types for ${url}`
+      `unimplemented: don't know how to look up card types for ${href}`
     );
   }
 
-  private isLocal(url: string): boolean {
-    return new URL(url, this.realm.url).href.startsWith(this.realm.url);
+  private isLocal(url: URL): boolean {
+    return url.href.startsWith(this.realm.url);
   }
 
   // TODO: complete these types
@@ -424,9 +552,62 @@ export class SearchIndex {
     module = new URL(module, this.realm.url).href;
     return this.exportedCardRefs.get(module) ?? [];
   }
+
+  // TODO merge this into the .search() API after we get the queries working
+  async directory(
+    url: URL
+  ): Promise<{ name: string; kind: Kind }[] | undefined> {
+    return this.directories.get(url);
+  }
+  // TODO merge this into the .search() API after we get the queries working
+  async card(url: URL): Promise<CardResource | undefined> {
+    return this.instances.get(url);
+  }
+
+  // TODO merge this into the .search() API after we get the queries working
+  async module(url: URL): Promise<string | undefined> {
+    return this.modules.get(url)?.src;
+  }
+
+  private async getIgnorePatterns(url: URL): Promise<string | undefined> {
+    try {
+      return await this.readFileAsText(new URL(".monacoignore", url).pathname);
+    } catch (e: any) {
+      if (e.name !== "NotFoundError" && e.name !== "TypeMismatchError") {
+        throw e;
+      }
+      try {
+        return await this.readFileAsText(new URL(".gitignore", url).pathname);
+      } catch (e: any) {
+        if (e.name !== "NotFoundError" && e.name !== "TypeMismatchError") {
+          throw e;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  private isIgnored(url: URL): boolean {
+    if (this.ignoreMap.size === 0) {
+      return false;
+    }
+    // Test URL against closest ignore. (Should the ignores cascade? so that the
+    // child ignore extends the parent ignore?)
+    let ignoreURLs = [...this.ignoreMap.keys()].map((u) => u.href);
+    let matchingIgnores = ignoreURLs.filter((u) => url.href.includes(u));
+    let ignoreURL = matchingIgnores.sort((a, b) => b.length - a.length)[0] as
+      | string
+      | undefined;
+    if (!ignoreURL) {
+      return false;
+    }
+
+    let ignore = this.ignoreMap.get(new URL(ignoreURL))!;
+    return ignore.test(url.pathname).ignored;
+  }
 }
 
-function isOurFieldDecorator(ref: ClassReference, inModule: string): boolean {
+function isOurFieldDecorator(ref: ClassReference, inModule: URL): boolean {
   return (
     ref.type === "external" &&
     new URL(ref.module, inModule).href ===
@@ -437,7 +618,7 @@ function isOurFieldDecorator(ref: ClassReference, inModule: string): boolean {
 
 function getFieldType(
   ref: ClassReference,
-  inModule: string
+  inModule: URL
 ): "contains" | "containsMany" | undefined {
   if (
     ref.type === "external" &&
@@ -448,4 +629,11 @@ function getFieldType(
     return ref.name as ReturnType<typeof getFieldType>;
   }
   return undefined;
+}
+
+function assertURLEndsWithSlash(url: URL): URL {
+  if (url.href.endsWith("/")) {
+    return url;
+  }
+  return new URL(url.href + "/");
 }

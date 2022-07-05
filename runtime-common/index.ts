@@ -12,6 +12,8 @@ export interface CardJSON {
   // TODO add included
 }
 
+export { Deferred } from "./deferred";
+
 export interface ResourceObject {
   type: string;
   attributes?: Record<string, any>;
@@ -105,7 +107,10 @@ export function isCardJSON(json: any): json is CardJSON {
   return typeof module === "string" && typeof name === "string";
 }
 
-export interface Realm {
-  url: string;
-  eachFile(): AsyncGenerator<{ path: string; contents: string }, void>;
-}
+export { Realm, Kind } from "./realm";
+export {
+  CardResource,
+  CardDocument,
+  isCardResource,
+  isCardDocument,
+} from "./search-index";

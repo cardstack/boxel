@@ -85,12 +85,7 @@ class _FileResource extends Resource<Args> {
     let prevState = this.state;
     let response = await fetch(this.url, {
       headers: {
-        Accept: this.url.endsWith('.json')
-          ? // assume we want JSON-API for .json files, if the server determines
-            // that it is not actually card data, then it will just return in the
-            // native format
-            'application/vnd.api+json'
-          : 'application/vnd.card+source',
+        Accept: 'application/vnd.card+source',
       },
     });
     if (!response.ok) {

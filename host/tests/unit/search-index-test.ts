@@ -2,6 +2,14 @@ import { module, test } from 'qunit';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import { TestRealm } from '../helpers';
 
+function makeSearchIndex(realm: TestRealm) {
+  return new SearchIndex(
+    realm,
+    realm.readdir.bind(realm),
+    realm.readFileAsText.bind(realm)
+  );
+}
+
 module('Unit | search-index', function () {
   test('full indexing discovers card instances', async function (assert) {
     let realm = new TestRealm({
@@ -18,12 +26,12 @@ module('Unit | search-index', function () {
         },
       },
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     let cards = await indexer.search({});
     assert.deepEqual(cards, [
       {
-        id: 'http://test-realm/empty.json',
+        id: 'http://test-realm/empty',
         type: 'card',
         attributes: {},
         meta: {
@@ -52,7 +60,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     let refs = await indexer.exportedCardsOf('person.gts');
     assert.deepEqual(refs, [
@@ -76,7 +84,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
 
     let definition = await indexer.typeOf({
@@ -133,7 +141,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     let definition = await indexer.typeOf({
       type: 'exportedCard',
@@ -186,7 +194,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     let definition = await indexer.typeOf({
       type: 'exportedCard',
@@ -237,7 +245,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     let definition = await indexer.typeOf({
       type: 'ancestorOf',
@@ -298,7 +306,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     assert.strictEqual(
       await indexer.typeOf({
@@ -324,7 +332,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     assert.strictEqual(
       await indexer.typeOf({
@@ -349,7 +357,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     assert.strictEqual(
       await indexer.typeOf({
@@ -373,7 +381,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     assert.strictEqual(
       await indexer.typeOf({
@@ -400,7 +408,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     let definition = await indexer.typeOf({
       type: 'fieldOf',
@@ -470,7 +478,7 @@ module('Unit | search-index', function () {
         }
       `,
     });
-    let indexer = new SearchIndex(realm);
+    let indexer = makeSearchIndex(realm);
     await indexer.run();
     let definition = await indexer.typeOf({
       type: 'exportedCard',

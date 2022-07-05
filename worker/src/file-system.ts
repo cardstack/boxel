@@ -1,7 +1,8 @@
-import { WorkerError } from './error';
-import { readFileAsText } from './util';
-import ignore from 'ignore';
+// TODO After our refactors are over, this file should not exist anymore
+
+import { WorkerError } from '@cardstack/runtime-common/error';
 import { formatRFC7231 } from 'date-fns';
+import { Kind } from '@cardstack/runtime-common';
 
 export async function serveLocalFile(
   handle: FileSystemFileHandle
@@ -14,23 +15,6 @@ export async function serveLocalFile(
   });
 }
 
-export async function write(
-  fs: FileSystemDirectoryHandle,
-  path: string,
-  contents: string,
-  create?: {
-    create: boolean;
-  }
-): Promise<number> {
-  let { handle: dirHandle, filename } = await traverse(fs, path, create);
-  let handle = await dirHandle.getFileHandle(filename, create);
-  // TypeScript seems to lack types for the writable stream features
-  let stream = await (handle as any).createWritable();
-  await stream.write(contents);
-  await stream.close();
-  return (await handle.getFile()).lastModified;
-}
-
 // we bother with this because typescript is picky about allowing you to use
 // explicit file extensions in your source code
 export async function getLocalFileWithFallbacks(
@@ -38,6 +22,7 @@ export async function getLocalFileWithFallbacks(
   path: string,
   extensions: string[]
 ): Promise<FileSystemFileHandle> {
+  // TODO refactor to use search index
   try {
     return await getLocalFile(fs, path);
   } catch (err) {
@@ -65,8 +50,7 @@ export async function getLocalFile(
   path: string
 ): Promise<FileSystemFileHandle> {
   try {
-    let { handle, filename } = await traverse(fs, path);
-    return await handle.getFileHandle(filename);
+    return await traverse(fs, path, 'file');
   } catch (err) {
     if ((err as DOMException).name === 'NotFoundError') {
       throw WorkerError.withResponse(
@@ -88,11 +72,24 @@ export async function getLocalFile(
   }
 }
 
-export async function traverse(
+type HandleKind<T extends Kind> = T extends 'file'
+  ? FileSystemFileHandle
+  : FileSystemDirectoryHandle;
+
+export async function traverse<Target extends Kind>(
   dirHandle: FileSystemDirectoryHandle,
   path: string,
+  targetKind: Target,
   opts?: { create?: boolean }
-): Promise<{ handle: FileSystemDirectoryHandle; filename: string }> {
+): Promise<HandleKind<Target>> {
+  // the leading and trailing "/" will result in a superflous items in our path segments
+  if (path.startsWith('/')) {
+    path = path.slice(1);
+  }
+  if (path.endsWith('/')) {
+    path = path.slice(0, -1);
+  }
+
   let pathSegments = path.split('/');
   let create = opts?.create;
   async function nextHandle(
@@ -114,99 +111,15 @@ export async function traverse(
     let segment = pathSegments.shift()!;
     handle = await nextHandle(handle, segment);
   }
-  return { handle, filename: pathSegments[0] };
-}
 
-export async function getContents(file: File): Promise<string> {
-  let reader = new FileReader();
-  return await new Promise<string>((resolve, reject) => {
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsText(file);
-  });
-}
-
-interface Entry {
-  handle: FileSystemDirectoryHandle | FileSystemFileHandle;
-  path: string;
-}
-
-export async function getDirectoryEntries(
-  directoryHandle: FileSystemDirectoryHandle,
-  parentDir: string,
-  ignoreFile = ''
-): Promise<Entry[]> {
-  let entries: Entry[] = [];
-  for await (let [name, handle] of directoryHandle as any as AsyncIterable<
-    [string, FileSystemDirectoryHandle | FileSystemFileHandle]
-  >) {
-    if (
-      handle.kind === 'directory' &&
-      filterIgnored([`${name}/`], ignoreFile).length === 0
-    ) {
-      // without this, trying to open large root dirs causes the browser to hang
-      continue;
-    }
-    let path = `${parentDir}${handle.name}`;
-    entries.push({
-      handle,
-      path: handle.kind === 'directory' ? `${path}/` : path,
-    });
+  if (targetKind === 'file') {
+    return (await handle.getFileHandle(
+      pathSegments[0],
+      opts
+    )) as HandleKind<Target>;
   }
-  return filterIgnoredEntries(entries, ignoreFile);
-}
-
-export async function getRecursiveDirectoryEntries(
-  directoryHandle: FileSystemDirectoryHandle,
-  parentDir = '/',
-  ignoreFile = ''
-): Promise<Entry[]> {
-  let entries: Entry[] = [];
-  for (let entry of await getDirectoryEntries(
-    directoryHandle,
-    parentDir,
-    ignoreFile
-  )) {
-    if (entry.handle.kind === 'file') {
-      entries = [...entries, entry];
-    } else {
-      entries = [
-        ...entries,
-        ...(await getDirectoryEntries(
-          entry.handle,
-          `${parentDir}${entry.handle.name}/`,
-          ignoreFile
-        )),
-      ];
-    }
-  }
-
-  entries.sort((a, b) => a.path.localeCompare(b.path));
-  return entries;
-}
-
-export async function getIgnorePatterns(fileDir: FileSystemDirectoryHandle) {
-  let fileHandle;
-  try {
-    fileHandle = await fileDir.getFileHandle('.monacoignore');
-  } catch (e) {
-    try {
-      fileHandle = await fileDir.getFileHandle('.gitignore');
-    } catch (e) {
-      return '';
-    }
-  }
-  return await readFileAsText(fileHandle);
-}
-
-function filterIgnoredEntries(entries: Entry[], patterns: string): Entry[] {
-  let filteredPaths = filterIgnored(
-    entries.map((e) => e.path.slice(1)),
-    patterns
-  );
-  return entries.filter((entry) => filteredPaths.includes(entry.path.slice(1)));
-}
-
-function filterIgnored(paths: string[], patterns: string): string[] {
-  return ignore().add(patterns).filter(paths);
+  return (await handle.getDirectoryHandle(
+    pathSegments[0],
+    opts
+  )) as HandleKind<Target>;
 }
