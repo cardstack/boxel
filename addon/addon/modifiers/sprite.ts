@@ -15,7 +15,7 @@ interface SpriteModifierArgs {
   named: {
     id: string | null;
     role: string | null;
-    isAnchor: boolean;
+    isAnchor?: boolean;
   };
 }
 
@@ -26,7 +26,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   currentBounds: DOMRect | undefined;
   lastComputedStyle: CopiedCSS | undefined;
   currentComputedStyle: CopiedCSS | undefined;
-  isAnchor = false;
+  isAnchor = true;
 
   alreadyTracked = false;
 
@@ -36,7 +36,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
     console.log(this.args.named.id, this.args.named.isAnchor);
     this.id = this.args.named.id;
     this.role = this.args.named.role;
-    this.isAnchor = this.args.named.isAnchor;
+    this.isAnchor = this.args.named.isAnchor ?? true;
     this.animations.registerSpriteModifier(this);
     this.captureSnapshot();
   }
