@@ -97,10 +97,15 @@ export default class AnimationsService extends Service {
         `${animations.length} animations found in DOM, ${playing} were playing.`
       );
 
+      let animationsToCancel: Animation[] = [];
       for (let context of this.eligibleContexts) {
         // We can't schedule this, if we don't deal with it immediately the animations will already be gone
-        this.willTransition(context);
+        animationsToCancel = animationsToCancel.concat(
+          this.willTransition(context)
+        );
       }
+
+      animationsToCancel.forEach((a) => a.cancel());
       scheduleOnce('afterRender', this, this.maybeTransition);
     }
   }
@@ -131,6 +136,8 @@ export default class AnimationsService extends Service {
     // We do not care about "stableness of contexts here".
     // For intermediate sprites it is good enough to measure direct children only.
 
+    let animationsToCancel: Animation[] = [];
+
     let contextNode = this.spriteTree.lookupNodeByElement(
       context.element
     ) as SpriteTreeNode;
@@ -141,7 +148,8 @@ export default class AnimationsService extends Service {
     ]) {
       let spriteModifier = node.spriteModel as SpriteModifier;
       if (spriteModifier) {
-        let animations = node.spriteModel?.element.getAnimations();
+        let animations = node.spriteModel?.element.getAnimations() ?? [];
+        animationsToCancel = animationsToCancel.concat(animations);
         if (animations?.length) {
           spriteModifier.captureSnapshot({
             withAnimations: true,
@@ -165,17 +173,17 @@ export default class AnimationsService extends Service {
             intermediateStyles:
               spriteModifier.currentComputedStyle as CopiedCSS,
           });
-
-          // TODO: this may not be the best spot for this
-          animations.forEach((a) => a.cancel());
         } else {
           spriteModifier.captureSnapshot();
         }
       }
     }
+
+    return animationsToCancel;
   }
 
-  willTransition(context: AnimationContext): void {
+  willTransition(context: AnimationContext): Animation[] {
+    let animationsToCancel: Animation[] = [];
     // TODO: what about intents
     // TODO: it might be possible to only measure if we know something changed since last we measured.
 
@@ -185,12 +193,14 @@ export default class AnimationsService extends Service {
     // The element check is there because the renderDetector may fire this before the actual element exists.
     if (context.element) {
       context.captureSnapshot();
-      this.createIntermediateSpritesForContext(context);
+      animationsToCancel = this.createIntermediateSpritesForContext(context);
       let contextNode = this.spriteTree.lookupNodeByElement(
         context.element
       ) as SpriteTreeNode;
       contextNode.freshlyRemovedChildren.clear();
     }
+
+    return animationsToCancel;
   }
 
   async maybeTransition(): Promise<TaskInstance<void>> {
