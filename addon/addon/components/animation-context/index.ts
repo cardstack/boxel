@@ -72,30 +72,42 @@ export default class AnimationContextComponent extends Component<AnimationContex
     return Boolean(this.args.use && this.isStable);
   }
 
-  hasOrphan(spriteOrElement: Sprite | HTMLElement): boolean {
-    let { orphansElement } = this;
-    if (spriteOrElement instanceof Sprite) {
-      return spriteOrElement.element.parentElement === orphansElement;
-    } else {
-      return spriteOrElement.parentElement === orphansElement;
+  hasOrphan(spriteOrElement: Sprite): boolean {
+    let { orphansElement } = this as { orphansElement: HTMLElement };
+
+    for (let orphan of orphansElement.children) {
+      if (!(orphan instanceof HTMLElement)) continue;
+      if (
+        orphan.dataset['orphanSpriteId'] ===
+        spriteOrElement.identifier.toString()
+      ) {
+        return true;
+      }
     }
+
+    return false;
   }
 
-  appendOrphan(spriteOrElement: Sprite | HTMLElement): void {
-    let { orphansElement } = this;
-    if (spriteOrElement instanceof Sprite) {
-      orphansElement?.appendChild(spriteOrElement.element);
-    } else {
-      orphansElement?.appendChild(spriteOrElement);
-    }
+  appendOrphan(spriteOrElement: Sprite): void {
+    let { orphansElement } = this as { orphansElement: HTMLElement };
+
+    orphansElement.appendChild(spriteOrElement.element);
+    spriteOrElement.element.dataset['orphanSpriteId'] =
+      spriteOrElement.identifier.toString();
   }
 
-  removeOrphan(spriteOrElement: Sprite | HTMLElement): void {
-    let { orphansElement } = this;
-    if (spriteOrElement instanceof Sprite) {
-      orphansElement?.removeChild(spriteOrElement.element);
-    } else {
-      orphansElement?.removeChild(spriteOrElement);
+  removeOrphan(spriteOrElement: Sprite): void {
+    let { orphansElement } = this as { orphansElement: HTMLElement };
+
+    for (let orphan of orphansElement.children) {
+      if (!(orphan instanceof HTMLElement)) continue;
+      if (
+        orphan.dataset['orphanSpriteId'] ===
+        spriteOrElement.identifier.toString()
+      ) {
+        console.log('removing matching orphan');
+        orphansElement.removeChild(orphan);
+      }
     }
   }
 
