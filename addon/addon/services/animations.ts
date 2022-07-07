@@ -110,26 +110,30 @@ export default class AnimationsService extends Service {
     }
   }
 
-  // When we interrupt, we can clean certain sprites marked for garbage collection
-  cleanupSprites(context: AnimationContext): void {
-    let removedSprites = filterToContext(
-      this.spriteTree,
-      context,
-      this.freshlyRemoved,
-      {
-        includeFreshlyRemoved: true,
-      }
-    );
+  cleanupSprites(_context: AnimationContext): void {
+    assert('Freshly removed is not empty', !this.freshlyRemoved.size);
+    // TODO: When we interrupt, we can clean certain sprites marked for garbage collection
+    // However, because we currently do cleanup in maybeTransitionTask, this method is a no-op because
+    // freshlyRemoved should always be empty
 
-    // cleanup removedSprites
-    removedSprites.forEach((sm) => {
-      if (sm.element.getAttribute('data-sprite-hidden') === 'true') {
-        if (context.hasOrphan(sm.element as HTMLElement)) {
-          context.removeOrphan(sm.element as HTMLElement);
-        }
-        this.freshlyRemoved.delete(sm);
-      }
-    });
+    // let removedSprites = filterToContext(
+    //   this.spriteTree,
+    //   context,
+    //   this.freshlyRemoved,
+    //   {
+    //     includeFreshlyRemoved: true,
+    //   }
+    // );
+
+    // // cleanup removedSprites
+    // removedSprites.forEach((sm) => {
+    //   if (sm.element.getAttribute('data-sprite-hidden') === 'true') {
+    //     if (context.hasOrphan(sm.element as HTMLElement)) {
+    //       context.removeOrphan(sm.element as HTMLElement);
+    //     }
+    //     this.freshlyRemoved.delete(sm);
+    //   }
+    // });
   }
 
   createIntermediateSpritesForContext(context: AnimationContext) {
