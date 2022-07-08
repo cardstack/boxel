@@ -1,0 +1,23 @@
+<div style="padding: 12px;">
+  <AnimationContext @use={{this.transition}} @id="double-render-demo" style="width: 200px; height: 220px; border-radius: 8px; border: 1px solid black; position: relative;" local-class="double-render">
+    {{#if this.isShowing}}
+      <div {{sprite id="item"}} style="background: #faa; width: 180px; height: 180px; border-radius: 8px; margin: 4px auto; display: flex; align-items: center; justify-content: center; text-align: center;">
+        Item
+      </div>
+    {{/if}}
+    <div style="position: absolute; left: 50%; bottom: 0; transform: translateX(-50%)">
+      {{this.count}}
+    </div>
+  </AnimationContext>
+  <div style="padding: 12px 0px; display: flex; gap: 4px;">
+    <button type="button" {{on "click" this.increment}} style="border: 1px solid black; background: #eee;">
+      Increment
+    </button>
+    <button type="button" {{on "click" this.hide}} style="border: 1px solid black; background: #eee;">
+      Remove
+    </button>
+    <button type="button" {{on "click" this.show}} style="border: 1px solid black; background: #eee;">
+      Insert
+    </button>
+  </div>
+</div>
