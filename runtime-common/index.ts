@@ -33,8 +33,8 @@ export interface DirectoryEntryRelationship {
     kind: "directory" | "file";
   };
 }
-export const protocolRelativeBaseOrigin = "//cardstack.com";
-export const baseOrigin = `http:${protocolRelativeBaseOrigin}`;
+import { RealmPaths } from './paths';
+export const baseRealm = new RealmPaths("https://cardstack.com/base/");
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 
@@ -107,10 +107,12 @@ export function isCardJSON(json: any): json is CardJSON {
   return typeof module === "string" && typeof name === "string";
 }
 
-export { Realm, Kind } from "./realm";
-export {
+export { Realm } from "./realm";
+export type { Kind, RealmAdapter, FileRef } from "./realm";
+
+export type {
   CardResource,
   CardDocument,
-  isCardResource,
-  isCardDocument,
+  CardDefinition,
 } from "./search-index";
+export { isCardResource, isCardDocument } from "./search-index";

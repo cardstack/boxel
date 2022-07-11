@@ -43,7 +43,7 @@ module.exports = {
       // compiler and load it dynamically. We don't use that feature, so this
       // warning doesn't break for us.
       module:
-        /node_modules\/ember-template-imports\/lib\/preprocess-embedded-templates\.js$/,
+        /vendor\/ember-template-imports\/lib\/preprocess-embedded-templates\.js$/,
       message: /the request of a dependency is an expression/,
     },
   ],

@@ -23,7 +23,7 @@
     "paths": {
       "runtime-spike/tests/*": ["host/tests/*"],
       "runtime-spike/*": ["host/app/*"],
-      "//cardstack.com/base/*": ["host/app/lib/*"],
+      "https://cardstack.com/base/*": ["host/app/lib/*"],
       "//local-realm/*": ["cards/*"],
       "cards": ["cards/*"],
       "*": ["host/types/*"],

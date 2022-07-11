@@ -5,9 +5,16 @@
   "main": "index.js",
   "dependencies": {
     "@babel/core": "^7.17.8",
-    "@babel/traverse": "^7.17.9",
+    "@babel/plugin-proposal-class-properties": "^7.16.7",
+    "@babel/plugin-proposal-decorators": "^7.17.9",
     "@babel/plugin-syntax-class-properties": "^7.12.13",
     "@babel/plugin-syntax-decorators": "^7.17.12",
-    "@babel/plugin-syntax-typescript": "^7.17.12"
+    "@babel/plugin-syntax-typescript": "^7.17.12",
+    "@babel/plugin-transform-typescript": "^7.16.8",
+    "@babel/traverse": "^7.17.9",
+    "@cardstack/ember-template-imports": "2.0.1",
+    "@types/babel__core": "^7.1.19",
+    "@types/babel__traverse": "^7.14.2",
+    "ember-source": "~4.2.0"
   }
 }

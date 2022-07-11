@@ -8,9 +8,9 @@ import {
   ExternalReference,
 } from "./schema-analysis-plugin";
 
-export { ClassReference, ExternalReference };
+export type { ClassReference, ExternalReference };
 
-import { parseTemplates } from "./vendor/ember-template-imports/parse-templates";
+import { parseTemplates } from "@cardstack/ember-template-imports/lib/parse-templates";
 
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from "@babel/plugin-syntax-decorators";

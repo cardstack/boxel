@@ -5,18 +5,16 @@ import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { tracked, cached } from '@glimmer/tracking';
 import LocalRealm from '../services/local-realm';
-import SchemaInspector from './schema-inspector';
 import CardEditor, { ExistingCardArgs } from './card-editor';
 import ImportModule from './import-module';
 import FileTree from './file-tree';
-import { CardInspector } from '../lib/schema-util';
 import { Format } from '../lib/card-api';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,
   languageConfigs
 } from '../utils/editor-language';
-import { externalsMap, isCardJSON } from '@cardstack/runtime-common';
+import { isCardJSON } from '@cardstack/runtime-common';
 import type { FileResource } from '../resources/file';
 
 interface Signature {
@@ -41,22 +39,9 @@ export default class Go extends Component<Signature> {
                       contentChanged=this.contentChanged}}></div>
         <div class="preview">
           {{#if (isRunnable this.openFile.name)}}
-            <ImportModule @url={{localRealmURL this.openFile.path}}>
-              <:ready as |module|>
-                <SchemaInspector
-                  @url={{localRealmURL this.openFile.path}}
-                  @module={{module}}
-                  @src={{this.openFile.content}}
-                  @inspector={{this.inspector}}
-                />
-              </:ready>
-              <:error as |error|>
-                <h2>Encountered {{error.type}} error</h2>
-                <pre>{{error.message}}</pre>
-              </:error>
-            </ImportModule>
+            Schema inspector goes here
           {{else if this.openFileCardJSON}}
-            <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module (localRealmURL this.openFile.path)}} >
+            <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module this.openFile.url}} >
               <:ready as |module|>
                 <CardEditor
                   @module={{module}}
@@ -80,17 +65,6 @@ export default class Go extends Component<Signature> {
 
   @service declare localRealm: LocalRealm;
   @tracked jsonError: string | undefined;
-  private inspector = new CardInspector({
-    async resolveModule(specifier: string, currentPath: string) {
-      if (externalsMap.has(specifier)) {
-        specifier = `http://externals/${specifier}`;
-      } else {
-        let url = new URL(specifier, currentPath);
-        specifier = url.href;
-      }
-      return await import(/* webpackIgnore: true */ specifier);
-    },
-  });
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -150,10 +124,6 @@ export default class Go extends Component<Signature> {
 
 function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
-}
-
-function localRealmURL(path: string): string {
-  return `http://local-realm${path}`;
 }
 
 function relativeFrom(url: string, base: string): string {

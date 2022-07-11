@@ -47,6 +47,7 @@ export default class Application extends Route<Model> {
     }
     if (response.url !== url) {
       this.router.transitionTo('application', {
+        // TODO: pathname is wrong here. It's not the same as Realm#localPath.
         queryParams: { path: new URL(response.url).pathname },
       });
     } else {

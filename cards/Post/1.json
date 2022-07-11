@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "author": {
-        "firstName": "A2",
+        "firstName": "a3",
         "lastName": "F"
       },
       "title": "The title",
@@ -13,7 +13,11 @@
       "adoptsFrom": {
         "module": "http://local-realm/post.gts",
         "name": "Post"
-      }
+      },
+      "lastModified": 1657122628758
+    },
+    "links": {
+      "self": "http://local-realm/Post/1"
     }
   }
 }

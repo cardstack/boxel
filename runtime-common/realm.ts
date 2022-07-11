@@ -6,75 +6,89 @@ import {
   CardDocument,
   isCardDocument,
 } from "./search-index";
+import { RealmPaths, LocalPath } from "./paths";
 import {
   systemError,
   notFound,
   methodNotAllowed,
   badRequest,
-  WorkerError,
+  CardError,
 } from "@cardstack/runtime-common/error";
 import { formatRFC7231 } from "date-fns";
 import {
   isCardJSON,
   ResourceObjectWithId,
   DirectoryEntryRelationship,
-} from ".";
+  executableExtensions,
+} from "./index";
 import merge from "lodash/merge";
 import { parse, stringify } from "qs";
 
-export abstract class Realm {
+import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
+import * as babel from "@babel/core";
+import makeEmberTemplatePlugin from "babel-plugin-ember-template-compilation";
+import * as etc from "ember-source/dist/ember-template-compiler";
+import { externalsPlugin } from "./externals";
+import glimmerTemplatePlugin from "@cardstack/ember-template-imports/src/babel-plugin";
+import decoratorsProposalPlugin from "@babel/plugin-proposal-decorators";
+import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properties";
+import typescriptPlugin from "@babel/plugin-transform-typescript";
+
+export interface FileRef {
+  path: LocalPath;
+  content: ReadableStream<Uint8Array> | Uint8Array | string;
+  lastModified: number;
+}
+
+export interface RealmAdapter {
+  readdir(
+    path: LocalPath,
+    opts?: { create?: true }
+  ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void>;
+
+  openFile(path: LocalPath): Promise<FileRef | undefined>;
+
+  write(path: string, contents: string): Promise<{ lastModified: number }>;
+}
+
+export class Realm {
   #startedUp = new Deferred<void>();
-  #searchIndex = new SearchIndex(
-    this,
-    this.readdir.bind(this),
-    this.readFileAsText.bind(this)
-  );
+  #searchIndex: SearchIndex;
+  #adapter: RealmAdapter;
+  #paths: RealmPaths;
 
-  readonly url: string;
-
-  constructor(url: string) {
-    this.url = url.replace(/\/$/, "") + "/";
-    this.#startedUp.fulfill((() => this.#startup())());
+  get url(): string {
+    return this.#paths.url;
   }
 
-  protected abstract readdir(
-    path: string,
-    opts?: { create?: true }
-  ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
+  constructor(url: string, adapter: RealmAdapter) {
+    this.#paths = new RealmPaths(url);
+    this.#startedUp.fulfill((() => this.#startup())());
+    this.#adapter = adapter;
+    this.#searchIndex = new SearchIndex(
+      this,
+      this.#paths,
+      this.#adapter.readdir.bind(this.#adapter),
+      this.readFileAsText.bind(this)
+    );
+  }
 
-  protected abstract openFile(
-    path: string
-  ): Promise<ReadableStream<Uint8Array> | Uint8Array | string>;
-
-  protected abstract statFile(
-    path: string
-  ): Promise<{ lastModified: number } | undefined>;
-
-  protected async write(
-    path: string,
+  async write(
+    path: LocalPath,
     contents: string
   ): Promise<{ lastModified: number }> {
-    let results = await this.doWrite(path, contents);
+    let results = await this.#adapter.write(path, contents);
     await this.#searchIndex.update(new URL(path, this.url));
 
     return results;
   }
 
-  protected abstract doWrite(
-    path: string,
-    contents: string
-  ): Promise<{ lastModified: number }>;
-
-  protected get searchIndex() {
+  get searchIndex() {
     return this.#searchIndex;
   }
 
   async #startup() {
-    // Wait a microtask because our derived class will still be inside its
-    // super() call to us and we don't want to start pulling on their "this" too
-    // early.
     await Promise.resolve();
-
     await this.#searchIndex.run();
   }
 
@@ -82,19 +96,162 @@ export abstract class Realm {
     return this.#startedUp.promise;
   }
 
-  // TODO refactor to get as much implementation in this base class as possible.
-  // currently there is a bunch of stuff relying on fs--so break that down to use
-  // the search index instead
-  abstract handle(request: Request): Promise<Response>;
-
-  protected async handleJSONAPI(request: Request): Promise<Response> {
+  async handle(request: Request): Promise<Response> {
     let url = new URL(request.url);
+    if (request.headers.get("Accept")?.includes("application/vnd.api+json")) {
+      await this.ready;
+      if (!this.searchIndex) {
+        return systemError("search index is not available");
+      }
+      return await this.handleJSONAPI(request);
+    } else if (
+      request.headers.get("Accept")?.includes("application/vnd.card+source")
+    ) {
+      return this.handleCardSource(request, url);
+    }
+
+    let maybeHandle = await this.getFileWithFallbacks(this.#paths.local(url));
+
+    if (!maybeHandle) {
+      return notFound(request, `${request.url} not found`);
+    }
+
+    let handle = maybeHandle;
+
+    if (
+      executableExtensions.some((extension) => handle.path.endsWith(extension))
+    ) {
+      return await this.makeJS(
+        await this.fileContentToText(handle),
+        handle.path
+      );
+    } else {
+      return await this.serveLocalFile(handle);
+    }
+  }
+
+  private async serveLocalFile(ref: FileRef): Promise<Response> {
+    return new Response(ref.content, {
+      headers: {
+        "Last-Modified": formatRFC7231(ref.lastModified),
+      },
+    });
+  }
+
+  private async handleCardSource(
+    request: Request,
+    url: URL
+  ): Promise<Response> {
+    if (request.method === "POST") {
+      let { lastModified } = await this.write(
+        this.#paths.local(new URL(request.url)),
+        await request.text()
+      );
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Last-Modified": formatRFC7231(lastModified),
+        },
+      });
+    }
+
+    let localName = this.#paths.local(url);
+
+    let handle = await this.getFileWithFallbacks(localName);
+
+    if (!handle) {
+      return notFound(request, `${localName} not found`);
+    }
+
+    if (handle.path !== localName) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: `/${handle.path}`,
+        },
+      });
+    }
+    return await this.serveLocalFile(handle);
+  }
+
+  private async makeJS(
+    content: string,
+    debugFilename: string
+  ): Promise<Response> {
+    try {
+      content = preprocessEmbeddedTemplates(content, {
+        relativePath: debugFilename,
+        getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
+        templateTag: "template",
+        templateTagReplacement: "__GLIMMER_TEMPLATE",
+        includeSourceMaps: true,
+        includeTemplateTokens: true,
+      }).output;
+      content = babel.transformSync(content, {
+        filename: debugFilename,
+        plugins: [
+          glimmerTemplatePlugin,
+          typescriptPlugin,
+          [decoratorsProposalPlugin, { legacy: true }],
+          classPropertiesProposalPlugin,
+          // this "as any" is because typescript is using the Node-specific types
+          // from babel-plugin-ember-template-compilation, but we're using the
+          // browser interface
+          (makeEmberTemplatePlugin as any)(() => etc.precompile),
+          externalsPlugin,
+        ],
+      })!.code!;
+    } catch (err: any) {
+      Promise.resolve().then(() => {
+        throw err;
+      });
+      return new Response(err.message, {
+        // using "Not Acceptable" here because no text/javascript representation
+        // can be made and we're sending text/html error page instead
+        status: 406,
+        headers: { "content-type": "text/html" },
+      });
+    }
+    return new Response(content, {
+      status: 200,
+      headers: {
+        "content-type": "text/javascript",
+      },
+    });
+  }
+
+  // we bother with this because typescript is picky about allowing you to use
+  // explicit file extensions in your source code
+  private async getFileWithFallbacks(
+    path: string
+  ): Promise<FileRef | undefined> {
+    // TODO refactor to use search index
+
+    let result = await this.#adapter.openFile(path);
+    if (result) {
+      return result;
+    }
+
+    for (let extension of executableExtensions) {
+      result = await this.#adapter.openFile(path + extension);
+      if (result) {
+        return result;
+      }
+    }
+    return undefined;
+  }
+
+  private async handleJSONAPI(request: Request): Promise<Response> {
+    let url = new URL(request.url);
+    let localPath = this.#paths.local(url);
+
     // create card data
     if (request.method === "POST") {
-      if (url.pathname.startsWith("_")) {
+      if (localPath.startsWith("_")) {
         return methodNotAllowed(request);
       }
-      if (url.pathname !== "/") {
+      // detecting top-level URL such that request.url === realm.url resulting in empty localPath
+      if (localPath !== "") {
         return notFound(request, `Can't POST to ${url.href}`);
       }
       let json = await request.json();
@@ -147,7 +304,7 @@ export abstract class Realm {
 
     // Update card data
     if (request.method === "PATCH") {
-      if (url.pathname.startsWith("_")) {
+      if (localPath.startsWith("_")) {
         return methodNotAllowed(request);
       }
 
@@ -166,9 +323,7 @@ export abstract class Realm {
 
       let card = merge({ data: original }, patch);
       delete (card as any).data.id; // don't write the ID to the file
-      let path = url.pathname.endsWith(".json")
-        ? url.pathname
-        : url.pathname + ".json";
+      let path = localPath.endsWith(".json") ? localPath : localPath + ".json";
       await this.write(path, JSON.stringify(card, null, 2));
       card.data.id = url.href.replace(/\.json$/, "");
       card.data.links = { self: url.href };
@@ -182,18 +337,18 @@ export abstract class Realm {
     }
 
     if (request.method === "GET") {
-      if (url.pathname === "/_cardsOf") {
+      if (localPath === "/_cardsOf") {
         return await this.getCardsOf(request);
       }
-      if (url.pathname === "/_typeOf") {
+      if (localPath === "/_typeOf") {
         return await this.getTypeOf(request);
       }
-      if (url.pathname === "/_search") {
+      if (localPath === "/_search") {
         return await this.search(request);
       }
 
       // Get directory listing
-      if (url.pathname.endsWith("/")) {
+      if (url.href.endsWith("/")) {
         let jsonapi = await this.getDirectoryListingAsJSONAPI(url);
         if (!jsonapi) {
           return notFound(request);
@@ -208,7 +363,12 @@ export abstract class Realm {
       if (data) {
         (data as any).links = { self: url.href };
         let card = { data };
-        await this.addLastModifiedToCardDoc(card, url.pathname + ".json");
+        // TODO: this is adding the wrong lastModified, because our data came
+        // from the search index and the lastModified is coming from the realm
+        // (i.e. the realm filesystem). Those two could differ. The lastModified
+        // time should already live inside the search index so they always
+        // match.
+        await this.addLastModifiedToCardDoc(card, localPath + ".json");
         return new Response(JSON.stringify(card, null, 2), {
           headers: {
             "Last-Modified": formatRFC7231(card.data.meta.lastModified!),
@@ -225,17 +385,25 @@ export abstract class Realm {
     );
   }
 
-  protected async readFileAsText(path: string): Promise<string> {
-    let result = await this.openFile(path);
-    if (typeof result === "string") {
-      return result;
+  // todo: I think we get rid of this
+  private async readFileAsText(path: LocalPath): Promise<string> {
+    let ref = await this.#adapter.openFile(path);
+    if (!ref) {
+      throw new Error("fixme todo");
+    }
+    return await this.fileContentToText(ref);
+  }
+
+  private async fileContentToText({ content }: FileRef): Promise<string> {
+    if (typeof content === "string") {
+      return content;
     }
     let decoder = new TextDecoder();
     let pieces: string[] = [];
-    if (result instanceof Uint8Array) {
-      pieces.push(decoder.decode(result));
+    if (content instanceof Uint8Array) {
+      pieces.push(decoder.decode(content));
     } else {
-      let reader = result.getReader();
+      let reader = content.getReader();
       while (true) {
         let { done, value } = await reader.read();
         if (done) {
@@ -443,10 +611,10 @@ export abstract class Realm {
     );
   }
 
-  private async addLastModifiedToCardDoc(card: CardDocument, path: string) {
-    let { lastModified } = (await this.statFile(path)) ?? {};
+  private async addLastModifiedToCardDoc(card: CardDocument, path: LocalPath) {
+    let { lastModified } = (await this.#adapter.openFile(path)) ?? {};
     if (!lastModified) {
-      throw new WorkerError(
+      throw new CardError(
         systemError(`no last modified date available for file ${path}`)
       );
     }

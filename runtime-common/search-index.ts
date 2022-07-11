@@ -1,13 +1,9 @@
-import {
-  Realm,
-  Kind,
-  executableExtensions,
-  baseOrigin,
-  protocolRelativeBaseOrigin,
-} from ".";
+import { executableExtensions, baseRealm } from ".";
+import { Kind, Realm } from "./realm";
+import { RealmPaths, LocalPath } from "./paths";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
-import ignore, { Ignore } from "ignore";
+// import ignore, { Ignore } from "ignore";
 
 export type CardRef =
   | {
@@ -114,7 +110,7 @@ export function isCardDocument(doc: any): doc is CardDocument {
 
 type Query = unknown;
 
-interface CardDefinition {
+export interface CardDefinition {
   id: CardRef;
   key: string; // this is used to help for JSON-API serialization
   super: CardRef | undefined; // base card has no super
@@ -192,27 +188,21 @@ export class SearchIndex {
   private directories = new URLMap<{ name: string; kind: Kind }[]>();
   private definitions = new Map<string, CardDefinition>();
   private exportedCardRefs = new Map<string, CardRef[]>();
-  private ignoreMap = new URLMap<Ignore>();
+  // private ignoreMap = new URLMap<Ignore>();
 
   constructor(
     private realm: Realm,
+    private realmPaths: RealmPaths,
     private readdir: (
       path: string
     ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
-    private readFileAsText: (path: string) => Promise<string>
+    private readFileAsText: (path: LocalPath) => Promise<string>
   ) {}
 
   async run() {
     let newDirectories = new URLMap<{ name: string; kind: Kind }[]>();
     await this.visitDirectory(new URL(this.realm.url), newDirectories);
     await this.semanticPhase(newDirectories);
-  }
-
-  private localPath(url: URL): string {
-    if (url.href.startsWith(this.realm.url)) {
-      return url.href.slice(this.realm.url.length);
-    }
-    throw new Error(`${url.href} does not belong to realm ${this.realm.url}`);
   }
 
   private async visitDirectory(
@@ -222,10 +212,12 @@ export class SearchIndex {
     // TODO we should be using ignore patterns for the current context so the
     // ignores are consistent with the index, i.e. don't use ignore file from a
     // previous search index run on a new search index
-    let ignorePatterns = await this.getIgnorePatterns(url);
-    if (ignorePatterns) {
-      this.ignoreMap.set(url, ignore().add(ignorePatterns));
-    }
+
+    // TODO: ignorePatterns
+    // let ignorePatterns = await this.getIgnorePatterns(url);
+    // if (ignorePatterns) {
+    //   this.ignoreMap.set(url, ignore().add(ignorePatterns));
+    // }
 
     let entries = directories.get(url);
     if (!entries) {
@@ -233,12 +225,12 @@ export class SearchIndex {
       directories.set(url, entries);
     }
     for await (let { path: innerPath, kind } of this.readdir(
-      this.localPath(url)
+      this.realmPaths.local(url)
     )) {
       let innerURL = new URL(innerPath, this.realm.url);
-      if (this.isIgnored(innerURL)) {
-        return;
-      }
+      // if (this.isIgnored(innerURL)) {
+      //   return;
+      // }
 
       let name = innerPath.split("/").pop()!;
       if (kind === "file") {
@@ -283,7 +275,9 @@ export class SearchIndex {
 
   private async visitFile(url: URL) {
     if (url.href.endsWith(".json")) {
-      let json = JSON.parse(await this.readFileAsText(this.localPath(url)));
+      let json = JSON.parse(
+        await this.readFileAsText(this.realmPaths.local(url))
+      );
       if (isCardDocument(json)) {
         let instanceURL = new URL(url.href.replace(/\.json$/, ""));
         json.data.id = instanceURL.href;
@@ -291,7 +285,7 @@ export class SearchIndex {
       }
     } else if (hasExecutableExtension(url.href)) {
       let mod = new ModuleSyntax(
-        await this.readFileAsText(this.localPath(url))
+        await this.readFileAsText(this.realmPaths.local(url))
       );
       this.modules.set(url, mod);
       this.modules.set(trimExecutableExtension(url), mod);
@@ -302,16 +296,16 @@ export class SearchIndex {
     directories?: URLMap<{ name: string; kind: Kind }[]>
   ): Promise<void> {
     let newDefinitions: Map<string, CardDefinition> = new Map();
-    for (let [path, mod] of this.modules) {
+    for (let [url, mod] of this.modules) {
       for (let possibleCard of mod.possibleCards) {
         if (possibleCard.exportedAs) {
           await this.buildDefinition(
             newDefinitions,
-            path,
+            url,
             mod,
             {
               type: "exportedCard",
-              module: path.href,
+              module: url.href,
               name: possibleCard.exportedAs,
             },
             possibleCard
@@ -431,7 +425,10 @@ export class SearchIndex {
           inner.possibleCard
         );
       } else {
-        return await this.getExternalCardDefinition(ref.module, ref.name);
+        return await this.getExternalCardDefinition(
+          new URL(ref.module, url),
+          ref.name
+        );
       }
     }
   }
@@ -466,72 +463,70 @@ export class SearchIndex {
     return { mod, possibleCard };
   }
 
-  private getExternalCardDefinition(
-    href: string,
+  private async getExternalCardDefinition(
+    moduleURL: URL,
     exportName: string
   ): Promise<CardDefinition | undefined> {
     // TODO This is scaffolding for the base realm, implement for real once we
     // have this realm endpoint fleshed out
-    let module = href.startsWith("http:") ? href : `http:${href}`;
-    let moduleURL = new URL(module);
-    if (moduleURL.origin !== baseOrigin) {
+    if (!baseRealm.inRealm(moduleURL)) {
       return Promise.resolve(undefined);
     }
-    let path = moduleURL.pathname;
+    let path = baseRealm.local(moduleURL);
     switch (path) {
-      case "/base/card-api":
+      case "card-api":
         return exportName === "Card"
-          ? Promise.resolve({
+          ? {
               id: {
                 type: "exportedCard",
-                module: href,
+                module: moduleURL.href,
                 name: exportName,
               },
-              key: `${baseOrigin}${path}/Card`,
+              key: `${baseRealm.fileURL(path)}/Card`,
               super: undefined,
               fields: new Map(),
-            })
-          : Promise.resolve(undefined);
-      case "/base/string":
-      case "/base/integer":
-      case "/base/date":
-      case "/base/datetime":
+            }
+          : undefined;
+      case "string":
+      case "integer":
+      case "date":
+      case "datetime":
         return exportName === "default"
-          ? Promise.resolve({
+          ? {
               id: {
                 type: "exportedCard",
-                module: href,
+                module: moduleURL.href,
                 name: exportName,
               },
               super: {
                 type: "exportedCard",
-                module: `${baseOrigin}/base/card-api`,
+                module: baseRealm.fileURL("card-api").href,
                 name: "Card",
               },
-              key: `${baseOrigin}${path}/default`,
+              key: `${baseRealm.fileURL(path)}/default`,
               fields: new Map(),
-            })
-          : Promise.resolve(undefined);
-      case "/base/text-area":
+            }
+          : undefined;
+      case "text-area":
         return exportName === "default"
           ? Promise.resolve({
               id: {
                 type: "exportedCard",
-                module: href,
+                module: moduleURL.href,
                 name: exportName,
               },
               super: {
                 type: "exportedCard",
-                module: `${baseOrigin}/base/string`,
+                module: baseRealm.fileURL("string").href,
                 name: "default",
               },
-              key: `${baseOrigin}${path}/default`,
+              key: `${baseRealm.fileURL(path)}/default`,
               fields: new Map(),
             })
-          : Promise.resolve(undefined);
+          : undefined;
     }
     throw new Error(
-      `unimplemented: don't know how to look up card types for ${href}`
+      `unimplemented: don't know how to look up card types for ${moduleURL.href}`
     );
   }
 
@@ -569,49 +564,48 @@ export class SearchIndex {
     return this.modules.get(url)?.src;
   }
 
-  private async getIgnorePatterns(url: URL): Promise<string | undefined> {
-    try {
-      return await this.readFileAsText(new URL(".monacoignore", url).pathname);
-    } catch (e: any) {
-      if (e.name !== "NotFoundError" && e.name !== "TypeMismatchError") {
-        throw e;
-      }
-      try {
-        return await this.readFileAsText(new URL(".gitignore", url).pathname);
-      } catch (e: any) {
-        if (e.name !== "NotFoundError" && e.name !== "TypeMismatchError") {
-          throw e;
-        }
-      }
-    }
-    return undefined;
-  }
+  // private async getIgnorePatterns(url: URL): Promise<string | undefined> {
+  //   try {
+  //     return await this.readFileAsText(new URL(".monacoignore", url).pathname);
+  //   } catch (e: any) {
+  //     if (e.name !== "NotFoundError" && e.name !== "TypeMismatchError") {
+  //       throw e;
+  //     }
+  //     try {
+  //       return await this.readFileAsText(new URL(".gitignore", url).pathname);
+  //     } catch (e: any) {
+  //       if (e.name !== "NotFoundError" && e.name !== "TypeMismatchError") {
+  //         throw e;
+  //       }
+  //     }
+  //   }
+  //   return undefined;
+  // }
 
-  private isIgnored(url: URL): boolean {
-    if (this.ignoreMap.size === 0) {
-      return false;
-    }
-    // Test URL against closest ignore. (Should the ignores cascade? so that the
-    // child ignore extends the parent ignore?)
-    let ignoreURLs = [...this.ignoreMap.keys()].map((u) => u.href);
-    let matchingIgnores = ignoreURLs.filter((u) => url.href.includes(u));
-    let ignoreURL = matchingIgnores.sort((a, b) => b.length - a.length)[0] as
-      | string
-      | undefined;
-    if (!ignoreURL) {
-      return false;
-    }
+  // private isIgnored(url: URL): boolean {
+  //   if (this.ignoreMap.size === 0) {
+  //     return false;
+  //   }
+  //   // Test URL against closest ignore. (Should the ignores cascade? so that the
+  //   // child ignore extends the parent ignore?)
+  //   let ignoreURLs = [...this.ignoreMap.keys()].map((u) => u.href);
+  //   let matchingIgnores = ignoreURLs.filter((u) => url.href.includes(u));
+  //   let ignoreURL = matchingIgnores.sort((a, b) => b.length - a.length)[0] as
+  //     | string
+  //     | undefined;
+  //   if (!ignoreURL) {
+  //     return false;
+  //   }
 
-    let ignore = this.ignoreMap.get(new URL(ignoreURL))!;
-    return ignore.test(url.pathname).ignored;
-  }
+  //   let ignore = this.ignoreMap.get(new URL(ignoreURL))!;
+  //   return ignore.test(url.pathname).ignored;
+  // }
 }
 
 function isOurFieldDecorator(ref: ClassReference, inModule: URL): boolean {
   return (
     ref.type === "external" &&
-    new URL(ref.module, inModule).href ===
-      new URL(`${protocolRelativeBaseOrigin}/base/card-api`, inModule).href &&
+    new URL(ref.module, inModule).href === baseRealm.fileURL("card-api").href &&
     ref.name === "field"
   );
 }
@@ -622,8 +616,7 @@ function getFieldType(
 ): "contains" | "containsMany" | undefined {
   if (
     ref.type === "external" &&
-    new URL(ref.module, inModule).href ===
-      new URL(`${protocolRelativeBaseOrigin}/base/card-api`, inModule).href &&
+    new URL(ref.module, inModule).href === baseRealm.fileURL("card-api").href &&
     ["contains", "containsMany"].includes(ref.name)
   ) {
     return ref.name as ReturnType<typeof getFieldType>;

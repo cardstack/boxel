@@ -16,13 +16,11 @@ interface Args {
 export type FileResource =
   | {
       state: 'server-error';
-      path: string;
       url: string;
       loading: TaskInstance<void> | null;
     }
   | {
       state: 'not-found';
-      path: string;
       url: string;
       loading: TaskInstance<void> | null;
     }
@@ -30,7 +28,6 @@ export type FileResource =
       state: 'ready';
       content: string;
       name: string;
-      path: string;
       url: string;
       loading: TaskInstance<void> | null;
       write(content: string): void;
@@ -65,12 +62,8 @@ class _FileResource extends Resource<Args> {
     return this._url;
   }
 
-  get path() {
-    return new URL(this._url).pathname;
-  }
-
   get name() {
-    return this.path.split('/').pop()!;
+    return this._url.split('/').pop()!;
   }
 
   get loading() {

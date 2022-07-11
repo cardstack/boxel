@@ -78,6 +78,8 @@ async function getEntries(url: string): Promise<Entry[]> {
     ([name, info]: [string, DirectoryEntryRelationship]) => ({
       name,
       kind: info.meta.kind,
+      // TODO: these uses of pathname are probably wrong. The local path to a
+      // file in a realm is not really always the pathname.
       path: new URL(info.links.related).pathname,
       indent:
         new URL(info.links.related).pathname.replace(/\/$/, '').split('/')

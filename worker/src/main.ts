@@ -2,6 +2,7 @@ import { FetchHandler } from './fetch';
 import { LivenessWatcher } from './liveness';
 import { MessageHandler } from './message-handler';
 import { LocalRealm } from './local-realm';
+import { Realm } from '@cardstack/runtime-common';
 
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
@@ -21,7 +22,9 @@ livenessWatcher.registerShutdownListener(async () => {
     if (!messageHandler.fs) {
       throw new Error(`could not get FileSystem`);
     }
-    fetchHandler.addRealm(new LocalRealm(messageHandler.fs));
+    fetchHandler.addRealm(
+      new Realm('http://local-realm/', new LocalRealm(messageHandler.fs))
+    );
   } catch (err) {
     console.log(err);
   }

@@ -1,6 +1,6 @@
-import { contains, field, Component, Card } from '//cardstack.com/base/card-api';
-import StringCard from '//cardstack.com/base/string';
-import TextAreaCard from '//cardstack.com/base/text-area';
+import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
+import StringCard from 'https://cardstack.com/base/string';
+import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
 import lodash from '//cdn.skypack.dev/lodash';
 

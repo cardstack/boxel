@@ -1,10 +1,10 @@
-export class WorkerError extends Error {
+export class CardError extends Error {
   constructor(readonly response: Response) {
     super(`WorkerError ${response.status}`);
   }
 
   static withResponse(response: Response) {
-    return new WorkerError(response);
+    return new CardError(response);
   }
 }
 
