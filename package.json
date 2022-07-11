@@ -16,7 +16,7 @@
     "yarn": "1.22.18"
   },
   "devDependencies": {
-    "@glint/core": "^0.8.0",
+    "@glint/core": "^0.9.1",
     "@glint/environment-ember-loose": "^0.8.0",
     "ember-cli-htmlbars": "^6.0.1",
     "ember-template-imports": "^2.0.1",
