@@ -1616,7 +1616,7 @@
     minimatch "^3.0.4"
     strip-json-comments "^3.1.1"
 
-"@glimmer/component@^1.0.3", "@glimmer/component@^1.1.0":
+"@glimmer/component@^1.0.3", "@glimmer/component@^1.1.0", "@glimmer/component@^1.1.2":
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/@glimmer/component/-/component-1.1.2.tgz#892ec0c9f0b6b3e41c112be502fde073cf24d17c"
   integrity sha512-XyAsEEa4kWOPy+gIdMjJ8XlzA3qrGH55ZDv6nA16ibalCR17k74BI0CztxuRds+Rm6CtbUVgheCVlcCULuqD7A==
@@ -1686,6 +1686,13 @@
   version "0.83.1"
   resolved "https://registry.yarnpkg.com/@glimmer/interfaces/-/interfaces-0.83.1.tgz#fb16f5f683ddc55f130887b6141f58c0751350fe"
   integrity sha512-rjAztghzX97v8I4rk3+NguM3XGYcFjc/GbJ8qrEj19KF2lUDoDBW1sB7f0tov3BD5HlrGXei/vOh4+DHfjeB5w==
+  dependencies:
+    "@simple-dom/interface" "^1.4.0"
+
+"@glimmer/interfaces@0.84.2":
+  version "0.84.2"
+  resolved "https://registry.yarnpkg.com/@glimmer/interfaces/-/interfaces-0.84.2.tgz#764cf92c954adcd1a851e5dc68ec1f6b654dc3bd"
+  integrity sha512-tMZxQpOddUVmHEOuripkNqVR7ba0K4doiYnFd4WyswqoHPlxqpBujbIamQ+bWCWEF0U4yxsXKa31ekS/JHkiBQ==
   dependencies:
     "@simple-dom/interface" "^1.4.0"
 
@@ -1790,6 +1797,16 @@
     "@handlebars/parser" "~2.0.0"
     simple-html-tokenizer "^0.5.11"
 
+"@glimmer/syntax@^0.84.2":
+  version "0.84.2"
+  resolved "https://registry.yarnpkg.com/@glimmer/syntax/-/syntax-0.84.2.tgz#a3f65e51eec20f6adb79c6159d1ad1166fa5bccd"
+  integrity sha512-SPBd1tpIR9XeaXsXsMRCnKz63eLnIZ0d5G9QC4zIBFBC3pQdtG0F5kWeuRVCdfTIFuR+5WBMfk5jvg+3gbQhjg==
+  dependencies:
+    "@glimmer/interfaces" "0.84.2"
+    "@glimmer/util" "0.84.2"
+    "@handlebars/parser" "~2.0.0"
+    simple-html-tokenizer "^0.5.11"
+
 "@glimmer/tracking@^1.0.0", "@glimmer/tracking@^1.0.3", "@glimmer/tracking@^1.0.4":
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/@glimmer/tracking/-/tracking-1.1.2.tgz#74e71be07b0a7066518d24044d2665d0cf8281eb"
@@ -1823,6 +1840,15 @@
   dependencies:
     "@glimmer/env" "0.1.7"
     "@glimmer/interfaces" "0.83.1"
+    "@simple-dom/interface" "^1.4.0"
+
+"@glimmer/util@0.84.2":
+  version "0.84.2"
+  resolved "https://registry.yarnpkg.com/@glimmer/util/-/util-0.84.2.tgz#2711ba40f25f44b2ea309cad49f5c2622c6211bc"
+  integrity sha512-VbhzE2s4rmU+qJF3gGBTL1IDjq+/G2Th51XErS8MQVMCmE4CU2pdwSzec8PyOowqCGUOrVIWuMzEI6VoPM4L4w==
+  dependencies:
+    "@glimmer/env" "0.1.7"
+    "@glimmer/interfaces" "0.84.2"
     "@simple-dom/interface" "^1.4.0"
 
 "@glimmer/util@^0.42.2":
@@ -1897,6 +1923,16 @@
     resolve "^1.17.0"
     silent-error "^1.1.1"
 
+"@glint/config@^0.9.1":
+  version "0.9.1"
+  resolved "https://registry.yarnpkg.com/@glint/config/-/config-0.9.1.tgz#0dbce8d03eb7baeef1bfcdef274793a342e16ae4"
+  integrity sha512-ULMxg2gsJBpdF66jb/neOiQU47H84196wryP/VkVxfmBQCmXWMebCfgggMyqAWfYnKOwcxfZLnmH06WVHwfsAw==
+  dependencies:
+    escape-string-regexp "^4.0.0"
+    minimatch "^3.0.4"
+    resolve "^1.17.0"
+    silent-error "^1.1.1"
+
 "@glint/core@^0.8.0":
   version "0.8.0"
   resolved "https://registry.yarnpkg.com/@glint/core/-/core-0.8.0.tgz#c46743d25b3bfb9901dc1dfc5f441969d3092a9a"
@@ -1911,6 +1947,20 @@
     vscode-uri "^3.0.2"
     yargs "^15.3.1"
 
+"@glint/core@^0.9.1":
+  version "0.9.1"
+  resolved "https://registry.yarnpkg.com/@glint/core/-/core-0.9.1.tgz#2ce3da6c3d678966c4eb595a1e99cac1c3ef1576"
+  integrity sha512-JC7WPyTKlNHp1d8IVNd8hvk5AEqQxLBo6TjaR+RloA3BLgydD3tOeZ/w/aMaN1daPUhSP37ZxhvnKWIiCP5AEQ==
+  dependencies:
+    "@glint/config" "^0.9.1"
+    "@glint/transform" "^0.9.1"
+    resolve "^1.17.0"
+    uuid "^8.3.2"
+    vscode-languageserver "^8.0.1"
+    vscode-languageserver-textdocument "^1.0.5"
+    vscode-uri "^3.0.2"
+    yargs "^15.3.1"
+
 "@glint/environment-ember-loose@^0.8.0":
   version "0.8.0"
   resolved "https://registry.yarnpkg.com/@glint/environment-ember-loose/-/environment-ember-loose-0.8.0.tgz#e483f799e979fbda28977bdcff361000f85a520d"
@@ -1919,10 +1969,30 @@
     "@glint/config" "^0.8.0"
     "@glint/template" "^0.8.0"
 
+"@glint/environment-ember-loose@^0.9.1":
+  version "0.9.1"
+  resolved "https://registry.yarnpkg.com/@glint/environment-ember-loose/-/environment-ember-loose-0.9.1.tgz#e34cd5709c5f4024612ef2ed24063ea31878ec64"
+  integrity sha512-/EtLfzdxn5axad4lJmf4V1HuDthb18a52/9nIzHmHDbcTzY+TiHOihCz5Nt8aHOFdQdavSDZ84GEu95WLp7TKw==
+  dependencies:
+    "@glint/config" "^0.9.1"
+    "@glint/template" "^0.9.1"
+
+"@glint/environment-ember-template-imports@^0.9.1":
+  version "0.9.1"
+  resolved "https://registry.yarnpkg.com/@glint/environment-ember-template-imports/-/environment-ember-template-imports-0.9.1.tgz#64dbb3cae05e1a061f38d1ae21fffe58b4bad023"
+  integrity sha512-pOfjzY76vJl3/UajKYDzcOKGJUPOuTxNK2kup/6mj6gGV79wxHSJErtPc6eGlxCh9Y7/HUpASZlsvX3QHMUbVg==
+  dependencies:
+    "@glint/template" "^0.9.1"
+
 "@glint/template@^0.8.0":
   version "0.8.0"
   resolved "https://registry.yarnpkg.com/@glint/template/-/template-0.8.0.tgz#30a38a402b68650154468aa4c724bc3956414f92"
   integrity sha512-q+e71UAe9z5641kGD0dPuc4hghd0ltN/bsiK2U6eZ7o556SDmWCZ3lT8+XkwcTakVDn6Mb4jemwgizb4mqjkaw==
+
+"@glint/template@^0.9.1":
+  version "0.9.1"
+  resolved "https://registry.yarnpkg.com/@glint/template/-/template-0.9.1.tgz#da1cfb97997f52e41eb0869b6d9aaea1d39f35c0"
+  integrity sha512-3Yfx5rgcR8LYRDiCtGI57JwFtyMJvdTH68+ROXopr3NBLTqdXuZEau1NojrveKBmh5NEZfDp6C/RP8UWuhd6nw==
 
 "@glint/transform@^0.8.0":
   version "0.8.0"
@@ -1931,6 +2001,14 @@
   dependencies:
     "@glimmer/syntax" "^0.68.1"
     "@glint/config" "^0.8.0"
+
+"@glint/transform@^0.9.1":
+  version "0.9.1"
+  resolved "https://registry.yarnpkg.com/@glint/transform/-/transform-0.9.1.tgz#971997d3aa7a5ef6adcd4d7e54240c82291eacc5"
+  integrity sha512-6mcv1HdN3Pc1BLruOdSyT4oVKucJV1psyIq5zZ/XBR2VLvnuBYw36aRAy2AJAT4xJDyahmg+v+w5V9uRYqxzjg==
+  dependencies:
+    "@glimmer/syntax" "^0.84.2"
+    "@glint/config" "^0.9.1"
 
 "@handlebars/parser@^1.1.0":
   version "1.1.0"
@@ -6786,7 +6864,7 @@ ember-cli-htmlbars@^5.7.1:
     strip-bom "^4.0.0"
     walk-sync "^2.2.0"
 
-ember-cli-htmlbars@^6.0.0:
+ember-cli-htmlbars@^6.0.0, ember-cli-htmlbars@^6.1.0:
   version "6.1.0"
   resolved "https://registry.yarnpkg.com/ember-cli-htmlbars/-/ember-cli-htmlbars-6.1.0.tgz#97150c2a6f9a981475599d74817df66f5d816c2b"
   integrity sha512-kT+MA2JsNLk10HpxAjpB5HHtR0WCoxZEUwLsy/BBww5lXmsrf34QzmTw7SL6DabZVxs+YCb9RhU9KTmFygGxCg==
@@ -7513,6 +7591,21 @@ ember-template-imports@^2.0.1:
   version "2.0.1"
   resolved "https://registry.yarnpkg.com/ember-template-imports/-/ember-template-imports-2.0.1.tgz#942fbda0ae9a806eb2f83ebd61743704c4c66d90"
   integrity sha512-2J0p3NU1hyP9VW6FX7/IAQtJPP0jDg/4zS3E2aYGND7uzuFbGJRgz9Ifze7yKkgWd7EAGnCjDQYCm5jTLu8Fvg==
+  dependencies:
+    babel-import-util "^0.2.0"
+    broccoli-stew "^3.0.0"
+    ember-cli-babel-plugin-helpers "^1.1.1"
+    ember-cli-version-checker "^5.1.2"
+    line-column "^1.0.2"
+    magic-string "^0.25.7"
+    parse-static-imports "^1.1.0"
+    string.prototype.matchall "^4.0.6"
+    validate-peer-dependencies "^1.1.0"
+
+ember-template-imports@^3.0.1:
+  version "3.0.1"
+  resolved "https://registry.yarnpkg.com/ember-template-imports/-/ember-template-imports-3.0.1.tgz#2f5c75bdc2c90e737861468a4cbd360a1f6c0d56"
+  integrity sha512-gkoa7t24YZtCx5KkjDMLMe3trIdvoRwW4z08PFCwsaKdq7YTAk3ggzEzif4prNI1gojVHKw3qTEQF08iv7VsNA==
   dependencies:
     babel-import-util "^0.2.0"
     broccoli-stew "^3.0.0"
@@ -15569,6 +15662,11 @@ vscode-jsonrpc@6.0.0:
   resolved "https://registry.yarnpkg.com/vscode-jsonrpc/-/vscode-jsonrpc-6.0.0.tgz#108bdb09b4400705176b957ceca9e0880e9b6d4e"
   integrity sha512-wnJA4BnEjOSyFMvjZdpiOwhSq9uDoK8e/kpRJDTaMYzwlkrhG1fwDIZI94CLsLzlCK5cIbMMtFlJlfR57Lavmg==
 
+vscode-jsonrpc@8.0.1:
+  version "8.0.1"
+  resolved "https://registry.yarnpkg.com/vscode-jsonrpc/-/vscode-jsonrpc-8.0.1.tgz#f30b0625ebafa0fb3bc53e934ca47b706445e57e"
+  integrity sha512-N/WKvghIajmEvXpatSzvTvOIz61ZSmOSa4BRA4pTLi+1+jozquQKP/MkaylP9iB68k73Oua1feLQvH3xQuigiQ==
+
 vscode-languageserver-protocol@3.16.0:
   version "3.16.0"
   resolved "https://registry.yarnpkg.com/vscode-languageserver-protocol/-/vscode-languageserver-protocol-3.16.0.tgz#34135b61a9091db972188a07d337406a3cdbe821"
@@ -15577,15 +15675,33 @@ vscode-languageserver-protocol@3.16.0:
     vscode-jsonrpc "6.0.0"
     vscode-languageserver-types "3.16.0"
 
+vscode-languageserver-protocol@3.17.1:
+  version "3.17.1"
+  resolved "https://registry.yarnpkg.com/vscode-languageserver-protocol/-/vscode-languageserver-protocol-3.17.1.tgz#e801762c304f740208b6c804a0cf21f2c87509ed"
+  integrity sha512-BNlAYgQoYwlSgDLJhSG+DeA8G1JyECqRzM2YO6tMmMji3Ad9Mw6AW7vnZMti90qlAKb0LqAlJfSVGEdqMMNzKg==
+  dependencies:
+    vscode-jsonrpc "8.0.1"
+    vscode-languageserver-types "3.17.1"
+
 vscode-languageserver-textdocument@^1.0.1:
   version "1.0.4"
   resolved "https://registry.yarnpkg.com/vscode-languageserver-textdocument/-/vscode-languageserver-textdocument-1.0.4.tgz#3cd56dd14cec1d09e86c4bb04b09a246cb3df157"
   integrity sha512-/xhqXP/2A2RSs+J8JNXpiiNVvvNM0oTosNVmQnunlKvq9o4mupHOBAnnzH0lwIPKazXKvAKsVp1kr+H/K4lgoQ==
 
+vscode-languageserver-textdocument@^1.0.5:
+  version "1.0.5"
+  resolved "https://registry.yarnpkg.com/vscode-languageserver-textdocument/-/vscode-languageserver-textdocument-1.0.5.tgz#838769940ece626176ec5d5a2aa2d0aa69f5095c"
+  integrity sha512-1ah7zyQjKBudnMiHbZmxz5bYNM9KKZYz+5VQLj+yr8l+9w3g+WAhCkUkWbhMEdC5u0ub4Ndiye/fDyS8ghIKQg==
+
 vscode-languageserver-types@3.16.0:
   version "3.16.0"
   resolved "https://registry.yarnpkg.com/vscode-languageserver-types/-/vscode-languageserver-types-3.16.0.tgz#ecf393fc121ec6974b2da3efb3155644c514e247"
   integrity sha512-k8luDIWJWyenLc5ToFQQMaSrqCHiLwyKPHKPQZ5zz21vM+vIVUSvsRpcbiECH4WR88K2XZqc4ScRcZ7nk/jbeA==
+
+vscode-languageserver-types@3.17.1:
+  version "3.17.1"
+  resolved "https://registry.yarnpkg.com/vscode-languageserver-types/-/vscode-languageserver-types-3.17.1.tgz#c2d87fa7784f8cac389deb3ff1e2d9a7bef07e16"
+  integrity sha512-K3HqVRPElLZVVPtMeKlsyL9aK0GxGQpvtAUTfX4k7+iJ4mc1M+JM+zQwkgGy2LzY0f0IAafe8MKqIkJrxfGGjQ==
 
 vscode-languageserver@^7.0.0:
   version "7.0.0"
@@ -15593,6 +15709,13 @@ vscode-languageserver@^7.0.0:
   integrity sha512-60HTx5ID+fLRcgdHfmz0LDZAXYEV68fzwG0JWwEPBode9NuMYTIxuYXPg4ngO8i8+Ou0lM7y6GzaYWbiDL0drw==
   dependencies:
     vscode-languageserver-protocol "3.16.0"
+
+vscode-languageserver@^8.0.1:
+  version "8.0.1"
+  resolved "https://registry.yarnpkg.com/vscode-languageserver/-/vscode-languageserver-8.0.1.tgz#56bd7a01f5c88af075a77f1d220edcb30fc4bdc7"
+  integrity sha512-sn7SjBwWm3OlmLtgg7jbM0wBULppyL60rj8K5HF0ny/MzN+GzPBX1kCvYdybhl7UW63V5V5tRVnyB8iwC73lSQ==
+  dependencies:
+    vscode-languageserver-protocol "3.17.1"
 
 vscode-uri@^3.0.2:
   version "3.0.3"
