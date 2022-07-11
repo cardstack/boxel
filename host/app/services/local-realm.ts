@@ -37,7 +37,7 @@ export default class LocalRealm extends Service {
         break;
       case 'wait-for-worker-handle-receipt':
         if (data.type === 'setDirectoryHandleAcknowledged') {
-          this.state.wait.fulfill();
+          this.state.wait.fulfill(new URL(data.url));
           return;
         }
         break;
@@ -55,9 +55,14 @@ export default class LocalRealm extends Service {
       response: new Deferred<DirectoryHandleResponse>(),
     };
     send(this.state.worker, { type: 'requestDirectoryHandle' });
-    let { handle } = await this.state.response.promise;
-    if (handle) {
-      this.state = { type: 'available', handle, worker: this.state.worker };
+    let { handle, url } = await this.state.response.promise;
+    if (handle && url) {
+      this.state = {
+        type: 'available',
+        handle,
+        worker: this.state.worker,
+        url: new URL(url),
+      };
     } else {
       this.state = { type: 'empty', worker: this.state.worker };
     }
@@ -82,18 +87,27 @@ export default class LocalRealm extends Service {
     | {
         type: 'available';
         handle: FileSystemDirectoryHandle;
+        url: URL;
         worker: ServiceWorker;
       }
     | {
         type: 'wait-for-worker-handle-receipt';
         worker: ServiceWorker;
         handle: FileSystemDirectoryHandle;
-        wait: Deferred<void>;
+        wait: Deferred<URL>;
       } = { type: 'starting-up' };
 
   get isAvailable(): boolean {
     this.maybeSetup();
     return this.state.type === 'available';
+  }
+
+  get url(): URL {
+    this.maybeSetup();
+    if (this.state.type !== 'available') {
+      throw new Error(`Cannot get url in state ${this.state.type}`);
+    }
+    return this.state.url;
   }
 
   get isEmpty(): boolean {
@@ -147,16 +161,16 @@ export default class LocalRealm extends Service {
       type: 'wait-for-worker-handle-receipt',
       handle,
       worker: this.state.worker,
-      wait: new Deferred<void>(),
+      wait: new Deferred<URL>(),
     };
 
     send(this.state.worker, {
       type: 'setDirectoryHandle',
       handle,
     });
-    await this.state.wait.promise;
+    let url = await this.state.wait.promise;
 
-    this.state = { type: 'available', handle, worker: this.state.worker };
+    this.state = { type: 'available', handle, worker: this.state.worker, url };
 
     if (cb) {
       cb();

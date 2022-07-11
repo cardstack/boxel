@@ -1,10 +1,13 @@
 import { Resource, useResource } from 'ember-resources';
 import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
+import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import flatMap from 'lodash/flatMap';
 import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+import LocalRealm from '../services/local-realm';
 
 interface Args {
   named: { url: string | undefined };
@@ -21,6 +24,9 @@ export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
   private interval: ReturnType<typeof setInterval>;
   private url: string | undefined;
+  private realmPath: RealmPaths;
+
+  @service declare localRealm: LocalRealm;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
@@ -28,6 +34,10 @@ export class DirectoryResource extends Resource<Args> {
       clearInterval(this.interval);
     });
     this.interval = setInterval(() => taskFor(this.readdir).perform(), 1000);
+    if (!this.localRealm.isAvailable) {
+      throw new Error('Local realm is not available');
+    }
+    this.realmPath = new RealmPaths(this.localRealm.url);
     if (args.named.url) {
       if (!args.named.url.endsWith('/')) {
         throw new Error(`A directory URL must end with a "/"`);
@@ -41,7 +51,7 @@ export class DirectoryResource extends Resource<Args> {
     if (!this.url) {
       return;
     }
-    let entries = await getEntries(this.url);
+    let entries = await getEntries(this.realmPath, this.url);
     entries.sort((a, b) => a.path.localeCompare(b.path));
 
     this.entries = entries;
@@ -56,7 +66,10 @@ export function directory(parent: object, url: () => string | undefined) {
 
 // TODO when we want to include actual real file-tree behavior, let's stop
 // recursing blindly into directories
-async function getEntries(url: string): Promise<Entry[]> {
+async function getEntries(
+  realmPath: RealmPaths,
+  url: string
+): Promise<Entry[]> {
   let response: Response | undefined;
   response = await fetch(url, {
     headers: { Accept: 'application/vnd.api+json' },
@@ -78,9 +91,7 @@ async function getEntries(url: string): Promise<Entry[]> {
     ([name, info]: [string, DirectoryEntryRelationship]) => ({
       name,
       kind: info.meta.kind,
-      // TODO: these uses of pathname are probably wrong. The local path to a
-      // file in a realm is not really always the pathname.
-      path: new URL(info.links.related).pathname,
+      path: realmPath.local(new URL(info.links.related)),
       indent:
         new URL(info.links.related).pathname.replace(/\/$/, '').split('/')
           .length - 1,
@@ -92,7 +103,7 @@ async function getEntries(url: string): Promise<Entry[]> {
   );
   let nestedEntries: Entry[] = [];
   for (let dir of nestedDirs) {
-    nestedEntries.push(...(await getEntries(dir)));
+    nestedEntries.push(...(await getEntries(realmPath, dir)));
   }
   return [...newEntries, ...nestedEntries];
 }

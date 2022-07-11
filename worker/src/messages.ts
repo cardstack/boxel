@@ -6,11 +6,13 @@ export interface RequestDirectoryHandle {
 }
 export interface SetDirectoryHandleAcknowledged {
   type: 'setDirectoryHandleAcknowledged';
+  url: string;
 }
 
 export interface DirectoryHandleResponse {
   type: 'directoryHandleResponse';
   handle: FileSystemDirectoryHandle | null;
+  url: string | null;
 }
 
 export interface SetDirectoryHandle {
@@ -63,9 +65,10 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
         'handle' in message &&
         ((message as any).handle === null ||
           (message as any).handle instanceof FileSystemDirectoryHandle)
+          && 'url' in message && ((message as any).url === null || typeof (message as any).url === 'string' ) 
       );
     case 'setDirectoryHandleAcknowledged':
-      return true;
+      return 'url' in message && typeof (message as any).url === 'string';
     default:
       return false;
   }

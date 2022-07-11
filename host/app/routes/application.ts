@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { file, FileResource } from '../resources/file';
 import type RouterService from '@ember/routing/router-service';
 import LocalRealm from '../services/local-realm';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 interface Model {
   path: string | undefined;
@@ -32,7 +33,8 @@ export default class Application extends Route<Model> {
       return { path, openFile };
     }
 
-    let url = `http://local-realm${path}`;
+    let realmPath = new RealmPaths(this.localRealm.url);
+    let url = realmPath.fileURL(path).href;
     let response = await fetch(url, {
       headers: {
         Accept: 'application/vnd.card+source',
@@ -47,8 +49,7 @@ export default class Application extends Route<Model> {
     }
     if (response.url !== url) {
       this.router.transitionTo('application', {
-        // TODO: pathname is wrong here. It's not the same as Realm#localPath.
-        queryParams: { path: new URL(response.url).pathname },
+        queryParams: { path: realmPath.local(new URL(response.url)) },
       });
     } else {
       let content = await response.text();

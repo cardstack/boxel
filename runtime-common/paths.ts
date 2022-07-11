@@ -18,7 +18,7 @@ export class RealmPaths {
     let local = url.href.slice(this.url.length);
 
     if (local.endsWith("/")) {
-      local.slice(-1);
+      local = local.slice(0, -1);
     }
     return local;
   }

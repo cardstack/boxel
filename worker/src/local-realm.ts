@@ -13,8 +13,7 @@ export class LocalRealm implements RealmAdapter {
     for await (let [name, handle] of dirHandle as unknown as AsyncIterable<
       [string, FileSystemDirectoryHandle | FileSystemFileHandle]
     >) {
-      // note that the path of a directory always ends in "/"
-      let innerPath = isTopPath(path) ? name : `${path}${name}`;
+      let innerPath = isTopPath(path) ? name : `${path}/${name}`;
       yield { name, path: innerPath, kind: handle.kind };
     }
   }
@@ -71,15 +70,6 @@ export async function traverse<Target extends Kind>(
   targetKind: Target,
   opts?: { create?: boolean }
 ): Promise<HandleKind<Target>> {
-  // TODO: our standard path handling says there won't be slashes, let's clean this up and confirm it works.
-  // the leading and trailing "/" will result in a superflous items in our path segments
-  if (path.startsWith('/')) {
-    path = path.slice(1);
-  }
-  if (path.endsWith('/')) {
-    path = path.slice(0, -1);
-  }
-
   let pathSegments = path.split('/');
   let create = opts?.create;
 
