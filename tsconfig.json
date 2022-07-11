@@ -20,9 +20,6 @@
     "baseUrl": ".",
     "module": "es2022",
     "experimentalDecorators": true,
-    "glint": {
-      "environment": "ember-loose"
-    },
     "paths": {
       "runtime-spike/tests/*": ["host/tests/*"],
       "runtime-spike/*": ["host/app/*"],
