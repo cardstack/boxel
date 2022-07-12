@@ -197,7 +197,7 @@ export default class AnimationsService extends Service {
       let contextNode = this.spriteTree.lookupNodeByElement(
         context.element
       ) as SpriteTreeNode;
-      for (let item of contextNode.freshlyRemovedChildren) {
+      for (let item of contextNode.freshlyRemovedDescendants) {
         if (item.isSprite) {
           let identifier = new SpriteIdentifier(
             (item.spriteModel as unknown as SpriteModifier).id,
@@ -209,12 +209,12 @@ export default class AnimationsService extends Service {
               this.intermediateSprites.get(identifier)
             )
           ) {
-            contextNode.freshlyRemovedChildren.delete(item);
+            (item.parent as SpriteTreeNode).freshlyRemovedChildren.delete(item);
           } else {
             this.freshlyRemoved.add(item.spriteModel as SpriteModifier);
           }
         } else {
-          contextNode.freshlyRemovedChildren.delete(item);
+          (item.parent as SpriteTreeNode).freshlyRemovedChildren.delete(item);
         }
       }
     }

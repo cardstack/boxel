@@ -32,6 +32,18 @@ export class SpriteTreeNode {
   children: Set<SpriteTreeNode> = new Set();
   freshlyRemovedChildren: Set<SpriteTreeNode> = new Set();
 
+  get freshlyRemovedDescendants() {
+    let result = new Set(this.freshlyRemovedChildren);
+
+    for (let child of this.children) {
+      for (let item of child.freshlyRemovedDescendants) {
+        result.add(item);
+      }
+    }
+
+    return result;
+  }
+
   get isContext() {
     return Boolean(this.contextModel);
   }
