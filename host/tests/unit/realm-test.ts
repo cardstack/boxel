@@ -262,7 +262,11 @@ module('Unit | realm', function () {
         'Abdel-Rahman',
         'field value is correct'
       );
-      assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+      assert.strictEqual(
+        json.data.meta.lastModified,
+        adapter.lastModified.get(paths.fileURL('dir/card.json').href),
+        'lastModified is correct'
+      );
       let fileRef = await adapter.openFile('dir/card.json');
       if (!fileRef) {
         throw new Error('file not found');
