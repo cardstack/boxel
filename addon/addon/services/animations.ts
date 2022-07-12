@@ -22,10 +22,7 @@ import {
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
-import {
-  filterToContext,
-  SpriteSnapshotNodeBuilder,
-} from 'animations-experiment/models/sprite-snapshot-node-builder';
+import { SpriteSnapshotNodeBuilder } from 'animations-experiment/models/sprite-snapshot-node-builder';
 
 export type AnimateFunction = (
   sprite: Sprite,
@@ -146,13 +143,12 @@ export default class AnimationsService extends Service {
       context.element
     ) as SpriteTreeNode;
 
-    for (let node of [
-      ...contextNode.freshlyRemovedChildren,
-      ...contextNode.children,
-    ]) {
-      let spriteModifier = node.spriteModel as SpriteModifier;
+    for (let node of contextNode.allChildSprites({
+      includeFreshlyRemoved: true,
+    })) {
+      let spriteModifier = node as SpriteModifier;
       if (spriteModifier) {
-        let animations = node.spriteModel?.element.getAnimations() ?? [];
+        let animations = spriteModifier.element.getAnimations() ?? [];
         animationsToCancel = animationsToCancel.concat(animations);
         if (animations?.length) {
           spriteModifier.captureSnapshot({

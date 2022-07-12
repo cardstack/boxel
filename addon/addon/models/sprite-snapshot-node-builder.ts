@@ -204,9 +204,9 @@ export class SpriteSnapshotNodeBuilder {
     for (let context of contexts) {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
-      let contextChildren: SpriteModifier[] = [...(contextNode?.children ?? [])]
-        .map((c) => c.spriteModel as SpriteModifier)
-        .filter(Boolean);
+      let contextChildren: SpriteModifier[] = contextNode?.allChildSprites({
+        includeFreshlyRemoved: false,
+      }) as SpriteModifier[];
 
       for (let spriteModifier of contextChildren) {
         spriteModifier.captureSnapshot({
@@ -240,14 +240,17 @@ export class SpriteSnapshotNodeBuilder {
       if (context.isStable) {
         let spriteSnapshotNode = new SpriteSnapshotNode(context);
 
-        let spriteModifiersForContext = filterToContext(
-          this.spriteTree,
-          context,
-          spriteModifiers,
-          {
+        let spriteModifiersForContext = new Set<SpriteModifier>();
+        spriteTree
+          .lookupNodeByElement(context.element)!
+          .allChildSprites({
             includeFreshlyRemoved: true,
-          }
-        );
+          })
+          .forEach((s) => {
+            if (spriteModifiers.has(s as SpriteModifier)) {
+              spriteModifiersForContext.add(s as SpriteModifier);
+            }
+          });
 
         // add the sprites with counterparts here, if necessary
         if (contextToKeptSpriteModifierMap.has(context)) {

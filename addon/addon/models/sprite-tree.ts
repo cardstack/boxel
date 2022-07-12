@@ -86,14 +86,31 @@ export class SpriteTreeNode {
       }
 
       if (
-        (child.isSprite ||
-          (child.isContext &&
-            !(child.contextModel as AnimationContextComponent).isStable)) &&
-        child.children?.size
+        child.isSprite ||
+        (child.isContext &&
+          !(child.contextModel as AnimationContextComponent).isStable)
       ) {
         child
           .allChildSprites({ includeFreshlyRemoved })
           .forEach((c) => result.push(c));
+      }
+    }
+
+    if (includeFreshlyRemoved) {
+      for (let child of this.freshlyRemovedChildren) {
+        if (child.isSprite) {
+          result.push(child.spriteModel as SpriteModel);
+        }
+
+        if (
+          child.isSprite ||
+          (child.isContext &&
+            !(child.contextModel as AnimationContextComponent).isStable)
+        ) {
+          child
+            .allChildSprites({ includeFreshlyRemoved })
+            .forEach((c) => result.push(c));
+        }
       }
     }
 
