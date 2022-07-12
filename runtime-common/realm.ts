@@ -406,14 +406,13 @@ export class Realm {
   }
 
   // todo: I think we get rid of this
-  private async readFileAsText(
-    path: LocalPath
-  ): Promise<{ content: string; lastModified: number }> {
+  private async readFileAsText(path: LocalPath): Promise<FileRef | undefined> {
     let ref = await this.#adapter.openFile(path);
     if (!ref) {
-      throw new Error("fixme todo");
+      return;
     }
     return {
+      path,
       content: await this.fileContentToText(ref),
       lastModified: ref.lastModified,
     };
