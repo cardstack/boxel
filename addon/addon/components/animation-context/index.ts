@@ -31,6 +31,8 @@ export default class AnimationContextComponent extends Component<AnimationContex
   currentBounds: DOMRect | undefined;
   isInitialRenderCompleted = false;
 
+  orphans = new Map<string, HTMLElement>();
+
   get isStable() {
     return (
       this.isInitialRenderCompleted && !this.isDestroying && !this.isDestroyed
@@ -73,48 +75,35 @@ export default class AnimationContextComponent extends Component<AnimationContex
   }
 
   hasOrphan(spriteOrElement: Sprite): boolean {
-    let { orphansElement } = this as { orphansElement: HTMLElement };
-
-    for (let orphan of orphansElement.children) {
-      if (!(orphan instanceof HTMLElement)) continue;
-      if (
-        orphan.dataset['orphanSpriteId'] ===
-        spriteOrElement.identifier.toString()
-      ) {
-        return true;
-      }
-    }
-
-    return false;
+    return this.orphans.has(spriteOrElement.identifier.toString());
   }
 
   appendOrphan(spriteOrElement: Sprite): void {
     let { orphansElement } = this as { orphansElement: HTMLElement };
 
     orphansElement.appendChild(spriteOrElement.element);
-    spriteOrElement.element.dataset['orphanSpriteId'] =
-      spriteOrElement.identifier.toString();
+    this.orphans.set(
+      spriteOrElement.identifier.toString(),
+      spriteOrElement.element
+    );
   }
 
   removeOrphan(spriteOrElement: Sprite): void {
-    let { orphansElement } = this as { orphansElement: HTMLElement };
-
-    for (let orphan of orphansElement.children) {
-      if (!(orphan instanceof HTMLElement)) continue;
-      if (
-        orphan.dataset['orphanSpriteId'] ===
-        spriteOrElement.identifier.toString()
-      ) {
-        console.log('removing matching orphan');
-        orphansElement.removeChild(orphan);
-      }
+    let identifier = spriteOrElement.identifier.toString();
+    let element = this.orphans.get(identifier);
+    if (element) {
+      console.log('removing orphan', identifier);
+      this.orphansElement!.removeChild(element);
+      this.orphans.delete(identifier);
+    } else {
+      console.warn(`attempted to remove nonexistent orphan ${identifier}`);
     }
   }
 
   clearOrphans(): void {
-    let { orphansElement } = this;
-    while (orphansElement?.firstChild) {
-      orphansElement.removeChild(orphansElement.firstChild);
+    for (let [spriteIdentifier, orphan] of this.orphans) {
+      this.orphansElement!.removeChild(orphan);
+      this.orphans.delete(spriteIdentifier);
     }
   }
 }
