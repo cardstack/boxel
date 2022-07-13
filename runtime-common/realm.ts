@@ -57,6 +57,7 @@ export class Realm {
   #adapter: RealmAdapter;
   #paths: RealmPaths;
   #jsonAPIRouter: Router;
+  #cardSourceRouter: Router;
 
   get url(): string {
     return this.#paths.url;
@@ -81,6 +82,13 @@ export class Realm {
       .get("/_typeOf", this.getTypeOf.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this));
+
+    this.#cardSourceRouter = new Router(new URL(url))
+      .post(
+        `/.+(${executableExtensions.map((e) => "\\" + e).join("|")})`,
+        this.upsertCardSource.bind(this)
+      )
+      .get("/.+", this.getCardSourceOrRedirect.bind(this));
   }
 
   async write(
@@ -117,7 +125,7 @@ export class Realm {
     } else if (
       request.headers.get("Accept")?.includes("application/vnd.card+source")
     ) {
-      return this.handleCardSource(request, url);
+      return this.#cardSourceRouter.handle(request);
     }
 
     let maybeHandle = await this.getFileWithFallbacks(this.#paths.local(url));
@@ -148,27 +156,22 @@ export class Realm {
     });
   }
 
-  private async handleCardSource(
-    request: Request,
-    url: URL
-  ): Promise<Response> {
-    if (request.method === "POST") {
-      let { lastModified } = await this.write(
-        this.#paths.local(new URL(request.url)),
-        await request.text()
-      );
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Last-Modified": formatRFC7231(lastModified),
-        },
-      });
-    }
+  private async upsertCardSource(request: Request): Promise<Response> {
+    let { lastModified } = await this.write(
+      this.#paths.local(new URL(request.url)),
+      await request.text()
+    );
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Last-Modified": formatRFC7231(lastModified),
+      },
+    });
+  }
 
-    let localName = this.#paths.local(url);
-
+  private async getCardSourceOrRedirect(request: Request): Promise<Response> {
+    let localName = this.#paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
-
     if (!handle) {
       return notFound(request, `${localName} not found`);
     }
