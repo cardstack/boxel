@@ -517,10 +517,10 @@ module('Unit | search-index', function () {
         export class Person extends Card {
           @field firstName = contains(StringCard);
 
-          static isolated = class Isolated extends Component<typeof this> { 
+          static isolated = class Isolated extends Component<typeof this> {
             <template><div class="hi"><@fields.firstName /></div></template>
           }
-        }      
+        }
       `,
     });
     let indexer = realm.searchIndex;
@@ -531,5 +531,106 @@ module('Unit | search-index', function () {
       name: 'Person',
     });
     assert.ok(definition, 'got definition');
+  });
+
+  test('directories do not list entries that match patterns in ignore files', async function (assert) {
+    let realm = TestRealm.create({
+      'sample-post.json': {},
+      'posts/1.json': {},
+      'posts/nested.gts': `
+        import { Card } from 'https://cardstack.com/base/card-api';
+        export class Nested extends Card {}
+      `,
+      'posts/2.json': {},
+      'post.gts': `
+        import { Card } from 'https://cardstack.com/base/card-api';
+        export class Post extends Card {}
+      `,
+      'dir/post-1.json': {},
+    });
+
+    const cardRef = {
+      type: 'exportedCard',
+      module: 'posts/nested.gts',
+      name: 'Nested',
+    };
+
+    const listings = [
+      {
+        kind: 'file',
+        name: 'sample-post.json',
+      },
+      {
+        kind: 'directory',
+        name: 'posts',
+      },
+      {
+        kind: 'file',
+        name: 'post.gts',
+      },
+      {
+        kind: 'directory',
+        name: 'dir',
+      },
+    ] as any;
+
+    const ignoreFile = {
+      name: '.gitignore',
+      kind: 'file',
+    };
+
+    const nestedListings = [
+      {
+        name: '1.json',
+        kind: 'file',
+      },
+      {
+        name: 'nested.gts',
+        kind: 'file',
+      },
+      {
+        name: '2.json',
+        kind: 'file',
+      },
+    ] as any;
+
+    let indexer = realm.searchIndex;
+    await indexer.run();
+    let definition = await indexer.typeOf(cardRef as any);
+    assert.ok(definition, 'got definition');
+
+    let entries = await indexer.directory(new URL(realm.url));
+    assert.deepEqual(entries, listings, 'top level entries are correct');
+    let nestedEntries = await indexer.directory(new URL('posts/', realm.url));
+    assert.deepEqual(
+      nestedEntries,
+      nestedListings,
+      'nested entries are correct'
+    );
+
+    await realm.write('.gitignore', '*.json\n/dir');
+    await indexer.run();
+
+    let def = await indexer.typeOf(cardRef as any);
+    assert.ok(def, 'card definition still exists');
+
+    entries = await indexer.directory(new URL(realm.url));
+    assert.deepEqual(
+      entries,
+      [...listings.slice(1, 3), ignoreFile],
+      'correct file is hidden in top level'
+    );
+
+    nestedEntries = await indexer.directory(new URL('posts/', realm.url));
+    assert.deepEqual(
+      nestedEntries,
+      [
+        {
+          name: 'nested.gts',
+          kind: 'file',
+        },
+      ],
+      'correct files are hidden in nested'
+    );
   });
 });
