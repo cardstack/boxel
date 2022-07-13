@@ -541,6 +541,10 @@ module('Unit | search-index', function () {
         import { Card } from 'https://cardstack.com/base/card-api';
         export class Nested extends Card {}
       `,
+      'posts/nested-2.gts': `
+        import { Card } from 'https://cardstack.com/base/card-api';
+        export class Nested2 extends Card {}
+      `,
       'posts/2.json': {},
       'post.gts': `
         import { Card } from 'https://cardstack.com/base/card-api';
@@ -589,6 +593,10 @@ module('Unit | search-index', function () {
         kind: 'file',
       },
       {
+        name: 'nested-2.gts',
+        kind: 'file',
+      },
+      {
         name: '2.json',
         kind: 'file',
       },
@@ -608,7 +616,7 @@ module('Unit | search-index', function () {
       'nested entries are correct'
     );
 
-    await realm.write('.gitignore', '*.json\n/dir');
+    await realm.write('.gitignore', '*.json\n/dir\nposts/nested-2.gts');
     await indexer.run();
 
     let def = await indexer.typeOf(cardRef as any);
