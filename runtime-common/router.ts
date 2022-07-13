@@ -14,8 +14,8 @@ function isHTTPMethod(method: any): method is Method {
 export class Router {
   #routeTable = new Map<Method, Map<string, Handler>>();
   #paths: RealmPaths;
-  constructor(realmURL: URL) {
-    this.#paths = new RealmPaths(realmURL);
+  constructor(mountURL: URL) {
+    this.#paths = new RealmPaths(mountURL);
   }
 
   get(path: string, handler: Handler): Router {
