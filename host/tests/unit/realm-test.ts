@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { isCardDocument } from '@cardstack/runtime-common/search-index';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { TestRealm, TestRealmAdapter } from '../helpers';
@@ -491,6 +491,11 @@ module('Unit | realm', function () {
     let responseText = await response.text();
     assert.strictEqual(responseText, html, 'asset contents are correct');
   });
+
+  skip('realm can serve search requests');
+  skip('realm can serve typeOf requests');
+  skip('realm can serve cardsOf requests');
+  skip('realm can serve directory requests');
 });
 
 const cardSrc = `
