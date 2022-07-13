@@ -1,9 +1,12 @@
 import { module, test } from 'qunit';
-import { TestRealm } from '../helpers';
+import { TestRealm, TestRealmAdapter } from '../helpers';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+
+let paths = new RealmPaths('http://test-realm');
 
 module('Unit | search-index', function () {
   test('full indexing discovers card instances', async function (assert) {
-    let realm = TestRealm.create({
+    let adapter = new TestRealmAdapter({
       'empty.json': {
         data: {
           type: 'card',
@@ -17,6 +20,7 @@ module('Unit | search-index', function () {
         },
       },
     });
+    let realm = TestRealm.createWithAdapter(adapter);
     let indexer = realm.searchIndex;
     await indexer.run();
     let cards = await indexer.search({});
@@ -30,6 +34,9 @@ module('Unit | search-index', function () {
             module: 'https://cardstack.com/base/card-api',
             name: 'Card',
           },
+          lastModified: adapter.lastModified.get(
+            paths.fileURL('empty.json').href
+          ),
         },
       },
     ]);

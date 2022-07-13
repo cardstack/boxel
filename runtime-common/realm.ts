@@ -12,7 +12,6 @@ import {
   notFound,
   methodNotAllowed,
   badRequest,
-  CardError,
 } from "@cardstack/runtime-common/error";
 import { formatRFC7231 } from "date-fns";
 import {
@@ -284,7 +283,10 @@ export class Realm {
       }
     }
     let pathname = `${dirName}${++index}.json`;
-    await this.write(pathname, JSON.stringify(json, null, 2));
+    let { lastModified } = await this.write(
+      pathname,
+      JSON.stringify(json, null, 2)
+    );
     let newURL = new URL(pathname, url.origin).href.replace(/\.json$/, "");
     if (!isCardDocument(json)) {
       return badRequest(
@@ -293,17 +295,17 @@ export class Realm {
     }
     json.data.id = newURL;
     json.data.links = { self: newURL };
+    json.data.meta.lastModified = lastModified;
     if (!isCardDocument(json)) {
       return systemError(
         `bug: constructed non-card document resource in JSON-API request for ${newURL}`
       );
     }
-    await this.addLastModifiedToCardDoc(json, pathname);
     return new Response(JSON.stringify(json, null, 2), {
       status: 201,
       headers: {
-        "Last-Modified": formatRFC7231(json.data.meta.lastModified!),
         "Content-Type": "application/vnd.api+json",
+        ...lastModifiedHeader(json),
       },
     });
   }
@@ -318,6 +320,7 @@ export class Realm {
     if (!original) {
       return notFound(request);
     }
+    delete original.meta.lastModified;
 
     let patch = await request.json();
     if (!isCardDocument(patch)) {
@@ -330,14 +333,17 @@ export class Realm {
     let card = merge({ data: original }, patch);
     delete (card as any).data.id; // don't write the ID to the file
     let path = `${this.#paths.local(url)}.json`;
-    await this.write(path, JSON.stringify(card, null, 2));
+    let { lastModified } = await this.write(
+      path,
+      JSON.stringify(card, null, 2)
+    );
     card.data.id = url.href.replace(/\.json$/, "");
     card.data.links = { self: url.href };
-    await this.addLastModifiedToCardDoc(card, path);
+    card.data.meta.lastModified = lastModified;
     return new Response(JSON.stringify(card, null, 2), {
       headers: {
-        "Last-Modified": formatRFC7231(card.data.meta.lastModified!),
         "Content-Type": "application/vnd.api+json",
+        ...lastModifiedHeader(card),
       },
     });
   }
@@ -350,16 +356,11 @@ export class Realm {
     }
     (data as any).links = { self: url.href };
     let card = { data };
-    // TODO: this is adding the wrong lastModified, because our data came
-    // from the search index and the lastModified is coming from the realm
-    // (i.e. the realm filesystem). Those two could differ. The lastModified
-    // time should already live inside the search index so they always
-    // match.
-    // await this.addLastModifiedToCardDoc(card, localPath + ".json");
     return new Response(JSON.stringify(card, null, 2), {
       headers: {
         "Last-Modified": formatRFC7231(card.data.meta.lastModified!),
         "Content-Type": "application/vnd.api+json",
+        ...lastModifiedHeader(card),
       },
     });
   }
@@ -405,12 +406,17 @@ export class Realm {
   }
 
   // todo: I think we get rid of this
-  private async readFileAsText(path: LocalPath): Promise<string> {
+  private async readFileAsText(
+    path: LocalPath
+  ): Promise<{ content: string; lastModified: number }> {
     let ref = await this.#adapter.openFile(path);
     if (!ref) {
       throw new Error("fixme todo");
     }
-    return await this.fileContentToText(ref);
+    return {
+      content: await this.fileContentToText(ref),
+      lastModified: ref.lastModified,
+    };
   }
 
   private async fileContentToText({ content }: FileRef): Promise<string> {
@@ -588,16 +594,6 @@ export class Realm {
       }
     );
   }
-
-  private async addLastModifiedToCardDoc(card: CardDocument, path: LocalPath) {
-    let { lastModified } = (await this.#adapter.openFile(path)) ?? {};
-    if (!lastModified) {
-      throw new CardError(
-        systemError(`no last modified date available for file ${path}`)
-      );
-    }
-    card.data.meta.lastModified = lastModified;
-  }
 }
 
 export type Kind = "file" | "directory";
@@ -613,4 +609,13 @@ function getModuleContext(ref: CardRef): string {
   } else {
     return getModuleContext(ref.card);
   }
+}
+function lastModifiedHeader(
+  card: CardDocument
+): {} | { "Last-Modified": string } {
+  return (
+    card.data.meta.lastModified != null
+      ? { "Last-Modified": formatRFC7231(card.data.meta.lastModified) }
+      : {}
+  ) as {} | { "Last-Modified": string };
 }

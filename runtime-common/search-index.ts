@@ -196,7 +196,9 @@ export class SearchIndex {
     private readdir: (
       path: string
     ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
-    private readFileAsText: (path: LocalPath) => Promise<string>
+    private readFileAsText: (
+      path: LocalPath
+    ) => Promise<{ content: string; lastModified: number }>
   ) {}
 
   async run() {
@@ -275,17 +277,19 @@ export class SearchIndex {
 
   private async visitFile(url: URL) {
     if (url.href.endsWith(".json")) {
-      let json = JSON.parse(
-        await this.readFileAsText(this.realmPaths.local(url))
+      let { content, lastModified } = await this.readFileAsText(
+        this.realmPaths.local(url)
       );
+      let json = JSON.parse(content);
       if (isCardDocument(json)) {
         let instanceURL = new URL(url.href.replace(/\.json$/, ""));
         json.data.id = instanceURL.href;
+        json.data.meta.lastModified = lastModified;
         this.instances.set(instanceURL, json.data);
       }
     } else if (hasExecutableExtension(url.href)) {
       let mod = new ModuleSyntax(
-        await this.readFileAsText(this.realmPaths.local(url))
+        (await this.readFileAsText(this.realmPaths.local(url))).content
       );
       this.modules.set(url, mod);
       this.modules.set(trimExecutableExtension(url), mod);
