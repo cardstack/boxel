@@ -1,4 +1,5 @@
 import { methodNotAllowed, notFound } from "./error";
+import { RealmPaths } from "./paths";
 
 type Handler = (request: Request) => Promise<Response>;
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
@@ -12,6 +13,10 @@ function isHTTPMethod(method: any): method is Method {
 
 export class Router {
   #routeTable = new Map<Method, Map<string, Handler>>();
+  #paths: RealmPaths;
+  constructor(realmURL: URL) {
+    this.#paths = new RealmPaths(realmURL);
+  }
 
   get(path: string, handler: Handler): Router {
     this.setRoute("GET", path, handler);
@@ -48,9 +53,17 @@ export class Router {
       return notFound(request);
     }
 
+    let requestPath = `/${this.#paths.local(new URL(request.url))}`;
+    // add a leading and trailing slashes back so we can match on routing rules for directories.
+    requestPath =
+      request.url.endsWith("/") && requestPath !== "/"
+        ? `${requestPath}/`
+        : requestPath;
     for (let [route, handler] of routes) {
-      let routeRegExp = new RegExp(route.replace("/", "\\/")); // let's take care of auto escaping '/' in our route regex's to make it more readable
-      if (routeRegExp.test(new URL(request.url).pathname)) {
+      // let's take care of auto escaping '/' and anchoring in our route regex's
+      // to make it more readable in our config
+      let routeRegExp = new RegExp(`^${route.replace("/", "\\/")}$`);
+      if (routeRegExp.test(requestPath)) {
         return await handler(request);
       }
     }

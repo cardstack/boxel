@@ -56,7 +56,7 @@ export class Realm {
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
   #paths: RealmPaths;
-  #jsonAPIRouter = new Router();
+  #jsonAPIRouter: Router;
 
   get url(): string {
     return this.#paths.url;
@@ -73,14 +73,14 @@ export class Realm {
       this.readFileAsText.bind(this)
     );
 
-    this.#jsonAPIRouter
+    this.#jsonAPIRouter = new Router(new URL(url))
       .post("/", this.createCard.bind(this))
-      .patch("/.*(?<!.json)$", this.patchCard.bind(this))
+      .patch("/.+(?<!.json)", this.patchCard.bind(this))
       .get("/_cardsOf", this.getCardsOf.bind(this))
       .get("/_search", this.search.bind(this))
       .get("/_typeOf", this.getTypeOf.bind(this))
-      .get(".*/$", this.getDirectoryListing.bind(this))
-      .get("/.*(?<!.json)$", this.getCard.bind(this));
+      .get(".*/", this.getDirectoryListing.bind(this))
+      .get("/.+(?<!.json)", this.getCard.bind(this));
   }
 
   async write(
@@ -253,14 +253,6 @@ export class Realm {
 
   private async createCard(request: Request): Promise<Response> {
     let url = new URL(request.url);
-    // let localPath = this.#paths.local(url);
-    // if (localPath.startsWith("_")) {
-    //   return methodNotAllowed(request);
-    // }
-    // // detecting top-level URL such that request.url === realm.url resulting in empty localPath
-    // if (localPath !== "") {
-    //   return notFound(request, `Can't POST to ${url.href}`);
-    // }
     let json = await request.json();
     if (!isCardJSON(json)) {
       return badRequest(`Request body is not valid card JSON-API`);
@@ -315,7 +307,7 @@ export class Realm {
       return methodNotAllowed(request);
     }
 
-    let url = this.#paths.directoryURL(new URL(request.url).pathname);
+    let url = this.#paths.fileURL(new URL(request.url).pathname);
     let original = await this.#searchIndex.card(url);
     if (!original) {
       return notFound(request);
@@ -349,7 +341,7 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
-    let url = this.#paths.directoryURL(new URL(request.url).pathname);
+    let url = this.#paths.fileURL(new URL(request.url).pathname);
     let data = await this.#searchIndex.card(url);
     if (!data) {
       return notFound(request);
@@ -366,7 +358,11 @@ export class Realm {
   }
 
   private async getDirectoryListing(request: Request): Promise<Response> {
-    let url = this.#paths.directoryURL(new URL(request.url).pathname);
+    // a LocalPath has no leading nor trailing slash
+    let localPath: LocalPath = new URL(request.url).pathname
+      .replace(/^\//, "")
+      .replace(/\/$/, "");
+    let url = this.#paths.directoryURL(localPath);
 
     let entries = await this.#searchIndex.directory(url);
     if (!entries) {
