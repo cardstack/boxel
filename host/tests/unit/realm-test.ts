@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { isCardDocument } from '@cardstack/runtime-common/search-index';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { TestRealm, TestRealmAdapter } from '../helpers';
@@ -54,6 +54,63 @@ module('Unit | realm', function () {
       },
     });
     assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+  });
+
+  test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
+    let realm = TestRealm.create(
+      {
+        'dir/empty.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'Card',
+              },
+            },
+          },
+        },
+      },
+      new URL('http://test-realm/root/')
+    );
+    await realm.ready;
+    {
+      let response = await realm.handle(
+        new Request('http://test-realm/root/dir/empty', {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        })
+      );
+      assert.strictEqual(response.status, 200, 'successful http status');
+      let json = await response.json();
+      assert.strictEqual(
+        json.data.id,
+        'http://test-realm/root/dir/empty',
+        'card ID is correct'
+      );
+    }
+    {
+      let response = await realm.handle(
+        new Request('http://test-realm/root/_search', {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        })
+      );
+      let json = await response.json();
+      assert.strictEqual(
+        json.data.length,
+        1,
+        'the card is returned in the search results'
+      );
+      assert.strictEqual(
+        json.data[0].id,
+        'http://test-realm/root/dir/empty',
+        'card ID is correct'
+      );
+    }
   });
 
   test('realm can serve create card requests', async function (assert) {
@@ -495,6 +552,11 @@ module('Unit | realm', function () {
     let responseText = await response.text();
     assert.strictEqual(responseText, html, 'asset contents are correct');
   });
+
+  skip('realm can serve search requests');
+  skip('realm can serve typeOf requests');
+  skip('realm can serve cardsOf requests');
+  skip('realm can serve directory requests');
 });
 
 const cardSrc = `
