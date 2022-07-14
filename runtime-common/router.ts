@@ -53,7 +53,9 @@ export class Router {
       return notFound(request);
     }
 
-    let requestPath = `/${this.#paths.local(new URL(request.url))}`;
+    let url = new URL(request.url);
+    // we construct a new URL within RealmPath.local() param that strips off the query string
+    let requestPath = `/${this.#paths.local(new URL(url.pathname, url))}`;
     // add a leading and trailing slashes back so we can match on routing rules for directories.
     requestPath =
       request.url.endsWith("/") && requestPath !== "/"

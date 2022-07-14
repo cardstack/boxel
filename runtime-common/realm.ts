@@ -19,6 +19,7 @@ import {
   ResourceObjectWithId,
   DirectoryEntryRelationship,
   executableExtensions,
+  baseRealm,
 } from "./index";
 import merge from "lodash/merge";
 import { parse, stringify } from "qs";
@@ -489,7 +490,7 @@ export class Realm {
       relationships: {
         _: {
           links: {
-            related: "http://local-realm/cardstack/type-of?type=exportedCard&module=%2Fsuper%2Fcard&name=SuperCard"
+            related: "http://local-realm/_typeOf?type=exportedCard&module=%2Fsuper%2Fcard&name=SuperCard"
           }
           meta: {
             type: "super"
@@ -497,7 +498,7 @@ export class Realm {
         },
         firstName: {
           links: {
-            related: "http://cardstack.com/cardstack/type-of?type=exportedCard&module%2Fstring&name=default"
+            related: "https://cardstack.com/base/_typeOf?type=exportedCard&module%2Fstring&name=default"
           },
           meta: {
             type: "contains"
@@ -505,7 +506,7 @@ export class Realm {
         },
         lastName: {
           links: {
-            related: "http://cardstack.com/cardstack/type-of?type=exportedCard&module%2Fstring&name=default"
+            related: "https://cardstack.com/base/_typeOf?type=exportedCard&module%2Fstring&name=default"
           },
           meta: {
             type: "contains"
@@ -555,7 +556,7 @@ export class Realm {
     if (def.super) {
       data.relationships._super = {
         links: {
-          related: cardRefToTypeURL(def.super, this),
+          related: this.cardRefToTypeURL(def.super),
         },
         meta: {
           type: "super",
@@ -565,7 +566,7 @@ export class Realm {
     for (let [fieldName, field] of def.fields) {
       data.relationships[fieldName] = {
         links: {
-          related: cardRefToTypeURL(field.fieldCard, this),
+          related: this.cardRefToTypeURL(field.fieldCard),
         },
         meta: {
           type: field.fieldType,
@@ -593,14 +594,29 @@ export class Realm {
       }
     );
   }
+
+  private cardRefToTypeURL(ref: CardRef): string {
+    let module = new URL(getModuleContext(ref));
+    if (this.#paths.inRealm(module)) {
+      return `${this.url}/_typeOf?${stringify(ref)}`;
+    }
+
+    // TODO how to resolve the Realm URL of a module that does not come from our
+    // own realm For now we can just hardcode realms we know about when
+    // resolving a realm URL from a module, which in this case is only the base
+    // realm. Probably we need some kind of "realm lookup" which is a list of
+    // all realms that our hub knows about
+    if (baseRealm.inRealm(module)) {
+      return `${baseRealm.fileURL("_typeOf")}?${stringify(ref)}`;
+    }
+
+    throw new Error(
+      `Don't know how to resolve realm URL for module ${module.href}`
+    );
+  }
 }
 
 export type Kind = "file" | "directory";
-
-function cardRefToTypeURL(ref: CardRef, realm: Realm): string {
-  let modRealm = new URL(getModuleContext(ref), realm.url).origin;
-  return `${modRealm}/cardstack/type-of?${stringify(ref)}`;
-}
 
 function getModuleContext(ref: CardRef): string {
   if (ref.type === "exportedCard") {
