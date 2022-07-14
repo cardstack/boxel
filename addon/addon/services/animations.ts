@@ -39,6 +39,7 @@ export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
   freshlyAdded: Set<SpriteModifier> = new Set();
   freshlyRemoved: Set<SpriteModifier> = new Set();
+  interruptedRemoved: Set<SpriteModifier> = new Set();
   eligibleContexts: Set<AnimationContext> = new Set();
   intent: string | undefined;
   intermediateSprites: Map<string, IntermediateSprite> = new Map();
@@ -211,7 +212,7 @@ export default class AnimationsService extends Service {
           ) {
             (item.parent as SpriteTreeNode).freshlyRemovedChildren.delete(item);
           } else {
-            this.freshlyRemoved.add(item.spriteModel as SpriteModifier);
+            this.interruptedRemoved.add(item.spriteModel as SpriteModifier);
           }
         } else {
           (item.parent as SpriteTreeNode).freshlyRemovedChildren.delete(item);
@@ -248,7 +249,7 @@ export default class AnimationsService extends Service {
       this.spriteTree,
       this.eligibleContexts,
       this.freshlyAdded,
-      this.freshlyRemoved,
+      new Set([...this.freshlyRemoved, ...this.interruptedRemoved]),
       this.intermediateSprites
     );
 
@@ -256,6 +257,7 @@ export default class AnimationsService extends Service {
     // correct starting point for the next run even if an interruption happens.
     this.freshlyAdded.clear();
     this.freshlyRemoved.clear();
+    this.interruptedRemoved.clear();
     this.intermediateSprites = new Map();
     this.runningAnimations = new Map();
     this.intent = undefined;
