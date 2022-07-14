@@ -47,7 +47,7 @@ module('Unit | search-index', function () {
       'person.gts': `
         import { contains, field, Card } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
-        
+
         class Person extends Card {
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
@@ -75,7 +75,7 @@ module('Unit | search-index', function () {
       'person.gts': `
         import { contains, field, Card } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
-        
+
         export class Person extends Card {
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
@@ -123,7 +123,7 @@ module('Unit | search-index', function () {
       'person.gts': `
         import { contains, field, Card } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
-        
+
         export class Person extends Card {
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
@@ -133,7 +133,7 @@ module('Unit | search-index', function () {
         import { contains, field } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
         import { Person } from './person';
-        
+
         export class FancyPerson extends Person {
           @field favoriteColor = contains(StringCard);
         }
@@ -181,7 +181,7 @@ module('Unit | search-index', function () {
       'person.gts': `
         import { contains, field, Card } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
-        
+
         export class Person extends Card {
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
@@ -232,7 +232,7 @@ module('Unit | search-index', function () {
       'person.gts': `
         import { contains, field, Card } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
-        
+
         class Person extends Card {
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
@@ -286,9 +286,9 @@ module('Unit | search-index', function () {
       'person.gts': `
         import { contains, field } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
-        
+
         class NotACard {};
-        
+
         export class Person extends NotACard {
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
@@ -298,7 +298,7 @@ module('Unit | search-index', function () {
         import { contains, field } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
         import { Person } from './person';
-        
+
         export class FancyPerson extends Person {
           @field favoriteColor = contains(StringCard);
         }
@@ -322,7 +322,7 @@ module('Unit | search-index', function () {
       'person.gts': `
         import { contains, field } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
-        
+
         class NotACard {}
 
         export class FancyPerson extends NotACard {
@@ -348,7 +348,7 @@ module('Unit | search-index', function () {
       'person.gts': `
         import { contains, field, Card } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
-        
+
         class Person extends Card {
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
@@ -373,7 +373,7 @@ module('Unit | search-index', function () {
       'person.gts': `
         import { contains, field, NotACard } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
-        
+
         export class FancyPerson extends NotACard {
           @field favoriteColor = contains(StringCard);
         }
@@ -399,7 +399,7 @@ module('Unit | search-index', function () {
         import StringCard from 'https://cardstack.com/base/string';
 
         class NewFieldCard extends Card {}
-        
+
         export class Person extends Card {
           @field firstName = contains(StringCard);
           @field lastName = contains(NewFieldCard);
@@ -467,7 +467,7 @@ module('Unit | search-index', function () {
         import StringCard from 'https://cardstack.com/base/string';
 
         class NotAFieldCard {}
-        
+
         export class Person extends Card {
           @field firstName = contains(StringCard);
           @field lastName = contains(NotAFieldCard);
@@ -534,30 +534,20 @@ module('Unit | search-index', function () {
   });
 
   test('directories do not list entries that match patterns in ignore files', async function (assert) {
-    let realm = TestRealm.create({
-      'sample-post.json': {},
-      'posts/1.json': {},
-      'posts/nested.gts': `
-        import { Card } from 'https://cardstack.com/base/card-api';
-        export class Nested extends Card {}
-      `,
-      'posts/nested-2.gts': `
-        import { Card } from 'https://cardstack.com/base/card-api';
-        export class Nested2 extends Card {}
-      `,
-      'posts/2.json': {},
-      'post.gts': `
-        import { Card } from 'https://cardstack.com/base/card-api';
-        export class Post extends Card {}
-      `,
-      'dir/post-1.json': {},
-    });
+    const cardSource = `
+      import { Card } from 'https://cardstack.com/base/card-api';
+      export class Post extends Card {}
+    `;
 
-    const cardRef = {
-      type: 'exportedCard',
-      module: 'posts/nested.gts',
-      name: 'Nested',
-    };
+    let realm = TestRealm.create({
+      'sample-post.json': '',
+      'posts/1.json': '',
+      'posts/nested.gts': cardSource,
+      'posts/ignore-me.gts': cardSource,
+      'posts/2.json': '',
+      'post.gts': cardSource,
+      'dir/card.gts': cardSource,
+    });
 
     const listings = [
       {
@@ -593,7 +583,7 @@ module('Unit | search-index', function () {
         kind: 'file',
       },
       {
-        name: 'nested-2.gts',
+        name: 'ignore-me.gts',
         kind: 'file',
       },
       {
@@ -604,8 +594,13 @@ module('Unit | search-index', function () {
 
     let indexer = realm.searchIndex;
     await indexer.run();
-    let definition = await indexer.typeOf(cardRef as any);
-    assert.ok(definition, 'got definition');
+
+    let definition = await indexer.typeOf({
+      type: 'exportedCard',
+      module: 'posts/ignore-me.gts',
+      name: 'Post',
+    });
+    assert.ok(definition, 'definition exists before file is ignored');
 
     let entries = await indexer.directory(new URL(realm.url));
     assert.deepEqual(entries, listings, 'top level entries are correct');
@@ -616,11 +611,19 @@ module('Unit | search-index', function () {
       'nested entries are correct'
     );
 
-    await realm.write('.gitignore', '*.json\n/dir\nposts/nested-2.gts');
+    await realm.write('.gitignore', '*.json\n/dir\nposts/ignore-me.gts');
     await indexer.run();
 
-    let def = await indexer.typeOf(cardRef as any);
-    assert.ok(def, 'card definition still exists');
+    let def = await indexer.typeOf({
+      type: 'exportedCard',
+      module: 'posts/ignore-me.gts',
+      name: 'Post',
+    });
+    assert.strictEqual(
+      def,
+      undefined,
+      'definition does not exist because file is ignored'
+    );
 
     entries = await indexer.directory(new URL(realm.url));
     assert.deepEqual(

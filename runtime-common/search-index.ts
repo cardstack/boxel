@@ -301,6 +301,9 @@ export class SearchIndex {
     for (let [url, mod] of this.modules) {
       for (let possibleCard of mod.possibleCards) {
         if (possibleCard.exportedAs) {
+          if (this.isIgnored(url)) {
+            continue;
+          }
           await this.buildDefinition(
             newDefinitions,
             url,
