@@ -7,6 +7,7 @@ import { tracked, cached } from '@glimmer/tracking';
 import LocalRealm from '../services/local-realm';
 import CardEditor, { ExistingCardArgs } from './card-editor';
 import ImportModule from './import-module';
+import Module from './module';
 import FileTree from './file-tree';
 import { Format } from '../lib/card-api';
 import {
@@ -39,7 +40,7 @@ export default class Go extends Component<Signature> {
                       contentChanged=this.contentChanged}}></div>
         <div class="preview">
           {{#if (isRunnable this.openFile.name)}}
-            Schema inspector goes here
+            <Module @url={{this.openFile.url}} />
           {{else if this.openFileCardJSON}}
             <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module this.openFile.url}} >
               <:ready as |module|>

@@ -52,8 +52,13 @@ export class DirectoryResource extends Resource<Args> {
       return;
     }
     let entries = await getEntries(this.realmPath, this.url);
-    entries.sort((a, b) => a.path.localeCompare(b.path));
-
+    entries.sort((a, b) => {
+      // need to re-insert the leading and trailing /'s in order to get a sort
+      // that can organize the paths correctly
+      let pathA = `/${a.path}${a.kind === 'directory' ? '/' : ''}`;
+      let pathB = `/${b.path}${b.kind === 'directory' ? '/' : ''}`;
+      return pathA.localeCompare(pathB);
+    });
     this.entries = entries;
   }
 }

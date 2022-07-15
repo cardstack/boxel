@@ -1,7 +1,11 @@
 import { module, test } from 'qunit';
-import { isCardDocument } from '@cardstack/runtime-common/search-index';
+import {
+  CardRef,
+  isCardDocument,
+} from '@cardstack/runtime-common/search-index';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { TestRealm, TestRealmAdapter } from '../helpers';
+import { stringify } from 'qs';
 
 let paths = new RealmPaths('http://test-realm');
 
@@ -54,6 +58,63 @@ module('Unit | realm', function () {
       },
     });
     assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+  });
+
+  test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
+    let realm = TestRealm.create(
+      {
+        'dir/empty.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'Card',
+              },
+            },
+          },
+        },
+      },
+      new URL('http://test-realm/root/')
+    );
+    await realm.ready;
+    {
+      let response = await realm.handle(
+        new Request('http://test-realm/root/dir/empty', {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        })
+      );
+      assert.strictEqual(response.status, 200, 'successful http status');
+      let json = await response.json();
+      assert.strictEqual(
+        json.data.id,
+        'http://test-realm/root/dir/empty',
+        'card ID is correct'
+      );
+    }
+    {
+      let response = await realm.handle(
+        new Request('http://test-realm/root/_search', {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        })
+      );
+      let json = await response.json();
+      assert.strictEqual(
+        json.data.length,
+        1,
+        'the card is returned in the search results'
+      );
+      assert.strictEqual(
+        json.data[0].id,
+        'http://test-realm/root/dir/empty',
+        'card ID is correct'
+      );
+    }
   });
 
   test('realm can serve create card requests', async function (assert) {
@@ -262,7 +323,11 @@ module('Unit | realm', function () {
         'Abdel-Rahman',
         'field value is correct'
       );
-      assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+      assert.strictEqual(
+        json.data.meta.lastModified,
+        adapter.lastModified.get(paths.fileURL('dir/card.json').href),
+        'lastModified is correct'
+      );
       let fileRef = await adapter.openFile('dir/card.json');
       if (!fileRef) {
         throw new Error('file not found');
@@ -490,6 +555,191 @@ module('Unit | realm', function () {
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let responseText = await response.text();
     assert.strictEqual(responseText, html, 'asset contents are correct');
+  });
+
+  test('realm can serve search requests', async function (assert) {
+    let realm = TestRealm.create({
+      'dir/empty.json': {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'Card',
+            },
+          },
+        },
+      },
+    });
+    await realm.ready;
+    let response = await realm.handle(
+      new Request('http://test-realm/_search', {
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+      })
+    );
+    let json = await response.json();
+    assert.strictEqual(
+      json.data.length,
+      1,
+      'the card is returned in the search results'
+    );
+    assert.strictEqual(
+      json.data[0].id,
+      'http://test-realm/dir/empty',
+      'card ID is correct'
+    );
+  });
+
+  test('realm can serve typeOf requests', async function (assert) {
+    let realm = TestRealm.create({
+      'person.gts': cardSrc,
+    });
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(
+        `http://test-realm/_typeOf?${stringify({
+          type: 'exportedCard',
+          module: 'http://test-realm/person',
+          name: 'Person',
+        } as CardRef)}`,
+        {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        }
+      )
+    );
+    assert.strictEqual(response.status, 200, 'HTTP 200 status code');
+    let json = await response.json();
+    assert.deepEqual(
+      json,
+      {
+        data: {
+          id: 'http://test-realm/person/Person',
+          type: 'card-definition',
+          relationships: {
+            _super: {
+              links: {
+                related:
+                  'https://cardstack.com/base/_typeOf?type=exportedCard&module=https%3A%2F%2Fcardstack.com%2Fbase%2Fcard-api&name=Card',
+              },
+              meta: {
+                type: 'super',
+              },
+            },
+            firstName: {
+              links: {
+                related:
+                  'https://cardstack.com/base/_typeOf?type=exportedCard&module=https%3A%2F%2Fcardstack.com%2Fbase%2Fstring&name=default',
+              },
+              meta: {
+                type: 'contains',
+              },
+            },
+          },
+        },
+      },
+      'typeOf response is correct'
+    );
+  });
+
+  test('realm can serve cardsOf requests', async function (assert) {
+    let realm = TestRealm.create({
+      'person.gts': cardSrc,
+    });
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(
+        `http://test-realm/_cardsOf?${stringify({
+          module: 'http://test-realm/person',
+        })}`,
+        {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        }
+      )
+    );
+    assert.strictEqual(response.status, 200, 'HTTP 200 status code');
+    let json = await response.json();
+    assert.deepEqual(
+      json,
+      {
+        data: {
+          type: 'module',
+          id: 'http://test-realm/person',
+          attributes: {
+            cardExports: [
+              {
+                type: 'exportedCard',
+                module: 'http://test-realm/person',
+                name: 'Person',
+              },
+            ],
+          },
+        },
+      },
+      'cardsOf response is correct'
+    );
+  });
+
+  test('realm can serve directory requests', async function (assert) {
+    let realm = TestRealm.create({
+      'dir/empty.json': {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'Card',
+            },
+          },
+        },
+      },
+      'dir/subdir/file.txt': '',
+    });
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(`http://test-realm/dir/`, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 200, 'HTTP 200 status code');
+    let json = await response.json();
+    assert.deepEqual(
+      json,
+      {
+        data: {
+          id: 'http://test-realm/dir/',
+          type: 'directory',
+          relationships: {
+            'subdir/': {
+              links: {
+                related: 'http://test-realm/dir/subdir/',
+              },
+              meta: {
+                kind: 'directory',
+              },
+            },
+            'empty.json': {
+              links: {
+                related: 'http://test-realm/dir/empty.json',
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
+          },
+        },
+      },
+      'the directory response is correct'
+    );
   });
 });
 

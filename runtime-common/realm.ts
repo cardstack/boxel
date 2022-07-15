@@ -12,7 +12,6 @@ import {
   notFound,
   methodNotAllowed,
   badRequest,
-  CardError,
 } from "@cardstack/runtime-common/error";
 import { formatRFC7231 } from "date-fns";
 import {
@@ -20,6 +19,7 @@ import {
   ResourceObjectWithId,
   DirectoryEntryRelationship,
   executableExtensions,
+  baseRealm,
 } from "./index";
 import merge from "lodash/merge";
 import { parse, stringify } from "qs";
@@ -33,6 +33,7 @@ import glimmerTemplatePlugin from "@cardstack/ember-template-imports/src/babel-p
 import decoratorsProposalPlugin from "@babel/plugin-proposal-decorators";
 import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properties";
 import typescriptPlugin from "@babel/plugin-transform-typescript";
+import { Router } from "./router";
 
 export interface FileRef {
   path: LocalPath;
@@ -56,6 +57,8 @@ export class Realm {
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
   #paths: RealmPaths;
+  #jsonAPIRouter: Router;
+  #cardSourceRouter: Router;
 
   get url(): string {
     return this.#paths.url;
@@ -71,6 +74,22 @@ export class Realm {
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this)
     );
+
+    this.#jsonAPIRouter = new Router(new URL(url))
+      .post("/", this.createCard.bind(this))
+      .patch("/.+(?<!.json)", this.patchCard.bind(this))
+      .get("/_cardsOf", this.getCardsOf.bind(this))
+      .get("/_search", this.search.bind(this))
+      .get("/_typeOf", this.getTypeOf.bind(this))
+      .get(".*/", this.getDirectoryListing.bind(this))
+      .get("/.+(?<!.json)", this.getCard.bind(this));
+
+    this.#cardSourceRouter = new Router(new URL(url))
+      .post(
+        `/.+(${executableExtensions.map((e) => "\\" + e).join("|")})`,
+        this.upsertCardSource.bind(this)
+      )
+      .get("/.+", this.getCardSourceOrRedirect.bind(this));
   }
 
   async write(
@@ -103,11 +122,11 @@ export class Realm {
       if (!this.searchIndex) {
         return systemError("search index is not available");
       }
-      return await this.handleJSONAPI(request);
+      return this.#jsonAPIRouter.handle(request);
     } else if (
       request.headers.get("Accept")?.includes("application/vnd.card+source")
     ) {
-      return this.handleCardSource(request, url);
+      return this.#cardSourceRouter.handle(request);
     }
 
     let maybeHandle = await this.getFileWithFallbacks(this.#paths.local(url));
@@ -138,27 +157,22 @@ export class Realm {
     });
   }
 
-  private async handleCardSource(
-    request: Request,
-    url: URL
-  ): Promise<Response> {
-    if (request.method === "POST") {
-      let { lastModified } = await this.write(
-        this.#paths.local(new URL(request.url)),
-        await request.text()
-      );
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Last-Modified": formatRFC7231(lastModified),
-        },
-      });
-    }
+  private async upsertCardSource(request: Request): Promise<Response> {
+    let { lastModified } = await this.write(
+      this.#paths.local(new URL(request.url)),
+      await request.text()
+    );
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Last-Modified": formatRFC7231(lastModified),
+      },
+    });
+  }
 
-    let localName = this.#paths.local(url);
-
+  private async getCardSourceOrRedirect(request: Request): Promise<Response> {
+    let localName = this.#paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
-
     if (!handle) {
       return notFound(request, `${localName} not found`);
     }
@@ -241,193 +255,123 @@ export class Realm {
     return undefined;
   }
 
-  private async handleJSONAPI(request: Request): Promise<Response> {
+  private async createCard(request: Request): Promise<Response> {
     let url = new URL(request.url);
-    let localPath = this.#paths.local(url);
+    let json = await request.json();
+    if (!isCardJSON(json)) {
+      return badRequest(`Request body is not valid card JSON-API`);
+    }
 
-    // create card data
-    if (request.method === "POST") {
-      if (localPath.startsWith("_")) {
-        return methodNotAllowed(request);
-      }
-      // detecting top-level URL such that request.url === realm.url resulting in empty localPath
-      if (localPath !== "") {
-        return notFound(request, `Can't POST to ${url.href}`);
-      }
-      let json = await request.json();
-      if (!isCardJSON(json)) {
-        return badRequest(`Request body is not valid card JSON-API`);
-      }
-
-      // new instances are created in a folder named after the card
-      let dirName = `/${json.data.meta.adoptsFrom.name}/`;
-      let entries = await this.#searchIndex.directory(
-        new URL(dirName, this.url)
-      );
-      let index = 0;
-      if (entries) {
-        for (let { name, kind } of entries) {
-          if (kind === "directory") {
-            continue;
-          }
-          if (!/^[\d]+\.json$/.test(name)) {
-            continue;
-          }
-          let num = parseInt(name.replace(".json", ""));
-          index = Math.max(index, num);
+    // new instances are created in a folder named after the card
+    let dirName = `/${json.data.meta.adoptsFrom.name}/`;
+    let entries = await this.#searchIndex.directory(new URL(dirName, this.url));
+    let index = 0;
+    if (entries) {
+      for (let { name, kind } of entries) {
+        if (kind === "directory") {
+          continue;
         }
-      }
-      let pathname = `${dirName}${++index}.json`;
-      await this.write(pathname, JSON.stringify(json, null, 2));
-      let newURL = new URL(pathname, url.origin).href.replace(/\.json$/, "");
-      if (!isCardDocument(json)) {
-        return badRequest(
-          `bug: the card document is not actually a card document`
-        );
-      }
-      json.data.id = newURL;
-      json.data.links = { self: newURL };
-      if (!isCardDocument(json)) {
-        return systemError(
-          `bug: constructed non-card document resource in JSON-API request for ${newURL}`
-        );
-      }
-      await this.addLastModifiedToCardDoc(json, pathname);
-      return new Response(JSON.stringify(json, null, 2), {
-        status: 201,
-        headers: {
-          "Last-Modified": formatRFC7231(json.data.meta.lastModified!),
-          "Content-Type": "application/vnd.api+json",
-        },
-      });
-    }
-
-    // Update card data
-    if (request.method === "PATCH") {
-      if (localPath.startsWith("_")) {
-        return methodNotAllowed(request);
-      }
-
-      let original = await this.#searchIndex.card(url);
-      if (!original) {
-        return notFound(request);
-      }
-
-      let patch = await request.json();
-      if (!isCardDocument(patch)) {
-        return badRequest(`The request body was not a card document`);
-      }
-      // prevent the client from changing the card type or ID in the patch
-      delete (patch as any).data.meta;
-      delete (patch as any).data.type;
-
-      let card = merge({ data: original }, patch);
-      delete (card as any).data.id; // don't write the ID to the file
-      let path = localPath.endsWith(".json") ? localPath : localPath + ".json";
-      await this.write(path, JSON.stringify(card, null, 2));
-      card.data.id = url.href.replace(/\.json$/, "");
-      card.data.links = { self: url.href };
-      await this.addLastModifiedToCardDoc(card, path);
-      return new Response(JSON.stringify(card, null, 2), {
-        headers: {
-          "Last-Modified": formatRFC7231(card.data.meta.lastModified!),
-          "Content-Type": "application/vnd.api+json",
-        },
-      });
-    }
-
-    if (request.method === "GET") {
-      if (localPath === "/_cardsOf") {
-        return await this.getCardsOf(request);
-      }
-      if (localPath === "/_typeOf") {
-        return await this.getTypeOf(request);
-      }
-      if (localPath === "/_search") {
-        return await this.search(request);
-      }
-
-      // Get directory listing
-      if (url.href.endsWith("/")) {
-        let jsonapi = await this.getDirectoryListingAsJSONAPI(url);
-        if (!jsonapi) {
-          return notFound(request);
+        if (!/^[\d]+\.json$/.test(name)) {
+          continue;
         }
-
-        return new Response(JSON.stringify(jsonapi, null, 2), {
-          headers: { "Content-Type": "application/vnd.api+json" },
-        });
+        let num = parseInt(name.replace(".json", ""));
+        index = Math.max(index, num);
       }
-
-      let data = await this.#searchIndex.card(url);
-      if (data) {
-        (data as any).links = { self: url.href };
-        let card = { data };
-        // TODO: this is adding the wrong lastModified, because our data came
-        // from the search index and the lastModified is coming from the realm
-        // (i.e. the realm filesystem). Those two could differ. The lastModified
-        // time should already live inside the search index so they always
-        // match.
-        await this.addLastModifiedToCardDoc(card, localPath + ".json");
-        return new Response(JSON.stringify(card, null, 2), {
-          headers: {
-            "Last-Modified": formatRFC7231(card.data.meta.lastModified!),
-            "Content-Type": "application/vnd.api+json",
-          },
-        });
-      }
-
-      return notFound(request, `No such JSON-API resource ${url.href}`);
     }
-
-    return systemError(
-      `Don't know how to handle JSON-API request ${request.method} for ${url.href}`
+    let pathname = `${dirName}${++index}.json`;
+    let { lastModified } = await this.write(
+      pathname,
+      JSON.stringify(json, null, 2)
     );
+    let newURL = new URL(pathname, url.origin).href.replace(/\.json$/, "");
+    if (!isCardDocument(json)) {
+      return badRequest(
+        `bug: the card document is not actually a card document`
+      );
+    }
+    json.data.id = newURL;
+    json.data.links = { self: newURL };
+    json.data.meta.lastModified = lastModified;
+    if (!isCardDocument(json)) {
+      return systemError(
+        `bug: constructed non-card document resource in JSON-API request for ${newURL}`
+      );
+    }
+    return new Response(JSON.stringify(json, null, 2), {
+      status: 201,
+      headers: {
+        "Content-Type": "application/vnd.api+json",
+        ...lastModifiedHeader(json),
+      },
+    });
   }
 
-  // todo: I think we get rid of this
-  private async readFileAsText(path: LocalPath): Promise<string> {
-    let ref = await this.#adapter.openFile(path);
-    if (!ref) {
-      throw new Error("fixme todo");
+  private async patchCard(request: Request): Promise<Response> {
+    if (this.#paths.local(new URL(request.url)).startsWith("_")) {
+      return methodNotAllowed(request);
     }
-    return await this.fileContentToText(ref);
+
+    let url = this.#paths.fileURL(new URL(request.url).pathname);
+    let original = await this.#searchIndex.card(url);
+    if (!original) {
+      return notFound(request);
+    }
+    delete original.meta.lastModified;
+
+    let patch = await request.json();
+    if (!isCardDocument(patch)) {
+      return badRequest(`The request body was not a card document`);
+    }
+    // prevent the client from changing the card type or ID in the patch
+    delete (patch as any).data.meta;
+    delete (patch as any).data.type;
+
+    let card = merge({ data: original }, patch);
+    delete (card as any).data.id; // don't write the ID to the file
+    let path = `${this.#paths.local(url)}.json`;
+    let { lastModified } = await this.write(
+      path,
+      JSON.stringify(card, null, 2)
+    );
+    card.data.id = url.href.replace(/\.json$/, "");
+    card.data.links = { self: url.href };
+    card.data.meta.lastModified = lastModified;
+    return new Response(JSON.stringify(card, null, 2), {
+      headers: {
+        "Content-Type": "application/vnd.api+json",
+        ...lastModifiedHeader(card),
+      },
+    });
   }
 
-  private async fileContentToText({ content }: FileRef): Promise<string> {
-    if (typeof content === "string") {
-      return content;
+  private async getCard(request: Request): Promise<Response> {
+    let url = this.#paths.fileURL(new URL(request.url).pathname);
+    let data = await this.#searchIndex.card(url);
+    if (!data) {
+      return notFound(request);
     }
-    let decoder = new TextDecoder();
-    let pieces: string[] = [];
-    if (content instanceof Uint8Array) {
-      pieces.push(decoder.decode(content));
-    } else {
-      let reader = content.getReader();
-      while (true) {
-        let { done, value } = await reader.read();
-        if (done) {
-          pieces.push(decoder.decode(undefined, { stream: false }));
-          break;
-        }
-        if (value) {
-          pieces.push(decoder.decode(value, { stream: true }));
-        }
-      }
-    }
-    return pieces.join("");
+    (data as any).links = { self: url.href };
+    let card = { data };
+    return new Response(JSON.stringify(card, null, 2), {
+      headers: {
+        "Last-Modified": formatRFC7231(card.data.meta.lastModified!),
+        "Content-Type": "application/vnd.api+json",
+        ...lastModifiedHeader(card),
+      },
+    });
   }
 
-  private async getDirectoryListingAsJSONAPI(
-    url: URL
-  ): Promise<
-    | { data: ResourceObjectWithId; included?: ResourceObjectWithId[] }
-    | undefined
-  > {
+  private async getDirectoryListing(request: Request): Promise<Response> {
+    // a LocalPath has no leading nor trailing slash
+    let localPath: LocalPath = new URL(request.url).pathname
+      .replace(/^\//, "")
+      .replace(/\/$/, "");
+    let url = this.#paths.directoryURL(localPath);
+
     let entries = await this.#searchIndex.directory(url);
     if (!entries) {
       console.log(`can't find directory ${url.href}`);
-      return undefined;
+      return notFound(request);
     }
 
     let data: ResourceObjectWithId = {
@@ -456,7 +400,47 @@ export class Realm {
       ] = relationship;
     }
 
-    return { data };
+    return new Response(JSON.stringify({ data }, null, 2), {
+      headers: { "Content-Type": "application/vnd.api+json" },
+    });
+  }
+
+  // todo: I think we get rid of this
+  private async readFileAsText(
+    path: LocalPath
+  ): Promise<{ content: string; lastModified: number } | undefined> {
+    let ref = await this.#adapter.openFile(path);
+    if (!ref) {
+      return;
+    }
+    return {
+      content: await this.fileContentToText(ref),
+      lastModified: ref.lastModified,
+    };
+  }
+
+  private async fileContentToText({ content }: FileRef): Promise<string> {
+    if (typeof content === "string") {
+      return content;
+    }
+    let decoder = new TextDecoder();
+    let pieces: string[] = [];
+    if (content instanceof Uint8Array) {
+      pieces.push(decoder.decode(content));
+    } else {
+      let reader = content.getReader();
+      while (true) {
+        let { done, value } = await reader.read();
+        if (done) {
+          pieces.push(decoder.decode(undefined, { stream: false }));
+          break;
+        }
+        if (value) {
+          pieces.push(decoder.decode(value, { stream: true }));
+        }
+      }
+    }
+    return pieces.join("");
   }
 
   private async getCardsOf(request: Request): Promise<Response> {
@@ -506,7 +490,7 @@ export class Realm {
       relationships: {
         _: {
           links: {
-            related: "http://local-realm/cardstack/type-of?type=exportedCard&module=%2Fsuper%2Fcard&name=SuperCard"
+            related: "http://local-realm/_typeOf?type=exportedCard&module=%2Fsuper%2Fcard&name=SuperCard"
           }
           meta: {
             type: "super"
@@ -514,7 +498,7 @@ export class Realm {
         },
         firstName: {
           links: {
-            related: "http://cardstack.com/cardstack/type-of?type=exportedCard&module%2Fstring&name=default"
+            related: "https://cardstack.com/base/_typeOf?type=exportedCard&module%2Fstring&name=default"
           },
           meta: {
             type: "contains"
@@ -522,7 +506,7 @@ export class Realm {
         },
         lastName: {
           links: {
-            related: "http://cardstack.com/cardstack/type-of?type=exportedCard&module%2Fstring&name=default"
+            related: "https://cardstack.com/base/_typeOf?type=exportedCard&module%2Fstring&name=default"
           },
           meta: {
             type: "contains"
@@ -543,15 +527,7 @@ export class Realm {
   private async getTypeOf(request: Request): Promise<Response> {
     let ref = parse(new URL(request.url).search, { ignoreQueryPrefix: true });
     if (!isCardRef(ref)) {
-      return new Response(
-        JSON.stringify({
-          errors: [`a valid card reference was not specified`],
-        }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/vnd.api+json" },
-        }
-      );
+      return badRequest("a valid card reference was not specified");
     }
     let def = await this.#searchIndex.typeOf(ref);
     if (!def) {
@@ -560,7 +536,7 @@ export class Realm {
         `Could not find card reference ${JSON.stringify(ref)}`
       );
     }
-    let data: ResourceObjectWithId = {
+    let data: CardDefinitionResource = {
       id: def.key,
       type: "card-definition",
       relationships: {},
@@ -572,7 +548,7 @@ export class Realm {
     if (def.super) {
       data.relationships._super = {
         links: {
-          related: cardRefToTypeURL(def.super, this),
+          related: this.cardRefToTypeURL(def.super),
         },
         meta: {
           type: "super",
@@ -582,14 +558,14 @@ export class Realm {
     for (let [fieldName, field] of def.fields) {
       data.relationships[fieldName] = {
         links: {
-          related: cardRefToTypeURL(field.fieldCard, this),
+          related: this.cardRefToTypeURL(field.fieldCard),
         },
         meta: {
           type: field.fieldType,
         },
       };
     }
-    return new Response(JSON.stringify(data, null, 2), {
+    return new Response(JSON.stringify({ data }, null, 2), {
       headers: { "Content-Type": "application/vnd.api+json" },
     });
   }
@@ -611,28 +587,60 @@ export class Realm {
     );
   }
 
-  private async addLastModifiedToCardDoc(card: CardDocument, path: LocalPath) {
-    let { lastModified } = (await this.#adapter.openFile(path)) ?? {};
-    if (!lastModified) {
-      throw new CardError(
-        systemError(`no last modified date available for file ${path}`)
-      );
+  private cardRefToTypeURL(ref: CardRef): string {
+    let module = new URL(getExportedCardContext(ref).module);
+    if (this.#paths.inRealm(module)) {
+      return `${this.url}_typeOf?${stringify(ref)}`;
     }
-    card.data.meta.lastModified = lastModified;
+
+    // TODO how to resolve the Realm URL of a module that does not come from our
+    // own realm For now we can just hardcode realms we know about when
+    // resolving a realm URL from a module, which in this case is only the base
+    // realm. Probably we need some kind of "realm lookup" which is a list of
+    // all realms that our hub knows about
+    if (baseRealm.inRealm(module)) {
+      return `${baseRealm.fileURL("_typeOf")}?${stringify(ref)}`;
+    }
+
+    throw new Error(
+      `Don't know how to resolve realm URL for module ${module.href}`
+    );
   }
 }
 
 export type Kind = "file" | "directory";
 
-function cardRefToTypeURL(ref: CardRef, realm: Realm): string {
-  let modRealm = new URL(getModuleContext(ref), realm.url).origin;
-  return `${modRealm}/cardstack/type-of?${stringify(ref)}`;
+export function getExportedCardContext(ref: CardRef): {
+  module: string;
+  name: string;
+} {
+  if (ref.type === "exportedCard") {
+    return { module: ref.module, name: ref.name };
+  } else {
+    return getExportedCardContext(ref.card);
+  }
+}
+function lastModifiedHeader(
+  card: CardDocument
+): {} | { "Last-Modified": string } {
+  return (
+    card.data.meta.lastModified != null
+      ? { "Last-Modified": formatRFC7231(card.data.meta.lastModified) }
+      : {}
+  ) as {} | { "Last-Modified": string };
 }
 
-function getModuleContext(ref: CardRef): string {
-  if (ref.type === "exportedCard") {
-    return ref.module;
-  } else {
-    return getModuleContext(ref.card);
-  }
+export interface CardDefinitionResource {
+  id: string;
+  type: "card-definition";
+  relationships: {
+    [fieldName: string]: {
+      links: {
+        related: string;
+      };
+      meta: {
+        type: "super" | "contains" | "containsMany";
+      };
+    };
+  };
 }

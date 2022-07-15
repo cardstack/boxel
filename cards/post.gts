@@ -25,3 +25,12 @@ export class Post extends Card {
     </template>
   }
 }
+
+export class BasicCard extends Card {
+  @field title = contains(StringCard);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      Title: <@fields.title/>
+    </template>
+  }
+}
