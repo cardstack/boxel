@@ -246,7 +246,9 @@ export class SearchIndex {
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
     await this.visitFile(url);
 
-    let newDirectories = new URLMap([...this.directories]);
+    let newDirectories = new URLMap<{ name: string; kind: Kind }[]>();
+    await this.visitDirectory(new URL(this.realm.url), newDirectories);
+
     let segments = url.href.split("/");
     let name = segments.pop()!;
     let dirURL = new URL(segments.join("/") + "/");

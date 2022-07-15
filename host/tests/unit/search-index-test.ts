@@ -612,7 +612,6 @@ module('Unit | search-index', function () {
     );
 
     await realm.write('.gitignore', '*.json\n/dir\nposts/ignore-me.gts');
-    await indexer.run();
 
     let def = await indexer.typeOf({
       type: 'exportedCard',
