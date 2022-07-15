@@ -3,7 +3,7 @@ import { Kind, Realm } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
-// import ignore, { Ignore } from "ignore";
+import ignore, { Ignore } from "ignore";
 
 export type CardRef =
   | {
@@ -188,7 +188,7 @@ export class SearchIndex {
   private directories = new URLMap<{ name: string; kind: Kind }[]>();
   private definitions = new Map<string, CardDefinition>();
   private exportedCardRefs = new Map<string, CardRef[]>();
-  // private ignoreMap = new URLMap<Ignore>();
+  private ignoreMap = new URLMap<Ignore>();
 
   constructor(
     private realm: Realm,
@@ -198,7 +198,7 @@ export class SearchIndex {
     ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
     private readFileAsText: (
       path: LocalPath
-    ) => Promise<{ content: string; lastModified: number }>
+    ) => Promise<{ content: string; lastModified: number } | undefined>
   ) {}
 
   async run() {
@@ -214,12 +214,10 @@ export class SearchIndex {
     // TODO we should be using ignore patterns for the current context so the
     // ignores are consistent with the index, i.e. don't use ignore file from a
     // previous search index run on a new search index
-
-    // TODO: ignorePatterns
-    // let ignorePatterns = await this.getIgnorePatterns(url);
-    // if (ignorePatterns) {
-    //   this.ignoreMap.set(url, ignore().add(ignorePatterns));
-    // }
+    let ignorePatterns = await this.getIgnorePatterns(url);
+    if (ignorePatterns && ignorePatterns.content) {
+      this.ignoreMap.set(url, ignore().add(ignorePatterns.content));
+    }
 
     let entries = directories.get(url);
     if (!entries) {
@@ -229,19 +227,18 @@ export class SearchIndex {
     for await (let { path: innerPath, kind } of this.readdir(
       this.realmPaths.local(url)
     )) {
-      let innerURL = new URL(innerPath, this.realm.url);
-      // if (this.isIgnored(innerURL)) {
-      //   return;
-      // }
-
+      let innerURL = this.realmPaths.fileURL(innerPath);
+      if (this.isIgnored(innerURL)) {
+        continue;
+      }
       let name = innerPath.split("/").pop()!;
       if (kind === "file") {
         entries.push({ name, kind: "file" });
         await this.visitFile(innerURL);
       } else {
+        let directoryURL = this.realmPaths.directoryURL(innerPath);
         entries.push({ name, kind: "directory" });
-        innerURL = assertURLEndsWithSlash(innerURL);
-        await this.visitDirectory(innerURL, directories);
+        await this.visitDirectory(directoryURL, directories);
       }
     }
   }
@@ -249,7 +246,9 @@ export class SearchIndex {
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
     await this.visitFile(url);
 
-    let newDirectories = new URLMap([...this.directories]);
+    let newDirectories = new URLMap<{ name: string; kind: Kind }[]>();
+    await this.visitDirectory(new URL(this.realm.url), newDirectories);
+
     let segments = url.href.split("/");
     let name = segments.pop()!;
     let dirURL = new URL(segments.join("/") + "/");
@@ -276,10 +275,13 @@ export class SearchIndex {
   }
 
   private async visitFile(url: URL) {
+    let localPath = this.realmPaths.local(url);
+    let fileRef = await this.readFileAsText(localPath);
+    if (!fileRef) {
+      return;
+    }
+    let { content, lastModified } = fileRef;
     if (url.href.endsWith(".json")) {
-      let { content, lastModified } = await this.readFileAsText(
-        this.realmPaths.local(url)
-      );
       let json = JSON.parse(content);
       if (isCardDocument(json)) {
         let instanceURL = new URL(url.href.replace(/\.json$/, ""));
@@ -288,9 +290,7 @@ export class SearchIndex {
         this.instances.set(instanceURL, json.data);
       }
     } else if (hasExecutableExtension(url.href)) {
-      let mod = new ModuleSyntax(
-        (await this.readFileAsText(this.realmPaths.local(url))).content
-      );
+      let mod = new ModuleSyntax(content);
       this.modules.set(url, mod);
       this.modules.set(trimExecutableExtension(url), mod);
     }
@@ -303,6 +303,9 @@ export class SearchIndex {
     for (let [url, mod] of this.modules) {
       for (let possibleCard of mod.possibleCards) {
         if (possibleCard.exportedAs) {
+          if (this.isIgnored(url)) {
+            continue;
+          }
           await this.buildDefinition(
             newDefinitions,
             url,
@@ -568,42 +571,40 @@ export class SearchIndex {
     return this.modules.get(url)?.src;
   }
 
-  // private async getIgnorePatterns(url: URL): Promise<string | undefined> {
-  //   try {
-  //     return await this.readFileAsText(new URL(".monacoignore", url).pathname);
-  //   } catch (e: any) {
-  //     if (e.name !== "NotFoundError" && e.name !== "TypeMismatchError") {
-  //       throw e;
-  //     }
-  //     try {
-  //       return await this.readFileAsText(new URL(".gitignore", url).pathname);
-  //     } catch (e: any) {
-  //       if (e.name !== "NotFoundError" && e.name !== "TypeMismatchError") {
-  //         throw e;
-  //       }
-  //     }
-  //   }
-  //   return undefined;
-  // }
+  private async getIgnorePatterns(
+    url: URL
+  ): Promise<{ content: string; lastModified: number } | undefined> {
+    let ref = await this.readFileAsText(
+      this.realmPaths.local(new URL(".monacoignore", url))
+    );
 
-  // private isIgnored(url: URL): boolean {
-  //   if (this.ignoreMap.size === 0) {
-  //     return false;
-  //   }
-  //   // Test URL against closest ignore. (Should the ignores cascade? so that the
-  //   // child ignore extends the parent ignore?)
-  //   let ignoreURLs = [...this.ignoreMap.keys()].map((u) => u.href);
-  //   let matchingIgnores = ignoreURLs.filter((u) => url.href.includes(u));
-  //   let ignoreURL = matchingIgnores.sort((a, b) => b.length - a.length)[0] as
-  //     | string
-  //     | undefined;
-  //   if (!ignoreURL) {
-  //     return false;
-  //   }
+    if (!ref) {
+      ref = await this.readFileAsText(
+        this.realmPaths.local(new URL(".gitignore", url))
+      );
+    }
 
-  //   let ignore = this.ignoreMap.get(new URL(ignoreURL))!;
-  //   return ignore.test(url.pathname).ignored;
-  // }
+    return ref;
+  }
+
+  private isIgnored(url: URL): boolean {
+    if (this.ignoreMap.size === 0) {
+      return false;
+    }
+    // Test URL against closest ignore. (Should the ignores cascade? so that the
+    // child ignore extends the parent ignore?)
+    let ignoreURLs = [...this.ignoreMap.keys()].map((u) => u.href);
+    let matchingIgnores = ignoreURLs.filter((u) => url.href.includes(u));
+    let ignoreURL = matchingIgnores.sort((a, b) => b.length - a.length)[0] as
+      | string
+      | undefined;
+    if (!ignoreURL) {
+      return false;
+    }
+    let ignore = this.ignoreMap.get(new URL(ignoreURL))!;
+    let pathname = this.realmPaths.local(url);
+    return ignore.test(pathname).ignored;
+  }
 }
 
 function isOurFieldDecorator(ref: ClassReference, inModule: URL): boolean {
@@ -626,11 +627,4 @@ function getFieldType(
     return ref.name as ReturnType<typeof getFieldType>;
   }
   return undefined;
-}
-
-function assertURLEndsWithSlash(url: URL): URL {
-  if (url.href.endsWith("/")) {
-    return url;
-  }
-  return new URL(url.href + "/");
 }
