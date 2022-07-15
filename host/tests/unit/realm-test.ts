@@ -617,25 +617,27 @@ module('Unit | realm', function () {
     assert.deepEqual(
       json,
       {
-        id: 'http://test-realm/person/Person',
-        type: 'card-definition',
-        relationships: {
-          _super: {
-            links: {
-              related:
-                'https://cardstack.com/base/_typeOf?type=exportedCard&module=https%3A%2F%2Fcardstack.com%2Fbase%2Fcard-api&name=Card',
+        data: {
+          id: 'http://test-realm/person/Person',
+          type: 'card-definition',
+          relationships: {
+            _super: {
+              links: {
+                related:
+                  'https://cardstack.com/base/_typeOf?type=exportedCard&module=https%3A%2F%2Fcardstack.com%2Fbase%2Fcard-api&name=Card',
+              },
+              meta: {
+                type: 'super',
+              },
             },
-            meta: {
-              type: 'super',
-            },
-          },
-          firstName: {
-            links: {
-              related:
-                'https://cardstack.com/base/_typeOf?type=exportedCard&module=https%3A%2F%2Fcardstack.com%2Fbase%2Fstring&name=default',
-            },
-            meta: {
-              type: 'contains',
+            firstName: {
+              links: {
+                related:
+                  'https://cardstack.com/base/_typeOf?type=exportedCard&module=https%3A%2F%2Fcardstack.com%2Fbase%2Fstring&name=default',
+              },
+              meta: {
+                type: 'contains',
+              },
             },
           },
         },

@@ -527,15 +527,7 @@ export class Realm {
   private async getTypeOf(request: Request): Promise<Response> {
     let ref = parse(new URL(request.url).search, { ignoreQueryPrefix: true });
     if (!isCardRef(ref)) {
-      return new Response(
-        JSON.stringify({
-          errors: [`a valid card reference was not specified`],
-        }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/vnd.api+json" },
-        }
-      );
+      return badRequest("a valid card reference was not specified");
     }
     let def = await this.#searchIndex.typeOf(ref);
     if (!def) {
@@ -544,7 +536,7 @@ export class Realm {
         `Could not find card reference ${JSON.stringify(ref)}`
       );
     }
-    let data: ResourceObjectWithId = {
+    let data: CardDefinitionResource = {
       id: def.key,
       type: "card-definition",
       relationships: {},
@@ -573,7 +565,7 @@ export class Realm {
         },
       };
     }
-    return new Response(JSON.stringify(data, null, 2), {
+    return new Response(JSON.stringify({ data }, null, 2), {
       headers: { "Content-Type": "application/vnd.api+json" },
     });
   }
@@ -596,9 +588,9 @@ export class Realm {
   }
 
   private cardRefToTypeURL(ref: CardRef): string {
-    let module = new URL(getModuleContext(ref));
+    let module = new URL(getExportedCardContext(ref).module);
     if (this.#paths.inRealm(module)) {
-      return `${this.url}/_typeOf?${stringify(ref)}`;
+      return `${this.url}_typeOf?${stringify(ref)}`;
     }
 
     // TODO how to resolve the Realm URL of a module that does not come from our
@@ -618,11 +610,14 @@ export class Realm {
 
 export type Kind = "file" | "directory";
 
-function getModuleContext(ref: CardRef): string {
+export function getExportedCardContext(ref: CardRef): {
+  module: string;
+  name: string;
+} {
   if (ref.type === "exportedCard") {
-    return ref.module;
+    return { module: ref.module, name: ref.name };
   } else {
-    return getModuleContext(ref.card);
+    return getExportedCardContext(ref.card);
   }
 }
 function lastModifiedHeader(
@@ -633,4 +628,19 @@ function lastModifiedHeader(
       ? { "Last-Modified": formatRFC7231(card.data.meta.lastModified) }
       : {}
   ) as {} | { "Last-Modified": string };
+}
+
+export interface CardDefinitionResource {
+  id: string;
+  type: "card-definition";
+  relationships: {
+    [fieldName: string]: {
+      links: {
+        related: string;
+      };
+      meta: {
+        type: "super" | "contains" | "containsMany";
+      };
+    };
+  };
 }

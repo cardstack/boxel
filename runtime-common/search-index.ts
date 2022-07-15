@@ -432,7 +432,8 @@ export class SearchIndex {
           inner.possibleCard
         );
       } else {
-        return await this.getExternalCardDefinition(
+        // TODO we should make a fetch to the realm
+        return await getExternalCardDefinition(
           new URL(ref.module, url),
           ref.name
         );
@@ -468,73 +469,6 @@ export class SearchIndex {
       return undefined;
     }
     return { mod, possibleCard };
-  }
-
-  private async getExternalCardDefinition(
-    moduleURL: URL,
-    exportName: string
-  ): Promise<CardDefinition | undefined> {
-    // TODO This is scaffolding for the base realm, implement for real once we
-    // have this realm endpoint fleshed out
-    if (!baseRealm.inRealm(moduleURL)) {
-      return Promise.resolve(undefined);
-    }
-    let path = baseRealm.local(moduleURL);
-    switch (path) {
-      case "card-api":
-        return exportName === "Card"
-          ? {
-              id: {
-                type: "exportedCard",
-                module: moduleURL.href,
-                name: exportName,
-              },
-              key: `${baseRealm.fileURL(path)}/Card`,
-              super: undefined,
-              fields: new Map(),
-            }
-          : undefined;
-      case "string":
-      case "integer":
-      case "date":
-      case "datetime":
-        return exportName === "default"
-          ? {
-              id: {
-                type: "exportedCard",
-                module: moduleURL.href,
-                name: exportName,
-              },
-              super: {
-                type: "exportedCard",
-                module: baseRealm.fileURL("card-api").href,
-                name: "Card",
-              },
-              key: `${baseRealm.fileURL(path)}/default`,
-              fields: new Map(),
-            }
-          : undefined;
-      case "text-area":
-        return exportName === "default"
-          ? Promise.resolve({
-              id: {
-                type: "exportedCard",
-                module: moduleURL.href,
-                name: exportName,
-              },
-              super: {
-                type: "exportedCard",
-                module: baseRealm.fileURL("string").href,
-                name: "default",
-              },
-              key: `${baseRealm.fileURL(path)}/default`,
-              fields: new Map(),
-            })
-          : undefined;
-    }
-    throw new Error(
-      `unimplemented: don't know how to look up card types for ${moduleURL.href}`
-    );
   }
 
   private isLocal(url: URL): boolean {
@@ -627,4 +561,71 @@ function getFieldType(
     return ref.name as ReturnType<typeof getFieldType>;
   }
   return undefined;
+}
+
+export async function getExternalCardDefinition(
+  moduleURL: URL,
+  exportName: string
+): Promise<CardDefinition | undefined> {
+  // TODO This is scaffolding for the base realm, implement for real once we
+  // have this realm endpoint fleshed out
+  if (!baseRealm.inRealm(moduleURL)) {
+    return Promise.resolve(undefined);
+  }
+  let path = baseRealm.local(moduleURL);
+  switch (path) {
+    case "card-api":
+      return exportName === "Card"
+        ? {
+            id: {
+              type: "exportedCard",
+              module: moduleURL.href,
+              name: exportName,
+            },
+            key: `${baseRealm.fileURL(path)}/Card`,
+            super: undefined,
+            fields: new Map(),
+          }
+        : undefined;
+    case "string":
+    case "integer":
+    case "date":
+    case "datetime":
+      return exportName === "default"
+        ? {
+            id: {
+              type: "exportedCard",
+              module: moduleURL.href,
+              name: exportName,
+            },
+            super: {
+              type: "exportedCard",
+              module: baseRealm.fileURL("card-api").href,
+              name: "Card",
+            },
+            key: `${baseRealm.fileURL(path)}/default`,
+            fields: new Map(),
+          }
+        : undefined;
+    case "text-area":
+      return exportName === "default"
+        ? Promise.resolve({
+            id: {
+              type: "exportedCard",
+              module: moduleURL.href,
+              name: exportName,
+            },
+            super: {
+              type: "exportedCard",
+              module: baseRealm.fileURL("string").href,
+              name: "default",
+            },
+            key: `${baseRealm.fileURL(path)}/default`,
+            fields: new Map(),
+          })
+        : undefined;
+  }
+  throw new Error(
+    `unimplemented: don't know how to look up card types for ${moduleURL.href}`
+  );
 }

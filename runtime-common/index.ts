@@ -33,7 +33,7 @@ export interface DirectoryEntryRelationship {
     kind: "directory" | "file";
   };
 }
-import { RealmPaths } from './paths';
+import { RealmPaths } from "./paths";
 export const baseRealm = new RealmPaths("https://cardstack.com/base/");
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
@@ -111,6 +111,7 @@ export { Realm } from "./realm";
 export type { Kind, RealmAdapter, FileRef } from "./realm";
 
 export type {
+  CardRef,
   CardResource,
   CardDocument,
   CardDefinition,
