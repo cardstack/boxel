@@ -6,7 +6,6 @@ import {
   writeFileSync,
   statSync,
   ensureDirSync,
-  createReadStream,
 } from "fs-extra";
 import { join } from "path";
 // import { Readable } from "stream";
@@ -45,7 +44,7 @@ export class NodeRealm implements RealmAdapter {
     }
     let { mtime } = statSync(absolutePath);
     // looks like ReadStream is not compatible with ReadableStream
-    // let stream = createReadStream(absolutePath);
+    // let stream = fs.createReadStream(absolutePath);
     return {
       path,
       content: readFileSync(absolutePath, { encoding: "utf8" }),

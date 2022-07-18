@@ -18,6 +18,6 @@
     "yargs": "^17.5.1"
   },
   "scripts": {
-    "start": "ts-node --logError server --port=4201 --path='../cards' --url='http://localhost:4201/'"
+    "start": "ts-node --transpileOnly server --port=4201 --path='../cards' --url='http://localhost:4201/'"
   }
 }
