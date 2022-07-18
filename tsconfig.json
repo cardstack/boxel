@@ -30,6 +30,10 @@
       "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"]
     }
   },
+  "glint": {
+    "environment": ["ember-loose", "ember-template-imports"],
+    "include": ["cards/**", "host/app/**", "host/tests/**"]
+  },
   "include": [
     "cards/**/*",
     "host/app/**/*",

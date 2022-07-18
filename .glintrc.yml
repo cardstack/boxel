@@ -1,8 +1,0 @@
-environment:
-  - ember-loose
-  - ember-template-imports
-
-include:
-  - cards/**
-  - host/app/**
-  - host/tests/**
