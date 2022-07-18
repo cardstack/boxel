@@ -5,6 +5,7 @@
   "license": "MIT",
   "workspaces": [
     "host",
+    "realm-server",
     "worker",
     "cards",
     "runtime-common",
