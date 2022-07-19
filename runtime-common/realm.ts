@@ -211,7 +211,13 @@ export class Realm {
           // this "as any" is because typescript is using the Node-specific types
           // from babel-plugin-ember-template-compilation, but we're using the
           // browser interface
-          (makeEmberTemplatePlugin as any)(() => etc.precompile),
+          // (makeEmberTemplatePlugin as any)(() => etc.precompile),
+          [
+            makeEmberTemplatePlugin,
+            {
+              precompile: etc.precompile,
+            },
+          ],
           externalsPlugin,
         ],
       })!.code!;

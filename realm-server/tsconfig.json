@@ -14,11 +14,12 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noEmitOnError": false,
-    "noEmit": true,
+    "noEmit": false,
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",
     "module": "CommonJS",
+    "esModuleInterop": true,
     "experimentalDecorators": true,
   }
 }
