@@ -26,7 +26,7 @@ jobs:
       - run: yarn glint
       - run: cd ./worker && yarn tsc
       - run: cd ./realm-server && yarn tsc
-  test:
+  host-test:
     name: Host Tests
     runs-on: ubuntu-latest
     steps:
@@ -48,7 +48,7 @@ jobs:
       - name: host test suite
         run: yarn test:ember
         working-directory: host
-  test:
+  realm-test:
     name: Realm Server Tests
     runs-on: ubuntu-latest
     steps:
