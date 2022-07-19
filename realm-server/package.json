@@ -7,17 +7,23 @@
     "extends": "../package.json"
   },
   "devDependencies": {
-    "@cardstack/runtime-common": "0.0.0",
+    "@cardstack/runtime-common": "1.0.0",
     "@types/koa": "^2.13.5",
     "@types/node-fetch": "^2.6.2",
+    "@types/qunit": "^2.11.3",
+    "@types/supertest": "^2.0.12",
     "@types/yargs": "^17.0.10",
     "fs-extra": "^10.1.0",
     "koa": "^2.13.4",
     "node-fetch": "^2.6.7",
+    "qunit": "^2.18.0",
+    "supertest": "^6.2.4",
     "ts-node": "^10.9.1",
+    "typescript": "^4.5.2",
     "yargs": "^17.5.1"
   },
   "scripts": {
-    "start": "ts-node --transpileOnly server --port=4201 --path='../cards' --url='http://localhost:4201/'"
+    "test": "qunit --require ts-node/register tests/index.ts",
+    "start": "ts-node --transpileOnly main --port=4201 --path='../cards' --url='http://localhost:4201/'"
   }
 }

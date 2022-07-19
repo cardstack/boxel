@@ -42,29 +42,32 @@ import * as emberHelper from '@ember/helper';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('@ember/helper', emberHelper);
 import * as emberModifier from '@ember/modifier';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('@ember/modifier', emberModifier);
-import * as cardAPI from './lib/card-api';
+
+// This should be loaded from the actual server serving our base cards
+
+import * as cardAPI from 'runtime-spike/lib/card-api';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   'runtime-spike/lib/card-api',
   cardAPI
 );
-import * as StringCard from './lib/string';
+import * as StringCard from 'runtime-spike/lib/string';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   'runtime-spike/lib/string',
   StringCard
 );
-import * as TextAreaCard from './lib/text-area';
+import * as TextAreaCard from 'runtime-spike/lib/text-area';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   'runtime-spike/lib/text-area',
   TextAreaCard
 );
-import * as DateCard from './lib/date';
+import * as DateCard from 'runtime-spike/lib/date';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('runtime-spike/lib/date', DateCard);
-import * as DateTimeCard from './lib/datetime';
+import * as DateTimeCard from 'runtime-spike/lib/datetime';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   'runtime-spike/lib/datetime',
   DateTimeCard
 );
-import * as IntegerCard from './lib/integer';
+import * as IntegerCard from 'runtime-spike/lib/integer';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   'runtime-spike/lib/integer',
   IntegerCard

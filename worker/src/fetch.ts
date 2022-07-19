@@ -45,6 +45,7 @@ export class FetchHandler {
         ) {
           return scaffoldBaseRealmTypeOf(request);
         }
+        // TODO we shouldn't need to generate an external stub for base cards since these will be served from a real server
         return generateExternalStub(
           url.pathname.replace('/base/', 'runtime-spike/lib/')
         );

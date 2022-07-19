@@ -1,4 +1,4 @@
-import { Component } from 'runtime-spike/lib/card-api';
+import { Component } from './card-api';
 import StringCard from './string';
 import { on } from '@ember/modifier';
 import { pick } from './pick';

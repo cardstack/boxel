@@ -1,7 +1,7 @@
 import { Resource, useResource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
-import { Format, prepareToRender, Card } from '../lib/card-api';
+import { Format, prepareToRender, Card } from 'runtime-spike/lib/card-api';
 import { tracked } from '@glimmer/tracking';
 import { ComponentLike } from '@glint/template';
 

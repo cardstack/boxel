@@ -14,7 +14,7 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noEmitOnError": false,
-    "noEmit": false,
+    "noEmit": true,
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",

@@ -40,6 +40,10 @@ import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properti
 import typescriptPlugin from "@babel/plugin-transform-typescript";
 import { Router } from "./router";
 
+// From https://github.com/iliakan/detect-node
+const isNode =
+  Object.prototype.toString.call(globalThis.process) === "[object process]";
+
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Uint8Array | string;
@@ -216,7 +220,7 @@ export class Realm {
           // this "as any" is because typescript is using the Node-specific types
           // from babel-plugin-ember-template-compilation, but we're using the
           // browser interface
-          isNode()
+          isNode
             ? [
                 makeEmberTemplatePlugin,
                 {
@@ -655,9 +659,4 @@ export interface CardDefinitionResource {
       };
     };
   };
-}
-
-// From https://github.com/iliakan/detect-node
-function isNode() {
-  return Object.prototype.toString.call(global.process) === "[object process]";
 }

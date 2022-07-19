@@ -5,7 +5,7 @@ import flatMap from 'lodash/flatMap';
 import startCase from 'lodash/startCase';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
-import ContainsManyEditor from '../components/contains-many';
+import ContainsManyEditor from './contains-many';
 import { WatchedArray } from './watched-array';
 import type { ResourceObject } from '@cardstack/runtime-common';
 

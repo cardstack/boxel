@@ -8,6 +8,7 @@
     "realm-server",
     "worker",
     "cards",
+    "base",
     "runtime-common",
     "vendor/ember-template-imports"
   ],

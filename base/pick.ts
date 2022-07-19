@@ -1,4 +1,4 @@
-import { get } from '@ember/object';
+import get from "lodash/get";
 
 export function pick(
   path: string,
