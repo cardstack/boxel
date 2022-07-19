@@ -27,11 +27,16 @@ import { parse, stringify } from "qs";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
 import makeEmberTemplatePlugin from "babel-plugin-ember-template-compilation";
+//@ts-ignore no types are available
 import * as etc from "ember-source/dist/ember-template-compiler";
 import { externalsPlugin } from "./externals";
+//@ts-ignore no types are available
 import glimmerTemplatePlugin from "@cardstack/ember-template-imports/src/babel-plugin";
+//@ts-ignore no types are available
 import decoratorsProposalPlugin from "@babel/plugin-proposal-decorators";
+//@ts-ignore no types are available
 import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properties";
+//@ts-ignore ironically no types are available
 import typescriptPlugin from "@babel/plugin-transform-typescript";
 import { Router } from "./router";
 

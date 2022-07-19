@@ -25,6 +25,7 @@ jobs:
       - run: yarn --prefer-offline
       - run: yarn glint
       - run: cd ./worker && yarn tsc
+      - run: cd ./realm-server && yarn tsc
   test:
     name: Test
     runs-on: ubuntu-latest
