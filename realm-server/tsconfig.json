@@ -20,6 +20,6 @@
     "baseUrl": ".",
     "module": "CommonJS",
     "esModuleInterop": true,
-    "experimentalDecorators": true,
+    "experimentalDecorators": true
   }
 }

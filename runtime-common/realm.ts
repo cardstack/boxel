@@ -211,13 +211,14 @@ export class Realm {
           // this "as any" is because typescript is using the Node-specific types
           // from babel-plugin-ember-template-compilation, but we're using the
           // browser interface
-          // (makeEmberTemplatePlugin as any)(() => etc.precompile),
-          [
-            makeEmberTemplatePlugin,
-            {
-              precompile: etc.precompile,
-            },
-          ],
+          isNode()
+            ? [
+                makeEmberTemplatePlugin,
+                {
+                  precompile: etc.precompile,
+                },
+              ]
+            : (makeEmberTemplatePlugin as any)(() => etc.precompile),
           externalsPlugin,
         ],
       })!.code!;
@@ -649,4 +650,9 @@ export interface CardDefinitionResource {
       };
     };
   };
+}
+
+// From https://github.com/iliakan/detect-node
+function isNode() {
+  return Object.prototype.toString.call(global.process) === "[object process]";
 }
