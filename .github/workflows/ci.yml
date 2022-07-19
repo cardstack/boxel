@@ -46,7 +46,7 @@ jobs:
             ${{ runner.os }}-yarn-
       - run: yarn --prefer-offline
       - name: host test suite
-      - run: yarn test:ember
+        run: yarn test:ember
         working-directory: host
   test:
     name: Realm Server Tests
@@ -68,5 +68,5 @@ jobs:
             ${{ runner.os }}-yarn-
       - run: yarn --prefer-offline
       - name: realm server test suite
-      - run: yarn test
+        run: yarn test
         working-directory: realm-server
