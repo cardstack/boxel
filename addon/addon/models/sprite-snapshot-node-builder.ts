@@ -3,9 +3,9 @@ import Sprite, {
   SpriteType,
 } from 'animations-experiment/models/sprite';
 import SpriteTree, {
-  ContextModel,
+  Context,
   GetDescendantNodesOptions,
-  SpriteModel,
+  SpriteStateTracker,
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';
 import { assert } from '@ember/debug';
@@ -13,8 +13,8 @@ import ContextAwareBounds from 'animations-experiment/models/context-aware-bound
 import { IntermediateSprite } from 'animations-experiment/services/animations';
 
 function checkForChanges(
-  spriteModifier: SpriteModel,
-  animationContext: ContextModel
+  spriteModifier: SpriteStateTracker,
+  animationContext: Context
 ): boolean {
   let spriteCurrent = spriteModifier.currentBounds;
   let spriteLast = spriteModifier.lastBounds;
@@ -36,16 +36,16 @@ function checkForChanges(
 
 export function filterToContext(
   spriteTree: SpriteTree,
-  animationContext: ContextModel,
-  spriteModifiers: Set<SpriteModel>,
+  animationContext: Context,
+  spriteModifiers: Set<SpriteStateTracker>,
   opts: GetDescendantNodesOptions = { includeFreshlyRemoved: false }
-): Set<SpriteModel> {
+): Set<SpriteStateTracker> {
   let contextDescendants = spriteTree.descendantsOf(animationContext, {
     ...opts,
     filter(childNode: SpriteTreeNode) {
       return !(
         childNode.isContext &&
-        (childNode as { contextModel: ContextModel }).contextModel.isStable
+        (childNode as { contextModel: Context }).contextModel.isStable
       );
     },
   });
@@ -55,20 +55,20 @@ export function filterToContext(
 }
 
 export class SpriteSnapshotNode {
-  controllingContext: ContextModel;
+  controllingContext: Context;
   insertedSprites: Set<Sprite> = new Set();
   removedSprites: Set<Sprite> = new Set();
   keptSprites: Set<Sprite> = new Set();
 
-  constructor(context: ContextModel) {
+  constructor(context: Context) {
     this.controllingContext = context;
   }
 
   addSprite(
     sprite: Sprite,
-    spriteModifier: SpriteModel,
-    context: ContextModel,
-    counterpartModifier?: SpriteModel,
+    spriteModifier: SpriteStateTracker,
+    context: Context,
+    counterpartModifier?: SpriteStateTracker,
     intermediateSprite?: IntermediateSprite
   ) {
     if (sprite.type === SpriteType.Kept) {
@@ -187,26 +187,26 @@ export class SpriteSnapshotNode {
 }
 
 export class SpriteSnapshotNodeBuilder {
-  contextToNode: WeakMap<ContextModel, SpriteSnapshotNode> = new WeakMap();
+  contextToNode: WeakMap<Context, SpriteSnapshotNode> = new WeakMap();
   spriteTree: SpriteTree;
 
   constructor(
     spriteTree: SpriteTree,
-    contexts: Set<ContextModel>,
-    freshlyAdded: Set<SpriteModel>,
-    freshlyRemoved: Set<SpriteModel>,
+    contexts: Set<Context>,
+    freshlyAdded: Set<SpriteStateTracker>,
+    freshlyRemoved: Set<SpriteStateTracker>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
     this.spriteTree = spriteTree;
 
     // Capture snapshots & lookup natural KeptSprites
-    let freshlyChanged: Set<SpriteModel> = new Set();
+    let freshlyChanged: Set<SpriteStateTracker> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
-      let contextChildren: SpriteModel[] = (
+      let contextChildren: SpriteStateTracker[] = (
         [...(contextNode?.children ?? [])].filter((c) => c.isSprite) as {
-          spriteModel: SpriteModel;
+          spriteModel: SpriteStateTracker;
         }[]
       ).map((c) => c.spriteModel);
 
@@ -286,25 +286,25 @@ export class SpriteSnapshotNodeBuilder {
   }
 
   classifySprites(
-    freshlyAdded: Set<SpriteModel>,
-    freshlyRemoved: Set<SpriteModel>,
-    freshlyChanged: Set<SpriteModel>,
+    freshlyAdded: Set<SpriteStateTracker>,
+    freshlyRemoved: Set<SpriteStateTracker>,
+    freshlyChanged: Set<SpriteStateTracker>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
     let classifiedInsertedSpriteModifiers = new Set([...freshlyAdded]);
     let classifiedRemovedSpriteModifiers = new Set([...freshlyRemoved]);
     let classifiedKeptSpriteModifiers = new Set([...freshlyChanged]);
 
-    let spriteModifiers: Set<SpriteModel> = new Set();
-    let spriteModifierToSpriteMap = new WeakMap<SpriteModel, Sprite>();
+    let spriteModifiers: Set<SpriteStateTracker> = new Set();
+    let spriteModifierToSpriteMap = new WeakMap<SpriteStateTracker, Sprite>();
     let spriteModifierToCounterpartModifierMap = new Map<
-      SpriteModel,
-      SpriteModel
+      SpriteStateTracker,
+      SpriteStateTracker
     >();
     // non-natural kept sprites only
     let contextToKeptSpriteModifierMap = new WeakMap<
-      ContextModel,
-      Set<SpriteModel>
+      Context,
+      Set<SpriteStateTracker>
     >();
 
     // Classify non-natural KeptSprites

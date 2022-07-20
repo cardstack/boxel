@@ -1,8 +1,8 @@
 import Service from '@ember/service';
 
 import SpriteTree, {
-  ContextModel,
-  SpriteModel,
+  Context,
+  SpriteStateTracker,
   SpriteTreeNode,
 } from '../models/sprite-tree';
 import TransitionRunner from '../models/transition-runner';
@@ -35,41 +35,41 @@ export type AnimateFunction = (
 ) => SpriteAnimation;
 
 export interface IntermediateSprite {
-  modifier: SpriteModel;
+  modifier: SpriteStateTracker;
   intermediateBounds: DOMRect;
   intermediateStyles: CopiedCSS;
 }
 
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
-  freshlyAdded: Set<SpriteModel> = new Set();
-  freshlyRemoved: Set<SpriteModel> = new Set();
-  eligibleContexts: Set<ContextModel> = new Set();
+  freshlyAdded: Set<SpriteStateTracker> = new Set();
+  freshlyRemoved: Set<SpriteStateTracker> = new Set();
+  eligibleContexts: Set<Context> = new Set();
   intent: string | undefined;
   intermediateSprites: Map<string, IntermediateSprite> = new Map();
   runningAnimations: Map<string, Set<Animation>> = new Map();
 
-  registerContext(context: ContextModel): void {
+  registerContext(context: Context): void {
     this.spriteTree.addPendingAnimationContext(context);
   }
 
-  unregisterContext(context: ContextModel): void {
+  unregisterContext(context: Context): void {
     this.eligibleContexts.delete(context);
     this.spriteTree.removeAnimationContext(context);
   }
 
-  registerSpriteModifier(spriteModifier: SpriteModel): void {
+  registerSpriteModifier(spriteModifier: SpriteStateTracker): void {
     this.spriteTree.addPendingSpriteModifier(spriteModifier);
     this.freshlyAdded.add(spriteModifier);
   }
 
-  unregisterSpriteModifier(spriteModifier: SpriteModel): void {
+  unregisterSpriteModifier(spriteModifier: SpriteStateTracker): void {
     this.spriteTree.removeSpriteModifier(spriteModifier);
     this.freshlyRemoved.add(spriteModifier);
   }
 
   didNotifyContextRendering = false;
-  notifyContextRendering(animationContext: ContextModel): void {
+  notifyContextRendering(animationContext: Context): void {
     this.eligibleContexts.add(animationContext);
 
     // Trigger willTransition once per render cycle
@@ -112,7 +112,7 @@ export default class AnimationsService extends Service {
     }
   }
 
-  cleanupSprites(_context: ContextModel): void {
+  cleanupSprites(_context: Context): void {
     assert('Freshly removed is not empty', !this.freshlyRemoved.size);
     // TODO: When we interrupt, we can clean certain sprites marked for garbage collection
     // However, because we currently do cleanup in maybeTransitionTask, this method is a no-op because
@@ -138,7 +138,7 @@ export default class AnimationsService extends Service {
     // });
   }
 
-  createIntermediateSpritesForContext(context: ContextModel) {
+  createIntermediateSpritesForContext(context: Context) {
     // We do not care about "stableness of contexts here".
     // For intermediate sprites it is good enough to measure direct children only.
 
@@ -152,7 +152,7 @@ export default class AnimationsService extends Service {
       ...contextNode.freshlyRemovedChildren,
       ...contextNode.children,
     ]) {
-      let spriteModifier = node.spriteModel as SpriteModel;
+      let spriteModifier = node.spriteModel as SpriteStateTracker;
       if (spriteModifier) {
         let animations = node.spriteModel?.element.getAnimations() ?? [];
         animationsToCancel = animationsToCancel.concat(animations);
@@ -188,7 +188,7 @@ export default class AnimationsService extends Service {
     return animationsToCancel;
   }
 
-  willTransition(context: ContextModel): Animation[] {
+  willTransition(context: Context): Animation[] {
     let animationsToCancel: Animation[] = [];
     // TODO: what about intents
     // TODO: it might be possible to only measure if we know something changed since last we measured.

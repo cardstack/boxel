@@ -1,6 +1,6 @@
 import Sprite, { SpriteType } from './sprite';
 import { assert } from '@ember/debug';
-import { ContextModel } from './sprite-tree';
+import { Context } from './sprite-tree';
 
 export type SpritesForArgs = {
   type?: SpriteType | undefined;
@@ -27,13 +27,13 @@ function union<T>(...sets: Set<T>[]): Set<T> {
 }
 
 export default class Changeset {
-  context: ContextModel;
+  context: Context;
   intent: string | undefined;
   insertedSprites: Set<Sprite> = new Set();
   removedSprites: Set<Sprite> = new Set();
   keptSprites: Set<Sprite> = new Set();
 
-  constructor(animationContext: ContextModel, intent: string | undefined) {
+  constructor(animationContext: Context, intent: string | undefined) {
     this.context = animationContext;
     this.intent = intent;
   }

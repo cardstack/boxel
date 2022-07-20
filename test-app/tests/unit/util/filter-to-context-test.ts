@@ -1,13 +1,13 @@
 import { module, test } from 'qunit';
 import SpriteTree, {
-  ContextModel,
-  SpriteModel,
+  Context,
+  SpriteStateTracker,
 } from 'animations-experiment/models/sprite-tree';
 import { filterToContext } from 'animations-experiment/models/sprite-snapshot-node-builder';
 import { CopiedCSS } from 'animations-experiment/utils/measurement';
 import Sprite from 'animations-experiment/models/sprite';
 
-class MockAnimationContext implements ContextModel {
+class MockAnimationContext implements Context {
   id: string | undefined;
   element: HTMLElement;
   isAnimationContext = true;
@@ -35,13 +35,13 @@ class MockAnimationContext implements ContextModel {
   shouldAnimate(): boolean {
     throw new Error('Method not implemented.');
   }
-  hasOrphan(spriteOrElement: HTMLElement | Sprite): boolean {
+  hasOrphan(sprite: Sprite): boolean {
     throw new Error('Method not implemented.');
   }
-  removeOrphan(spriteOrElement: HTMLElement | Sprite): void {
+  removeOrphan(sprite: Sprite): void {
     throw new Error('Method not implemented.');
   }
-  appendOrphan(spriteOrElement: HTMLElement | Sprite): void {
+  appendOrphan(sprite: Sprite): void {
     throw new Error('Method not implemented.');
   }
   clearOrphans(): void {
@@ -60,7 +60,7 @@ class MockAnimationContext implements ContextModel {
   }
 }
 
-class MockSpriteModifier implements SpriteModel {
+class MockSpriteModifier implements SpriteStateTracker {
   element: HTMLElement;
   id: string;
   constructor(

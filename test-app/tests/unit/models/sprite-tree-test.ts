@@ -2,13 +2,13 @@
 import Sprite from 'animations-experiment/models/sprite';
 import { CopiedCSS } from 'animations-experiment/utils/measurement';
 import SpriteTree, {
-  ContextModel,
-  SpriteModel,
+  Context,
+  SpriteStateTracker,
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';
 import { module, test } from 'qunit';
 
-class MockAnimationContext implements ContextModel {
+class MockAnimationContext implements Context {
   id: string | undefined;
   element: HTMLElement;
   isAnimationContext = true;
@@ -51,7 +51,7 @@ class MockAnimationContext implements ContextModel {
   }
 }
 
-class MockSpriteModifier implements SpriteModel {
+class MockSpriteModifier implements SpriteStateTracker {
   element: HTMLElement;
   id: string;
   constructor(
@@ -320,10 +320,10 @@ module('Unit | Models | SpriteTree', function (hooks) {
     });
   });
   module('with two context nodes, each with a sprite', function (hooks) {
-    let context1: ContextModel,
-      context2: ContextModel,
-      sprite1: SpriteModel,
-      sprite2: SpriteModel;
+    let context1: Context,
+      context2: Context,
+      sprite1: SpriteStateTracker,
+      sprite2: SpriteStateTracker;
     hooks.beforeEach(function () {
       context1 = new MockAnimationContext();
       context2 = new MockAnimationContext();
@@ -687,7 +687,7 @@ module('Unit | Models | SpriteTree', function (hooks) {
       assert.ok(
         grandchildSpriteNode.isSprite &&
           !grandchildSpriteNode.isContext &&
-          (grandchildSpriteNode as { spriteModel: SpriteModel }).spriteModel
+          (grandchildSpriteNode as { spriteModel: SpriteStateTracker }).spriteModel
             .id === 'grandchild-sprite',
         'The grandchild sprite node is correct'
       );
