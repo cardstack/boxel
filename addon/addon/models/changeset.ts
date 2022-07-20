@@ -206,7 +206,7 @@ export class ChangesetBuilder {
 
     for (let context of contexts) {
       if (context.isStable) {
-        let spriteSnapshotNode = new Changeset(context);
+        let changeset = new Changeset(context);
 
         let spriteModifiersForContext = filterToContext(
           this.spriteTree,
@@ -234,7 +234,7 @@ export class ChangesetBuilder {
           );
 
           this.addSpriteTo(
-            spriteSnapshotNode,
+            changeset,
             sprite,
             spriteModifier,
             context,
@@ -243,7 +243,7 @@ export class ChangesetBuilder {
           );
         }
 
-        this.contextToNode.set(context, spriteSnapshotNode);
+        this.contextToNode.set(context, changeset);
       } else {
         // We already decided what contexts we're going to use for this render,
         // so we can mark new contexts for the next run.
