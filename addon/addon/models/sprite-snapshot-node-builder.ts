@@ -64,119 +64,6 @@ export class SpriteSnapshotNode {
     this.controllingContext = context;
   }
 
-  addSprite(
-    sprite: Sprite,
-    spriteModifier: SpriteStateTracker,
-    context: Context,
-    counterpartModifier?: SpriteStateTracker,
-    intermediateSprite?: IntermediateSprite
-  ) {
-    if (sprite.type === SpriteType.Kept) {
-      assert(
-        'kept sprite should have lastBounds and currentBounds',
-        spriteModifier.lastBounds &&
-          context.lastBounds &&
-          spriteModifier.currentBounds &&
-          context.currentBounds
-      );
-
-      if (intermediateSprite) {
-        // If an interruption happened we set the intermediate sprite's bounds as the starting point.
-        sprite.initialBounds = new ContextAwareBounds({
-          element: intermediateSprite.intermediateBounds,
-          contextElement: context.lastBounds,
-        });
-        sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
-      } else {
-        sprite.initialBounds = new ContextAwareBounds({
-          element: spriteModifier.lastBounds,
-          contextElement: context.lastBounds,
-        });
-        sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
-      }
-
-      sprite.finalBounds = new ContextAwareBounds({
-        element: spriteModifier.currentBounds,
-        contextElement: context.currentBounds,
-      });
-      sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
-
-      if (sprite.counterpart) {
-        assert(
-          'counterpart modifier should have been passed',
-          counterpartModifier
-        );
-        assert(
-          'kept sprite counterpart should have lastBounds and currentBounds',
-          counterpartModifier.lastBounds && counterpartModifier.currentBounds
-        );
-
-        if (counterpartModifier) {
-          if (intermediateSprite) {
-            // If an interruption happened the counterpart starts at the same point as the sprite.
-            sprite.counterpart.initialBounds = sprite.initialBounds;
-            sprite.counterpart.initialComputedStyle =
-              sprite.initialComputedStyle;
-          } else {
-            sprite.counterpart.initialBounds = new ContextAwareBounds({
-              element: counterpartModifier.currentBounds,
-              contextElement: context.lastBounds,
-            });
-            sprite.counterpart.initialComputedStyle =
-              counterpartModifier.lastComputedStyle;
-
-            // If we have a counterpart the sprite should start there.
-            sprite.initialBounds = sprite.counterpart.initialBounds;
-            sprite.initialComputedStyle =
-              sprite.counterpart.initialComputedStyle;
-          }
-          sprite.counterpart.finalBounds = sprite.finalBounds;
-          sprite.counterpart.finalComputedStyle = sprite.finalComputedStyle;
-        }
-      }
-
-      this.keptSprites.add(sprite);
-    } else if (sprite.type === SpriteType.Inserted) {
-      assert(
-        'inserted sprite should have currentBounds',
-        spriteModifier.currentBounds && context.currentBounds
-      );
-      assert(
-        'there should not be an intermediate sprite for an inserted sprite',
-        !intermediateSprite
-      );
-
-      sprite.finalBounds = new ContextAwareBounds({
-        element: spriteModifier.currentBounds,
-        contextElement: context.currentBounds,
-      });
-      sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
-
-      this.insertedSprites.add(sprite);
-    } else if (sprite.type === SpriteType.Removed) {
-      assert(
-        'removed sprite should have currentBounds',
-        spriteModifier.currentBounds && context.lastBounds
-      );
-
-      if (intermediateSprite) {
-        sprite.initialBounds = new ContextAwareBounds({
-          element: intermediateSprite.intermediateBounds,
-          contextElement: context.lastBounds,
-        });
-        sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
-      } else {
-        sprite.initialBounds = new ContextAwareBounds({
-          element: spriteModifier.currentBounds,
-          contextElement: context.lastBounds,
-        });
-        sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
-      }
-
-      this.removedSprites.add(sprite);
-    }
-  }
-
   get hasSprites() {
     return (
       this.insertedSprites.size ||
@@ -267,7 +154,8 @@ export class SpriteSnapshotNodeBuilder {
             sprite.identifier.toString()
           );
 
-          spriteSnapshotNode.addSprite(
+          this.addSpriteTo(
+            spriteSnapshotNode,
             sprite,
             spriteModifier,
             context,
@@ -441,5 +329,119 @@ export class SpriteSnapshotNodeBuilder {
       spriteModifierToCounterpartModifierMap,
       contextToKeptSpriteModifierMap,
     };
+  }
+
+  addSpriteTo(
+    node: SpriteSnapshotNode,
+    sprite: Sprite,
+    spriteModifier: SpriteStateTracker,
+    context: Context,
+    counterpartModifier?: SpriteStateTracker,
+    intermediateSprite?: IntermediateSprite
+  ) {
+    if (sprite.type === SpriteType.Kept) {
+      assert(
+        'kept sprite should have lastBounds and currentBounds',
+        spriteModifier.lastBounds &&
+          context.lastBounds &&
+          spriteModifier.currentBounds &&
+          context.currentBounds
+      );
+
+      if (intermediateSprite) {
+        // If an interruption happened we set the intermediate sprite's bounds as the starting point.
+        sprite.initialBounds = new ContextAwareBounds({
+          element: intermediateSprite.intermediateBounds,
+          contextElement: context.lastBounds,
+        });
+        sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
+      } else {
+        sprite.initialBounds = new ContextAwareBounds({
+          element: spriteModifier.lastBounds,
+          contextElement: context.lastBounds,
+        });
+        sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
+      }
+
+      sprite.finalBounds = new ContextAwareBounds({
+        element: spriteModifier.currentBounds,
+        contextElement: context.currentBounds,
+      });
+      sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
+
+      if (sprite.counterpart) {
+        assert(
+          'counterpart modifier should have been passed',
+          counterpartModifier
+        );
+        assert(
+          'kept sprite counterpart should have lastBounds and currentBounds',
+          counterpartModifier.lastBounds && counterpartModifier.currentBounds
+        );
+
+        if (counterpartModifier) {
+          if (intermediateSprite) {
+            // If an interruption happened the counterpart starts at the same point as the sprite.
+            sprite.counterpart.initialBounds = sprite.initialBounds;
+            sprite.counterpart.initialComputedStyle =
+              sprite.initialComputedStyle;
+          } else {
+            sprite.counterpart.initialBounds = new ContextAwareBounds({
+              element: counterpartModifier.currentBounds,
+              contextElement: context.lastBounds,
+            });
+            sprite.counterpart.initialComputedStyle =
+              counterpartModifier.lastComputedStyle;
+
+            // If we have a counterpart the sprite should start there.
+            sprite.initialBounds = sprite.counterpart.initialBounds;
+            sprite.initialComputedStyle =
+              sprite.counterpart.initialComputedStyle;
+          }
+          sprite.counterpart.finalBounds = sprite.finalBounds;
+          sprite.counterpart.finalComputedStyle = sprite.finalComputedStyle;
+        }
+      }
+
+      node.keptSprites.add(sprite);
+    } else if (sprite.type === SpriteType.Inserted) {
+      assert(
+        'inserted sprite should have currentBounds',
+        spriteModifier.currentBounds && context.currentBounds
+      );
+      assert(
+        'there should not be an intermediate sprite for an inserted sprite',
+        !intermediateSprite
+      );
+
+      sprite.finalBounds = new ContextAwareBounds({
+        element: spriteModifier.currentBounds,
+        contextElement: context.currentBounds,
+      });
+      sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
+
+      node.insertedSprites.add(sprite);
+    } else if (sprite.type === SpriteType.Removed) {
+      assert(
+        'removed sprite should have currentBounds',
+        spriteModifier.currentBounds && context.lastBounds
+      );
+
+      if (intermediateSprite) {
+        sprite.initialBounds = new ContextAwareBounds({
+          element: intermediateSprite.intermediateBounds,
+          contextElement: context.lastBounds,
+        });
+        sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
+      } else {
+        sprite.initialBounds = new ContextAwareBounds({
+          element: spriteModifier.currentBounds,
+          contextElement: context.lastBounds,
+        });
+        sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
+      }
+
+      node.removedSprites.add(sprite);
+    }
   }
 }
