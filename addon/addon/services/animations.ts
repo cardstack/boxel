@@ -255,19 +255,9 @@ export default class AnimationsService extends Service {
       let spriteSnapshotNode =
         spriteSnapshotNodeBuilder.contextToNode.get(context);
       if (spriteSnapshotNode && spriteSnapshotNode.hasSprites) {
-        let { insertedSprites, keptSprites, removedSprites } =
-          spriteSnapshotNode;
-
-        let changeset = new OldChangeset(context, undefined);
-        changeset.addSprites([
-          ...insertedSprites,
-          ...keptSprites,
-          ...removedSprites,
-        ]);
-
         let transitionRunner = new TransitionRunner(context);
         let task = taskFor(transitionRunner.maybeTransitionTask);
-        promises.push(task.perform(changeset));
+        promises.push(task.perform(spriteSnapshotNode));
       }
     }
     yield all(promises);
