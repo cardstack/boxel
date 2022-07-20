@@ -81,7 +81,12 @@ export default class AnimationContextComponent extends Component<AnimationContex
   appendOrphan(spriteOrElement: Sprite): void {
     let { orphansElement } = this as { orphansElement: HTMLElement };
 
+    // TODO:
+    // - add a map of orphans on a higher level than the animation context
+    // - assert that an orphan is not appended in two places
+
     orphansElement.appendChild(spriteOrElement.element);
+
     this.orphans.set(
       spriteOrElement.identifier.toString(),
       spriteOrElement.element
@@ -92,7 +97,6 @@ export default class AnimationContextComponent extends Component<AnimationContex
     let identifier = spriteOrElement.identifier.toString();
     let element = this.orphans.get(identifier);
     if (element) {
-      console.log('removing orphan', identifier);
       this.orphansElement!.removeChild(element);
       this.orphans.delete(identifier);
     } else {
