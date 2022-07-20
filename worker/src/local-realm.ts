@@ -1,4 +1,5 @@
 import { RealmAdapter, Kind, FileRef } from '@cardstack/runtime-common';
+import { LocalPath } from '@cardstack/runtime-common/paths';
 
 export class LocalRealm implements RealmAdapter {
   constructor(private fs: FileSystemDirectoryHandle) {}
@@ -43,7 +44,7 @@ export class LocalRealm implements RealmAdapter {
   }
 
   async write(
-    path: string,
+    path: LocalPath,
     contents: string
   ): Promise<{ lastModified: number }> {
     let handle = await traverse(this.fs, path, 'file', { create: true });

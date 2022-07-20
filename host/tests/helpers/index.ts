@@ -1,6 +1,6 @@
 import { parse } from 'date-fns';
 import { Realm, Kind, RealmAdapter, FileRef } from '@cardstack/runtime-common';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 
 export function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -68,7 +68,7 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
-  async openFile(path: string): Promise<FileRef | undefined> {
+  async openFile(path: LocalPath): Promise<FileRef | undefined> {
     let content;
     try {
       content = this.#traverse(path.replace(/^\//, '').split('/'), 'file');
