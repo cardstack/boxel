@@ -11,7 +11,6 @@ import { taskFor } from 'ember-concurrency-ts';
 import Sprite, { SpriteIdentifier } from '../models/sprite';
 import Motion from '../motions/base';
 import { SpriteAnimation } from '../models/sprite-animation';
-import Changeset, { OldChangeset } from 'animations-experiment/models/changeset';
 import {
   CopiedCSS,
   copyComputedStyle,
@@ -27,7 +26,7 @@ import {
 import {
   filterToContext,
   SpriteSnapshotNodeBuilder,
-} from 'animations-experiment/models/sprite-snapshot-node-builder';
+} from 'animations-experiment/models/changeset';
 
 export type AnimateFunction = (
   sprite: Sprite,

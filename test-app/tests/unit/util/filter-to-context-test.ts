@@ -3,7 +3,7 @@ import SpriteTree, {
   Context,
   SpriteStateTracker,
 } from 'animations-experiment/models/sprite-tree';
-import { filterToContext } from 'animations-experiment/models/sprite-snapshot-node-builder';
+import { filterToContext } from 'animations-experiment/models/changeset';
 import { CopiedCSS } from 'animations-experiment/utils/measurement';
 import Sprite from 'animations-experiment/models/sprite';
 

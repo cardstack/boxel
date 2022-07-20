@@ -6,7 +6,7 @@ import SpriteTree, {
 import {
   SpriteSnapshotNode,
   SpriteSnapshotNodeBuilder,
-} from 'animations-experiment/models/sprite-snapshot-node-builder';
+} from 'animations-experiment/models/changeset';
 import Sprite, { SpriteIdentifier } from 'animations-experiment/models/sprite';
 import { IntermediateSprite } from 'animations-experiment/services/animations';
 import { CopiedCSS } from 'animations-experiment/utils/measurement';
