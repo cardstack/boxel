@@ -185,7 +185,8 @@ export class SpriteTreeNode {
       text += `🥡${contextId ? ` ${contextId}` : ''} `;
     }
     if (this.isSprite) {
-      let spriteId = (this as { spriteModel: SpriteStateTracker }).spriteModel.id;
+      let spriteId = (this as { spriteModel: SpriteStateTracker }).spriteModel
+        .id;
       text += `🥠${spriteId ? ` ${spriteId}` : ''}`;
     }
     let extra = isRemoved ? '❌' : undefined;
@@ -215,7 +216,8 @@ export default class SpriteTree {
     | { item: Context; type: 'CONTEXT' }
     | { item: SpriteStateTracker; type: 'SPRITE' }
   )[] = [];
-  freshlyRemovedToNode: WeakMap<SpriteStateTracker, SpriteTreeNode> = new WeakMap();
+  freshlyRemovedToNode: WeakMap<SpriteStateTracker, SpriteTreeNode> =
+    new WeakMap();
 
   addPendingAnimationContext(item: Context) {
     this._pendingAdditions.push({ item, type: 'CONTEXT' });
@@ -410,7 +412,10 @@ export default class SpriteTree {
     return null;
   }
 
-  findStableSharedAncestor(spriteA: SpriteStateTracker, spriteB: SpriteStateTracker) {
+  findStableSharedAncestor(
+    spriteA: SpriteStateTracker,
+    spriteB: SpriteStateTracker
+  ) {
     let ancestorsOfKeptSprite = this.nodesByElement
       .get(spriteA.element)
       ?.ancestors.filter((v) => v.contextModel?.isStable);

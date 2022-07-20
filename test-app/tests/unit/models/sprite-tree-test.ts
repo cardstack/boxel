@@ -687,8 +687,8 @@ module('Unit | Models | SpriteTree', function (hooks) {
       assert.ok(
         grandchildSpriteNode.isSprite &&
           !grandchildSpriteNode.isContext &&
-          (grandchildSpriteNode as { spriteModel: SpriteStateTracker }).spriteModel
-            .id === 'grandchild-sprite',
+          (grandchildSpriteNode as { spriteModel: SpriteStateTracker })
+            .spriteModel.id === 'grandchild-sprite',
         'The grandchild sprite node is correct'
       );
     });

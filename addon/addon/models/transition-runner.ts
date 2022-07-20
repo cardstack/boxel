@@ -35,10 +35,7 @@ export default class TransitionRunner {
     }
   }
 
-  private logChangeset(
-    changeset: Changeset,
-    animationContext: Context
-  ): void {
+  private logChangeset(changeset: Changeset, animationContext: Context): void {
     let contextId = animationContext.args.id;
     function row(type: SpriteType, sprite: Sprite) {
       return {
