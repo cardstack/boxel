@@ -1,14 +1,13 @@
 import { module, test } from 'qunit';
 import SpriteTree, {
-  SpriteModel,
+  Context,
+  SpriteStateTracker,
 } from 'animations-experiment/models/sprite-tree';
 import { filterToContext } from 'animations-experiment/models/sprite-snapshot-node-builder';
-import AnimationContextComponent from 'animations-experiment/components/animation-context';
-import SpriteModifier from 'animations-experiment/modifiers/sprite';
+import { CopiedCSS } from 'animations-experiment/utils/measurement';
+import Sprite from 'animations-experiment/models/sprite';
 
-class MockAnimationContext
-  implements Pick<AnimationContextComponent, 'element' | 'isStable'>
-{
+class MockAnimationContext implements Context {
   id: string | undefined;
   element: HTMLElement;
   isAnimationContext = true;
@@ -25,6 +24,30 @@ class MockAnimationContext
     }
     this.id = id;
   }
+  currentBounds?: DOMRect | undefined;
+  lastBounds?: DOMRect | undefined;
+  isInitialRenderCompleted = false;
+  captureSnapshot(
+    opts?: { withAnimations: boolean; playAnimations: boolean } | undefined
+  ): void {
+    throw new Error('Method not implemented.');
+  }
+  shouldAnimate(): boolean {
+    throw new Error('Method not implemented.');
+  }
+  hasOrphan(sprite: Sprite): boolean {
+    throw new Error('Method not implemented.');
+  }
+  removeOrphan(sprite: Sprite): void {
+    throw new Error('Method not implemented.');
+  }
+  appendOrphan(sprite: Sprite): void {
+    throw new Error('Method not implemented.');
+  }
+  clearOrphans(): void {
+    throw new Error('Method not implemented.');
+  }
+  args = {};
 
   stable() {
     this.isStable = true;
@@ -37,7 +60,7 @@ class MockAnimationContext
   }
 }
 
-class MockSpriteModifier implements SpriteModel {
+class MockSpriteModifier implements SpriteStateTracker {
   element: HTMLElement;
   id: string;
   constructor(
@@ -51,6 +74,16 @@ class MockSpriteModifier implements SpriteModel {
       parentEl.appendChild(this.element);
     }
   }
+  role: string | null = null;
+  currentBounds?: DOMRect | undefined;
+  lastBounds?: DOMRect | undefined;
+  captureSnapshot(
+    opts?: { withAnimations: boolean; playAnimations: boolean } | undefined
+  ): void {
+    throw new Error('Method not implemented.');
+  }
+  lastComputedStyle: CopiedCSS | undefined;
+  currentComputedStyle: CopiedCSS | undefined;
 }
 
 function nestEachInPrevious(
@@ -100,18 +133,14 @@ module('Unit | Util | filterToContext', function () {
       if (item instanceof MockSpriteModifier) {
         tree.addPendingSpriteModifier(item);
         sprites.push(item);
-      } else {
+      } else if (item instanceof MockAnimationContext) {
         tree.addPendingAnimationContext(item);
       }
     }
 
     tree.flushPendingAdditions();
 
-    let descendants = filterToContext(
-      tree,
-      targetContext as unknown as AnimationContextComponent,
-      new Set(sprites) as unknown as Set<SpriteModifier>
-    );
+    let descendants = filterToContext(tree, targetContext, new Set(sprites));
 
     assert.deepEqual([...descendants].map((v) => v.id).sort(), [
       'included-1',
@@ -156,18 +185,14 @@ module('Unit | Util | filterToContext', function () {
       if (item instanceof MockSpriteModifier) {
         tree.addPendingSpriteModifier(item);
         sprites.push(item);
-      } else {
+      } else if (item instanceof MockAnimationContext) {
         tree.addPendingAnimationContext(item);
       }
     }
 
     tree.flushPendingAdditions();
 
-    let descendants = filterToContext(
-      tree,
-      targetContext as unknown as AnimationContextComponent,
-      new Set(sprites) as unknown as Set<SpriteModifier>
-    );
+    let descendants = filterToContext(tree, targetContext, new Set(sprites));
 
     assert.deepEqual([...descendants].map((v) => v.id).sort(), [
       'included-1',
@@ -212,11 +237,7 @@ module('Unit | Util | filterToContext', function () {
 
     tree.flushPendingAdditions();
 
-    let descendants = filterToContext(
-      tree,
-      targetContext as unknown as AnimationContextComponent,
-      new Set(sprites) as unknown as Set<SpriteModifier>
-    );
+    let descendants = filterToContext(tree, targetContext, new Set(sprites));
 
     assert.deepEqual(
       [...descendants].map((v) => v.id),

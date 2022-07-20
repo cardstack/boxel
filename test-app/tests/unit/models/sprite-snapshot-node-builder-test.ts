@@ -1,23 +1,18 @@
 import { module, test } from 'qunit';
-import SpriteTree from 'animations-experiment/models/sprite-tree';
-import AnimationContextComponent from 'animations-experiment/components/animation-context';
+import SpriteTree, {
+  Context,
+  SpriteStateTracker,
+} from 'animations-experiment/models/sprite-tree';
 import {
   SpriteSnapshotNode,
   SpriteSnapshotNodeBuilder,
 } from 'animations-experiment/models/sprite-snapshot-node-builder';
-import SpriteModifier from 'animations-experiment/modifiers/sprite';
-import { SpriteIdentifier } from 'animations-experiment/models/sprite';
+import Sprite, { SpriteIdentifier } from 'animations-experiment/models/sprite';
 import { IntermediateSprite } from 'animations-experiment/services/animations';
 import { CopiedCSS } from 'animations-experiment/utils/measurement';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
 
-class MockAnimationContext
-  implements
-    Pick<
-      AnimationContextComponent,
-      'element' | 'isStable' | 'isInitialRenderCompleted'
-    >
-{
+class MockAnimationContext implements Context {
   id: string | undefined;
   element: HTMLElement;
   isAnimationContext = true;
@@ -26,6 +21,7 @@ class MockAnimationContext
   lastBounds: DOMRect | undefined = undefined;
   currentBounds = new DOMRect(0, 0, 0, 0);
   nextBounds = new DOMRect(0, 0, 0, 0);
+  args = {};
 
   constructor(
     parentEl: HTMLElement | null = null,
@@ -37,6 +33,26 @@ class MockAnimationContext
       parentEl.appendChild(this.element);
     }
     this.id = id;
+  }
+
+  shouldAnimate(): boolean {
+    throw new Error('Method not implemented.');
+  }
+
+  hasOrphan(_sprite: Sprite): boolean {
+    throw new Error('Method not implemented.');
+  }
+
+  removeOrphan(_sprite: Sprite): void {
+    throw new Error('Method not implemented.');
+  }
+
+  appendOrphan(_sprite: Sprite): void {
+    throw new Error('Method not implemented.');
+  }
+
+  clearOrphans(): void {
+    throw new Error('Method not implemented.');
   }
 
   captureSnapshot() {
@@ -65,7 +81,7 @@ class MockAnimationContext
   }
 }
 
-class MockSpriteModifier implements Partial<SpriteModifier> {
+class MockSpriteModifier implements SpriteStateTracker {
   element: HTMLElement;
   id: string;
   lastBounds: DOMRect | undefined = undefined;
@@ -83,6 +99,9 @@ class MockSpriteModifier implements Partial<SpriteModifier> {
       parentEl.appendChild(this.element);
     }
   }
+  role: string | null = null;
+  lastComputedStyle: CopiedCSS | undefined;
+  currentComputedStyle: CopiedCSS | undefined;
 
   willTransformInto(domrect: DOMRect) {
     this.nextBounds = domrect;
@@ -166,7 +185,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     ]) {
       if (item instanceof MockSpriteModifier) {
         spriteTree.addPendingSpriteModifier(item);
-      } else {
+      } else if (item instanceof MockAnimationContext) {
         spriteTree.addPendingAnimationContext(item);
       }
     }
@@ -175,20 +194,17 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
 
     let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
       spriteTree,
-      new Set([
-        stableContext1,
-        stableContext2,
-      ]) as unknown as Set<AnimationContextComponent>,
-      new Set([freshlyAddedSprite]) as unknown as Set<SpriteModifier>,
-      new Set([freshlyRemovedSprite]) as unknown as Set<SpriteModifier>,
+      new Set([stableContext1, stableContext2]),
+      new Set([freshlyAddedSprite]),
+      new Set([freshlyRemovedSprite]),
       new Map()
     );
 
     let context1Node = spriteSnapshotNodeBuilder.contextToNode.get(
-      stableContext1 as unknown as AnimationContextComponent
+      stableContext1
     ) as SpriteSnapshotNode;
     let context2Node = spriteSnapshotNodeBuilder.contextToNode.get(
-      stableContext2 as unknown as AnimationContextComponent
+      stableContext2
     ) as SpriteSnapshotNode;
 
     assert.equal(
@@ -311,7 +327,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     ]) {
       if (item instanceof MockSpriteModifier) {
         spriteTree.addPendingSpriteModifier(item);
-      } else {
+      } else if (item instanceof MockAnimationContext) {
         spriteTree.addPendingAnimationContext(item);
       }
     }
@@ -319,20 +335,17 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
 
     let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
       spriteTree,
-      new Set([
-        movedContext,
-        unmovedContext,
-      ]) as unknown as Set<AnimationContextComponent>,
-      new Set([freshlyAddedSprite]) as unknown as Set<SpriteModifier>,
-      new Set() as unknown as Set<SpriteModifier>,
+      new Set([movedContext, unmovedContext]),
+      new Set([freshlyAddedSprite]),
+      new Set(),
       new Map()
     );
 
     let movedContextNode = spriteSnapshotNodeBuilder.contextToNode.get(
-      movedContext as unknown as AnimationContextComponent
+      movedContext
     ) as SpriteSnapshotNode;
     let unmovedContextNode = spriteSnapshotNodeBuilder.contextToNode.get(
-      unmovedContext as unknown as AnimationContextComponent
+      unmovedContext
     ) as SpriteSnapshotNode;
 
     assert.ok(
@@ -398,25 +411,18 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
 
     let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
       spriteTree,
-      new Set([
-        stableContext,
-        unstableContext,
-      ]) as unknown as Set<AnimationContextComponent>,
-      new Set() as unknown as Set<SpriteModifier>,
-      new Set() as unknown as Set<SpriteModifier>,
+      new Set([stableContext, unstableContext]),
+      new Set(),
+      new Set(),
       new Map()
     );
 
     assert.ok(
-      spriteSnapshotNodeBuilder.contextToNode.get(
-        stableContext as unknown as AnimationContextComponent
-      ),
+      spriteSnapshotNodeBuilder.contextToNode.get(stableContext),
       'Stable context is in the contextToNode map'
     );
     assert.notOk(
-      spriteSnapshotNodeBuilder.contextToNode.get(
-        unstableContext as unknown as AnimationContextComponent
-      ),
+      spriteSnapshotNodeBuilder.contextToNode.get(unstableContext),
       'Stable context is not in the contextToNode map'
     );
     assert.equal(
@@ -465,20 +471,17 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
 
     let spriteSnapshotTree = new SpriteSnapshotNodeBuilder(
       spriteTree,
-      new Set([
-        outerContext,
-        innerContext,
-      ]) as unknown as Set<AnimationContextComponent>,
-      new Set([freshlyAddedSprite]) as unknown as Set<SpriteModifier>,
-      new Set([freshlyRemovedSprite]) as unknown as Set<SpriteModifier>,
+      new Set([outerContext, innerContext]),
+      new Set([freshlyAddedSprite]),
+      new Set([freshlyRemovedSprite]),
       new Map()
     );
 
     let outerContextNode = spriteSnapshotTree.contextToNode.get(
-      outerContext as unknown as AnimationContextComponent
+      outerContext
     ) as SpriteSnapshotNode;
     let innerContextNode = spriteSnapshotTree.contextToNode.get(
-      innerContext as unknown as AnimationContextComponent
+      innerContext
     ) as SpriteSnapshotNode;
     assert.ok(
       outerContextNode.insertedSprites.size === 0 &&
@@ -574,12 +577,9 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
 
     let spriteSnapshotTree = new SpriteSnapshotNodeBuilder(
       spriteTree,
-      new Set([
-        outerContext,
-        innerContext,
-      ]) as unknown as Set<AnimationContextComponent>,
-      new Set([]) as unknown as Set<SpriteModifier>,
-      new Set([freshlyRemovedSprite]) as unknown as Set<SpriteModifier>,
+      new Set([outerContext, innerContext]),
+      new Set([]),
+      new Set([freshlyRemovedSprite]),
       new Map<string, IntermediateSprite>([
         [
           new SpriteIdentifier(
@@ -587,7 +587,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
             null
           ).toString(),
           {
-            modifier: spriteFromPreviousRender as unknown as SpriteModifier,
+            modifier: spriteFromPreviousRender,
             intermediateBounds: spriteFromPreviousRenderNextDOMRect,
             intermediateStyles: {} as CopiedCSS,
           } as IntermediateSprite,
@@ -595,8 +595,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
         [
           new SpriteIdentifier('modifier-control', null).toString(),
           {
-            modifier:
-              controlSpriteFromPreviousRender as unknown as SpriteModifier,
+            modifier: controlSpriteFromPreviousRender,
             intermediateBounds: new DOMRect(),
             intermediateStyles: {} as CopiedCSS,
           } as IntermediateSprite,
@@ -605,10 +604,10 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     );
 
     let outerContextNode = spriteSnapshotTree.contextToNode.get(
-      outerContext as unknown as AnimationContextComponent
+      outerContext
     ) as SpriteSnapshotNode;
     let innerContextNode = spriteSnapshotTree.contextToNode.get(
-      innerContext as unknown as AnimationContextComponent
+      innerContext
     ) as SpriteSnapshotNode;
     assert.ok(
       outerContextNode.insertedSprites.size === 0 &&

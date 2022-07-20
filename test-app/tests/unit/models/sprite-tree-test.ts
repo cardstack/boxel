@@ -1,35 +1,63 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
+import Sprite from 'animations-experiment/models/sprite';
+import { CopiedCSS } from 'animations-experiment/utils/measurement';
 import SpriteTree, {
-  ContextModel,
-  SpriteModel,
+  Context,
+  SpriteStateTracker,
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';
 import { module, test } from 'qunit';
 
-class MockAnimationContext implements ContextModel {
+class MockAnimationContext implements Context {
   id: string | undefined;
-  element: Element;
+  element: HTMLElement;
   isAnimationContext = true;
   constructor(
-    parentEl: Element | null = null,
+    parentEl: HTMLElement | null = null,
     id: string | undefined = undefined,
-    element: Element | null = null
+    element: HTMLElement | null = null
   ) {
     this.element = element ?? document.createElement('div');
     if (parentEl) {
       parentEl.appendChild(this.element);
     }
     this.id = id;
+  }
+  currentBounds?: DOMRect | undefined;
+  lastBounds?: DOMRect | undefined;
+  isInitialRenderCompleted = false;
+  isStable = false;
+  args = {};
+
+  captureSnapshot(
+    opts?: { withAnimations: boolean; playAnimations: boolean } | undefined
+  ): void {
+    throw new Error('Method not implemented.');
+  }
+  shouldAnimate(): boolean {
+    throw new Error('Method not implemented.');
+  }
+  hasOrphan(sprite: Sprite): boolean {
+    throw new Error('Method not implemented.');
+  }
+  removeOrphan(sprite: Sprite): void {
+    throw new Error('Method not implemented.');
+  }
+  appendOrphan(sprite: Sprite): void {
+    throw new Error('Method not implemented.');
+  }
+  clearOrphans(): void {
+    throw new Error('Method not implemented.');
   }
 }
 
-class MockSpriteModifier implements SpriteModel {
-  element: Element;
+class MockSpriteModifier implements SpriteStateTracker {
+  element: HTMLElement;
   id: string;
   constructor(
-    parentEl: Element | null = null,
+    parentEl: HTMLElement | null = null,
     id = 'Mock',
-    element: Element | null = null
+    element: HTMLElement | null = null
   ) {
     this.element = element ?? document.createElement('div');
     this.id = id;
@@ -37,6 +65,16 @@ class MockSpriteModifier implements SpriteModel {
       parentEl.appendChild(this.element);
     }
   }
+  role: string | null = null;
+  currentBounds?: DOMRect | undefined;
+  lastBounds?: DOMRect | undefined;
+  captureSnapshot(
+    opts?: { withAnimations: boolean; playAnimations: boolean } | undefined
+  ): void {
+    throw new Error('Method not implemented.');
+  }
+  lastComputedStyle: CopiedCSS | undefined;
+  currentComputedStyle: CopiedCSS | undefined;
 }
 
 module('Unit | Models | SpriteTree', function (hooks) {
@@ -282,15 +320,15 @@ module('Unit | Models | SpriteTree', function (hooks) {
     });
   });
   module('with two context nodes, each with a sprite', function (hooks) {
-    let context1: ContextModel,
-      context2: ContextModel,
-      sprite1: SpriteModel,
-      sprite2: SpriteModel;
+    let context1: Context,
+      context2: Context,
+      sprite1: SpriteStateTracker,
+      sprite2: SpriteStateTracker;
     hooks.beforeEach(function () {
       context1 = new MockAnimationContext();
       context2 = new MockAnimationContext();
-      sprite1 = new MockSpriteModifier(context1.element);
-      sprite2 = new MockSpriteModifier(context2.element);
+      sprite1 = new MockSpriteModifier(context1.element as HTMLElement);
+      sprite2 = new MockSpriteModifier(context2.element as HTMLElement);
       subject.addAnimationContext(context1);
       subject.addAnimationContext(context2);
       subject.addSpriteModifier(sprite1);
@@ -649,8 +687,8 @@ module('Unit | Models | SpriteTree', function (hooks) {
       assert.ok(
         grandchildSpriteNode.isSprite &&
           !grandchildSpriteNode.isContext &&
-          (grandchildSpriteNode.spriteModel as MockAnimationContext).id ===
-            'grandchild-sprite',
+          (grandchildSpriteNode as { spriteModel: SpriteStateTracker })
+            .spriteModel.id === 'grandchild-sprite',
         'The grandchild sprite node is correct'
       );
     });
