@@ -2,12 +2,13 @@ import Koa from "koa";
 import { NodeRealm } from "./node-realm";
 import { Realm } from "@cardstack/runtime-common";
 import { resolve } from "path";
-import fetch, { Request, Response } from "node-fetch";
+import { Response } from "node-fetch";
 
-// Polyfill fetch API
-(globalThis.Request as any) = Request;
+// Despite node 18's native support for fetch, the built-in node fetch Response
+// does not seem to play nice with the Koa Response. The node-fetch Response
+// seems to work nicely with the Koa Response, so continuing to polyfill the
+// just the Response.
 (globalThis.Response as any) = Response;
-(globalThis.fetch as any) = fetch;
 
 export class RealmServer {
   private path: string;
@@ -28,7 +29,7 @@ export class RealmServer {
         method: req.method,
         headers: req.headers as { [name: string]: string },
       });
-      let res = await realm.handle(request as any); // The node-fetch Request type doesn't seem to line up with the actual fetch Request type
+      let res = await realm.handle(request);
       ctx.status = res.status;
       ctx.message = res.statusText;
       ctx.body = res.body;

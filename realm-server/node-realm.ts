@@ -2,13 +2,12 @@ import { RealmAdapter, Kind, FileRef } from "@cardstack/runtime-common";
 import {
   readdirSync,
   existsSync,
-  readFileSync,
   writeFileSync,
   statSync,
   ensureDirSync,
 } from "fs-extra";
+import { open, FileHandle } from "node:fs/promises";
 import { join } from "path";
-// import { Readable } from "stream";
 
 export class NodeRealm implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -43,11 +42,10 @@ export class NodeRealm implements RealmAdapter {
       return undefined;
     }
     let { mtime } = statSync(absolutePath);
-    // looks like ReadStream is not compatible with ReadableStream
-    // let stream = fs.createReadStream(absolutePath);
+    let content = createReadWebStream(absolutePath);
     return {
       path,
-      content: readFileSync(absolutePath, { encoding: "utf8" }),
+      content,
       lastModified: mtime.getTime(),
     };
   }
@@ -61,4 +59,48 @@ export class NodeRealm implements RealmAdapter {
     let { mtime } = statSync(absolutePath);
     return { lastModified: mtime.getTime() };
   }
+}
+
+// This creates a readable web-stream (the new style whatwg stream that our
+// Realm API expects) from a file. Eventually node:stream.Readable.toWeb() will
+// exist to support this. This is based off of the whatwg reference
+// implementation here https://streams.spec.whatwg.org/#example-rbs-pull
+const DEFAULT_CHUNK_SIZE = 65536;
+function createReadWebStream(
+  path: string,
+  start = 0,
+  stop = Number.MAX_SAFE_INTEGER
+): ReadableStream {
+  let fileHandle: FileHandle;
+  return new ReadableStream({
+    //@ts-ignore the type for ReadableStream is no up-to-date, type is allowed to be "bytes" or undefined
+    type: "bytes",
+    autoAllocateChunkSize: DEFAULT_CHUNK_SIZE,
+    async start() {
+      fileHandle = await open(path, "r");
+    },
+    async pull(ctrl) {
+      // ctrl is a ReadableByteStreamController which has a byobRequest
+      // property--the type seems to be missing for this.
+      const byobRequest = (ctrl as any).byobRequest;
+      const v = byobRequest.view;
+      const { bytesRead } = await fileHandle.read(
+        v,
+        0,
+        Math.min(v.byteLength, stop - start),
+        start
+      );
+      if (bytesRead === 0) {
+        await fileHandle.close();
+        ctrl.close();
+        byobRequest.respond(0);
+      } else {
+        start += bytesRead;
+        byobRequest.respond(bytesRead);
+      }
+    },
+    cancel() {
+      return fileHandle.close();
+    },
+  });
 }

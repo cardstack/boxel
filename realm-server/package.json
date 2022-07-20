@@ -4,7 +4,8 @@
   "license": "MIT",
   "dependencies": {},
   "volta": {
-    "extends": "../package.json"
+    "node": "18.6.0",
+    "yarn": "1.22.18"
   },
   "devDependencies": {
     "@cardstack/runtime-common": "1.0.0",
