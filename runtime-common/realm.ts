@@ -50,6 +50,8 @@ export interface RealmAdapter {
   openFile(path: LocalPath): Promise<FileRef | undefined>;
 
   write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
+
+  remove(path: LocalPath): Promise<void>;
 }
 
 export class Realm {
@@ -82,7 +84,8 @@ export class Realm {
       .get("/_search", this.search.bind(this))
       .get("/_typeOf", this.getTypeOf.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
-      .get("/.+(?<!.json)", this.getCard.bind(this));
+      .get("/.+(?<!.json)", this.getCard.bind(this))
+      .delete("/.+(?<!.json)", this.removeCard.bind(this));
 
     this.#cardSourceRouter = new Router(new URL(url))
       .post(
@@ -362,6 +365,20 @@ export class Realm {
         ...lastModifiedHeader(card),
       },
     });
+  }
+
+  private async removeCard(request: Request): Promise<Response | void> {
+    let url = new URL(request.url);
+    let data = await this.#searchIndex.card(url);
+    if (!data) {
+      return notFound(request);
+    }
+    let localPath = this.#paths.local(url) + ".json";
+    await this.#searchIndex.update(this.#paths.fileURL(localPath), {
+      delete: true,
+    });
+    await this.#adapter.remove(localPath);
+    return new Response(null, { status: 204 });
   }
 
   private async getDirectoryListing(request: Request): Promise<Response> {

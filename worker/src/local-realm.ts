@@ -55,6 +55,19 @@ export class LocalRealm implements RealmAdapter {
     let { lastModified } = await handle.getFile();
     return { lastModified };
   }
+
+  async remove(path: LocalPath): Promise<void> {
+    if (!path) {
+      return;
+    }
+    let pathSegments = path.split('/');
+    if (pathSegments.length === 1) {
+      return this.fs.removeEntry(path);
+    }
+    let fileName = pathSegments.pop();
+    let dirHandle = await traverse(this.fs, pathSegments.join('/'), 'directory');
+    return dirHandle.removeEntry(fileName!);
+  }
 }
 
 function isTopPath(path: string): boolean {
