@@ -38,6 +38,27 @@ export default class AccordionPanel extends Component {
       }
     }
 
+    let nonOrphanPanel: Sprite | undefined;
+    let keptPanelContentGroup = changeset.spritesFor({
+      type: SpriteType.Kept,
+      role: 'accordion-panel-content',
+    });
+    let insertedPanelContentGroup = changeset.spritesFor({
+      type: SpriteType.Inserted,
+      role: 'accordion-panel-content',
+    });
+    if (keptPanelContentGroup.size) {
+      nonOrphanPanel = [...keptPanelContentGroup][0];
+    } else if (insertedPanelContentGroup.size) {
+      nonOrphanPanel = [...insertedPanelContentGroup][0];
+    }
+
+    if (nonOrphanPanel) {
+      if (context.hasOrphan(nonOrphanPanel)) {
+        context.removeOrphan(nonOrphanPanel);
+      }
+    }
+
     if (containers.size) {
       for (let sprite of [...containers]) {
         sprite.setupAnimation('size', {

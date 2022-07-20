@@ -68,7 +68,7 @@ export default class HomeReno extends Component {
     ];
     let keptSprite = keptCompactCards.find((sprite) => sprite.counterpart);
     if (keptSprite) {
-      changeset.context.appendOrphan(keptSprite.counterpart!.element);
+      changeset.context.appendOrphan(keptSprite.counterpart!);
       keptSprite.counterpart!.lockStyles();
       keptSprite.element.style.visibility = 'hidden';
       keptSprite.counterpart!.element.style.zIndex = '1';
