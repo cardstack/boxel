@@ -1,14 +1,43 @@
 import { assert } from '@ember/debug';
-import AnimationContextComponent from 'animations-experiment/components/animation-context';
-import SpriteModifier from 'animations-experiment/modifiers/sprite';
+import { CopiedCSS } from '../utils/measurement';
 import { formatTreeString, TreeNode } from '../utils/format-tree';
-import AnimationContext from 'animations-experiment/components/animation-context';
+import Sprite from './sprite';
+import Changeset from './changeset';
+
 export interface ContextModel {
+  id: string | undefined;
   element: Element;
+  currentBounds?: DOMRect;
+  lastBounds?: DOMRect;
+  isInitialRenderCompleted: boolean;
+  isStable: boolean;
+  captureSnapshot(opts?: {
+    withAnimations: boolean;
+    playAnimations: boolean;
+  }): void;
+  shouldAnimate(): boolean;
+  hasOrphan(spriteOrElement: Sprite): boolean;
+  removeOrphan(spriteOrElement: Sprite): void;
+  appendOrphan(spriteOrElement: Sprite): void;
+  clearOrphans(): void;
+  args: {
+    use?(changeset: Changeset): Promise<void>;
+    id?: string;
+  };
 }
 
 export interface SpriteModel {
+  id: string | null;
+  role: string | null;
   element: Element;
+  currentBounds?: DOMRect;
+  lastBounds?: DOMRect;
+  captureSnapshot(opts?: {
+    withAnimations: boolean;
+    playAnimations: boolean;
+  }): void;
+  lastComputedStyle: CopiedCSS | undefined;
+  currentComputedStyle: CopiedCSS | undefined;
 }
 
 export interface GetDescendantNodesOptions {
@@ -41,7 +70,17 @@ export class SpriteTreeNode {
   }
 
   constructor(
-    model: SpriteTreeModel,
+    model: ContextModel,
+    nodeType: SpriteTreeNodeType.Context,
+    parentNode: SpriteTreeNode | SpriteTree
+  );
+  constructor(
+    model: SpriteModel,
+    nodeType: SpriteTreeNodeType.Sprite,
+    parentNode: SpriteTreeNode | SpriteTree
+  );
+  constructor(
+    model: any,
     nodeType: SpriteTreeNodeType,
     parentNode: SpriteTreeNode | SpriteTree
   ) {
@@ -88,7 +127,11 @@ export class SpriteTreeNode {
       if (
         (child.isSprite ||
           (child.isContext &&
-            !(child.contextModel as AnimationContextComponent).isStable)) &&
+            !(
+              child as {
+                contextModel: ContextModel;
+              }
+            ).contextModel.isStable)) &&
         child.children?.size
       ) {
         child
@@ -138,13 +181,11 @@ export class SpriteTreeNode {
   toLoggableForm(isRemoved?: boolean): TreeNode {
     let text = '';
     if (this.isContext) {
-      let contextId = (
-        this.contextModel as unknown as AnimationContextComponent
-      ).id;
+      let contextId = (this as { contextModel: ContextModel }).contextModel.id;
       text += `🥡${contextId ? ` ${contextId}` : ''} `;
     }
     if (this.isSprite) {
-      let spriteId = (this.spriteModel as unknown as SpriteModifier).id;
+      let spriteId = (this as { spriteModel: SpriteModel }).spriteModel.id;
       text += `🥠${spriteId ? ` ${spriteId}` : ''}`;
     }
     let extra = isRemoved ? '❌' : undefined;
@@ -174,7 +215,7 @@ export default class SpriteTree {
     | { item: ContextModel; type: 'CONTEXT' }
     | { item: SpriteModel; type: 'SPRITE' }
   )[] = [];
-  freshlyRemovedToNode: WeakMap<SpriteModifier, SpriteTreeNode> = new WeakMap();
+  freshlyRemovedToNode: WeakMap<SpriteModel, SpriteTreeNode> = new WeakMap();
 
   addPendingAnimationContext(item: ContextModel) {
     this._pendingAdditions.push({ item, type: 'CONTEXT' });
@@ -200,11 +241,11 @@ export default class SpriteTree {
       return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
     });
 
-    for (let { item, type } of this._pendingAdditions) {
-      if (type === 'CONTEXT') {
-        this.addAnimationContext(item);
-      } else if (type === 'SPRITE') {
-        this.addSpriteModifier(item);
+    for (let v of this._pendingAdditions) {
+      if (v.type === 'CONTEXT') {
+        this.addAnimationContext(v.item);
+      } else if (v.type === 'SPRITE') {
+        this.addSpriteModifier(v.item);
       } else {
         throw new Error('unexpected pending addition');
       }
@@ -242,7 +283,10 @@ export default class SpriteTree {
       if (node.isSprite) {
         // TODO: we might need to do some cleanup? This is currently a WeakMap but..
         // situation where this matters is SpriteModifier hanging around when it should be removed
-        this.freshlyRemovedToNode.set(node.spriteModel as SpriteModifier, node);
+        this.freshlyRemovedToNode.set(
+          (node as { spriteModel: SpriteModel }).spriteModel,
+          node
+        );
       }
       this.nodesByElement.delete(context.element);
     }
@@ -252,7 +296,7 @@ export default class SpriteTree {
     let existingNode = this.lookupNodeByElement(spriteModifier.element);
     if (existingNode) {
       assert(
-        'Cannot add a SpriteModifier which was already added',
+        'Cannot add a SpriteModel which was already added',
         !existingNode.isSprite
       );
 
@@ -271,9 +315,7 @@ export default class SpriteTree {
 
     if (!resultNode.parent.isContext) {
       console.error(
-        `Sprite "${
-          (spriteModifier as SpriteModifier).id
-        }" cannot have another Sprite as a direct parent. An extra AnimationContext will need to be added.`
+        `Sprite "${spriteModifier.id}" cannot have another Sprite as a direct parent. An extra AnimationContext will need to be added.`
       );
     }
 
@@ -286,7 +328,10 @@ export default class SpriteTree {
       if (node.isSprite) {
         // TODO: we might need to do some cleanup? This is currently a WeakMap but..
         // situation where this matters is SpriteModifier hanging around when it should be removed
-        this.freshlyRemovedToNode.set(node.spriteModel as SpriteModifier, node);
+        this.freshlyRemovedToNode.set(
+          (node as { spriteModel: SpriteModel }).spriteModel,
+          node
+        );
       }
       this.nodesByElement.delete(spriteModifer.element);
     }
@@ -365,13 +410,13 @@ export default class SpriteTree {
     return null;
   }
 
-  findStableSharedAncestor(spriteA: SpriteModifier, spriteB: SpriteModifier) {
+  findStableSharedAncestor(spriteA: SpriteModel, spriteB: SpriteModel) {
     let ancestorsOfKeptSprite = this.nodesByElement
       .get(spriteA.element)
-      ?.ancestors.filter((v) => (v.contextModel as AnimationContext)?.isStable);
+      ?.ancestors.filter((v) => v.contextModel?.isStable);
     let ancestorsOfCounterpartSprite = this.freshlyRemovedToNode
       .get(spriteB)
-      ?.ancestors.filter((v) => (v.contextModel as AnimationContext)?.isStable);
+      ?.ancestors.filter((v) => v.contextModel?.isStable);
 
     return ancestorsOfKeptSprite?.find((v) =>
       ancestorsOfCounterpartSprite?.includes(v)

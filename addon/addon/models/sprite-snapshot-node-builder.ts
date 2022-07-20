@@ -2,19 +2,19 @@ import Sprite, {
   SpriteIdentifier,
   SpriteType,
 } from 'animations-experiment/models/sprite';
-import AnimationContext from 'animations-experiment/components/animation-context';
 import SpriteTree, {
+  ContextModel,
   GetDescendantNodesOptions,
+  SpriteModel,
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';
-import SpriteModifier from 'animations-experiment/modifiers/sprite';
 import { assert } from '@ember/debug';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
 import { IntermediateSprite } from 'animations-experiment/services/animations';
 
 function checkForChanges(
-  spriteModifier: SpriteModifier,
-  animationContext: AnimationContext
+  spriteModifier: SpriteModel,
+  animationContext: ContextModel
 ): boolean {
   let spriteCurrent = spriteModifier.currentBounds;
   let spriteLast = spriteModifier.lastBounds;
@@ -36,16 +36,16 @@ function checkForChanges(
 
 export function filterToContext(
   spriteTree: SpriteTree,
-  animationContext: AnimationContext,
-  spriteModifiers: Set<SpriteModifier>,
+  animationContext: ContextModel,
+  spriteModifiers: Set<SpriteModel>,
   opts: GetDescendantNodesOptions = { includeFreshlyRemoved: false }
-): Set<SpriteModifier> {
+): Set<SpriteModel> {
   let contextDescendants = spriteTree.descendantsOf(animationContext, {
     ...opts,
     filter(childNode: SpriteTreeNode) {
       return !(
         childNode.isContext &&
-        (childNode.contextModel as AnimationContext).isStable
+        (childNode as { contextModel: ContextModel }).contextModel.isStable
       );
     },
   });
@@ -55,20 +55,20 @@ export function filterToContext(
 }
 
 export class SpriteSnapshotNode {
-  controllingContext: AnimationContext;
+  controllingContext: ContextModel;
   insertedSprites: Set<Sprite> = new Set();
   removedSprites: Set<Sprite> = new Set();
   keptSprites: Set<Sprite> = new Set();
 
-  constructor(context: AnimationContext) {
+  constructor(context: ContextModel) {
     this.controllingContext = context;
   }
 
   addSprite(
     sprite: Sprite,
-    spriteModifier: SpriteModifier,
-    context: AnimationContext,
-    counterpartModifier?: SpriteModifier,
+    spriteModifier: SpriteModel,
+    context: ContextModel,
+    counterpartModifier?: SpriteModel,
     intermediateSprite?: IntermediateSprite
   ) {
     if (sprite.type === SpriteType.Kept) {
@@ -187,26 +187,28 @@ export class SpriteSnapshotNode {
 }
 
 export class SpriteSnapshotNodeBuilder {
-  contextToNode: WeakMap<AnimationContext, SpriteSnapshotNode> = new WeakMap();
+  contextToNode: WeakMap<ContextModel, SpriteSnapshotNode> = new WeakMap();
   spriteTree: SpriteTree;
 
   constructor(
     spriteTree: SpriteTree,
-    contexts: Set<AnimationContext>,
-    freshlyAdded: Set<SpriteModifier>,
-    freshlyRemoved: Set<SpriteModifier>,
+    contexts: Set<ContextModel>,
+    freshlyAdded: Set<SpriteModel>,
+    freshlyRemoved: Set<SpriteModel>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
     this.spriteTree = spriteTree;
 
     // Capture snapshots & lookup natural KeptSprites
-    let freshlyChanged: Set<SpriteModifier> = new Set();
+    let freshlyChanged: Set<SpriteModel> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
-      let contextChildren: SpriteModifier[] = [...(contextNode?.children ?? [])]
-        .map((c) => c.spriteModel as SpriteModifier)
-        .filter(Boolean);
+      let contextChildren: SpriteModel[] = (
+        [...(contextNode?.children ?? [])].filter((c) => c.isSprite) as {
+          spriteModel: SpriteModel;
+        }[]
+      ).map((c) => c.spriteModel);
 
       for (let spriteModifier of contextChildren) {
         spriteModifier.captureSnapshot({
@@ -284,25 +286,25 @@ export class SpriteSnapshotNodeBuilder {
   }
 
   classifySprites(
-    freshlyAdded: Set<SpriteModifier>,
-    freshlyRemoved: Set<SpriteModifier>,
-    freshlyChanged: Set<SpriteModifier>,
+    freshlyAdded: Set<SpriteModel>,
+    freshlyRemoved: Set<SpriteModel>,
+    freshlyChanged: Set<SpriteModel>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
     let classifiedInsertedSpriteModifiers = new Set([...freshlyAdded]);
     let classifiedRemovedSpriteModifiers = new Set([...freshlyRemoved]);
     let classifiedKeptSpriteModifiers = new Set([...freshlyChanged]);
 
-    let spriteModifiers: Set<SpriteModifier> = new Set();
-    let spriteModifierToSpriteMap = new WeakMap<SpriteModifier, Sprite>();
+    let spriteModifiers: Set<SpriteModel> = new Set();
+    let spriteModifierToSpriteMap = new WeakMap<SpriteModel, Sprite>();
     let spriteModifierToCounterpartModifierMap = new Map<
-      SpriteModifier,
-      SpriteModifier
+      SpriteModel,
+      SpriteModel
     >();
     // non-natural kept sprites only
     let contextToKeptSpriteModifierMap = new WeakMap<
-      AnimationContext,
-      Set<SpriteModifier>
+      ContextModel,
+      Set<SpriteModel>
     >();
 
     // Classify non-natural KeptSprites
@@ -326,7 +328,7 @@ export class SpriteSnapshotNodeBuilder {
         removedSpriteModifiers.length < 2
       );
 
-      let removedSpriteModifier = removedSpriteModifiers[0] as SpriteModifier;
+      let removedSpriteModifier = removedSpriteModifiers[0];
       if (removedSpriteModifier) {
         classifiedRemovedSpriteModifiers.delete(removedSpriteModifier);
       }
@@ -338,20 +340,19 @@ export class SpriteSnapshotNodeBuilder {
         ).toString()
       );
 
-      if (intermediateSprite || removedSpriteModifier) {
+      // a matching IntermediateSprite always wins from a RemovedSprite counterpart
+      // as it is more up-to-date (mid-animation interruption).
+      let counterpartSpriteModifier =
+        intermediateSprite?.modifier ?? removedSpriteModifier;
+      if (counterpartSpriteModifier) {
         classifiedKeptSpriteModifiers.add(insertedSpriteModifier);
         classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
 
-        // a matching IntermediateSprite always wins from a RemovedSprite counterpart
-        // as it is more up-to-date (mid-animation interruption).
-        let counterpartSpriteModifier =
-          intermediateSprite?.modifier ?? removedSpriteModifier;
-
-        // Find a stable shared ancestor AnimationContext
+        // Find a stable shared ancestor ContextModel
         let sharedContext = this.spriteTree.findStableSharedAncestor(
           insertedSpriteModifier,
           counterpartSpriteModifier
-        ) as AnimationContext;
+        );
 
         if (!sharedContext) {
           console.warn(
