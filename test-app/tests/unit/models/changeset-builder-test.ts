@@ -133,7 +133,7 @@ function nestEachInPrevious(
   return items;
 }
 
-module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
+module('Unit | Util | ChangesetBuilder', function () {
   test('it divvies sprites up between contexts correctly', async function (assert) {
     let rootDiv = document.createElement('div');
     let context1NextDOMRect = new DOMRect(0, 0, 0, 1);
