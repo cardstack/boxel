@@ -82,8 +82,14 @@ export default class AnimationContextComponent extends Component<AnimationContex
     let { orphansElement } = this as { orphansElement: HTMLElement };
 
     // TODO:
-    // - add a map of orphans on a higher level than the animation context
-    // - assert that an orphan is not appended in two places
+    // - add a map of orphans on a higher level than the animation context and use it for this assertion
+    assert(
+      'Element is appended in multiple different orphan elements',
+      spriteOrElement.element.parentElement === orphansElement ||
+        !spriteOrElement.element.parentElement?.dataset[
+          'animationContextOrphanElement'
+        ]
+    );
 
     orphansElement.appendChild(spriteOrElement.element);
 
