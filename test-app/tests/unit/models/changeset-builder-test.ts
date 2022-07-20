@@ -468,7 +468,7 @@ module('Unit | Util | ChangesetBuilder', function () {
     spriteTree.flushPendingAdditions();
     spriteTree.removeSpriteModifier(freshlyRemovedSprite);
 
-    let spriteSnapshotTree = new ChangesetBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([outerContext, innerContext]),
       new Set([freshlyAddedSprite]),
@@ -476,10 +476,10 @@ module('Unit | Util | ChangesetBuilder', function () {
       new Map()
     );
 
-    let outerContextNode = spriteSnapshotTree.contextToNode.get(
+    let outerContextNode = changesetBuilder.contextToNode.get(
       outerContext
     ) as Changeset;
-    let innerContextNode = spriteSnapshotTree.contextToNode.get(
+    let innerContextNode = changesetBuilder.contextToNode.get(
       innerContext
     ) as Changeset;
     assert.ok(
@@ -574,7 +574,7 @@ module('Unit | Util | ChangesetBuilder', function () {
     spriteTree.flushPendingAdditions();
     spriteTree.removeSpriteModifier(freshlyRemovedSprite);
 
-    let spriteSnapshotTree = new ChangesetBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([outerContext, innerContext]),
       new Set([]),
@@ -602,10 +602,10 @@ module('Unit | Util | ChangesetBuilder', function () {
       ])
     );
 
-    let outerContextNode = spriteSnapshotTree.contextToNode.get(
+    let outerContextNode = changesetBuilder.contextToNode.get(
       outerContext
     ) as Changeset;
-    let innerContextNode = spriteSnapshotTree.contextToNode.get(
+    let innerContextNode = changesetBuilder.contextToNode.get(
       innerContext
     ) as Changeset;
     assert.ok(
