@@ -74,33 +74,28 @@ export default class AnimationContextComponent extends Component<AnimationContex
     return Boolean(this.args.use && this.isStable);
   }
 
-  hasOrphan(spriteOrElement: Sprite): boolean {
-    return this.orphans.has(spriteOrElement.identifier.toString());
+  hasOrphan(sprite: Sprite): boolean {
+    return this.orphans.has(sprite.identifier.toString());
   }
 
-  appendOrphan(spriteOrElement: Sprite): void {
+  appendOrphan(sprite: Sprite): void {
     let { orphansElement } = this as { orphansElement: HTMLElement };
 
     // TODO:
     // - add a map of orphans on a higher level than the animation context and use it for this assertion
     assert(
       'Element is appended in multiple different orphan elements',
-      spriteOrElement.element.parentElement === orphansElement ||
-        !spriteOrElement.element.parentElement?.dataset[
-          'animationContextOrphanElement'
-        ]
+      sprite.element.parentElement === orphansElement ||
+        !sprite.element.parentElement?.dataset['animationContextOrphanElement']
     );
 
-    orphansElement.appendChild(spriteOrElement.element);
+    orphansElement.appendChild(sprite.element);
 
-    this.orphans.set(
-      spriteOrElement.identifier.toString(),
-      spriteOrElement.element
-    );
+    this.orphans.set(sprite.identifier.toString(), sprite.element);
   }
 
-  removeOrphan(spriteOrElement: Sprite): void {
-    let identifier = spriteOrElement.identifier.toString();
+  removeOrphan(sprite: Sprite): void {
+    let identifier = sprite.identifier.toString();
     let element = this.orphans.get(identifier);
     if (element) {
       this.orphansElement!.removeChild(element);
