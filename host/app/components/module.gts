@@ -8,7 +8,6 @@ interface Signature {
   }
 }
 
-
 export default class Module extends Component<Signature> {
   <template>
     {{#each this.cardRefs.refs as |ref|}}

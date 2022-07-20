@@ -5,7 +5,6 @@ import { tracked, cached } from '@glimmer/tracking';
 import { Card, Format, serializeCard } from 'runtime-spike/lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { moduleURL } from 'runtime-spike/resources/import';
 import { action } from '@ember/object';
 import isEqual from 'lodash/isEqual';
 import { eq } from '../helpers/truth-helpers';
@@ -16,8 +15,11 @@ import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common'
 
 export interface NewCardArgs {
   type: 'new';
-  class: typeof Card;
-  name: string;
+  realmURL: string;
+  context: {
+    module: string;
+    name: string;
+  };
 }
 export interface ExistingCardArgs {
   type: 'existing';
@@ -40,10 +42,11 @@ interface Signature {
 
 export default class Preview extends Component<Signature> {
   <template>
-    {{#if this.args.formats}}
+    {{#if @formats}}
       <div>
         Format:
-        {{#each this.args.formats as |format|}}
+        {{#each @formats as |format|}}
+          {{!-- template-lint-disable require-button-type --}}
           <button {{on "click" (fn this.setFormat format)}}
             class="format-button {{format}} {{if (eq this.format format) 'selected'}}"
             disabled={{if (eq this.format format) true false}}>
@@ -62,7 +65,7 @@ export default class Preview extends Component<Signature> {
         {{#if this.isDirty}}
           <div>
             <button data-test-save-card {{on "click" this.save}}>Save</button>
-            {{#if (eq this.args.card.type 'new')}}
+            {{#if (eq @card.type "new")}}
               <button data-test-cancel-create {{on "click" this.cancel}}>Cancel</button>
             {{else}}
               <button data-test-reset {{on "click" this.reset}}>Reset</button>
@@ -96,7 +99,8 @@ export default class Preview extends Component<Signature> {
   get card() {
     this.resetTime; // just consume this
     if (this.args.card.type === 'new') {
-      return new this.args.card.class();
+      let cardClass = this.args.module[this.args.card.context.name];
+      return new cardClass();
     }
     if (this.initialCardData) {
       let cardClass = this.args.module[this.initialCardData.data.meta.adoptsFrom.name];
@@ -111,16 +115,9 @@ export default class Preview extends Component<Signature> {
       if (this.card === undefined) {
         throw new Error('bug: this should never happen');
       }
-      let mod = moduleURL(this.args.module);
-      if (!mod) {
-        throw new Error(`can't save card in unknown module.`);
-      }
       json = {
         data: serializeCard(this.card, {
-          adoptsFrom: {
-            module: mod,
-            name: this.args.card.name
-          }
+          adoptsFrom: this.args.card.context,
         })
       };
     } else {
@@ -205,7 +202,7 @@ export default class Preview extends Component<Signature> {
   }
 
   @restartableTask private async write(): Promise<void> {
-    let url = this.args.card.type === 'new' ? 'http://local-realm/' : this.args.card.url;
+    let url = this.args.card.type === 'new' ? this.args.card.realmURL : this.args.card.url;
     let method = this.args.card.type === 'new' ? 'POST' : 'PATCH';
     let response = await fetch(url, {
       method,

@@ -58,7 +58,7 @@ export interface RealmAdapter {
 
   openFile(path: LocalPath): Promise<FileRef | undefined>;
 
-  write(path: string, contents: string): Promise<{ lastModified: number }>;
+  write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
 }
 
 export class Realm {
@@ -106,7 +106,7 @@ export class Realm {
     contents: string
   ): Promise<{ lastModified: number }> {
     let results = await this.#adapter.write(path, contents);
-    await this.#searchIndex.update(new URL(path, this.url));
+    await this.#searchIndex.update(this.#paths.fileURL(path));
 
     return results;
   }
@@ -253,7 +253,7 @@ export class Realm {
   // we bother with this because typescript is picky about allowing you to use
   // explicit file extensions in your source code
   private async getFileWithFallbacks(
-    path: string
+    path: LocalPath
   ): Promise<FileRef | undefined> {
     // TODO refactor to use search index
 
@@ -272,7 +272,6 @@ export class Realm {
   }
 
   private async createCard(request: Request): Promise<Response> {
-    let url = new URL(request.url);
     let body = await request.text();
     let json;
     try {
@@ -301,11 +300,13 @@ export class Realm {
       }
     }
     let pathname = `${dirName}${++index}.json`;
+    let fileURL = this.#paths.fileURL(pathname);
+    let localPath: LocalPath = this.#paths.local(fileURL);
     let { lastModified } = await this.write(
-      pathname,
+      localPath,
       JSON.stringify(json, null, 2)
     );
-    let newURL = new URL(pathname, url.origin).href.replace(/\.json$/, "");
+    let newURL = fileURL.href.replace(/\.json$/, "");
     if (!isCardDocument(json)) {
       return badRequest(
         `bug: the card document is not actually a card document`
@@ -329,11 +330,12 @@ export class Realm {
   }
 
   private async patchCard(request: Request): Promise<Response> {
-    if (this.#paths.local(new URL(request.url)).startsWith("_")) {
+    let localPath = this.#paths.local(new URL(request.url));
+    if (localPath.startsWith("_")) {
       return methodNotAllowed(request);
     }
 
-    let url = this.#paths.fileURL(new URL(request.url).pathname);
+    let url = this.#paths.fileURL(localPath);
     let original = await this.#searchIndex.card(url);
     if (!original) {
       return notFound(request);
@@ -350,7 +352,7 @@ export class Realm {
 
     let card = merge({ data: original }, patch);
     delete (card as any).data.id; // don't write the ID to the file
-    let path = `${this.#paths.local(url)}.json`;
+    let path: LocalPath = `${localPath}.json`;
     let { lastModified } = await this.write(
       path,
       JSON.stringify(card, null, 2)
@@ -367,7 +369,8 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
-    let url = this.#paths.fileURL(new URL(request.url).pathname);
+    let localPath = this.#paths.local(new URL(request.url));
+    let url = this.#paths.fileURL(localPath);
     let data = await this.#searchIndex.card(url);
     if (!data) {
       return notFound(request);
@@ -385,9 +388,7 @@ export class Realm {
 
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
-    let localPath: LocalPath = new URL(request.url).pathname
-      .replace(/^\//, "")
-      .replace(/\/$/, "");
+    let localPath: LocalPath = this.#paths.local(new URL(request.url));
     let url = this.#paths.directoryURL(localPath);
 
     let entries = await this.#searchIndex.directory(url);
