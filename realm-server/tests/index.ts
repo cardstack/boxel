@@ -1,1 +1,1 @@
-import "./web-api-test";
+import "./realm-server-test";
