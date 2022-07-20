@@ -1,1 +1,1 @@
-import "./json-api-test";
+import "./web-api-test";

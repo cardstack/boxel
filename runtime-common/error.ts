@@ -15,7 +15,7 @@ export function methodNotAllowed(request: Request): Response {
     }),
     {
       status: 405,
-      headers: { 'Content-Type': 'application/vnd.api+json' },
+      headers: { "content-type": "application/vnd.api+json" },
     }
   );
 }
@@ -30,7 +30,7 @@ export function notFound(
     }),
     {
       status: 404,
-      headers: { 'Content-Type': 'application/vnd.api+json' },
+      headers: { "content-type": "application/vnd.api+json" },
     }
   );
 }
@@ -42,7 +42,7 @@ export function badRequest(message: string): Response {
     }),
     {
       status: 400,
-      headers: { 'Content-Type': 'application/vnd.api+json' },
+      headers: { "content-type": "application/vnd.api+json" },
     }
   );
 }
@@ -54,7 +54,7 @@ export function systemError(message: string): Response {
     }),
     {
       status: 500,
-      headers: { 'Content-Type': 'application/vnd.api+json' },
+      headers: { "content-type": "application/vnd.api+json" },
     }
   );
 }

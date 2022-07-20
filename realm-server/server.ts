@@ -1,4 +1,5 @@
 import Koa from "koa";
+import bodyParser from "koa-bodyparser";
 import { NodeRealm } from "./node-realm";
 import { Realm } from "@cardstack/runtime-common";
 import { resolve } from "path";
@@ -20,6 +21,7 @@ export class RealmServer {
   start() {
     let realm = new Realm(this.url.href, new NodeRealm(this.path));
     let app = new Koa();
+    app.use(bodyParser());
     app.use(async (ctx) => {
       let { req } = ctx;
       if (!req.url) {
@@ -28,11 +30,16 @@ export class RealmServer {
       let request = new Request(new URL(req.url, ctx.request.origin).href, {
         method: req.method,
         headers: req.headers as { [name: string]: string },
+        ...(ctx.request.rawBody != null ? { body: ctx.request.rawBody } : {}),
       });
       let res = await realm.handle(request);
-      ctx.status = res.status;
-      ctx.message = res.statusText;
-      ctx.body = res.body;
+      ctx.response.status = res.status;
+      ctx.response.message = res.statusText;
+      ctx.response.set(Object.fromEntries([...res.headers.entries()]));
+
+      if (res.body != null) {
+        ctx.response.body = res.body;
+      }
     });
     return app;
   }

@@ -56,7 +56,7 @@ export default class Application extends Route<Model> {
       openFile = file(this, () => ({
         url,
         content,
-        lastModified: response.headers.get('Last-Modified') || undefined,
+        lastModified: response.headers.get('last-modified') || undefined,
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.router.transitionTo('application', {

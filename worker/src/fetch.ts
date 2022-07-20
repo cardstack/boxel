@@ -141,7 +141,7 @@ async function scaffoldBaseRealmTypeOf(request: Request): Promise<Response> {
     };
   }
   return new Response(JSON.stringify({ data }, null, 2), {
-    headers: { 'Content-Type': 'application/vnd.api+json' },
+    headers: { 'content-type': 'application/vnd.api+json' },
   });
 }
 
