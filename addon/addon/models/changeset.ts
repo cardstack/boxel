@@ -26,7 +26,17 @@ function union<T>(...sets: Set<T>[]): Set<T> {
   }
 }
 
-export default class Changeset {
+export default interface Changeset {
+  context: Context;
+  intent: string | undefined;
+  insertedSprites: Set<Sprite>;
+  removedSprites: Set<Sprite>;
+  keptSprites: Set<Sprite>;
+  spritesFor(filter: SpritesForArgs): Set<Sprite>;
+  spriteFor(filter: SpritesForArgs): Sprite | null;
+}
+
+export class OldChangeset implements Changeset {
   context: Context;
   intent: string | undefined;
   insertedSprites: Set<Sprite> = new Set();

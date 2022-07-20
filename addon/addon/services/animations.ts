@@ -11,7 +11,7 @@ import { taskFor } from 'ember-concurrency-ts';
 import Sprite, { SpriteIdentifier } from '../models/sprite';
 import Motion from '../motions/base';
 import { SpriteAnimation } from '../models/sprite-animation';
-import Changeset from 'animations-experiment/models/changeset';
+import Changeset, { OldChangeset } from 'animations-experiment/models/changeset';
 import {
   CopiedCSS,
   copyComputedStyle,
@@ -258,7 +258,7 @@ export default class AnimationsService extends Service {
         let { insertedSprites, keptSprites, removedSprites } =
           spriteSnapshotNode;
 
-        let changeset = new Changeset(context, undefined);
+        let changeset = new OldChangeset(context, undefined);
         changeset.addSprites([
           ...insertedSprites,
           ...keptSprites,
