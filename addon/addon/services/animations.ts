@@ -230,7 +230,7 @@ export default class AnimationsService extends Service {
     this.spriteTree.log();
 
     // This classifies sprites and puts them under the correct first stable ancestor context.
-    let spriteSnapshotNodeBuilder = new ChangesetBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       this.spriteTree,
       this.eligibleContexts,
       this.freshlyAdded,
@@ -252,7 +252,7 @@ export default class AnimationsService extends Service {
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
     for (let context of contexts) {
       let spriteSnapshotNode =
-        spriteSnapshotNodeBuilder.contextToNode.get(context);
+        changesetBuilder.contextToNode.get(context);
       if (spriteSnapshotNode && spriteSnapshotNode.hasSprites) {
         let transitionRunner = new TransitionRunner(context);
         let task = taskFor(transitionRunner.maybeTransitionTask);

@@ -191,7 +191,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     spriteTree.flushPendingAdditions();
     spriteTree.removeSpriteModifier(freshlyRemovedSprite);
 
-    let spriteSnapshotNodeBuilder = new ChangesetBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([stableContext1, stableContext2]),
       new Set([freshlyAddedSprite]),
@@ -199,10 +199,10 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
       new Map()
     );
 
-    let context1Node = spriteSnapshotNodeBuilder.contextToNode.get(
+    let context1Node = changesetBuilder.contextToNode.get(
       stableContext1
     ) as Changeset;
-    let context2Node = spriteSnapshotNodeBuilder.contextToNode.get(
+    let context2Node = changesetBuilder.contextToNode.get(
       stableContext2
     ) as Changeset;
 
@@ -332,7 +332,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     }
     spriteTree.flushPendingAdditions();
 
-    let spriteSnapshotNodeBuilder = new ChangesetBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([movedContext, unmovedContext]),
       new Set([freshlyAddedSprite]),
@@ -340,10 +340,10 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
       new Map()
     );
 
-    let movedContextNode = spriteSnapshotNodeBuilder.contextToNode.get(
+    let movedContextNode = changesetBuilder.contextToNode.get(
       movedContext
     ) as Changeset;
-    let unmovedContextNode = spriteSnapshotNodeBuilder.contextToNode.get(
+    let unmovedContextNode = changesetBuilder.contextToNode.get(
       unmovedContext
     ) as Changeset;
 
@@ -408,7 +408,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
       'Unstable context does not have initial render completed yet'
     );
 
-    let spriteSnapshotNodeBuilder = new ChangesetBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([stableContext, unstableContext]),
       new Set(),
@@ -417,11 +417,11 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     );
 
     assert.ok(
-      spriteSnapshotNodeBuilder.contextToNode.get(stableContext),
+      changesetBuilder.contextToNode.get(stableContext),
       'Stable context is in the contextToNode map'
     );
     assert.notOk(
-      spriteSnapshotNodeBuilder.contextToNode.get(unstableContext),
+      changesetBuilder.contextToNode.get(unstableContext),
       'Stable context is not in the contextToNode map'
     );
     assert.equal(
