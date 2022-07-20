@@ -3,9 +3,8 @@ import SpriteTree, {
   Context,
   SpriteStateTracker,
 } from 'animations-experiment/models/sprite-tree';
-import {
-  SpriteSnapshotNode,
-  SpriteSnapshotNodeBuilder,
+import Changeset, {
+  ChangesetBuilder,
 } from 'animations-experiment/models/changeset';
 import Sprite, { SpriteIdentifier } from 'animations-experiment/models/sprite';
 import { IntermediateSprite } from 'animations-experiment/services/animations';
@@ -192,7 +191,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     spriteTree.flushPendingAdditions();
     spriteTree.removeSpriteModifier(freshlyRemovedSprite);
 
-    let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
+    let spriteSnapshotNodeBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([stableContext1, stableContext2]),
       new Set([freshlyAddedSprite]),
@@ -202,10 +201,10 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
 
     let context1Node = spriteSnapshotNodeBuilder.contextToNode.get(
       stableContext1
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
     let context2Node = spriteSnapshotNodeBuilder.contextToNode.get(
       stableContext2
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
 
     assert.equal(
       context1Node.insertedSprites.size,
@@ -333,7 +332,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     }
     spriteTree.flushPendingAdditions();
 
-    let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
+    let spriteSnapshotNodeBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([movedContext, unmovedContext]),
       new Set([freshlyAddedSprite]),
@@ -343,10 +342,10 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
 
     let movedContextNode = spriteSnapshotNodeBuilder.contextToNode.get(
       movedContext
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
     let unmovedContextNode = spriteSnapshotNodeBuilder.contextToNode.get(
       unmovedContext
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
 
     assert.ok(
       movedContextNode.insertedSprites.size === 0 &&
@@ -409,7 +408,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
       'Unstable context does not have initial render completed yet'
     );
 
-    let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
+    let spriteSnapshotNodeBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([stableContext, unstableContext]),
       new Set(),
@@ -469,7 +468,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     spriteTree.flushPendingAdditions();
     spriteTree.removeSpriteModifier(freshlyRemovedSprite);
 
-    let spriteSnapshotTree = new SpriteSnapshotNodeBuilder(
+    let spriteSnapshotTree = new ChangesetBuilder(
       spriteTree,
       new Set([outerContext, innerContext]),
       new Set([freshlyAddedSprite]),
@@ -479,10 +478,10 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
 
     let outerContextNode = spriteSnapshotTree.contextToNode.get(
       outerContext
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
     let innerContextNode = spriteSnapshotTree.contextToNode.get(
       innerContext
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
     assert.ok(
       outerContextNode.insertedSprites.size === 0 &&
         outerContextNode.removedSprites.size === 0 &&
@@ -575,7 +574,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     spriteTree.flushPendingAdditions();
     spriteTree.removeSpriteModifier(freshlyRemovedSprite);
 
-    let spriteSnapshotTree = new SpriteSnapshotNodeBuilder(
+    let spriteSnapshotTree = new ChangesetBuilder(
       spriteTree,
       new Set([outerContext, innerContext]),
       new Set([]),
@@ -605,10 +604,10 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
 
     let outerContextNode = spriteSnapshotTree.contextToNode.get(
       outerContext
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
     let innerContextNode = spriteSnapshotTree.contextToNode.get(
       innerContext
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
     assert.ok(
       outerContextNode.insertedSprites.size === 0 &&
         outerContextNode.removedSprites.size === 1 &&

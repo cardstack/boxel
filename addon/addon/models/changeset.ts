@@ -12,16 +12,6 @@ import SpriteTree, {
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
 import { IntermediateSprite } from 'animations-experiment/services/animations';
 
-export default interface Changeset {
-  context: Context;
-  intent: string | undefined;
-  insertedSprites: Set<Sprite>;
-  removedSprites: Set<Sprite>;
-  keptSprites: Set<Sprite>;
-  spritesFor(filter: SpritesForArgs): Set<Sprite>;
-  spriteFor(filter: SpritesForArgs): Sprite | null;
-}
-
 export type SpritesForArgs = {
   type?: SpriteType | undefined;
   role?: string | undefined;
@@ -88,7 +78,7 @@ export function filterToContext(
   );
 }
 
-export class SpriteSnapshotNode implements Changeset {
+export default class Changeset {
   context: Context;
   intent: string | undefined;
   insertedSprites: Set<Sprite> = new Set();
@@ -162,8 +152,8 @@ export class SpriteSnapshotNode implements Changeset {
   }
 }
 
-export class SpriteSnapshotNodeBuilder {
-  contextToNode: WeakMap<Context, SpriteSnapshotNode> = new WeakMap();
+export class ChangesetBuilder {
+  contextToNode: WeakMap<Context, Changeset> = new WeakMap();
   spriteTree: SpriteTree;
 
   constructor(
@@ -216,7 +206,7 @@ export class SpriteSnapshotNodeBuilder {
 
     for (let context of contexts) {
       if (context.isStable) {
-        let spriteSnapshotNode = new SpriteSnapshotNode(context);
+        let spriteSnapshotNode = new Changeset(context);
 
         let spriteModifiersForContext = filterToContext(
           this.spriteTree,
@@ -421,7 +411,7 @@ export class SpriteSnapshotNodeBuilder {
   }
 
   addSpriteTo(
-    node: SpriteSnapshotNode,
+    node: Changeset,
     sprite: Sprite,
     spriteModifier: SpriteStateTracker,
     context: Context,

@@ -25,7 +25,7 @@ import {
 } from 'ember-concurrency';
 import {
   filterToContext,
-  SpriteSnapshotNodeBuilder,
+  ChangesetBuilder,
 } from 'animations-experiment/models/changeset';
 
 export type AnimateFunction = (
@@ -230,7 +230,7 @@ export default class AnimationsService extends Service {
     this.spriteTree.log();
 
     // This classifies sprites and puts them under the correct first stable ancestor context.
-    let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
+    let spriteSnapshotNodeBuilder = new ChangesetBuilder(
       this.spriteTree,
       this.eligibleContexts,
       this.freshlyAdded,
