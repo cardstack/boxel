@@ -5,8 +5,10 @@
   "license": "MIT",
   "workspaces": [
     "host",
+    "realm-server",
     "worker",
     "cards",
+    "base",
     "runtime-common",
     "vendor/ember-template-imports"
   ],

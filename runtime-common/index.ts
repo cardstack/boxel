@@ -56,6 +56,9 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["@ember/object", ["action", "get"]],
   ["@ember/helper", ["get", "fn"]],
   ["@ember/modifier", ["on"]],
+
+  // TODO eventually we should not need to build externals for these anymore
+  // since they will be loading code from a real realm server
   [
     "runtime-spike/lib/card-api",
     [

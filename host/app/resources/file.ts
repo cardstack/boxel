@@ -97,7 +97,7 @@ class _FileResource extends Resource<Args> {
       }
       return;
     }
-    let lastModified = response.headers.get('Last-Modified') || undefined;
+    let lastModified = response.headers.get('last-modified') || undefined;
     if (this.lastModified === lastModified) {
       return;
     }
@@ -137,7 +137,7 @@ class _FileResource extends Resource<Args> {
     }
 
     this.content = content;
-    this.lastModified = response.headers.get('Last-Modified') || undefined;
+    this.lastModified = response.headers.get('last-modified') || undefined;
   }
 }
 

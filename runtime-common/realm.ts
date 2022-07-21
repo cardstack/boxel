@@ -27,13 +27,22 @@ import { parse, stringify } from "qs";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
 import makeEmberTemplatePlugin from "babel-plugin-ember-template-compilation";
+//@ts-ignore no types are available
 import * as etc from "ember-source/dist/ember-template-compiler";
 import { externalsPlugin } from "./externals";
+//@ts-ignore no types are available
 import glimmerTemplatePlugin from "@cardstack/ember-template-imports/src/babel-plugin";
+//@ts-ignore no types are available
 import decoratorsProposalPlugin from "@babel/plugin-proposal-decorators";
+//@ts-ignore no types are available
 import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properties";
+//@ts-ignore ironically no types are available
 import typescriptPlugin from "@babel/plugin-transform-typescript";
 import { Router } from "./router";
+
+// From https://github.com/iliakan/detect-node
+const isNode =
+  Object.prototype.toString.call(globalThis.process) === "[object process]";
 
 export interface FileRef {
   path: LocalPath;
@@ -155,7 +164,7 @@ export class Realm {
   private async serveLocalFile(ref: FileRef): Promise<Response> {
     return new Response(ref.content, {
       headers: {
-        "Last-Modified": formatRFC7231(ref.lastModified),
+        "last-modified": formatRFC7231(ref.lastModified),
       },
     });
   }
@@ -168,7 +177,7 @@ export class Realm {
     return new Response(null, {
       status: 204,
       headers: {
-        "Last-Modified": formatRFC7231(lastModified),
+        "last-modified": formatRFC7231(lastModified),
       },
     });
   }
@@ -214,7 +223,14 @@ export class Realm {
           // this "as any" is because typescript is using the Node-specific types
           // from babel-plugin-ember-template-compilation, but we're using the
           // browser interface
-          (makeEmberTemplatePlugin as any)(() => etc.precompile),
+          isNode
+            ? [
+                makeEmberTemplatePlugin,
+                {
+                  precompile: etc.precompile,
+                },
+              ]
+            : (makeEmberTemplatePlugin as any)(() => etc.precompile),
           externalsPlugin,
         ],
       })!.code!;
@@ -259,7 +275,13 @@ export class Realm {
   }
 
   private async createCard(request: Request): Promise<Response> {
-    let json = await request.json();
+    let body = await request.text();
+    let json;
+    try {
+      json = JSON.parse(body);
+    } catch (e) {
+      return badRequest(`Request body is not valid card JSON-API`);
+    }
     if (!isCardJSON(json)) {
       return badRequest(`Request body is not valid card JSON-API`);
     }
@@ -304,7 +326,7 @@ export class Realm {
     return new Response(JSON.stringify(json, null, 2), {
       status: 201,
       headers: {
-        "Content-Type": "application/vnd.api+json",
+        "content-type": "application/vnd.api+json",
         ...lastModifiedHeader(json),
       },
     });
@@ -343,7 +365,7 @@ export class Realm {
     card.data.meta.lastModified = lastModified;
     return new Response(JSON.stringify(card, null, 2), {
       headers: {
-        "Content-Type": "application/vnd.api+json",
+        "content-type": "application/vnd.api+json",
         ...lastModifiedHeader(card),
       },
     });
@@ -360,8 +382,8 @@ export class Realm {
     let card = { data };
     return new Response(JSON.stringify(card, null, 2), {
       headers: {
-        "Last-Modified": formatRFC7231(card.data.meta.lastModified!),
-        "Content-Type": "application/vnd.api+json",
+        "last-modified": formatRFC7231(card.data.meta.lastModified!),
+        "content-type": "application/vnd.api+json",
         ...lastModifiedHeader(card),
       },
     });
@@ -419,7 +441,7 @@ export class Realm {
     }
 
     return new Response(JSON.stringify({ data }, null, 2), {
-      headers: { "Content-Type": "application/vnd.api+json" },
+      headers: { "content-type": "application/vnd.api+json" },
     });
   }
 
@@ -465,15 +487,7 @@ export class Realm {
     let { module } =
       parse(new URL(request.url).search, { ignoreQueryPrefix: true }) ?? {};
     if (typeof module !== "string") {
-      return new Response(
-        JSON.stringify({
-          errors: [`'module' param was not specified or invalid`],
-        }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/vnd.api+json" },
-        }
-      );
+      return badRequest(`'module' param was not specified or invalid`);
     }
     let refs = await this.#searchIndex.exportedCardsOf(module);
     return new Response(
@@ -492,7 +506,7 @@ export class Realm {
       ),
       {
         headers: {
-          "Content-Type": "application/vnd.api+json",
+          "content-type": "application/vnd.api+json",
         },
       }
     );
@@ -584,7 +598,7 @@ export class Realm {
       };
     }
     return new Response(JSON.stringify({ data }, null, 2), {
-      headers: { "Content-Type": "application/vnd.api+json" },
+      headers: { "content-type": "application/vnd.api+json" },
     });
   }
 
@@ -600,7 +614,7 @@ export class Realm {
         2
       ),
       {
-        headers: { "Content-Type": "application/vnd.api+json" },
+        headers: { "content-type": "application/vnd.api+json" },
       }
     );
   }
@@ -640,12 +654,12 @@ export function getExportedCardContext(ref: CardRef): {
 }
 function lastModifiedHeader(
   card: CardDocument
-): {} | { "Last-Modified": string } {
+): {} | { "last-modified": string } {
   return (
     card.data.meta.lastModified != null
-      ? { "Last-Modified": formatRFC7231(card.data.meta.lastModified) }
+      ? { "last-modified": formatRFC7231(card.data.meta.lastModified) }
       : {}
-  ) as {} | { "Last-Modified": string };
+  ) as {} | { "last-modified": string };
 }
 
 export interface CardDefinitionResource {

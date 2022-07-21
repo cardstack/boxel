@@ -9,7 +9,7 @@ import CardEditor, { ExistingCardArgs } from './card-editor';
 import ImportModule from './import-module';
 import Module from './module';
 import FileTree from './file-tree';
-import { Format } from '../lib/card-api';
+import { Format } from 'runtime-spike/lib/card-api';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,

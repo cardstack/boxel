@@ -1,4 +1,4 @@
-import { Component, primitive, serialize, CardInstanceType, CardConstructor, Card } from 'runtime-spike/lib/card-api';
+import { Component, primitive, serialize, CardInstanceType, CardConstructor, Card } from './card-api';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';

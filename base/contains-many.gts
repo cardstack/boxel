@@ -3,7 +3,7 @@ import { ComponentLike } from '@glint/template';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { Card, Box, CardConstructor, Format } from '../lib/card-api';
+import { Card, Box, CardConstructor, Format } from './card-api';
 
 interface Signature {
   Args: {

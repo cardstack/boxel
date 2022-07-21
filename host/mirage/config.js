@@ -173,7 +173,7 @@ function handleScaffoldedTypeOf(request, stubs) {
 export function notFound(request, message = `Could not find ${request.url}`) {
   return new Response(
     404,
-    { 'Content-Type': 'application/vnd.api+json' },
+    { 'content-type': 'application/vnd.api+json' },
 
     {
       errors: [message],

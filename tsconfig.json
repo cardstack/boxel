@@ -22,8 +22,9 @@
     "experimentalDecorators": true,
     "paths": {
       "runtime-spike/tests/*": ["host/tests/*"],
+      "runtime-spike/lib/*": ["base/*"],
       "runtime-spike/*": ["host/app/*"],
-      "https://cardstack.com/base/*": ["host/app/lib/*"],
+      "https://cardstack.com/base/*": ["base/*"],
       "//local-realm/*": ["cards/*"],
       "cards": ["cards/*"],
       "*": ["host/types/*"],
@@ -32,10 +33,12 @@
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
-    "include": ["cards/**", "host/app/**", "host/tests/**"]
+    "include": ["cards/**", "base/**", "host/app/**", "host/tests/**"]
   },
   "include": [
+    "base/**/*",
     "cards/**/*",
+    "realm-server/**/*",
     "host/app/**/*",
     "host/tests/**/*",
     "host/types/**/*"

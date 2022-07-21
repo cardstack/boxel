@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { render } from '../resources/rendered-card';
 //@ts-ignore cached not available yet in definitely typed
 import { tracked, cached } from '@glimmer/tracking';
-import { Card, Format, serializeCard } from '../lib/card-api';
+import { Card, Format, serializeCard } from 'runtime-spike/lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';

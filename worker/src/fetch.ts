@@ -45,6 +45,7 @@ export class FetchHandler {
         ) {
           return scaffoldBaseRealmTypeOf(request);
         }
+        // TODO we shouldn't need to generate an external stub for base cards since these will be served from a real server
         return generateExternalStub(
           url.pathname.replace('/base/', 'runtime-spike/lib/')
         );
@@ -140,7 +141,7 @@ async function scaffoldBaseRealmTypeOf(request: Request): Promise<Response> {
     };
   }
   return new Response(JSON.stringify({ data }, null, 2), {
-    headers: { 'Content-Type': 'application/vnd.api+json' },
+    headers: { 'content-type': 'application/vnd.api+json' },
   });
 }
 
