@@ -159,13 +159,6 @@ export class SpriteTreeNode {
     return result;
   }
 
-  clearFreshlyRemovedChildren(): void {
-    for (let rootNode of this.children) {
-      rootNode.freshlyRemovedChildren.clear();
-      rootNode.clearFreshlyRemovedChildren();
-    }
-  }
-
   addChild(childNode: SpriteTreeNode): void {
     this.children.add(childNode);
   }
@@ -371,13 +364,6 @@ export default class SpriteTree {
       }
     }
     return result;
-  }
-
-  clearFreshlyRemovedChildren(): void {
-    for (let rootNode of this.rootNodes) {
-      rootNode.freshlyRemovedChildren.clear();
-      rootNode.clearFreshlyRemovedChildren();
-    }
   }
 
   addChild(rootNode: SpriteTreeNode): void {
