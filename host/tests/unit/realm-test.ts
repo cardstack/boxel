@@ -432,7 +432,10 @@ module('Unit | realm', function () {
     );
     assert.deepEqual(
       dirEntries,
-      [{ name: '1.json', kind: 'file' }, { name: '2.json', kind: 'file' }],
+      [
+        { name: '1.json', kind: 'file' },
+        { name: '2.json', kind: 'file' },
+      ],
       'directory entries are correct'
     );
 
@@ -450,11 +453,20 @@ module('Unit | realm', function () {
     assert.strictEqual(card, undefined, 'card was deleted');
 
     card = await searchIndex.card(new URL('http://test-realm/cards/1'));
-    assert.strictEqual(card?.id,
-      'http://test-realm/cards/1', 'card 1 is still there');
+    assert.strictEqual(
+      card?.id,
+      'http://test-realm/cards/1',
+      'card 1 is still there'
+    );
 
-    dirEntries = await searchIndex.directory(new URL('http://test-realm/cards/'));
-    assert.deepEqual(dirEntries, [{ name: '1.json', kind: 'file' }], 'directory entries are updated');
+    dirEntries = await searchIndex.directory(
+      new URL('http://test-realm/cards/')
+    );
+    assert.deepEqual(
+      dirEntries,
+      [{ name: '1.json', kind: 'file' }],
+      'directory entries are updated'
+    );
 
     cards = await searchIndex.search({});
     assert.strictEqual(cards.length, 1, 'only one card remains');
