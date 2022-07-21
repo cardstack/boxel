@@ -1,6 +1,7 @@
 import { RealmAdapter, Kind, FileRef } from "@cardstack/runtime-common";
 import { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
+import { streamToText } from "./stream";
 
 import {
   readdirSync,
@@ -77,11 +78,6 @@ export class NodeRealm implements RealmAdapter {
     if (!(stream instanceof Readable)) {
       throw new Error(`Cannot handle web-stream in node environment`);
     }
-
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream as any) {
-      chunks.push(Buffer.from(chunk));
-    }
-    return Buffer.concat(chunks).toString("utf-8");
+    return await streamToText(stream);
   }
 }

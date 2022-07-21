@@ -2,15 +2,9 @@ import http from "http";
 import { NodeRealm } from "./node-realm";
 import { Realm } from "@cardstack/runtime-common";
 import { resolve } from "path";
-import { Response } from "node-fetch";
-import { Readable } from "stream";
+import { streamToText as nodeStreamToText } from "./stream";
+import { streamToText as webStreamToText } from "@cardstack/runtime-common/stream";
 import { LocalPath, RealmPaths } from "@cardstack/runtime-common/paths";
-
-// Despite node 18's native support for fetch, the built-in node fetch Response
-// does not seem to play nice with the Koa Response. The node-fetch Response
-// seems to work nicely with the Koa Response, so continuing to polyfill the
-// just the Response.
-(globalThis.Response as any) = Response;
 
 export function createRealmServer(path: string, realmURL: URL) {
   path = resolve(path);
@@ -28,7 +22,7 @@ export function createRealmServer(path: string, realmURL: URL) {
           ? realmPath.directoryURL(local)
           : realmPath.fileURL(local);
 
-      let reqBody = await readStreamAsString(req);
+      let reqBody = await nodeStreamToText(req);
       let request = new Request(url.href, {
         method: req.method,
         headers: req.headers as { [name: string]: string },
@@ -45,6 +39,15 @@ export function createRealmServer(path: string, realmURL: URL) {
       if (nodeStream) {
         isStreaming = true;
         nodeStream.pipe(res);
+      } else if (body instanceof ReadableStream) {
+        // since we are using native fetch Response in our Realm API, any
+        // strings or buffers will be converted into web-streams automatically
+        // in the fetch Response--this is not to be confused with actual file
+        // streams that the Realm is creating. The node HTTP server does not
+        // play nice with web-streams, so we will read these streams into
+        // strings and then include in our node ServerResponse. Actual node file
+        // streams will not be handled here--those will be taken care of above.
+        res.write(await webStreamToText(body));
       } else if (body != null) {
         res.write(body);
       }
@@ -61,12 +64,4 @@ export function createRealmServer(path: string, realmURL: URL) {
     }
   });
   return server;
-}
-
-async function readStreamAsString(stream: Readable): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream as any) {
-    chunks.push(Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks).toString("utf-8");
 }

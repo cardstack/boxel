@@ -1,5 +1,6 @@
 import { RealmAdapter, Kind, FileRef } from '@cardstack/runtime-common';
 import { LocalPath } from '@cardstack/runtime-common/paths';
+import { streamToText } from '@cardstack/runtime-common/stream';
 import type { Readable } from 'stream';
 
 export class LocalRealm implements RealmAdapter {
@@ -80,20 +81,7 @@ export class LocalRealm implements RealmAdapter {
     if (!(stream instanceof ReadableStream)) {
       throw new Error(`Cannot handle node-stream in non-node environment`);
     }
-    let decoder = new TextDecoder();
-    let pieces: string[] = [];
-    let reader = stream.getReader();
-    while (true) {
-      let { done, value } = await reader.read();
-      if (done) {
-        pieces.push(decoder.decode(undefined, { stream: false }));
-        break;
-      }
-      if (value) {
-        pieces.push(decoder.decode(value, { stream: true }));
-      }
-    }
-    return pieces.join('');
+    return await streamToText(stream);
   }
 }
 
