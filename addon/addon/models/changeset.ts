@@ -36,6 +36,7 @@ function union<T>(...sets: Set<T>[]): Set<T> {
   }
 }
 
+// DESCENDANT ACCESS: exclusively used to get descendants to filter for descendants that should be included in a changeset
 export function filterToContext(
   spriteTree: SpriteTree,
   animationContext: Context,
@@ -145,6 +146,7 @@ export class ChangesetBuilder {
     for (let context of contexts) {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
+      // DESCENDANT ACCESS: get descendants to measure and detect changes
       let contextChildren: SpriteStateTracker[] = (
         [...(contextNode?.children ?? [])].filter((c) => c.isSprite()) as {
           spriteModel: SpriteStateTracker;

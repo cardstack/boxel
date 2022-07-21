@@ -147,6 +147,7 @@ export default class AnimationsService extends Service {
       context.element
     ) as SpriteTreeNode;
 
+    // DESCENDANT ACCESS: measure things and create intermediate sprites
     for (let node of [
       ...contextNode.freshlyRemovedChildren,
       ...contextNode.children,
