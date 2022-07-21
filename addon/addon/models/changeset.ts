@@ -40,15 +40,13 @@ function union<T>(...sets: Set<T>[]): Set<T> {
 export function filterToContext(
   spriteTree: SpriteTree,
   animationContext: Context,
-  spriteModifiers: Set<SpriteStateTracker>,
-  opts: GetDescendantNodesOptions = { includeFreshlyRemoved: false }
+  spriteModifiers: Set<SpriteStateTracker>
 ): Set<SpriteStateTracker> {
-  let contextDescendants = spriteTree.descendantsOf(animationContext, {
-    ...opts,
-    filter(childNode: SpriteTreeNode) {
-      return !(childNode.isContext() && childNode.contextModel.isStable);
-    },
-  });
+  let node = spriteTree.lookupNodeByElement(animationContext.element);
+  let contextDescendants = node!
+    .spriteStateTrackers({ deep: true })
+    .map((v) => v.spriteStateTracker);
+
   return new Set(
     [...spriteModifiers].filter((m) => contextDescendants.includes(m))
   );
@@ -146,12 +144,10 @@ export class ChangesetBuilder {
     for (let context of contexts) {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
-      // DESCENDANT ACCESS: get descendants to measure and detect changes
-      let contextChildren: SpriteStateTracker[] = (
-        [...(contextNode?.children ?? [])].filter((c) => c.isSprite()) as {
-          spriteModel: SpriteStateTracker;
-        }[]
-      ).map((c) => c.spriteModel);
+      let contextChildren: SpriteStateTracker[] = contextNode!
+        .spriteStateTrackers()
+        .filter((v) => !v.removed)
+        .map((c) => c.spriteStateTracker);
 
       for (let spriteModifier of contextChildren) {
         spriteModifier.captureSnapshot({
@@ -184,10 +180,7 @@ export class ChangesetBuilder {
         let spriteModifiersForContext = filterToContext(
           this.spriteTree,
           context,
-          spriteModifiers,
-          {
-            includeFreshlyRemoved: true,
-          }
+          spriteModifiers
         );
 
         // add the sprites with counterparts here, if necessary

@@ -117,6 +117,76 @@ export class SpriteTreeNode {
     return result;
   }
 
+  spriteStateTrackers(
+    opts: {
+      deep: boolean;
+    } = { deep: false }
+  ): {
+    removed: boolean;
+    spriteStateTracker: SpriteStateTracker;
+    node: SpriteTreeNode;
+  }[] {
+    let result: {
+      removed: boolean;
+      spriteStateTracker: SpriteStateTracker;
+      node: SpriteTreeNode;
+    }[] = [];
+
+    for (let child of this.children) {
+      if (child.isSprite()) {
+        result.push({
+          node: child,
+          removed: false,
+          spriteStateTracker: child.spriteModel as SpriteStateTracker,
+        });
+
+        if (!child.isContext()) {
+          child
+            .spriteStateTrackers({ deep: opts.deep })
+            .forEach((c) => result.push(c));
+        }
+      } else if (child.isContext()) {
+        if (opts.deep && !(child.contextModel as Context).isStable) {
+          child
+            .spriteStateTrackers({ deep: opts.deep })
+            .forEach((c) => result.push(c));
+        }
+      } else {
+        throw new Error(
+          'Sprite tree node that is not child or context encountered'
+        );
+      }
+    }
+
+    for (let child of this.freshlyRemovedChildren) {
+      if (child.isSprite()) {
+        result.push({
+          node: child,
+          removed: true,
+          spriteStateTracker: child.spriteModel as SpriteStateTracker,
+        });
+
+        if (!child.isContext()) {
+          child
+            .spriteStateTrackers({ deep: opts.deep })
+            .forEach((c) => result.push(c));
+        }
+      } else if (child.isContext()) {
+        if (opts.deep && !(child.contextModel as Context).isStable) {
+          child
+            .spriteStateTrackers({ deep: opts.deep })
+            .forEach((c) => result.push(c));
+        }
+      } else {
+        throw new Error(
+          'Sprite tree node that is not child or context encountered'
+        );
+      }
+    }
+
+    return result;
+  }
+
   getDescendantNodes(
     opts: GetDescendantNodesOptions = {
       includeFreshlyRemoved: false,
