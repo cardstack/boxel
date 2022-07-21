@@ -382,6 +382,80 @@ module('Unit | realm', function () {
     );
   });
 
+  test('realm can serve delete card requests', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'cards/1.json': {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'Card',
+            },
+          },
+        },
+      },
+      'cards/2.json': {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'Card',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+
+    let searchIndex = realm.searchIndex;
+
+    let cards = await searchIndex.search({});
+    assert.strictEqual(cards.length, 2, 'two cards found');
+
+    let card = await searchIndex.card(new URL('http://test-realm/cards/2'));
+    assert.strictEqual(
+      card?.id,
+      'http://test-realm/cards/2',
+      'found card in index'
+    );
+    let dirEntries = await searchIndex.directory(
+      new URL('http://test-realm/cards/')
+    );
+    assert.deepEqual(
+      dirEntries,
+      [{ name: '1.json', kind: 'file' }, { name: '2.json', kind: 'file' }],
+      'directory entries are correct'
+    );
+
+    let response = await realm.handle(
+      new Request('http://test-realm/cards/2', {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 204, 'status was 204');
+
+    card = await searchIndex.card(new URL('http://test-realm/cards/2'));
+    assert.strictEqual(card, undefined, 'card was deleted');
+
+    card = await searchIndex.card(new URL('http://test-realm/cards/1'));
+    assert.strictEqual(card?.id,
+      'http://test-realm/cards/1', 'card 1 is still there');
+
+    dirEntries = await searchIndex.directory(new URL('http://test-realm/cards/'));
+    assert.deepEqual(dirEntries, [{ name: '1.json', kind: 'file' }], 'directory entries are updated');
+
+    cards = await searchIndex.search({});
+    assert.strictEqual(cards.length, 1, 'only one card remains');
+  });
+
   test('realm can serve card source file', async function (assert) {
     let realm = TestRealm.create({
       'dir/person.gts': cardSrc,

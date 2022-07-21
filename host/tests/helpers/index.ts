@@ -89,10 +89,10 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   async write(
-    path: string,
+    path: LocalPath,
     contents: string | object
   ): Promise<{ lastModified: number }> {
-    let segments = path.replace(/^\//, '').split('/');
+    let segments = path.split('/');
     let name = segments.pop()!;
     let dir = this.#traverse(segments, 'directory');
     if (typeof dir === 'string') {
@@ -110,6 +110,16 @@ export class TestRealmAdapter implements RealmAdapter {
     let lastModified = Date.now();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
     return { lastModified };
+  }
+
+  async remove(path: LocalPath) {
+    let segments = path.split('/');
+    let name = segments.pop()!;
+    let dir = this.#traverse(segments, 'directory');
+    if (typeof dir === 'string') {
+      throw new Error(`tried to use file as directory`);
+    }
+    delete dir[name];
   }
 
   #traverse(

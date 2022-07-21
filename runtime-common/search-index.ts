@@ -180,6 +180,9 @@ class URLMap<T> {
   get size() {
     return this.#map.size;
   }
+  remove(url: URL) {
+    return this.#map.delete(url.href);
+  }
 }
 
 export class SearchIndex {
@@ -244,10 +247,9 @@ export class SearchIndex {
   }
 
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
-    await this.visitFile(url);
-
     let newDirectories = new URLMap<{ name: string; kind: Kind }[]>();
     await this.visitDirectory(new URL(this.realm.url), newDirectories);
+    await this.visitFile(url, opts);
 
     let segments = url.href.split("/");
     let name = segments.pop()!;
@@ -274,7 +276,7 @@ export class SearchIndex {
     await this.semanticPhase(newDirectories);
   }
 
-  private async visitFile(url: URL) {
+  private async visitFile(url: URL, opts?: { delete?: true }): Promise<void> {
     let localPath = this.realmPaths.local(url);
     let fileRef = await this.readFileAsText(localPath);
     if (!fileRef) {
@@ -285,9 +287,13 @@ export class SearchIndex {
       let json = JSON.parse(content);
       if (isCardDocument(json)) {
         let instanceURL = new URL(url.href.replace(/\.json$/, ""));
-        json.data.id = instanceURL.href;
-        json.data.meta.lastModified = lastModified;
-        this.instances.set(instanceURL, json.data);
+        if (opts?.delete && this.instances.get(instanceURL)) {
+          this.instances.remove(instanceURL);
+        } else {
+          json.data.id = instanceURL.href;
+          json.data.meta.lastModified = lastModified;
+          this.instances.set(instanceURL, json.data);
+        }
       }
     } else if (hasExecutableExtension(url.href)) {
       let mod = new ModuleSyntax(content);

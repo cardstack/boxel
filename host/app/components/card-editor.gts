@@ -12,6 +12,8 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common';
+import RouterService from '@ember/routing/router-service';
+import { service } from '@ember/service';
 
 export interface NewCardArgs {
   type: 'new';
@@ -73,9 +75,14 @@ export default class Preview extends Component<Signature> {
           </div>
         {{/if}}
       {{/if}}
+
+      {{#if (eq @card.type "existing")}}
+        <button {{on "click" this.removeCard}}>Delete Card</button>
+      {{/if}}
     {{/if}}
   </template>
 
+  @service declare router: RouterService;
   @tracked
   format: Format = this.args.card.type === 'new' ? 'edit' : 'isolated';
   @tracked
@@ -169,6 +176,14 @@ export default class Preview extends Component<Signature> {
     taskFor(this.write).perform();
   }
 
+  @action
+  async removeCard() {
+    if (this.args.card.type === 'existing') {
+      await taskFor(this.remove).perform(this.args.card.url);
+      this.router.transitionTo('/');
+    }
+  }
+
   @restartableTask private async loadData(url: string | undefined): Promise<void> {
     if (!url) {
       return;
@@ -220,6 +235,19 @@ export default class Preview extends Component<Signature> {
       // this is to notify the application route to load a
       // new source path, so we use the actual .json extension
       this.args.onSave(json.data.links.self + '.json');
+    }
+  }
+
+  @restartableTask private async remove(url: string): Promise<void> {
+    let response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/vnd.api+json'
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`could not delete file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
     }
   }
 }
