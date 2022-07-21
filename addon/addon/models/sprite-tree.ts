@@ -117,28 +117,6 @@ export class SpriteTreeNode {
     return result;
   }
 
-  allChildSprites({ includeFreshlyRemoved = false }) {
-    let result: SpriteStateTracker[] = [];
-
-    for (let child of this.children) {
-      if (child.isSprite()) {
-        result.push(child.spriteModel);
-      }
-
-      if (
-        (child.isSprite() ||
-          (child.isContext() && !child.contextModel.isStable)) &&
-        child.children?.size
-      ) {
-        child
-          .allChildSprites({ includeFreshlyRemoved })
-          .forEach((c) => result.push(c));
-      }
-    }
-
-    return result;
-  }
-
   getDescendantNodes(
     opts: GetDescendantNodesOptions = {
       includeFreshlyRemoved: false,
