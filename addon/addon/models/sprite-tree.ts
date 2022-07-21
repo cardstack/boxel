@@ -2,7 +2,7 @@ import { assert } from '@ember/debug';
 import { CopiedCSS } from '../utils/measurement';
 import { formatTreeString, TreeNode } from '../utils/format-tree';
 import Sprite from './sprite';
-import Changeset from './changeset';
+import { Changeset } from './changeset';
 
 export interface Context {
   id: string | undefined;

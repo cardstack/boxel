@@ -1,4 +1,4 @@
-import Changeset from '../models/changeset';
+import { Changeset } from '../models/changeset';
 import { assert } from '@ember/debug';
 import LinearBehavior from 'animations-experiment/behaviors/linear';
 import approximatelyEqual from 'animations-experiment/utils/approximately-equal';

@@ -1,5 +1,5 @@
 import { task } from 'ember-concurrency';
-import Changeset from '../models/changeset';
+import { Changeset } from '../models/changeset';
 import Sprite, { SpriteType } from '../models/sprite';
 import { assert } from '@ember/debug';
 import { Context } from './sprite-tree';

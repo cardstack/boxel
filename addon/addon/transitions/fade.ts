@@ -1,4 +1,4 @@
-import Changeset from '../models/changeset';
+import { Changeset } from '../models/changeset';
 import { TransitionOptions } from 'animations-experiment/transitions/magic-move';
 
 /**

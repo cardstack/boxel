@@ -1,6 +1,6 @@
 import { assert } from '@ember/debug';
 import { SpriteType } from 'animations-experiment/models/sprite';
-import Changeset from 'animations-experiment/models/changeset';
+import { Changeset } from 'animations-experiment/models/changeset';
 import LinearBehavior from 'animations-experiment/behaviors/linear';
 
 // FADE OUT : ----------

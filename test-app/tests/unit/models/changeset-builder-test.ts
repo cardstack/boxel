@@ -3,7 +3,8 @@ import SpriteTree, {
   Context,
   SpriteStateTracker,
 } from 'animations-experiment/models/sprite-tree';
-import Changeset, {
+import {
+  Changeset,
   ChangesetBuilder,
 } from 'animations-experiment/models/changeset';
 import Sprite, { SpriteIdentifier } from 'animations-experiment/models/sprite';

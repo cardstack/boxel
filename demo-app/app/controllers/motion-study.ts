@@ -1,5 +1,5 @@
 import Controller from '@ember/controller';
-import Changeset from 'animations-experiment/models/changeset';
+import { Changeset } from 'animations-experiment/models/changeset';
 import magicMove from 'animations-experiment/transitions/magic-move';
 import { SpriteType } from 'animations-experiment/models/sprite';
 import fade from 'animations-experiment/transitions/fade';

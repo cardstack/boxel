@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
-import Changeset from 'animations-experiment/models/changeset';
+import { Changeset } from 'animations-experiment/models/changeset';
 import Sprite, { SpriteType } from 'animations-experiment/models/sprite';
 import runAnimations from 'animations-experiment/utils/run-animations';
 

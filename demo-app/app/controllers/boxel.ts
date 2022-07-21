@@ -3,7 +3,7 @@ import { assert } from '@ember/debug';
 const PIA_MIDINA_PROFILE_IMG = '/images/Pia-Midina.jpg';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
-import Changeset from 'animations-experiment/models/changeset';
+import { Changeset } from 'animations-experiment/models/changeset';
 import { inject as service } from '@ember/service';
 import AnimationsService from 'animations-experiment/services/animations';
 import SpringBehavior from 'animations-experiment/behaviors/spring';

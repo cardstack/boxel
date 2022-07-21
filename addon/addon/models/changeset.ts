@@ -78,7 +78,7 @@ export function filterToContext(
   );
 }
 
-export default class Changeset {
+export class Changeset {
   context: Context;
   intent: string | undefined;
   insertedSprites: Set<Sprite> = new Set();

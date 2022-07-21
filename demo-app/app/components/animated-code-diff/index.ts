@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 import { highlightCode } from '../../utils/compile-markdown';
 import { htmlSafe } from '@ember/template';
 import { action } from '@ember/object';
-import Changeset from 'animations-experiment/models/changeset';
+import { Changeset } from 'animations-experiment/models/changeset';
 
 interface AnimatedCodeDiffArgs {
   isShowingFinal: boolean;
