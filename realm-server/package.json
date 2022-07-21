@@ -9,8 +9,6 @@
   },
   "devDependencies": {
     "@cardstack/runtime-common": "1.0.0",
-    "@types/koa": "^2.13.5",
-    "@types/koa-bodyparser": "^4.3.7",
     "@types/node-fetch": "^2.6.2",
     "@types/qunit": "^2.11.3",
     "@types/supertest": "^2.0.12",

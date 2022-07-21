@@ -1,5 +1,5 @@
 import yargs from "yargs";
-import { RealmServer } from "./server";
+import { createRealmServer } from "./server";
 
 let { port, path, url } = yargs(process.argv.slice(2))
   .usage("Start realm server")
@@ -22,8 +22,8 @@ let { port, path, url } = yargs(process.argv.slice(2))
   })
   .parseSync();
 
-let app = new RealmServer(path, new URL(url)).start();
-app.listen(port);
+let server = createRealmServer(path, new URL(url));
+server.listen(port);
 console.log(
   `realm server listening on port ${port} as url ${url} with realm dir ${path}`
 );

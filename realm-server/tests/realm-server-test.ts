@@ -1,6 +1,6 @@
 import { module, test } from "qunit";
 import supertest, { Test, SuperTest } from "supertest";
-import { RealmServer } from "../server";
+import { createRealmServer } from "../server";
 import { join } from "path";
 import { Server } from "http";
 import { dirSync, setGracefulCleanup, DirResult } from "tmp";
@@ -25,8 +25,8 @@ module("Realm Server", function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
 
-    let app = new RealmServer(dir.name, testRealmURL).start();
-    server = app.listen(testRealmURL.port);
+    server = createRealmServer(dir.name, testRealmURL);
+    server.listen(testRealmURL.port);
     request = supertest(server);
   });
 
@@ -119,7 +119,7 @@ module("Realm Server", function (hooks) {
       .set("Accept", "application/vnd.card+source");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
-    let result = response.body.toString();
+    let result = response.text.trim();
     assert.strictEqual(result, cardSrc, "the card source is correct");
     assert.ok(response.headers["last-modified"], "last-modified header exists");
   });

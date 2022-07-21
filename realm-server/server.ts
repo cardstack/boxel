@@ -1,9 +1,10 @@
-import Koa from "koa";
-import bodyParser from "koa-bodyparser";
+import http from "http";
 import { NodeRealm } from "./node-realm";
 import { Realm } from "@cardstack/runtime-common";
 import { resolve } from "path";
 import { Response } from "node-fetch";
+import { Readable } from "stream";
+import { LocalPath, RealmPaths } from "@cardstack/runtime-common/paths";
 
 // Despite node 18's native support for fetch, the built-in node fetch Response
 // does not seem to play nice with the Koa Response. The node-fetch Response
@@ -11,36 +12,52 @@ import { Response } from "node-fetch";
 // just the Response.
 (globalThis.Response as any) = Response;
 
-export class RealmServer {
-  private path: string;
-
-  constructor(path: string, private url: URL) {
-    this.path = resolve(path);
-  }
-
-  start() {
-    let realm = new Realm(this.url.href, new NodeRealm(this.path));
-    let app = new Koa();
-    app.use(bodyParser());
-    app.use(async (ctx) => {
-      let { req } = ctx;
+export function createRealmServer(path: string, realmURL: URL) {
+  path = resolve(path);
+  let realm = new Realm(realmURL.href, new NodeRealm(path));
+  let realmPath = new RealmPaths(realmURL);
+  let server = http.createServer(async (req, res) => {
+    try {
       if (!req.url) {
         throw new Error(`bug: missing URL in request`);
       }
-      let request = new Request(new URL(req.url, ctx.request.origin).href, {
+      let local: LocalPath = req.url === "/" ? "" : req.url; // this is actually the pathname for the request URL
+      let url =
+        local.endsWith("/") || local === ""
+          ? realmPath.directoryURL(local)
+          : realmPath.fileURL(local);
+
+      let reqBody = await readStreamAsString(req);
+      let request = new Request(url.href, {
         method: req.method,
         headers: req.headers as { [name: string]: string },
-        ...(ctx.request.rawBody != null ? { body: ctx.request.rawBody } : {}),
+        ...(reqBody ? { body: reqBody } : {}),
       });
-      let res = await realm.handle(request);
-      ctx.response.status = res.status;
-      ctx.response.message = res.statusText;
-      ctx.response.set(Object.fromEntries([...res.headers.entries()]));
-
-      if (res.body != null) {
-        ctx.response.body = res.body;
+      let { status, statusText, headers, body } = await realm.handle(request);
+      res.statusCode = status;
+      res.statusMessage = statusText;
+      for (let [header, value] of headers.entries()) {
+        res.setHeader(header, value);
       }
-    });
-    return app;
+
+      if (body != null) {
+        res.write(body);
+      }
+    } catch (e) {
+      console.error("Unexpected server error: ", e);
+      res.statusCode = 500;
+      res.statusMessage = e.message;
+    } finally {
+      res.end();
+    }
+  });
+  return server;
+}
+
+async function readStreamAsString(stream: Readable): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream as any) {
+    chunks.push(Buffer.from(chunk));
   }
+  return Buffer.concat(chunks).toString("utf-8");
 }
