@@ -16,7 +16,8 @@ export function createRealmServer(path: string, realmURL: URL) {
       if (!req.url) {
         throw new Error(`bug: missing URL in request`);
       }
-      let local: LocalPath = req.url === "/" ? "" : req.url; // this is actually the pathname for the request URL
+      // despite the name, req.url is actually the pathname for the request URL
+      let local: LocalPath = req.url === "/" ? "" : req.url;
       let url =
         local.endsWith("/") || local === ""
           ? realmPath.directoryURL(local)
