@@ -179,7 +179,7 @@ export default class Preview extends Component<Signature> {
   @action
   async removeCard() {
     if (this.args.card.type === 'existing') {
-      taskFor(this.remove).perform(this.args.card.url);
+      await taskFor(this.remove).perform(this.args.card.url);
       this.router.transitionTo('/');
     }
   }
