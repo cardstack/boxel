@@ -91,7 +91,7 @@ module("Realm Server", function (hooks) {
       assert.ok(json.data.meta.lastModified, "lastModified is populated");
       let cardFile = join(dir.name, "Card", "1.json");
       assert.ok(existsSync(cardFile), "card json exists");
-      let card = readJSONSync(join(dir.name, "Card", "1.json"));
+      let card = readJSONSync(cardFile);
       assert.deepEqual(
         card,
         {
@@ -111,6 +111,72 @@ module("Realm Server", function (hooks) {
     } else {
       assert.ok(false, "response body is not a card document");
     }
+  });
+
+  test("serves a card PATCH request", async function (assert) {
+    let response = await request
+      .patch("/person-1")
+      .send({
+        data: {
+          type: "card",
+          attributes: {
+            firstName: "Van Gogh",
+          },
+          meta: {
+            adoptsFrom: {
+              module: "./person.gts",
+              name: "Person",
+            },
+          },
+        },
+      })
+      .set("Accept", "application/vnd.api+json");
+
+    assert.strictEqual(response.status, 200, "HTTP 200 status");
+    let json = response.body;
+    assert.ok(json.data.meta.lastModified, "lastModified exists");
+    if (isCardDocument(json)) {
+      assert.strictEqual(
+        json.data.attributes?.firstName,
+        "Van Gogh",
+        "the field data is correct"
+      );
+      assert.ok(json.data.meta.lastModified, "lastModified is populated");
+      delete json.data.meta.lastModified;
+      let cardFile = join(dir.name, "person-1.json");
+      assert.ok(existsSync(cardFile), "card json exists");
+      let card = readJSONSync(cardFile);
+      assert.deepEqual(
+        card,
+        {
+          data: {
+            type: "card",
+            attributes: {
+              firstName: "Van Gogh",
+            },
+            meta: {
+              adoptsFrom: {
+                module: "./person.gts",
+                name: "Person",
+              },
+            },
+          },
+        },
+        "file contents are correct"
+      );
+    } else {
+      assert.ok(false, "response body is not a card document");
+    }
+  });
+
+  test("serves a card DELETE request", async function (assert) {
+    let response = await request
+      .delete("/person-1")
+      .set("Accept", "application/vnd.api+json");
+
+    assert.strictEqual(response.status, 204, "HTTP 204 status");
+    let cardFile = join(dir.name, "person-1.json");
+    assert.strictEqual(existsSync(cardFile), false, "card json does not exist");
   });
 
   test("serves a card-source GET request", async function (assert) {
