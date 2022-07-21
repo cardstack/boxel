@@ -62,11 +62,11 @@ export class SpriteTreeNode {
   children: Set<SpriteTreeNode> = new Set();
   freshlyRemovedChildren: Set<SpriteTreeNode> = new Set();
 
-  get isContext() {
+  isContext(): this is { contextModel: Context } {
     return Boolean(this.contextModel);
   }
 
-  get isSprite() {
+  isSprite(): this is { spriteModel: SpriteStateTracker } {
     return Boolean(this.spriteModel);
   }
 
@@ -121,18 +121,13 @@ export class SpriteTreeNode {
     let result: SpriteStateTracker[] = [];
 
     for (let child of this.children) {
-      if (child.isSprite) {
-        result.push(child.spriteModel as SpriteStateTracker);
+      if (child.isSprite()) {
+        result.push(child.spriteModel);
       }
 
       if (
-        (child.isSprite ||
-          (child.isContext &&
-            !(
-              child as {
-                contextModel: Context;
-              }
-            ).contextModel.isStable)) &&
+        (child.isSprite() ||
+          (child.isContext() && !child.contextModel.isStable)) &&
         child.children?.size
       ) {
         child
@@ -181,13 +176,12 @@ export class SpriteTreeNode {
 
   toLoggableForm(isRemoved?: boolean): TreeNode {
     let text = '';
-    if (this.isContext) {
-      let contextId = (this as { contextModel: Context }).contextModel.id;
+    if (this.isContext()) {
+      let contextId = this.contextModel.id;
       text += `🥡${contextId ? ` ${contextId}` : ''} `;
     }
-    if (this.isSprite) {
-      let spriteId = (this as { spriteModel: SpriteStateTracker }).spriteModel
-        .id;
+    if (this.isSprite()) {
+      let spriteId = this.spriteModel.id;
       text += `🥠${spriteId ? ` ${spriteId}` : ''}`;
     }
     let extra = isRemoved ? '❌' : undefined;
@@ -208,8 +202,12 @@ export class SpriteTreeNode {
 export default class SpriteTree {
   contextModel = undefined;
   spriteModel = undefined;
-  isContext = false;
-  isSprite = false;
+  isContext() {
+    return false;
+  }
+  isSprite() {
+    return false;
+  }
 
   nodesByElement = new WeakMap<Element, SpriteTreeNode>();
   rootNodes: Set<SpriteTreeNode> = new Set();
@@ -263,7 +261,7 @@ export default class SpriteTree {
     if (existingNode) {
       assert(
         'Cannot add an AnimationContext which was already added',
-        !existingNode.isContext
+        !existingNode.isContext()
       );
 
       existingNode.contextModel = context;
@@ -283,13 +281,10 @@ export default class SpriteTree {
     let node = this.lookupNodeByElement(context.element);
     if (node) {
       node.parent?.removeChild(node);
-      if (node.isSprite) {
+      if (node.isSprite()) {
         // TODO: we might need to do some cleanup? This is currently a WeakMap but..
         // situation where this matters is SpriteModifier hanging around when it should be removed
-        this.freshlyRemovedToNode.set(
-          (node as { spriteModel: SpriteStateTracker }).spriteModel,
-          node
-        );
+        this.freshlyRemovedToNode.set(node.spriteModel, node);
       }
       this.nodesByElement.delete(context.element);
     }
@@ -300,7 +295,7 @@ export default class SpriteTree {
     if (existingNode) {
       assert(
         'Cannot add a SpriteModel which was already added',
-        !existingNode.isSprite
+        !existingNode.isSprite()
       );
 
       existingNode.spriteModel = spriteModifier;
@@ -316,7 +311,7 @@ export default class SpriteTree {
       resultNode = node;
     }
 
-    if (!resultNode.parent.isContext) {
+    if (!resultNode.parent.isContext()) {
       console.error(
         `Sprite "${spriteModifier.id}" cannot have another Sprite as a direct parent. An extra AnimationContext will need to be added.`
       );
@@ -328,13 +323,10 @@ export default class SpriteTree {
     let node = this.lookupNodeByElement(spriteModifer.element);
     if (node) {
       node.parent?.removeChild(node);
-      if (node.isSprite) {
+      if (node.isSprite()) {
         // TODO: we might need to do some cleanup? This is currently a WeakMap but..
         // situation where this matters is SpriteModifier hanging around when it should be removed
-        this.freshlyRemovedToNode.set(
-          (node as { spriteModel: SpriteStateTracker }).spriteModel,
-          node
-        );
+        this.freshlyRemovedToNode.set(node.spriteModel, node);
       }
       this.nodesByElement.delete(spriteModifer.element);
     }
@@ -370,9 +362,9 @@ export default class SpriteTree {
       let node = this.lookupNodeByElement(context.element);
       let ancestor = node && node.parent;
       while (ancestor) {
-        if (ancestor.isContext) {
-          if (result.indexOf(ancestor.contextModel as Context) === -1) {
-            result.push(ancestor.contextModel as Context);
+        if (ancestor.isContext()) {
+          if (result.indexOf(ancestor.contextModel) === -1) {
+            result.push(ancestor.contextModel);
           }
         }
         ancestor = (ancestor as SpriteTreeNode).parent;

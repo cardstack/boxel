@@ -67,10 +67,7 @@ export function filterToContext(
   let contextDescendants = spriteTree.descendantsOf(animationContext, {
     ...opts,
     filter(childNode: SpriteTreeNode) {
-      return !(
-        childNode.isContext &&
-        (childNode as { contextModel: Context }).contextModel.isStable
-      );
+      return !(childNode.isContext() && childNode.contextModel.isStable);
     },
   });
   return new Set(
@@ -171,7 +168,7 @@ export class ChangesetBuilder {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
       let contextChildren: SpriteStateTracker[] = (
-        [...(contextNode?.children ?? [])].filter((c) => c.isSprite) as {
+        [...(contextNode?.children ?? [])].filter((c) => c.isSprite()) as {
           spriteModel: SpriteStateTracker;
         }[]
       ).map((c) => c.spriteModel);
