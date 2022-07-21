@@ -153,7 +153,7 @@ export class Changeset {
 }
 
 export class ChangesetBuilder {
-  contextToNode: WeakMap<Context, Changeset> = new WeakMap();
+  contextToChangeset: WeakMap<Context, Changeset> = new WeakMap();
   spriteTree: SpriteTree;
 
   constructor(
@@ -243,7 +243,7 @@ export class ChangesetBuilder {
           );
         }
 
-        this.contextToNode.set(context, changeset);
+        this.contextToChangeset.set(context, changeset);
       } else {
         // We already decided what contexts we're going to use for this render,
         // so we can mark new contexts for the next run.

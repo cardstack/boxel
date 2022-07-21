@@ -200,10 +200,10 @@ module('Unit | Util | ChangesetBuilder', function () {
       new Map()
     );
 
-    let context1Node = changesetBuilder.contextToNode.get(
+    let context1Node = changesetBuilder.contextToChangeset.get(
       stableContext1
     ) as Changeset;
-    let context2Node = changesetBuilder.contextToNode.get(
+    let context2Node = changesetBuilder.contextToChangeset.get(
       stableContext2
     ) as Changeset;
 
@@ -341,10 +341,10 @@ module('Unit | Util | ChangesetBuilder', function () {
       new Map()
     );
 
-    let movedContextNode = changesetBuilder.contextToNode.get(
+    let movedContextNode = changesetBuilder.contextToChangeset.get(
       movedContext
     ) as Changeset;
-    let unmovedContextNode = changesetBuilder.contextToNode.get(
+    let unmovedContextNode = changesetBuilder.contextToChangeset.get(
       unmovedContext
     ) as Changeset;
 
@@ -418,12 +418,12 @@ module('Unit | Util | ChangesetBuilder', function () {
     );
 
     assert.ok(
-      changesetBuilder.contextToNode.get(stableContext),
-      'Stable context is in the contextToNode map'
+      changesetBuilder.contextToChangeset.get(stableContext),
+      'Stable context is in the contextToChangeset map'
     );
     assert.notOk(
-      changesetBuilder.contextToNode.get(unstableContext),
-      'Stable context is not in the contextToNode map'
+      changesetBuilder.contextToChangeset.get(unstableContext),
+      'Stable context is not in the contextToChangeset map'
     );
     assert.equal(
       unstableContext.isInitialRenderCompleted,
@@ -477,10 +477,10 @@ module('Unit | Util | ChangesetBuilder', function () {
       new Map()
     );
 
-    let outerContextNode = changesetBuilder.contextToNode.get(
+    let outerContextNode = changesetBuilder.contextToChangeset.get(
       outerContext
     ) as Changeset;
-    let innerContextNode = changesetBuilder.contextToNode.get(
+    let innerContextNode = changesetBuilder.contextToChangeset.get(
       innerContext
     ) as Changeset;
     assert.ok(
@@ -603,10 +603,10 @@ module('Unit | Util | ChangesetBuilder', function () {
       ])
     );
 
-    let outerContextNode = changesetBuilder.contextToNode.get(
+    let outerContextNode = changesetBuilder.contextToChangeset.get(
       outerContext
     ) as Changeset;
-    let innerContextNode = changesetBuilder.contextToNode.get(
+    let innerContextNode = changesetBuilder.contextToChangeset.get(
       innerContext
     ) as Changeset;
     assert.ok(

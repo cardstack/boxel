@@ -251,7 +251,7 @@ export default class AnimationsService extends Service {
     let promises = [];
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
     for (let context of contexts) {
-      let changeset = changesetBuilder.contextToNode.get(context);
+      let changeset = changesetBuilder.contextToChangeset.get(context);
       if (changeset && changeset.hasSprites) {
         let transitionRunner = new TransitionRunner(context);
         let task = taskFor(transitionRunner.maybeTransitionTask);
