@@ -43,6 +43,7 @@ export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
   freshlyAdded: Set<ISpriteModifier> = new Set();
   freshlyRemoved: Set<ISpriteModifier> = new Set();
+  interruptedRemoved: Set<ISpriteModifier> = new Set();
   eligibleContexts: Set<IContext> = new Set();
   intent: string | undefined;
   intermediateSprites: Map<string, IntermediateSprite> = new Map();
@@ -195,7 +196,26 @@ export default class AnimationsService extends Service {
       let contextNode = this.spriteTree.lookupNodeByElement(
         context.element
       ) as SpriteTreeNode;
-      contextNode.freshlyRemovedChildren.clear();
+      for (let item of contextNode.freshlyRemovedChildren) {
+        if (item.isSprite()) {
+          let identifier = new SpriteIdentifier(
+            item.spriteModel.id,
+            item.spriteModel.role
+          ).toString();
+          if (
+            !(
+              context.orphans.has(identifier) &&
+              this.intermediateSprites.get(identifier)
+            )
+          ) {
+            (item.parent as SpriteTreeNode).freshlyRemovedChildren.delete(item);
+          } else {
+            this.interruptedRemoved.add(item.spriteModel);
+          }
+        } else {
+          (item.parent as SpriteTreeNode).freshlyRemovedChildren.delete(item);
+        }
+      }
     }
 
     return animationsToCancel;
@@ -227,7 +247,7 @@ export default class AnimationsService extends Service {
       this.spriteTree,
       this.eligibleContexts,
       this.freshlyAdded,
-      this.freshlyRemoved,
+      new Set([...this.freshlyRemoved, ...this.interruptedRemoved]),
       this.intermediateSprites
     );
 
@@ -235,6 +255,7 @@ export default class AnimationsService extends Service {
     // correct starting point for the next run even if an interruption happens.
     this.freshlyAdded.clear();
     this.freshlyRemoved.clear();
+    this.interruptedRemoved.clear();
     this.intermediateSprites = new Map();
     this.runningAnimations = new Map();
     this.intent = undefined;
