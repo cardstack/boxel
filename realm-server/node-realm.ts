@@ -1,4 +1,6 @@
 import { RealmAdapter, Kind, FileRef } from "@cardstack/runtime-common";
+import { LocalPath } from "@cardstack/runtime-common/paths";
+
 import {
   readdirSync,
   existsSync,
@@ -7,6 +9,7 @@ import {
   ensureDirSync,
   ensureFileSync,
   readFileSync,
+  removeSync,
 } from "fs-extra";
 import { join } from "path";
 
@@ -64,5 +67,10 @@ export class NodeRealm implements RealmAdapter {
     writeFileSync(absolutePath, contents);
     let { mtime } = statSync(absolutePath);
     return { lastModified: mtime.getTime() };
+  }
+
+  async remove(path: LocalPath): Promise<void> {
+    let absolutePath = join(this.realmDir, path);
+    removeSync(absolutePath);
   }
 }
