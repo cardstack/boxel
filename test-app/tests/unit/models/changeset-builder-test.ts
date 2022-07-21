@@ -34,6 +34,7 @@ class MockAnimationContext implements Context {
     }
     this.id = id;
   }
+  orphans: Map<string, HTMLElement> = new Map();
 
   shouldAnimate(): boolean {
     throw new Error('Method not implemented.');

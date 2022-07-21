@@ -11,6 +11,7 @@ export interface Context {
   lastBounds?: DOMRect;
   isInitialRenderCompleted: boolean;
   isStable: boolean;
+  orphans: Map<string, HTMLElement>;
   captureSnapshot(opts?: {
     withAnimations: boolean;
     playAnimations: boolean;
