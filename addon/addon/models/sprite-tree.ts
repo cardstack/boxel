@@ -225,7 +225,7 @@ export default class SpriteTree {
       let bitmask = a.item.element.compareDocumentPosition(b.item.element);
 
       assert(
-        'Document position is not implementation-specific or disconnected',
+        'Sorting sprite tree additions - Document position of two compared nodes is implementation-specific or disconnected',
         !(
           bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
           bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
