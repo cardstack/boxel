@@ -39,6 +39,7 @@ import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properti
 //@ts-ignore ironically no types are available
 import typescriptPlugin from "@babel/plugin-transform-typescript";
 import { Router } from "./router";
+import type { Readable } from "stream";
 
 // From https://github.com/iliakan/detect-node
 const isNode =
@@ -46,8 +47,12 @@ const isNode =
 
 export interface FileRef {
   path: LocalPath;
-  content: ReadableStream<Uint8Array> | Uint8Array | string;
+  content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+}
+
+interface ResponseWithNodeStream extends Response {
+  nodeStream?: Readable;
 }
 
 export interface RealmAdapter {
@@ -61,6 +66,8 @@ export interface RealmAdapter {
   write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
 
   remove(path: LocalPath): Promise<void>;
+
+  streamToText(stream: Readable | ReadableStream<Uint8Array>): Promise<string>;
 }
 
 export class Realm {
@@ -127,7 +134,7 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async handle(request: Request): Promise<Response> {
+  async handle(request: Request): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
     if (request.headers.get("Accept")?.includes("application/vnd.api+json")) {
       await this.ready;
@@ -161,12 +168,31 @@ export class Realm {
     }
   }
 
-  private async serveLocalFile(ref: FileRef): Promise<Response> {
-    return new Response(ref.content, {
+  private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {
+    if (
+      ref.content instanceof ReadableStream ||
+      ref.content instanceof Uint8Array ||
+      typeof ref.content === "string"
+    ) {
+      return new Response(ref.content, {
+        headers: {
+          "last-modified": formatRFC7231(ref.lastModified),
+        },
+      });
+    }
+
+    if (!isNode) {
+      throw new Error(`Cannot handle node stream in a non-node environment`);
+    }
+
+    // add the node stream to the response which will get special handling in the node env
+    let response = new Response(null, {
       headers: {
         "last-modified": formatRFC7231(ref.lastModified),
       },
-    });
+    }) as ResponseWithNodeStream;
+    response.nodeStream = ref.content;
+    return response;
   }
 
   private async upsertCardSource(request: Request): Promise<Response> {
@@ -182,7 +208,9 @@ export class Realm {
     });
   }
 
-  private async getCardSourceOrRedirect(request: Request): Promise<Response> {
+  private async getCardSourceOrRedirect(
+    request: Request
+  ): Promise<ResponseWithNodeStream> {
     let localName = this.#paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
@@ -463,24 +491,12 @@ export class Realm {
     if (typeof content === "string") {
       return content;
     }
-    let decoder = new TextDecoder();
-    let pieces: string[] = [];
     if (content instanceof Uint8Array) {
-      pieces.push(decoder.decode(content));
+      let decoder = new TextDecoder();
+      return decoder.decode(content);
     } else {
-      let reader = content.getReader();
-      while (true) {
-        let { done, value } = await reader.read();
-        if (done) {
-          pieces.push(decoder.decode(undefined, { stream: false }));
-          break;
-        }
-        if (value) {
-          pieces.push(decoder.decode(value, { stream: true }));
-        }
-      }
+      return await this.#adapter.streamToText(content);
     }
-    return pieces.join("");
   }
 
   private async getCardsOf(request: Request): Promise<Response> {

@@ -1,5 +1,6 @@
 import { RealmAdapter, Kind, FileRef } from "@cardstack/runtime-common";
 import { LocalPath } from "@cardstack/runtime-common/paths";
+import { Readable } from "stream";
 
 import {
   readdirSync,
@@ -8,7 +9,7 @@ import {
   statSync,
   ensureDirSync,
   ensureFileSync,
-  readFileSync,
+  createReadStream,
   removeSync,
 } from "fs-extra";
 import { join } from "path";
@@ -46,11 +47,7 @@ export class NodeRealm implements RealmAdapter {
       return undefined;
     }
     let { mtime } = statSync(absolutePath);
-    // holding off on streaming this--the webstream that our realm uses is not
-    // the same as the read stream that is used by Koa's response body (as well
-    // as the fs.createStream used by node). At some point we need to get this
-    // all sorted out
-    let content = readFileSync(absolutePath);
+    let content = createReadStream(absolutePath);
     return {
       path,
       content,
@@ -72,5 +69,19 @@ export class NodeRealm implements RealmAdapter {
   async remove(path: LocalPath): Promise<void> {
     let absolutePath = join(this.realmDir, path);
     removeSync(absolutePath);
+  }
+
+  async streamToText(
+    stream: Readable | ReadableStream<Uint8Array>
+  ): Promise<string> {
+    if (!(stream instanceof Readable)) {
+      throw new Error(`Cannot handle web-stream in node environment`);
+    }
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream as any) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks).toString("utf-8");
   }
 }

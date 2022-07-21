@@ -17,6 +17,7 @@ export function createRealmServer(path: string, realmURL: URL) {
   let realm = new Realm(realmURL.href, new NodeRealm(path));
   let realmPath = new RealmPaths(realmURL);
   let server = http.createServer(async (req, res) => {
+    let isStreaming = false;
     try {
       if (!req.url) {
         throw new Error(`bug: missing URL in request`);
@@ -33,14 +34,18 @@ export function createRealmServer(path: string, realmURL: URL) {
         headers: req.headers as { [name: string]: string },
         ...(reqBody ? { body: reqBody } : {}),
       });
-      let { status, statusText, headers, body } = await realm.handle(request);
+      let { status, statusText, headers, body, nodeStream } =
+        await realm.handle(request);
       res.statusCode = status;
       res.statusMessage = statusText;
       for (let [header, value] of headers.entries()) {
         res.setHeader(header, value);
       }
 
-      if (body != null) {
+      if (nodeStream) {
+        isStreaming = true;
+        nodeStream.pipe(res);
+      } else if (body != null) {
         res.write(body);
       }
     } catch (e) {
@@ -48,7 +53,11 @@ export function createRealmServer(path: string, realmURL: URL) {
       res.statusCode = 500;
       res.statusMessage = e.message;
     } finally {
-      res.end();
+      // the node pipe takes care of ending the response for us, so we only have
+      // to do this when we are not piping
+      if (!isStreaming) {
+        res.end();
+      }
     }
   });
   return server;

@@ -1,5 +1,6 @@
 import { RealmAdapter, Kind, FileRef } from '@cardstack/runtime-common';
 import { LocalPath } from '@cardstack/runtime-common/paths';
+import type { Readable } from 'stream';
 
 export class LocalRealm implements RealmAdapter {
   constructor(private fs: FileSystemDirectoryHandle) {}
@@ -65,8 +66,34 @@ export class LocalRealm implements RealmAdapter {
       return this.fs.removeEntry(path);
     }
     let fileName = pathSegments.pop();
-    let dirHandle = await traverse(this.fs, pathSegments.join('/'), 'directory');
+    let dirHandle = await traverse(
+      this.fs,
+      pathSegments.join('/'),
+      'directory'
+    );
     return dirHandle.removeEntry(fileName!);
+  }
+
+  async streamToText(
+    stream: Readable | ReadableStream<Uint8Array>
+  ): Promise<string> {
+    if (!(stream instanceof ReadableStream)) {
+      throw new Error(`Cannot handle node-stream in non-node environment`);
+    }
+    let decoder = new TextDecoder();
+    let pieces: string[] = [];
+    let reader = stream.getReader();
+    while (true) {
+      let { done, value } = await reader.read();
+      if (done) {
+        pieces.push(decoder.decode(undefined, { stream: false }));
+        break;
+      }
+      if (value) {
+        pieces.push(decoder.decode(value, { stream: true }));
+      }
+    }
+    return pieces.join('');
   }
 }
 

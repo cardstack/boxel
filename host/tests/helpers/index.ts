@@ -1,6 +1,7 @@
 import { parse } from 'date-fns';
 import { Realm, Kind, RealmAdapter, FileRef } from '@cardstack/runtime-common';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
+import type { Readable } from 'stream';
 
 export function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -120,6 +121,12 @@ export class TestRealmAdapter implements RealmAdapter {
       throw new Error(`tried to use file as directory`);
     }
     delete dir[name];
+  }
+
+  async streamToText(
+    _stream: Readable | ReadableStream<Uint8Array>
+  ): Promise<string> {
+    throw new Error('streaming not yet implemented in tests');
   }
 
   #traverse(
