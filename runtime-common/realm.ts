@@ -367,7 +367,7 @@ export class Realm {
     });
   }
 
-  private async removeCard(request: Request): Promise<Response | void> {
+  private async removeCard(request: Request): Promise<Response> {
     let url = new URL(request.url);
     let data = await this.#searchIndex.card(url);
     if (!data) {
