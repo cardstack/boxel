@@ -477,8 +477,8 @@ module('Unit | Models | SpriteTree', function (hooks) {
         ) as SpriteTreeNode;
 
         assert.ok(childNode, 'child node exists');
-        assert.strictEqual(childNode.isContext, true, 'node is context');
-        assert.strictEqual(childNode.isSprite, true, 'node is sprite');
+        assert.strictEqual(childNode.isContext(), true, 'node is context');
+        assert.strictEqual(childNode.isSprite(), true, 'node is sprite');
         assert.strictEqual(
           childNode.children.size,
           1,
@@ -493,8 +493,8 @@ module('Unit | Models | SpriteTree', function (hooks) {
         );
 
         let leafSprite = leafSprites[0] as SpriteTreeNode;
-        assert.ok(leafSprite.isSprite);
-        assert.notOk(leafSprite.isContext);
+        assert.ok(leafSprite.isSprite());
+        assert.notOk(leafSprite.isContext());
         assert.strictEqual(leafSprite.spriteModel, leafSpriteModifier);
       });
       test('getting descendants', function (assert) {
@@ -611,10 +611,9 @@ module('Unit | Models | SpriteTree', function (hooks) {
 
       let rootNode = rootNodes[0]!;
       assert.ok(
-        rootNode.isContext &&
-          !rootNode.isSprite &&
-          (rootNode.contextModel as MockAnimationContext).id ===
-            'parent-context',
+        rootNode.isContext() &&
+          !rootNode.isSprite() &&
+          rootNode.contextModel.id === 'parent-context',
         'The root node is the parent context'
       );
       assert.equal(rootNode.children.size, 1);
@@ -624,14 +623,16 @@ module('Unit | Models | SpriteTree', function (hooks) {
       let childSpriteNode = children.find(
         (v) => (v.spriteModel as MockSpriteModifier)?.id === 'child-sprite'
       )!;
-      assert.ok(!childSpriteNode.isContext, 'The child sprite node is correct');
+      assert.ok(
+        !childSpriteNode.isContext(),
+        'The child sprite node is correct'
+      );
       assert.equal(childSpriteNode.children.size, 1);
       let grandchildContextNode = [...childSpriteNode.children][0]!;
       assert.ok(
-        grandchildContextNode.isContext &&
-          !grandchildContextNode.isSprite &&
-          (grandchildContextNode.contextModel as MockAnimationContext).id ===
-            'grandchild-context',
+        grandchildContextNode.isContext() &&
+          !grandchildContextNode.isSprite() &&
+          grandchildContextNode.contextModel.id === 'grandchild-context',
         'The grandchild context node is correct'
       );
     });
@@ -652,10 +653,9 @@ module('Unit | Models | SpriteTree', function (hooks) {
 
       let rootNode = rootNodes[0]!;
       assert.ok(
-        rootNode.isContext &&
-          !rootNode.isSprite &&
-          (rootNode.contextModel as MockAnimationContext).id ===
-            'parent-context',
+        rootNode.isContext() &&
+          !rootNode.isSprite() &&
+          rootNode.contextModel.id === 'parent-context',
         'The root node is the parent context'
       );
       assert.equal(rootNode.children.size, 2);
@@ -665,14 +665,16 @@ module('Unit | Models | SpriteTree', function (hooks) {
       let childSpriteNode = children.find(
         (v) => (v.spriteModel as MockSpriteModifier)?.id === 'child-sprite'
       )!;
-      assert.ok(!childSpriteNode.isContext, 'The child sprite node is correct');
+      assert.ok(
+        !childSpriteNode.isContext(),
+        'The child sprite node is correct'
+      );
       assert.equal(childSpriteNode.children.size, 1);
       let grandchildContextNode = [...childSpriteNode.children][0]!;
       assert.ok(
-        grandchildContextNode.isContext &&
-          !grandchildContextNode.isSprite &&
-          (grandchildContextNode.contextModel as MockAnimationContext).id ===
-            'grandchild-context',
+        grandchildContextNode.isContext() &&
+          !grandchildContextNode.isSprite() &&
+          grandchildContextNode.contextModel.id === 'grandchild-context',
         'The grandchild context node is correct'
       );
 
@@ -680,16 +682,15 @@ module('Unit | Models | SpriteTree', function (hooks) {
         (v) => (v.contextModel as MockAnimationContext)?.id === 'child-context'
       )!;
       assert.ok(
-        !childContextNode.isSprite,
+        !childContextNode.isSprite(),
         'The child context node is correct'
       );
       assert.equal(childContextNode.children.size, 1);
       let grandchildSpriteNode = [...childContextNode.children][0]!;
       assert.ok(
-        grandchildSpriteNode.isSprite &&
-          !grandchildSpriteNode.isContext &&
-          (grandchildSpriteNode as { spriteModel: SpriteStateTracker })
-            .spriteModel.id === 'grandchild-sprite',
+        grandchildSpriteNode.isSprite() &&
+          !grandchildSpriteNode.isContext() &&
+          grandchildSpriteNode.spriteModel.id === 'grandchild-sprite',
         'The grandchild sprite node is correct'
       );
     });
