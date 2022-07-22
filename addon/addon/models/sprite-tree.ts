@@ -1,7 +1,7 @@
 import { assert } from '@ember/debug';
 import { CopiedCSS } from '../utils/measurement';
 import { formatTreeString, TreeNode } from '../utils/format-tree';
-import Sprite from './sprite';
+import Sprite, { SpriteIdentifier } from './sprite';
 import { Changeset } from './changeset';
 
 export interface IContext {
@@ -343,6 +343,26 @@ export default class SpriteTree {
       resultNode = existingNode;
     } else {
       let parentNode = this.findParentNode(spriteModifier.element);
+      let identifier = new SpriteIdentifier(
+        spriteModifier.id,
+        spriteModifier.role
+      );
+      let matchingRemovedItem = (
+        parentNode?.freshlyRemovedChildren
+          ? [...parentNode.freshlyRemovedChildren]
+          : []
+      ).find((v) => {
+        return (
+          v.isSprite() &&
+          new SpriteIdentifier(v.spriteModel.id, v.spriteModel.role).equals(
+            identifier
+          )
+        );
+      });
+
+      if (matchingRemovedItem) {
+        parentNode?.freshlyRemovedChildren.delete(matchingRemovedItem);
+      }
       let node = new SpriteTreeNode(
         spriteModifier,
         SpriteTreeNodeType.Sprite,
