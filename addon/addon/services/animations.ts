@@ -147,18 +147,18 @@ export default class AnimationsService extends Service {
       context.element
     ) as SpriteTreeNode;
 
-    for (let { spriteStateTracker } of contextNode.spriteStateTrackers()) {
-      let animations = spriteStateTracker.element.getAnimations() ?? [];
+    for (let { spriteModifier } of contextNode.getSpriteDescendants()) {
+      let animations = spriteModifier.element.getAnimations() ?? [];
       animationsToCancel = animationsToCancel.concat(animations);
       if (animations?.length) {
-        spriteStateTracker.captureSnapshot({
+        spriteModifier.captureSnapshot({
           withAnimations: true,
           playAnimations: false,
         });
 
         let identifier = new SpriteIdentifier(
-          spriteStateTracker.id,
-          spriteStateTracker.role
+          spriteModifier.id,
+          spriteModifier.role
         );
         let identifierString = identifier.toString();
 
@@ -168,13 +168,12 @@ export default class AnimationsService extends Service {
         );
 
         this.intermediateSprites.set(identifierString, {
-          modifier: spriteStateTracker,
-          intermediateBounds: spriteStateTracker.currentBounds as DOMRect,
-          intermediateStyles:
-            spriteStateTracker.currentComputedStyle as CopiedCSS,
+          modifier: spriteModifier,
+          intermediateBounds: spriteModifier.currentBounds as DOMRect,
+          intermediateStyles: spriteModifier.currentComputedStyle as CopiedCSS,
         });
       } else {
-        spriteStateTracker.captureSnapshot();
+        spriteModifier.captureSnapshot();
       }
     }
 

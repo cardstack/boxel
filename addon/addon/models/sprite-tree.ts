@@ -117,18 +117,18 @@ export class SpriteTreeNode {
     return result;
   }
 
-  spriteStateTrackers(
+  getSpriteDescendants(
     opts: {
       deep: boolean;
     } = { deep: false }
   ): {
-    removed: boolean;
-    spriteStateTracker: SpriteStateTracker;
+    isRemoved: boolean;
+    spriteModifier: SpriteStateTracker;
     node: SpriteTreeNode;
   }[] {
     let result: {
-      removed: boolean;
-      spriteStateTracker: SpriteStateTracker;
+      isRemoved: boolean;
+      spriteModifier: SpriteStateTracker;
       node: SpriteTreeNode;
     }[] = [];
 
@@ -136,19 +136,19 @@ export class SpriteTreeNode {
       if (child.isSprite()) {
         result.push({
           node: child,
-          removed: false,
-          spriteStateTracker: child.spriteModel as SpriteStateTracker,
+          isRemoved: false,
+          spriteModifier: child.spriteModel,
         });
 
         if (!child.isContext()) {
           child
-            .spriteStateTrackers({ deep: opts.deep })
+            .getSpriteDescendants({ deep: opts.deep })
             .forEach((c) => result.push(c));
         }
       } else if (child.isContext()) {
-        if (opts.deep && !(child.contextModel as Context).isStable) {
+        if (opts.deep && !child.contextModel.isStable) {
           child
-            .spriteStateTrackers({ deep: opts.deep })
+            .getSpriteDescendants({ deep: opts.deep })
             .forEach((c) => result.push(c));
         }
       } else {
@@ -162,19 +162,19 @@ export class SpriteTreeNode {
       if (child.isSprite()) {
         result.push({
           node: child,
-          removed: true,
-          spriteStateTracker: child.spriteModel as SpriteStateTracker,
+          isRemoved: true,
+          spriteModifier: child.spriteModel,
         });
 
         if (!child.isContext()) {
           child
-            .spriteStateTrackers({ deep: opts.deep })
+            .getSpriteDescendants({ deep: opts.deep })
             .forEach((c) => result.push(c));
         }
       } else if (child.isContext()) {
-        if (opts.deep && !(child.contextModel as Context).isStable) {
+        if (opts.deep && !child.contextModel.isStable) {
           child
-            .spriteStateTrackers({ deep: opts.deep })
+            .getSpriteDescendants({ deep: opts.deep })
             .forEach((c) => result.push(c));
         }
       } else {

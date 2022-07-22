@@ -44,8 +44,8 @@ export function filterToContext(
 ): Set<SpriteStateTracker> {
   let node = spriteTree.lookupNodeByElement(animationContext.element);
   let contextDescendants = node!
-    .spriteStateTrackers({ deep: true })
-    .map((v) => v.spriteStateTracker);
+    .getSpriteDescendants({ deep: true })
+    .map((v) => v.spriteModifier);
 
   return new Set(
     [...spriteModifiers].filter((m) => contextDescendants.includes(m))
@@ -145,9 +145,9 @@ export class ChangesetBuilder {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
       let contextChildren: SpriteStateTracker[] = contextNode!
-        .spriteStateTrackers()
-        .filter((v) => !v.removed)
-        .map((c) => c.spriteStateTracker);
+        .getSpriteDescendants()
+        .filter((v) => !v.isRemoved)
+        .map((c) => c.spriteModifier);
 
       for (let spriteModifier of contextChildren) {
         spriteModifier.captureSnapshot({
