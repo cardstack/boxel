@@ -141,7 +141,7 @@ export class ChangesetBuilder {
     this.spriteTree = spriteTree;
 
     // Capture snapshots & lookup natural KeptSprites
-    let freshlyChanged: Set<SpriteStateTracker> = new Set();
+    let naturalKept: Set<SpriteStateTracker> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
@@ -158,7 +158,7 @@ export class ChangesetBuilder {
         });
 
         if (!freshlyAdded.has(spriteModifier)) {
-          freshlyChanged.add(spriteModifier);
+          naturalKept.add(spriteModifier);
         }
       }
     }
@@ -171,7 +171,7 @@ export class ChangesetBuilder {
     } = this.classifySprites(
       freshlyAdded,
       freshlyRemoved,
-      freshlyChanged,
+      naturalKept,
       intermediateSprites
     );
 
@@ -226,12 +226,12 @@ export class ChangesetBuilder {
   classifySprites(
     freshlyAdded: Set<SpriteStateTracker>,
     freshlyRemoved: Set<SpriteStateTracker>,
-    freshlyChanged: Set<SpriteStateTracker>,
+    naturalKept: Set<SpriteStateTracker>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
     let classifiedInsertedSpriteModifiers = new Set([...freshlyAdded]);
     let classifiedRemovedSpriteModifiers = new Set([...freshlyRemoved]);
-    let classifiedKeptSpriteModifiers = new Set([...freshlyChanged]);
+    let classifiedKeptSpriteModifiers = new Set([...naturalKept]);
 
     let spriteModifiers: Set<SpriteStateTracker> = new Set();
     let spriteModifierToSpriteMap = new WeakMap<SpriteStateTracker, Sprite>();
@@ -356,7 +356,7 @@ export class ChangesetBuilder {
       );
     }
 
-    for (let keptSpriteModifier of freshlyChanged) {
+    for (let keptSpriteModifier of naturalKept) {
       assert(
         'Freshly changed sprite modifier has already been processed as a non-natural kept sprite',
         !spriteModifierToCounterpartModifierMap.has(keptSpriteModifier)
