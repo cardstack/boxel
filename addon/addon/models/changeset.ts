@@ -36,28 +36,6 @@ function union<T>(...sets: Set<T>[]): Set<T> {
   }
 }
 
-function checkForChanges(
-  spriteModifier: SpriteStateTracker,
-  animationContext: Context
-): boolean {
-  let spriteCurrent = spriteModifier.currentBounds;
-  let spriteLast = spriteModifier.lastBounds;
-  let contextCurrent = animationContext.currentBounds;
-  let contextLast = animationContext.lastBounds;
-  if (spriteCurrent && spriteLast && contextCurrent && contextLast) {
-    let parentLeftChange = contextCurrent.left - contextLast.left;
-    let parentTopChange = contextCurrent.top - contextLast.top;
-
-    return (
-      spriteCurrent.left - spriteLast.left - parentLeftChange !== 0 ||
-      spriteCurrent.top - spriteLast.top - parentTopChange !== 0 ||
-      spriteCurrent.width - spriteLast.width !== 0 ||
-      spriteCurrent.height - spriteLast.height !== 0
-    );
-  }
-  return true;
-}
-
 export function filterToContext(
   spriteTree: SpriteTree,
   animationContext: Context,
@@ -179,11 +157,7 @@ export class ChangesetBuilder {
           playAnimations: false,
         });
 
-        // TODO: what about refactoring away checkForChanges and simply treating all leftover sprites in the SpriteTree as KeptSprites
-        if (
-          !freshlyAdded.has(spriteModifier) &&
-          checkForChanges(spriteModifier, context)
-        ) {
+        if (!freshlyAdded.has(spriteModifier)) {
           freshlyChanged.add(spriteModifier);
         }
       }
