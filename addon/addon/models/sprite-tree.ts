@@ -117,22 +117,70 @@ export class SpriteTreeNode {
     return result;
   }
 
-  allChildSprites({ includeFreshlyRemoved = false }) {
-    let result: SpriteStateTracker[] = [];
+  getSpriteDescendants(
+    opts: {
+      deep: boolean;
+    } = { deep: false }
+  ): {
+    isRemoved: boolean;
+    spriteModifier: SpriteStateTracker;
+    node: SpriteTreeNode;
+  }[] {
+    let result: {
+      isRemoved: boolean;
+      spriteModifier: SpriteStateTracker;
+      node: SpriteTreeNode;
+    }[] = [];
 
     for (let child of this.children) {
       if (child.isSprite()) {
-        result.push(child.spriteModel);
-      }
+        result.push({
+          node: child,
+          isRemoved: false,
+          spriteModifier: child.spriteModel,
+        });
 
-      if (
-        (child.isSprite() ||
-          (child.isContext() && !child.contextModel.isStable)) &&
-        child.children?.size
-      ) {
-        child
-          .allChildSprites({ includeFreshlyRemoved })
-          .forEach((c) => result.push(c));
+        if (!child.isContext()) {
+          child
+            .getSpriteDescendants({ deep: opts.deep })
+            .forEach((c) => result.push(c));
+        }
+      } else if (child.isContext()) {
+        if (opts.deep && !child.contextModel.isStable) {
+          child
+            .getSpriteDescendants({ deep: opts.deep })
+            .forEach((c) => result.push(c));
+        }
+      } else {
+        throw new Error(
+          'Sprite tree node that is not child or context encountered'
+        );
+      }
+    }
+
+    for (let child of this.freshlyRemovedChildren) {
+      if (child.isSprite()) {
+        result.push({
+          node: child,
+          isRemoved: true,
+          spriteModifier: child.spriteModel,
+        });
+
+        if (!child.isContext()) {
+          child
+            .getSpriteDescendants({ deep: opts.deep })
+            .forEach((c) => result.push(c));
+        }
+      } else if (child.isContext()) {
+        if (opts.deep && !child.contextModel.isStable) {
+          child
+            .getSpriteDescendants({ deep: opts.deep })
+            .forEach((c) => result.push(c));
+        }
+      } else {
+        throw new Error(
+          'Sprite tree node that is not child or context encountered'
+        );
       }
     }
 
@@ -157,13 +205,6 @@ export class SpriteTreeNode {
       result = result.concat(childNode.getDescendantNodes(opts));
     }
     return result;
-  }
-
-  clearFreshlyRemovedChildren(): void {
-    for (let rootNode of this.children) {
-      rootNode.freshlyRemovedChildren.clear();
-      rootNode.clearFreshlyRemovedChildren();
-    }
   }
 
   addChild(childNode: SpriteTreeNode): void {
@@ -232,7 +273,7 @@ export default class SpriteTree {
       let bitmask = a.item.element.compareDocumentPosition(b.item.element);
 
       assert(
-        'Document position is not implementation-specific or disconnected',
+        'Sorting sprite tree additions - Document position of two compared nodes is implementation-specific or disconnected',
         !(
           bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
           bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
@@ -371,13 +412,6 @@ export default class SpriteTree {
       }
     }
     return result;
-  }
-
-  clearFreshlyRemovedChildren(): void {
-    for (let rootNode of this.rootNodes) {
-      rootNode.freshlyRemovedChildren.clear();
-      rootNode.clearFreshlyRemovedChildren();
-    }
   }
 
   addChild(rootNode: SpriteTreeNode): void {

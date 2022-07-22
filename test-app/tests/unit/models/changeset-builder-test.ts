@@ -375,15 +375,10 @@ module('Unit | Util | ChangesetBuilder', function () {
       1,
       'One inserted sprite in unmoved context'
     );
-    assert.equal(
-      unmovedContextChangeset.keptSprites.size,
-      1,
-      'One kept sprite in unmoved context'
-    );
-    assert.equal(
-      [...unmovedContextChangeset.keptSprites][0]?.id,
-      'modifier-moved-independent-of-context',
-      'Kept sprite in unmoved context has correct id'
+    assert.deepEqual(
+      [...unmovedContextChangeset.keptSprites].map((v) => v.id).sort(),
+      ['modifier-did-not-move', 'modifier-moved-independent-of-context'],
+      'Kept sprites in unmoved context have correct ids'
     );
   });
 

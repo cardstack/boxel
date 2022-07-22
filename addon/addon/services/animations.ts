@@ -147,40 +147,33 @@ export default class AnimationsService extends Service {
       context.element
     ) as SpriteTreeNode;
 
-    for (let node of [
-      ...contextNode.freshlyRemovedChildren,
-      ...contextNode.children,
-    ]) {
-      let spriteModifier = node.spriteModel as SpriteStateTracker;
-      if (spriteModifier) {
-        let animations = node.spriteModel?.element.getAnimations() ?? [];
-        animationsToCancel = animationsToCancel.concat(animations);
-        if (animations?.length) {
-          spriteModifier.captureSnapshot({
-            withAnimations: true,
-            playAnimations: false,
-          });
+    for (let { spriteModifier } of contextNode.getSpriteDescendants()) {
+      let animations = spriteModifier.element.getAnimations() ?? [];
+      animationsToCancel = animationsToCancel.concat(animations);
+      if (animations?.length) {
+        spriteModifier.captureSnapshot({
+          withAnimations: true,
+          playAnimations: false,
+        });
 
-          let identifier = new SpriteIdentifier(
-            spriteModifier.id,
-            spriteModifier.role
-          );
-          let identifierString = identifier.toString();
+        let identifier = new SpriteIdentifier(
+          spriteModifier.id,
+          spriteModifier.role
+        );
+        let identifierString = identifier.toString();
 
-          assert(
-            `IntermediateSprite already exists for identifier ${identifierString}`,
-            !this.intermediateSprites.has(identifierString)
-          );
+        assert(
+          `IntermediateSprite already exists for identifier ${identifierString}`,
+          !this.intermediateSprites.has(identifierString)
+        );
 
-          this.intermediateSprites.set(identifierString, {
-            modifier: spriteModifier,
-            intermediateBounds: spriteModifier.currentBounds as DOMRect,
-            intermediateStyles:
-              spriteModifier.currentComputedStyle as CopiedCSS,
-          });
-        } else {
-          spriteModifier.captureSnapshot();
-        }
+        this.intermediateSprites.set(identifierString, {
+          modifier: spriteModifier,
+          intermediateBounds: spriteModifier.currentBounds as DOMRect,
+          intermediateStyles: spriteModifier.currentComputedStyle as CopiedCSS,
+        });
+      } else {
+        spriteModifier.captureSnapshot();
       }
     }
 
