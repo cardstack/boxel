@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 // @ts-ignore
 import Ember from 'ember';
 import { reads } from 'macro-decorators';
-import Changeset from 'animations-experiment/models/changeset';
+import { Changeset } from 'animations-experiment/models/changeset';
 import Sprite from 'animations-experiment/models/sprite';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';

@@ -4,9 +4,9 @@ import SpriteTree, {
   SpriteStateTracker,
 } from 'animations-experiment/models/sprite-tree';
 import {
-  SpriteSnapshotNode,
-  SpriteSnapshotNodeBuilder,
-} from 'animations-experiment/models/sprite-snapshot-node-builder';
+  Changeset,
+  ChangesetBuilder,
+} from 'animations-experiment/models/changeset';
 import Sprite, { SpriteIdentifier } from 'animations-experiment/models/sprite';
 import { IntermediateSprite } from 'animations-experiment/services/animations';
 import { CopiedCSS } from 'animations-experiment/utils/measurement';
@@ -34,6 +34,7 @@ class MockAnimationContext implements Context {
     }
     this.id = id;
   }
+  orphans: Map<string, HTMLElement> = new Map();
 
   shouldAnimate(): boolean {
     throw new Error('Method not implemented.');
@@ -134,7 +135,7 @@ function nestEachInPrevious(
   return items;
 }
 
-module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
+module('Unit | Util | ChangesetBuilder', function () {
   test('it divvies sprites up between contexts correctly', async function (assert) {
     let rootDiv = document.createElement('div');
     let context1NextDOMRect = new DOMRect(0, 0, 0, 1);
@@ -192,7 +193,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     spriteTree.flushPendingAdditions();
     spriteTree.removeSpriteModifier(freshlyRemovedSprite);
 
-    let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([stableContext1, stableContext2]),
       new Set([freshlyAddedSprite]),
@@ -200,24 +201,24 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
       new Map()
     );
 
-    let context1Node = spriteSnapshotNodeBuilder.contextToNode.get(
+    let context1Changeset = changesetBuilder.contextToChangeset.get(
       stableContext1
-    ) as SpriteSnapshotNode;
-    let context2Node = spriteSnapshotNodeBuilder.contextToNode.get(
+    ) as Changeset;
+    let context2Changeset = changesetBuilder.contextToChangeset.get(
       stableContext2
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
 
     assert.equal(
-      context1Node.insertedSprites.size,
+      context1Changeset.insertedSprites.size,
       0,
       'No inserted sprites in context 1'
     );
     assert.equal(
-      context1Node.removedSprites.size,
+      context1Changeset.removedSprites.size,
       1,
       'One removed sprite in context 1'
     );
-    let removedSprite = [...context1Node.removedSprites][0];
+    let removedSprite = [...context1Changeset.removedSprites][0];
     assert.equal(
       removedSprite?.id,
       'modifier-removed',
@@ -233,11 +234,11 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     assert.equal(removedSprite?.finalBounds, undefined);
 
     assert.equal(
-      context1Node.keptSprites.size,
+      context1Changeset.keptSprites.size,
       1,
       'One kept sprite in context 1'
     );
-    let keptSprite = [...context1Node.keptSprites][0];
+    let keptSprite = [...context1Changeset.keptSprites][0];
     assert.equal(
       keptSprite?.id,
       'modifier-kept-1',
@@ -259,11 +260,11 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     );
 
     assert.equal(
-      context2Node.insertedSprites.size,
+      context2Changeset.insertedSprites.size,
       1,
       'One inserted sprite in context 2'
     );
-    let insertedSprite = [...context2Node.insertedSprites][0];
+    let insertedSprite = [...context2Changeset.insertedSprites][0];
     assert.equal(
       insertedSprite?.id,
       'modifier-added',
@@ -278,7 +279,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
       })
     );
     assert.equal(
-      context2Node.removedSprites.size,
+      context2Changeset.removedSprites.size,
       0,
       'No removed sprites in context 2'
     );
@@ -333,7 +334,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     }
     spriteTree.flushPendingAdditions();
 
-    let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([movedContext, unmovedContext]),
       new Set([freshlyAddedSprite]),
@@ -341,46 +342,46 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
       new Map()
     );
 
-    let movedContextNode = spriteSnapshotNodeBuilder.contextToNode.get(
+    let movedContextChangeset = changesetBuilder.contextToChangeset.get(
       movedContext
-    ) as SpriteSnapshotNode;
-    let unmovedContextNode = spriteSnapshotNodeBuilder.contextToNode.get(
+    ) as Changeset;
+    let unmovedContextChangeset = changesetBuilder.contextToChangeset.get(
       unmovedContext
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
 
     assert.ok(
-      movedContextNode.insertedSprites.size === 0 &&
-        movedContextNode.removedSprites.size === 0,
+      movedContextChangeset.insertedSprites.size === 0 &&
+        movedContextChangeset.removedSprites.size === 0,
       'No inserted sprites or removed sprites in moved context'
     );
     assert.equal(
-      movedContextNode.keptSprites.size,
+      movedContextChangeset.keptSprites.size,
       1,
       'One kept sprite in moved context'
     );
     assert.equal(
-      [...movedContextNode.keptSprites][0]?.id,
+      [...movedContextChangeset.keptSprites][0]?.id,
       'modifier-did-not-move-with-context',
       'Kept sprite in moved context has correct id'
     );
 
     assert.equal(
-      unmovedContextNode.removedSprites.size,
+      unmovedContextChangeset.removedSprites.size,
       0,
       'No removed sprites in unmoved context'
     );
     assert.equal(
-      unmovedContextNode.insertedSprites.size,
+      unmovedContextChangeset.insertedSprites.size,
       1,
       'One inserted sprite in unmoved context'
     );
     assert.equal(
-      unmovedContextNode.keptSprites.size,
+      unmovedContextChangeset.keptSprites.size,
       1,
       'One kept sprite in unmoved context'
     );
     assert.equal(
-      [...unmovedContextNode.keptSprites][0]?.id,
+      [...unmovedContextChangeset.keptSprites][0]?.id,
       'modifier-moved-independent-of-context',
       'Kept sprite in unmoved context has correct id'
     );
@@ -409,7 +410,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
       'Unstable context does not have initial render completed yet'
     );
 
-    let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([stableContext, unstableContext]),
       new Set(),
@@ -418,12 +419,12 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     );
 
     assert.ok(
-      spriteSnapshotNodeBuilder.contextToNode.get(stableContext),
-      'Stable context is in the contextToNode map'
+      changesetBuilder.contextToChangeset.get(stableContext),
+      'Stable context is in the contextToChangeset map'
     );
     assert.notOk(
-      spriteSnapshotNodeBuilder.contextToNode.get(unstableContext),
-      'Stable context is not in the contextToNode map'
+      changesetBuilder.contextToChangeset.get(unstableContext),
+      'Stable context is not in the contextToChangeset map'
     );
     assert.equal(
       unstableContext.isInitialRenderCompleted,
@@ -469,7 +470,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     spriteTree.flushPendingAdditions();
     spriteTree.removeSpriteModifier(freshlyRemovedSprite);
 
-    let spriteSnapshotTree = new SpriteSnapshotNodeBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([outerContext, innerContext]),
       new Set([freshlyAddedSprite]),
@@ -477,25 +478,25 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
       new Map()
     );
 
-    let outerContextNode = spriteSnapshotTree.contextToNode.get(
+    let outerContextChangeset = changesetBuilder.contextToChangeset.get(
       outerContext
-    ) as SpriteSnapshotNode;
-    let innerContextNode = spriteSnapshotTree.contextToNode.get(
+    ) as Changeset;
+    let innerContextChangeset = changesetBuilder.contextToChangeset.get(
       innerContext
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
     assert.ok(
-      outerContextNode.insertedSprites.size === 0 &&
-        outerContextNode.removedSprites.size === 0 &&
-        outerContextNode.keptSprites.size === 1,
+      outerContextChangeset.insertedSprites.size === 0 &&
+        outerContextChangeset.removedSprites.size === 0 &&
+        outerContextChangeset.keptSprites.size === 1,
       'Only a single kept sprite in outer context'
     );
     assert.ok(
-      innerContextNode.insertedSprites.size === 0 &&
-        innerContextNode.removedSprites.size === 0 &&
-        innerContextNode.keptSprites.size === 0,
+      innerContextChangeset.insertedSprites.size === 0 &&
+        innerContextChangeset.removedSprites.size === 0 &&
+        innerContextChangeset.keptSprites.size === 0,
       'No sprites in inner context'
     );
-    let keptSprite = [...outerContextNode.keptSprites][0];
+    let keptSprite = [...outerContextChangeset.keptSprites][0];
     assert.equal(keptSprite!.id, 'modifier-kept', 'Kept sprite has correct id');
     assert.deepEqual(
       keptSprite?.initialBounds,
@@ -575,7 +576,7 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
     spriteTree.flushPendingAdditions();
     spriteTree.removeSpriteModifier(freshlyRemovedSprite);
 
-    let spriteSnapshotTree = new SpriteSnapshotNodeBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       spriteTree,
       new Set([outerContext, innerContext]),
       new Set([]),
@@ -603,29 +604,29 @@ module('Unit | Util | SpriteSnapshotNodeBuilder', function () {
       ])
     );
 
-    let outerContextNode = spriteSnapshotTree.contextToNode.get(
+    let outerContextChangeset = changesetBuilder.contextToChangeset.get(
       outerContext
-    ) as SpriteSnapshotNode;
-    let innerContextNode = spriteSnapshotTree.contextToNode.get(
+    ) as Changeset;
+    let innerContextChangeset = changesetBuilder.contextToChangeset.get(
       innerContext
-    ) as SpriteSnapshotNode;
+    ) as Changeset;
     assert.ok(
-      outerContextNode.insertedSprites.size === 0 &&
-        outerContextNode.removedSprites.size === 1 &&
-        outerContextNode.keptSprites.size === 0,
+      outerContextChangeset.insertedSprites.size === 0 &&
+        outerContextChangeset.removedSprites.size === 1 &&
+        outerContextChangeset.keptSprites.size === 0,
       'One removed sprite in outer context'
     );
     assert.equal(
-      [...outerContextNode.removedSprites][0]!.id,
+      [...outerContextChangeset.removedSprites][0]!.id,
       'modifier-control'
     );
     assert.ok(
-      innerContextNode.insertedSprites.size === 0 &&
-        innerContextNode.removedSprites.size === 0 &&
-        innerContextNode.keptSprites.size === 1,
+      innerContextChangeset.insertedSprites.size === 0 &&
+        innerContextChangeset.removedSprites.size === 0 &&
+        innerContextChangeset.keptSprites.size === 1,
       'Only a single kept sprite in inner context'
     );
-    let keptSprite = [...innerContextNode.keptSprites][0];
+    let keptSprite = [...innerContextChangeset.keptSprites][0];
     assert.equal(keptSprite?.id, 'modifier-kept-from-intermediate');
     assert.deepEqual(
       keptSprite?.initialBounds,

@@ -23,6 +23,7 @@ class MockAnimationContext implements Context {
     }
     this.id = id;
   }
+  orphans: Map<string, HTMLElement> = new Map();
   currentBounds?: DOMRect | undefined;
   lastBounds?: DOMRect | undefined;
   isInitialRenderCompleted = false;

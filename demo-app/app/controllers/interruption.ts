@@ -1,6 +1,6 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
-import Changeset from 'animations-experiment/models/changeset';
+import { Changeset } from 'animations-experiment/models/changeset';
 import magicMove from 'animations-experiment/transitions/magic-move';
 import runAnimations from 'animations-experiment/utils/run-animations';
 import SpringBehavior from 'animations-experiment/behaviors/spring';

@@ -1,6 +1,6 @@
 import Controller from '@ember/controller';
 import Sprite, { SpriteType } from 'animations-experiment/models/sprite';
-import Changeset from 'animations-experiment/models/changeset';
+import { Changeset } from 'animations-experiment/models/changeset';
 import magicMove from 'animations-experiment/transitions/magic-move';
 import { assert } from '@ember/debug';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';

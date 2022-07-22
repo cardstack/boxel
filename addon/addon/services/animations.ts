@@ -11,7 +11,6 @@ import { taskFor } from 'ember-concurrency-ts';
 import Sprite, { SpriteIdentifier } from '../models/sprite';
 import Motion from '../motions/base';
 import { SpriteAnimation } from '../models/sprite-animation';
-import Changeset from 'animations-experiment/models/changeset';
 import {
   CopiedCSS,
   copyComputedStyle,
@@ -26,8 +25,8 @@ import {
 } from 'ember-concurrency';
 import {
   filterToContext,
-  SpriteSnapshotNodeBuilder,
-} from 'animations-experiment/models/sprite-snapshot-node-builder';
+  ChangesetBuilder,
+} from 'animations-experiment/models/changeset';
 
 export type AnimateFunction = (
   sprite: Sprite,
@@ -231,7 +230,7 @@ export default class AnimationsService extends Service {
     this.spriteTree.log();
 
     // This classifies sprites and puts them under the correct first stable ancestor context.
-    let spriteSnapshotNodeBuilder = new SpriteSnapshotNodeBuilder(
+    let changesetBuilder = new ChangesetBuilder(
       this.spriteTree,
       this.eligibleContexts,
       this.freshlyAdded,
@@ -252,19 +251,8 @@ export default class AnimationsService extends Service {
     let promises = [];
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
     for (let context of contexts) {
-      let spriteSnapshotNode =
-        spriteSnapshotNodeBuilder.contextToNode.get(context);
-      if (spriteSnapshotNode && spriteSnapshotNode.hasSprites) {
-        let { insertedSprites, keptSprites, removedSprites } =
-          spriteSnapshotNode;
-
-        let changeset = new Changeset(context, undefined);
-        changeset.addSprites([
-          ...insertedSprites,
-          ...keptSprites,
-          ...removedSprites,
-        ]);
-
+      let changeset = changesetBuilder.contextToChangeset.get(context);
+      if (changeset && changeset.hasSprites) {
         let transitionRunner = new TransitionRunner(context);
         let task = taskFor(transitionRunner.maybeTransitionTask);
         promises.push(task.perform(changeset));

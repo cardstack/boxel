@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/models/changeset';
+export { Changeset } from 'animations-experiment/models/changeset';
