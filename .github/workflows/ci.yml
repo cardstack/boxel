@@ -49,7 +49,7 @@ jobs:
         run: yarn start:base &
         working-directory: realm-server
       - name: Test realm server
-        run: yarn start:test-worker &
+        run: yarn start:test-realm &
         working-directory: realm-server
       - name: host test suite
         run: yarn test:ember
