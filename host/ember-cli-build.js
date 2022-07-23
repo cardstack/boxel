@@ -28,7 +28,7 @@ module.exports = function (defaults) {
             // path of the consumer--assumes the consumer and dep are in same
             // dir.
             return content.replace(
-              "from 'https://cardstack.com/base/",
+              /from 'https:\/\/cardstack.com\/base\//g,
               "from './"
             );
           }
