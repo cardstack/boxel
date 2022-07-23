@@ -24,7 +24,7 @@ There are currently 2 test suites: the host/ workspace tests and the realm-serve
 ### Host
 To run the  `host/`  workspace tests start the following servers:
 1. `yarn start:base` in the `realm-server/` to serve the base realm
-2. `yarn start:test-worker` in the `realm-server/` to serve the realm that emulates the worker
+2. `yarn start:test-realm` in the `realm-server/` to serve the realm that emulates the worker
 3. `yarn start` in the `host/` workspace to serve ember
 
 The tests are available at `http://localhost:4200/tests`
