@@ -30,9 +30,9 @@ export interface API {
   primitive: typeof primitive;
 }
 
+const baseCardModule = 'https://cardstack.com/base/card-api';
+
 export default class CardAPI extends Service {
-  baseCardModule = 'https://cardstack.com/base/card-api';
-  localBaseCardModel = 'http://localhost:4201/base/card/api';
   #api: API | undefined;
 
   constructor(properties: object) {
@@ -62,7 +62,7 @@ export default class CardAPI extends Service {
         'runtime-spike/lib/card-api'
       );
     } else {
-      this.#api = await import(/* webpackIgnore: true */ this.baseCardModule);
+      this.#api = await import(/* webpackIgnore: true */ baseCardModule);
     }
   }
 }
