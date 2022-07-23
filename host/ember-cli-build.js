@@ -7,6 +7,7 @@ const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 const buildFunnel = require('broccoli-funnel');
 const mergeTrees = require('broccoli-merge-trees');
+const mapTrees = require('broccoli-stew').map;
 const { resolve } = require('path');
 let base = resolve('../base');
 
@@ -15,11 +16,23 @@ module.exports = function (defaults) {
     trees: {
       app: mergeTrees([
         'app',
-        buildFunnel(base, {
-          destDir: 'lib',
-          // don't copy over package.json or any other tooling file
-          include: ['**/*.js', '**/*.ts', '**/*.gts', '**/*.gjs'],
-        }),
+        mapTrees(
+          buildFunnel(base, {
+            destDir: 'lib',
+            // don't copy over package.json or any other tooling file
+            include: ['**/*.js', '**/*.ts', '**/*.gts', '**/*.gjs'],
+          }),
+          function (content) {
+            // This is a simple workaround to replace the absolute module
+            // imports with relative imports that doesn't take into account the
+            // path of the consumer--assumes the consumer and dep are in same
+            // dir.
+            return content.replace(
+              "from 'https://cardstack.com/base/",
+              "from './"
+            );
+          }
+        ),
       ]),
     },
   });

@@ -9,13 +9,13 @@ import CardEditor, { ExistingCardArgs } from './card-editor';
 import ImportModule from './import-module';
 import Module from './module';
 import FileTree from './file-tree';
-import { Format } from 'runtime-spike/lib/card-api';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,
   languageConfigs
 } from '../utils/editor-language';
 import { isCardJSON } from '@cardstack/runtime-common';
+  import type { Format } from 'runtime-spike/lib/card-api';
 import type { FileResource } from '../resources/file';
 
 interface Signature {

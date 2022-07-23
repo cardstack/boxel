@@ -56,9 +56,12 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["@ember/object", ["action", "get"]],
   ["@ember/helper", ["get", "fn"]],
   ["@ember/modifier", ["on"]],
+  ["@ember/destroyable", ["registerDestructor"]],
+  ["lodash", ["flatMap", "startCase", "get"]],
+  ["tracked-built-ins", ["TrackedWeakMap"]],
+  ["date-fns", ["parseISO", "format", "parse"]],
 
-  // TODO eventually we should not need to build externals for these anymore
-  // since they will be loading code from a real realm server
+  // This is necessary for tests
   [
     "runtime-spike/lib/card-api",
     [

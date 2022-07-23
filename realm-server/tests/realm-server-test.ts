@@ -25,7 +25,11 @@ module("Realm Server", function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
 
-    server = createRealmServer(dir.name, testRealmURL);
+    server = createRealmServer(
+      dir.name,
+      testRealmHref,
+      "http://localhost:4201/base/"
+    );
     server.listen(testRealmURL.port);
     request = supertest(server);
   });
@@ -320,6 +324,13 @@ module("Realm Server", function (hooks) {
         data: {
           id: `${testRealmHref}person/Person`,
           type: "card-definition",
+          attributes: {
+            cardRef: {
+              type: "exportedCard",
+              module: `${testRealmHref}person`,
+              name: "Person",
+            },
+          },
           relationships: {
             _super: {
               links: {
@@ -328,6 +339,11 @@ module("Realm Server", function (hooks) {
               },
               meta: {
                 type: "super",
+                ref: {
+                  type: "exportedCard",
+                  module: "https://cardstack.com/base/card-api",
+                  name: "Card",
+                },
               },
             },
             firstName: {
@@ -337,6 +353,11 @@ module("Realm Server", function (hooks) {
               },
               meta: {
                 type: "contains",
+                ref: {
+                  type: "exportedCard",
+                  module: "https://cardstack.com/base/string",
+                  name: "default",
+                },
               },
             },
           },

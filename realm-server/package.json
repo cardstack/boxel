@@ -25,6 +25,7 @@
   },
   "scripts": {
     "test": "qunit --require ts-node/register tests/index.ts",
-    "start": "ts-node --transpileOnly main --port=4201 --path='../cards' --url='http://localhost:4201/'"
+    "start": "ts-node --transpileOnly main",
+    "start:base": "ts-node --transpileOnly main --port=4201 --path='../base' --url='https://cardstack.com/base/'"
   }
 }

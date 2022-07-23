@@ -1,4 +1,4 @@
-import http from "http";
+import http, { IncomingMessage, ServerResponse } from "http";
 import { NodeRealm } from "./node-realm";
 import { Realm } from "@cardstack/runtime-common";
 import { resolve } from "path";
@@ -6,13 +6,20 @@ import { streamToText as nodeStreamToText } from "./stream";
 import { streamToText as webStreamToText } from "@cardstack/runtime-common/stream";
 import { LocalPath, RealmPaths } from "@cardstack/runtime-common/paths";
 
-export function createRealmServer(path: string, realmURL: URL) {
+export function createRealmServer(
+  path: string,
+  realmURL: string,
+  baseRealmURL = "https://cardstack.com/base/"
+) {
   path = resolve(path);
-  let realm = new Realm(realmURL.href, new NodeRealm(path));
+  let realm = new Realm(realmURL, new NodeRealm(path), baseRealmURL);
   let realmPath = new RealmPaths(realmURL);
   let server = http.createServer(async (req, res) => {
     let isStreaming = false;
     try {
+      if (handleCors(req, res)) {
+        return;
+      }
       if (!req.url) {
         throw new Error(`bug: missing URL in request`);
       }
@@ -66,4 +73,21 @@ export function createRealmServer(path: string, realmURL: URL) {
     }
   });
   return server;
+}
+
+function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  if (
+    req.method === "OPTIONS" &&
+    req.headers["access-control-request-method"]
+  ) {
+    // preflight request
+    res.setHeader("Access-Control-Allow-Headers", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,DELETE,PATCH");
+    res.statusCode = 204;
+    res.end();
+    return true;
+  }
+  return false;
 }

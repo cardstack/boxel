@@ -1,4 +1,4 @@
-import { primitive, Component, Card, useIndexBasedKey } from './card-api';
+import { primitive, Component, Card, useIndexBasedKey } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { pick } from './pick';

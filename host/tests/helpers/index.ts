@@ -19,11 +19,16 @@ export const TestRealm = {
   create(flatFiles: Record<string, string | object>, realmURL?: URL): Realm {
     return new Realm(
       realmURL?.href ?? 'http://test-realm/',
-      new TestRealmAdapter(flatFiles)
+      new TestRealmAdapter(flatFiles),
+      'http://localhost:4201/base/'
     );
   },
   createWithAdapter(adapter: RealmAdapter, realmURL?: URL): Realm {
-    return new Realm(realmURL?.href ?? 'http://test-realm/', adapter);
+    return new Realm(
+      realmURL?.href ?? 'http://test-realm/',
+      adapter,
+      'http://localhost:4201/base/'
+    );
   },
 };
 

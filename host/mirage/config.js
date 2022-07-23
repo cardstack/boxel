@@ -20,6 +20,13 @@ export default function () {
           data: {
             id: 'http://test-realm/person/Person',
             type: 'card-definition',
+            attributes: {
+              cardRef: {
+                type: 'exportedCard',
+                module: 'http://test-realm/person',
+                name: 'Person',
+              },
+            },
             relationships: {
               _super: {
                 links: {
@@ -28,6 +35,11 @@ export default function () {
                 },
                 meta: {
                   type: 'super',
+                  ref: {
+                    type: 'exportedCard',
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'Card',
+                  },
                 },
               },
               firstName: {
@@ -37,6 +49,11 @@ export default function () {
                 },
                 meta: {
                   type: 'contains',
+                  ref: {
+                    type: 'exportedCard',
+                    module: 'https://cardstack.com/base/string',
+                    name: 'default',
+                  },
                 },
               },
             },
@@ -60,6 +77,13 @@ export default function () {
           data: {
             id: 'http://test-realm/post/Post',
             type: 'card-definition',
+            attributes: {
+              cardRef: {
+                type: 'exportedCard',
+                module: 'http://test-realm/post',
+                name: 'Post',
+              },
+            },
             relationships: {
               _super: {
                 links: {
@@ -68,6 +92,11 @@ export default function () {
                 },
                 meta: {
                   type: 'super',
+                  ref: {
+                    type: 'exportedCard',
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'Card',
+                  },
                 },
               },
               author: {
@@ -77,6 +106,11 @@ export default function () {
                 },
                 meta: {
                   type: 'contains',
+                  ref: {
+                    type: 'exportedCard',
+                    module: 'http://test-realm/person',
+                    name: 'Person',
+                  },
                 },
               },
               title: {
@@ -86,6 +120,11 @@ export default function () {
                 },
                 meta: {
                   type: 'contains',
+                  ref: {
+                    type: 'exportedCard',
+                    module: 'https://cardstack.com/base/string',
+                    name: 'default',
+                  },
                 },
               },
             },

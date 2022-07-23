@@ -42,9 +42,19 @@ import * as emberHelper from '@ember/helper';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('@ember/helper', emberHelper);
 import * as emberModifier from '@ember/modifier';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('@ember/modifier', emberModifier);
+import * as emberDestroyable from '@ember/destroyable';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  '@ember/destroyable',
+  emberDestroyable
+);
+import * as lodash from 'lodash';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set('lodash', lodash);
+import * as tracked from 'tracked-built-ins';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set('tracked-built-ins', tracked);
+import * as dateFns from 'date-fns';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set('date-fns', dateFns);
 
-// This should be loaded from the actual server serving our base cards
-
+// This is necessary for tests
 import * as cardAPI from 'runtime-spike/lib/card-api';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   'runtime-spike/lib/card-api',

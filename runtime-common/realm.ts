@@ -82,7 +82,11 @@ export class Realm {
     return this.#paths.url;
   }
 
-  constructor(url: string, adapter: RealmAdapter) {
+  constructor(
+    url: string,
+    adapter: RealmAdapter,
+    readonly baseRealmURL = baseRealm.url
+  ) {
     this.#paths = new RealmPaths(url);
     this.#startedUp.fulfill((() => this.#startup())());
     this.#adapter = adapter;
@@ -245,7 +249,7 @@ export class Realm {
         filename: debugFilename,
         plugins: [
           glimmerTemplatePlugin,
-          typescriptPlugin,
+          [typescriptPlugin, { allowDeclareFields: true }],
           [decoratorsProposalPlugin, { legacy: true }],
           classPropertiesProposalPlugin,
           // this "as any" is because typescript is using the Node-specific types
@@ -587,6 +591,9 @@ export class Realm {
     let data: CardDefinitionResource = {
       id: def.key,
       type: "card-definition",
+      attributes: {
+        cardRef: def.id,
+      },
       relationships: {},
     };
     if (!data.relationships) {
@@ -600,6 +607,7 @@ export class Realm {
         },
         meta: {
           type: "super",
+          ref: def.super,
         },
       };
     }
@@ -610,6 +618,7 @@ export class Realm {
         },
         meta: {
           type: field.fieldType,
+          ref: field.fieldCard,
         },
       };
     }
@@ -681,6 +690,9 @@ function lastModifiedHeader(
 export interface CardDefinitionResource {
   id: string;
   type: "card-definition";
+  attributes: {
+    cardRef: CardRef;
+  };
   relationships: {
     [fieldName: string]: {
       links: {
@@ -688,6 +700,7 @@ export interface CardDefinitionResource {
       };
       meta: {
         type: "super" | "contains" | "containsMany";
+        ref: CardRef;
       };
     };
   };
