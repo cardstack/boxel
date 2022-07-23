@@ -80,7 +80,7 @@ module('Unit | realm', function () {
           },
         },
       },
-      new URL('http://test-realm/root/')
+      'http://test-realm/root/'
     );
     await realm.ready;
     {

@@ -1,6 +1,6 @@
 import http, { IncomingMessage, ServerResponse } from "http";
 import { NodeRealm } from "./node-realm";
-import { Realm } from "@cardstack/runtime-common";
+import { Realm, baseRealm } from "@cardstack/runtime-common";
 import { resolve } from "path";
 import { streamToText as nodeStreamToText } from "./stream";
 import { streamToText as webStreamToText } from "@cardstack/runtime-common/stream";
@@ -9,7 +9,7 @@ import { LocalPath, RealmPaths } from "@cardstack/runtime-common/paths";
 export function createRealmServer(
   path: string,
   realmURL: string,
-  baseRealmURL = "https://cardstack.com/base/"
+  baseRealmURL = baseRealm.url
 ) {
   path = resolve(path);
   let realm = new Realm(realmURL, new NodeRealm(path), baseRealmURL);

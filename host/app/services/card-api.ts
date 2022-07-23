@@ -14,6 +14,7 @@ import type {
   Component,
   primitive,
 } from 'https://cardstack.com/base/card-api';
+import { baseRealm } from '@cardstack/runtime-common';
 import config from 'runtime-spike/config/environment';
 
 export interface API {
@@ -30,7 +31,7 @@ export interface API {
   primitive: typeof primitive;
 }
 
-const baseCardModule = 'https://cardstack.com/base/card-api';
+const baseCardModule = `${baseRealm.url}card-api`;
 
 export default class CardAPI extends Service {
   #api: API | undefined;

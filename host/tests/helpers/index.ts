@@ -16,16 +16,16 @@ export interface Dir {
 }
 
 export const TestRealm = {
-  create(flatFiles: Record<string, string | object>, realmURL?: URL): Realm {
+  create(flatFiles: Record<string, string | object>, realmURL?: string): Realm {
     return new Realm(
-      realmURL?.href ?? 'http://test-realm/',
+      realmURL ?? 'http://test-realm/',
       new TestRealmAdapter(flatFiles),
       'http://localhost:4201/base/'
     );
   },
-  createWithAdapter(adapter: RealmAdapter, realmURL?: URL): Realm {
+  createWithAdapter(adapter: RealmAdapter, realmURL?: string): Realm {
     return new Realm(
-      realmURL?.href ?? 'http://test-realm/',
+      realmURL ?? 'http://test-realm/',
       adapter,
       'http://localhost:4201/base/'
     );

@@ -48,6 +48,9 @@ jobs:
       - name: Base realm server
         run: yarn start:base &
         working-directory: realm-server
+      - name: Test realm server
+        run: yarn start:test-worker &
+        working-directory: realm-server
       - name: host test suite
         run: yarn test:ember
         working-directory: host

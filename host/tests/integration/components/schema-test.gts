@@ -1,17 +1,31 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
-import { CardRef } from '@cardstack/runtime-common';
+import { CardRef, baseRealm } from '@cardstack/runtime-common';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import Schema from 'runtime-spike/components/schema';
 import Service from '@ember/service';
-//@ts-ignore no types (double check that)
-import { setupMirage } from 'ember-cli-mirage/test-support';
 import { waitUntil } from '@ember/test-helpers';
 
-class MockLocalRealm extends Service {
+// TODO Consider making this a helper
+class NodeRealm extends Service {
   isAvailable = true;
-  url = new URL('http://test-realm/');
+  url = new URL('http://localhost:4202/');
+  realmMappings = new Map([
+    [baseRealm.url, 'http://localhost:4201/base/'],
+    ['http://test-realm/', 'http://localhost:4202/']
+  ])
+  mapURL(url: string, reverseLookup = false) {
+    for (let [realm, forwardURL] of this.realmMappings) {
+      if (!reverseLookup && url.startsWith(realm)) {
+        return url.replace(realm, forwardURL);
+      }
+      if (reverseLookup && url.startsWith(forwardURL)) {
+        return url.replace(forwardURL, realm);
+      }
+    }
+    return url;
+  }
 }
 
 // TODO rework this test so that we use the actual realm server(s) to retrieve
@@ -19,10 +33,9 @@ class MockLocalRealm extends Service {
 
 module('Integration | schema', function (hooks) {
   setupRenderingTest(hooks);
-  setupMirage(hooks);
 
   hooks.beforeEach(function() {
-    this.owner.register('service:local-realm', MockLocalRealm);
+    this.owner.register('service:local-realm', NodeRealm);
   })
 
   test('renders card schema view', async function (assert) {
