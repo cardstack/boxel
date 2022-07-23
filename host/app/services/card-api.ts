@@ -55,6 +55,9 @@ export default class CardAPI extends Service {
 
   @task private async load(): Promise<void> {
     if (config.environment === 'test') {
+      // The tests don't have a way of overriding import URL's like we do in the
+      // service worker for resolving https://cardstack.com/base/ to a locally
+      // served base realm so we cheat and use AMD style module loading for the tests
       this.#api = (window as any).RUNTIME_SPIKE_EXTERNALS.get(
         'runtime-spike/lib/card-api'
       );
