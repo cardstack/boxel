@@ -46,7 +46,7 @@ jobs:
             ${{ runner.os }}-yarn-
       - run: yarn --prefer-offline
       - name: Base realm server
-        run: yarn start:base
+        run: yarn start:base &
         working-directory: realm-server
       - name: host test suite
         run: yarn test:ember
@@ -71,7 +71,7 @@ jobs:
             ${{ runner.os }}-yarn-
       - run: yarn --prefer-offline
       - name: Base realm server
-        run: yarn start:base
+        run: yarn start:base &
         working-directory: realm-server
       - name: realm server test suite
         run: yarn test
