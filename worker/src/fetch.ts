@@ -36,7 +36,7 @@ export class FetchHandler {
           request.url.slice(urlWithoutQuery.origin.length),
           this.realm.baseRealmURL
         );
-        return await fetch(url, {
+        return await fetch(url.href, {
           method: request.method,
           headers: request.headers,
           ...(request.body ? { body: request.body } : {}),
