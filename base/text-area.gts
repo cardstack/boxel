@@ -1,5 +1,5 @@
 import { Component } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringCard from './string';
 import { on } from '@ember/modifier';
 import { pick } from './pick';
 
