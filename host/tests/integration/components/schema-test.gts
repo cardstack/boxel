@@ -14,6 +14,9 @@ class MockLocalRealm extends Service {
   url = new URL('http://test-realm/');
 }
 
+// TODO rework this test so that we use the actual realm server(s) to retrieve
+// the types of the cards under test that mirage is mocking (Person and Post cards)
+
 module('Integration | schema', function (hooks) {
   setupRenderingTest(hooks);
   setupMirage(hooks);
