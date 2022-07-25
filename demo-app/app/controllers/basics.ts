@@ -8,7 +8,7 @@ import { inject as service } from '@ember/service';
 const FADE_DURATION = 1500;
 const TRANSLATE_DURATION = 1500;
 const MOVE_C_INTENT = 'move-c';
-export default class IndexController extends Controller {
+export default class BasicsController extends Controller {
   @service declare animations: AnimationsService;
 
   @tracked contextHasPadding = false;
