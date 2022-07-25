@@ -12,6 +12,10 @@
   "volta": {
     "node": "14.18.3"
   },
+  "scripts": {
+    "lint": "pnpm run --if-present -r lint",
+    "lint:fix": "pnpm run --if-present -r lint:fix"
+  },
   "pnpm": {
     "overrides": {
       "@embroider/macros": "^1.5.0",
