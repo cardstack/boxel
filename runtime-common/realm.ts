@@ -6,7 +6,7 @@ import {
   CardDocument,
   isCardDocument,
 } from "./search-index";
-import { RealmPaths, LocalPath } from "./paths";
+import { RealmPaths, LocalPath, join } from "./paths";
 import {
   systemError,
   notFound,
@@ -57,6 +57,8 @@ export interface RealmAdapter {
   ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void>;
 
   openFile(path: LocalPath): Promise<FileRef | undefined>;
+
+  exists(path: LocalPath): Promise<boolean>;
 
   write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
 
@@ -288,7 +290,7 @@ export class Realm {
 
     // new instances are created in a folder named after the card
     let dirName = `/${json.data.meta.adoptsFrom.name}/`;
-    let entries = await this.#searchIndex.directory(new URL(dirName, this.url));
+    let entries = await this.directoryEntries(new URL(dirName, this.url));
     let index = 0;
     if (entries) {
       for (let { name, kind } of entries) {
@@ -403,12 +405,37 @@ export class Realm {
     return new Response(null, { status: 204 });
   }
 
+  private async directoryEntries(
+    url: URL
+  ): Promise<{ name: string; kind: Kind }[] | undefined> {
+    if (await this.isIgnored(url)) {
+      return undefined;
+    }
+    let path = this.#paths.local(url);
+    if (!(await this.#adapter.exists(path))) {
+      return undefined;
+    }
+    let entries: { name: string; kind: Kind }[] = [];
+    for await (let entry of this.#adapter.readdir(path)) {
+      let innerPath = join(path, entry.name);
+      let innerURL =
+        entry.kind === "directory"
+          ? this.#paths.directoryURL(innerPath)
+          : this.#paths.fileURL(innerPath);
+      if (await this.isIgnored(innerURL)) {
+        continue;
+      }
+      entries.push(entry);
+    }
+    return entries;
+  }
+
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
     let localPath: LocalPath = this.#paths.local(new URL(request.url));
     let url = this.#paths.directoryURL(localPath);
 
-    let entries = await this.#searchIndex.directory(url);
+    let entries = await this.directoryEntries(url);
     if (!entries) {
       console.log(`can't find directory ${url.href}`);
       return notFound(request);
@@ -457,6 +484,11 @@ export class Realm {
       content: await this.fileContentToText(ref),
       lastModified: ref.lastModified,
     };
+  }
+
+  private async isIgnored(url: URL): Promise<boolean> {
+    await this.ready;
+    return this.#searchIndex.isIgnored(url);
   }
 
   private async fileContentToText({ content }: FileRef): Promise<string> {

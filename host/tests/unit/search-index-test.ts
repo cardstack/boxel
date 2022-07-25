@@ -533,7 +533,7 @@ module('Unit | search-index', function () {
     assert.ok(definition, 'got definition');
   });
 
-  test('directories do not list entries that match patterns in ignore files', async function (assert) {
+  test('search index does not contain entries that match patterns in ignore files', async function (assert) {
     const cardSource = `
       import { Card } from 'https://cardstack.com/base/card-api';
       export class Post extends Card {}
@@ -547,71 +547,92 @@ module('Unit | search-index', function () {
       'posts/2.json': '',
       'post.gts': cardSource,
       'dir/card.gts': cardSource,
+      '.gitignore': `
+*.json
+dir/
+posts/ignore-me.gts
+      `,
     });
-
-    const listings = [
-      {
-        kind: 'file',
-        name: 'sample-post.json',
-      },
-      {
-        kind: 'directory',
-        name: 'posts',
-      },
-      {
-        kind: 'file',
-        name: 'post.gts',
-      },
-      {
-        kind: 'directory',
-        name: 'dir',
-      },
-    ] as any;
-
-    const ignoreFile = {
-      name: '.gitignore',
-      kind: 'file',
-    };
-
-    const nestedListings = [
-      {
-        name: '1.json',
-        kind: 'file',
-      },
-      {
-        name: 'nested.gts',
-        kind: 'file',
-      },
-      {
-        name: 'ignore-me.gts',
-        kind: 'file',
-      },
-      {
-        name: '2.json',
-        kind: 'file',
-      },
-    ] as any;
 
     let indexer = realm.searchIndex;
     await indexer.run();
 
-    let definition = await indexer.typeOf({
-      type: 'exportedCard',
-      module: 'posts/ignore-me.gts',
-      name: 'Post',
+    {
+      let def = await indexer.typeOf({
+        type: 'exportedCard',
+        module: 'posts/ignore-me.gts',
+        name: 'Post',
+      });
+      assert.strictEqual(
+        def,
+        undefined,
+        'definition does not exist because file is ignored'
+      );
+    }
+    {
+      let def = await indexer.typeOf({
+        type: 'exportedCard',
+        module: 'dir/card.gts',
+        name: 'Post',
+      });
+      assert.strictEqual(
+        def,
+        undefined,
+        'definition does not exist because file is ignored'
+      );
+    }
+    {
+      let card = await indexer.card(
+        new URL('http://test-realm/sample-post.json')
+      );
+      assert.strictEqual(
+        card,
+        undefined,
+        'instance does not exist because file is ignored'
+      );
+    }
+    {
+      let card = await indexer.card(new URL(`http://test-realm/posts/2.json`));
+      assert.strictEqual(
+        card,
+        undefined,
+        'instance does not exist because file is ignored'
+      );
+    }
+    {
+      let def = await indexer.typeOf({
+        type: 'exportedCard',
+        module: 'post.gts',
+        name: 'Post',
+      });
+      assert.ok(def, 'definition exists');
+    }
+    {
+      let def = await indexer.typeOf({
+        type: 'exportedCard',
+        module: 'posts/nested.gts',
+        name: 'Post',
+      });
+      assert.ok(def, 'definition exists');
+    }
+  });
+
+  test("search index incremental update doesn't process ignored files", async function (assert) {
+    const cardSource = `
+      import { Card } from 'https://cardstack.com/base/card-api';
+      export class Post extends Card {}
+    `;
+
+    let realm = TestRealm.create({
+      'posts/ignore-me.gts': cardSource,
+      '.gitignore': `
+posts/ignore-me.gts
+      `,
     });
-    assert.ok(definition, 'definition exists before file is ignored');
 
-    let entries = await indexer.directory(new URL(realm.url));
-    assert.deepEqual(entries, listings, 'top level entries are correct');
-    let nestedEntries = await indexer.directory(new URL('posts/', realm.url));
-    assert.deepEqual(
-      nestedEntries,
-      nestedListings,
-      'nested entries are correct'
-    );
-
-    await realm.write('.gitignore', '*.json\n/dir\nposts/ignore-me.gts');
+    let indexer = realm.searchIndex;
+    await indexer.run();
+    await indexer.update(new URL('http://test-realm/posts/ignore-me.gts'));
 
     let def = await indexer.typeOf({
       type: 'exportedCard',
@@ -622,25 +643,6 @@ module('Unit | search-index', function () {
       def,
       undefined,
       'definition does not exist because file is ignored'
-    );
-
-    entries = await indexer.directory(new URL(realm.url));
-    assert.deepEqual(
-      entries,
-      [...listings.slice(1, 3), ignoreFile],
-      'correct file is hidden in top level'
-    );
-
-    nestedEntries = await indexer.directory(new URL('posts/', realm.url));
-    assert.deepEqual(
-      nestedEntries,
-      [
-        {
-          name: 'nested.gts',
-          kind: 'file',
-        },
-      ],
-      'correct files are hidden in nested'
     );
   });
 });

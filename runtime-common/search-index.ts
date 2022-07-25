@@ -188,7 +188,6 @@ class URLMap<T> {
 export class SearchIndex {
   private instances = new URLMap<CardResource>();
   private modules = new URLMap<ModuleSyntax>();
-  private directories = new URLMap<{ name: string; kind: Kind }[]>();
   private definitions = new Map<string, CardDefinition>();
   private exportedCardRefs = new Map<string, CardRef[]>();
   private ignoreMap = new URLMap<Ignore>();
@@ -205,28 +204,16 @@ export class SearchIndex {
   ) {}
 
   async run() {
-    let newDirectories = new URLMap<{ name: string; kind: Kind }[]>();
-    await this.visitDirectory(new URL(this.realm.url), newDirectories);
-    await this.semanticPhase(newDirectories);
+    await this.visitDirectory(new URL(this.realm.url));
+    await this.semanticPhase();
   }
 
-  private async visitDirectory(
-    url: URL,
-    directories: URLMap<{ name: string; kind: Kind }[]>
-  ): Promise<void> {
-    // TODO we should be using ignore patterns for the current context so the
-    // ignores are consistent with the index, i.e. don't use ignore file from a
-    // previous search index run on a new search index
+  private async visitDirectory(url: URL): Promise<void> {
     let ignorePatterns = await this.getIgnorePatterns(url);
     if (ignorePatterns && ignorePatterns.content) {
       this.ignoreMap.set(url, ignore().add(ignorePatterns.content));
     }
 
-    let entries = directories.get(url);
-    if (!entries) {
-      entries = [];
-      directories.set(url, entries);
-    }
     for await (let { path: innerPath, kind } of this.readdir(
       this.realmPaths.local(url)
     )) {
@@ -234,49 +221,25 @@ export class SearchIndex {
       if (this.isIgnored(innerURL)) {
         continue;
       }
-      let name = innerPath.split("/").pop()!;
       if (kind === "file") {
-        entries.push({ name, kind: "file" });
         await this.visitFile(innerURL);
       } else {
         let directoryURL = this.realmPaths.directoryURL(innerPath);
-        entries.push({ name, kind: "directory" });
-        await this.visitDirectory(directoryURL, directories);
+        await this.visitDirectory(directoryURL);
       }
     }
   }
 
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
-    let newDirectories = new URLMap<{ name: string; kind: Kind }[]>();
-    await this.visitDirectory(new URL(this.realm.url), newDirectories);
     await this.visitFile(url, opts);
-
-    let segments = url.href.split("/");
-    let name = segments.pop()!;
-    let dirURL = new URL(segments.join("/") + "/");
-
-    if (opts?.delete) {
-      let entries = newDirectories.get(dirURL);
-      if (entries) {
-        let index = entries.findIndex((e) => e.name === name);
-        if (index > -1) {
-          entries.splice(index, 1);
-        }
-      }
-    } else {
-      let entries = newDirectories.get(dirURL);
-      if (!entries) {
-        entries = [];
-        newDirectories.set(dirURL, entries);
-      }
-      if (!entries.find((e) => e.name === name)) {
-        entries.push({ name, kind: "file" });
-      }
-    }
-    await this.semanticPhase(newDirectories);
+    await this.semanticPhase();
   }
 
   private async visitFile(url: URL, opts?: { delete?: true }): Promise<void> {
+    if (this.isIgnored(url)) {
+      return;
+    }
+
     let localPath = this.realmPaths.local(url);
     let fileRef = await this.readFileAsText(localPath);
     if (!fileRef) {
@@ -302,9 +265,7 @@ export class SearchIndex {
     }
   }
 
-  private async semanticPhase(
-    directories?: URLMap<{ name: string; kind: Kind }[]>
-  ): Promise<void> {
+  private async semanticPhase(): Promise<void> {
     let newDefinitions: Map<string, CardDefinition> = new Map();
     for (let [url, mod] of this.modules) {
       for (let possibleCard of mod.possibleCards) {
@@ -343,9 +304,6 @@ export class SearchIndex {
     // atomically update the search index
     this.definitions = newDefinitions;
     this.exportedCardRefs = newExportedCardRefs;
-    if (directories) {
-      this.directories = directories;
-    }
   }
 
   private async buildDefinition(
@@ -496,12 +454,6 @@ export class SearchIndex {
   }
 
   // TODO merge this into the .search() API after we get the queries working
-  async directory(
-    url: URL
-  ): Promise<{ name: string; kind: Kind }[] | undefined> {
-    return this.directories.get(url);
-  }
-  // TODO merge this into the .search() API after we get the queries working
   async card(url: URL): Promise<CardResource | undefined> {
     return this.instances.get(url);
   }
@@ -517,7 +469,7 @@ export class SearchIndex {
     let ref = await this.readFileAsText(
       this.realmPaths.local(new URL(".monacoignore", url))
     );
-
+    // are these supposed to be mutually exclusive?
     if (!ref) {
       ref = await this.readFileAsText(
         this.realmPaths.local(new URL(".gitignore", url))
@@ -527,7 +479,10 @@ export class SearchIndex {
     return ref;
   }
 
-  private isIgnored(url: URL): boolean {
+  public isIgnored(url: URL): boolean {
+    if (url.href === this.realm.url) {
+      return false; // you can't ignore the entire realm
+    }
     if (this.ignoreMap.size === 0) {
       return false;
     }
