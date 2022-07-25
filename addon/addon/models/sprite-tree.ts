@@ -255,6 +255,9 @@ export class SpriteTreeNode {
 export default class SpriteTree {
   contextModel = undefined;
   spriteModel = undefined;
+  freshlyAdded: Set<ISpriteModifier> = new Set();
+  freshlyRemoved: Set<ISpriteModifier> = new Set();
+  interruptedRemoved: Set<ISpriteModifier> = new Set();
   isContext() {
     return false;
   }
@@ -390,18 +393,21 @@ export default class SpriteTree {
       );
     }
 
+    this.freshlyAdded.add(spriteModifier);
+
     return resultNode;
   }
-  removeSpriteModifier(spriteModifer: ISpriteModifier): void {
-    let node = this.lookupNodeByElement(spriteModifer.element);
+  removeSpriteModifier(spriteModifier: ISpriteModifier): void {
+    let node = this.lookupNodeByElement(spriteModifier.element);
     if (node) {
       node.parent?.removeChild(node);
       if (node.isSprite()) {
         // TODO: we might need to do some cleanup? This is currently a WeakMap but..
         // situation where this matters is SpriteModifier hanging around when it should be removed
         this.freshlyRemovedToNode.set(node.spriteModel, node);
+        this.freshlyRemoved.add(spriteModifier);
       }
-      this.nodesByElement.delete(spriteModifer.element);
+      this.nodesByElement.delete(spriteModifier.element);
     }
   }
   lookupNodeByElement(element: Element): SpriteTreeNode | undefined {

@@ -41,13 +41,22 @@ export interface IntermediateSprite {
 
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
-  freshlyAdded: Set<ISpriteModifier> = new Set();
-  freshlyRemoved: Set<ISpriteModifier> = new Set();
-  interruptedRemoved: Set<ISpriteModifier> = new Set();
   eligibleContexts: Set<IContext> = new Set();
   intent: string | undefined;
   intermediateSprites: Map<string, IntermediateSprite> = new Map();
   runningAnimations: Map<string, Set<Animation>> = new Map();
+
+  get freshlyAdded(): Set<ISpriteModifier> {
+    return this.spriteTree.freshlyAdded;
+  }
+
+  get freshlyRemoved(): Set<ISpriteModifier> {
+    return this.spriteTree.freshlyRemoved;
+  }
+
+  get interruptedRemoved(): Set<ISpriteModifier> {
+    return this.spriteTree.interruptedRemoved;
+  }
 
   registerContext(context: IContext): void {
     this.spriteTree.addPendingAnimationContext(context);
@@ -60,12 +69,10 @@ export default class AnimationsService extends Service {
 
   registerSpriteModifier(spriteModifier: ISpriteModifier): void {
     this.spriteTree.addPendingSpriteModifier(spriteModifier);
-    this.freshlyAdded.add(spriteModifier);
   }
 
   unregisterSpriteModifier(spriteModifier: ISpriteModifier): void {
     this.spriteTree.removeSpriteModifier(spriteModifier);
-    this.freshlyRemoved.add(spriteModifier);
   }
 
   didNotifyContextRendering = false;
@@ -215,7 +222,7 @@ export default class AnimationsService extends Service {
         ) {
           node.delete();
         } else {
-          this.interruptedRemoved.add(spriteModifier);
+          this.spriteTree.interruptedRemoved.add(spriteModifier);
         }
       }
     }
@@ -248,16 +255,19 @@ export default class AnimationsService extends Service {
     let changesetBuilder = new ChangesetBuilder(
       this.spriteTree,
       this.eligibleContexts,
-      this.freshlyAdded,
-      new Set([...this.freshlyRemoved, ...this.interruptedRemoved]),
+      this.spriteTree.freshlyAdded,
+      new Set([
+        ...this.spriteTree.freshlyRemoved,
+        ...this.spriteTree.interruptedRemoved,
+      ]),
       this.intermediateSprites
     );
 
     // We can already do cleanup here so that we're guaranteed to have the
     // correct starting point for the next run even if an interruption happens.
-    this.freshlyAdded.clear();
-    this.freshlyRemoved.clear();
-    this.interruptedRemoved.clear();
+    this.spriteTree.freshlyAdded.clear();
+    this.spriteTree.freshlyRemoved.clear();
+    this.spriteTree.interruptedRemoved.clear();
     this.intermediateSprites = new Map();
     this.runningAnimations = new Map();
     this.intent = undefined;
