@@ -6,7 +6,7 @@ import { assert } from '@ember/debug';
 import SpriteTree, {
   IContext,
   GetDescendantNodesOptions,
-  SpriteStateTracker,
+  ISpriteModifier,
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
@@ -40,8 +40,8 @@ function union<T>(...sets: Set<T>[]): Set<T> {
 export function filterToContext(
   spriteTree: SpriteTree,
   animationContext: IContext,
-  spriteModifiers: Set<SpriteStateTracker>
-): Set<SpriteStateTracker> {
+  spriteModifiers: Set<ISpriteModifier>
+): Set<ISpriteModifier> {
   let node = spriteTree.lookupNodeByElement(animationContext.element);
   let contextDescendants = node!
     .getSpriteDescendants({ deep: true })
@@ -133,18 +133,18 @@ export class ChangesetBuilder {
   constructor(
     spriteTree: SpriteTree,
     contexts: Set<IContext>,
-    freshlyAdded: Set<SpriteStateTracker>,
-    freshlyRemoved: Set<SpriteStateTracker>,
+    freshlyAdded: Set<ISpriteModifier>,
+    freshlyRemoved: Set<ISpriteModifier>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
     this.spriteTree = spriteTree;
 
     // Capture snapshots & lookup natural KeptSprites
-    let naturalKept: Set<SpriteStateTracker> = new Set();
+    let naturalKept: Set<ISpriteModifier> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
-      let contextChildren: SpriteStateTracker[] = contextNode!
+      let contextChildren: ISpriteModifier[] = contextNode!
         .getSpriteDescendants()
         .filter((v) => !v.isRemoved)
         .map((c) => c.spriteModifier);
@@ -219,25 +219,25 @@ export class ChangesetBuilder {
   }
 
   classifySprites(
-    freshlyAdded: Set<SpriteStateTracker>,
-    freshlyRemoved: Set<SpriteStateTracker>,
-    naturalKept: Set<SpriteStateTracker>,
+    freshlyAdded: Set<ISpriteModifier>,
+    freshlyRemoved: Set<ISpriteModifier>,
+    naturalKept: Set<ISpriteModifier>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
     let classifiedInsertedSpriteModifiers = new Set([...freshlyAdded]);
     let classifiedRemovedSpriteModifiers = new Set([...freshlyRemoved]);
     let classifiedKeptSpriteModifiers = new Set([...naturalKept]);
 
-    let spriteModifiers: Set<SpriteStateTracker> = new Set();
-    let spriteModifierToSpriteMap = new WeakMap<SpriteStateTracker, Sprite>();
+    let spriteModifiers: Set<ISpriteModifier> = new Set();
+    let spriteModifierToSpriteMap = new WeakMap<ISpriteModifier, Sprite>();
     let spriteModifierToCounterpartModifierMap = new Map<
-      SpriteStateTracker,
-      SpriteStateTracker
+      ISpriteModifier,
+      ISpriteModifier
     >();
     // non-natural kept sprites only
     let contextToKeptSpriteModifierMap = new WeakMap<
       IContext,
-      Set<SpriteStateTracker>
+      Set<ISpriteModifier>
     >();
 
     // Classify non-natural KeptSprites
@@ -379,9 +379,9 @@ export class ChangesetBuilder {
   addSpriteTo(
     node: Changeset,
     sprite: Sprite,
-    spriteModifier: SpriteStateTracker,
+    spriteModifier: ISpriteModifier,
     context: IContext,
-    counterpartModifier?: SpriteStateTracker,
+    counterpartModifier?: ISpriteModifier,
     intermediateSprite?: IntermediateSprite
   ) {
     if (sprite.type === SpriteType.Kept) {

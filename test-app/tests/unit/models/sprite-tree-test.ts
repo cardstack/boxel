@@ -3,7 +3,7 @@ import Sprite from 'animations-experiment/models/sprite';
 import { CopiedCSS } from 'animations-experiment/utils/measurement';
 import SpriteTree, {
   IContext,
-  SpriteStateTracker,
+  ISpriteModifier,
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';
 import { module, test } from 'qunit';
@@ -52,7 +52,7 @@ class MockAnimationContext implements IContext {
   }
 }
 
-class MockSpriteModifier implements SpriteStateTracker {
+class MockSpriteModifier implements ISpriteModifier {
   element: HTMLElement;
   id: string;
   constructor(
@@ -323,8 +323,8 @@ module('Unit | Models | SpriteTree', function (hooks) {
   module('with two context nodes, each with a sprite', function (hooks) {
     let context1: IContext,
       context2: IContext,
-      sprite1: SpriteStateTracker,
-      sprite2: SpriteStateTracker;
+      sprite1: ISpriteModifier,
+      sprite2: ISpriteModifier;
     hooks.beforeEach(function () {
       context1 = new MockAnimationContext();
       context2 = new MockAnimationContext();

@@ -2,7 +2,7 @@ import Service from '@ember/service';
 
 import SpriteTree, {
   IContext,
-  SpriteStateTracker,
+  ISpriteModifier,
   SpriteTreeNode,
 } from '../models/sprite-tree';
 import TransitionRunner from '../models/transition-runner';
@@ -34,15 +34,15 @@ export type AnimateFunction = (
 ) => SpriteAnimation;
 
 export interface IntermediateSprite {
-  modifier: SpriteStateTracker;
+  modifier: ISpriteModifier;
   intermediateBounds: DOMRect;
   intermediateStyles: CopiedCSS;
 }
 
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
-  freshlyAdded: Set<SpriteStateTracker> = new Set();
-  freshlyRemoved: Set<SpriteStateTracker> = new Set();
+  freshlyAdded: Set<ISpriteModifier> = new Set();
+  freshlyRemoved: Set<ISpriteModifier> = new Set();
   eligibleContexts: Set<IContext> = new Set();
   intent: string | undefined;
   intermediateSprites: Map<string, IntermediateSprite> = new Map();
@@ -57,12 +57,12 @@ export default class AnimationsService extends Service {
     this.spriteTree.removeAnimationContext(context);
   }
 
-  registerSpriteModifier(spriteModifier: SpriteStateTracker): void {
+  registerSpriteModifier(spriteModifier: ISpriteModifier): void {
     this.spriteTree.addPendingSpriteModifier(spriteModifier);
     this.freshlyAdded.add(spriteModifier);
   }
 
-  unregisterSpriteModifier(spriteModifier: SpriteStateTracker): void {
+  unregisterSpriteModifier(spriteModifier: ISpriteModifier): void {
     this.spriteTree.removeSpriteModifier(spriteModifier);
     this.freshlyRemoved.add(spriteModifier);
   }

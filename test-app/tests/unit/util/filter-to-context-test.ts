@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import SpriteTree, {
   IContext,
-  SpriteStateTracker,
+  ISpriteModifier,
 } from 'animations-experiment/models/sprite-tree';
 import { filterToContext } from 'animations-experiment/models/changeset';
 import { CopiedCSS } from 'animations-experiment/utils/measurement';
@@ -61,7 +61,7 @@ class MockAnimationContext implements IContext {
   }
 }
 
-class MockSpriteModifier implements SpriteStateTracker {
+class MockSpriteModifier implements ISpriteModifier {
   element: HTMLElement;
   id: string;
   constructor(
