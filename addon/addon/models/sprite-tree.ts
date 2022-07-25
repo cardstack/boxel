@@ -207,9 +207,21 @@ export class SpriteTreeNode {
     return result;
   }
 
+  /**
+   * Deletes the node from its parent's freshlyRemovedChildren set
+   */
+  delete() {
+    assert(
+      'May have called delete on a root node of the sprite tree',
+      this.parent instanceof SpriteTreeNode
+    );
+    this.parent.freshlyRemovedChildren.delete(this);
+  }
+
   addChild(childNode: SpriteTreeNode): void {
     this.children.add(childNode);
   }
+
   removeChild(childNode: SpriteTreeNode): void {
     this.children.delete(childNode);
     this.freshlyRemovedChildren.add(childNode);

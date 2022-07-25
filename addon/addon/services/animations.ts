@@ -208,12 +208,12 @@ export default class AnimationsService extends Service {
               this.intermediateSprites.get(identifier)
             )
           ) {
-            (item.parent as SpriteTreeNode).freshlyRemovedChildren.delete(item);
+            item.delete();
           } else {
             this.interruptedRemoved.add(item.spriteModel);
           }
         } else {
-          (item.parent as SpriteTreeNode).freshlyRemovedChildren.delete(item);
+          item.delete();
         }
       }
     }
