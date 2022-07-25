@@ -42,6 +42,11 @@ export class NodeRealm implements RealmAdapter {
     }
   }
 
+  async exists(path: string): Promise<boolean> {
+    let absolutePath = join(this.realmDir, path);
+    return existsSync(absolutePath);
+  }
+
   async openFile(path: string): Promise<FileRef | undefined> {
     let absolutePath = join(this.realmDir, path);
     if (!existsSync(absolutePath)) {

@@ -36,6 +36,10 @@ export class RealmPaths {
   }
 }
 
+export function join(...pathParts: string[]): LocalPath {
+  return pathParts.join("/").replace(/^\//, "").replace(/\/$/, "");
+}
+
 // Documenting that this represents a local path within realm, with no leading
 // slashes or dots and no trailing slash. Example:
 //

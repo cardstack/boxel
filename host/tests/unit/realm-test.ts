@@ -190,14 +190,6 @@ module('Unit | realm', function () {
         'http://test-realm/Card/1',
         'found card in index'
       );
-      let dirEntries = await searchIndex.directory(
-        new URL('http://test-realm/Card/')
-      );
-      assert.deepEqual(
-        dirEntries,
-        [{ name: '1.json', kind: 'file' }],
-        'found new file in directory entries'
-      );
     }
 
     // create second file
@@ -248,17 +240,6 @@ module('Unit | realm', function () {
         card?.id,
         'http://test-realm/Card/2',
         'found card in index'
-      );
-      let dirEntries = await searchIndex.directory(
-        new URL('http://test-realm/Card/')
-      );
-      assert.deepEqual(
-        dirEntries,
-        [
-          { name: '1.json', kind: 'file' },
-          { name: '2.json', kind: 'file' },
-        ],
-        'found new file in directory entries'
       );
     }
   });
@@ -376,14 +357,6 @@ module('Unit | realm', function () {
       'Abdel-Rahman',
       'field value is correct'
     );
-    let dirEntries = await searchIndex.directory(
-      new URL('http://test-realm/dir/')
-    );
-    assert.deepEqual(
-      dirEntries,
-      [{ name: 'card.json', kind: 'file' }],
-      'directory entries is correct'
-    );
   });
 
   test('realm can serve delete card requests', async function (assert) {
@@ -429,17 +402,6 @@ module('Unit | realm', function () {
       'http://test-realm/cards/2',
       'found card in index'
     );
-    let dirEntries = await searchIndex.directory(
-      new URL('http://test-realm/cards/')
-    );
-    assert.deepEqual(
-      dirEntries,
-      [
-        { name: '1.json', kind: 'file' },
-        { name: '2.json', kind: 'file' },
-      ],
-      'directory entries are correct'
-    );
 
     let response = await realm.handle(
       new Request('http://test-realm/cards/2', {
@@ -459,15 +421,6 @@ module('Unit | realm', function () {
       card?.id,
       'http://test-realm/cards/1',
       'card 1 is still there'
-    );
-
-    dirEntries = await searchIndex.directory(
-      new URL('http://test-realm/cards/')
-    );
-    assert.deepEqual(
-      dirEntries,
-      [{ name: '1.json', kind: 'file' }],
-      'directory entries are updated'
     );
 
     cards = await searchIndex.search({});
@@ -849,5 +802,89 @@ module('Unit | realm', function () {
       },
       'the directory response is correct'
     );
+  });
+
+  test('requests do not contain entries that match patterns in ignore files', async function (assert) {
+    const cardSource = `
+      import { Card } from 'https://cardstack.com/base/card-api';
+      export class Post extends Card {}
+    `;
+
+    let realm = TestRealm.create({
+      'sample-post.json': '',
+      'posts/1.json': '',
+      'posts/nested.gts': cardSource,
+      'posts/ignore-me.gts': cardSource,
+      'posts/2.json': '',
+      'post.gts': cardSource,
+      'dir/card.gts': cardSource,
+      '.gitignore': `
+*.json
+/dir
+posts/ignore-me.gts
+`,
+    });
+    await realm.ready;
+
+    {
+      let response = await realm.handle(
+        new Request(
+          `http://test-realm/_typeOf?${stringify({
+            type: 'exportedCard',
+            module: 'posts/ignore-me.gts',
+            name: 'Post',
+          } as CardRef)}`,
+          {
+            headers: {
+              Accept: 'application/vnd.api+json',
+            },
+          }
+        )
+      );
+
+      assert.strictEqual(response.status, 404, 'HTTP 404 response');
+    }
+    {
+      let response = await realm.handle(
+        new Request(`http://test-realm/dir/`, {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        })
+      );
+      assert.strictEqual(response.status, 404, 'HTTP 404 response');
+    }
+    {
+      let response = await realm.handle(
+        new Request(`http://test-realm/`, {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        })
+      );
+
+      let json = await response.json();
+      assert.deepEqual(
+        Object.keys(json.data.relationships).sort(),
+        ['.gitignore', 'post.gts', 'posts/'],
+        'top level entries are correct'
+      );
+    }
+    {
+      let response = await realm.handle(
+        new Request(`http://test-realm/posts/`, {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        })
+      );
+
+      let json = await response.json();
+      assert.deepEqual(
+        Object.keys(json.data.relationships).sort(),
+        ['nested.gts'],
+        'nested entries are correct'
+      );
+    }
   });
 });
