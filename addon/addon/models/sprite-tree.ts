@@ -439,10 +439,7 @@ export default class SpriteTree {
     return null;
   }
 
-  findStableSharedAncestor(
-    spriteA: ISpriteModifier,
-    spriteB: ISpriteModifier
-  ) {
+  findStableSharedAncestor(spriteA: ISpriteModifier, spriteB: ISpriteModifier) {
     let ancestorsOfKeptSprite = this.nodesByElement
       .get(spriteA.element)
       ?.ancestors.filter((v) => v.contextModel?.isStable);
