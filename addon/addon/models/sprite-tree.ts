@@ -362,21 +362,23 @@ export default class SpriteTree {
         spriteModifier.id,
         spriteModifier.role
       );
-      let matchingRemovedItem = (
-        parentNode?.freshlyRemovedChildren
-          ? [...parentNode.freshlyRemovedChildren]
-          : []
-      ).find((v) => {
-        return (
-          v.isSprite() &&
-          new SpriteIdentifier(v.spriteModel.id, v.spriteModel.role).equals(
-            identifier
-          )
-        );
-      });
+      let matchingRemovedItems: SpriteTreeNode[] = [];
 
-      if (matchingRemovedItem) {
-        parentNode?.freshlyRemovedChildren.delete(matchingRemovedItem);
+      for (let item of this.interruptedRemoved) {
+        if (new SpriteIdentifier(item.id, item.role).equals(identifier)) {
+          matchingRemovedItems.push(this.freshlyRemovedToNode.get(item)!);
+        }
+      }
+
+      assert(
+        'Multiple matching interrupted removed items found while adding a new sprite',
+        matchingRemovedItems.length <= 1
+      );
+
+      if (matchingRemovedItems.length === 1) {
+        let removedNode = matchingRemovedItems[0]!;
+        removedNode.delete();
+        this.interruptedRemoved.delete(removedNode.spriteModel!);
       }
       let node = new SpriteTreeNode(
         spriteModifier,
