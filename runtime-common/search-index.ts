@@ -208,7 +208,9 @@ export class SearchIndex {
   }
 
   private async visitDirectory(url: URL): Promise<void> {
-    let ignorePatterns = await this.getIgnorePatterns(url);
+    let ignorePatterns = await this.readFileAsText(
+      this.realmPaths.local(new URL(".gitignore", url))
+    );
     if (ignorePatterns && ignorePatterns.content) {
       this.ignoreMap.set(url, ignore().add(ignorePatterns.content));
     }
@@ -465,22 +467,6 @@ export class SearchIndex {
   async exportedCardsOf(module: string): Promise<CardRef[]> {
     module = new URL(module, this.realm.url).href;
     return this.exportedCardRefs.get(module) ?? [];
-  }
-
-  private async getIgnorePatterns(
-    url: URL
-  ): Promise<{ content: string; lastModified: number } | undefined> {
-    let ref = await this.readFileAsText(
-      this.realmPaths.local(new URL(".monacoignore", url))
-    );
-    // are these supposed to be mutually exclusive?
-    if (!ref) {
-      ref = await this.readFileAsText(
-        this.realmPaths.local(new URL(".gitignore", url))
-      );
-    }
-
-    return ref;
   }
 
   public isIgnored(url: URL): boolean {
