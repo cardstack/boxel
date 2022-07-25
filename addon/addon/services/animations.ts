@@ -196,24 +196,26 @@ export default class AnimationsService extends Service {
       let contextNode = this.spriteTree.lookupNodeByElement(
         context.element
       ) as SpriteTreeNode;
-      for (let item of contextNode.freshlyRemovedChildren) {
-        if (item.isSprite()) {
-          let identifier = new SpriteIdentifier(
-            item.spriteModel.id,
-            item.spriteModel.role
-          ).toString();
-          if (
-            !(
-              context.orphans.has(identifier) &&
-              this.intermediateSprites.get(identifier)
-            )
-          ) {
-            item.delete();
-          } else {
-            this.interruptedRemoved.add(item.spriteModel);
-          }
+      for (let {
+        isRemoved,
+        node,
+        spriteModifier,
+      } of contextNode.getSpriteDescendants()) {
+        if (!isRemoved) continue;
+
+        let identifier = new SpriteIdentifier(
+          spriteModifier.id,
+          spriteModifier.role
+        ).toString();
+        if (
+          !(
+            context.orphans.has(identifier) &&
+            this.intermediateSprites.get(identifier)
+          )
+        ) {
+          node.delete();
         } else {
-          item.delete();
+          this.interruptedRemoved.add(spriteModifier);
         }
       }
     }
