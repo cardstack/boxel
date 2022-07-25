@@ -184,7 +184,7 @@ module('Unit | realm', function () {
       }
 
       let searchIndex = realm.searchIndex;
-      let card = await searchIndex.card(new URL(json.data.links.self));
+      let card = (await searchIndex.search({ id: json.data.links.self }))[0];
       assert.strictEqual(
         card?.id,
         'http://test-realm/Card/1',
@@ -243,7 +243,7 @@ module('Unit | realm', function () {
       }
 
       let searchIndex = realm.searchIndex;
-      let card = await searchIndex.card(new URL(json.data.links.self));
+      let card = (await searchIndex.search({ id: json.data.links.self }))[0];
       assert.strictEqual(
         card?.id,
         'http://test-realm/Card/2',
@@ -360,7 +360,7 @@ module('Unit | realm', function () {
     }
 
     let searchIndex = realm.searchIndex;
-    let card = await searchIndex.card(new URL(json.data.links.self));
+    let card = (await searchIndex.search({ id: json.data.links.self }))[0];
     assert.strictEqual(
       card?.id,
       'http://test-realm/dir/card',
@@ -421,7 +421,9 @@ module('Unit | realm', function () {
     let cards = await searchIndex.search({});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
-    let card = await searchIndex.card(new URL('http://test-realm/cards/2'));
+    let card = (
+      await searchIndex.search({ id: 'http://test-realm/cards/2' })
+    )[0];
     assert.strictEqual(
       card?.id,
       'http://test-realm/cards/2',
@@ -449,10 +451,10 @@ module('Unit | realm', function () {
     );
     assert.strictEqual(response.status, 204, 'status was 204');
 
-    card = await searchIndex.card(new URL('http://test-realm/cards/2'));
+    card = (await searchIndex.search({ id: 'http://test-realm/cards/2' }))[0];
     assert.strictEqual(card, undefined, 'card was deleted');
 
-    card = await searchIndex.card(new URL('http://test-realm/cards/1'));
+    card = (await searchIndex.search({ id: 'http://test-realm/cards/1' }))[0];
     assert.strictEqual(
       card?.id,
       'http://test-realm/cards/1',
