@@ -36,7 +36,10 @@ export type Sort = SortExpression[];
 // adopt from some particular card type--no other predicates are included in
 // this filter.
 export interface CardTypeFilter {
-  type: CardURL;
+  type: {
+    module: string;
+    name: string;
+  };
 }
 
 export interface AnyFilter extends TypedFilter {
@@ -153,7 +156,7 @@ function assertFilter(
   }
 
   if ("type" in filter) {
-    assertCardId(filter.type, pointer.concat("type"));
+    assertCardType(filter.type, pointer.concat("type"));
     if (isEqual(Object.keys(filter), ["type"])) {
       return; // This is a pure card type filter
     }
@@ -177,6 +180,16 @@ function assertFilter(
     throw new Error(
       `${pointer.join("/") || "/"}: cannot determine the type of filter`
     );
+  }
+}
+
+function assertCardType(type: any, pointer: string[]) {
+  if (
+    Object.keys(type).length > 2 ||
+    !("module" in type) ||
+    !("name" in type)
+  ) {
+    throw new Error(`${pointer.join("/") || "/"}: type is not valid`);
   }
 }
 

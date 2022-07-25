@@ -494,7 +494,9 @@ export class SearchIndex {
     }
 
     if (query.filter) {
-      return filterCardData(query.filter, [...this.instances.values()]);
+      return await this.filterCardData(query.filter, [
+        ...this.instances.values(),
+      ]);
     }
 
     throw new Error("Not implemented");
@@ -554,6 +556,71 @@ export class SearchIndex {
     let ignore = this.ignoreMap.get(new URL(ignoreURL))!;
     let pathname = this.realmPaths.local(url);
     return ignore.test(pathname).ignored;
+  }
+
+  async filterCardData(
+    filter: Filter,
+    results: CardResource[],
+    opts?: { negate?: true }
+  ): Promise<CardResource[]> {
+    if (!("type" in filter) && !("not" in filter) && !("eq" in filter)) {
+      throw new Error("Not implemented");
+    }
+
+    if ("type" in filter) {
+      let cards = [];
+      for (let card of results) {
+        if (
+          // assumption: only exported cards have instances
+          await this.instanceHasType(
+            { type: "exportedCard", ...card.meta.adoptsFrom },
+            filter.type
+          )
+        ) {
+          if (!opts) {
+            cards.push(card);
+          }
+        } else {
+          if (opts?.negate) {
+            cards.push(card);
+          }
+        }
+      }
+      results = cards;
+    }
+
+    if ("not" in filter) {
+      results = await this.filterCardData(filter.not, results, {
+        negate: true,
+      });
+    }
+
+    if ("eq" in filter) {
+      results = filterByFieldData(filter.eq, results, opts);
+    }
+
+    return results;
+  }
+
+  async instanceHasType(
+    ref: CardRef,
+    type: { name: string; module: string }
+  ): Promise<Boolean> {
+    // only checks for exported cards
+    if (ref.type !== "exportedCard") {
+      return false;
+    }
+
+    if (ref.name === type.name && ref.module === type.module) {
+      return true;
+    }
+
+    let def = await this.typeOf(ref);
+    if (def?.super) {
+      return await this.instanceHasType(def.super, type);
+    }
+
+    return false;
   }
 }
 
@@ -644,26 +711,6 @@ export async function getExternalCardDefinition(
   throw new Error(
     `unimplemented: don't know how to look up card types for ${moduleURL.href}`
   );
-}
-
-function filterCardData(
-  filter: Filter,
-  results: CardResource[],
-  opts?: { negate?: true }
-): CardResource[] {
-  if (!("not" in filter) && !("eq" in filter)) {
-    throw new Error("Not implemented");
-  }
-
-  if ("not" in filter) {
-    results = filterCardData(filter.not, results, { negate: true });
-  }
-
-  if ("eq" in filter) {
-    results = filterByFieldData(filter.eq, results, opts);
-  }
-
-  return results;
 }
 
 function filterByFieldData(

@@ -651,6 +651,7 @@ module('Unit | search-index', function () {
         import { contains, field, Card } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
         import IntegerCard from 'https://cardstack.com/base/integer';
+        import DatetimeCard from 'https://cardstack.com/base/datetime';
 
         export class Person extends Card {
           @field name = contains(StringCard);
@@ -662,6 +663,11 @@ module('Unit | search-index', function () {
           @field description = contains(StringCard);
           @field author = contains(Person);
           @fields views = contains(IntegerCard);
+          @fields createdAt = contains(DatetimeCard);
+        }
+
+        export class Article extends Post {
+          @fields publishedDate = contains(DatetimeCard);
         }
       `,
       'card-1.json': {
@@ -676,8 +682,8 @@ module('Unit | search-index', function () {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
-              name: 'Card',
+              module: 'http://test-realm/cards',
+              name: 'Article',
             },
           },
         },
@@ -696,8 +702,8 @@ module('Unit | search-index', function () {
           },
           meta: {
             adoptsFrom: {
-              module: `${paths.url}/Post`,
-              name: 'Card',
+              module: 'http://test-realm/cards',
+              name: 'Post',
             },
           },
         },
@@ -717,8 +723,8 @@ module('Unit | search-index', function () {
           },
           meta: {
             adoptsFrom: {
-              module: `${paths.url}/Post`,
-              name: 'Card',
+              module: 'http://test-realm/cards',
+              name: 'Article',
             },
           },
         },
@@ -768,12 +774,54 @@ module('Unit | search-index', function () {
           },
         },
       });
-      assert.strictEqual(matching.length, 1);
+      assert.strictEqual(matching.length, 1, 'combining eq and not filters');
       assert.strictEqual(matching[0]?.id, 'http://test-realm/cards/1');
+
+      matching = await indexer.search({
+        filter: {
+          type: {
+            module: `http://test-realm/cards`,
+            name: 'Article',
+          },
+          eq: {
+            'attributes.title': 'Card 1',
+          },
+        },
+      });
+      assert.strictEqual(matching.length, 1, 'combining type and eq filters');
+      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
     });
 
     // Tests from hub/**/**/card-service-test.ts
-    skip('can filter by card type');
+    test('can filter by card type', async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          type: {
+            module: `http://test-realm/cards`,
+            name: 'Article',
+          },
+        },
+      });
+
+      assert.strictEqual(matching.length, 2, 'Two cards have Article type');
+      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
+      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/2');
+
+      matching = await indexer.search({
+        filter: {
+          type: {
+            module: 'http://test-realm/cards',
+            name: 'Post',
+          },
+        },
+      });
+
+      assert.strictEqual(matching.length, 3, 'Three cards have Post type');
+      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
+      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/1');
+      assert.strictEqual(matching[2]?.id, 'http://test-realm/cards/2');
+    });
+
     skip(`can filter on a card's own fields using gt`);
     skip(`gives a good error when query refers to missing card`);
     skip(`gives a good error when query refers to missing field`);
@@ -804,6 +852,27 @@ module('Unit | search-index', function () {
       assert.strictEqual(matching.length, 2);
       assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
       assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/1');
+
+      matching = await indexer.search({
+        filter: {
+          type: {
+            module: `http://test-realm/cards`,
+            name: 'Post',
+          },
+          not: {
+            type: {
+              module: `http://test-realm/cards`,
+              name: 'Article',
+            },
+          },
+        },
+      });
+      assert.strictEqual(
+        matching.length,
+        1,
+        'combining type and not type filters'
+      );
+      assert.strictEqual(matching[0]?.id, 'http://test-realm/cards/1');
     });
 
     skip('can combine multiple types');
