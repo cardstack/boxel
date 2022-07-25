@@ -4,7 +4,7 @@ import { formatTreeString, TreeNode } from '../utils/format-tree';
 import Sprite from './sprite';
 import { Changeset } from './changeset';
 
-export interface Context {
+export interface IContext {
   id: string | undefined;
   element: Element;
   currentBounds?: DOMRect;
@@ -27,7 +27,7 @@ export interface Context {
   };
 }
 
-export interface SpriteStateTracker {
+export interface ISpriteModifier {
   id: string | null;
   role: string | null;
   element: Element;
@@ -46,7 +46,7 @@ export interface GetDescendantNodesOptions {
   filter?(childNode: SpriteTreeNode): boolean;
 }
 
-type SpriteTreeModel = Context | SpriteStateTracker;
+type SpriteTreeModel = IContext | ISpriteModifier;
 
 export enum SpriteTreeNodeType {
   Root,
@@ -55,28 +55,28 @@ export enum SpriteTreeNodeType {
 }
 
 export class SpriteTreeNode {
-  contextModel: Context | undefined;
-  spriteModel: SpriteStateTracker | undefined;
+  contextModel: IContext | undefined;
+  spriteModel: ISpriteModifier | undefined;
 
   parent: SpriteTreeNode | SpriteTree;
   children: Set<SpriteTreeNode> = new Set();
   freshlyRemovedChildren: Set<SpriteTreeNode> = new Set();
 
-  isContext(): this is { contextModel: Context } {
+  isContext(): this is { contextModel: IContext } {
     return Boolean(this.contextModel);
   }
 
-  isSprite(): this is { spriteModel: SpriteStateTracker } {
+  isSprite(): this is { spriteModel: ISpriteModifier } {
     return Boolean(this.spriteModel);
   }
 
   constructor(
-    model: Context,
+    model: IContext,
     nodeType: SpriteTreeNodeType.Context,
     parentNode: SpriteTreeNode | SpriteTree
   );
   constructor(
-    model: SpriteStateTracker,
+    model: ISpriteModifier,
     nodeType: SpriteTreeNodeType.Sprite,
     parentNode: SpriteTreeNode | SpriteTree
   );
@@ -123,12 +123,12 @@ export class SpriteTreeNode {
     } = { deep: false }
   ): {
     isRemoved: boolean;
-    spriteModifier: SpriteStateTracker;
+    spriteModifier: ISpriteModifier;
     node: SpriteTreeNode;
   }[] {
     let result: {
       isRemoved: boolean;
-      spriteModifier: SpriteStateTracker;
+      spriteModifier: ISpriteModifier;
       node: SpriteTreeNode;
     }[] = [];
 
@@ -253,17 +253,17 @@ export default class SpriteTree {
   nodesByElement = new WeakMap<Element, SpriteTreeNode>();
   rootNodes: Set<SpriteTreeNode> = new Set();
   _pendingAdditions: (
-    | { item: Context; type: 'CONTEXT' }
-    | { item: SpriteStateTracker; type: 'SPRITE' }
+    | { item: IContext; type: 'CONTEXT' }
+    | { item: ISpriteModifier; type: 'SPRITE' }
   )[] = [];
-  freshlyRemovedToNode: WeakMap<SpriteStateTracker, SpriteTreeNode> =
+  freshlyRemovedToNode: WeakMap<ISpriteModifier, SpriteTreeNode> =
     new WeakMap();
 
-  addPendingAnimationContext(item: Context) {
+  addPendingAnimationContext(item: IContext) {
     this._pendingAdditions.push({ item, type: 'CONTEXT' });
   }
 
-  addPendingSpriteModifier(item: SpriteStateTracker) {
+  addPendingSpriteModifier(item: ISpriteModifier) {
     this._pendingAdditions.push({ item, type: 'SPRITE' });
   }
 
@@ -296,7 +296,7 @@ export default class SpriteTree {
     this._pendingAdditions = [];
   }
 
-  addAnimationContext(context: Context): SpriteTreeNode {
+  addAnimationContext(context: IContext): SpriteTreeNode {
     let existingNode = this.lookupNodeByElement(context.element);
 
     if (existingNode) {
@@ -318,7 +318,7 @@ export default class SpriteTree {
       return node;
     }
   }
-  removeAnimationContext(context: Context): void {
+  removeAnimationContext(context: IContext): void {
     let node = this.lookupNodeByElement(context.element);
     if (node) {
       node.parent?.removeChild(node);
@@ -330,7 +330,7 @@ export default class SpriteTree {
       this.nodesByElement.delete(context.element);
     }
   }
-  addSpriteModifier(spriteModifier: SpriteStateTracker): SpriteTreeNode {
+  addSpriteModifier(spriteModifier: ISpriteModifier): SpriteTreeNode {
     let resultNode: SpriteTreeNode;
     let existingNode = this.lookupNodeByElement(spriteModifier.element);
     if (existingNode) {
@@ -360,7 +360,7 @@ export default class SpriteTree {
 
     return resultNode;
   }
-  removeSpriteModifier(spriteModifer: SpriteStateTracker): void {
+  removeSpriteModifier(spriteModifer: ISpriteModifier): void {
     let node = this.lookupNodeByElement(spriteModifer.element);
     if (node) {
       node.parent?.removeChild(node);
@@ -395,8 +395,8 @@ export default class SpriteTree {
     }
   }
 
-  getContextRunList(requestedContexts: Set<Context>): Context[] {
-    let result: Context[] = [];
+  getContextRunList(requestedContexts: Set<IContext>): IContext[] {
+    let result: IContext[] = [];
     for (let context of requestedContexts) {
       if (result.indexOf(context) !== -1) continue;
       result.unshift(context);
@@ -439,10 +439,7 @@ export default class SpriteTree {
     return null;
   }
 
-  findStableSharedAncestor(
-    spriteA: SpriteStateTracker,
-    spriteB: SpriteStateTracker
-  ) {
+  findStableSharedAncestor(spriteA: ISpriteModifier, spriteB: ISpriteModifier) {
     let ancestorsOfKeptSprite = this.nodesByElement
       .get(spriteA.element)
       ?.ancestors.filter((v) => v.contextModel?.isStable);

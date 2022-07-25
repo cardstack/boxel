@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import SpriteTree, {
-  Context,
-  SpriteStateTracker,
+  IContext,
+  ISpriteModifier,
 } from 'animations-experiment/models/sprite-tree';
 import {
   Changeset,
@@ -12,7 +12,7 @@ import { IntermediateSprite } from 'animations-experiment/services/animations';
 import { CopiedCSS } from 'animations-experiment/utils/measurement';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
 
-class MockAnimationContext implements Context {
+class MockAnimationContext implements IContext {
   id: string | undefined;
   element: HTMLElement;
   isAnimationContext = true;
@@ -82,7 +82,7 @@ class MockAnimationContext implements Context {
   }
 }
 
-class MockSpriteModifier implements SpriteStateTracker {
+class MockSpriteModifier implements ISpriteModifier {
   element: HTMLElement;
   id: string;
   lastBounds: DOMRect | undefined = undefined;

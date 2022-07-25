@@ -4,9 +4,9 @@ import Sprite, {
 } from 'animations-experiment/models/sprite';
 import { assert } from '@ember/debug';
 import SpriteTree, {
-  Context,
+  IContext,
   GetDescendantNodesOptions,
-  SpriteStateTracker,
+  ISpriteModifier,
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
@@ -39,9 +39,9 @@ function union<T>(...sets: Set<T>[]): Set<T> {
 // DESCENDANT ACCESS: exclusively used to get descendants to filter for descendants that should be included in a changeset
 export function filterToContext(
   spriteTree: SpriteTree,
-  animationContext: Context,
-  spriteModifiers: Set<SpriteStateTracker>
-): Set<SpriteStateTracker> {
+  animationContext: IContext,
+  spriteModifiers: Set<ISpriteModifier>
+): Set<ISpriteModifier> {
   let node = spriteTree.lookupNodeByElement(animationContext.element);
   let contextDescendants = node!
     .getSpriteDescendants({ deep: true })
@@ -53,13 +53,13 @@ export function filterToContext(
 }
 
 export class Changeset {
-  context: Context;
+  context: IContext;
   intent: string | undefined;
   insertedSprites: Set<Sprite> = new Set();
   removedSprites: Set<Sprite> = new Set();
   keptSprites: Set<Sprite> = new Set();
 
-  constructor(context: Context) {
+  constructor(context: IContext) {
     this.context = context;
   }
 
@@ -127,24 +127,24 @@ export class Changeset {
 }
 
 export class ChangesetBuilder {
-  contextToChangeset: WeakMap<Context, Changeset> = new WeakMap();
+  contextToChangeset: WeakMap<IContext, Changeset> = new WeakMap();
   spriteTree: SpriteTree;
 
   constructor(
     spriteTree: SpriteTree,
-    contexts: Set<Context>,
-    freshlyAdded: Set<SpriteStateTracker>,
-    freshlyRemoved: Set<SpriteStateTracker>,
+    contexts: Set<IContext>,
+    freshlyAdded: Set<ISpriteModifier>,
+    freshlyRemoved: Set<ISpriteModifier>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
     this.spriteTree = spriteTree;
 
     // Capture snapshots & lookup natural KeptSprites
-    let naturalKept: Set<SpriteStateTracker> = new Set();
+    let naturalKept: Set<ISpriteModifier> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
-      let contextChildren: SpriteStateTracker[] = contextNode!
+      let contextChildren: ISpriteModifier[] = contextNode!
         .getSpriteDescendants()
         .filter((v) => !v.isRemoved)
         .map((c) => c.spriteModifier);
@@ -219,25 +219,25 @@ export class ChangesetBuilder {
   }
 
   classifySprites(
-    freshlyAdded: Set<SpriteStateTracker>,
-    freshlyRemoved: Set<SpriteStateTracker>,
-    naturalKept: Set<SpriteStateTracker>,
+    freshlyAdded: Set<ISpriteModifier>,
+    freshlyRemoved: Set<ISpriteModifier>,
+    naturalKept: Set<ISpriteModifier>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
     let classifiedInsertedSpriteModifiers = new Set([...freshlyAdded]);
     let classifiedRemovedSpriteModifiers = new Set([...freshlyRemoved]);
     let classifiedKeptSpriteModifiers = new Set([...naturalKept]);
 
-    let spriteModifiers: Set<SpriteStateTracker> = new Set();
-    let spriteModifierToSpriteMap = new WeakMap<SpriteStateTracker, Sprite>();
+    let spriteModifiers: Set<ISpriteModifier> = new Set();
+    let spriteModifierToSpriteMap = new WeakMap<ISpriteModifier, Sprite>();
     let spriteModifierToCounterpartModifierMap = new Map<
-      SpriteStateTracker,
-      SpriteStateTracker
+      ISpriteModifier,
+      ISpriteModifier
     >();
     // non-natural kept sprites only
     let contextToKeptSpriteModifierMap = new WeakMap<
-      Context,
-      Set<SpriteStateTracker>
+      IContext,
+      Set<ISpriteModifier>
     >();
 
     // Classify non-natural KeptSprites
@@ -379,9 +379,9 @@ export class ChangesetBuilder {
   addSpriteTo(
     node: Changeset,
     sprite: Sprite,
-    spriteModifier: SpriteStateTracker,
-    context: Context,
-    counterpartModifier?: SpriteStateTracker,
+    spriteModifier: ISpriteModifier,
+    context: IContext,
+    counterpartModifier?: ISpriteModifier,
     intermediateSprite?: IntermediateSprite
   ) {
     if (sprite.type === SpriteType.Kept) {
