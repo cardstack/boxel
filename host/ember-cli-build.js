@@ -24,9 +24,11 @@ module.exports = function (defaults) {
           }),
           function (content) {
             // This is a simple workaround to replace the absolute module
-            // imports with relative imports that doesn't take into account the
-            // path of the consumer--assumes the consumer and dep are in same
-            // dir.
+            // imports with relative imports since webpack doesn't know how to
+            // deal with the absolute imports (we use the webpack build of the
+            // base card for the tests specifically). this doesn't take into
+            // account the path of the consumer--assumes the consumer and dep
+            // are in same dir.
             return content.replace(
               /from 'https:\/\/cardstack.com\/base\//g,
               "from './"
