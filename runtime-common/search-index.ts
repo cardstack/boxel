@@ -4,6 +4,7 @@ import { RealmPaths, LocalPath } from "./paths";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
+import { Query, Filter, assertQuery } from "./query";
 
 export type CardRef =
   | {
@@ -107,8 +108,6 @@ export function isCardDocument(doc: any): doc is CardDocument {
   }
   return "data" in doc && isCardResource(doc.data);
 }
-
-type Query = unknown;
 
 export interface CardDefinition {
   id: CardRef;
@@ -440,8 +439,23 @@ export class SearchIndex {
   }
 
   // TODO: complete these types
-  async search(_query: Query): Promise<CardResource[]> {
-    return [...this.instances.values()];
+  async search(query: Query): Promise<CardResource[]> {
+    assertQuery(query);
+
+    if (!query || Object.keys(query).length === 0) {
+      return [...this.instances.values()];
+    }
+
+    if (query.id) {
+      let card = this.instances.get(new URL(query.id));
+      return card ? [card] : [];
+    }
+
+    if (query.filter) {
+      return filterCardData(query.filter, [...this.instances.values()]);
+    }
+
+    throw new Error("Not implemented");
   }
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
@@ -451,16 +465,6 @@ export class SearchIndex {
   async exportedCardsOf(module: string): Promise<CardRef[]> {
     module = new URL(module, this.realm.url).href;
     return this.exportedCardRefs.get(module) ?? [];
-  }
-
-  // TODO merge this into the .search() API after we get the queries working
-  async card(url: URL): Promise<CardResource | undefined> {
-    return this.instances.get(url);
-  }
-
-  // TODO merge this into the .search() API after we get the queries working
-  async module(url: URL): Promise<string | undefined> {
-    return this.modules.get(url)?.src;
   }
 
   private async getIgnorePatterns(
@@ -589,4 +593,56 @@ export async function getExternalCardDefinition(
   throw new Error(
     `unimplemented: don't know how to look up card types for ${moduleURL.href}`
   );
+}
+
+function filterCardData(
+  filter: Filter,
+  results: CardResource[],
+  opts?: { negate?: true }
+): CardResource[] {
+  if (!("not" in filter) && !("eq" in filter)) {
+    throw new Error("Not implemented");
+  }
+
+  if ("not" in filter) {
+    results = filterCardData(filter.not, results, { negate: true });
+  }
+
+  if ("eq" in filter) {
+    results = filterByFieldData(filter.eq, results, opts);
+  }
+
+  return results;
+}
+
+function filterByFieldData(
+  query: Record<string, any>,
+  instances: CardResource[],
+  opts?: { negate?: true }
+): CardResource[] {
+  let results = instances as Record<string, any>[];
+
+  for (let [key, value] of Object.entries(query)) {
+    results = results.filter((c) => {
+      let fields = key.split(".");
+      if (fields.length > 1) {
+        let compValue = c;
+        while (fields.length > 0 && compValue) {
+          let field = fields.shift();
+          compValue = compValue?.[field!];
+        }
+        if (opts?.negate) {
+          return compValue !== value;
+        }
+        return compValue === value;
+      } else {
+        if (opts?.negate) {
+          return c[key] !== value;
+        }
+        return c[key] === value;
+      }
+    });
+  }
+
+  return results as CardResource[];
 }
