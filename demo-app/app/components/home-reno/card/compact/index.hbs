@@ -1,7 +1,7 @@
 {{#if (eq @state this.STATES.EXPANDED)}}
   <div
     local-class="home-reno-card medium"
-    {{sprite id=@identifier }}
+    {{sprite id=@spriteId role=@spriteRole}}
     ...attributes
   >
     <button local-class="corner-button left" type="button" {{on "click" @toggleExpansion}}>
@@ -23,13 +23,13 @@
     local-class="home-reno-card small"
     type="button"
     {{on "click" @toggleExpansion}}
-    {{sprite id=@identifier }}
+    {{sprite id=@spriteId role=@spriteRole}}
     ...attributes
   >
     {{yield}}
   </button>
 {{else if (eq @state this.STATES.MAXIMIZED_PLACEHOLDER)}}
-  <div local-class="home-reno-card placeholder" ...attributes>
+  <div {{sprite id=(concat @spriteId "-placeholder")}} local-class="home-reno-card placeholder" ...attributes>
     Placeholder for maximized state
   </div>
 {{/if}}
