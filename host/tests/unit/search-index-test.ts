@@ -583,20 +583,20 @@ posts/ignore-me.gts
       );
     }
     {
-      let card = await indexer.card(
-        new URL('http://test-realm/sample-post.json')
-      );
-      assert.strictEqual(
+      let card = await indexer.search({
+        id: 'http://test-realm/sample-post.json',
+      });
+      assert.deepEqual(
         card,
-        undefined,
+        [],
         'instance does not exist because file is ignored'
       );
     }
     {
-      let card = await indexer.card(new URL(`http://test-realm/posts/2.json`));
-      assert.strictEqual(
+      let card = await indexer.search({ id: 'http://test-realm/posts/2.json' });
+      assert.deepEqual(
         card,
-        undefined,
+        [],
         'instance does not exist because file is ignored'
       );
     }
