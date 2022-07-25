@@ -12,7 +12,9 @@ type ExistingCards = 'outline' | 'gallery' | 'form';
 export default class HomeReno extends Component {
   @tracked currentExpandedItem: ExistingCards | null = null;
   @tracked currentMaximizedItem: ExistingCards | null = null;
+  @tracked currentMaximizedLevel2Item: ExistingCards | null = null;
   @tracked secondaryItemExpanded = false;
+  COMPACT_CARD_STATES = COMPACT_CARD_STATES;
 
   get compactCardState(): Record<
     ExistingCards,
@@ -40,7 +42,9 @@ export default class HomeReno extends Component {
   }
 
   get secondaryItemState() {
-    return this.secondaryItemExpanded
+    return this.currentMaximizedLevel2Item
+      ? COMPACT_CARD_STATES.MAXIMIZED_PLACEHOLDER
+      : this.secondaryItemExpanded
       ? COMPACT_CARD_STATES.EXPANDED
       : COMPACT_CARD_STATES.MINIMIZED;
   }
@@ -106,9 +110,19 @@ export default class HomeReno extends Component {
   @action maximize(item: ExistingCards) {
     this.secondaryItemExpanded = false;
     this.currentMaximizedItem = item;
+    this.currentMaximizedLevel2Item = null;
+  }
+
+  @action maximizeLevel2(item: ExistingCards) {
+    this.currentMaximizedLevel2Item = item;
+  }
+
+  @action minimizeLevel2() {
+    this.currentMaximizedLevel2Item = null;
   }
 
   @action minimize() {
     this.currentMaximizedItem = null;
+    this.currentMaximizedLevel2Item = null;
   }
 }

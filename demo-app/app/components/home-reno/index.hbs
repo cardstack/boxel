@@ -8,16 +8,19 @@
         @state={{this.compactCardState.outline}}
         @toggleExpansion={{fn this.toggleExpansion "outline"}}
         @maximize={{fn this.maximize "outline"}}
+        @spriteId="outline-l1"
       />
       <HomeReno::Gallery::Compact
         @state={{this.compactCardState.gallery}}
         @toggleExpansion={{fn this.toggleExpansion "gallery"}}
         @maximize={{fn this.maximize "gallery"}}
+        @spriteId="gallery-l1"
       />
       <HomeReno::Form::Compact
         @state={{this.compactCardState.form}}
         @toggleExpansion={{fn this.toggleExpansion "form"}}
         @maximize={{fn this.maximize "form"}}
+        @spriteId="form-l1"
       />
     {{!-- </div> --}}
     </AnimationContext>
@@ -27,45 +30,94 @@
     <HomeReno::Card::Maximized
       @minimize={{this.minimize}}
       local-class="outline"
-      {{sprite id="outline-card" }}
+      {{sprite id="outline-l1"}}
     >
       Outline
       <div local-class="compact-list">
         <HomeReno::Gallery::Compact
           @state={{this.secondaryItemState}}
           @toggleExpansion={{this.toggleSecondaryItemExpansion}}
+          @maximize={{fn this.maximizeLevel2 "gallery"}}
+          @spriteId="gallery-l2"
         />
       </div>
     </HomeReno::Card::Maximized>
-  {{/if}}
-
-  {{#if (eq this.currentMaximizedItem "gallery")}}
+  {{else if (eq this.currentMaximizedItem "gallery")}}
     <HomeReno::Card::Maximized
       @minimize={{this.minimize}}
       local-class="gallery"
-      {{sprite id="gallery-card" }}
+      {{sprite id="gallery-l1" }}
     >
       Gallery
       <div local-class="compact-list">
-        <HomeReno::Outline::Compact
+        <HomeReno::Form::Compact
           @state={{this.secondaryItemState}}
           @toggleExpansion={{this.toggleSecondaryItemExpansion}}
+          @maximize={{fn this.maximizeLevel2 "form"}}
+          @spriteId="form-l2"
         />
       </div>
     </HomeReno::Card::Maximized>
-  {{/if}}
-
-  {{#if (eq this.currentMaximizedItem "form")}}
+  {{else if (eq this.currentMaximizedItem "form")}}
     <HomeReno::Card::Maximized
       @minimize={{this.minimize}}
       local-class="form"
-      {{sprite id="form-card" }}
+      {{sprite id="form-l1" }}
     >
       Form
       <div local-class="compact-list">
         <HomeReno::Outline::Compact
           @state={{this.secondaryItemState}}
           @toggleExpansion={{this.toggleSecondaryItemExpansion}}
+          @maximize={{fn this.maximizeLevel2 "outline"}}
+          @spriteId="outline-l2"
+        />
+      </div>
+    </HomeReno::Card::Maximized>
+  {{/if}}
+
+  {{#if (eq this.currentMaximizedLevel2Item "outline")}}
+    <HomeReno::Card::Maximized
+      @minimize={{this.minimizeLevel2}}
+      local-class="outline"
+      {{sprite id="outline-l2" }}
+    >
+      Outline
+      <div local-class="compact-list">
+        <HomeReno::Gallery::Compact
+          @state={{this.COMPACT_CARD_STATES.MINIMIZED}}
+          @toggleExpansion={{noop}}
+          @spriteId="gallery-l3"
+        />
+      </div>
+    </HomeReno::Card::Maximized>
+  {{else if (eq this.currentMaximizedLevel2Item "gallery")}}
+    <HomeReno::Card::Maximized
+      @minimize={{this.minimizeLevel2}}
+      local-class="gallery"
+      {{sprite id="gallery-l2" }}
+    >
+      Gallery
+      <div local-class="compact-list">
+        <HomeReno::Form::Compact
+          @state={{this.COMPACT_CARD_STATES.MINIMIZED}}
+          @toggleExpansion={{noop}}
+          @spriteId="form-l3"
+        />
+      </div>
+    </HomeReno::Card::Maximized>
+  {{else if (eq this.currentMaximizedLevel2Item "form")}}
+    <HomeReno::Card::Maximized
+      @minimize={{this.minimizeLevel2}}
+      local-class="form"
+      {{sprite id="form-l2" }}
+    >
+      Form
+      <div local-class="compact-list">
+        <HomeReno::Outline::Compact
+          @state={{this.COMPACT_CARD_STATES.MINIMIZED}}
+          @toggleExpansion={{noop}}
+          @spriteId="outline-l3"
         />
       </div>
     </HomeReno::Card::Maximized>
