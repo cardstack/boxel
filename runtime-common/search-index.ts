@@ -4,7 +4,7 @@ import { RealmPaths, LocalPath } from "./paths";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
-import { Query, Filter, assertQuery } from "./query";
+import { Query, Filter, CardTypeFilter, assertQuery } from "./query";
 
 export type CardRef =
   | {
@@ -568,25 +568,7 @@ export class SearchIndex {
     }
 
     if ("type" in filter) {
-      let cards = [];
-      for (let card of results) {
-        if (
-          // assumption: only exported cards have instances
-          await this.instanceHasType(
-            { type: "exportedCard", ...card.meta.adoptsFrom },
-            filter.type
-          )
-        ) {
-          if (!opts) {
-            cards.push(card);
-          }
-        } else {
-          if (opts?.negate) {
-            cards.push(card);
-          }
-        }
-      }
-      results = cards;
+      results = await this.filterByType(filter.type, results, opts);
     }
 
     if ("not" in filter) {
@@ -602,9 +584,27 @@ export class SearchIndex {
     return results;
   }
 
+  async filterByType(
+    type: CardTypeFilter["type"],
+    cards: CardResource[],
+    opts?: { negate?: true }
+  ): Promise<CardResource[]> {
+    let results: CardResource[] = [];
+    for (let card of cards) {
+      // assumption: only exported cards have instances
+      let cardRef: CardRef = { type: "exportedCard", ...card.meta.adoptsFrom };
+      if (!opts && (await this.instanceHasType(cardRef, type))) {
+        results.push(card);
+      } else if (opts?.negate && !(await this.instanceHasType(cardRef, type))) {
+        results.push(card);
+      }
+    }
+    return results;
+  }
+
   async instanceHasType(
     ref: CardRef,
-    type: { name: string; module: string }
+    type: CardTypeFilter["type"]
   ): Promise<Boolean> {
     // only checks for exported cards
     if (ref.type !== "exportedCard") {
