@@ -1,6 +1,7 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { TestRealm, TestRealmAdapter } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { SearchIndex } from '@cardstack/runtime-common/search-index';
 
 let paths = new RealmPaths('http://test-realm');
 
@@ -642,5 +643,178 @@ module('Unit | search-index', function () {
       ],
       'correct files are hidden in nested'
     );
+  });
+
+  module('query', function (hooks) {
+    const sampleCards = {
+      'cards.gts': `
+        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+        import StringCard from 'https://cardstack.com/base/string';
+        import IntegerCard from 'https://cardstack.com/base/integer';
+
+        export class Person extends Card {
+          @field name = contains(StringCard);
+          @field email = contains(StringCard);
+        }
+
+        export class Post extends Card {
+          @field title = contains(StringCard);
+          @field description = contains(StringCard);
+          @field author = contains(Person);
+          @fields views = contains(IntegerCard);
+        }
+      `,
+      'card-1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Card 1',
+            description: 'Sample post',
+            author: {
+              name: 'Cardy',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'Card',
+            },
+          },
+        },
+      },
+      'cards/1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Card 1',
+            description: 'Sample post',
+            author: {
+              name: 'Carl Stack',
+            },
+            createdAt: new Date(2022, 7, 1),
+            views: 10,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${paths.url}/Post`,
+              name: 'Card',
+            },
+          },
+        },
+      },
+      'cards/2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Card 2',
+            description: 'Sample post',
+            author: {
+              name: 'Carl Stack',
+              email: 'carl@stack.com',
+            },
+            createdAt: new Date(2022, 7, 22),
+            views: 5,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${paths.url}/Post`,
+              name: 'Card',
+            },
+          },
+        },
+      },
+    };
+
+    let indexer: SearchIndex;
+
+    hooks.beforeEach(async function () {
+      let realm = TestRealm.create(sampleCards);
+      indexer = realm.searchIndex;
+      await indexer.run();
+    });
+
+    test('can search cards by id', async function (assert) {
+      let matching = await indexer.search({
+        id: 'http://test-realm/card-1',
+      });
+      assert.strictEqual(matching.length, 1, 'found one card');
+      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
+    });
+
+    test(`can search for cards by using the 'eq' filter`, async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          eq: {
+            'attributes.title': 'Card 1',
+            'attributes.description': 'Sample post',
+          },
+        },
+      });
+      assert.strictEqual(matching.length, 2, 'found two cards');
+      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
+      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/1');
+    });
+
+    test('can combine multiple filters', async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          eq: {
+            'attributes.title': 'Card 1',
+          },
+          not: {
+            eq: {
+              'attributes.author.name': 'Cardy',
+            },
+          },
+        },
+      });
+      assert.strictEqual(matching.length, 1);
+      assert.strictEqual(matching[0]?.id, 'http://test-realm/cards/1');
+    });
+
+    // Tests from hub/**/**/card-service-test.ts
+    skip('can filter by card type');
+    skip(`can filter on a card's own fields using gt`);
+    skip(`gives a good error when query refers to missing card`);
+    skip(`gives a good error when query refers to missing field`);
+
+    test(`can filter on a nested field using 'eq'`, async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          eq: {
+            'attributes.author.name': 'Carl Stack',
+          },
+        },
+      });
+      assert.strictEqual(matching.length, 2);
+      assert.strictEqual(matching[0]?.id, 'http://test-realm/cards/1');
+      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/2');
+    });
+
+    test('can negate a filter', async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          not: {
+            eq: {
+              'attributes.author.email': 'carl@stack.com',
+            },
+          },
+        },
+      });
+      assert.strictEqual(matching.length, 2);
+      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
+      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/1');
+    });
+
+    skip('can combine multiple types');
+    skip('can sort in alphabetical order');
+    skip('can sort in reverse alphabetical order');
+    skip('can sort in multiple string field conditions');
+    skip('can sort by multiple string field conditions in given directions');
+    skip('can sort by integer value');
+    skip('can sort by date');
+    skip('can sort by mixed field types');
+    skip(`can sort on multiple paths in combination with 'any' filter`);
+    skip(`can sort on multiple paths in combination with 'every' filter`);
   });
 });
