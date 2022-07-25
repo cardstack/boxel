@@ -4,7 +4,7 @@ import { formatTreeString, TreeNode } from '../utils/format-tree';
 import Sprite from './sprite';
 import { Changeset } from './changeset';
 
-export interface Context {
+export interface IContext {
   id: string | undefined;
   element: Element;
   currentBounds?: DOMRect;
@@ -46,7 +46,7 @@ export interface GetDescendantNodesOptions {
   filter?(childNode: SpriteTreeNode): boolean;
 }
 
-type SpriteTreeModel = Context | SpriteStateTracker;
+type SpriteTreeModel = IContext | SpriteStateTracker;
 
 export enum SpriteTreeNodeType {
   Root,
@@ -55,14 +55,14 @@ export enum SpriteTreeNodeType {
 }
 
 export class SpriteTreeNode {
-  contextModel: Context | undefined;
+  contextModel: IContext | undefined;
   spriteModel: SpriteStateTracker | undefined;
 
   parent: SpriteTreeNode | SpriteTree;
   children: Set<SpriteTreeNode> = new Set();
   freshlyRemovedChildren: Set<SpriteTreeNode> = new Set();
 
-  isContext(): this is { contextModel: Context } {
+  isContext(): this is { contextModel: IContext } {
     return Boolean(this.contextModel);
   }
 
@@ -71,7 +71,7 @@ export class SpriteTreeNode {
   }
 
   constructor(
-    model: Context,
+    model: IContext,
     nodeType: SpriteTreeNodeType.Context,
     parentNode: SpriteTreeNode | SpriteTree
   );
@@ -253,13 +253,13 @@ export default class SpriteTree {
   nodesByElement = new WeakMap<Element, SpriteTreeNode>();
   rootNodes: Set<SpriteTreeNode> = new Set();
   _pendingAdditions: (
-    | { item: Context; type: 'CONTEXT' }
+    | { item: IContext; type: 'CONTEXT' }
     | { item: SpriteStateTracker; type: 'SPRITE' }
   )[] = [];
   freshlyRemovedToNode: WeakMap<SpriteStateTracker, SpriteTreeNode> =
     new WeakMap();
 
-  addPendingAnimationContext(item: Context) {
+  addPendingAnimationContext(item: IContext) {
     this._pendingAdditions.push({ item, type: 'CONTEXT' });
   }
 
@@ -296,7 +296,7 @@ export default class SpriteTree {
     this._pendingAdditions = [];
   }
 
-  addAnimationContext(context: Context): SpriteTreeNode {
+  addAnimationContext(context: IContext): SpriteTreeNode {
     let existingNode = this.lookupNodeByElement(context.element);
 
     if (existingNode) {
@@ -318,7 +318,7 @@ export default class SpriteTree {
       return node;
     }
   }
-  removeAnimationContext(context: Context): void {
+  removeAnimationContext(context: IContext): void {
     let node = this.lookupNodeByElement(context.element);
     if (node) {
       node.parent?.removeChild(node);
@@ -395,8 +395,8 @@ export default class SpriteTree {
     }
   }
 
-  getContextRunList(requestedContexts: Set<Context>): Context[] {
-    let result: Context[] = [];
+  getContextRunList(requestedContexts: Set<IContext>): IContext[] {
+    let result: IContext[] = [];
     for (let context of requestedContexts) {
       if (result.indexOf(context) !== -1) continue;
       result.unshift(context);

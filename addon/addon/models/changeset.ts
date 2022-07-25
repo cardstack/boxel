@@ -4,7 +4,7 @@ import Sprite, {
 } from 'animations-experiment/models/sprite';
 import { assert } from '@ember/debug';
 import SpriteTree, {
-  Context,
+  IContext,
   GetDescendantNodesOptions,
   SpriteStateTracker,
   SpriteTreeNode,
@@ -39,7 +39,7 @@ function union<T>(...sets: Set<T>[]): Set<T> {
 // DESCENDANT ACCESS: exclusively used to get descendants to filter for descendants that should be included in a changeset
 export function filterToContext(
   spriteTree: SpriteTree,
-  animationContext: Context,
+  animationContext: IContext,
   spriteModifiers: Set<SpriteStateTracker>
 ): Set<SpriteStateTracker> {
   let node = spriteTree.lookupNodeByElement(animationContext.element);
@@ -53,13 +53,13 @@ export function filterToContext(
 }
 
 export class Changeset {
-  context: Context;
+  context: IContext;
   intent: string | undefined;
   insertedSprites: Set<Sprite> = new Set();
   removedSprites: Set<Sprite> = new Set();
   keptSprites: Set<Sprite> = new Set();
 
-  constructor(context: Context) {
+  constructor(context: IContext) {
     this.context = context;
   }
 
@@ -127,12 +127,12 @@ export class Changeset {
 }
 
 export class ChangesetBuilder {
-  contextToChangeset: WeakMap<Context, Changeset> = new WeakMap();
+  contextToChangeset: WeakMap<IContext, Changeset> = new WeakMap();
   spriteTree: SpriteTree;
 
   constructor(
     spriteTree: SpriteTree,
-    contexts: Set<Context>,
+    contexts: Set<IContext>,
     freshlyAdded: Set<SpriteStateTracker>,
     freshlyRemoved: Set<SpriteStateTracker>,
     intermediateSprites: Map<string, IntermediateSprite>
@@ -236,7 +236,7 @@ export class ChangesetBuilder {
     >();
     // non-natural kept sprites only
     let contextToKeptSpriteModifierMap = new WeakMap<
-      Context,
+      IContext,
       Set<SpriteStateTracker>
     >();
 
@@ -380,7 +380,7 @@ export class ChangesetBuilder {
     node: Changeset,
     sprite: Sprite,
     spriteModifier: SpriteStateTracker,
-    context: Context,
+    context: IContext,
     counterpartModifier?: SpriteStateTracker,
     intermediateSprite?: IntermediateSprite
   ) {

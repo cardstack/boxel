@@ -2,13 +2,13 @@
 import Sprite from 'animations-experiment/models/sprite';
 import { CopiedCSS } from 'animations-experiment/utils/measurement';
 import SpriteTree, {
-  Context,
+  IContext,
   SpriteStateTracker,
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';
 import { module, test } from 'qunit';
 
-class MockAnimationContext implements Context {
+class MockAnimationContext implements IContext {
   id: string | undefined;
   element: HTMLElement;
   isAnimationContext = true;
@@ -321,8 +321,8 @@ module('Unit | Models | SpriteTree', function (hooks) {
     });
   });
   module('with two context nodes, each with a sprite', function (hooks) {
-    let context1: Context,
-      context2: Context,
+    let context1: IContext,
+      context2: IContext,
       sprite1: SpriteStateTracker,
       sprite2: SpriteStateTracker;
     hooks.beforeEach(function () {

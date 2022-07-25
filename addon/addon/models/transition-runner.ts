@@ -2,13 +2,13 @@ import { task } from 'ember-concurrency';
 import { Changeset } from '../models/changeset';
 import Sprite, { SpriteType } from '../models/sprite';
 import { assert } from '@ember/debug';
-import { Context } from './sprite-tree';
+import { IContext } from './sprite-tree';
 
 export default class TransitionRunner {
-  animationContext: Context;
+  animationContext: IContext;
   intent: string | undefined;
 
-  constructor(animationContext: Context) {
+  constructor(animationContext: IContext) {
     this.animationContext = animationContext;
   }
 
@@ -35,7 +35,7 @@ export default class TransitionRunner {
     }
   }
 
-  private logChangeset(changeset: Changeset, animationContext: Context): void {
+  private logChangeset(changeset: Changeset, animationContext: IContext): void {
     let contextId = animationContext.args.id;
     function row(type: SpriteType, sprite: Sprite) {
       return {

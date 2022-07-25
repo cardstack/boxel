@@ -1,7 +1,7 @@
 import Service from '@ember/service';
 
 import SpriteTree, {
-  Context,
+  IContext,
   SpriteStateTracker,
   SpriteTreeNode,
 } from '../models/sprite-tree';
@@ -43,16 +43,16 @@ export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
   freshlyAdded: Set<SpriteStateTracker> = new Set();
   freshlyRemoved: Set<SpriteStateTracker> = new Set();
-  eligibleContexts: Set<Context> = new Set();
+  eligibleContexts: Set<IContext> = new Set();
   intent: string | undefined;
   intermediateSprites: Map<string, IntermediateSprite> = new Map();
   runningAnimations: Map<string, Set<Animation>> = new Map();
 
-  registerContext(context: Context): void {
+  registerContext(context: IContext): void {
     this.spriteTree.addPendingAnimationContext(context);
   }
 
-  unregisterContext(context: Context): void {
+  unregisterContext(context: IContext): void {
     this.eligibleContexts.delete(context);
     this.spriteTree.removeAnimationContext(context);
   }
@@ -68,7 +68,7 @@ export default class AnimationsService extends Service {
   }
 
   didNotifyContextRendering = false;
-  notifyContextRendering(animationContext: Context): void {
+  notifyContextRendering(animationContext: IContext): void {
     this.eligibleContexts.add(animationContext);
 
     // Trigger willTransition once per render cycle
@@ -111,7 +111,7 @@ export default class AnimationsService extends Service {
     }
   }
 
-  cleanupSprites(_context: Context): void {
+  cleanupSprites(_context: IContext): void {
     assert('Freshly removed is not empty', !this.freshlyRemoved.size);
     // TODO: When we interrupt, we can clean certain sprites marked for garbage collection
     // However, because we currently do cleanup in maybeTransitionTask, this method is a no-op because
@@ -137,7 +137,7 @@ export default class AnimationsService extends Service {
     // });
   }
 
-  createIntermediateSpritesForContext(context: Context) {
+  createIntermediateSpritesForContext(context: IContext) {
     // We do not care about "stableness of contexts here".
     // For intermediate sprites it is good enough to measure direct children only.
 
@@ -180,7 +180,7 @@ export default class AnimationsService extends Service {
     return animationsToCancel;
   }
 
-  willTransition(context: Context): Animation[] {
+  willTransition(context: IContext): Animation[] {
     let animationsToCancel: Animation[] = [];
     // TODO: what about intents
     // TODO: it might be possible to only measure if we know something changed since last we measured.
