@@ -45,14 +45,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-yarn-
       - run: yarn --prefer-offline
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
       - name: Base realm server
         run: yarn start:base &
         working-directory: realm-server
       - name: Test realm server
         run: yarn start:test-realm &
         working-directory: realm-server
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
       - name: host test suite
         run: yarn test:ember
         working-directory: host
