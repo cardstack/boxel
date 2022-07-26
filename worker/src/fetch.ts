@@ -36,10 +36,35 @@ export class FetchHandler {
           request.url.slice(urlWithoutQuery.origin.length),
           this.realm.baseRealmURL
         );
-        return await fetch(url.href, {
+        let response = await fetch(url.href, {
           method: request.method,
           headers: request.headers,
           ...(request.body ? { body: request.body } : {}),
+        });
+        // based on
+        // https://developer.mozilla.org/en-US/docs/Web/API/FetchEvent/respondWith#specifying_the_final_url_of_a_resource:
+        //
+        //     "When a service worker provides a Response to
+        //     FetchEvent.respondWith(), the Response.url value will be
+        //     propagated to the intercepted network request as the final
+        //     resolved URL.
+        //
+        //     "This means, for example, if a service worker intercepts a
+        //     stylesheet or worker script, then the provided Response.url will
+        //     be used to resolve any relative @import or importScripts()
+        //     subresource loads (bug 1222008)."
+        //
+        // This means that in order for our module resolution to work using the
+        // canonical base realm URL we need to alter this behavior, otherwise
+        // relative import references will use the wrong origin URL. According
+        // to the same MDN article, a response with an empty string `url`
+        // property will revert to resolving relative references using the
+        // request URL. so we make a new response without a URL value to trigger
+        // that behavior.
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
         });
       }
       if (!this.realm) {
@@ -51,7 +76,9 @@ export class FetchHandler {
         return generateExternalStub(urlWithoutQuery.pathname.slice(1));
       }
 
-      console.log(`Service worker passing through ${request.url}`);
+      console.log(
+        `Service worker passing through ${request.url} for ${request.referrer}`
+      );
       return await fetch(request);
     } catch (err) {
       if (err instanceof CardError) {
