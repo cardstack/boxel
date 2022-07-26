@@ -6,6 +6,7 @@ import { cleanWhiteSpace, p } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
 import type { SignatureFor } from "https://cardstack.com/base/card-api";
+import type CardAPIService  from "runtime-spike/services/card-api";
 
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -19,12 +20,17 @@ module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.before(async function () {
-    cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
+    // cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
     string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
     integer = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/integer' + '');
     date = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/date' + '');
     dateTime = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/datetime' + '');
     pickModule = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/pick' + '');
+  });
+  hooks.beforeEach(async function () { 
+    let service = this.owner.lookup('service:card-api') as CardAPIService;
+    await service.loaded;
+    cardApi = service.api;
   });
 
   test('primitive field type checking', async function (assert) {
