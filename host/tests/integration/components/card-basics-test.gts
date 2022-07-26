@@ -13,24 +13,26 @@ let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
 let integer: typeof import ("https://cardstack.com/base/integer");
 let date: typeof import ("https://cardstack.com/base/date");
-let dateTime: typeof import ("https://cardstack.com/base/datetime");
+let datetime: typeof import ("https://cardstack.com/base/datetime");
 let pickModule: typeof import ("https://cardstack.com/base/pick");
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
 
-  hooks.before(async function () {
-    // cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
-    string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
-    integer = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/integer' + '');
-    date = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/date' + '');
-    dateTime = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/datetime' + '');
-    pickModule = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/pick' + '');
-  });
+  // hooks.before(async function () {
+  //   // cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
+  //   string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
+  //   integer = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/integer' + '');
+  //   date = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/date' + '');
+  //   dateTime = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/datetime' + '');
+  //   pickModule = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/pick' + '');
+  // });
   hooks.beforeEach(async function () { 
     let service = this.owner.lookup('service:card-api') as CardAPIService;
     await service.loaded;
     cardApi = service.api;
+    ({ string, integer, date, datetime, pick: pickModule } = service.testModules)
+
   });
 
   test('primitive field type checking', async function (assert) {
@@ -583,7 +585,7 @@ module('Integration | card-basics', function (hooks) {
   test('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
     let {field, containsMany, Card, Component } = cardApi;
     let { default: DateCard} = date;
-    let { default: DatetimeCard} = dateTime;
+    let { default: DatetimeCard} = datetime;
     function toDateString(date: Date | null) {
       return date instanceof Date ? date.toISOString().split('T')[0] : null;
     }
