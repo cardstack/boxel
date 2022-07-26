@@ -412,7 +412,10 @@ export class SearchIndex {
       );
     } else {
       if (this.isLocal(new URL(ref.module, url))) {
-        if (ref.module === `${baseRealm.url}card-api` && ref.name === "Card") {
+        if (
+          baseRealm.fileURL(ref.module).href === `${baseRealm.url}card-api` &&
+          ref.name === "Card"
+        ) {
           let { module, name } = ref;
           return definitions.get(
             this.internalKeyFor({ module, name, type: "exportedCard" })

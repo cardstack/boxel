@@ -60,24 +60,6 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["lodash", ["flatMap", "startCase", "get"]],
   ["tracked-built-ins", ["TrackedWeakMap"]],
   ["date-fns", ["parseISO", "format", "parse"]],
-
-  // This is necessary for tests
-  [
-    "runtime-spike/lib/card-api",
-    [
-      "contains",
-      "containsMany",
-      "field",
-      "Component",
-      "Card",
-      "prepareToRender",
-    ],
-  ],
-  ["runtime-spike/lib/string", ["default"]],
-  ["runtime-spike/lib/text-area", ["default"]],
-  ["runtime-spike/lib/date", ["default"]],
-  ["runtime-spike/lib/datetime", ["default"]],
-  ["runtime-spike/lib/integer", ["default"]],
 ]);
 
 export function isCardJSON(json: any): json is CardJSON {

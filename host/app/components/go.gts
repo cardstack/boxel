@@ -15,7 +15,7 @@ import {
   languageConfigs
 } from '../utils/editor-language';
 import { isCardJSON } from '@cardstack/runtime-common';
-  import type { Format } from 'runtime-spike/lib/card-api';
+import type { Format } from 'https://cardstack.com/base/card-api';
 import type { FileResource } from '../resources/file';
 
 interface Signature {

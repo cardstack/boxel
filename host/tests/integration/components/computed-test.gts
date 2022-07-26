@@ -1,17 +1,25 @@
 import { module, test } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
-import { contains, containsMany, field, Component, Card } from 'runtime-spike/lib/card-api';
-import StringCard from 'runtime-spike/lib/string';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn } from '@ember/test-helpers';
 import waitUntil from '@ember/test-helpers/wait-until';
 import find from '@ember/test-helpers/dom/find';
 import { cleanWhiteSpace } from '../../helpers';
 
+let cardApi: typeof import("https://cardstack.com/base/card-api");
+let string: typeof import ("https://cardstack.com/base/string");
+
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
 
+  hooks.before(async function () {
+    cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
+    string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
+  });
+
   test('can render a synchronous computed field', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field lastName = contains(StringCard);
@@ -27,6 +35,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a synchronous computed field (using a string in `computeVia`)', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field lastName = contains(StringCard);
@@ -45,6 +55,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed that consumes a nested property', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
@@ -64,6 +76,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed that is a composite type', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
@@ -90,6 +104,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render an asynchronous computed field', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field slowName = contains(StringCard, { computeVia: 'computeSlowName'})
@@ -108,6 +124,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render an asynchronous computed field (using an async function in `computeVia`)', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field slowName = contains(StringCard, { computeVia: async function(this: Person) {
@@ -125,6 +143,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can indirectly render an asynchronous computed field', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field slowName = contains(StringCard, { computeVia: 'computeSlowName'})
@@ -144,6 +164,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a nested asynchronous computed field', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field slowName = contains(StringCard, { computeVia: 'computeSlowName'})
@@ -167,6 +189,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render an asynchronous computed composite field', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
@@ -193,6 +217,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a containsMany computed primitive field', async function(assert) {
+    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
@@ -216,6 +242,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('supports an empty containsMany computed primitive field', async function (assert) {
+    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
@@ -235,6 +263,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a containsMany computed composite field', async function(assert) {
+    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
@@ -269,6 +299,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('supports an empty containsMany computed composite field', async function (assert) {
+    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
@@ -293,6 +325,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('cannot set a computed field', async function(assert) {
+    let { field, contains, Card, } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field fastName = contains(StringCard, { computeVia: function(this: Person) { return this.firstName; } });
@@ -309,6 +343,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('computed fields render as embedded in the edit format', async function(assert) {
+    let { field, contains, Card, } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field alias = contains(StringCard, { computeVia: function(this: Person) { return this.firstName; } });
@@ -321,6 +357,8 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can maintain data consistency for async computed fields', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Location extends Card {
       @field city = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {

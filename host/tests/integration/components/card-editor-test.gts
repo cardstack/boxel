@@ -3,15 +3,30 @@ import GlimmerComponent from '@glimmer/component';
 import { click, fillIn } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import CardEditor, { ExistingCardArgs }  from 'runtime-spike/components/card-editor';
-import { contains, field, Component, Card, Format } from 'runtime-spike/lib/card-api';
-import StringCard from 'runtime-spike/lib/string';
 import { renderComponent } from '../../helpers/render-component';
+import type { Format } from "https://cardstack.com/base/card-api";
+import type CardAPIService from "runtime-spike/services/card-api";
+
+let cardApi: typeof import("https://cardstack.com/base/card-api");
+let string: typeof import ("https://cardstack.com/base/string");
 
 const formats: Format[] = ['isolated', 'embedded', 'edit'];
 module('Integration | card-editor', function (hooks) {
   setupRenderingTest(hooks);
 
+  hooks.before(async function () {
+    cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
+    string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
+  });
+
+  hooks.beforeEach(async function () { 
+    let apiService = this.owner.lookup('service:card-api') as CardAPIService;
+    await apiService.loaded;
+  });
+
   test('renders card', async function (assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
@@ -39,6 +54,8 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('can change card format', async function (assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
@@ -84,6 +101,8 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('edited card data in visible in different formats', async function (assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
@@ -124,6 +143,8 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('can detect when card is dirty', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {

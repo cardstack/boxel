@@ -3,18 +3,31 @@ import { setupRenderingTest } from 'ember-qunit';
 import stringify from 'fast-json-stable-stringify'
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
-import { contains, containsMany, field, Component, Card, serializedGet, serializeCard } from 'runtime-spike/lib/card-api';
-import StringCard from 'runtime-spike/lib/string';
-import DateCard from 'runtime-spike/lib/date';
-import IntegerCard from 'runtime-spike/lib/integer';
-import DatetimeCard from 'runtime-spike/lib/datetime';
 import parseISO from 'date-fns/parseISO';
 import { p, cleanWhiteSpace } from '../../helpers';
+
+let cardApi: typeof import("https://cardstack.com/base/card-api");
+let string: typeof import ("https://cardstack.com/base/string");
+let integer: typeof import ("https://cardstack.com/base/integer");
+let date: typeof import ("https://cardstack.com/base/date");
+let datetime: typeof import ("https://cardstack.com/base/datetime");
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
 
+  hooks.before(async function () {
+    cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
+    string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
+    integer = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/integer' + '');
+    date = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/date' + '');
+    datetime = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/datetime' + '');
+  });
+
   test('can deserialize field', async function (assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+    let { default: DatetimeCard } = datetime;
     class Post extends Card {
       @field title = contains(StringCard);
       @field created = contains(DateCard);
@@ -34,6 +47,10 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize field', async function(assert) {
+    let { field, contains, Card, Component, serializedGet } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+    let { default: DatetimeCard } = datetime;
     class Post extends Card {
       @field title = contains(StringCard);
       @field created = contains(DateCard);
@@ -50,6 +67,10 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a date field with null value', async function (assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+    let { default: DatetimeCard } = datetime;
     class Post extends Card {
       @field title = contains(StringCard);
       @field created = contains(DateCard);
@@ -69,6 +90,10 @@ module('Integration | serialization', function (hooks) {
       return String(a);
     }
 
+    let { field, contains, Card, Component, serializedGet } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+    let { default: DatetimeCard } = datetime;
     class Post extends Card {
       @field title = contains(StringCard);
       @field created = contains(DateCard);
@@ -87,6 +112,10 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a nested field', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+    let { default: DatetimeCard } = datetime;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field birthdate = contains(DateCard);
@@ -107,6 +136,10 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a composite field', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+    let { default: DatetimeCard } = datetime;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field birthdate = contains(DateCard);
@@ -130,6 +163,10 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a composite field', async function(assert) {
+    let { field, contains, serializedGet, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+    let { default: DatetimeCard } = datetime;
     class Animal extends Card {
       @field species = contains(StringCard);
     }
@@ -167,6 +204,9 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a composite field that has been edited', async function(assert) {
+    let { field, contains, serializeCard, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    let { default: IntegerCard} = integer;
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
@@ -210,6 +250,8 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a computed field', async function(assert) {
+    let { field, contains, serializedGet, Card, Component } = cardApi;
+    let { default: DateCard } = date;
     class Person extends Card {
       @field birthdate = contains(DateCard);
       @field firstBirthday = contains(DateCard, { computeVia:
@@ -228,6 +270,8 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a containsMany field', async function(assert) {
+    let { field, containsMany, Card, Component } = cardApi;
+    let { default: DateCard } = date;
     class Schedule extends Card {
       @field dates = containsMany(DateCard);
       static isolated = class Isolated extends Component<typeof this> {
@@ -241,6 +285,9 @@ module('Integration | serialization', function (hooks) {
   });
 
   test("can deserialize a containsMany's nested field", async function(assert) {
+    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
     class Appointment extends Card {
       @field date = contains(DateCard);
       @field location = contains(StringCard);
@@ -264,6 +311,8 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a containsMany field', async function(assert) {
+    let { field, containsMany, serializedGet, Card, Component } = cardApi;
+    let { default: DateCard } = date;
     class Schedule extends Card {
       @field dates = containsMany(DateCard);
       static isolated = class Isolated extends Component<typeof this> {
@@ -276,6 +325,9 @@ module('Integration | serialization', function (hooks) {
   });
 
   test("can serialize a containsMany's nested field", async function(assert) {
+    let { field, contains, containsMany, serializedGet, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
     class Appointment extends Card {
       @field date = contains(DateCard);
       @field location = contains(StringCard);
@@ -296,6 +348,10 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card with primitive fields', async function (assert) {
+    let { field, contains, serializeCard, Card, } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+    let { default: DatetimeCard } = datetime;
     class Post extends Card {
       @field title = contains(StringCard);
       @field created = contains(DateCard);
@@ -319,6 +375,9 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card with composite field', async function (assert) {
+    let { field, contains, serializeCard, Card, } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
     class Animal extends Card {
       @field species = contains(StringCard);
     }
@@ -357,6 +416,8 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card with computed field', async function (assert) {
+    let { field, contains, serializeCard, Card, } = cardApi;
+    let { default: DateCard } = date;
     class Person extends Card {
       @field birthdate = contains(DateCard);
       @field firstBirthday = contains(DateCard, { computeVia:

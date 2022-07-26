@@ -14,7 +14,7 @@ import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common'
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import CardAPI from '../services/card-api';
-import type { Card, Format, } from 'runtime-spike/lib/card-api';
+import type { Card, Format, } from 'https://cardstack.com/base/card-api';
 
 export interface NewCardArgs {
   type: 'new';

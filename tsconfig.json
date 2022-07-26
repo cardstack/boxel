@@ -22,7 +22,6 @@
     "experimentalDecorators": true,
     "paths": {
       "runtime-spike/tests/*": ["host/tests/*"],
-      "runtime-spike/lib/*": ["base/*"],
       "runtime-spike/*": ["host/app/*"],
       "https://cardstack.com/base/*": ["base/*"],
       "//local-realm/*": ["cards/*"],

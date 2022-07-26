@@ -127,7 +127,7 @@ export default class LocalRealm extends Service {
     return taskFor(this.setup).last;
   }
 
-  // this is a hook for service worker like fetch redirection for tests
+  // this is a hook for service worker like fetch proxying for tests
   mapURL(url: string, _reverseLookup = false) {
     return url;
   }

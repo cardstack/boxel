@@ -1,4 +1,4 @@
-import { Component, primitive, serialize, CardInstanceType, CardConstructor, Card } from 'https://cardstack.com/base/card-api';
+import { Component, primitive, serialize, CardInstanceType, CardConstructor, Card } from './card-api';
 import { format, parseISO } from 'date-fns';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
