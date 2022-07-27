@@ -556,6 +556,64 @@ module('Unit | realm', function () {
     }
   });
 
+  test('realm can serve card source delete request', async function (assert) {
+    let realm = TestRealm.create({
+      'person.gts': `
+        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+        import StringCard from 'https://cardstack.com/base/string';
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+        }
+      `,
+    });
+    await realm.ready;
+
+    let searchIndex = realm.searchIndex;
+    let card = await searchIndex.typeOf({
+      type: 'exportedCard',
+      module: 'http://test-realm/person',
+      name: 'Person',
+    });
+    assert.ok(card, 'found card in index');
+
+    let response = await realm.handle(
+      new Request(`http://test-realm/person`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 302, 'file exists');
+
+    response = await realm.handle(
+      new Request(`http://test-realm/person`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 204, 'file is deleted');
+
+    card = await searchIndex.typeOf({
+      type: 'exportedCard',
+      module: 'http://test-realm/person',
+      name: 'Person',
+    });
+    assert.strictEqual(card, undefined, 'card is deleted from index');
+
+    response = await realm.handle(
+      new Request(`http://test-realm/person`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 404, 'file no longer exists');
+  });
+
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {
     let realm = TestRealm.create({
       'dir/person.gts': cardSrc,
