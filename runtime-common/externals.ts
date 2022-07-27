@@ -1,28 +1,16 @@
-import type * as Babel from '@babel/core';
-import type { types as t } from '@babel/core';
-import type { NodePath } from '@babel/traverse';
-import { externalsMap } from '@cardstack/runtime-common';
+import type * as Babel from "@babel/core";
+import type { types as t } from "@babel/core";
+import type { NodePath } from "@babel/traverse";
+import { externalsMap } from "@cardstack/runtime-common";
+import type { Realm } from "@cardstack/runtime-common/realm";
 
-export function generateExternalStub(moduleName: string): Response {
-  let names = externalsMap.get(moduleName);
-  if (!names) {
-    return new Response(`unknown external module ${moduleName}`, {
-      status: 404,
-    });
-  }
-  let src = [`const m = window.RUNTIME_SPIKE_EXTERNALS.get('${moduleName}');`];
+interface State {
+  opts: Options;
+  insideCard: boolean;
+}
 
-  for (let name of names) {
-    if (name === 'default') {
-      src.push(`export default m.default;`);
-    } else {
-      src.push(`export const ${name} = m.${name};`);
-    }
-  }
-
-  return new Response(src.join('\n'), {
-    headers: { 'content-type': 'text/javascript' },
-  });
+interface Options {
+  realm: Realm;
 }
 
 export function externalsPlugin(_babel: typeof Babel) {
@@ -30,13 +18,17 @@ export function externalsPlugin(_babel: typeof Babel) {
   return {
     visitor: {
       Program: {
-        exit(path: NodePath<t.Program>) {
-          for (let topLevelPath of path.get('body')) {
+        exit(path: NodePath<t.Program>, state: State) {
+          let {
+            opts: { realm },
+          } = state;
+          let externalsURL = new URL("/externals/", realm.baseRealmURL);
+          for (let topLevelPath of path.get("body")) {
             if (
               topLevelPath.isImportDeclaration() &&
               externalsMap.has(topLevelPath.node.source.value)
             ) {
-              topLevelPath.node.source.value = `http://externals/${topLevelPath.node.source.value}`;
+              topLevelPath.node.source.value = `${externalsURL.href}${topLevelPath.node.source.value}`;
             }
           }
         },

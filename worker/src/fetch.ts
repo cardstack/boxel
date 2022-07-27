@@ -1,5 +1,4 @@
 import { CardError } from '@cardstack/runtime-common/error';
-import { generateExternalStub } from '@cardstack/runtime-common/externals';
 import { Realm, baseRealm } from '@cardstack/runtime-common';
 
 export class FetchHandler {
@@ -71,9 +70,6 @@ export class FetchHandler {
         console.warn(`No realm is currently available`);
       } else if (urlWithoutQuery.href.includes(this.realm.url)) {
         return await this.realm.handle(request);
-      }
-      if (urlWithoutQuery.origin === 'http://externals') {
-        return generateExternalStub(urlWithoutQuery.pathname.slice(1));
       }
 
       console.log(

@@ -1,19 +1,22 @@
 import http, { IncomingMessage, ServerResponse } from "http";
 import { NodeRealm } from "./node-realm";
-import { Realm, baseRealm } from "@cardstack/runtime-common";
+import { Realm, baseRealm, externalsMap } from "@cardstack/runtime-common";
 import { resolve } from "path";
 import { streamToText as nodeStreamToText } from "./stream";
 import { streamToText as webStreamToText } from "@cardstack/runtime-common/stream";
 import { LocalPath, RealmPaths } from "@cardstack/runtime-common/paths";
 
+const externalsPath = "/externals/";
+
 export function createRealmServer(
   path: string,
   realmURL: string,
-  baseRealmURL = baseRealm.url
+  baseRealmURL: string
 ) {
   path = resolve(path);
   let realm = new Realm(realmURL, new NodeRealm(path), baseRealmURL);
   let realmPath = new RealmPaths(realmURL);
+  let isServingExternals = realmURL === baseRealm.url;
   let server = http.createServer(async (req, res) => {
     let isStreaming = false;
     try {
@@ -23,6 +26,12 @@ export function createRealmServer(
       if (!req.url) {
         throw new Error(`bug: missing URL in request`);
       }
+
+      if (req.url.startsWith(externalsPath) && isServingExternals) {
+        handleExternals(req, res);
+        return;
+      }
+
       // despite the name, req.url is actually the pathname for the request URL
       let local: LocalPath = req.url === "/" ? "" : req.url;
       let url =
@@ -90,4 +99,29 @@ function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
     return true;
   }
   return false;
+}
+
+function handleExternals(req: IncomingMessage, res: ServerResponse): void {
+  let moduleName = req.url!.slice(externalsPath.length);
+  let names = externalsMap.get(moduleName);
+  if (!names) {
+    res.statusCode = 404;
+    res.statusMessage = `external module ${moduleName} not found.`;
+    res.end();
+    return;
+  }
+
+  let src = [`const m = window.RUNTIME_SPIKE_EXTERNALS.get('${moduleName}');`];
+
+  for (let name of names) {
+    if (name === "default") {
+      src.push(`export default m.default;`);
+    } else {
+      src.push(`export const ${name} = m.${name};`);
+    }
+  }
+  res.statusCode = 200;
+  res.setHeader("content-type", "text/javascript");
+  res.write(src.join("\n"));
+  res.end();
 }

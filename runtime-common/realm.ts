@@ -265,7 +265,7 @@ export class Realm {
                 },
               ]
             : (makeEmberTemplatePlugin as any)(() => etc.precompile),
-          externalsPlugin,
+          [externalsPlugin, { realm: this }],
         ],
       })!.code!;
     } catch (err: any) {

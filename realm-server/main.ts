@@ -21,6 +21,7 @@ let { port, path, url, baseRealmURL } = yargs(process.argv.slice(2))
     },
     baseRealmURL: {
       description: "the URL the base realm is served from (optional)",
+      demandOption: true,
       type: "string",
     },
   })
@@ -29,5 +30,5 @@ let { port, path, url, baseRealmURL } = yargs(process.argv.slice(2))
 let server = createRealmServer(path, url, baseRealmURL);
 server.listen(port);
 console.log(
-  `realm server listening on port ${port} as url ${url} with realm dir ${path}`
+  `realm server listening on port ${port} as url ${url} with realm dir ${path} using base realm of ${baseRealmURL}`
 );
