@@ -12,8 +12,6 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common';
-import RouterService from '@ember/routing/router-service';
-import { service } from '@ember/service';
 
 export interface NewCardArgs {
   type: 'new';
@@ -82,7 +80,6 @@ export default class Preview extends Component<Signature> {
     {{/if}}
   </template>
 
-  @service declare router: RouterService;
   @tracked
   format: Format = this.args.card.type === 'new' ? 'edit' : 'isolated';
   @tracked
@@ -173,14 +170,13 @@ export default class Preview extends Component<Signature> {
 
   @action
   async save() {
-    taskFor(this.write).perform();
+    await taskFor(this.write).perform();
   }
 
   @action
   async removeCard() {
     if (this.args.card.type === 'existing') {
       await taskFor(this.remove).perform(this.args.card.url);
-      this.router.transitionTo('/');
     }
   }
 
