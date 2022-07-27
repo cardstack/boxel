@@ -5,7 +5,7 @@ import { renderCard } from '../../helpers/render-component';
 import { cleanWhiteSpace, p } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
-import type { SignatureFor } from "https://cardstack.com/base/card-api";
+import type { SignatureFor, primitive as primitiveType } from "https://cardstack.com/base/card-api";
 
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -14,12 +14,14 @@ let integer: typeof import ("https://cardstack.com/base/integer");
 let date: typeof import ("https://cardstack.com/base/date");
 let datetime: typeof import ("https://cardstack.com/base/datetime");
 let pickModule: typeof import ("https://cardstack.com/base/pick");
+let primitive: typeof primitiveType;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.before(async function () {
     cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
+    primitive = cardApi.primitive;
     string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
     integer = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/integer' + '');
     date = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/date' + '');
@@ -97,7 +99,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render primitive field', async function (assert) {
-    const {field, contains,  Card, Component, primitive } = cardApi;
+    let {field, contains, Card, Component } = cardApi;
     class EmphasizedString extends Card {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
@@ -174,7 +176,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render nested composite field', async function (assert) {
-    let {field, contains, Card, Component, primitive } = cardApi;
+    let {field, contains, Card, Component } = cardApi;
     class TestString extends Card {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
@@ -639,7 +641,7 @@ module('Integration | card-basics', function (hooks) {
 
 async function testString(label: string) {
   cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
-  let {primitive, Card, Component } = cardApi;
+  let {Card, Component } = cardApi;
   return class TestString extends Card {
     static [primitive]: string;
     static embedded = class Embedded extends Component<typeof this> {
