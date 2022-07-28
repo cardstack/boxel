@@ -83,7 +83,7 @@ export class CardType extends Resource<Args> {
   }
 
   private async load(typeOfURL: string): Promise<CardDefinitionResource> {
-    let response = await fetch(typeOfURL, {
+    let response = await fetch(this.localRealm.mapURL(typeOfURL), {
       headers: {
         Accept: 'application/vnd.api+json',
       },

@@ -23,7 +23,7 @@ import {
 } from "./index";
 import merge from "lodash/merge";
 import { parse, stringify } from "qs";
-
+import { webStreamToText } from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
 import makeEmberTemplatePlugin from "babel-plugin-ember-template-compilation";
@@ -39,6 +39,7 @@ import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properti
 //@ts-ignore ironically no types are available
 import typescriptPlugin from "@babel/plugin-transform-typescript";
 import { Router } from "./router";
+import type { Readable } from "stream";
 
 // From https://github.com/iliakan/detect-node
 const isNode =
@@ -46,8 +47,12 @@ const isNode =
 
 export interface FileRef {
   path: LocalPath;
-  content: ReadableStream<Uint8Array> | Uint8Array | string;
+  content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+}
+
+interface ResponseWithNodeStream extends Response {
+  nodeStream?: Readable;
 }
 
 export interface RealmAdapter {
@@ -77,7 +82,11 @@ export class Realm {
     return this.#paths.url;
   }
 
-  constructor(url: string, adapter: RealmAdapter) {
+  constructor(
+    url: string,
+    adapter: RealmAdapter,
+    readonly baseRealmURL = baseRealm.url
+  ) {
     this.#paths = new RealmPaths(url);
     this.#startedUp.fulfill((() => this.#startup())());
     this.#adapter = adapter;
@@ -129,7 +138,7 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async handle(request: Request): Promise<Response> {
+  async handle(request: Request): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
     if (request.headers.get("Accept")?.includes("application/vnd.api+json")) {
       await this.ready;
@@ -163,12 +172,31 @@ export class Realm {
     }
   }
 
-  private async serveLocalFile(ref: FileRef): Promise<Response> {
-    return new Response(ref.content, {
+  private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {
+    if (
+      ref.content instanceof ReadableStream ||
+      ref.content instanceof Uint8Array ||
+      typeof ref.content === "string"
+    ) {
+      return new Response(ref.content, {
+        headers: {
+          "last-modified": formatRFC7231(ref.lastModified),
+        },
+      });
+    }
+
+    if (!isNode) {
+      throw new Error(`Cannot handle node stream in a non-node environment`);
+    }
+
+    // add the node stream to the response which will get special handling in the node env
+    let response = new Response(null, {
       headers: {
         "last-modified": formatRFC7231(ref.lastModified),
       },
-    });
+    }) as ResponseWithNodeStream;
+    response.nodeStream = ref.content;
+    return response;
   }
 
   private async upsertCardSource(request: Request): Promise<Response> {
@@ -184,7 +212,9 @@ export class Realm {
     });
   }
 
-  private async getCardSourceOrRedirect(request: Request): Promise<Response> {
+  private async getCardSourceOrRedirect(
+    request: Request
+  ): Promise<ResponseWithNodeStream> {
     let localName = this.#paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
@@ -219,7 +249,7 @@ export class Realm {
         filename: debugFilename,
         plugins: [
           glimmerTemplatePlugin,
-          typescriptPlugin,
+          [typescriptPlugin, { allowDeclareFields: true }],
           [decoratorsProposalPlugin, { legacy: true }],
           classPropertiesProposalPlugin,
           // this "as any" is because typescript is using the Node-specific types
@@ -233,7 +263,7 @@ export class Realm {
                 },
               ]
             : (makeEmberTemplatePlugin as any)(() => etc.precompile),
-          externalsPlugin,
+          [externalsPlugin, { realm: this }],
         ],
       })!.code!;
     } catch (err: any) {
@@ -495,24 +525,22 @@ export class Realm {
     if (typeof content === "string") {
       return content;
     }
-    let decoder = new TextDecoder();
-    let pieces: string[] = [];
     if (content instanceof Uint8Array) {
-      pieces.push(decoder.decode(content));
+      let decoder = new TextDecoder();
+      return decoder.decode(content);
+    } else if (content instanceof ReadableStream) {
+      return await webStreamToText(content);
     } else {
-      let reader = content.getReader();
-      while (true) {
-        let { done, value } = await reader.read();
-        if (done) {
-          pieces.push(decoder.decode(undefined, { stream: false }));
-          break;
-        }
-        if (value) {
-          pieces.push(decoder.decode(value, { stream: true }));
-        }
+      if (!isNode) {
+        throw new Error(`cannot handle node-streams when not in node`);
       }
+      const chunks: Buffer[] = []; // Buffer is available from globalThis when in the node env
+      // the types for Readable have not caught up to the fact these are async generators
+      for await (const chunk of content as any) {
+        chunks.push(Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks).toString("utf-8");
     }
-    return pieces.join("");
   }
 
   private async getCardsOf(request: Request): Promise<Response> {
@@ -603,6 +631,9 @@ export class Realm {
     let data: CardDefinitionResource = {
       id: def.key,
       type: "card-definition",
+      attributes: {
+        cardRef: def.id,
+      },
       relationships: {},
     };
     if (!data.relationships) {
@@ -616,6 +647,7 @@ export class Realm {
         },
         meta: {
           type: "super",
+          ref: def.super,
         },
       };
     }
@@ -626,6 +658,7 @@ export class Realm {
         },
         meta: {
           type: field.fieldType,
+          ref: field.fieldCard,
         },
       };
     }
@@ -697,6 +730,9 @@ function lastModifiedHeader(
 export interface CardDefinitionResource {
   id: string;
   type: "card-definition";
+  attributes: {
+    cardRef: CardRef;
+  };
   relationships: {
     [fieldName: string]: {
       links: {
@@ -704,6 +740,7 @@ export interface CardDefinitionResource {
       };
       meta: {
         type: "super" | "contains" | "containsMany";
+        ref: CardRef;
       };
     };
   };

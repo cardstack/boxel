@@ -23,7 +23,7 @@ export class ModuleSyntax {
   ast: Babel.types.File;
   possibleCards: PossibleCardClass[];
 
-  constructor(readonly src: string) {
+  constructor(private src: string) {
     let moduleAnalysis: Options = { possibleCards: [] };
     let preprocessedSrc = this.preprocessTemplateTags();
 

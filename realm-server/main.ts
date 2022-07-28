@@ -1,7 +1,7 @@
 import yargs from "yargs";
-import { RealmServer } from "./server";
+import { createRealmServer } from "./server";
 
-let { port, path, url } = yargs(process.argv.slice(2))
+let { port, path, url, baseRealmURL } = yargs(process.argv.slice(2))
   .usage("Start realm server")
   .options({
     port: {
@@ -19,11 +19,16 @@ let { port, path, url } = yargs(process.argv.slice(2))
       demandOption: true,
       type: "string",
     },
+    baseRealmURL: {
+      description: "the URL the base realm is served from (optional)",
+      demandOption: true,
+      type: "string",
+    },
   })
   .parseSync();
 
-let app = new RealmServer(path, new URL(url)).start();
-app.listen(port);
+let server = createRealmServer(path, url, baseRealmURL);
+server.listen(port);
 console.log(
-  `realm server listening on port ${port} as url ${url} with realm dir ${path}`
+  `realm server listening on port ${port} as url ${url} with realm dir ${path} using base realm of ${baseRealmURL}`
 );

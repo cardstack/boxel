@@ -1,9 +1,10 @@
 import { executableExtensions, baseRealm } from ".";
-import { Kind, Realm } from "./realm";
+import { Kind, Realm, CardDefinitionResource } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
+import { stringify } from "qs";
 import { Query, Filter, assertQuery } from "./query";
 
 export type CardRef =
@@ -259,7 +260,10 @@ export class SearchIndex {
           this.instances.set(instanceURL, json.data);
         }
       }
-    } else if (hasExecutableExtension(url.href)) {
+    } else if (
+      hasExecutableExtension(url.href) &&
+      url.href !== `${baseRealm.url}card-api.gts` // the base card's module is not analyzable
+    ) {
       let mod = new ModuleSyntax(content);
       this.modules.set(url, mod);
       this.modules.set(trimExecutableExtension(url), mod);
@@ -267,7 +271,30 @@ export class SearchIndex {
   }
 
   private async semanticPhase(): Promise<void> {
-    let newDefinitions: Map<string, CardDefinition> = new Map();
+    let newDefinitions: Map<string, CardDefinition> = new Map([
+      // seed the definitions with the base card
+      [
+        this.internalKeyFor({
+          type: "exportedCard",
+          module: `${baseRealm.url}card-api`,
+          name: "Card",
+        }),
+        {
+          id: {
+            type: "exportedCard",
+            module: `${baseRealm.url}card-api`,
+            name: "Card",
+          },
+          key: this.internalKeyFor({
+            type: "exportedCard",
+            module: `${baseRealm.url}card-api`,
+            name: "Card",
+          }),
+          super: undefined,
+          fields: new Map(),
+        },
+      ],
+    ]);
     for (let [url, mod] of this.modules) {
       for (let possibleCard of mod.possibleCards) {
         if (possibleCard.exportedAs) {
@@ -385,6 +412,15 @@ export class SearchIndex {
       );
     } else {
       if (this.isLocal(new URL(ref.module, url))) {
+        if (
+          baseRealm.fileURL(ref.module).href === `${baseRealm.url}card-api` &&
+          ref.name === "Card"
+        ) {
+          let { module, name } = ref;
+          return definitions.get(
+            this.internalKeyFor({ module, name, type: "exportedCard" })
+          );
+        }
         let inner = this.lookupPossibleCard(new URL(ref.module, url), ref.name);
         if (!inner) {
           return undefined;
@@ -397,11 +433,11 @@ export class SearchIndex {
           inner.possibleCard
         );
       } else {
-        // TODO we should make a fetch to the realm
-        return await getExternalCardDefinition(
-          new URL(ref.module, url),
-          ref.name
-        );
+        return await this.getExternalCardDefinition(new URL(ref.module, url), {
+          type: "exportedCard",
+          name: ref.name,
+          module: ref.module,
+        });
       }
     }
   }
@@ -490,6 +526,45 @@ export class SearchIndex {
     let pathname = this.realmPaths.local(url);
     return ignore.test(pathname).ignored;
   }
+
+  private async getExternalCardDefinition(
+    moduleURL: URL,
+    ref: CardRef
+  ): Promise<CardDefinition | undefined> {
+    if (!baseRealm.inRealm(moduleURL)) {
+      // TODO we need some way to map a module to the realm URL that it comes from
+      // so that we now how to ask for it's cards' definitions
+      throw new Error(`not implemented`);
+    }
+    let url = `${this.realm.baseRealmURL}_typeOf?${stringify(ref)}`;
+    let response = await fetch(url, {
+      headers: {
+        Accept: "application/vnd.api+json",
+      },
+    });
+    if (!response.ok) {
+      console.log(`Could not get card type for ${url}: ${response.status}`);
+      return undefined;
+    }
+    let resource: CardDefinitionResource = (await response.json()).data;
+    let def: CardDefinition = {
+      id: resource.attributes.cardRef,
+      key: resource.id,
+      super: resource.relationships._super?.meta.ref,
+      fields: new Map(
+        Object.entries(resource.relationships)
+          .filter(([fieldName]) => fieldName !== "_super")
+          .map(([fieldName, fieldInfo]) => [
+            fieldName,
+            {
+              fieldType: fieldInfo.meta.type as "contains" | "containsMany",
+              fieldCard: fieldInfo.meta.ref,
+            },
+          ])
+      ),
+    };
+    return def;
+  }
 }
 
 function isOurFieldDecorator(ref: ClassReference, inModule: URL): boolean {
@@ -512,73 +587,6 @@ function getFieldType(
     return ref.name as ReturnType<typeof getFieldType>;
   }
   return undefined;
-}
-
-export async function getExternalCardDefinition(
-  moduleURL: URL,
-  exportName: string
-): Promise<CardDefinition | undefined> {
-  // TODO This is scaffolding for the base realm, implement for real once we
-  // have this realm endpoint fleshed out
-  if (!baseRealm.inRealm(moduleURL)) {
-    return Promise.resolve(undefined);
-  }
-  let path = baseRealm.local(moduleURL);
-  switch (path) {
-    case "card-api":
-      return exportName === "Card"
-        ? {
-            id: {
-              type: "exportedCard",
-              module: moduleURL.href,
-              name: exportName,
-            },
-            key: `${baseRealm.fileURL(path)}/Card`,
-            super: undefined,
-            fields: new Map(),
-          }
-        : undefined;
-    case "string":
-    case "integer":
-    case "date":
-    case "datetime":
-      return exportName === "default"
-        ? {
-            id: {
-              type: "exportedCard",
-              module: moduleURL.href,
-              name: exportName,
-            },
-            super: {
-              type: "exportedCard",
-              module: baseRealm.fileURL("card-api").href,
-              name: "Card",
-            },
-            key: `${baseRealm.fileURL(path)}/default`,
-            fields: new Map(),
-          }
-        : undefined;
-    case "text-area":
-      return exportName === "default"
-        ? Promise.resolve({
-            id: {
-              type: "exportedCard",
-              module: moduleURL.href,
-              name: exportName,
-            },
-            super: {
-              type: "exportedCard",
-              module: baseRealm.fileURL("string").href,
-              name: "default",
-            },
-            key: `${baseRealm.fileURL(path)}/default`,
-            fields: new Map(),
-          })
-        : undefined;
-  }
-  throw new Error(
-    `unimplemented: don't know how to look up card types for ${moduleURL.href}`
-  );
 }
 
 function filterCardData(

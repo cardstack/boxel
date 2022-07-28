@@ -80,7 +80,7 @@ module('Unit | realm', function () {
           },
         },
       },
-      new URL('http://test-realm/root/')
+      'http://test-realm/root/'
     );
     await realm.ready;
     {
@@ -665,6 +665,13 @@ module('Unit | realm', function () {
         data: {
           id: 'http://test-realm/person/Person',
           type: 'card-definition',
+          attributes: {
+            cardRef: {
+              type: 'exportedCard',
+              module: 'http://test-realm/person',
+              name: 'Person',
+            },
+          },
           relationships: {
             _super: {
               links: {
@@ -673,6 +680,11 @@ module('Unit | realm', function () {
               },
               meta: {
                 type: 'super',
+                ref: {
+                  type: 'exportedCard',
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'Card',
+                },
               },
             },
             firstName: {
@@ -682,6 +694,11 @@ module('Unit | realm', function () {
               },
               meta: {
                 type: 'contains',
+                ref: {
+                  type: 'exportedCard',
+                  module: 'https://cardstack.com/base/string',
+                  name: 'default',
+                },
               },
             },
           },

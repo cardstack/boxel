@@ -1,9 +1,11 @@
 import { Resource, useResource } from 'ember-resources';
+import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
-import { Format, prepareToRender, Card } from 'runtime-spike/lib/card-api';
 import { tracked } from '@glimmer/tracking';
 import { ComponentLike } from '@glint/template';
+import CardAPI from '../services/card-api';
+import type { Format, Card } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: { card: Card | undefined; format: Format };
@@ -11,6 +13,7 @@ interface Args {
 
 export class RenderedCard extends Resource<Args> {
   @tracked component: ComponentLike<{ Args: {}; Blocks: {} }> | undefined;
+  @service declare cardAPI: CardAPI;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
@@ -21,7 +24,8 @@ export class RenderedCard extends Resource<Args> {
   }
 
   @restartableTask private async load(card: Card, format: Format) {
-    let { component } = await prepareToRender(card, format);
+    await this.cardAPI.loaded;
+    let { component } = await this.cardAPI.api.prepareToRender(card, format);
     this.component = component;
   }
 }
