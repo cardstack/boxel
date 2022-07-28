@@ -4,6 +4,7 @@ import { click, fillIn, waitFor } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import CardEditor, { ExistingCardArgs }  from 'runtime-spike/components/card-editor';
 import { renderComponent } from '../../helpers/render-component';
+import { testRealmURL } from '../../helpers';
 import type { Format } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -35,7 +36,7 @@ module('Integration | card-editor', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-    const args: ExistingCardArgs = { type: 'existing', json, url: 'http://test-realm/card' };
+    const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -70,7 +71,7 @@ module('Integration | card-editor', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-    const args: ExistingCardArgs = { type: 'existing', json, url: 'http://test-realm/card' };
+    const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -117,7 +118,7 @@ module('Integration | card-editor', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-    const args: ExistingCardArgs = { type: 'existing', json, url: 'http://test-realm/card' };
+    const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -165,7 +166,7 @@ module('Integration | card-editor', function (hooks) {
         meta: { adoptsFrom: { module: '', name: 'default'} }
       }
     };
-    const args: ExistingCardArgs = { type: 'existing', json, url: 'http://test-realm/card' };
+    const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

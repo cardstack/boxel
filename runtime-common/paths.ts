@@ -28,6 +28,10 @@ export class RealmPaths {
   }
 
   directoryURL(local: LocalPath): URL {
+    if (local === "") {
+      // this preserves a root that is not at the origin of the URL
+      return new URL(this.url);
+    }
     return new URL(local + "/", this.url);
   }
 
@@ -37,7 +41,10 @@ export class RealmPaths {
 }
 
 export function join(...pathParts: string[]): LocalPath {
-  return pathParts.join("/").replace(/^\//, "").replace(/\/$/, "");
+  return pathParts
+    .map((p) => p.replace(/^\//, "").replace(/\/$/, ""))
+    .filter(Boolean)
+    .join("/");
 }
 
 // Documenting that this represents a local path within realm, with no leading

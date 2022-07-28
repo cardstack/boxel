@@ -14,17 +14,19 @@ export interface Dir {
   [name: string]: string | Dir;
 }
 
+export const testRealmURL = 'http://test-realm/test/';
+
 export const TestRealm = {
   create(flatFiles: Record<string, string | object>, realmURL?: string): Realm {
     return new Realm(
-      realmURL ?? 'http://test-realm/',
+      realmURL ?? testRealmURL,
       new TestRealmAdapter(flatFiles),
       'http://localhost:4201/base/'
     );
   },
   createWithAdapter(adapter: RealmAdapter, realmURL?: string): Realm {
     return new Realm(
-      realmURL ?? 'http://test-realm/',
+      realmURL ?? testRealmURL,
       adapter,
       'http://localhost:4201/base/'
     );
@@ -36,8 +38,11 @@ export class TestRealmAdapter implements RealmAdapter {
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
 
-  constructor(flatFiles: Record<string, string | object>, realmURL?: URL) {
-    this.#paths = new RealmPaths(realmURL ?? new URL('http://test-realm/'));
+  constructor(
+    flatFiles: Record<string, string | object>,
+    realmURL = new URL(testRealmURL)
+  ) {
+    this.#paths = new RealmPaths(realmURL);
     let now = Date.now();
     for (let [path, content] of Object.entries(flatFiles)) {
       let segments = path.split('/');

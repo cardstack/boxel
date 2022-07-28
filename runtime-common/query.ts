@@ -4,7 +4,6 @@ import { assertJSONValue, assertJSONPrimitive } from "./json-validation";
 import qs from "qs";
 
 export interface Query {
-  id?: string;
   filter?: Filter;
   sort?: Sort;
   page?: { size?: number | string; cursor?: string };
@@ -82,10 +81,6 @@ export function assertQuery(
 ): asserts query is Query {
   if (typeof query !== "object" || query == null) {
     throw new Error(`${pointer.join("/") || "/"}: missing query object`);
-  }
-
-  if ("id" in query) {
-    assertCardId(query.id, pointer.concat("id"));
   }
 
   if ("filter" in query) {

@@ -493,11 +493,6 @@ export class SearchIndex {
       return [...this.instances.values()];
     }
 
-    if (query.id) {
-      let card = this.instances.get(new URL(query.id));
-      return card ? [card] : [];
-    }
-
     if (query.filter) {
       return filterCardData(query.filter, [...this.instances.values()]);
     }
@@ -512,6 +507,10 @@ export class SearchIndex {
   async exportedCardsOf(module: string): Promise<CardRef[]> {
     module = new URL(module, this.realm.url).href;
     return this.exportedCardRefs.get(module) ?? [];
+  }
+
+  async card(url: URL): Promise<CardResource | undefined> {
+    return this.instances.get(url);
   }
 
   public isIgnored(url: URL): boolean {
