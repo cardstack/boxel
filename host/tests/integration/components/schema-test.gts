@@ -3,6 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { CardRef, baseRealm } from '@cardstack/runtime-common';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
+import { testRealmURL } from '../../helpers';
 import Schema from 'runtime-spike/components/schema';
 import Service from '@ember/service';
 import { waitUntil } from '@ember/test-helpers';
@@ -10,10 +11,10 @@ import { waitUntil } from '@ember/test-helpers';
 // TODO Consider making this a helper
 class NodeRealm extends Service {
   isAvailable = true;
-  url = new URL('http://localhost:4202/');
+  url = new URL('http://localhost:4201/test/');
   realmMappings = new Map([
     [baseRealm.url, 'http://localhost:4201/base/'],
-    ['http://test-realm/', 'http://localhost:4202/']
+    [testRealmURL, 'http://localhost:4201/test/']
   ])
   mapURL(url: string, reverseLookup = false) {
     for (let [realm, forwardURL] of this.realmMappings) {
@@ -36,7 +37,7 @@ module('Integration | schema', function (hooks) {
   })
 
   test('renders card schema view', async function (assert) {
-    const args: CardRef =  { type: 'exportedCard', module: 'http://test-realm/person', name: 'Person' };
+    const args: CardRef =  { type: 'exportedCard', module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -47,14 +48,14 @@ module('Integration | schema', function (hooks) {
 
     await waitUntil(() => Boolean(document.querySelector('[data-test-card-id]')));
 
-    assert.dom('[data-test-card-id]').hasText('Card ID: http://test-realm/person/Person');
+    assert.dom('[data-test-card-id]').hasText(`Card ID: ${testRealmURL}person/Person`);
     assert.dom('[data-test-adopts-from').hasText('Adopts From: https://cardstack.com/base/card-api/Card');
     assert.dom('[data-test-field="firstName"]').hasText('firstName - contains - field card ID: https://cardstack.com/base/string/default');
     assert.dom('[data-test-create-card="Person"]').exists();
   });
 
   test('renders link to field card for contained field', async function(assert) {
-    const args: CardRef =  { type: 'exportedCard', module: 'http://test-realm/post', name: 'Post' };
+    const args: CardRef =  { type: 'exportedCard', module: `${testRealmURL}post`, name: 'Post' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

@@ -26,8 +26,7 @@ module("Realm Server", function (hooks) {
     copySync(join(__dirname, "cards"), dir.name);
 
     server = createRealmServer(
-      dir.name,
-      testRealmHref,
+      [{ path: dir.name, realmURL: testRealmHref }],
       "http://localhost:4201/base/"
     );
     server.listen(testRealmURL.port);
