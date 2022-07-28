@@ -40,7 +40,7 @@ export class TestRealmAdapter implements RealmAdapter {
 
   constructor(
     flatFiles: Record<string, string | object>,
-    private realmURL = new URL(testRealmURL)
+    realmURL = new URL(testRealmURL)
   ) {
     this.#paths = new RealmPaths(realmURL);
     let now = Date.now();
