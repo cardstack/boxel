@@ -23,7 +23,11 @@ livenessWatcher.registerShutdownListener(async () => {
       throw new Error(`could not get FileSystem`);
     }
     fetchHandler.addRealm(
-      new Realm('http://local-realm/', new LocalRealm(messageHandler.fs))
+      new Realm(
+        'http://local-realm/',
+        new LocalRealm(messageHandler.fs),
+        'http://localhost:4201/base/' // This is the locally served base realm
+      )
     );
   } catch (err) {
     console.log(err);

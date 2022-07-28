@@ -2,7 +2,6 @@ import Component from '@glimmer/component';
 import { render } from '../resources/rendered-card';
 //@ts-ignore cached not available yet in definitely typed
 import { tracked, cached } from '@glimmer/tracking';
-import { Card, Format, serializeCard } from 'runtime-spike/lib/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -12,6 +11,10 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common';
+import RouterService from '@ember/routing/router-service';
+import { service } from '@ember/service';
+import CardAPI from '../services/card-api';
+import type { Card, Format, } from 'https://cardstack.com/base/card-api';
 
 export interface NewCardArgs {
   type: 'new';
@@ -80,6 +83,8 @@ export default class Preview extends Component<Signature> {
     {{/if}}
   </template>
 
+  @service declare router: RouterService;
+  @service declare cardAPI: CardAPI;
   @tracked
   format: Format = this.args.card.type === 'new' ? 'edit' : 'isolated';
   @tracked
@@ -120,13 +125,13 @@ export default class Preview extends Component<Signature> {
         throw new Error('bug: this should never happen');
       }
       json = {
-        data: serializeCard(this.card, {
+        data: this.cardAPI.api.serializeCard(this.card, {
           adoptsFrom: this.args.card.context,
         })
       };
     } else {
       if (this.card && this.initialCardData) {
-        json = { data: serializeCard(this.card, { adoptsFrom: this.initialCardData.data.meta.adoptsFrom }) };
+        json = { data: this.cardAPI.api.serializeCard(this.card, { adoptsFrom: this.initialCardData.data.meta.adoptsFrom }) };
       } else {
         return undefined;
       }
@@ -184,6 +189,7 @@ export default class Preview extends Component<Signature> {
     if (!url) {
       return;
     }
+    await this.cardAPI.loaded;
     // this is just for loading fixtures for testing. remove once we
     // have an actual service we can mock
     if (this.args.card.type === 'existing' && this.args.card.json) {

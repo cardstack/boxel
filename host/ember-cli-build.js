@@ -1,28 +1,13 @@
 'use strict';
 
 const EmberApp = require('ember-cli/lib/broccoli/ember-app');
-const { compatBuild, V1Addon } = require('@embroider/compat');
+const { compatBuild } = require('@embroider/compat');
 const { Webpack } = require('@embroider/webpack');
 const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
-const buildFunnel = require('broccoli-funnel');
-const mergeTrees = require('broccoli-merge-trees');
-const { resolve } = require('path');
-let base = resolve('../base');
 
 module.exports = function (defaults) {
-  let app = new EmberApp(defaults, {
-    trees: {
-      app: mergeTrees([
-        'app',
-        buildFunnel(base, {
-          destDir: 'lib',
-          // don't copy over package.json or any other tooling file
-          include: ['**/*.js', '**/*.ts', '**/*.gts', '**/*.gjs'],
-        }),
-      ]),
-    },
-  });
+  let app = new EmberApp(defaults, {});
   return compatBuild(app, Webpack, {
     staticAddonTrees: true,
     staticAddonTestSupportTrees: true,

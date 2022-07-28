@@ -79,7 +79,7 @@ export default class Schema extends Component<Signature> {
     if (!this.localRealm.isAvailable) {
       throw new Error('Local realm is not available');
     }
-    return new RealmPaths(this.localRealm.url);
+    return new RealmPaths(this.localRealm.mapURL(this.localRealm.url.href, true));
   }
 
   @action
