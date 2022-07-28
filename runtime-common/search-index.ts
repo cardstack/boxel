@@ -484,15 +484,23 @@ export class SearchIndex {
   async search(query: Query): Promise<CardResource[]> {
     assertQuery(query);
 
+    let cards = [...this.instances.values()];
+
     if (!query || Object.keys(query).length === 0) {
-      return [...this.instances.values()];
+      return cards;
     }
+
+    let expression: Record<string, any>[] = [];
 
     if (query.filter) {
-      return filterCardData(query.filter, [...this.instances.values()]);
+      if ("every" in query.filter) {
+        expression = query.filter.every.flatMap((f) => filterToExpression(f));
+      } else {
+        expression = filterToExpression(query.filter);
+      }
     }
 
-    throw new Error("Not implemented");
+    return cards.flatMap((card) => (isMatching(expression, card) ? card : []));
   }
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
@@ -592,58 +600,6 @@ function getFieldType(
   return undefined;
 }
 
-function filterCardData(
-  filter: Filter,
-  results: CardResource[],
-  opts?: { negate?: true }
-): CardResource[] {
-  if (!("not" in filter) && !("eq" in filter)) {
-    throw new Error("Not implemented");
-  }
-
-  if ("not" in filter) {
-    results = filterCardData(filter.not, results, { negate: true });
-  }
-
-  if ("eq" in filter) {
-    results = filterByFieldData(filter.eq, results, opts);
-  }
-
-  return results;
-}
-
-function filterByFieldData(
-  query: Record<string, any>,
-  instances: CardResource[],
-  opts?: { negate?: true }
-): CardResource[] {
-  let results = instances as Record<string, any>[];
-
-  for (let [key, value] of Object.entries(query)) {
-    results = results.filter((c) => {
-      let fields = key.split(".");
-      if (fields.length > 1) {
-        let compValue = c;
-        while (fields.length > 0 && compValue) {
-          let field = fields.shift();
-          compValue = compValue?.[field!];
-        }
-        if (opts?.negate) {
-          return compValue !== value;
-        }
-        return compValue === value;
-      } else {
-        if (opts?.negate) {
-          return c[key] !== value;
-        }
-        return c[key] === value;
-      }
-    });
-  }
-
-  return results as CardResource[];
-}
-
 function flatten(obj: Record<string, any>): Record<string, any> {
   let result: Record<string, any> = {};
   for (let [key, value] of Object.entries(obj)) {
@@ -657,4 +613,47 @@ function flatten(obj: Record<string, any>): Record<string, any> {
     }
   }
   return result;
+}
+
+function filterToExpression(filter: Filter): Record<string, any>[] {
+  if ("not" in filter) {
+    if ("not" in filter.not) {
+      return filterToExpression(filter.not.not);
+    }
+    return filterToExpression(filter.not).map((expr: Record<string, any>) => ({
+      type: `not ${expr.type}`,
+      fieldPath: expr.fieldPath,
+      value: expr.value,
+    }));
+  }
+  if ("eq" in filter) {
+    return Object.entries(filter.eq).map(([fieldPath, value]) => ({
+      type: `eq`,
+      fieldPath,
+      value,
+    }));
+  }
+
+  throw new Error("Unknown filter");
+}
+
+function isMatching(
+  expressions: Record<string, any>[],
+  card: CardResource<string>
+): boolean {
+  if (!card.searchData) {
+    return false;
+  }
+  for (let expr of expressions) {
+    if (expr.type === "eq") {
+      if (card.searchData[expr.fieldPath] !== expr.value) {
+        return false;
+      }
+    } else if (expr.type === "not eq") {
+      if (card.searchData[expr.fieldPath] === expr.value) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
