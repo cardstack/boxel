@@ -2,9 +2,9 @@ import http, { IncomingMessage, ServerResponse } from "http";
 import { NodeRealm } from "./node-realm";
 import { Realm, baseRealm, externalsMap } from "@cardstack/runtime-common";
 import { resolve } from "path";
-import { streamToText as nodeStreamToText } from "./stream";
-import { streamToText as webStreamToText } from "@cardstack/runtime-common/stream";
+import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { LocalPath, RealmPaths } from "@cardstack/runtime-common/paths";
+import { Readable } from "stream";
 
 const externalsPath = "/externals/";
 
@@ -124,4 +124,13 @@ function handleExternals(req: IncomingMessage, res: ServerResponse): void {
   res.setHeader("content-type", "text/javascript");
   res.write(src.join("\n"));
   res.end();
+}
+
+async function nodeStreamToText(stream: Readable): Promise<string> {
+  const chunks: Buffer[] = [];
+  // the types for Readable have not caught up to the fact these are async generators
+  for await (const chunk of stream as any) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf-8");
 }

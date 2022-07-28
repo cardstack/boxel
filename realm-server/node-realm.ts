@@ -1,7 +1,5 @@
 import { RealmAdapter, Kind, FileRef } from "@cardstack/runtime-common";
 import { LocalPath } from "@cardstack/runtime-common/paths";
-import { Readable } from "stream";
-import { streamToText } from "./stream";
 
 import {
   readdirSync,
@@ -75,14 +73,5 @@ export class NodeRealm implements RealmAdapter {
   async remove(path: LocalPath): Promise<void> {
     let absolutePath = join(this.realmDir, path);
     removeSync(absolutePath);
-  }
-
-  async streamToText(
-    stream: Readable | ReadableStream<Uint8Array>
-  ): Promise<string> {
-    if (!(stream instanceof Readable)) {
-      throw new Error(`Cannot handle web-stream in node environment`);
-    }
-    return await streamToText(stream);
   }
 }

@@ -23,7 +23,7 @@ import {
 } from "./index";
 import merge from "lodash/merge";
 import { parse, stringify } from "qs";
-
+import { webStreamToText } from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
 import makeEmberTemplatePlugin from "babel-plugin-ember-template-compilation";
@@ -68,8 +68,6 @@ export interface RealmAdapter {
   write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
 
   remove(path: LocalPath): Promise<void>;
-
-  streamToText(stream: Readable | ReadableStream<Uint8Array>): Promise<string>;
 }
 
 export class Realm {
@@ -530,8 +528,18 @@ export class Realm {
     if (content instanceof Uint8Array) {
       let decoder = new TextDecoder();
       return decoder.decode(content);
+    } else if (content instanceof ReadableStream) {
+      return await webStreamToText(content);
     } else {
-      return await this.#adapter.streamToText(content);
+      if (!isNode) {
+        throw new Error(`cannot handle node-streams when not in node`);
+      }
+      const chunks: Buffer[] = []; // Buffer is available from globalThis when in the node env
+      // the types for Readable have not caught up to the fact these are async generators
+      for await (const chunk of content as any) {
+        chunks.push(Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks).toString("utf-8");
     }
   }
 

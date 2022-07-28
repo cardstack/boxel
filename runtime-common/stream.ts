@@ -1,4 +1,4 @@
-export async function streamToText(
+export async function webStreamToText(
   stream: ReadableStream<Uint8Array>
 ): Promise<string> {
   let decoder = new TextDecoder();
