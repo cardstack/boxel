@@ -1,11 +1,10 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
-import { click, fillIn } from '@ember/test-helpers';
+import { click, fillIn, waitFor } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import CardEditor, { ExistingCardArgs }  from 'runtime-spike/components/card-editor';
 import { renderComponent } from '../../helpers/render-component';
 import type { Format } from "https://cardstack.com/base/card-api";
-import type CardAPIService from "runtime-spike/services/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -13,15 +12,10 @@ let string: typeof import ("https://cardstack.com/base/string");
 const formats: Format[] = ['isolated', 'embedded', 'edit'];
 module('Integration | card-editor', function (hooks) {
   setupRenderingTest(hooks);
-  let apiService: CardAPIService;
 
   hooks.before(async function () {
     cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
     string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
-  });
-
-  hooks.beforeEach(async function () { 
-    apiService = this.owner.lookup('service:card-api') as CardAPIService;
   });
 
   test('renders card', async function (assert) {
@@ -49,7 +43,7 @@ module('Integration | card-editor', function (hooks) {
         </template>
       }
     )
-
+    await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-firstName]').hasText('Mango');
   });
 
@@ -84,8 +78,7 @@ module('Integration | card-editor', function (hooks) {
         </template>
       }
     )
-    await apiService.loaded;
-
+    await waitFor('[data-test-isolated-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-isolated-firstName]').hasText('Mango');
     assert.dom('[data-test-embedded-firstName]').doesNotExist();
     assert.dom('[data-test-edit-firstName]').doesNotExist();
@@ -132,9 +125,9 @@ module('Integration | card-editor', function (hooks) {
         </template>
       }
     )
-    await apiService.loaded;
 
     await click('.format-button.edit')
+    await waitFor('[data-test-edit-firstName] input'); // we need to wait for the card instance to load
     await fillIn('[data-test-edit-firstName] input', 'Van Gogh');
 
     await click('.format-button.embedded');
@@ -180,12 +173,12 @@ module('Integration | card-editor', function (hooks) {
         </template>
       }
     )
-    await apiService.loaded;
 
     await click('.format-button.edit')
     assert.dom('[data-test-save-card]').doesNotExist();
     assert.dom('[data-test-reset]').doesNotExist();
 
+    await waitFor('[data-test-field="title"] input'); // we need to wait for the card instance to load
     await fillIn('[data-test-field="title"] input', 'Why I Whine'); // dirty top level field
     assert.dom('[data-test-field="title"] input').hasValue('Why I Whine');
     assert.dom('[data-test-save-card]').exists();

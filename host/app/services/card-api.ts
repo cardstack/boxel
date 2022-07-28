@@ -24,7 +24,13 @@ export default class CardAPI extends Service {
   }
 
   get loaded(): Promise<void> {
-    return (this.load as any).last.isRunning;
+    // TODO probably there is a more elegant way to express this in EC
+    return new Promise(async (res) => {
+      while (taskFor(this.load).isRunning) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      res();
+    });
   }
 
   @task private async load(): Promise<void> {
