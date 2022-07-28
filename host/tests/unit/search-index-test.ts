@@ -740,8 +740,8 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           eq: {
-            'attributes.title': 'Card 1',
-            'attributes.description': 'Sample post',
+            title: 'Card 1',
+            description: 'Sample post',
           },
         },
       });
@@ -753,18 +753,44 @@ posts/ignore-me.gts
     test('can combine multiple filters', async function (assert) {
       let matching = await indexer.search({
         filter: {
-          eq: {
-            'attributes.title': 'Card 1',
-          },
-          not: {
-            eq: {
-              'attributes.author.name': 'Cardy',
+          every: [
+            {
+              eq: {
+                title: 'Card 1',
+              },
             },
-          },
+            {
+              not: {
+                eq: {
+                  'author.name': 'Cardy',
+                },
+              },
+            },
+          ],
         },
       });
       assert.strictEqual(matching.length, 1);
       assert.strictEqual(matching[0]?.id, 'http://test-realm/cards/1');
+    });
+
+    test('can handle a filter with double negatives', async function (assert) {
+      // note: do we allow this?
+      let matching = await indexer.search({
+        filter: {
+          not: {
+            not: {
+              not: {
+                eq: {
+                  'author.email': 'carl@stack.com',
+                },
+              },
+            },
+          },
+        },
+      });
+      assert.strictEqual(matching.length, 2);
+      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
+      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/1');
     });
 
     // Tests from hub/**/**/card-service-test.ts
@@ -777,7 +803,7 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           eq: {
-            'attributes.author.name': 'Carl Stack',
+            'author.name': 'Carl Stack',
           },
         },
       });
@@ -791,7 +817,7 @@ posts/ignore-me.gts
         filter: {
           not: {
             eq: {
-              'attributes.author.email': 'carl@stack.com',
+              'author.email': 'carl@stack.com',
             },
           },
         },

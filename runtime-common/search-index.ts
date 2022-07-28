@@ -493,11 +493,7 @@ export class SearchIndex {
     let expression: Record<string, any>[] = [];
 
     if (query.filter) {
-      if ("every" in query.filter) {
-        expression = query.filter.every.flatMap((f) => filterToExpression(f));
-      } else {
-        expression = filterToExpression(query.filter);
-      }
+      expression = filterToExpression(query.filter);
     }
 
     return cards.flatMap((card) => (isMatching(expression, card) ? card : []));
@@ -616,16 +612,21 @@ function flatten(obj: Record<string, any>): Record<string, any> {
 }
 
 function filterToExpression(filter: Filter): Record<string, any>[] {
+  if ("every" in filter) {
+    return filter.every.flatMap((f) => filterToExpression(f));
+  }
+
   if ("not" in filter) {
     if ("not" in filter.not) {
       return filterToExpression(filter.not.not);
     }
-    return filterToExpression(filter.not).map((expr: Record<string, any>) => ({
-      type: `not ${expr.type}`,
-      fieldPath: expr.fieldPath,
-      value: expr.value,
+    return filterToExpression(filter.not).map(({ type, fieldPath, value }) => ({
+      type: `not ${type}`,
+      fieldPath,
+      value,
     }));
   }
+
   if ("eq" in filter) {
     return Object.entries(filter.eq).map(([fieldPath, value]) => ({
       type: `eq`,
