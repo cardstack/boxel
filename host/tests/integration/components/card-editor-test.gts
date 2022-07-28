@@ -13,6 +13,7 @@ let string: typeof import ("https://cardstack.com/base/string");
 const formats: Format[] = ['isolated', 'embedded', 'edit'];
 module('Integration | card-editor', function (hooks) {
   setupRenderingTest(hooks);
+  let apiService: CardAPIService;
 
   hooks.before(async function () {
     cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
@@ -20,8 +21,7 @@ module('Integration | card-editor', function (hooks) {
   });
 
   hooks.beforeEach(async function () { 
-    let apiService = this.owner.lookup('service:card-api') as CardAPIService;
-    await apiService.loaded;
+    apiService = this.owner.lookup('service:card-api') as CardAPIService;
   });
 
   test('renders card', async function (assert) {
@@ -84,6 +84,7 @@ module('Integration | card-editor', function (hooks) {
         </template>
       }
     )
+    await apiService.loaded;
 
     assert.dom('[data-test-isolated-firstName]').hasText('Mango');
     assert.dom('[data-test-embedded-firstName]').doesNotExist();
@@ -131,6 +132,7 @@ module('Integration | card-editor', function (hooks) {
         </template>
       }
     )
+    await apiService.loaded;
 
     await click('.format-button.edit')
     await fillIn('[data-test-edit-firstName] input', 'Van Gogh');
@@ -178,6 +180,7 @@ module('Integration | card-editor', function (hooks) {
         </template>
       }
     )
+    await apiService.loaded;
 
     await click('.format-button.edit')
     assert.dom('[data-test-save-card]').doesNotExist();
