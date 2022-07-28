@@ -6,7 +6,7 @@ import {
   CardDocument,
   isCardDocument,
 } from "./search-index";
-import { RealmPaths, LocalPath } from "./paths";
+import { RealmPaths, LocalPath, join } from "./paths";
 import {
   systemError,
   notFound,
@@ -23,7 +23,7 @@ import {
 } from "./index";
 import merge from "lodash/merge";
 import { parse, stringify } from "qs";
-
+import { webStreamToText } from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
 import makeEmberTemplatePlugin from "babel-plugin-ember-template-compilation";
@@ -39,6 +39,7 @@ import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properti
 //@ts-ignore ironically no types are available
 import typescriptPlugin from "@babel/plugin-transform-typescript";
 import { Router } from "./router";
+import type { Readable } from "stream";
 
 // From https://github.com/iliakan/detect-node
 const isNode =
@@ -46,8 +47,12 @@ const isNode =
 
 export interface FileRef {
   path: LocalPath;
-  content: ReadableStream<Uint8Array> | Uint8Array | string;
+  content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+}
+
+interface ResponseWithNodeStream extends Response {
+  nodeStream?: Readable;
 }
 
 export interface RealmAdapter {
@@ -57,6 +62,8 @@ export interface RealmAdapter {
   ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void>;
 
   openFile(path: LocalPath): Promise<FileRef | undefined>;
+
+  exists(path: LocalPath): Promise<boolean>;
 
   write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
 
@@ -75,7 +82,11 @@ export class Realm {
     return this.#paths.url;
   }
 
-  constructor(url: string, adapter: RealmAdapter) {
+  constructor(
+    url: string,
+    adapter: RealmAdapter,
+    readonly baseRealmURL = baseRealm.url
+  ) {
     this.#paths = new RealmPaths(url);
     this.#startedUp.fulfill((() => this.#startup())());
     this.#adapter = adapter;
@@ -127,7 +138,7 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async handle(request: Request): Promise<Response> {
+  async handle(request: Request): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
     if (request.headers.get("Accept")?.includes("application/vnd.api+json")) {
       await this.ready;
@@ -161,12 +172,31 @@ export class Realm {
     }
   }
 
-  private async serveLocalFile(ref: FileRef): Promise<Response> {
-    return new Response(ref.content, {
+  private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {
+    if (
+      ref.content instanceof ReadableStream ||
+      ref.content instanceof Uint8Array ||
+      typeof ref.content === "string"
+    ) {
+      return new Response(ref.content, {
+        headers: {
+          "last-modified": formatRFC7231(ref.lastModified),
+        },
+      });
+    }
+
+    if (!isNode) {
+      throw new Error(`Cannot handle node stream in a non-node environment`);
+    }
+
+    // add the node stream to the response which will get special handling in the node env
+    let response = new Response(null, {
       headers: {
         "last-modified": formatRFC7231(ref.lastModified),
       },
-    });
+    }) as ResponseWithNodeStream;
+    response.nodeStream = ref.content;
+    return response;
   }
 
   private async upsertCardSource(request: Request): Promise<Response> {
@@ -182,7 +212,9 @@ export class Realm {
     });
   }
 
-  private async getCardSourceOrRedirect(request: Request): Promise<Response> {
+  private async getCardSourceOrRedirect(
+    request: Request
+  ): Promise<ResponseWithNodeStream> {
     let localName = this.#paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
@@ -217,7 +249,7 @@ export class Realm {
         filename: debugFilename,
         plugins: [
           glimmerTemplatePlugin,
-          typescriptPlugin,
+          [typescriptPlugin, { allowDeclareFields: true }],
           [decoratorsProposalPlugin, { legacy: true }],
           classPropertiesProposalPlugin,
           // this "as any" is because typescript is using the Node-specific types
@@ -231,7 +263,7 @@ export class Realm {
                 },
               ]
             : (makeEmberTemplatePlugin as any)(() => etc.precompile),
-          externalsPlugin,
+          [externalsPlugin, { realm: this }],
         ],
       })!.code!;
     } catch (err: any) {
@@ -288,7 +320,7 @@ export class Realm {
 
     // new instances are created in a folder named after the card
     let dirName = `/${json.data.meta.adoptsFrom.name}/`;
-    let entries = await this.#searchIndex.directory(new URL(dirName, this.url));
+    let entries = await this.directoryEntries(new URL(dirName, this.url));
     let index = 0;
     if (entries) {
       for (let { name, kind } of entries) {
@@ -403,12 +435,37 @@ export class Realm {
     return new Response(null, { status: 204 });
   }
 
+  private async directoryEntries(
+    url: URL
+  ): Promise<{ name: string; kind: Kind }[] | undefined> {
+    if (await this.isIgnored(url)) {
+      return undefined;
+    }
+    let path = this.#paths.local(url);
+    if (!(await this.#adapter.exists(path))) {
+      return undefined;
+    }
+    let entries: { name: string; kind: Kind }[] = [];
+    for await (let entry of this.#adapter.readdir(path)) {
+      let innerPath = join(path, entry.name);
+      let innerURL =
+        entry.kind === "directory"
+          ? this.#paths.directoryURL(innerPath)
+          : this.#paths.fileURL(innerPath);
+      if (await this.isIgnored(innerURL)) {
+        continue;
+      }
+      entries.push(entry);
+    }
+    return entries;
+  }
+
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
     let localPath: LocalPath = this.#paths.local(new URL(request.url));
     let url = this.#paths.directoryURL(localPath);
 
-    let entries = await this.#searchIndex.directory(url);
+    let entries = await this.directoryEntries(url);
     if (!entries) {
       console.log(`can't find directory ${url.href}`);
       return notFound(request);
@@ -459,28 +516,31 @@ export class Realm {
     };
   }
 
+  private async isIgnored(url: URL): Promise<boolean> {
+    await this.ready;
+    return this.#searchIndex.isIgnored(url);
+  }
+
   private async fileContentToText({ content }: FileRef): Promise<string> {
     if (typeof content === "string") {
       return content;
     }
-    let decoder = new TextDecoder();
-    let pieces: string[] = [];
     if (content instanceof Uint8Array) {
-      pieces.push(decoder.decode(content));
+      let decoder = new TextDecoder();
+      return decoder.decode(content);
+    } else if (content instanceof ReadableStream) {
+      return await webStreamToText(content);
     } else {
-      let reader = content.getReader();
-      while (true) {
-        let { done, value } = await reader.read();
-        if (done) {
-          pieces.push(decoder.decode(undefined, { stream: false }));
-          break;
-        }
-        if (value) {
-          pieces.push(decoder.decode(value, { stream: true }));
-        }
+      if (!isNode) {
+        throw new Error(`cannot handle node-streams when not in node`);
       }
+      const chunks: Buffer[] = []; // Buffer is available from globalThis when in the node env
+      // the types for Readable have not caught up to the fact these are async generators
+      for await (const chunk of content as any) {
+        chunks.push(Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks).toString("utf-8");
     }
-    return pieces.join("");
   }
 
   private async getCardsOf(request: Request): Promise<Response> {
@@ -571,6 +631,9 @@ export class Realm {
     let data: CardDefinitionResource = {
       id: def.key,
       type: "card-definition",
+      attributes: {
+        cardRef: def.id,
+      },
       relationships: {},
     };
     if (!data.relationships) {
@@ -584,6 +647,7 @@ export class Realm {
         },
         meta: {
           type: "super",
+          ref: def.super,
         },
       };
     }
@@ -594,6 +658,7 @@ export class Realm {
         },
         meta: {
           type: field.fieldType,
+          ref: field.fieldCard,
         },
       };
     }
@@ -665,6 +730,9 @@ function lastModifiedHeader(
 export interface CardDefinitionResource {
   id: string;
   type: "card-definition";
+  attributes: {
+    cardRef: CardRef;
+  };
   relationships: {
     [fieldName: string]: {
       links: {
@@ -672,6 +740,7 @@ export interface CardDefinitionResource {
       };
       meta: {
         type: "super" | "contains" | "containsMany";
+        ref: CardRef;
       };
     };
   };

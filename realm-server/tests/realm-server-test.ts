@@ -1,6 +1,6 @@
 import { module, test } from "qunit";
 import supertest, { Test, SuperTest } from "supertest";
-import { RealmServer } from "../server";
+import { createRealmServer } from "../server";
 import { join } from "path";
 import { Server } from "http";
 import { dirSync, setGracefulCleanup, DirResult } from "tmp";
@@ -25,8 +25,12 @@ module("Realm Server", function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
 
-    let app = new RealmServer(dir.name, testRealmURL).start();
-    server = app.listen(testRealmURL.port);
+    server = createRealmServer(
+      dir.name,
+      testRealmHref,
+      "http://localhost:4201/base/"
+    );
+    server.listen(testRealmURL.port);
     request = supertest(server);
   });
 
@@ -91,7 +95,7 @@ module("Realm Server", function (hooks) {
       assert.ok(json.data.meta.lastModified, "lastModified is populated");
       let cardFile = join(dir.name, "Card", "1.json");
       assert.ok(existsSync(cardFile), "card json exists");
-      let card = readJSONSync(join(dir.name, "Card", "1.json"));
+      let card = readJSONSync(cardFile);
       assert.deepEqual(
         card,
         {
@@ -113,13 +117,79 @@ module("Realm Server", function (hooks) {
     }
   });
 
+  test("serves a card PATCH request", async function (assert) {
+    let response = await request
+      .patch("/person-1")
+      .send({
+        data: {
+          type: "card",
+          attributes: {
+            firstName: "Van Gogh",
+          },
+          meta: {
+            adoptsFrom: {
+              module: "./person.gts",
+              name: "Person",
+            },
+          },
+        },
+      })
+      .set("Accept", "application/vnd.api+json");
+
+    assert.strictEqual(response.status, 200, "HTTP 200 status");
+    let json = response.body;
+    assert.ok(json.data.meta.lastModified, "lastModified exists");
+    if (isCardDocument(json)) {
+      assert.strictEqual(
+        json.data.attributes?.firstName,
+        "Van Gogh",
+        "the field data is correct"
+      );
+      assert.ok(json.data.meta.lastModified, "lastModified is populated");
+      delete json.data.meta.lastModified;
+      let cardFile = join(dir.name, "person-1.json");
+      assert.ok(existsSync(cardFile), "card json exists");
+      let card = readJSONSync(cardFile);
+      assert.deepEqual(
+        card,
+        {
+          data: {
+            type: "card",
+            attributes: {
+              firstName: "Van Gogh",
+            },
+            meta: {
+              adoptsFrom: {
+                module: "./person.gts",
+                name: "Person",
+              },
+            },
+          },
+        },
+        "file contents are correct"
+      );
+    } else {
+      assert.ok(false, "response body is not a card document");
+    }
+  });
+
+  test("serves a card DELETE request", async function (assert) {
+    let response = await request
+      .delete("/person-1")
+      .set("Accept", "application/vnd.api+json");
+
+    assert.strictEqual(response.status, 204, "HTTP 204 status");
+    let cardFile = join(dir.name, "person-1.json");
+    assert.strictEqual(existsSync(cardFile), false, "card json does not exist");
+  });
+
   test("serves a card-source GET request", async function (assert) {
     let response = await request
       .get("/person.gts")
       .set("Accept", "application/vnd.card+source");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
-    let result = response.body.toString();
+    let result = response.text.trim();
     assert.strictEqual(result, cardSrc, "the card source is correct");
     assert.ok(response.headers["last-modified"], "last-modified header exists");
   });
@@ -254,6 +324,13 @@ module("Realm Server", function (hooks) {
         data: {
           id: `${testRealmHref}person/Person`,
           type: "card-definition",
+          attributes: {
+            cardRef: {
+              type: "exportedCard",
+              module: `${testRealmHref}person`,
+              name: "Person",
+            },
+          },
           relationships: {
             _super: {
               links: {
@@ -262,6 +339,11 @@ module("Realm Server", function (hooks) {
               },
               meta: {
                 type: "super",
+                ref: {
+                  type: "exportedCard",
+                  module: "https://cardstack.com/base/card-api",
+                  name: "Card",
+                },
               },
             },
             firstName: {
@@ -271,6 +353,11 @@ module("Realm Server", function (hooks) {
               },
               meta: {
                 type: "contains",
+                ref: {
+                  type: "exportedCard",
+                  module: "https://cardstack.com/base/string",
+                  name: "default",
+                },
               },
             },
           },

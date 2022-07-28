@@ -15,14 +15,19 @@ export interface Dir {
 }
 
 export const TestRealm = {
-  create(flatFiles: Record<string, string | object>, realmURL?: URL): Realm {
+  create(flatFiles: Record<string, string | object>, realmURL?: string): Realm {
     return new Realm(
-      realmURL?.href ?? 'http://test-realm/',
-      new TestRealmAdapter(flatFiles)
+      realmURL ?? 'http://test-realm/',
+      new TestRealmAdapter(flatFiles),
+      'http://localhost:4201/base/'
     );
   },
-  createWithAdapter(adapter: RealmAdapter, realmURL?: URL): Realm {
-    return new Realm(realmURL?.href ?? 'http://test-realm/', adapter);
+  createWithAdapter(adapter: RealmAdapter, realmURL?: string): Realm {
+    return new Realm(
+      realmURL ?? 'http://test-realm/',
+      adapter,
+      'http://localhost:4201/base/'
+    );
   },
 };
 
@@ -54,6 +59,11 @@ export class TestRealmAdapter implements RealmAdapter {
     return this.#lastModified;
   }
 
+  // this is to aid debugging since privates are actually not visible in the debugger
+  get files() {
+    return this.#files;
+  }
+
   async *readdir(
     path: string
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
@@ -68,10 +78,33 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
+  async exists(path: string): Promise<boolean> {
+    try {
+      await this.#traverse(path.split('/'), 'directory');
+      return true;
+    } catch (err: any) {
+      if (err.name === 'NotFoundError') {
+        return false;
+      }
+      if (err.name === 'TypeMismatchError') {
+        try {
+          await this.#traverse(path.split('/'), 'file');
+          return true;
+        } catch (err: any) {
+          if (err.name === 'NotFoundError') {
+            return false;
+          }
+          throw err;
+        }
+      }
+      throw err;
+    }
+  }
+
   async openFile(path: LocalPath): Promise<FileRef | undefined> {
     let content;
     try {
-      content = this.#traverse(path.replace(/^\//, '').split('/'), 'file');
+      content = this.#traverse(path.split('/'), 'file');
     } catch (err: any) {
       if (['TypeMismatchError', 'NotFoundError'].includes(err.name)) {
         return undefined;
@@ -133,6 +166,9 @@ export class TestRealmAdapter implements RealmAdapter {
         throw new Error(`tried to use file as directory`);
       }
       let name = segments.shift()!;
+      if (name === '') {
+        return dir;
+      }
       if (!dir[name]) {
         if (
           segments.length > 0 ||

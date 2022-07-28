@@ -19,6 +19,29 @@ export class LocalRealm implements RealmAdapter {
     }
   }
 
+  async exists(path: string): Promise<boolean> {
+    try {
+      await traverse(this.fs, path, 'directory');
+      return true;
+    } catch (err: any) {
+      if (err.name === 'NotFoundError') {
+        return false;
+      }
+      if (err.name === 'TypeMismatchError') {
+        try {
+          await traverse(this.fs, path, 'file');
+          return true;
+        } catch (err: any) {
+          if (err.name === 'NotFoundError') {
+            return false;
+          }
+          throw err;
+        }
+      }
+      throw err;
+    }
+  }
+
   async openFile(path: string): Promise<FileRef | undefined> {
     try {
       let fileHandle = await traverse(this.fs, path, 'file');
@@ -65,7 +88,11 @@ export class LocalRealm implements RealmAdapter {
       return this.fs.removeEntry(path);
     }
     let fileName = pathSegments.pop();
-    let dirHandle = await traverse(this.fs, pathSegments.join('/'), 'directory');
+    let dirHandle = await traverse(
+      this.fs,
+      pathSegments.join('/'),
+      'directory'
+    );
     return dirHandle.removeEntry(fileName!);
   }
 }
@@ -88,18 +115,21 @@ export async function traverse<Target extends Kind>(
   let create = opts?.create;
 
   let handle = dirHandle;
-  while (pathSegments.length > 1) {
+  while (pathSegments.length > 1 && path !== '') {
     let segment = pathSegments.shift()!;
     handle = await handle.getDirectoryHandle(segment, { create });
   }
 
-  if (targetKind === 'file') {
-    return (await handle.getFileHandle(
+  if (targetKind === 'directory') {
+    if (path === '') {
+      return dirHandle as HandleKind<Target>;
+    }
+    return (await handle.getDirectoryHandle(
       pathSegments[0],
       opts
     )) as HandleKind<Target>;
   }
-  return (await handle.getDirectoryHandle(
+  return (await handle.getFileHandle(
     pathSegments[0],
     opts
   )) as HandleKind<Target>;

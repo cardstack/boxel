@@ -1,8 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
-import flatMap from 'lodash/flatMap';
-import startCase from 'lodash/startCase';
+import { flatMap, startCase } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
 import ContainsManyEditor from './contains-many';

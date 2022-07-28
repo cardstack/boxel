@@ -8,7 +8,7 @@ import {
   statSync,
   ensureDirSync,
   ensureFileSync,
-  readFileSync,
+  createReadStream,
   removeSync,
 } from "fs-extra";
 import { join } from "path";
@@ -40,17 +40,18 @@ export class NodeRealm implements RealmAdapter {
     }
   }
 
+  async exists(path: string): Promise<boolean> {
+    let absolutePath = join(this.realmDir, path);
+    return existsSync(absolutePath);
+  }
+
   async openFile(path: string): Promise<FileRef | undefined> {
     let absolutePath = join(this.realmDir, path);
     if (!existsSync(absolutePath)) {
       return undefined;
     }
     let { mtime } = statSync(absolutePath);
-    // holding off on streaming this--the webstream that our realm uses is not
-    // the same as the read stream that is used by Koa's response body (as well
-    // as the fs.createStream used by node). At some point we need to get this
-    // all sorted out
-    let content = readFileSync(absolutePath);
+    let content = createReadStream(absolutePath);
     return {
       path,
       content,

@@ -9,18 +9,12 @@
   },
   "devDependencies": {
     "@cardstack/runtime-common": "1.0.0",
-    "@types/koa": "^2.13.5",
-    "@types/koa-bodyparser": "^4.3.7",
-    "@types/node-fetch": "^2.6.2",
     "@types/qunit": "^2.11.3",
     "@types/supertest": "^2.0.12",
     "@types/qs": "^6.9.7",
     "@types/tmp": "^0.2.3",
     "@types/yargs": "^17.0.10",
     "fs-extra": "^10.1.0",
-    "koa": "^2.13.4",
-    "koa-bodyparser": "^4.3.0",
-    "node-fetch": "^2.6.7",
     "qs": "^6.10.5",
     "qunit": "^2.18.0",
     "supertest": "^6.2.4",
@@ -31,6 +25,8 @@
   },
   "scripts": {
     "test": "qunit --require ts-node/register tests/index.ts",
-    "start": "ts-node --transpileOnly main --port=4201 --path='../cards' --url='http://localhost:4201/'"
+    "start": "ts-node --transpileOnly main",
+    "start:base": "ts-node --transpileOnly main --port=4201 --path='../base' --url='https://cardstack.com/base/' --baseRealmURL='http://localhost:4201/base/'",
+    "start:test-realm": "ts-node --transpileOnly main --port=4202 --path='../host/tests/cards' --url='http://test-realm/' --baseRealmURL='http://localhost:4201/base/'"
   }
 }

@@ -14,6 +14,8 @@ import { Deferred } from '@cardstack/runtime-common';
 import { TaskInstance } from 'ember-resources';
 
 export default class LocalRealm extends Service {
+  realmMappings = new Map<string, string>();
+
   constructor(properties: object) {
     super(properties);
     let handler = (event: MessageEvent) => this.handleMessage(event);
@@ -123,6 +125,11 @@ export default class LocalRealm extends Service {
   get startedUp(): TaskInstance<void> | null {
     this.maybeSetup();
     return taskFor(this.setup).last;
+  }
+
+  // this is a hook for service worker like fetch proxying for tests
+  mapURL(url: string, _reverseLookup = false) {
+    return url;
   }
 
   chooseDirectory(cb?: () => void): void {

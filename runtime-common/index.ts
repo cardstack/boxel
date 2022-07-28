@@ -56,25 +56,10 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["@ember/object", ["action", "get"]],
   ["@ember/helper", ["get", "fn"]],
   ["@ember/modifier", ["on"]],
-
-  // TODO eventually we should not need to build externals for these anymore
-  // since they will be loading code from a real realm server
-  [
-    "runtime-spike/lib/card-api",
-    [
-      "contains",
-      "containsMany",
-      "field",
-      "Component",
-      "Card",
-      "prepareToRender",
-    ],
-  ],
-  ["runtime-spike/lib/string", ["default"]],
-  ["runtime-spike/lib/text-area", ["default"]],
-  ["runtime-spike/lib/date", ["default"]],
-  ["runtime-spike/lib/datetime", ["default"]],
-  ["runtime-spike/lib/integer", ["default"]],
+  ["@ember/destroyable", ["registerDestructor"]],
+  ["lodash", ["flatMap", "startCase", "get"]],
+  ["tracked-built-ins", ["TrackedWeakMap"]],
+  ["date-fns", ["parseISO", "format", "parse"]],
 ]);
 
 export function isCardJSON(json: any): json is CardJSON {
