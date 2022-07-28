@@ -371,7 +371,7 @@ export class Realm {
     }
 
     let url = this.#paths.fileURL(localPath);
-    let original = (await this.#searchIndex.search({ id: url.href }))[0];
+    let original = await this.#searchIndex.card(url);
     if (!original) {
       return notFound(request);
     }
@@ -406,7 +406,7 @@ export class Realm {
   private async getCard(request: Request): Promise<Response> {
     let localPath = this.#paths.local(new URL(request.url));
     let url = this.#paths.fileURL(localPath);
-    let data = (await this.#searchIndex.search({ id: url.href }))[0];
+    let data = await this.#searchIndex.card(url);
     if (!data) {
       return notFound(request);
     }
@@ -423,7 +423,7 @@ export class Realm {
 
   private async removeCard(request: Request): Promise<Response> {
     let url = new URL(request.url);
-    let data = (await this.#searchIndex.search({ id: url.href }))[0];
+    let data = await this.#searchIndex.card(url);
     if (!data) {
       return notFound(request);
     }
