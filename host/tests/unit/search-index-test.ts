@@ -1,9 +1,6 @@
 import { module, test, skip } from 'qunit';
-import { TestRealm, TestRealmAdapter } from '../helpers';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
-
-let paths = new RealmPaths('http://test-realm');
 
 module('Unit | search-index', function () {
   test('full indexing discovers card instances', async function (assert) {
@@ -27,7 +24,7 @@ module('Unit | search-index', function () {
     let cards = await indexer.search({});
     assert.deepEqual(cards, [
       {
-        id: 'http://test-realm/empty',
+        id: `${testRealmURL}empty`,
         type: 'card',
         attributes: {},
         meta: {
@@ -35,9 +32,7 @@ module('Unit | search-index', function () {
             module: 'https://cardstack.com/base/card-api',
             name: 'Card',
           },
-          lastModified: adapter.lastModified.get(
-            paths.fileURL('empty.json').href
-          ),
+          lastModified: adapter.lastModified.get(`${testRealmURL}empty.json`),
         },
       },
     ]);
@@ -65,7 +60,7 @@ module('Unit | search-index', function () {
     assert.deepEqual(refs, [
       {
         type: 'exportedCard',
-        module: 'http://test-realm/person.gts',
+        module: `${testRealmURL}person.gts`,
         name: 'FancyPerson',
       },
     ]);
@@ -93,7 +88,7 @@ module('Unit | search-index', function () {
     });
     assert.deepEqual(definition?.id, {
       type: 'exportedCard',
-      module: 'http://test-realm/person.gts',
+      module: `${testRealmURL}person.gts`,
       name: 'Person',
     });
     assert.deepEqual(definition?.super, {
@@ -149,12 +144,12 @@ module('Unit | search-index', function () {
     });
     assert.deepEqual(definition?.id, {
       type: 'exportedCard',
-      module: 'http://test-realm/fancy-person.gts',
+      module: `${testRealmURL}fancy-person.gts`,
       name: 'FancyPerson',
     });
     assert.deepEqual(definition?.super, {
       type: 'exportedCard',
-      module: 'http://test-realm/person', // this does not have the ".gts" extension because we import it as just "./person"
+      module: `${testRealmURL}person`, // this does not have the ".gts" extension because we import it as just "./person"
       name: 'Person',
     });
 
@@ -202,12 +197,12 @@ module('Unit | search-index', function () {
     });
     assert.deepEqual(definition?.id, {
       type: 'exportedCard',
-      module: 'http://test-realm/person.gts',
+      module: `${testRealmURL}person.gts`,
       name: 'FancyPerson',
     });
     assert.deepEqual(definition?.super, {
       type: 'exportedCard',
-      module: 'http://test-realm/person.gts',
+      module: `${testRealmURL}person.gts`,
       name: 'Person',
     });
     assert.deepEqual(definition?.fields.get('lastName'), {
@@ -258,7 +253,7 @@ module('Unit | search-index', function () {
       type: 'ancestorOf',
       card: {
         type: 'exportedCard',
-        module: 'http://test-realm/person.gts',
+        module: `${testRealmURL}person.gts`,
         name: 'FancyPerson',
       },
     });
@@ -422,7 +417,7 @@ module('Unit | search-index', function () {
       type: 'fieldOf',
       card: {
         type: 'exportedCard',
-        module: 'http://test-realm/person.gts',
+        module: `${testRealmURL}person.gts`,
         name: 'Person',
       },
       field: 'lastName',
@@ -453,7 +448,7 @@ module('Unit | search-index', function () {
         type: 'fieldOf',
         card: {
           type: 'exportedCard',
-          module: 'http://test-realm/person.gts',
+          module: `${testRealmURL}person.gts`,
           name: 'Person',
         },
         field: 'lastName',
@@ -583,20 +578,18 @@ posts/ignore-me.gts
       );
     }
     {
-      let card = await indexer.search({
-        id: 'http://test-realm/sample-post.json',
-      });
+      let card = await indexer.card(new URL(`${testRealmURL}sample-post.json`));
       assert.deepEqual(
         card,
-        [],
+        undefined,
         'instance does not exist because file is ignored'
       );
     }
     {
-      let card = await indexer.search({ id: 'http://test-realm/posts/2.json' });
+      let card = await indexer.card(new URL(`${testRealmURL}cards/2.json`));
       assert.deepEqual(
         card,
-        [],
+        undefined,
         'instance does not exist because file is ignored'
       );
     }
@@ -633,7 +626,7 @@ posts/ignore-me.gts
 
     let indexer = realm.searchIndex;
     await indexer.run();
-    await indexer.update(new URL('http://test-realm/posts/ignore-me.gts'));
+    await indexer.update(new URL(`${testRealmURL}posts/ignore-me.gts`));
 
     let def = await indexer.typeOf({
       type: 'exportedCard',
@@ -684,7 +677,7 @@ posts/ignore-me.gts
           },
           meta: {
             adoptsFrom: {
-              module: 'http://test-realm/cards',
+              module: `${testRealmURL}cards`,
               name: 'Article',
             },
           },
@@ -704,7 +697,7 @@ posts/ignore-me.gts
           },
           meta: {
             adoptsFrom: {
-              module: 'http://test-realm/cards',
+              module: `${testRealmURL}cards`,
               name: 'Post',
             },
           },
@@ -725,7 +718,7 @@ posts/ignore-me.gts
           },
           meta: {
             adoptsFrom: {
-              module: 'http://test-realm/cards',
+              module: `${testRealmURL}cards`,
               name: 'Article',
             },
           },
@@ -741,14 +734,6 @@ posts/ignore-me.gts
       await indexer.run();
     });
 
-    test('can search cards by id', async function (assert) {
-      let matching = await indexer.search({
-        id: 'http://test-realm/card-1',
-      });
-      assert.strictEqual(matching.length, 1, 'found one card');
-      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
-    });
-
     test(`can search for cards by using the 'eq' filter`, async function (assert) {
       let matching = await indexer.search({
         filter: {
@@ -759,8 +744,8 @@ posts/ignore-me.gts
         },
       });
       assert.strictEqual(matching.length, 2, 'found two cards');
-      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
-      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/1');
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
+      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/1`);
     });
 
     test('can combine multiple filters', async function (assert) {
@@ -777,12 +762,12 @@ posts/ignore-me.gts
         },
       });
       assert.strictEqual(matching.length, 1, 'combining eq and not filters');
-      assert.strictEqual(matching[0]?.id, 'http://test-realm/cards/1');
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
 
       matching = await indexer.search({
         filter: {
           type: {
-            module: `http://test-realm/cards`,
+            module: `${testRealmURL}cards`,
             name: 'Article',
           },
           eq: {
@@ -791,7 +776,7 @@ posts/ignore-me.gts
         },
       });
       assert.strictEqual(matching.length, 1, 'combining type and eq filters');
-      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
     });
 
     // Tests from hub/**/**/card-service-test.ts
@@ -799,29 +784,29 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           type: {
-            module: `http://test-realm/cards`,
+            module: `${testRealmURL}cards`,
             name: 'Article',
           },
         },
       });
 
       assert.strictEqual(matching.length, 2, 'Two cards have Article type');
-      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
-      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/2');
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
+      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/2`);
 
       matching = await indexer.search({
         filter: {
           type: {
-            module: 'http://test-realm/cards',
+            module: `${testRealmURL}cards`,
             name: 'Post',
           },
         },
       });
 
       assert.strictEqual(matching.length, 3, 'Three cards have Post type');
-      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
-      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/1');
-      assert.strictEqual(matching[2]?.id, 'http://test-realm/cards/2');
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
+      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/1`);
+      assert.strictEqual(matching[2]?.id, `${testRealmURL}cards/2`);
     });
 
     skip(`can filter on a card's own fields using gt`);
@@ -837,8 +822,8 @@ posts/ignore-me.gts
         },
       });
       assert.strictEqual(matching.length, 2);
-      assert.strictEqual(matching[0]?.id, 'http://test-realm/cards/1');
-      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/2');
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
+      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/2`);
     });
 
     test('can negate a filter', async function (assert) {
@@ -852,18 +837,18 @@ posts/ignore-me.gts
         },
       });
       assert.strictEqual(matching.length, 2);
-      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
-      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/1');
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
+      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/1`);
 
       matching = await indexer.search({
         filter: {
           type: {
-            module: `http://test-realm/cards`,
+            module: `${testRealmURL}cards`,
             name: 'Post',
           },
           not: {
             type: {
-              module: `http://test-realm/cards`,
+              module: `${testRealmURL}cards`,
               name: 'Article',
             },
           },
@@ -874,7 +859,7 @@ posts/ignore-me.gts
         1,
         'combining type and not type filters'
       );
-      assert.strictEqual(matching[0]?.id, 'http://test-realm/cards/1');
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
     });
 
     skip('can combine multiple types');

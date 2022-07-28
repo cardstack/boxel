@@ -319,7 +319,10 @@ export class Realm {
     }
 
     // new instances are created in a folder named after the card
-    let dirName = `/${json.data.meta.adoptsFrom.name}/`;
+    let dirName = `/${join(
+      new URL(this.url).pathname,
+      json.data.meta.adoptsFrom.name
+    )}/`;
     let entries = await this.directoryEntries(new URL(dirName, this.url));
     let index = 0;
     if (entries) {
@@ -371,7 +374,7 @@ export class Realm {
     }
 
     let url = this.#paths.fileURL(localPath);
-    let original = (await this.#searchIndex.search({ id: url.href }))[0];
+    let original = await this.#searchIndex.card(url);
     if (!original) {
       return notFound(request);
     }
@@ -406,7 +409,7 @@ export class Realm {
   private async getCard(request: Request): Promise<Response> {
     let localPath = this.#paths.local(new URL(request.url));
     let url = this.#paths.fileURL(localPath);
-    let data = (await this.#searchIndex.search({ id: url.href }))[0];
+    let data = await this.#searchIndex.card(url);
     if (!data) {
       return notFound(request);
     }
@@ -423,7 +426,7 @@ export class Realm {
 
   private async removeCard(request: Request): Promise<Response> {
     let url = new URL(request.url);
-    let data = (await this.#searchIndex.search({ id: url.href }))[0];
+    let data = await this.#searchIndex.card(url);
     if (!data) {
       return notFound(request);
     }
@@ -464,7 +467,6 @@ export class Realm {
     // a LocalPath has no leading nor trailing slash
     let localPath: LocalPath = this.#paths.local(new URL(request.url));
     let url = this.#paths.directoryURL(localPath);
-
     let entries = await this.directoryEntries(url);
     if (!entries) {
       console.log(`can't find directory ${url.href}`);

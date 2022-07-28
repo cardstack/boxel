@@ -27,6 +27,6 @@
     "test": "qunit --require ts-node/register tests/index.ts",
     "start": "ts-node --transpileOnly main",
     "start:base": "ts-node --transpileOnly main --port=4201 --path='../base' --url='https://cardstack.com/base/' --baseRealmURL='http://localhost:4201/base/'",
-    "start:test-realm": "ts-node --transpileOnly main --port=4202 --path='../host/tests/cards' --url='http://test-realm/' --baseRealmURL='http://localhost:4201/base/'"
+    "start:test-realms": "ts-node --transpileOnly main --port=4201 --path='../base' --url='https://cardstack.com/base/' --path='../host/tests/cards' --url='http://test-realm/test/' --baseRealmURL='http://localhost:4201/base/'"
   }
 }
