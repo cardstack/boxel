@@ -1,5 +1,5 @@
 import Service from '@ember/service';
-import { task } from 'ember-concurrency';
+import { task, timeout } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { baseRealm } from '@cardstack/runtime-common';
 import config from 'runtime-spike/config/environment';
@@ -27,7 +27,7 @@ export default class CardAPI extends Service {
     // TODO probably there is a more elegant way to express this in EC
     return new Promise(async (res) => {
       while (taskFor(this.load).isRunning) {
-        await new Promise((r) => setTimeout(r, 10));
+        await timeout(10);
       }
       res();
     });
