@@ -59,6 +59,7 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
   type: "card";
   attributes?: Record<string, any>;
+  searchData?: Record<string, any>;
   // TODO add relationships
   meta: {
     adoptsFrom: {
@@ -257,6 +258,9 @@ export class SearchIndex {
         } else {
           json.data.id = instanceURL.href;
           json.data.meta.lastModified = lastModified;
+          json.data.searchData = json.data.attributes
+            ? flatten(json.data.attributes)
+            : {};
           this.instances.set(instanceURL, json.data);
         }
       }
@@ -638,4 +642,19 @@ function filterByFieldData(
   }
 
   return results as CardResource[];
+}
+
+function flatten(obj: Record<string, any>): Record<string, any> {
+  let result: Record<string, any> = {};
+  for (let [key, value] of Object.entries(obj)) {
+    if (typeof value === "object") {
+      let res = flatten(value);
+      for (let [k, val] of Object.entries(res)) {
+        result[`${key}.${k}`] = val;
+      }
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
 }

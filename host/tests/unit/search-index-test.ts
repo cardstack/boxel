@@ -30,6 +30,7 @@ module('Unit | search-index', function () {
         id: 'http://test-realm/empty',
         type: 'card',
         attributes: {},
+        searchData: {},
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/card-api',
