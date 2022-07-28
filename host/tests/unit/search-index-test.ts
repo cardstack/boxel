@@ -581,20 +581,18 @@ posts/ignore-me.gts
       );
     }
     {
-      let card = await indexer.search({
-        id: `${testRealmURL}sample-post.json`,
-      });
+      let card = await indexer.card(new URL(`${testRealmURL}sample-post.json`));
       assert.deepEqual(
         card,
-        [],
+        undefined,
         'instance does not exist because file is ignored'
       );
     }
     {
-      let card = await indexer.search({ id: `${testRealmURL}posts/2.json` });
+      let card = await indexer.card(new URL(`${testRealmURL}cards/2.json`));
       assert.deepEqual(
         card,
-        [],
+        undefined,
         'instance does not exist because file is ignored'
       );
     }
@@ -731,14 +729,6 @@ posts/ignore-me.gts
       let realm = TestRealm.create(sampleCards);
       indexer = realm.searchIndex;
       await indexer.run();
-    });
-
-    test('can search cards by id', async function (assert) {
-      let matching = await indexer.search({
-        id: `${testRealmURL}card-1`,
-      });
-      assert.strictEqual(matching.length, 1, 'found one card');
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
     });
 
     test(`can search for cards by using the 'eq' filter`, async function (assert) {
