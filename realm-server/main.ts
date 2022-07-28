@@ -1,7 +1,12 @@
 import yargs from "yargs";
-import { createRealmServer } from "./server";
+import { createRealmServer, RealmConfig } from "./server";
 
-let { port, path, url, baseRealmURL } = yargs(process.argv.slice(2))
+let {
+  port,
+  path: paths,
+  url: urls,
+  baseRealmURL,
+} = yargs(process.argv.slice(2))
   .usage("Start realm server")
   .options({
     port: {
@@ -12,12 +17,12 @@ let { port, path, url, baseRealmURL } = yargs(process.argv.slice(2))
     url: {
       description: "realm URL",
       demandOption: true,
-      type: "string",
+      type: "array",
     },
     path: {
       description: "realm directory path",
       demandOption: true,
-      type: "string",
+      type: "array",
     },
     baseRealmURL: {
       description: "the URL the base realm is served from (optional)",
@@ -27,8 +32,23 @@ let { port, path, url, baseRealmURL } = yargs(process.argv.slice(2))
   })
   .parseSync();
 
-let server = createRealmServer(path, url, baseRealmURL);
+if (urls.length !== paths.length) {
+  console.error(
+    `Mismatched number of paths and URLs specified. Each --path argument must be paired with a --url argument`
+  );
+  process.exit(-1);
+}
+
+let configs: RealmConfig[] = paths.map((path, i) => ({
+  realmURL: String(urls[i]),
+  path: String(path),
+}));
+
+let server = createRealmServer(configs, baseRealmURL);
 server.listen(port);
 console.log(
-  `realm server listening on port ${port} as url ${url} with realm dir ${path} using base realm of ${baseRealmURL}`
+  `Realm server listening on port ${port} with base realm of ${baseRealmURL}:`
 );
+for (let { realmURL, path } of configs) {
+  console.log(`  ${path} => ${realmURL}`);
+}
