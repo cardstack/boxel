@@ -568,13 +568,13 @@ module('Unit | realm', function () {
     let searchIndex = realm.searchIndex;
     let card = await searchIndex.typeOf({
       type: 'exportedCard',
-      module: 'http://test-realm/person',
+      module: `${testRealmURL}person`,
       name: 'Person',
     });
     assert.ok(card, 'found card in index');
 
     let response = await realm.handle(
-      new Request(`http://test-realm/person`, {
+      new Request(`${testRealmURL}person`, {
         headers: {
           Accept: 'application/vnd.card+source',
         },
@@ -583,7 +583,7 @@ module('Unit | realm', function () {
     assert.strictEqual(response.status, 302, 'file exists');
 
     response = await realm.handle(
-      new Request(`http://test-realm/person`, {
+      new Request(`${testRealmURL}person`, {
         method: 'DELETE',
         headers: {
           Accept: 'application/vnd.card+source',
@@ -594,13 +594,13 @@ module('Unit | realm', function () {
 
     card = await searchIndex.typeOf({
       type: 'exportedCard',
-      module: 'http://test-realm/person',
+      module: `${testRealmURL}person`,
       name: 'Person',
     });
     assert.strictEqual(card, undefined, 'card is deleted from index');
 
     response = await realm.handle(
-      new Request(`http://test-realm/person`, {
+      new Request(`${testRealmURL}person`, {
         headers: {
           Accept: 'application/vnd.card+source',
         },
