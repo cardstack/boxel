@@ -40,6 +40,7 @@ import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properti
 import typescriptPlugin from "@babel/plugin-transform-typescript";
 import { Router } from "./router";
 import type { Readable } from "stream";
+import { parseQueryString } from "./query";
 
 // From https://github.com/iliakan/detect-node
 const isNode =
@@ -112,7 +113,8 @@ export class Realm {
         `/.+(${executableExtensions.map((e) => "\\" + e).join("|")})`,
         this.upsertCardSource.bind(this)
       )
-      .get("/.+", this.getCardSourceOrRedirect.bind(this));
+      .get("/.+", this.getCardSourceOrRedirect.bind(this))
+      .delete("/.+", this.removeCardSource.bind(this));
   }
 
   async write(
@@ -230,6 +232,19 @@ export class Realm {
       });
     }
     return await this.serveLocalFile(handle);
+  }
+
+  private async removeCardSource(request: Request): Promise<Response> {
+    let localName = this.#paths.local(new URL(request.url));
+    let handle = await this.getFileWithFallbacks(localName);
+    if (!handle) {
+      return notFound(request, `${localName} not found`);
+    }
+    await this.#searchIndex.update(this.#paths.fileURL(handle.path), {
+      delete: true,
+    });
+    await this.#adapter.remove(handle.path);
+    return new Response(null, { status: 204 });
   }
 
   private async makeJS(
@@ -669,9 +684,10 @@ export class Realm {
     });
   }
 
-  private async search(_request: Request): Promise<Response> {
-    // TODO process query param....
-    let data = await this.#searchIndex.search({});
+  private async search(request: Request): Promise<Response> {
+    let data = await this.#searchIndex.search(
+      parseQueryString(new URL(request.url).search.slice(1))
+    );
     return new Response(
       JSON.stringify(
         {

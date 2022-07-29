@@ -86,33 +86,39 @@ export function assertQuery(
     throw new Error(`${pointer.join("/") || "/"}: missing query object`);
   }
 
-  if ("filter" in query) {
-    assertFilter(query.filter, pointer.concat("filter"));
-  }
-
-  if (
-    "sort" in query &&
-    typeof query.sort !== "string" &&
-    (!Array.isArray(query.sort) ||
-      query.sort.some((i: any) => typeof i !== "string"))
-  ) {
-    throw new Error(
-      `${
-        pointer.concat("sort").join("/") || "/"
-      }: sort must be a string or string array`
-    );
-  }
-
-  if ("queryString" in query && typeof query.queryString !== "string") {
-    throw new Error(
-      `${
-        pointer.concat("queryString").join("/") || "/"
-      }: queryString must be a string`
-    );
-  }
-
-  if ("page" in query) {
-    assertPage(query.page, pointer.concat("page"));
+  for (let [key, value] of Object.entries(query)) {
+    switch (key) {
+      case "filter":
+        assertFilter(value, pointer.concat("filter"));
+        break;
+      case "sort":
+        if (
+          typeof value !== "string" &&
+          (!Array.isArray(value) ||
+            value.some((i: any) => typeof i !== "string"))
+        ) {
+          throw new Error(
+            `${
+              pointer.concat("sort").join("/") || "/"
+            }: sort must be a string or string array`
+          );
+        }
+        break;
+      case "queryString":
+        if (typeof value !== "string") {
+          throw new Error(
+            `${
+              pointer.concat("queryString").join("/") || "/"
+            }: queryString must be a string`
+          );
+        }
+        break;
+      case "page":
+        assertPage(value, pointer.concat("page"));
+        break;
+      default:
+        throw new Error(`unknown field in query: ${key}`);
+    }
   }
 }
 
