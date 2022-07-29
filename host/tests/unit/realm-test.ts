@@ -3,15 +3,12 @@ import {
   CardRef,
   isCardDocument,
 } from '@cardstack/runtime-common/search-index';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
 import {
   cardSrc,
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
-import { TestRealm, TestRealmAdapter } from '../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { stringify } from 'qs';
-
-let paths = new RealmPaths('http://test-realm');
 
 module('Unit | realm', function () {
   test('realm can serve card data requests', async function (assert) {
@@ -33,7 +30,7 @@ module('Unit | realm', function () {
     await realm.ready;
 
     let response = await realm.handle(
-      new Request('http://test-realm/dir/empty', {
+      new Request(`${testRealmURL}dir/empty`, {
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -45,7 +42,7 @@ module('Unit | realm', function () {
     assert.deepEqual(json, {
       data: {
         type: 'card',
-        id: 'http://test-realm/dir/empty',
+        id: `${testRealmURL}dir/empty`,
         attributes: {},
         searchData: {},
         meta: {
@@ -54,11 +51,11 @@ module('Unit | realm', function () {
             name: 'Card',
           },
           lastModified: adapter.lastModified.get(
-            paths.fileURL('dir/empty.json').href
+            `${testRealmURL}dir/empty.json`
           ),
         },
         links: {
-          self: 'http://test-realm/dir/empty',
+          self: `${testRealmURL}dir/empty`,
         },
       },
     });
@@ -81,12 +78,12 @@ module('Unit | realm', function () {
           },
         },
       },
-      'http://test-realm/root/'
+      `${testRealmURL}root/`
     );
     await realm.ready;
     {
       let response = await realm.handle(
-        new Request('http://test-realm/root/dir/empty', {
+        new Request(`${testRealmURL}root/dir/empty`, {
           headers: {
             Accept: 'application/vnd.api+json',
           },
@@ -96,13 +93,13 @@ module('Unit | realm', function () {
       let json = await response.json();
       assert.strictEqual(
         json.data.id,
-        'http://test-realm/root/dir/empty',
+        `${testRealmURL}root/dir/empty`,
         'card ID is correct'
       );
     }
     {
       let response = await realm.handle(
-        new Request('http://test-realm/root/_search', {
+        new Request(`${testRealmURL}root/_search`, {
           headers: {
             Accept: 'application/vnd.api+json',
           },
@@ -116,7 +113,7 @@ module('Unit | realm', function () {
       );
       assert.strictEqual(
         json.data[0].id,
-        'http://test-realm/root/dir/empty',
+        `${testRealmURL}root/dir/empty`,
         'card ID is correct'
       );
     }
@@ -128,7 +125,7 @@ module('Unit | realm', function () {
     await realm.ready;
     {
       let response = await realm.handle(
-        new Request('http://test-realm/', {
+        new Request(testRealmURL, {
           method: 'POST',
           headers: {
             Accept: 'application/vnd.api+json',
@@ -156,7 +153,7 @@ module('Unit | realm', function () {
       if (isCardDocument(json)) {
         assert.strictEqual(
           json.data.id,
-          'http://test-realm/Card/1',
+          `${testRealmURL}Card/1`,
           'the id is correct'
         );
         assert.ok(json.data.meta.lastModified, 'lastModified is populated');
@@ -188,7 +185,7 @@ module('Unit | realm', function () {
       let card = await searchIndex.card(new URL(json.data.links.self));
       assert.strictEqual(
         card?.id,
-        'http://test-realm/Card/1',
+        `${testRealmURL}Card/1`,
         'found card in index'
       );
     }
@@ -196,7 +193,7 @@ module('Unit | realm', function () {
     // create second file
     {
       let response = await realm.handle(
-        new Request('http://test-realm/', {
+        new Request(testRealmURL, {
           method: 'POST',
           headers: {
             Accept: 'application/vnd.api+json',
@@ -224,7 +221,7 @@ module('Unit | realm', function () {
       if (isCardDocument(json)) {
         assert.strictEqual(
           json.data.id,
-          'http://test-realm/Card/2',
+          `${testRealmURL}Card/2`,
           'the id is correct'
         );
         assert.ok(
@@ -239,7 +236,7 @@ module('Unit | realm', function () {
       let card = await searchIndex.card(new URL(json.data.links.self));
       assert.strictEqual(
         card?.id,
-        'http://test-realm/Card/2',
+        `${testRealmURL}Card/2`,
         'found card in index'
       );
     }
@@ -266,7 +263,7 @@ module('Unit | realm', function () {
     let realm = TestRealm.createWithAdapter(adapter);
     await realm.ready;
     let response = await realm.handle(
-      new Request('http://test-realm/dir/card', {
+      new Request(`${testRealmURL}dir/card`, {
         method: 'PATCH',
         headers: {
           Accept: 'application/vnd.api+json',
@@ -299,7 +296,7 @@ module('Unit | realm', function () {
     if (isCardDocument(json)) {
       assert.strictEqual(
         json.data.id,
-        'http://test-realm/dir/card',
+        `${testRealmURL}dir/card`,
         'the id is correct'
       );
       assert.strictEqual(
@@ -314,7 +311,7 @@ module('Unit | realm', function () {
       );
       assert.strictEqual(
         json.data.meta.lastModified,
-        adapter.lastModified.get(paths.fileURL('dir/card.json').href),
+        adapter.lastModified.get(`${testRealmURL}dir/card.json`),
         'lastModified is correct'
       );
       let fileRef = await adapter.openFile('dir/card.json');
@@ -352,7 +349,7 @@ module('Unit | realm', function () {
     let card = await searchIndex.card(new URL(json.data.links.self));
     assert.strictEqual(
       card?.id,
-      'http://test-realm/dir/card',
+      `${testRealmURL}dir/card`,
       'found card in index'
     );
     assert.strictEqual(
@@ -402,15 +399,15 @@ module('Unit | realm', function () {
     let cards = await searchIndex.search({});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
-    let card = await searchIndex.card(new URL('http://test-realm/cards/2'));
+    let card = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
     assert.strictEqual(
       card?.id,
-      'http://test-realm/cards/2',
+      `${testRealmURL}cards/2`,
       'found card in index'
     );
 
     let response = await realm.handle(
-      new Request('http://test-realm/cards/2', {
+      new Request(`${testRealmURL}cards/2`, {
         method: 'DELETE',
         headers: {
           Accept: 'application/vnd.api+json',
@@ -419,13 +416,13 @@ module('Unit | realm', function () {
     );
     assert.strictEqual(response.status, 204, 'status was 204');
 
-    card = await searchIndex.card(new URL('http://test-realm/cards/2'));
+    card = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
     assert.strictEqual(card, undefined, 'card was deleted');
 
-    card = await searchIndex.card(new URL('http://test-realm/cards/1'));
+    card = await searchIndex.card(new URL(`${testRealmURL}cards/1`));
     assert.strictEqual(
       card?.id,
-      'http://test-realm/cards/1',
+      `${testRealmURL}cards/1`,
       'card 1 is still there'
     );
 
@@ -439,7 +436,7 @@ module('Unit | realm', function () {
     });
     await realm.ready;
     let response = await realm.handle(
-      new Request('http://test-realm/dir/person.gts', {
+      new Request(`${testRealmURL}dir/person.gts`, {
         headers: {
           Accept: 'application/vnd.card+source',
         },
@@ -460,7 +457,7 @@ module('Unit | realm', function () {
     });
     await realm.ready;
     let response = await realm.handle(
-      new Request('http://test-realm/dir/person', {
+      new Request(`${testRealmURL}dir/person`, {
         headers: {
           Accept: 'application/vnd.card+source',
         },
@@ -478,7 +475,7 @@ module('Unit | realm', function () {
     let realm = TestRealm.create({});
     await realm.ready;
     let response = await realm.handle(
-      new Request('http://test-realm/dir/person', {
+      new Request(`${testRealmURL}dir/person`, {
         headers: {
           Accept: 'application/vnd.card+source',
         },
@@ -494,7 +491,7 @@ module('Unit | realm', function () {
 
     {
       let response = await realm.handle(
-        new Request('http://test-realm/dir/person.gts', {
+        new Request(`${testRealmURL}dir/person.gts`, {
           method: 'POST',
           headers: {
             Accept: 'application/vnd.card+source',
@@ -511,14 +508,14 @@ module('Unit | realm', function () {
 
       let definition = await realm.searchIndex.typeOf({
         type: 'exportedCard',
-        module: 'http://test-realm/dir/person.gts',
+        module: `${testRealmURL}dir/person.gts`,
         name: 'Person',
       });
       assert.deepEqual(
         definition?.id,
         {
           type: 'exportedCard',
-          module: 'http://test-realm/dir/person.gts',
+          module: `${testRealmURL}dir/person.gts`,
           name: 'Person',
         },
         'the definition id is correct'
@@ -550,7 +547,7 @@ module('Unit | realm', function () {
     }
     {
       let response = await realm.handle(
-        new Request('http://test-realm/dir/person.gts', {
+        new Request(`${testRealmURL}dir/person.gts`, {
           headers: {
             Accept: 'application/vnd.card+source',
           },
@@ -562,14 +559,70 @@ module('Unit | realm', function () {
     }
   });
 
+  test('realm can serve card source delete request', async function (assert) {
+    let realm = TestRealm.create({
+      'person.gts': `
+        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+        import StringCard from 'https://cardstack.com/base/string';
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+        }
+      `,
+    });
+    await realm.ready;
+
+    let searchIndex = realm.searchIndex;
+    let card = await searchIndex.typeOf({
+      type: 'exportedCard',
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    assert.ok(card, 'found card in index');
+
+    let response = await realm.handle(
+      new Request(`${testRealmURL}person`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 302, 'file exists');
+
+    response = await realm.handle(
+      new Request(`${testRealmURL}person`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 204, 'file is deleted');
+
+    card = await searchIndex.typeOf({
+      type: 'exportedCard',
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    assert.strictEqual(card, undefined, 'card is deleted from index');
+
+    response = await realm.handle(
+      new Request(`${testRealmURL}person`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 404, 'file no longer exists');
+  });
+
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {
     let realm = TestRealm.create({
       'dir/person.gts': cardSrc,
     });
     await realm.ready;
-    let response = await realm.handle(
-      new Request('http://test-realm/dir/person')
-    );
+    let response = await realm.handle(new Request(`${testRealmURL}dir/person`));
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
     assert.strictEqual(compiledJS, compiledCard(), 'compiled card is correct');
@@ -581,7 +634,7 @@ module('Unit | realm', function () {
     });
     await realm.ready;
     let response = await realm.handle(
-      new Request('http://test-realm/dir/person.gts')
+      new Request(`${testRealmURL}dir/person.gts`)
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
@@ -601,7 +654,7 @@ module('Unit | realm', function () {
     });
     await realm.ready;
     let response = await realm.handle(
-      new Request('http://test-realm/dir/index.html')
+      new Request(`${testRealmURL}dir/index.html`)
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let responseText = await response.text();
@@ -625,7 +678,7 @@ module('Unit | realm', function () {
     });
     await realm.ready;
     let response = await realm.handle(
-      new Request('http://test-realm/_search', {
+      new Request(`${testRealmURL}_search`, {
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -639,7 +692,7 @@ module('Unit | realm', function () {
     );
     assert.strictEqual(
       json.data[0].id,
-      'http://test-realm/dir/empty',
+      `${testRealmURL}dir/empty`,
       'card ID is correct'
     );
   });
@@ -651,9 +704,9 @@ module('Unit | realm', function () {
     await realm.ready;
     let response = await realm.handle(
       new Request(
-        `http://test-realm/_typeOf?${stringify({
+        `${testRealmURL}_typeOf?${stringify({
           type: 'exportedCard',
-          module: 'http://test-realm/person',
+          module: `${testRealmURL}person`,
           name: 'Person',
         } as CardRef)}`,
         {
@@ -669,12 +722,12 @@ module('Unit | realm', function () {
       json,
       {
         data: {
-          id: 'http://test-realm/person/Person',
+          id: `${testRealmURL}person/Person`,
           type: 'card-definition',
           attributes: {
             cardRef: {
               type: 'exportedCard',
-              module: 'http://test-realm/person',
+              module: `${testRealmURL}person`,
               name: 'Person',
             },
           },
@@ -721,8 +774,8 @@ module('Unit | realm', function () {
     await realm.ready;
     let response = await realm.handle(
       new Request(
-        `http://test-realm/_cardsOf?${stringify({
-          module: 'http://test-realm/person',
+        `${testRealmURL}_cardsOf?${stringify({
+          module: `${testRealmURL}person`,
         })}`,
         {
           headers: {
@@ -738,12 +791,12 @@ module('Unit | realm', function () {
       {
         data: {
           type: 'module',
-          id: 'http://test-realm/person',
+          id: `${testRealmURL}person`,
           attributes: {
             cardExports: [
               {
                 type: 'exportedCard',
-                module: 'http://test-realm/person',
+                module: `${testRealmURL}person`,
                 name: 'Person',
               },
             ],
@@ -772,7 +825,7 @@ module('Unit | realm', function () {
     });
     await realm.ready;
     let response = await realm.handle(
-      new Request(`http://test-realm/dir/`, {
+      new Request(`${testRealmURL}dir/`, {
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -784,12 +837,12 @@ module('Unit | realm', function () {
       json,
       {
         data: {
-          id: 'http://test-realm/dir/',
+          id: `${testRealmURL}dir/`,
           type: 'directory',
           relationships: {
             'subdir/': {
               links: {
-                related: 'http://test-realm/dir/subdir/',
+                related: `${testRealmURL}dir/subdir/`,
               },
               meta: {
                 kind: 'directory',
@@ -797,7 +850,7 @@ module('Unit | realm', function () {
             },
             'empty.json': {
               links: {
-                related: 'http://test-realm/dir/empty.json',
+                related: `${testRealmURL}dir/empty.json`,
               },
               meta: {
                 kind: 'file',
@@ -835,7 +888,7 @@ posts/ignore-me.gts
     {
       let response = await realm.handle(
         new Request(
-          `http://test-realm/_typeOf?${stringify({
+          `${testRealmURL}_typeOf?${stringify({
             type: 'exportedCard',
             module: 'posts/ignore-me.gts',
             name: 'Post',
@@ -852,7 +905,7 @@ posts/ignore-me.gts
     }
     {
       let response = await realm.handle(
-        new Request(`http://test-realm/dir/`, {
+        new Request(`${testRealmURL}dir/`, {
           headers: {
             Accept: 'application/vnd.api+json',
           },
@@ -862,7 +915,7 @@ posts/ignore-me.gts
     }
     {
       let response = await realm.handle(
-        new Request(`http://test-realm/`, {
+        new Request(testRealmURL, {
           headers: {
             Accept: 'application/vnd.api+json',
           },
@@ -878,7 +931,7 @@ posts/ignore-me.gts
     }
     {
       let response = await realm.handle(
-        new Request(`http://test-realm/posts/`, {
+        new Request(`${testRealmURL}posts/`, {
           headers: {
             Accept: 'application/vnd.api+json',
           },

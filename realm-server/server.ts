@@ -8,15 +8,29 @@ import { Readable } from "stream";
 
 const externalsPath = "/externals/";
 
+export interface RealmConfig {
+  realmURL: string;
+  path: string;
+}
+
 export function createRealmServer(
-  path: string,
-  realmURL: string,
+  configs: RealmConfig[],
   baseRealmURL: string
 ) {
-  path = resolve(path);
-  let realm = new Realm(realmURL, new NodeRealm(path), baseRealmURL);
-  let realmPath = new RealmPaths(realmURL);
-  let isServingExternals = realmURL === baseRealm.url;
+  detectRealmCollision(configs);
+
+  let realmConfigs = new Map(
+    configs.map(({ realmURL, path }) => [
+      new URL(realmURL).pathname,
+      {
+        realm: new Realm(realmURL, new NodeRealm(resolve(path)), baseRealmURL),
+        realmPath: new RealmPaths(realmURL),
+      },
+    ])
+  );
+  let isServingExternals = configs.find(
+    ({ realmURL }) => realmURL === baseRealm.url
+  );
   let server = http.createServer(async (req, res) => {
     let isStreaming = false;
     try {
@@ -31,6 +45,18 @@ export function createRealmServer(
         handleExternals(req, res);
         return;
       }
+
+      let configPath = [...realmConfigs.keys()].find((path) =>
+        req.url?.startsWith(path)
+      );
+      if (!configPath) {
+        res.statusCode = 404;
+        res.statusMessage = "Not Found";
+        res.end();
+        return;
+      }
+
+      let { realmPath, realm } = realmConfigs.get(configPath)!;
 
       // despite the name, req.url is actually the pathname for the request URL
       let local: LocalPath = req.url === "/" ? "" : req.url;
@@ -133,4 +159,28 @@ async function nodeStreamToText(stream: Readable): Promise<string> {
     chunks.push(Buffer.from(chunk));
   }
   return Buffer.concat(chunks).toString("utf-8");
+}
+
+function detectRealmCollision(configs: RealmConfig[]): void {
+  let collisions: string[] = [];
+  let realmsURLs = configs.map(({ realmURL }) => ({
+    url: realmURL,
+    path: new URL(realmURL).pathname,
+  }));
+  for (let realmA of realmsURLs) {
+    for (let realmB of realmsURLs) {
+      if (realmA.path.length > realmB.path.length) {
+        if (realmA.path.startsWith(realmB.path)) {
+          collisions.push(`${realmA.url} collides with ${realmB.url}`);
+        }
+      }
+    }
+  }
+  if (collisions.length > 0) {
+    throw new Error(
+      `Cannot start realm server--realm route collisions detected: ${JSON.stringify(
+        collisions
+      )}`
+    );
+  }
 }

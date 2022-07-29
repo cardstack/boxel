@@ -112,7 +112,8 @@ export class Realm {
         `/.+(${executableExtensions.map((e) => "\\" + e).join("|")})`,
         this.upsertCardSource.bind(this)
       )
-      .get("/.+", this.getCardSourceOrRedirect.bind(this));
+      .get("/.+", this.getCardSourceOrRedirect.bind(this))
+      .delete("/.+", this.removeCardSource.bind(this));
   }
 
   async write(
@@ -232,6 +233,19 @@ export class Realm {
     return await this.serveLocalFile(handle);
   }
 
+  private async removeCardSource(request: Request): Promise<Response> {
+    let localName = this.#paths.local(new URL(request.url));
+    let handle = await this.getFileWithFallbacks(localName);
+    if (!handle) {
+      return notFound(request, `${localName} not found`);
+    }
+    await this.#searchIndex.update(this.#paths.fileURL(handle.path), {
+      delete: true,
+    });
+    await this.#adapter.remove(handle.path);
+    return new Response(null, { status: 204 });
+  }
+
   private async makeJS(
     content: string,
     debugFilename: string
@@ -319,7 +333,10 @@ export class Realm {
     }
 
     // new instances are created in a folder named after the card
-    let dirName = `/${json.data.meta.adoptsFrom.name}/`;
+    let dirName = `/${join(
+      new URL(this.url).pathname,
+      json.data.meta.adoptsFrom.name
+    )}/`;
     let entries = await this.directoryEntries(new URL(dirName, this.url));
     let index = 0;
     if (entries) {
@@ -464,7 +481,6 @@ export class Realm {
     // a LocalPath has no leading nor trailing slash
     let localPath: LocalPath = this.#paths.local(new URL(request.url));
     let url = this.#paths.directoryURL(localPath);
-
     let entries = await this.directoryEntries(url);
     if (!entries) {
       console.log(`can't find directory ${url.href}`);

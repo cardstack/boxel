@@ -268,9 +268,18 @@ export class SearchIndex {
       hasExecutableExtension(url.href) &&
       url.href !== `${baseRealm.url}card-api.gts` // the base card's module is not analyzable
     ) {
-      let mod = new ModuleSyntax(content);
-      this.modules.set(url, mod);
-      this.modules.set(trimExecutableExtension(url), mod);
+      if (opts?.delete) {
+        if (this.modules.get(url)) {
+          this.modules.remove(url);
+        }
+        if (this.modules.get(trimExecutableExtension(url))) {
+          this.modules.remove(trimExecutableExtension(url));
+        }
+      } else {
+        let mod = new ModuleSyntax(content);
+        this.modules.set(url, mod);
+        this.modules.set(trimExecutableExtension(url), mod);
+      }
     }
   }
 
