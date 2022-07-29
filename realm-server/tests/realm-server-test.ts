@@ -202,6 +202,20 @@ module("Realm Server", function (hooks) {
     assert.ok(response.headers["location"], "/person.gts");
   });
 
+  test("serves a card-source DELETE request", async function (assert) {
+    let response = await request
+      .delete("/person.gts")
+      .set("Accept", "application/vnd.card+source");
+
+    assert.strictEqual(response.status, 204, "HTTP 204 status");
+    let cardFile = join(dir.name, "person.gts");
+    assert.strictEqual(
+      existsSync(cardFile),
+      false,
+      "card module does not exist"
+    );
+  });
+
   test("serves a card-source POST request", async function (assert) {
     let response = await request
       .post("/person.gts")

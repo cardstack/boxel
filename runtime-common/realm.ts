@@ -112,7 +112,8 @@ export class Realm {
         `/.+(${executableExtensions.map((e) => "\\" + e).join("|")})`,
         this.upsertCardSource.bind(this)
       )
-      .get("/.+", this.getCardSourceOrRedirect.bind(this));
+      .get("/.+", this.getCardSourceOrRedirect.bind(this))
+      .delete("/.+", this.removeCardSource.bind(this));
   }
 
   async write(
@@ -230,6 +231,19 @@ export class Realm {
       });
     }
     return await this.serveLocalFile(handle);
+  }
+
+  private async removeCardSource(request: Request): Promise<Response> {
+    let localName = this.#paths.local(new URL(request.url));
+    let handle = await this.getFileWithFallbacks(localName);
+    if (!handle) {
+      return notFound(request, `${localName} not found`);
+    }
+    await this.#searchIndex.update(this.#paths.fileURL(handle.path), {
+      delete: true,
+    });
+    await this.#adapter.remove(handle.path);
+    return new Response(null, { status: 204 });
   }
 
   private async makeJS(
