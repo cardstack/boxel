@@ -653,7 +653,8 @@ module('Integration | card-basics', function (hooks) {
     }
 
     let card = new TestCard({ info: { firstName: 'Mango', age: 2 }});
-    assert.strictEqual(getQueryableValue(card, 'info'), 'Mango', 'The queryable value is correct');
+    assert.strictEqual(getQueryableValue(card, 'info'), 'Mango', 'The queryable value from card instance is correct');
+    assert.strictEqual(getQueryableValue(TestField, { firstName: 'Van Gogh', age: 6}), 'Van Gogh', 'The queryable value from user supplied data is correct')
   });
 
   test('queryable value for a field defaults to current field value when not specified', async function (assert) {
@@ -668,6 +669,7 @@ module('Integration | card-basics', function (hooks) {
 
     let card = new TestCard({ firstName: 'Van Gogh' });
     assert.strictEqual(getQueryableValue(card, 'firstName'), 'Van Gogh', 'The queryable value is correct');
+    assert.strictEqual(getQueryableValue(StringCard, 'Van Gogh'), 'Van Gogh', 'The queryable value from user supplied data is correct')
   });
 
   test('throws when attempting to get a queryable value for a non-primitive field', async function (assert) {
@@ -685,6 +687,7 @@ module('Integration | card-basics', function (hooks) {
 
     let card = TestCard.fromSerialized({ person: { firstName: 'Mango', lastName: 'Abdel-Rahman' }});
     assert.throws(() => getQueryableValue(card, 'person'), /cannot getQueryableValue for non-primitive field/);
+    assert.throws(() => getQueryableValue(CompoundField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /cannot getQueryableValue for non-primitive field/);
   });
 });
 
