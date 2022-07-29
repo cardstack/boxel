@@ -538,45 +538,6 @@ export class SearchIndex {
     return ignore.test(pathname).ignored;
   }
 
-  async filterByType(
-    type: CardTypeFilter["type"],
-    cards: CardResource[],
-    opts?: { negate?: true }
-  ): Promise<CardResource[]> {
-    let results: CardResource[] = [];
-    for (let card of cards) {
-      // assumption: only exported cards have instances
-      let cardRef: CardRef = { type: "exportedCard", ...card.meta.adoptsFrom };
-      if (!opts && (await this.instanceHasType(cardRef, type))) {
-        results.push(card);
-      } else if (opts?.negate && !(await this.instanceHasType(cardRef, type))) {
-        results.push(card);
-      }
-    }
-    return results;
-  }
-
-  async instanceHasType(
-    ref: CardRef,
-    type: CardTypeFilter["type"]
-  ): Promise<Boolean> {
-    // only checks for exported cards
-    if (ref.type !== "exportedCard") {
-      return false;
-    }
-
-    if (ref.name === type.name && ref.module === type.module) {
-      return true;
-    }
-
-    let def = await this.typeOf(ref);
-    if (def?.super) {
-      return await this.instanceHasType(def.super, type);
-    }
-
-    return false;
-  }
-
   private async getExternalCardDefinition(
     moduleURL: URL,
     ref: CardRef
@@ -586,7 +547,7 @@ export class SearchIndex {
       // so that we now how to ask for it's cards' definitions
       throw new Error(`not implemented`);
     }
-    let url = `${this.realm.baseRealmURL}_typeOf?${stringify(ref)}`;
+    let url = this.realm.baseRealmURL + "_typeOf?" + stringify(ref);
     let response = await fetch(url, {
       headers: {
         Accept: "application/vnd.api+json",
@@ -666,7 +627,7 @@ function buildMatcher(
   }
 
   // if ("type" in filter) {
-  //   results = await this.filterByType(filter.type, results, opts);
+  //   results = await filterByType(filter.type, results, opts);
   // }
 
   if ("not" in filter) {
@@ -683,3 +644,42 @@ function buildMatcher(
 
   throw new Error("Unknown filter");
 }
+
+// async function filterByType(
+//   type: CardTypeFilter["type"],
+//   cards: CardResource[],
+//   opts?: { negate?: true }
+// ): Promise<CardResource[]> {
+//   let results: CardResource[] = [];
+//   for (let card of cards) {
+//     // assumption: only exported cards have instances
+//     let cardRef: CardRef = { type: "exportedCard", ...card.meta.adoptsFrom };
+//     if (!opts && (await instanceHasType(cardRef, type))) {
+//       results.push(card);
+//     } else if (opts?.negate && !(await instanceHasType(cardRef, type))) {
+//       results.push(card);
+//     }
+//   }
+//   return results;
+// }
+
+// async function instanceHasType(
+//   ref: CardRef,
+//   type: CardTypeFilter["type"]
+// ): Promise<Boolean> {
+//   // only checks for exported cards
+//   if (ref.type !== "exportedCard") {
+//     return false;
+//   }
+
+//   if (ref.name === type.name && ref.module === type.module) {
+//     return true;
+//   }
+
+//   let def = await this.typeOf(ref);
+//   if (def?.super) {
+//     return await instanceHasType(def.super, type);
+//   }
+
+//   return false;
+// }
