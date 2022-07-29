@@ -482,21 +482,8 @@ export class SearchIndex {
 
   // TODO: complete these types
   async search(query: Query): Promise<CardResource[]> {
-    assertQuery(query);
-
-    let cards = [...this.instances.values()];
-
-    if (!query || Object.keys(query).length === 0) {
-      return cards;
-    }
-
-    let expression: Record<string, any>[] = [];
-
-    if (query.filter) {
-      expression = filterToExpression(query.filter);
-    }
-
-    return cards.flatMap((card) => (isMatching(expression, card) ? card : []));
+    let matcher = buildMatcher(query.filter);
+    return [...this.instances.values()].filter(matcher);
   }
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
@@ -611,50 +598,28 @@ function flatten(obj: Record<string, any>): Record<string, any> {
   return result;
 }
 
-function filterToExpression(filter: Filter): Record<string, any>[] {
+function buildMatcher(
+  filter: Filter | undefined
+): (card: CardResource) => boolean {
+  if (!filter) {
+    return (_card) => true;
+  }
   if ("every" in filter) {
-    return filter.every.flatMap((f) => filterToExpression(f));
+    let matchers = filter.every.map((f) => buildMatcher(f));
+    return (card) => matchers.every((m) => m(card));
   }
 
   if ("not" in filter) {
-    if ("not" in filter.not) {
-      return filterToExpression(filter.not.not);
-    }
-    return filterToExpression(filter.not).map(({ type, fieldPath, value }) => ({
-      type: `not ${type}`,
-      fieldPath,
-      value,
-    }));
+    let matcher = buildMatcher(filter.not);
+    return (card) => !matcher(card);
   }
 
   if ("eq" in filter) {
-    return Object.entries(filter.eq).map(([fieldPath, value]) => ({
-      type: `eq`,
-      fieldPath,
-      value,
-    }));
+    return (card) =>
+      Object.entries(filter.eq).every(
+        ([fieldPath, value]) => card.searchData![fieldPath] === value
+      );
   }
 
   throw new Error("Unknown filter");
-}
-
-function isMatching(
-  expressions: Record<string, any>[],
-  card: CardResource<string>
-): boolean {
-  if (!card.searchData) {
-    return false;
-  }
-  for (let expr of expressions) {
-    if (expr.type === "eq") {
-      if (card.searchData[expr.fieldPath] !== expr.value) {
-        return false;
-      }
-    } else if (expr.type === "not eq") {
-      if (card.searchData[expr.fieldPath] === expr.value) {
-        return false;
-      }
-    }
-  }
-  return true;
 }
