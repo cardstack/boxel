@@ -354,6 +354,12 @@ module('Unit | realm', function () {
       'Abdel-Rahman',
       'field value is correct'
     );
+
+    let cards = await searchIndex.search({
+      filter: { eq: { firstName: 'Van Gogh' } },
+    });
+
+    assert.strictEqual(cards.length, 1, 'search finds updated value');
   });
 
   test('realm can serve delete card requests', async function (assert) {
