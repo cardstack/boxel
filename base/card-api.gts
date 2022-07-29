@@ -120,15 +120,17 @@ function getDataBucket(instance: object): Map<string, any> {
   return deserialized;
 }
 
+export type Scalar = string | number | boolean | null | undefined;
+
 // This operates on both an instance and a field card class, we need to consider
 // both the left and right side of the operand we are using for comparison. On
 // one side you will be testing an actual card instance value from the search
 // index, on the other side you will be testing a user defined predicate that
 // likely was received as a search query param and will be divorced from an actual
 // card instance. 
-export function getQueryableValue(model: Card, fieldName: string): any;
-export function getQueryableValue(fieldCard: typeof Card, value: any ): any;
-export function getQueryableValue(modelOrFieldCard:typeof Card | Card, fieldNameOrValue: string | any ) {
+export function getQueryableValue(model: Card, fieldName: string): Scalar;
+export function getQueryableValue(fieldCard: typeof Card, value: any ): Scalar;
+export function getQueryableValue(modelOrFieldCard:typeof Card | Card, fieldNameOrValue: string | any ): Scalar {
   let fieldCard: typeof Card;
   let fieldName: string | undefined;
   let fieldValue: any;
