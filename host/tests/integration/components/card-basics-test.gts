@@ -1,6 +1,6 @@
 import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { fillIn, click, waitUntil } from '@ember/test-helpers';
+import { fillIn, click, waitUntil, waitFor } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import { cleanWhiteSpace, p, testRealmURL } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
@@ -150,11 +150,13 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let ref = { module: `${testRealmURL}person`, name: 'Person' };
+    let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
 
     await renderCard(driver, 'embedded');
-    assert.dom('[data-test-ref').containsText(`Module: ${testRealmURL}person Name: Person`);
+    assert.dom('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
+    await waitFor('[data-test-card]')
+    assert.dom('[data-test-card]').containsText('Person: Mango', 'the referenced card is rendered');
 
     // is this worth an assertion? or is it just obvious?
     assert.strictEqual(driver.ref, ref, 'The deserialized card ref constructor param is strict equal to the deserialized card ref value');
@@ -170,12 +172,13 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let ref = { module: `${testRealmURL}person`, name: 'Person' };
+    let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
 
     await renderCard(driver, 'edit');
-    assert.dom('[data-test-ref').containsText(`Module: ${testRealmURL}person Name: Person`);
-    assert.dom('input').doesNotExist('no input fields exist');
+    assert.dom('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
+    await waitFor('[data-test-card]')
+    assert.dom('[data-test-card]').containsText('Person: Mango', 'the referenced card is rendered');
   });
 
   test('render whole composite field', async function (assert) {

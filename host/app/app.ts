@@ -47,6 +47,18 @@ import * as emberDestroyable from '@ember/destroyable';
   '@ember/destroyable',
   emberDestroyable
 );
+import * as emberResources from 'ember-resources';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set('ember-resources', emberResources);
+import * as emberConcurrency from 'ember-concurrency';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  'ember-concurrency',
+  emberConcurrency
+);
+import * as emberConcurrencyTS from 'ember-concurrency-ts';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  'ember-concurrency-ts',
+  emberConcurrencyTS
+);
 import * as lodash from 'lodash';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('lodash', lodash);
 import * as tracked from 'tracked-built-ins';
