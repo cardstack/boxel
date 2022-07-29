@@ -13,6 +13,7 @@ export const serialize = Symbol('cardstack-serialize');
 export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol('cardstack-field-decorator');
 export const fieldType = Symbol('cardstack-field-type');
+export const queryableValue = Symbol('cardstack-queryable-value');
 
 const isField = Symbol('cardstack-field');
 
@@ -117,6 +118,21 @@ function getDataBucket(instance: object): Map<string, any> {
     deserializedData.set(instance, deserialized);
   }
   return deserialized;
+}
+
+export function getQueryableValue<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string ) {
+  let field = getField(model.constructor, fieldName);
+  if (!field) {
+    throw new Error(`tried to getQueryableValue for field "${fieldName}" which does not exist in card ${model.constructor.name}`);
+  }
+  if (!(primitive in field.card)) {
+    throw new Error(`cannot getQueryableValue for non-primitive field "${fieldName}" in card ${model.constructor.name}`);
+  }
+  if (typeof (field.card as any)[queryableValue] !== 'function') {
+    return (model as any)[fieldName];
+  }
+
+  return (field.card as any)[queryableValue]((model as any)[fieldName]);
 }
 
 export function serializedGet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string ) {

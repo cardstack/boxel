@@ -5,7 +5,7 @@ import { renderCard } from '../../helpers/render-component';
 import { cleanWhiteSpace, p } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
-import type { SignatureFor, primitive as primitiveType } from "https://cardstack.com/base/card-api";
+import type { SignatureFor, primitive as primitiveType, queryableValue as queryableValueType } from "https://cardstack.com/base/card-api";
 
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -15,6 +15,7 @@ let date: typeof import ("https://cardstack.com/base/date");
 let datetime: typeof import ("https://cardstack.com/base/datetime");
 let pickModule: typeof import ("https://cardstack.com/base/pick");
 let primitive: typeof primitiveType;
+let queryableValue: typeof queryableValueType;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -22,6 +23,7 @@ module('Integration | card-basics', function (hooks) {
   hooks.before(async function () {
     cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
     primitive = cardApi.primitive;
+    queryableValue = cardApi.queryableValue;
     string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
     integer = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/integer' + '');
     date = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/date' + '');
@@ -637,6 +639,53 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output="appointments"]').hasText('2022-05-01 2021-05-30');
   });
 
+  test('can get a queryable value for a field', async function(assert) {
+    let { field, contains, Card, getQueryableValue } = cardApi;
+    class TestField extends Card {
+      static [primitive]: TestShape;
+      static [queryableValue](value: TestShape) {
+        return value.firstName;
+      }
+    }
+
+    class TestCard extends Card {
+      @field info = contains(TestField);
+    }
+
+    let card = new TestCard({ info: { firstName: 'Mango', age: 2 }});
+    assert.strictEqual(getQueryableValue(card, 'info'), 'Mango', 'The queryable value is correct');
+  });
+
+  test('queryable value for a field defaults to current field value when not specified', async function (assert) {
+    let { field, contains, Card, getQueryableValue } = cardApi;
+    class StringCard extends Card {
+      static [primitive]: string;
+    }
+
+    class TestCard extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    let card = new TestCard({ firstName: 'Van Gogh' });
+    assert.strictEqual(getQueryableValue(card, 'firstName'), 'Van Gogh', 'The queryable value is correct');
+  });
+
+  test('throws when attempting to get a queryable value for a non-primitive field', async function (assert) {
+    let { field, contains, Card, getQueryableValue } = cardApi;
+    let { default: StringCard} = string;
+
+    class CompoundField extends Card {
+      @field firstName = contains(StringCard);
+      @field lastName = contains(StringCard);
+    }
+
+    class TestCard extends Card {
+      @field person = contains(CompoundField);
+    }
+
+    let card = TestCard.fromSerialized({ person: { firstName: 'Mango', lastName: 'Abdel-Rahman' }});
+    assert.throws(() => getQueryableValue(card, 'person'), /cannot getQueryableValue for non-primitive field/);
+  });
 });
 
 async function testString(label: string) {
@@ -656,4 +705,9 @@ function getDateFromInput(selector: string): Date | undefined {
     return parseISO(input.value);
   }
   return undefined;
+}
+
+interface TestShape {
+  firstName: string;
+  age: number
 }
