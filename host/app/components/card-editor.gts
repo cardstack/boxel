@@ -174,14 +174,14 @@ export default class Preview extends Component<Signature> {
   }
 
   @action
-  async save() {
-    await taskFor(this.write).perform();
+  save() {
+    taskFor(this.write).perform();
   }
 
   @action
-  async removeCard() {
+  removeCard() {
     if (this.args.card.type === 'existing') {
-      await taskFor(this.remove).perform(this.args.card.url);
+      taskFor(this.remove).perform(this.args.card.url);
     }
   }
 
