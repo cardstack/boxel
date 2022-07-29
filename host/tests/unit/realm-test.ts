@@ -44,7 +44,6 @@ module('Unit | realm', function () {
         type: 'card',
         id: `${testRealmURL}dir/empty`,
         attributes: {},
-        searchData: {},
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/card-api',
@@ -275,9 +274,6 @@ module('Unit | realm', function () {
               attributes: {
                 firstName: 'Van Gogh',
               },
-              searchData: {
-                firstName: 'Van Gogh',
-              },
               meta: {
                 adoptsFrom: {
                   module: 'https://cardstack.com/base/card-api',
@@ -324,10 +320,6 @@ module('Unit | realm', function () {
           data: {
             type: 'card',
             attributes: {
-              firstName: 'Van Gogh',
-              lastName: 'Abdel-Rahman',
-            },
-            searchData: {
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
             },

@@ -30,7 +30,6 @@ module('Unit | search-index', function () {
         id: `${testRealmURL}empty`,
         type: 'card',
         attributes: {},
-        searchData: {},
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/card-api',
@@ -785,8 +784,8 @@ posts/ignore-me.gts
         },
       });
       assert.strictEqual(matching.length, 2);
-      assert.strictEqual(matching[0]?.id, 'http://test-realm/card-1');
-      assert.strictEqual(matching[1]?.id, 'http://test-realm/cards/1');
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
+      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/1`);
     });
 
     // Tests from hub/**/**/card-service-test.ts

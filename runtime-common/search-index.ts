@@ -5,7 +5,7 @@ import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
 import { stringify } from "qs";
-import { Query, Filter, assertQuery } from "./query";
+import { Query, Filter } from "./query";
 
 export type CardRef =
   | {
@@ -59,7 +59,6 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
   type: "card";
   attributes?: Record<string, any>;
-  searchData?: Record<string, any>;
   // TODO add relationships
   meta: {
     adoptsFrom: {
@@ -186,8 +185,13 @@ class URLMap<T> {
   }
 }
 
+interface SearchEntry {
+  resource: CardResource;
+  searchData: Record<string, any>;
+}
+
 export class SearchIndex {
-  private instances = new URLMap<CardResource>();
+  private instances = new URLMap<SearchEntry>();
   private modules = new URLMap<ModuleSyntax>();
   private definitions = new Map<string, CardDefinition>();
   private exportedCardRefs = new Map<string, CardRef[]>();
@@ -258,10 +262,12 @@ export class SearchIndex {
         } else {
           json.data.id = instanceURL.href;
           json.data.meta.lastModified = lastModified;
-          json.data.searchData = json.data.attributes
-            ? flatten(json.data.attributes)
-            : {};
-          this.instances.set(instanceURL, json.data);
+          this.instances.set(instanceURL, {
+            resource: json.data,
+            searchData: json.data.attributes
+              ? flatten(json.data.attributes)
+              : {},
+          });
         }
       }
     } else if (
@@ -492,7 +498,9 @@ export class SearchIndex {
   // TODO: complete these types
   async search(query: Query): Promise<CardResource[]> {
     let matcher = buildMatcher(query.filter);
-    return [...this.instances.values()].filter(matcher);
+    return [...this.instances.values()]
+      .filter(matcher)
+      .map((entry) => entry.resource);
   }
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
@@ -505,7 +513,7 @@ export class SearchIndex {
   }
 
   async card(url: URL): Promise<CardResource | undefined> {
-    return this.instances.get(url);
+    return this.instances.get(url)?.resource;
   }
 
   public isIgnored(url: URL): boolean {
@@ -609,24 +617,24 @@ function flatten(obj: Record<string, any>): Record<string, any> {
 
 function buildMatcher(
   filter: Filter | undefined
-): (card: CardResource) => boolean {
+): (entry: SearchEntry) => boolean {
   if (!filter) {
-    return (_card) => true;
+    return (_entry) => true;
   }
   if ("every" in filter) {
     let matchers = filter.every.map((f) => buildMatcher(f));
-    return (card) => matchers.every((m) => m(card));
+    return (entry) => matchers.every((m) => m(entry));
   }
 
   if ("not" in filter) {
     let matcher = buildMatcher(filter.not);
-    return (card) => !matcher(card);
+    return (entry) => !matcher(entry);
   }
 
   if ("eq" in filter) {
-    return (card) =>
+    return (entry) =>
       Object.entries(filter.eq).every(
-        ([fieldPath, value]) => card.searchData![fieldPath] === value
+        ([fieldPath, value]) => entry.searchData![fieldPath] === value
       );
   }
 
