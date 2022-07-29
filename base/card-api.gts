@@ -120,7 +120,7 @@ function getDataBucket(instance: object): Map<string, any> {
   return deserialized;
 }
 
-export type Scalar = string | number | boolean | null | undefined;
+type Scalar = string | number | boolean | null | undefined;
 
 // This operates on both an instance and a field card class, we need to consider
 // both the left and right side of the operand we are using for comparison. On
