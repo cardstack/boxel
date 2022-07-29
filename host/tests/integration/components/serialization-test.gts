@@ -4,13 +4,15 @@ import stringify from 'fast-json-stable-stringify'
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
-import { p, cleanWhiteSpace } from '../../helpers';
+import { p, cleanWhiteSpace, testRealmURL } from '../../helpers';
+import type { ExportedCardRef } from "https://cardstack.com/base/card-ref";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
 let integer: typeof import ("https://cardstack.com/base/integer");
 let date: typeof import ("https://cardstack.com/base/date");
 let datetime: typeof import ("https://cardstack.com/base/datetime");
+let cardRef: typeof import ("https://cardstack.com/base/card-ref");
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
@@ -21,6 +23,7 @@ module('Integration | serialization', function (hooks) {
     integer = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/integer' + '');
     date = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/date' + '');
     datetime = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/datetime' + '');
+    cardRef = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-ref' + '');
   });
 
   test('can deserialize field', async function (assert) {
@@ -44,6 +47,39 @@ module('Integration | serialization', function (hooks) {
     // the template value 'Apr 22, 2022' can only be realized when the card has
     // correctly deserialized it's static data property
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post created Apr 22, 2022 published Apr 27, 2022, 4:02 PM');
+  });
+
+  test('deserialized card ref fields are not strict equal to serialized card ref', async function(assert) {
+    let {field, contains, Card, Component } = cardApi;
+    let { default: CardRefCard } = cardRef;
+    class DriverCard extends Card {
+      @field ref = contains(CardRefCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><div data-test-ref><@fields.ref/></div></template>
+      }
+    }
+
+    let ref: ExportedCardRef = { module: `${testRealmURL}person`, name: 'Person' };
+    let driver = DriverCard.fromSerialized({ ref });
+    assert.ok(driver.ref !== ref, 'the card ref value is not strict equals to its serialized counter part');
+    assert.deepEqual(driver.ref, ref, 'the card ref value is deep equal to its serialized counter part')
+  });
+
+  test('serialized card ref fields are not strict equal to their deserialized card ref values', async function(assert) {
+    let {field, contains, Card, Component, serializedGet } = cardApi;
+    let { default: CardRefCard } = cardRef;
+    class DriverCard extends Card {
+      @field ref = contains(CardRefCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><div data-test-ref><@fields.ref/></div></template>
+      }
+    }
+
+    let ref: ExportedCardRef = { module: `${testRealmURL}person`, name: 'Person' };
+    let driver = new DriverCard({ ref });
+    let serializedRef = serializedGet(driver, 'ref');
+    assert.ok(serializedRef !== ref, 'the card ref value is not strict equals to its serialized counter part');
+    assert.deepEqual(serializedRef, ref, 'the card ref value is deep equal to its serialized counter part')
   });
 
   test('can serialize field', async function(assert) {

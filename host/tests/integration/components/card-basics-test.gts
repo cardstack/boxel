@@ -2,10 +2,11 @@ import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn, click, waitUntil } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
-import { cleanWhiteSpace, p } from '../../helpers';
+import { cleanWhiteSpace, p, testRealmURL } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
 import type { SignatureFor, primitive as primitiveType } from "https://cardstack.com/base/card-api";
+import type { ExportedCardRef } from "https://cardstack.com/base/card-ref";
 
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -13,6 +14,7 @@ let string: typeof import ("https://cardstack.com/base/string");
 let integer: typeof import ("https://cardstack.com/base/integer");
 let date: typeof import ("https://cardstack.com/base/date");
 let datetime: typeof import ("https://cardstack.com/base/datetime");
+let cardRef: typeof import ("https://cardstack.com/base/card-ref");
 let pickModule: typeof import ("https://cardstack.com/base/pick");
 let primitive: typeof primitiveType;
 
@@ -26,6 +28,7 @@ module('Integration | card-basics', function (hooks) {
     integer = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/integer' + '');
     date = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/date' + '');
     datetime = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/datetime' + '');
+    cardRef = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-ref' + '');
     pickModule = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/pick' + '');
   });
 
@@ -33,17 +36,21 @@ module('Integration | card-basics', function (hooks) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard} = string;
     let { default: IntegerCard} = integer;
+    let { default: CardRefCard } = cardRef;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard);
       @field number = contains(IntegerCard);
       @field languagesSpoken = containsMany(StringCard);
+      @field ref = contains(CardRefCard);
 
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           {{@model.firstName}}
           {{@model.title}}
           {{@model.number}}
+          {{@model.ref.module}}
+          {{@model.ref.name}}
           {{#each @model.languagesSpoken as |language|}}
             {{language}}
           {{/each}}
@@ -54,12 +61,15 @@ module('Integration | card-basics', function (hooks) {
     card.firstName = 'arthur';
     card.number = 42;
     card.languagesSpoken = ['english', 'japanese'];
+    card.ref = { module: `${testRealmURL}person`, name: "Person" };
     let readName: string = card.firstName;
     assert.strictEqual(readName, 'arthur');
     let readNumber: number = card.number;
     assert.strictEqual(readNumber, 42);
     let readLanguages: string[] = card.languagesSpoken;
     assert.deepEqual(readLanguages, ['english', 'japanese']);
+    let readRef: ExportedCardRef = card.ref; 
+    assert.deepEqual(readRef, { module: `${testRealmURL}person`, name: "Person" });
   });
 
   test('access @model for primitive and composite fields', async function (assert) {
@@ -128,6 +138,44 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(arthur, 'embedded');
     assert.dom('[data-test="name"]').containsText('Arthur');
     assert.dom('[data-test="integer"]').containsText('10');
+  });
+
+  test('render cardRef field', async function (assert) {
+    let {field, contains, Card, Component } = cardApi;
+    let { default: CardRefCard } = cardRef;
+    class DriverCard extends Card {
+      @field ref = contains(CardRefCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template><div data-test-ref><@fields.ref/></div></template>
+      }
+    }
+
+    let ref = { module: `${testRealmURL}person`, name: 'Person' };
+    let driver = new DriverCard({ ref });
+
+    await renderCard(driver, 'embedded');
+    assert.dom('[data-test-ref').containsText(`Module: ${testRealmURL}person Name: Person`);
+
+    // is this worth an assertion? or is it just obvious?
+    assert.strictEqual(driver.ref, ref, 'The deserialized card ref constructor param is strict equal to the deserialized card ref value');
+  });
+
+  test('render cardRef fields are not editable', async function (assert) {
+    let {field, contains, Card, Component } = cardApi;
+    let { default: CardRefCard } = cardRef;
+    class DriverCard extends Card {
+      @field ref = contains(CardRefCard);
+      static edit = class Edit extends Component<typeof this> {
+        <template><div data-test-ref><@fields.ref/></div></template>
+      }
+    }
+
+    let ref = { module: `${testRealmURL}person`, name: 'Person' };
+    let driver = new DriverCard({ ref });
+
+    await renderCard(driver, 'edit');
+    assert.dom('[data-test-ref').containsText(`Module: ${testRealmURL}person Name: Person`);
+    assert.dom('input').doesNotExist('no input fields exist');
   });
 
   test('render whole composite field', async function (assert) {
