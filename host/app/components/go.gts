@@ -1,5 +1,8 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+import { restartableTask } from 'ember-concurrency';
+import { taskFor } from 'ember-concurrency-ts';
 import monaco from '../modifiers/monaco';
 import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
@@ -49,7 +52,7 @@ export default class Go extends Component<Signature> {
                   @formats={{this.formats}}
                 />
               </:ready>
-               <:error as |error|>
+              <:error as |error|>
                 <h2>Encountered {{error.type}} error</h2>
                 <pre>{{error.message}}</pre>
               </:error>
@@ -58,6 +61,7 @@ export default class Go extends Component<Signature> {
             <h2>Encountered error parsing JSON</h2>
             <pre>{{this.jsonError}}</pre>
           {{/if}}
+          <button type="button" {{on "click" this.removeFile}}>Delete</button>
         </div>
       {{/if}}
     </div>
@@ -120,8 +124,21 @@ export default class Go extends Component<Signature> {
   get path() {
     return this.args.path ?? '/';
   }
-}
 
+  @action
+  removeFile() {
+    if (!this.openFile) { return; }
+    taskFor(this.remove).perform(this.openFile.url);
+  }
+
+  @restartableTask private async remove(url: string): Promise<void> {
+    let headersAccept = url.endsWith('.json') ? 'application/vnd.api+json' : 'application/vnd.card+source';
+    let response = await fetch(url, { method: 'DELETE', headers: { 'Accept': headersAccept }});
+    if (!response.ok) {
+      throw new Error(`could not delete file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
+    }
+  }
+}
 
 function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
