@@ -1,6 +1,6 @@
 export class CardError extends Error {
   constructor(readonly response: Response) {
-    super(`WorkerError ${response.status}`);
+    super(`CardError ${response.status}`);
   }
 
   static withResponse(response: Response) {
