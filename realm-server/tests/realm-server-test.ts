@@ -170,6 +170,13 @@ module("Realm Server", function (hooks) {
     } else {
       assert.ok(false, "response body is not a card document");
     }
+
+    response = await request
+      .get("/_search?filter[eq][firstName]=Van+Gogh")
+      .set("Accept", "application/vnd.api+json");
+
+    assert.strictEqual(response.status, 200, "HTTP 200 status");
+    assert.strictEqual(response.body.data.length, 1, "found one card");
   });
 
   test("serves a card DELETE request", async function (assert) {
@@ -283,6 +290,14 @@ module("Realm Server", function (hooks) {
                 kind: "file",
               },
             },
+            "person-2.json": {
+              links: {
+                related: `${testRealmHref}person-2.json`,
+              },
+              meta: {
+                kind: "file",
+              },
+            },
           },
         },
       },
@@ -382,7 +397,7 @@ module("Realm Server", function (hooks) {
 
   test("serves a /_search GET request", async function (assert) {
     let response = await request
-      .get(`/_search`)
+      .get(`/_search?filter[eq][firstName]=Mango`)
       .set("Accept", "application/vnd.api+json");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");

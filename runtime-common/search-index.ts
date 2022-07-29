@@ -5,7 +5,7 @@ import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
 import { stringify } from "qs";
-import { Query, Filter, assertQuery } from "./query";
+import { Query, Filter } from "./query";
 
 export type CardRef =
   | {
@@ -185,8 +185,13 @@ class URLMap<T> {
   }
 }
 
+interface SearchEntry {
+  resource: CardResource;
+  searchData: Record<string, any>;
+}
+
 export class SearchIndex {
-  private instances = new URLMap<CardResource>();
+  private instances = new URLMap<SearchEntry>();
   private modules = new URLMap<ModuleSyntax>();
   private definitions = new Map<string, CardDefinition>();
   private exportedCardRefs = new Map<string, CardRef[]>();
@@ -257,7 +262,12 @@ export class SearchIndex {
         } else {
           json.data.id = instanceURL.href;
           json.data.meta.lastModified = lastModified;
-          this.instances.set(instanceURL, json.data);
+          this.instances.set(instanceURL, {
+            resource: json.data,
+            searchData: json.data.attributes
+              ? flatten(json.data.attributes)
+              : {},
+          });
         }
       }
     } else if (
@@ -487,17 +497,10 @@ export class SearchIndex {
 
   // TODO: complete these types
   async search(query: Query): Promise<CardResource[]> {
-    assertQuery(query);
-
-    if (!query || Object.keys(query).length === 0) {
-      return [...this.instances.values()];
-    }
-
-    if (query.filter) {
-      return filterCardData(query.filter, [...this.instances.values()]);
-    }
-
-    throw new Error("Not implemented");
+    let matcher = buildMatcher(query.filter);
+    return [...this.instances.values()]
+      .filter(matcher)
+      .map((entry) => entry.resource);
   }
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
@@ -510,7 +513,7 @@ export class SearchIndex {
   }
 
   async card(url: URL): Promise<CardResource | undefined> {
-    return this.instances.get(url);
+    return this.instances.get(url)?.resource;
   }
 
   public isIgnored(url: URL): boolean {
@@ -597,54 +600,43 @@ function getFieldType(
   return undefined;
 }
 
-function filterCardData(
-  filter: Filter,
-  results: CardResource[],
-  opts?: { negate?: true }
-): CardResource[] {
-  if (!("not" in filter) && !("eq" in filter)) {
-    throw new Error("Not implemented");
+function flatten(obj: Record<string, any>): Record<string, any> {
+  let result: Record<string, any> = {};
+  for (let [key, value] of Object.entries(obj)) {
+    if (typeof value === "object") {
+      let res = flatten(value);
+      for (let [k, val] of Object.entries(res)) {
+        result[`${key}.${k}`] = val;
+      }
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+function buildMatcher(
+  filter: Filter | undefined
+): (entry: SearchEntry) => boolean {
+  if (!filter) {
+    return (_entry) => true;
+  }
+  if ("every" in filter) {
+    let matchers = filter.every.map((f) => buildMatcher(f));
+    return (entry) => matchers.every((m) => m(entry));
   }
 
   if ("not" in filter) {
-    results = filterCardData(filter.not, results, { negate: true });
+    let matcher = buildMatcher(filter.not);
+    return (entry) => !matcher(entry);
   }
 
   if ("eq" in filter) {
-    results = filterByFieldData(filter.eq, results, opts);
+    return (entry) =>
+      Object.entries(filter.eq).every(
+        ([fieldPath, value]) => entry.searchData![fieldPath] === value
+      );
   }
 
-  return results;
-}
-
-function filterByFieldData(
-  query: Record<string, any>,
-  instances: CardResource[],
-  opts?: { negate?: true }
-): CardResource[] {
-  let results = instances as Record<string, any>[];
-
-  for (let [key, value] of Object.entries(query)) {
-    results = results.filter((c) => {
-      let fields = key.split(".");
-      if (fields.length > 1) {
-        let compValue = c;
-        while (fields.length > 0 && compValue) {
-          let field = fields.shift();
-          compValue = compValue?.[field!];
-        }
-        if (opts?.negate) {
-          return compValue !== value;
-        }
-        return compValue === value;
-      } else {
-        if (opts?.negate) {
-          return c[key] !== value;
-        }
-        return c[key] === value;
-      }
-    });
-  }
-
-  return results as CardResource[];
+  throw new Error("Unknown filter");
 }
