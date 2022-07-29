@@ -680,7 +680,7 @@ posts/ignore-me.gts
           },
           meta: {
             adoptsFrom: {
-              module: `${paths.url}/cards`,
+              module: `${paths.url}cards`,
               name: 'Article',
             },
           },
@@ -700,7 +700,7 @@ posts/ignore-me.gts
           },
           meta: {
             adoptsFrom: {
-              module: `${paths.url}/cards`,
+              module: `${paths.url}cards`,
               name: 'Post',
             },
           },
@@ -721,7 +721,7 @@ posts/ignore-me.gts
           },
           meta: {
             adoptsFrom: {
-              module: `${paths.url}/cards`,
+              module: `${paths.url}cards`,
               name: 'Article',
             },
           },
@@ -740,15 +740,19 @@ posts/ignore-me.gts
     test(`can search for cards by using the 'eq' filter`, async function (assert) {
       let matching = await indexer.search({
         filter: {
+          on: {
+            type: 'exportedCard',
+            module: `${paths.url}cards`,
+            name: 'Post',
+          },
           eq: {
             title: 'Card 1',
             description: 'Sample post',
           },
         },
       });
-      assert.strictEqual(matching.length, 2, 'found two cards');
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
-      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/1`);
+      assert.strictEqual(matching.length, 1, 'found matching Post card');
+      assert.strictEqual(matching[0]?.id, `${paths.url}cards/1`);
     });
 
     test('can combine multiple filters', async function (assert) {
@@ -756,11 +760,19 @@ posts/ignore-me.gts
         filter: {
           every: [
             {
-              eq: {
-                title: 'Card 1',
+              on: {
+                type: 'exportedCard',
+                module: `${paths.url}cards`,
+                name: 'Post',
               },
+              eq: { title: 'Card 1' },
             },
             {
+              on: {
+                type: 'exportedCard',
+                module: `${paths.url}cards`,
+                name: 'Post',
+              },
               not: {
                 eq: {
                   'author.name': 'Cardy',
@@ -772,26 +784,16 @@ posts/ignore-me.gts
       });
       assert.strictEqual(matching.length, 1, 'combining eq and not filters');
       assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
-
-      matching = await indexer.search({
-        filter: {
-          type: {
-            module: `${testRealmURL}cards`,
-            name: 'Article',
-          },
-          eq: {
-            title: 'Card 1',
-          },
-        },
-      });
-      assert.strictEqual(matching.length, 1, 'combining type and eq filters');
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
     });
 
     test('can handle a filter with double negatives', async function (assert) {
-      // note: do we allow this?
       let matching = await indexer.search({
         filter: {
+          on: {
+            type: 'exportedCard',
+            module: `${paths.url}cards`,
+            name: 'Post',
+          },
           not: {
             not: {
               not: {
@@ -803,29 +805,30 @@ posts/ignore-me.gts
           },
         },
       });
-      assert.strictEqual(matching.length, 2);
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
-      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/1`);
+      assert.strictEqual(matching.length, 1);
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
     });
 
     // Tests from hub/**/**/card-service-test.ts
-    test('can filter by card type', async function (assert) {
+    skip('can filter by card type', async function (assert) {
       let matching = await indexer.search({
         filter: {
           type: {
-            module: `${testRealmURL}cards`,
+            type: 'exportedCard',
+            module: `${paths.url}cards`,
             name: 'Article',
           },
         },
       });
 
-      assert.strictEqual(matching.length, 2, 'Two cards have Article type');
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
-      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/2`);
+      assert.strictEqual(matching.length, 2, 'Found 2 cards for Article type');
+      assert.strictEqual(matching[0]?.id, `${paths.url}card-1`);
+      assert.strictEqual(matching[1]?.id, `${paths.url}cards/2`);
 
       matching = await indexer.search({
         filter: {
           type: {
+            type: 'exportedCard',
             module: `${testRealmURL}cards`,
             name: 'Post',
           },
@@ -845,49 +848,62 @@ posts/ignore-me.gts
     test(`can filter on a nested field using 'eq'`, async function (assert) {
       let matching = await indexer.search({
         filter: {
-          eq: {
-            'author.name': 'Carl Stack',
+          on: {
+            type: 'exportedCard',
+            module: `${paths.url}cards`,
+            name: 'Article',
           },
+          eq: { 'author.name': 'Carl Stack' },
         },
       });
-      assert.strictEqual(matching.length, 2);
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
-      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/2`);
+      assert.strictEqual(matching.length, 1);
+      assert.strictEqual(matching[0]?.id, `${paths.url}cards/2`);
     });
 
     test('can negate a filter', async function (assert) {
       let matching = await indexer.search({
         filter: {
-          not: {
-            eq: {
-              'author.email': 'carl@stack.com',
-            },
+          on: {
+            type: 'exportedCard',
+            module: `${paths.url}cards`,
+            name: 'Article',
           },
+          not: { eq: { 'author.email': 'carl@stack.com' } },
+        },
+      });
+      assert.strictEqual(matching.length, 1);
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
+    });
+
+    test('can combine multiple types', async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          any: [
+            {
+              on: {
+                type: 'exportedCard',
+                module: `${paths.url}cards`,
+                name: 'Post',
+              },
+              eq: { title: 'Card 1' },
+            },
+            {
+              on: {
+                type: 'exportedCard',
+                module: `${paths.url}cards`,
+                name: 'Article',
+              },
+              eq: { title: 'Card 1' },
+            },
+          ],
         },
       });
       assert.strictEqual(matching.length, 2);
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
-      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/1`);
-
-      matching = await indexer.search({
-        filter: {
-          type: {
-            module: `${testRealmURL}cards`,
-            name: 'Post',
-          },
-          not: {
-            type: {
-              module: `${testRealmURL}cards`,
-              name: 'Article',
-            },
-          },
-        },
-      });
-      assert.strictEqual(matching.length, 1, 'combining type and not filters');
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
+      assert.strictEqual(matching[0]?.id, `${paths.url}card-1`);
+      assert.strictEqual(matching[1]?.id, `${paths.url}cards/1`);
     });
 
-    skip('can combine multiple types');
+    // sorting
     skip('can sort in alphabetical order');
     skip('can sort in reverse alphabetical order');
     skip('can sort in multiple string field conditions');

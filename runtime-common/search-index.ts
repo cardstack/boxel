@@ -5,14 +5,16 @@ import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
 import { stringify } from "qs";
-import { Query, Filter, CardTypeFilter } from "./query";
+import { Query, Filter } from "./query";
+
+export type ExportedCardRef = {
+  type: "exportedCard";
+  module: string;
+  name: string;
+};
 
 export type CardRef =
-  | {
-      type: "exportedCard";
-      module: string;
-      name: string;
-    }
+  | ExportedCardRef
   | {
       type: "ancestorOf";
       card: CardRef;
@@ -497,7 +499,11 @@ export class SearchIndex {
 
   // TODO: complete these types
   async search(query: Query): Promise<CardResource[]> {
-    let matcher = buildMatcher(query.filter);
+    let matcher = buildMatcher(query.filter, {
+      type: "exportedCard",
+      module: `${baseRealm.url}card-api`,
+      name: "Card",
+    });
     return [...this.instances.values()]
       .filter(matcher)
       .map((entry) => entry.resource);
@@ -616,70 +622,47 @@ function flatten(obj: Record<string, any>): Record<string, any> {
 }
 
 function buildMatcher(
-  filter: Filter | undefined
+  filter: Filter | undefined,
+  onRef?: ExportedCardRef
 ): (entry: SearchEntry) => boolean {
   if (!filter) {
     return (_entry) => true;
   }
+
+  if ("type" in filter) {
+    throw new Error("TODO");
+    //   results = await filterByType(filter.type, results, opts);
+  }
+
+  let on = filter?.on ?? onRef;
+
+  if ("any" in filter) {
+    let matchers = filter.any.map((f) => buildMatcher(f, on));
+    return (entry) => matchers.any((m) => m(entry));
+  }
+
   if ("every" in filter) {
-    let matchers = filter.every.map((f) => buildMatcher(f));
+    let matchers = filter.every.map((f) => buildMatcher(f, on));
     return (entry) => matchers.every((m) => m(entry));
   }
 
-  // if ("type" in filter) {
-  //   results = await filterByType(filter.type, results, opts);
-  // }
-
   if ("not" in filter) {
-    let matcher = buildMatcher(filter.not);
-    return (entry) => !matcher(entry);
+    let matcher = buildMatcher(filter.not, on);
+    return (entry) =>
+      on?.module === entry.resource.meta.adoptsFrom.module &&
+      on?.name === entry.resource.meta.adoptsFrom.name &&
+      !matcher(entry);
   }
 
   if ("eq" in filter) {
     return (entry) =>
       Object.entries(filter.eq).every(
-        ([fieldPath, value]) => entry.searchData![fieldPath] === value
+        ([fieldPath, value]) =>
+          on?.module === entry.resource.meta.adoptsFrom.module &&
+          on?.name === entry.resource.meta.adoptsFrom.name &&
+          entry.searchData![fieldPath] === value
       );
   }
 
   throw new Error("Unknown filter");
 }
-
-// async function filterByType(
-//   type: CardTypeFilter["type"],
-//   cards: CardResource[],
-//   opts?: { negate?: true }
-// ): Promise<CardResource[]> {
-//   let results: CardResource[] = [];
-//   for (let card of cards) {
-//     // assumption: only exported cards have instances
-//     let cardRef: CardRef = { type: "exportedCard", ...card.meta.adoptsFrom };
-//     if (!opts && (await instanceHasType(cardRef, type))) {
-//       results.push(card);
-//     } else if (opts?.negate && !(await instanceHasType(cardRef, type))) {
-//       results.push(card);
-//     }
-//   }
-//   return results;
-// }
-
-// async function instanceHasType(
-//   ref: CardRef,
-//   type: CardTypeFilter["type"]
-// ): Promise<Boolean> {
-//   // only checks for exported cards
-//   if (ref.type !== "exportedCard") {
-//     return false;
-//   }
-
-//   if (ref.name === type.name && ref.module === type.module) {
-//     return true;
-//   }
-
-//   let def = await this.typeOf(ref);
-//   if (def?.super) {
-//     return await instanceHasType(def.super, type);
-//   }
-
-//   return false;
-// }

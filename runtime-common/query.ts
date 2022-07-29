@@ -2,6 +2,7 @@ import * as JSON from "json-typescript";
 import isEqual from "lodash/isEqual";
 import { assertJSONValue, assertJSONPrimitive } from "./json-validation";
 import qs from "qs";
+import { ExportedCardRef } from "@cardstack/runtime-common/search-index";
 
 export interface Query {
   filter?: Filter;
@@ -20,7 +21,7 @@ export type Filter =
   | CardTypeFilter;
 
 export interface TypedFilter {
-  on?: CardURL;
+  on?: ExportedCardRef;
 }
 
 interface SortExpression {
@@ -35,10 +36,7 @@ export type Sort = SortExpression[];
 // adopt from some particular card type--no other predicates are included in
 // this filter.
 export interface CardTypeFilter {
-  type: {
-    module: string;
-    name: string;
-  };
+  type: ExportedCardRef;
 }
 
 export interface AnyFilter extends TypedFilter {
