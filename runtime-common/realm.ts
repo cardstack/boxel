@@ -40,6 +40,7 @@ import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properti
 import typescriptPlugin from "@babel/plugin-transform-typescript";
 import { Router } from "./router";
 import type { Readable } from "stream";
+import { parseQueryString } from "./query";
 
 // From https://github.com/iliakan/detect-node
 const isNode =
@@ -683,9 +684,10 @@ export class Realm {
     });
   }
 
-  private async search(_request: Request): Promise<Response> {
-    // TODO process query param....
-    let data = await this.#searchIndex.search({});
+  private async search(request: Request): Promise<Response> {
+    let data = await this.#searchIndex.search(
+      parseQueryString(new URL(request.url).search.slice(1))
+    );
     return new Response(
       JSON.stringify(
         {
