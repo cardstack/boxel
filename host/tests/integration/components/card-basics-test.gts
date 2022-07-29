@@ -176,6 +176,7 @@ module('Integration | card-basics', function (hooks) {
     let driver = new DriverCard({ ref });
 
     await renderCard(driver, 'edit');
+    assert.dom('input').doesNotExist('no input fields exist');
     assert.dom('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
     await waitFor('[data-test-card]')
     assert.dom('[data-test-card]').containsText('Person: Mango', 'the referenced card is rendered');

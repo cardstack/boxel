@@ -4,8 +4,7 @@ import stringify from 'fast-json-stable-stringify'
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
-import { p, cleanWhiteSpace, testRealmURL } from '../../helpers';
-import type { ExportedCardRef } from "https://cardstack.com/base/card-ref";
+import { p, cleanWhiteSpace } from '../../helpers';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -59,7 +58,7 @@ module('Integration | serialization', function (hooks) {
       }
     }
 
-    let ref: ExportedCardRef = { module: `${testRealmURL}person`, name: 'Person' };
+    let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
     let driver = DriverCard.fromSerialized({ ref });
     assert.ok(driver.ref !== ref, 'the card ref value is not strict equals to its serialized counter part');
     assert.deepEqual(driver.ref, ref, 'the card ref value is deep equal to its serialized counter part')
@@ -75,7 +74,7 @@ module('Integration | serialization', function (hooks) {
       }
     }
 
-    let ref: ExportedCardRef = { module: `${testRealmURL}person`, name: 'Person' };
+    let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
     let serializedRef = serializedGet(driver, 'ref');
     assert.ok(serializedRef !== ref, 'the card ref value is not strict equals to its serialized counter part');
