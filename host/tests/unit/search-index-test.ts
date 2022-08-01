@@ -741,7 +741,6 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           on: {
-            type: 'exportedCard',
             module: `${paths.url}cards`,
             name: 'Post',
           },
@@ -761,7 +760,6 @@ posts/ignore-me.gts
           every: [
             {
               on: {
-                type: 'exportedCard',
                 module: `${paths.url}cards`,
                 name: 'Post',
               },
@@ -769,7 +767,6 @@ posts/ignore-me.gts
             },
             {
               on: {
-                type: 'exportedCard',
                 module: `${paths.url}cards`,
                 name: 'Post',
               },
@@ -790,7 +787,6 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           on: {
-            type: 'exportedCard',
             module: `${paths.url}cards`,
             name: 'Post',
           },
@@ -814,7 +810,6 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           type: {
-            type: 'exportedCard',
             module: `${paths.url}cards`,
             name: 'Article',
           },
@@ -828,7 +823,6 @@ posts/ignore-me.gts
       matching = await indexer.search({
         filter: {
           type: {
-            type: 'exportedCard',
             module: `${testRealmURL}cards`,
             name: 'Post',
           },
@@ -849,7 +843,6 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           on: {
-            type: 'exportedCard',
             module: `${paths.url}cards`,
             name: 'Article',
           },
@@ -864,7 +857,6 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           on: {
-            type: 'exportedCard',
             module: `${paths.url}cards`,
             name: 'Article',
           },
@@ -881,7 +873,6 @@ posts/ignore-me.gts
           any: [
             {
               on: {
-                type: 'exportedCard',
                 module: `${paths.url}cards`,
                 name: 'Post',
               },
@@ -889,7 +880,6 @@ posts/ignore-me.gts
             },
             {
               on: {
-                type: 'exportedCard',
                 module: `${paths.url}cards`,
                 name: 'Article',
               },

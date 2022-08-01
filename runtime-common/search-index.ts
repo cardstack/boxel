@@ -8,13 +8,16 @@ import { stringify } from "qs";
 import { Query, Filter } from "./query";
 
 export type ExportedCardRef = {
-  type: "exportedCard";
   module: string;
   name: string;
 };
 
 export type CardRef =
-  | ExportedCardRef
+  | {
+      type: "exportedCard";
+      module: string;
+      name: string;
+    }
   | {
       type: "ancestorOf";
       card: CardRef;
@@ -497,10 +500,8 @@ export class SearchIndex {
     return url.href.startsWith(this.realm.url);
   }
 
-  // TODO: complete these types
   async search(query: Query): Promise<CardResource[]> {
     let matcher = buildMatcher(query.filter, {
-      type: "exportedCard",
       module: `${baseRealm.url}card-api`,
       name: "Card",
     });
@@ -621,10 +622,14 @@ function flatten(obj: Record<string, any>): Record<string, any> {
   return result;
 }
 
+// Matchers are three-valued (true, false, null) because a query that talks
+// about a field that is not even present on a given card results in `null` to
+// distinguish it from a field that is present but not matching the filter
+// (`false`)
 function buildMatcher(
   filter: Filter | undefined,
-  onRef?: ExportedCardRef
-): (entry: SearchEntry) => boolean {
+  onRef: ExportedCardRef
+): (entry: SearchEntry) => boolean | null {
   if (!filter) {
     return (_entry) => true;
   }
@@ -638,7 +643,7 @@ function buildMatcher(
 
   if ("any" in filter) {
     let matchers = filter.any.map((f) => buildMatcher(f, on));
-    return (entry) => matchers.any((m) => m(entry));
+    return (entry) => matchers.some((m) => m(entry));
   }
 
   if ("every" in filter) {
@@ -648,20 +653,29 @@ function buildMatcher(
 
   if ("not" in filter) {
     let matcher = buildMatcher(filter.not, on);
-    return (entry) =>
-      on?.module === entry.resource.meta.adoptsFrom.module &&
-      on?.name === entry.resource.meta.adoptsFrom.name &&
-      !matcher(entry);
+    return (entry) => {
+      let inner = matcher(entry);
+      if (inner == null) {
+        // irrelevant cards stay irrelevant, even when the query is inverted
+        return null;
+      } else {
+        return !inner;
+      }
+    };
   }
 
   if ("eq" in filter) {
     return (entry) =>
-      Object.entries(filter.eq).every(
-        ([fieldPath, value]) =>
+      Object.entries(filter.eq).every(([fieldPath, value]) => {
+        if (
           on?.module === entry.resource.meta.adoptsFrom.module &&
-          on?.name === entry.resource.meta.adoptsFrom.name &&
-          entry.searchData![fieldPath] === value
-      );
+          on?.name === entry.resource.meta.adoptsFrom.name
+        ) {
+          return entry.searchData![fieldPath] === value;
+        } else {
+          return null;
+        }
+      });
   }
 
   throw new Error("Unknown filter");
