@@ -643,12 +643,12 @@ function buildMatcher(
 
   if ("any" in filter) {
     let matchers = filter.any.map((f) => buildMatcher(f, on));
-    return (entry) => matchers.some((m) => m(entry));
+    return (entry) => some(matchers, (m) => m(entry));
   }
 
   if ("every" in filter) {
     let matchers = filter.every.map((f) => buildMatcher(f, on));
-    return (entry) => matchers.every((m) => m(entry));
+    return (entry) => every(matchers, (m) => m(entry));
   }
 
   if ("not" in filter) {
@@ -666,10 +666,10 @@ function buildMatcher(
 
   if ("eq" in filter) {
     return (entry) =>
-      Object.entries(filter.eq).every(([fieldPath, value]) => {
+      every(Object.entries(filter.eq), ([fieldPath, value]) => {
         if (
-          on?.module === entry.resource.meta.adoptsFrom.module &&
-          on?.name === entry.resource.meta.adoptsFrom.name
+          on.module === entry.resource.meta.adoptsFrom.module &&
+          on.name === entry.resource.meta.adoptsFrom.name
         ) {
           return entry.searchData![fieldPath] === value;
         } else {
@@ -679,4 +679,40 @@ function buildMatcher(
   }
 
   throw new Error("Unknown filter");
+}
+
+// three-valued version of Array.every that propagates nulls. Here, the presence
+// of any nulls causes the whole thing to be null.
+function every<T>(
+  list: T[],
+  predicate: (t: T) => boolean | null
+): boolean | null {
+  let result = true;
+  for (let element of list) {
+    let status = predicate(element);
+    if (status == null) {
+      return null;
+    }
+    result = result && status;
+  }
+  return result;
+}
+
+// three-valued version of Array.some that propagates nulls. Here, the whole
+// expression becomes null only if the whole input is null.
+function some<T>(
+  list: T[],
+  predicate: (t: T) => boolean | null
+): boolean | null {
+  let result = null;
+  for (let element of list) {
+    let status = predicate(element);
+    if (status === true) {
+      return true;
+    }
+    if (status === false) {
+      result = false;
+    }
+  }
+  return result;
 }
