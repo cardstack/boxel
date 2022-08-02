@@ -172,7 +172,19 @@ module("Realm Server", function (hooks) {
     }
 
     response = await request
-      .get("/_search?filter[eq][firstName]=Van+Gogh")
+      .get(
+        `/_search?${stringify({
+          filter: {
+            on: {
+              module: `./person.gts`,
+              name: "Person",
+            },
+            eq: {
+              firstName: "Van Gogh",
+            },
+          },
+        })}`
+      )
       .set("Accept", "application/vnd.api+json");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
@@ -397,7 +409,19 @@ module("Realm Server", function (hooks) {
 
   test("serves a /_search GET request", async function (assert) {
     let response = await request
-      .get(`/_search?filter[eq][firstName]=Mango`)
+      .get(
+        `/_search?${stringify({
+          filter: {
+            eq: {
+              firstName: "Mango",
+            },
+            on: {
+              module: `./person.gts`,
+              name: "Person",
+            },
+          },
+        })}`
+      )
       .set("Accept", "application/vnd.api+json");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");

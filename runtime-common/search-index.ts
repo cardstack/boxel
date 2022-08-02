@@ -636,7 +636,6 @@ function buildMatcher(
 
   if ("type" in filter) {
     throw new Error("TODO");
-    //   results = await filterByType(filter.type, results, opts);
   }
 
   let on = filter?.on ?? onRef;

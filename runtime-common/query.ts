@@ -162,7 +162,7 @@ function assertFilter(
   }
 
   if ("on" in filter) {
-    assertCardId(filter.on, pointer.concat("on"));
+    assertCardType(filter.on, pointer.concat("on"));
   }
 
   if ("any" in filter) {
@@ -189,14 +189,6 @@ function assertCardType(type: any, pointer: string[]) {
     !("name" in type)
   ) {
     throw new Error(`${pointer.join("/") || "/"}: type is not valid`);
-  }
-}
-
-function assertCardId(id: any, pointer: string[]): asserts id is CardURL {
-  if (typeof id !== "string") {
-    throw new Error(
-      `${pointer.join("/") || "/"}: card id must be a string URL`
-    );
   }
 }
 
