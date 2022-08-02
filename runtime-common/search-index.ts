@@ -501,10 +501,14 @@ export class SearchIndex {
   }
 
   async search(query: Query): Promise<CardResource[]> {
-    let matcher = buildMatcher(query.filter, {
-      module: `${baseRealm.url}card-api`,
-      name: "Card",
-    });
+    let matcher = buildMatcher(
+      query.filter,
+      {
+        module: `${baseRealm.url}card-api`,
+        name: "Card",
+      },
+      this.realm.url
+    );
     return [...this.instances.values()]
       .filter(matcher)
       .map((entry) => entry.resource);
@@ -628,7 +632,8 @@ function flatten(obj: Record<string, any>): Record<string, any> {
 // (`false`)
 function buildMatcher(
   filter: Filter | undefined,
-  onRef: ExportedCardRef
+  onRef: ExportedCardRef,
+  realmURL: string
 ): (entry: SearchEntry) => boolean | null {
   if (!filter) {
     return (_entry) => true;
@@ -641,17 +646,17 @@ function buildMatcher(
   let on = filter?.on ?? onRef;
 
   if ("any" in filter) {
-    let matchers = filter.any.map((f) => buildMatcher(f, on));
+    let matchers = filter.any.map((f) => buildMatcher(f, on, realmURL));
     return (entry) => some(matchers, (m) => m(entry));
   }
 
   if ("every" in filter) {
-    let matchers = filter.every.map((f) => buildMatcher(f, on));
+    let matchers = filter.every.map((f) => buildMatcher(f, on, realmURL));
     return (entry) => every(matchers, (m) => m(entry));
   }
 
   if ("not" in filter) {
-    let matcher = buildMatcher(filter.not, on);
+    let matcher = buildMatcher(filter.not, on, realmURL);
     return (entry) => {
       let inner = matcher(entry);
       if (inner == null) {
@@ -667,8 +672,11 @@ function buildMatcher(
     return (entry) =>
       every(Object.entries(filter.eq), ([fieldPath, value]) => {
         if (
-          on.module === entry.resource.meta.adoptsFrom.module &&
-          on.name === entry.resource.meta.adoptsFrom.name
+          on.name === entry.resource.meta.adoptsFrom.name &&
+          trimExecutableExtension(new URL(on.module, realmURL)).href ===
+            trimExecutableExtension(
+              new URL(entry.resource.meta.adoptsFrom.module, realmURL)
+            ).href
         ) {
           return entry.searchData![fieldPath] === value;
         } else {

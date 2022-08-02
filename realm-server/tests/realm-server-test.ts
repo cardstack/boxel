@@ -176,7 +176,7 @@ module("Realm Server", function (hooks) {
         `/_search?${stringify({
           filter: {
             on: {
-              module: `./person.gts`,
+              module: `${testRealmHref}person`,
               name: "Person",
             },
             eq: {
@@ -416,7 +416,7 @@ module("Realm Server", function (hooks) {
               firstName: "Mango",
             },
             on: {
-              module: `./person.gts`,
+              module: `${testRealmHref}person`,
               name: "Person",
             },
           },
