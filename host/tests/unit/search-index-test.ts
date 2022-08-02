@@ -806,13 +806,11 @@ posts/ignore-me.gts
     });
 
     // Tests from hub/**/**/card-service-test.ts
-    skip('can filter by card type', async function (assert) {
+    test('can filter by card type', async function (assert) {
       let matching = await indexer.search({
-        filter: {
-          type: {
-            module: `${paths.url}cards`,
-            name: 'Article',
-          },
+        type: {
+          module: `${paths.url}cards`,
+          name: 'Article',
         },
       });
 
@@ -821,11 +819,9 @@ posts/ignore-me.gts
       assert.strictEqual(matching[1]?.id, `${paths.url}cards/2`);
 
       matching = await indexer.search({
-        filter: {
-          type: {
-            module: `${testRealmURL}cards`,
-            name: 'Post',
-          },
+        type: {
+          module: `${testRealmURL}cards`,
+          name: 'Post',
         },
       });
 

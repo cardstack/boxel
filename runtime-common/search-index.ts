@@ -509,9 +509,12 @@ export class SearchIndex {
       },
       this.realm.url
     );
-    return [...this.instances.values()]
-      .filter(matcher)
-      .map((entry) => entry.resource);
+
+    let cards = [...this.instances.values()];
+    if (query.type) {
+      cards = await this.filterByType(query.type, cards);
+    }
+    return cards.filter(matcher).map((entry) => entry.resource);
   }
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
@@ -525,6 +528,42 @@ export class SearchIndex {
 
   async card(url: URL): Promise<CardResource | undefined> {
     return this.instances.get(url)?.resource;
+  }
+
+  async filterByType(
+    type: ExportedCardRef,
+    cards: SearchEntry[]
+  ): Promise<SearchEntry[]> {
+    let results: SearchEntry[] = [];
+    for (let card of cards) {
+      // assumption: only exported cards have instances
+      let cardRef: CardRef = {
+        type: "exportedCard",
+        ...card.resource.meta.adoptsFrom,
+      };
+      if (await this.instanceHasType(cardRef, type)) {
+        results.push(card);
+      }
+    }
+    return results;
+  }
+
+  async instanceHasType(ref: CardRef, type: ExportedCardRef): Promise<Boolean> {
+    // only checks for exported cards
+    if (ref.type !== "exportedCard") {
+      return false;
+    }
+
+    if (ref.name === type.name && ref.module === type.module) {
+      return true;
+    }
+
+    let def = await this.typeOf(ref);
+    if (def?.super) {
+      return await this.instanceHasType(def.super, type);
+    }
+
+    return false;
   }
 
   public isIgnored(url: URL): boolean {
@@ -637,10 +676,6 @@ function buildMatcher(
 ): (entry: SearchEntry) => boolean | null {
   if (!filter) {
     return (_entry) => true;
-  }
-
-  if ("type" in filter) {
-    throw new Error("TODO");
   }
 
   let on = filter?.on ?? onRef;
