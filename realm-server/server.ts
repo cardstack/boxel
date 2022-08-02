@@ -137,7 +137,9 @@ function handleExternals(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
-  let src = [`const m = window.RUNTIME_SPIKE_EXTERNALS.get('${moduleName}');`];
+  let src = [
+    `const m = globalThis.RUNTIME_SPIKE_EXTERNALS.get('${moduleName}');`,
+  ];
 
   for (let name of names) {
     if (name === "default") {
