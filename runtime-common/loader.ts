@@ -4,6 +4,7 @@ import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
 import type { Realm } from "@cardstack/runtime-common/realm";
 import { RealmPaths } from "./paths";
+import { baseRealm } from "@cardstack/runtime-common";
 
 type RegisteredModule = {
   state: "registered";
@@ -35,18 +36,23 @@ type Module =
 
 export class Loader {
   private modules = new Map<string, Module>();
-  private realmPath: RealmPaths | undefined;
+  private realmPath: RealmPaths;
 
   constructor(
-    private realm?: Realm,
-    private openFile?: (url: URL) => Promise<string>
+    private realm: Realm,
+    private openFile: (url: URL) => Promise<string>
   ) {
-    if (realm) {
-      this.realmPath = new RealmPaths(realm.url);
-    }
+    this.realmPath = new RealmPaths(realm.url);
   }
 
   async load<T extends object>(moduleIdentifier: string): Promise<T> {
+    if (!moduleIdentifier.startsWith("http")) {
+      throw new Error(
+        `expected module identifier to be a URL: "${moduleIdentifier}"`
+      );
+    }
+    moduleIdentifier = this.resolveModule(moduleIdentifier);
+
     let module = this.modules.get(moduleIdentifier);
     if (!module) {
       module = {
@@ -77,16 +83,18 @@ export class Loader {
     this.modules = new Map();
   }
 
+  private resolveModule(moduleIdentifier: string): string {
+    let moduleURL = new URL(moduleIdentifier);
+    if (baseRealm.inRealm(moduleURL)) {
+      return new URL(moduleURL.pathname, this.realm.baseRealmURL).href;
+    }
+    return moduleIdentifier;
+  }
+
   private async fetchModule<T extends object>(
     moduleIdentifier: string,
     module: FetchingModule
   ): Promise<T> {
-    if (!moduleIdentifier.startsWith("http")) {
-      throw new Error(
-        `expected module identifier to be a URL: "${moduleIdentifier}"`
-      );
-    }
-
     let src: string;
     try {
       src = await this.fetch(new URL(moduleIdentifier));
@@ -174,23 +182,15 @@ export class Loader {
   }
 
   private async fetch(moduleURL: URL): Promise<string> {
-    if (
-      this.realm &&
-      this.realmPath &&
-      this.openFile &&
-      this.realmPath.inRealm(moduleURL)
-    ) {
-      // if module is in the realm then use realm file API to get module source
+    if (this.realmPath.inRealm(moduleURL)) {
       return await this.openFile(moduleURL);
     }
 
-    // module is not in the realm (or no realm available) then use fetch to
-    // get module src
     let response: Response;
     try {
       response = await fetch(moduleURL);
     } catch (err) {
-      console.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging
+      console.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a
       // "broken" state, since the server hosting the module is likely down. it
       // might be a good idea to be able to try again in this case...

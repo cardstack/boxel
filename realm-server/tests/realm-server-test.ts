@@ -11,7 +11,6 @@ import {
 } from "@cardstack/runtime-common/etc/test-fixtures";
 import { CardRef, isCardDocument, Realm } from "@cardstack/runtime-common";
 import { stringify } from "qs";
-import { Loader } from "@cardstack/runtime-common/loader";
 import { NodeRealm } from "../node-realm";
 
 setGracefulCleanup();
@@ -415,16 +414,6 @@ module("Realm Server", function (hooks) {
       `${testRealmHref}person-1`,
       "card ID is correct"
     );
-  });
-
-  test("can dynamically load a card (no realm context)", async function (assert) {
-    let loader = new Loader();
-    let module = await loader.load<Record<string, any>>(
-      `${testRealm2Href}person`
-    );
-    let Person = module["Person"];
-    let person = Person.fromSerialized({ firstName: "Mango" });
-    assert.strictEqual(person.firstName, "Mango", "card data is correct");
   });
 
   test("can dynamically load a card from own realm", async function (assert) {
