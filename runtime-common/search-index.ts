@@ -501,14 +501,10 @@ export class SearchIndex {
   }
 
   async search(query: Query): Promise<CardResource[]> {
-    let matcher = this.buildMatcher(
-      query.filter,
-      {
-        module: `${baseRealm.url}card-api`,
-        name: "Card",
-      },
-      this.realm.url
-    );
+    let matcher = this.buildMatcher(query.filter, {
+      module: `${baseRealm.url}card-api`,
+      name: "Card",
+    });
 
     let results: SearchEntry[] = [];
     for (let entry of [...this.instances.values()]) {
@@ -532,7 +528,7 @@ export class SearchIndex {
     return this.instances.get(url)?.resource;
   }
 
-  async instanceHasType(
+  async cardHasType(
     ref: CardRef,
     type: ExportedCardRef
   ): Promise<boolean | null> {
@@ -541,7 +537,11 @@ export class SearchIndex {
       return false;
     }
 
-    if (ref.name === type.name && ref.module === type.module) {
+    if (
+      ref.name === type.name &&
+      trimExecutableExtension(new URL(ref.module, this.realm.url)).href ===
+        trimExecutableExtension(new URL(type.module, this.realm.url)).href
+    ) {
       return true;
     }
 
@@ -550,7 +550,7 @@ export class SearchIndex {
       return null;
     }
     if (def.super) {
-      return await this.instanceHasType(def.super, type);
+      return await this.cardHasType(def.super, type);
     }
     return false;
   }
@@ -561,8 +561,7 @@ export class SearchIndex {
   // (`false`)
   buildMatcher(
     filter: Filter | undefined,
-    onRef: ExportedCardRef,
-    realmURL: string
+    onRef: ExportedCardRef
   ): (entry: SearchEntry) => Promise<boolean | null> {
     if (!filter) {
       return async (_entry) => true;
@@ -570,7 +569,7 @@ export class SearchIndex {
 
     if ("type" in filter) {
       return async (entry) =>
-        await this.instanceHasType(
+        await this.cardHasType(
           { type: "exportedCard", ...entry.resource.meta.adoptsFrom },
           filter.type
         );
@@ -579,19 +578,17 @@ export class SearchIndex {
     let on = filter?.on ?? onRef;
 
     if ("any" in filter) {
-      let matchers = filter.any.map((f) => this.buildMatcher(f, on, realmURL));
+      let matchers = filter.any.map((f) => this.buildMatcher(f, on));
       return (entry) => some(matchers, (m) => m(entry));
     }
 
     if ("every" in filter) {
-      let matchers = filter.every.map((f) =>
-        this.buildMatcher(f, on, realmURL)
-      );
+      let matchers = filter.every.map((f) => this.buildMatcher(f, on));
       return (entry) => every(matchers, (m) => m(entry));
     }
 
     if ("not" in filter) {
-      let matcher = this.buildMatcher(filter.not, on, realmURL);
+      let matcher = this.buildMatcher(filter.not, on);
       return async (entry) => {
         let inner = await matcher(entry);
         if (inner == null) {
@@ -607,11 +604,10 @@ export class SearchIndex {
       return (entry) =>
         every(Object.entries(filter.eq), async ([fieldPath, value]) => {
           if (
-            on.name === entry.resource.meta.adoptsFrom.name &&
-            trimExecutableExtension(new URL(on.module, realmURL)).href ===
-              trimExecutableExtension(
-                new URL(entry.resource.meta.adoptsFrom.module, realmURL)
-              ).href
+            await this.cardHasType(
+              { type: "exportedCard", ...entry.resource.meta.adoptsFrom },
+              on
+            )
           ) {
             return entry.searchData![fieldPath] === value;
           } else {

@@ -668,22 +668,30 @@ posts/ignore-me.gts
           @fields publishedDate = contains(DatetimeCard);
         }
       `,
+      'book.gts': `
+        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+        import Person from './cards.gts';
+
+        export class Book extends Card {
+          @field author = contains(Person);
+        }
+      `,
       'card-1.json': {
         data: {
           type: 'card',
           attributes: {
             title: 'Card 1',
             description: 'Sample post',
-            author: {
-              name: 'Cardy',
-            },
+            author: { name: 'Cardy' },
           },
-          meta: {
-            adoptsFrom: {
-              module: `${paths.url}cards`,
-              name: 'Article',
-            },
-          },
+          meta: { adoptsFrom: { module: `./cards`, name: 'Article' } },
+        },
+      },
+      'card-2.json': {
+        data: {
+          type: 'card',
+          attributes: { author: { name: 'Cardy' } },
+          meta: { adoptsFrom: { module: `./book.gts`, name: 'Book' } },
         },
       },
       'cards/1.json': {
@@ -692,17 +700,12 @@ posts/ignore-me.gts
           attributes: {
             title: 'Card 1',
             description: 'Sample post',
-            author: {
-              name: 'Carl Stack',
-            },
+            author: { name: 'Carl Stack' },
             createdAt: new Date(2022, 7, 1),
             views: 10,
           },
           meta: {
-            adoptsFrom: {
-              module: `${paths.url}cards`,
-              name: 'Post',
-            },
+            adoptsFrom: { module: `${paths.url}cards`, name: 'Post' },
           },
         },
       },
@@ -720,10 +723,7 @@ posts/ignore-me.gts
             views: 5,
           },
           meta: {
-            adoptsFrom: {
-              module: `${paths.url}cards`,
-              name: 'Article',
-            },
+            adoptsFrom: { module: `${paths.url}cards`, name: 'Article' },
           },
         },
       },
@@ -740,99 +740,61 @@ posts/ignore-me.gts
     test(`can search for cards by using the 'eq' filter`, async function (assert) {
       let matching = await indexer.search({
         filter: {
-          on: {
-            module: `${paths.url}cards`,
-            name: 'Post',
-          },
-          eq: {
-            title: 'Card 1',
-            description: 'Sample post',
-          },
+          on: { module: `${paths.url}cards`, name: 'Post' },
+          eq: { title: 'Card 1', description: 'Sample post' },
         },
       });
-      assert.strictEqual(matching.length, 1, 'found matching Post card');
-      assert.strictEqual(matching[0]?.id, `${paths.url}cards/1`);
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}card-1`, `${paths.url}cards/1`]
+      );
     });
 
     test('can combine multiple filters', async function (assert) {
       let matching = await indexer.search({
         filter: {
           every: [
-            {
-              on: {
-                module: `${paths.url}cards`,
-                name: 'Post',
-              },
-              eq: { title: 'Card 1' },
-            },
-            {
-              on: {
-                module: `${paths.url}cards`,
-                name: 'Post',
-              },
-              not: {
-                eq: {
-                  'author.name': 'Cardy',
-                },
-              },
-            },
+            { type: { module: `${paths.url}cards`, name: 'Post' } },
+            { eq: { title: 'Card 1' } },
+            { not: { eq: { 'author.name': 'Cardy' } } },
           ],
-        },
-      });
-      assert.strictEqual(matching.length, 1, 'combining eq and not filters');
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
-    });
-
-    test('can handle a filter with double negatives', async function (assert) {
-      let matching = await indexer.search({
-        filter: {
-          on: {
-            module: `${paths.url}cards`,
-            name: 'Post',
-          },
-          not: {
-            not: {
-              not: {
-                eq: {
-                  'author.email': 'carl@stack.com',
-                },
-              },
-            },
-          },
         },
       });
       assert.strictEqual(matching.length, 1);
       assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
     });
 
-    // Tests from hub/**/**/card-service-test.ts
-    test('can filter by card type', async function (assert) {
+    test('can handle a filter with double negatives', async function (assert) {
       let matching = await indexer.search({
         filter: {
-          type: {
-            module: `${paths.url}cards`,
-            name: 'Article',
-          },
+          on: { module: `${paths.url}cards`, name: 'Post' },
+          not: { not: { not: { eq: { 'author.email': 'carl@stack.com' } } } },
         },
       });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}card-1`, `${paths.url}cards/1`]
+      );
+    });
 
-      assert.strictEqual(matching.length, 2, 'Found 2 cards for Article type');
-      assert.strictEqual(matching[0]?.id, `${paths.url}card-1`);
-      assert.strictEqual(matching[1]?.id, `${paths.url}cards/2`);
+    test('can filter by card type', async function (assert) {
+      let matching = await indexer.search({
+        filter: { type: { module: `${paths.url}cards`, name: 'Article' } },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}card-1`, `${paths.url}cards/2`],
+        'found cards of type Article'
+      );
 
       matching = await indexer.search({
-        filter: {
-          type: {
-            module: `${testRealmURL}cards`,
-            name: 'Post',
-          },
-        },
+        filter: { type: { module: `${testRealmURL}cards`, name: 'Post' } },
       });
-
-      assert.strictEqual(matching.length, 3, 'Three cards have Post type');
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
-      assert.strictEqual(matching[1]?.id, `${testRealmURL}cards/1`);
-      assert.strictEqual(matching[2]?.id, `${testRealmURL}cards/2`);
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}card-1`, `${paths.url}cards/1`, `${paths.url}cards/2`],
+        'found cards of type Post'
+      );
     });
 
     skip(`can filter on a card's own fields using gt`);
@@ -842,25 +804,23 @@ posts/ignore-me.gts
     test(`can filter on a nested field using 'eq'`, async function (assert) {
       let matching = await indexer.search({
         filter: {
-          on: {
-            module: `${paths.url}cards`,
-            name: 'Article',
-          },
+          on: { module: `${paths.url}cards`, name: 'Post' },
           eq: { 'author.name': 'Carl Stack' },
         },
       });
-      assert.strictEqual(matching.length, 1);
-      assert.strictEqual(matching[0]?.id, `${paths.url}cards/2`);
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}cards/1`, `${paths.url}cards/2`]
+      );
     });
 
     test('can negate a filter', async function (assert) {
       let matching = await indexer.search({
         filter: {
-          on: {
-            module: `${paths.url}cards`,
-            name: 'Article',
-          },
-          not: { eq: { 'author.email': 'carl@stack.com' } },
+          every: [
+            { type: { module: `${paths.url}cards`, name: 'Article' } },
+            { not: { eq: { 'author.email': 'carl@stack.com' } } },
+          ],
         },
       });
       assert.strictEqual(matching.length, 1);
@@ -872,25 +832,20 @@ posts/ignore-me.gts
         filter: {
           any: [
             {
-              on: {
-                module: `${paths.url}cards`,
-                name: 'Post',
-              },
-              eq: { title: 'Card 1' },
+              on: { module: `${paths.url}cards`, name: 'Article' },
+              eq: { 'author.name': 'Cardy' },
             },
             {
-              on: {
-                module: `${paths.url}cards`,
-                name: 'Article',
-              },
-              eq: { title: 'Card 1' },
+              on: { module: `${paths.url}book`, name: 'Book' },
+              eq: { 'author.name': 'Cardy' },
             },
           ],
         },
       });
-      assert.strictEqual(matching.length, 2);
-      assert.strictEqual(matching[0]?.id, `${paths.url}card-1`);
-      assert.strictEqual(matching[1]?.id, `${paths.url}cards/1`);
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}card-1`, `${paths.url}card-2`]
+      );
     });
 
     // sorting
