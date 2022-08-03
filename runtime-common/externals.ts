@@ -28,8 +28,6 @@ export function externalsPlugin(_babel: typeof Babel) {
               topLevelPath.isImportDeclaration() &&
               externalsMap.has(topLevelPath.node.source.value)
             ) {
-              // rewrite the external to use the /externals route of the base
-              // realm that the realm was configured to talk to
               topLevelPath.node.source.value = `${externalsURL.href}${topLevelPath.node.source.value}`;
             }
           }
