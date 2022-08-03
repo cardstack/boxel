@@ -24,12 +24,13 @@ export function externalsPlugin(_babel: typeof Babel) {
           } = state;
           let externalsURL = new URL("/externals/", realm.baseRealmURL);
           for (let topLevelPath of path.get("body")) {
-            if (topLevelPath.isImportDeclaration()) {
-              if (externalsMap.has(topLevelPath.node.source.value)) {
-                // rewrite the external to use the /externals route of the base
-                // realm that the realm was configured to talk to
-                topLevelPath.node.source.value = `${externalsURL.href}${topLevelPath.node.source.value}`;
-              }
+            if (
+              topLevelPath.isImportDeclaration() &&
+              externalsMap.has(topLevelPath.node.source.value)
+            ) {
+              // rewrite the external to use the /externals route of the base
+              // realm that the realm was configured to talk to
+              topLevelPath.node.source.value = `${externalsURL.href}${topLevelPath.node.source.value}`;
             }
           }
         },
