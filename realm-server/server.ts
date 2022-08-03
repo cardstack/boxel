@@ -5,6 +5,7 @@ import { resolve } from "path";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { LocalPath, RealmPaths } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
+import "@cardstack/runtime-common/externals-global";
 
 const externalsPath = "/externals/";
 

@@ -3,6 +3,7 @@ import { LivenessWatcher } from './liveness';
 import { MessageHandler } from './message-handler';
 import { LocalRealm } from './local-realm';
 import { Realm } from '@cardstack/runtime-common';
+import '@cardstack/runtime-common/externals-global';
 
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 

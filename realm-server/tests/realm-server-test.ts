@@ -9,12 +9,15 @@ import {
   cardSrc,
   compiledCard,
 } from "@cardstack/runtime-common/etc/test-fixtures";
-import { CardRef, isCardDocument } from "@cardstack/runtime-common";
+import { CardRef, isCardDocument, Realm } from "@cardstack/runtime-common";
 import { stringify } from "qs";
+import { Loader } from "@cardstack/runtime-common/loader";
+import { NodeRealm } from "../node-realm";
 
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
 const testRealmHref = testRealmURL.href;
+const testRealm2Href = "http://localhost:4201/node-test/";
 
 module("Realm Server", function (hooks) {
   let server: Server;
@@ -412,5 +415,47 @@ module("Realm Server", function (hooks) {
       `${testRealmHref}person-1`,
       "card ID is correct"
     );
+  });
+
+  test("can dynamically load a card (no realm context)", async function (assert) {
+    let loader = new Loader();
+    let module = await loader.load<Record<string, any>>(
+      `${testRealm2Href}person`
+    );
+    let Person = module["Person"];
+    let person = Person.fromSerialized({ firstName: "Mango" });
+    assert.strictEqual(person.firstName, "Mango", "card data is correct");
+  });
+
+  test("can dynamically load a card from own realm", async function (assert) {
+    let nodeRealm = new NodeRealm(dir.name);
+    let realm = new Realm(
+      "http://test-realm/",
+      nodeRealm,
+      "http://localhost:4201/base/"
+    );
+    await realm.ready;
+
+    let module = await realm.load<Record<string, any>>("./person");
+    let Person = module["Person"];
+    let person = Person.fromSerialized({ firstName: "Mango" });
+    assert.strictEqual(person.firstName, "Mango", "card data is correct");
+  });
+
+  test("can dynamically load a card from a different realm", async function (assert) {
+    let nodeRealm = new NodeRealm(dir.name);
+    let realm = new Realm(
+      "http://test-realm/",
+      nodeRealm,
+      "http://localhost:4201/base/"
+    );
+    await realm.ready;
+
+    let module = await realm.load<Record<string, any>>(
+      `${testRealm2Href}person`
+    );
+    let Person = module["Person"];
+    let person = Person.fromSerialized({ firstName: "Mango" });
+    assert.strictEqual(person.firstName, "Mango", "card data is correct");
   });
 });

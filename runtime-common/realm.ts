@@ -6,6 +6,7 @@ import {
   CardDocument,
   isCardDocument,
 } from "./search-index";
+import { Loader } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
 import {
   systemError,
@@ -78,6 +79,7 @@ export class Realm {
   #paths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
+  #loader: Loader;
 
   get url(): string {
     return this.#paths.url;
@@ -97,6 +99,9 @@ export class Realm {
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this)
     );
+    this.#loader = new Loader(this, async (url: URL) => {
+      return this.transpileJS((await this.getCardSourceAsText(url))!, url.href);
+    });
 
     this.#jsonAPIRouter = new Router(new URL(url))
       .post("/", this.createCard.bind(this))
@@ -115,6 +120,11 @@ export class Realm {
       )
       .get("/.+", this.getCardSourceOrRedirect.bind(this))
       .delete("/.+", this.removeCardSource.bind(this));
+  }
+
+  async load<T extends object>(moduleIdentifier: string): Promise<T> {
+    let moduleURL = new URL(moduleIdentifier, this.url);
+    return await this.#loader.load(moduleURL.href);
   }
 
   async write(
@@ -206,6 +216,7 @@ export class Realm {
       this.#paths.local(new URL(request.url)),
       await request.text()
     );
+    this.#loader.clearCache();
     return new Response(null, {
       status: 204,
       headers: {
@@ -234,6 +245,16 @@ export class Realm {
     return await this.serveLocalFile(handle);
   }
 
+  // this will follow the redirect
+  private async getCardSourceAsText(url: URL): Promise<string | undefined> {
+    let localName = this.#paths.local(url);
+    let handle = await this.getFileWithFallbacks(localName);
+    if (!handle) {
+      return undefined;
+    }
+
+    return (await this.readFileAsText(handle.path))?.content;
+  }
   private async removeCardSource(request: Request): Promise<Response> {
     let localName = this.#paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
@@ -244,7 +265,40 @@ export class Realm {
       delete: true,
     });
     await this.#adapter.remove(handle.path);
+    this.#loader.clearCache();
     return new Response(null, { status: 204 });
+  }
+
+  private transpileJS(content: string, debugFilename: string): string {
+    content = preprocessEmbeddedTemplates(content, {
+      relativePath: debugFilename,
+      getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
+      templateTag: "template",
+      templateTagReplacement: "__GLIMMER_TEMPLATE",
+      includeSourceMaps: true,
+      includeTemplateTokens: true,
+    }).output;
+    return babel.transformSync(content, {
+      filename: debugFilename,
+      plugins: [
+        glimmerTemplatePlugin,
+        [typescriptPlugin, { allowDeclareFields: true }],
+        [decoratorsProposalPlugin, { legacy: true }],
+        classPropertiesProposalPlugin,
+        // this "as any" is because typescript is using the Node-specific types
+        // from babel-plugin-ember-template-compilation, but we're using the
+        // browser interface
+        isNode
+          ? [
+              makeEmberTemplatePlugin,
+              {
+                precompile: etc.precompile,
+              },
+            ]
+          : (makeEmberTemplatePlugin as any)(() => etc.precompile),
+        [externalsPlugin, { realm: this }],
+      ],
+    })!.code!;
   }
 
   private async makeJS(
@@ -252,35 +306,7 @@ export class Realm {
     debugFilename: string
   ): Promise<Response> {
     try {
-      content = preprocessEmbeddedTemplates(content, {
-        relativePath: debugFilename,
-        getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
-        templateTag: "template",
-        templateTagReplacement: "__GLIMMER_TEMPLATE",
-        includeSourceMaps: true,
-        includeTemplateTokens: true,
-      }).output;
-      content = babel.transformSync(content, {
-        filename: debugFilename,
-        plugins: [
-          glimmerTemplatePlugin,
-          [typescriptPlugin, { allowDeclareFields: true }],
-          [decoratorsProposalPlugin, { legacy: true }],
-          classPropertiesProposalPlugin,
-          // this "as any" is because typescript is using the Node-specific types
-          // from babel-plugin-ember-template-compilation, but we're using the
-          // browser interface
-          isNode
-            ? [
-                makeEmberTemplatePlugin,
-                {
-                  precompile: etc.precompile,
-                },
-              ]
-            : (makeEmberTemplatePlugin as any)(() => etc.precompile),
-          [externalsPlugin, { realm: this }],
-        ],
-      })!.code!;
+      content = this.transpileJS(content, debugFilename);
     } catch (err: any) {
       Promise.resolve().then(() => {
         throw err;
