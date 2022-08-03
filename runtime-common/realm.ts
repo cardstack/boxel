@@ -245,16 +245,16 @@ export class Realm {
     return await this.serveLocalFile(handle);
   }
 
-  // this will follow the redirect
+  // as opposed to getCardSourceOrRedirect, this will follow the redirect
   private async getCardSourceAsText(url: URL): Promise<string | undefined> {
     let localName = this.#paths.local(url);
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
       return undefined;
     }
-
     return (await this.readFileAsText(handle.path))?.content;
   }
+
   private async removeCardSource(request: Request): Promise<Response> {
     let localName = this.#paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
