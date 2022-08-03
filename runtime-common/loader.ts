@@ -40,7 +40,7 @@ export class Loader {
 
   constructor(
     private realm: Realm,
-    private openFile: (url: URL) => Promise<string>
+    private readFileAsText: (url: URL) => Promise<string>
   ) {
     this.realmPath = new RealmPaths(realm.url);
   }
@@ -183,7 +183,7 @@ export class Loader {
 
   private async fetch(moduleURL: URL): Promise<string> {
     if (this.realmPath.inRealm(moduleURL)) {
-      return await this.openFile(moduleURL);
+      return await this.readFileAsText(moduleURL);
     }
 
     let response: Response;
