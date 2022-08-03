@@ -5,7 +5,6 @@ import qs from "qs";
 import { ExportedCardRef } from "@cardstack/runtime-common/search-index";
 
 export interface Query {
-  type?: ExportedCardRef;
   filter?: Filter;
   sort?: Sort;
   page?: { size?: number | string; cursor?: string };
@@ -18,7 +17,8 @@ export type Filter =
   | EveryFilter
   | NotFilter
   | EqFilter
-  | RangeFilter;
+  | RangeFilter
+  | CardTypeFilter;
 
 export interface TypedFilter {
   on?: ExportedCardRef;
@@ -35,9 +35,9 @@ export type Sort = SortExpression[];
 // The CardTypeFilter is used when you solely want to filter for all cards that
 // adopt from some particular card type--no other predicates are included in
 // this filter.
-// export interface CardTypeFilter {
-//   type: ExportedCardRef;
-// }
+export interface CardTypeFilter {
+  type: ExportedCardRef;
+}
 
 export interface AnyFilter extends TypedFilter {
   any: Filter[];
