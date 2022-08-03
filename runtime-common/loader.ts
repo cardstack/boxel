@@ -14,7 +14,7 @@ type RegisteredModule = {
 
 type FetchingModule = {
   state: "fetching";
-  deferred: Deferred<unknown>;
+  deferred: Deferred<any>;
 };
 
 type Module =
@@ -188,7 +188,7 @@ export class Loader {
 
     let response: Response;
     try {
-      response = await fetch(moduleURL);
+      response = await fetch(moduleURL.href);
     } catch (err) {
       console.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a
