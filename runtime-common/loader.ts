@@ -64,6 +64,8 @@ export class Loader {
     }
 
     switch (module.state) {
+      case "fetching":
+        return await (module.deferred as Deferred<T>).promise;
       case "preparing":
         return (await module.moduleInstancePromise) as T;
       case "evaluated":
@@ -72,8 +74,6 @@ export class Loader {
         throw module.exception;
       case "registered":
         return await this.evaluateModule(moduleIdentifier, module);
-      case "fetching":
-        return await (module.deferred as Deferred<T>).promise;
       default:
         throw assertNever(module);
     }
