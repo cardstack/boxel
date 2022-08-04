@@ -2,6 +2,7 @@ import * as JSON from "json-typescript";
 import isEqual from "lodash/isEqual";
 import { assertJSONValue, assertJSONPrimitive } from "./json-validation";
 import qs from "qs";
+import { ExportedCardRef } from "@cardstack/runtime-common/search-index";
 
 export interface Query {
   filter?: Filter;
@@ -20,7 +21,7 @@ export type Filter =
   | CardTypeFilter;
 
 export interface TypedFilter {
-  on?: CardURL;
+  on?: ExportedCardRef;
 }
 
 interface SortExpression {
@@ -35,7 +36,7 @@ export type Sort = SortExpression[];
 // adopt from some particular card type--no other predicates are included in
 // this filter.
 export interface CardTypeFilter {
-  type: CardURL;
+  type: ExportedCardRef;
 }
 
 export interface AnyFilter extends TypedFilter {
@@ -154,14 +155,14 @@ function assertFilter(
   }
 
   if ("type" in filter) {
-    assertCardId(filter.type, pointer.concat("type"));
+    assertCardType(filter.type, pointer.concat("type"));
     if (isEqual(Object.keys(filter), ["type"])) {
       return; // This is a pure card type filter
     }
   }
 
   if ("on" in filter) {
-    assertCardId(filter.on, pointer.concat("on"));
+    assertCardType(filter.on, pointer.concat("on"));
   }
 
   if ("any" in filter) {
@@ -181,11 +182,13 @@ function assertFilter(
   }
 }
 
-function assertCardId(id: any, pointer: string[]): asserts id is CardURL {
-  if (typeof id !== "string") {
-    throw new Error(
-      `${pointer.join("/") || "/"}: card id must be a string URL`
-    );
+function assertCardType(type: any, pointer: string[]) {
+  if (
+    Object.keys(type).length > 2 ||
+    !("module" in type) ||
+    !("name" in type)
+  ) {
+    throw new Error(`${pointer.join("/") || "/"}: type is not valid`);
   }
 }
 

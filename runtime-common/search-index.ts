@@ -7,6 +7,11 @@ import ignore, { Ignore } from "ignore";
 import { stringify } from "qs";
 import { Query, Filter } from "./query";
 
+export type ExportedCardRef = {
+  module: string;
+  name: string;
+};
+
 export type CardRef =
   | {
       type: "exportedCard";
@@ -495,12 +500,19 @@ export class SearchIndex {
     return url.href.startsWith(this.realm.url);
   }
 
-  // TODO: complete these types
   async search(query: Query): Promise<CardResource[]> {
-    let matcher = buildMatcher(query.filter);
-    return [...this.instances.values()]
-      .filter(matcher)
-      .map((entry) => entry.resource);
+    let matcher = this.buildMatcher(query.filter, {
+      module: `${baseRealm.url}card-api`,
+      name: "Card",
+    });
+
+    let results: SearchEntry[] = [];
+    for (let entry of [...this.instances.values()]) {
+      if (await matcher(entry)) {
+        results.push(entry);
+      }
+    }
+    return results.map((entry) => entry.resource);
   }
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
@@ -514,6 +526,97 @@ export class SearchIndex {
 
   async card(url: URL): Promise<CardResource | undefined> {
     return this.instances.get(url)?.resource;
+  }
+
+  async cardHasType(
+    ref: CardRef,
+    type: ExportedCardRef
+  ): Promise<boolean | null> {
+    // only checks for exported cards
+    if (ref.type !== "exportedCard") {
+      return false;
+    }
+
+    if (
+      ref.name === type.name &&
+      trimExecutableExtension(new URL(ref.module, this.realm.url)).href ===
+        trimExecutableExtension(new URL(type.module, this.realm.url)).href
+    ) {
+      return true;
+    }
+
+    let def = await this.typeOf(ref);
+    if (!def) {
+      return null;
+    }
+    if (def.super) {
+      return await this.cardHasType(def.super, type);
+    }
+    return false;
+  }
+
+  // Matchers are three-valued (true, false, null) because a query that talks
+  // about a field that is not even present on a given card results in `null` to
+  // distinguish it from a field that is present but not matching the filter
+  // (`false`)
+  buildMatcher(
+    filter: Filter | undefined,
+    onRef: ExportedCardRef
+  ): (entry: SearchEntry) => Promise<boolean | null> {
+    if (!filter) {
+      return async (_entry) => true;
+    }
+
+    if ("type" in filter) {
+      return async (entry) =>
+        await this.cardHasType(
+          { type: "exportedCard", ...entry.resource.meta.adoptsFrom },
+          filter.type
+        );
+    }
+
+    let on = filter?.on ?? onRef;
+
+    if ("any" in filter) {
+      let matchers = filter.any.map((f) => this.buildMatcher(f, on));
+      return (entry) => some(matchers, (m) => m(entry));
+    }
+
+    if ("every" in filter) {
+      let matchers = filter.every.map((f) => this.buildMatcher(f, on));
+      return (entry) => every(matchers, (m) => m(entry));
+    }
+
+    if ("not" in filter) {
+      let matcher = this.buildMatcher(filter.not, on);
+      return async (entry) => {
+        let inner = await matcher(entry);
+        if (inner == null) {
+          // irrelevant cards stay irrelevant, even when the query is inverted
+          return null;
+        } else {
+          return !inner;
+        }
+      };
+    }
+
+    if ("eq" in filter) {
+      return (entry) =>
+        every(Object.entries(filter.eq), async ([fieldPath, value]) => {
+          if (
+            await this.cardHasType(
+              { type: "exportedCard", ...entry.resource.meta.adoptsFrom },
+              on
+            )
+          ) {
+            return entry.searchData![fieldPath] === value;
+          } else {
+            return null;
+          }
+        });
+    }
+
+    throw new Error("Unknown filter");
   }
 
   public isIgnored(url: URL): boolean {
@@ -547,7 +650,7 @@ export class SearchIndex {
       // so that we now how to ask for it's cards' definitions
       throw new Error(`not implemented`);
     }
-    let url = `${this.realm.baseRealmURL}_typeOf?${stringify(ref)}`;
+    let url = this.realm.baseRealmURL + "_typeOf?" + stringify(ref);
     let response = await fetch(url, {
       headers: {
         Accept: "application/vnd.api+json",
@@ -615,28 +718,38 @@ function flatten(obj: Record<string, any>): Record<string, any> {
   return result;
 }
 
-function buildMatcher(
-  filter: Filter | undefined
-): (entry: SearchEntry) => boolean {
-  if (!filter) {
-    return (_entry) => true;
+// three-valued version of Array.every that propagates nulls. Here, the presence
+// of any nulls causes the whole thing to be null.
+async function every<T>(
+  list: T[],
+  predicate: (t: T) => Promise<boolean | null>
+): Promise<boolean | null> {
+  let result = true;
+  for (let element of list) {
+    let status = await predicate(element);
+    if (status == null) {
+      return null;
+    }
+    result = result && status;
   }
-  if ("every" in filter) {
-    let matchers = filter.every.map((f) => buildMatcher(f));
-    return (entry) => matchers.every((m) => m(entry));
-  }
+  return result;
+}
 
-  if ("not" in filter) {
-    let matcher = buildMatcher(filter.not);
-    return (entry) => !matcher(entry);
+// three-valued version of Array.some that propagates nulls. Here, the whole
+// expression becomes null only if the whole input is null.
+async function some<T>(
+  list: T[],
+  predicate: (t: T) => Promise<boolean | null>
+): Promise<boolean | null> {
+  let result = null;
+  for (let element of list) {
+    let status = await predicate(element);
+    if (status === true) {
+      return true;
+    }
+    if (status === false) {
+      result = false;
+    }
   }
-
-  if ("eq" in filter) {
-    return (entry) =>
-      Object.entries(filter.eq).every(
-        ([fieldPath, value]) => entry.searchData![fieldPath] === value
-      );
-  }
-
-  throw new Error("Unknown filter");
+  return result;
 }
