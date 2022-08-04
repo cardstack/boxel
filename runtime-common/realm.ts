@@ -711,7 +711,7 @@ export class Realm {
     });
   }
 
-  private getBaseRealm(): Response {
+  private async getBaseRealm(): Promise<Response> {
     return new Response(
       JSON.stringify({
         data: {
