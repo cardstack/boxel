@@ -8,7 +8,7 @@ import type { Card, Box, CardConstructor, Format } from './card-api';
 interface Signature {
   Args: {
     model: Box<Card>,
-    fieldName: keyof Card,
+    fieldName: string,
     arrayField: Box<Card[]>,
     format: Format;
     field: any,

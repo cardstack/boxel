@@ -8,15 +8,15 @@ import ContainsManyEditor from './contains-many';
 import { WatchedArray } from './watched-array';
 import type { ResourceObject } from '@cardstack/runtime-common';
 
-export const primitive = Symbol('cardstack-primitive');
-export const serialize = Symbol('cardstack-serialize');
-export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
-export const fieldDecorator = Symbol('cardstack-field-decorator');
-export const fieldType = Symbol('cardstack-field-type');
+export const primitive = "__primitive__";
+export const serialize = "__serialize__";
+export const useIndexBasedKey = "__useIndexBasedKey__"
+export const fieldDecorator = "__fieldDecorator__";
+export const fieldType = "__fieldType__"
 
-const isField = Symbol('cardstack-field');
+const isField = "__isField__";
 
-export type CardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
+export type CardInstanceType<T extends CardConstructor> = T extends { __primitive__: infer P } ? P : InstanceType<T>;
 
 type FieldsTypeFor<T extends Card> = {
   [Field in keyof T]: (new() => GlimmerComponent<{ Args: {}, Blocks: {} }>) & (T[Field] extends Card ? FieldsTypeFor<T[Field]> : unknown);
@@ -39,7 +39,7 @@ const componentCache = new WeakMap<Box<unknown>, ComponentLike<{ Args: {}; Block
 // involve rerunning async computed fields)
 const cardTracking = new TrackedWeakMap<object, any>();
 
-const isBaseCard = Symbol('isBaseCard');
+const isBaseCard = "__isBaseCard__";
 
 interface Field<CardT extends CardConstructor> {
   card: CardT;

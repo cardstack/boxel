@@ -155,10 +155,10 @@ module('Integration | card-basics', function (hooks) {
 
     await renderCard(driver, 'embedded');
     assert.dom('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
-    await waitFor('h3') // <h3> is a tag that appears in the person embedded template
-    assert.dom('[data-test-card]').containsText('Person: Mango', 'the referenced card is rendered');
+    // <h3> is a tag that appears in the person embedded template
+    await waitUntil(() => cleanWhiteSpace(document.querySelector('h3')?.textContent ?? '') === 'Person: Mango');
+    assert.dom('h3').containsText('Person: Mango', 'the referenced card is rendered');
 
-debugger;
     // is this worth an assertion? or is it just obvious?
     assert.strictEqual(driver.ref, ref, 'The deserialized card ref constructor param is strict equal to the deserialized card ref value');
   });
@@ -179,8 +179,8 @@ debugger;
     await renderCard(driver, 'edit');
     assert.dom('input').doesNotExist('no input fields exist');
     assert.dom('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
-    await waitFor('[data-test-card]')
-    assert.dom('[data-test-card]').containsText('Person: Mango', 'the referenced card is rendered');
+    await waitUntil(() => cleanWhiteSpace(document.querySelector('h3')?.textContent ?? '') === 'Person: Mango');
+    assert.dom('h3').containsText('Person: Mango', 'the referenced card is rendered');
   });
 
   test('render whole composite field', async function (assert) {
