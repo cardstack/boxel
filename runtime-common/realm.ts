@@ -106,9 +106,10 @@ export class Realm {
     this.#jsonAPIRouter = new Router(new URL(url))
       .post("/", this.createCard.bind(this))
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
-      .get("/_cardsOf", this.getCardsOf.bind(this))
       .get("/_search", this.search.bind(this))
+      // TODO lets move typeOf and cardsOf to be a path you add to the end of a route like /baseRealm
       .get("/_typeOf", this.getTypeOf.bind(this))
+      .get("/_cardsOf", this.getCardsOf.bind(this))
       .get("/.+/_baseRealm", this.getBaseRealm.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
