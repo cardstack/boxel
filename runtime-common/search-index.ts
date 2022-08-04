@@ -193,7 +193,7 @@ class URLMap<T> {
 interface SearchEntry {
   resource: CardResource;
   searchData: Record<string, any>;
-  ancestors: CardRef[]; // TODO
+  types: string[];
 }
 
 export class SearchIndex {
@@ -273,7 +273,7 @@ export class SearchIndex {
             searchData: json.data.attributes
               ? flatten(json.data.attributes)
               : {},
-            ancestors: [],
+            types: [],
           });
         }
       }
@@ -504,9 +504,7 @@ export class SearchIndex {
 
   async search(query: Query): Promise<CardResource[]> {
     for (let entry of [...this.instances.values()]) {
-      entry.ancestors = await this.buildAncestors(
-        entry.resource.meta.adoptsFrom
-      );
+      entry.types = await this.getTypes(entry.resource.meta.adoptsFrom);
     }
 
     let matcher = this.buildMatcher(query.filter, {
@@ -532,44 +530,32 @@ export class SearchIndex {
     return this.instances.get(url)?.resource;
   }
 
-  async buildAncestors(ref: ExportedCardRef): Promise<CardRef[]> {
-    let ancestors: CardRef[] = [];
-    let def = await this.typeOf({ type: "exportedCard", ...ref });
-    if (!def) {
-      return ancestors;
+  async getTypes(ref: ExportedCardRef): Promise<string[]> {
+    let types: string[] = [];
+    ref.module = trimExecutableExtension(
+      new URL(ref.module, this.realm.url)
+    ).href;
+    let def = this.definitions.get(
+      this.internalKeyFor({ type: "exportedCard", ...ref })
+    );
+    if (def) {
+      types.push(this.internalKeyFor({ type: "exportedCard", ...ref }));
     }
-    while (def!.super) {
-      ancestors.push(def!.super);
-      def = await this.typeOf(def!.super);
+    while (def?.super) {
+      types.push(this.internalKeyFor(def.super));
+      def = this.definitions.get(this.internalKeyFor(def.super));
     }
-    return ancestors;
+    return types;
   }
 
-  cardHasType(entry: SearchEntry, type: ExportedCardRef): boolean | null {
-    let ref = entry.resource.meta.adoptsFrom;
-    if (
-      ref.name === type.name &&
-      trimExecutableExtension(new URL(ref.module, this.realm.url)).href ===
-        trimExecutableExtension(new URL(type.module, this.realm.url)).href
-    ) {
-      return true;
-    }
-
-    return this.cardHasAncestor(entry.ancestors, type);
-  }
-
-  cardHasAncestor(ancestors: CardRef[], ref: ExportedCardRef): boolean {
-    if (ancestors.length === 0 || ancestors[0].type !== "exportedCard") {
-      return false;
-    }
-    if (
-      ancestors[0].name === ref.name &&
-      ancestors[0].module ===
-        trimExecutableExtension(new URL(ref.module, this.realm.url)).href
-    ) {
-      return true;
-    }
-    return this.cardHasAncestor(ancestors.slice(1), ref);
+  cardHasType(entry: SearchEntry, type: ExportedCardRef): boolean {
+    let ref = this.internalKeyFor({
+      type: "exportedCard",
+      module: trimExecutableExtension(new URL(type.module, this.realm.url))
+        .href,
+      name: type.name,
+    });
+    return Boolean(entry.types.find((t) => t === ref));
   }
 
   // Matchers are three-valued (true, false, null) because a query that talks

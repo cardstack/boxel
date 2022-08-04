@@ -836,7 +836,7 @@ posts/ignore-me.gts
               eq: { 'author.name': 'Cardy' },
             },
             {
-              on: { module: `${paths.url}book`, name: 'Book' },
+              on: { module: `${paths.url}book.gts`, name: 'Book' },
               eq: { 'author.name': 'Cardy' },
             },
           ],
