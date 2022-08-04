@@ -1,33 +1,13 @@
 {{#each this.cardList as |card|}}
-  <div style="border: 1px solid black;">
-    {{#if card.canUpdateState}}
-      <button {{on "click" (fn this.minimize card)}}>Minimize</button>
-    {{/if}}
-    <div>
-      type: {{card.type}}
-    </div>
-    <div>
-      id: {{card.id}}
-    </div>
-    <div>
-      suggestions:
-      <ul>
-        {{#each card.suggestions as |child|}}
-            <li>
-              {{child.type}} - {{child.id}} -
-              {{#if (eq child.state this.CARD_STATES.MAX)}}
-                PLACEHOLDER
-              {{else if (eq child.state this.CARD_STATES.MIN)}}
-                MINIMIZED
-                <button type="button" {{on "click" (fn this.expand child)}}>Expand</button>
-              {{else if (eq child.state this.CARD_STATES.EXPANDED)}}
-                EXPANDED
-                <button type="button" {{on "click" (fn this.minimize child)}}>Minimize</button>
-                <button type="button" {{on "click" (fn this.maximize child)}}>Maximize</button>
-              {{/if}}
-            </li>
-        {{/each}}
-      </ul>
-    </div>
-  </div>
+  {{component
+    (concat "home-reno-v2/" card.type)
+    id=card.id
+    state=card.state
+    canUpdateState=card.canUpdateState
+    card=card
+    expand=this.expand
+    minimize=this.minimize
+    maximize=this.maximize
+    suggestions=card.suggestions
+  }}
 {{/each}}

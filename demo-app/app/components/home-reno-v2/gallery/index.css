@@ -1,0 +1,11 @@
+.card {
+  border: 1px solid black;
+  padding: 6px;
+  max-width: 300px;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
