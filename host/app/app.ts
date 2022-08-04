@@ -12,6 +12,9 @@ import './lib/glint-embroider-workaround';
  * runtime-common/index.js file.
  */
 
+// TODO eventually we should replace this with
+//   import "@cardstack/runtime-common/external-globals";
+// when our common external-globals can support glimmer
 (window as any).RUNTIME_SPIKE_EXTERNALS = new Map();
 import * as glimmerComponent from '@glimmer/component';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(

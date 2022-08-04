@@ -30,6 +30,6 @@ The tests are available at `http://localhost:4200/tests`
 
 ### Realm Server
 To run the `realm-server/` workspace tests start:
-1. `yarn start:base` in the `realm-server/` workspace to serve the base realm (alternatively you can use `yarn start:test-realms` which also serves the base realm)
+1. `yarn start:test-realms` in the `realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
 
 Run `yarn test` in the `realm-server/` workspace to run the realm tests

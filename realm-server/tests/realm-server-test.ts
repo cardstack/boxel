@@ -9,12 +9,14 @@ import {
   cardSrc,
   compiledCard,
 } from "@cardstack/runtime-common/etc/test-fixtures";
-import { CardRef, isCardDocument } from "@cardstack/runtime-common";
+import { CardRef, isCardDocument, Realm } from "@cardstack/runtime-common";
 import { stringify } from "qs";
+import { NodeRealm } from "../node-realm";
 
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
 const testRealmHref = testRealmURL.href;
+const testRealm2Href = "http://localhost:4201/node-test/";
 
 module("Realm Server", function (hooks) {
   let server: Server;
@@ -282,6 +284,22 @@ module("Realm Server", function (hooks) {
                 kind: "file",
               },
             },
+            "cycle-one.js": {
+              links: {
+                related: "http://127.0.0.1:4444/cycle-one.js",
+              },
+              meta: {
+                kind: "file",
+              },
+            },
+            "cycle-two.js": {
+              links: {
+                related: "http://127.0.0.1:4444/cycle-two.js",
+              },
+              meta: {
+                kind: "file",
+              },
+            },
             "person-1.json": {
               links: {
                 related: `${testRealmHref}person-1.json`,
@@ -412,5 +430,52 @@ module("Realm Server", function (hooks) {
       `${testRealmHref}person-1`,
       "card ID is correct"
     );
+  });
+
+  test("can dynamically load a card from own realm", async function (assert) {
+    let nodeRealm = new NodeRealm(dir.name);
+    let realm = new Realm(
+      "http://test-realm/",
+      nodeRealm,
+      "http://localhost:4201/base/"
+    );
+    await realm.ready;
+
+    let module = await realm.load<Record<string, any>>("./person");
+    let Person = module["Person"];
+    let person = Person.fromSerialized({ firstName: "Mango" });
+    assert.strictEqual(person.firstName, "Mango", "card data is correct");
+  });
+
+  test("can dynamically load a card from a different realm", async function (assert) {
+    let nodeRealm = new NodeRealm(dir.name);
+    let realm = new Realm(
+      "http://test-realm/",
+      nodeRealm,
+      "http://localhost:4201/base/"
+    );
+    await realm.ready;
+
+    let module = await realm.load<Record<string, any>>(
+      `${testRealm2Href}person`
+    );
+    let Person = module["Person"];
+    let person = Person.fromSerialized({ firstName: "Mango" });
+    assert.strictEqual(person.firstName, "Mango", "card data is correct");
+  });
+
+  test("can dynamically modules with cycles", async function (assert) {
+    let nodeRealm = new NodeRealm(dir.name);
+    let realm = new Realm(
+      "http://test-realm/",
+      nodeRealm,
+      "http://localhost:4201/base/"
+    );
+    await realm.ready;
+
+    let module = await realm.load<{ three(): number }>(
+      `${testRealm2Href}cycle-two`
+    );
+    assert.strictEqual(module.three(), 3);
   });
 });

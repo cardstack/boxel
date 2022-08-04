@@ -1,6 +1,6 @@
 export const cardSrc = `
-import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+import StringCard from "https://cardstack.com/base/string";
 
 export class Person extends Card {
   @field firstName = contains(StringCard);
@@ -25,8 +25,8 @@ function _applyDecoratedDescriptor(target, property, decorators, descriptor, con
 
 function _initializerWarningHelper(descriptor, context) { throw new Error('Decorating class property failed. Please ensure that ' + 'proposal-class-properties is enabled and runs after the decorators transform.'); }
 
-import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+import StringCard from "https://cardstack.com/base/string";
 export let Person = (_class = (_class2 = class Person extends Card {
   constructor(...args) {
     super(...args);
