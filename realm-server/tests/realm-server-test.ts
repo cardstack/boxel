@@ -284,6 +284,22 @@ module("Realm Server", function (hooks) {
                 kind: "file",
               },
             },
+            "cycle-one.js": {
+              links: {
+                related: "http://127.0.0.1:4444/cycle-one.js",
+              },
+              meta: {
+                kind: "file",
+              },
+            },
+            "cycle-two.js": {
+              links: {
+                related: "http://127.0.0.1:4444/cycle-two.js",
+              },
+              meta: {
+                kind: "file",
+              },
+            },
             "person-1.json": {
               links: {
                 related: `${testRealmHref}person-1.json`,
@@ -446,5 +462,20 @@ module("Realm Server", function (hooks) {
     let Person = module["Person"];
     let person = Person.fromSerialized({ firstName: "Mango" });
     assert.strictEqual(person.firstName, "Mango", "card data is correct");
+  });
+
+  test("can dynamically modules with cycles", async function (assert) {
+    let nodeRealm = new NodeRealm(dir.name);
+    let realm = new Realm(
+      "http://test-realm/",
+      nodeRealm,
+      "http://localhost:4201/base/"
+    );
+    await realm.ready;
+
+    let module = await realm.load<{ three(): number }>(
+      `${testRealm2Href}cycle-two`
+    );
+    assert.strictEqual(module.three(), 3);
   });
 });

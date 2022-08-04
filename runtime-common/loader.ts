@@ -12,18 +12,28 @@ type RegisteredModule = {
   implementation: Function;
 };
 
+// a module is in this state until its own code *and the code for all its deps*
+// have been loaded. Modules move from fetching to registered depth-first.
 type FetchingModule = {
   state: "fetching";
-  deferred: Deferred<any>;
+
+  // if you encounter a module in this state, you should wait for the deferred
+  // and then retry load where you're guarantee to see a new state
+  deferred: Deferred<void>;
 };
 
 type Module =
-  | RegisteredModule
   | FetchingModule
+  | RegisteredModule
   | {
+      // this state represents the *synchronous* window of time where this
+      // module's dependencies are moving from registered to preparing to
+      // evaluated. Because this is synchronous, you can rely on the fact that
+      // encountering a load for a module that is in "preparing" means you have a
+      // cycle.
       state: "preparing";
       implementation: Function;
-      moduleInstancePromise: Promise<object>;
+      moduleInstance: object;
     }
   | {
       state: "evaluated";
@@ -46,34 +56,19 @@ export class Loader {
   }
 
   async load<T extends object>(moduleIdentifier: string): Promise<T> {
-    if (!moduleIdentifier.startsWith("http")) {
-      throw new Error(
-        `expected module identifier to be a URL: "${moduleIdentifier}"`
-      );
-    }
     moduleIdentifier = this.resolveModule(moduleIdentifier);
-
-    let module = this.modules.get(moduleIdentifier);
-    if (!module) {
-      module = {
-        state: "fetching",
-        deferred: new Deferred<T>(),
-      };
-      this.modules.set(moduleIdentifier, module);
-      return await this.fetchModule(moduleIdentifier, module);
-    }
-
+    let module = await this.fetchModule(moduleIdentifier);
     switch (module.state) {
       case "fetching":
-        return await (module.deferred as Deferred<T>).promise;
+        await module.deferred.promise;
+        return this.evaluateModule(moduleIdentifier);
       case "preparing":
-        return (await module.moduleInstancePromise) as T;
       case "evaluated":
         return module.moduleInstance as T;
       case "broken":
         throw module.exception;
       case "registered":
-        return await this.evaluateModule(moduleIdentifier, module);
+        return this.evaluateModule(moduleIdentifier);
       default:
         throw assertNever(module);
     }
@@ -83,18 +78,34 @@ export class Loader {
     this.modules = new Map();
   }
 
-  private resolveModule(moduleIdentifier: string): string {
+  private resolveModule(moduleIdentifier: string, relativeTo?: string): string {
+    if (relativeTo) {
+      moduleIdentifier = new URL(moduleIdentifier, relativeTo).href;
+    }
+
+    if (!moduleIdentifier.startsWith("http")) {
+      throw new Error(
+        `expected module identifier to be a URL: "${moduleIdentifier}"`
+      );
+    }
     let moduleURL = new URL(moduleIdentifier);
     if (baseRealm.inRealm(moduleURL)) {
-      return new URL(moduleURL.pathname, this.realm.baseRealmURL).href;
+      return this.realm.baseRealmURL + baseRealm.local(moduleURL);
     }
     return moduleIdentifier;
   }
 
-  private async fetchModule<T extends object>(
-    moduleIdentifier: string,
-    module: FetchingModule
-  ): Promise<T> {
+  private async fetchModule(moduleIdentifier: string): Promise<Module> {
+    let module = this.modules.get(moduleIdentifier);
+    if (module) {
+      return module;
+    }
+    module = {
+      state: "fetching",
+      deferred: new Deferred(),
+    };
+    this.modules.set(moduleIdentifier, module);
+
     let src: string;
     try {
       src = await this.fetch(new URL(moduleIdentifier));
@@ -111,11 +122,24 @@ export class Loader {
       ],
     })?.code!;
 
+    let dependencyList: string[];
+    let implementation: Function;
+
+    // this local is here for the evals to see
+    // @ts-ignore
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    let define = (_mid: string, depList: string[], impl: Function) => {
+      dependencyList = depList.map((depId) => {
+        if (depId === "exports") {
+          return "exports";
+        } else {
+          return this.resolveModule(depId, moduleIdentifier);
+        }
+      });
+      implementation = impl;
+    };
+
     try {
-      // this local is here for the evals to see
-      // @ts-ignore
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      let define = this.registerModule.bind(this);
       eval(src);
     } catch (exception) {
       this.modules.set(moduleIdentifier, {
@@ -124,37 +148,69 @@ export class Loader {
       });
       throw exception;
     }
-    let deferred = module.deferred as Deferred<T>;
-    deferred.fulfill(this.load(moduleIdentifier));
-    return deferred.promise;
+
+    await Promise.all(
+      dependencyList!.map((depId) => {
+        if (depId !== "exports") {
+          return this.fetchModule(depId);
+        }
+        return undefined;
+      })
+    );
+
+    let registeredModule: RegisteredModule = {
+      state: "registered",
+      dependencyList: dependencyList!,
+      implementation: implementation!,
+    };
+
+    this.modules.set(moduleIdentifier, registeredModule);
+    module.deferred.fulfill();
+    return registeredModule;
   }
 
-  private async evaluateModule<T extends object>(
-    moduleIdentifier: string,
-    module: RegisteredModule
-  ): Promise<T> {
+  private evaluateModule<T extends object>(moduleIdentifier: string): T {
+    let module = this.modules.get(moduleIdentifier);
+    if (!module) {
+      throw new Error(
+        `bug in module loader. ${moduleIdentifier} should have been registered before entering evaluateModule`
+      );
+    }
+    switch (module.state) {
+      case "fetching":
+        throw new Error(
+          `bug in module loader. ${moduleIdentifier} should have been registered before entering evaluateModule`
+        );
+      case "preparing":
+      case "evaluated":
+        return module.moduleInstance as T;
+      case "broken":
+        throw module.exception;
+      case "registered":
+        return this.evaluate(moduleIdentifier, module);
+      default:
+        throw assertNever(module);
+    }
+  }
+
+  private evaluate<T>(moduleIdentifier: string, module: RegisteredModule): T {
     let moduleInstance = Object.create(null);
-    let deferredModuleInstance = new Deferred<T>();
     this.modules.set(moduleIdentifier, {
       state: "preparing",
       implementation: module.implementation,
-      moduleInstancePromise: deferredModuleInstance.promise,
+      moduleInstance,
     });
 
     try {
-      let dependencies = await Promise.all(
-        module.dependencyList.map((dependencyIdentifier) => {
-          if (dependencyIdentifier === "exports") {
-            return moduleInstance;
-          } else {
-            let absIdentifier = new URL(dependencyIdentifier, moduleIdentifier)
-              .href;
-            return this.load(absIdentifier);
-          }
-        })
-      );
+      let dependencies = module.dependencyList.map((dependencyIdentifier) => {
+        if (dependencyIdentifier === "exports") {
+          return moduleInstance;
+        } else {
+          return this.evaluateModule(dependencyIdentifier);
+        }
+      });
+
       module.implementation(...dependencies);
-      deferredModuleInstance.fulfill(moduleInstance);
       this.modules.set(moduleIdentifier, {
         state: "evaluated",
         moduleInstance,
@@ -167,18 +223,6 @@ export class Loader {
       });
       throw exception;
     }
-  }
-
-  private registerModule(
-    moduleIdentifier: string,
-    dependencyList: string[],
-    implementation: Function
-  ): void {
-    this.modules.set(moduleIdentifier, {
-      state: "registered",
-      dependencyList,
-      implementation,
-    });
   }
 
   private async fetch(moduleURL: URL): Promise<string> {
