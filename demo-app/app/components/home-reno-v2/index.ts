@@ -29,6 +29,15 @@ export default class HomeRenoV2 extends Component {
   }
 
   @action expand(card: Card) {
+    let parent = card.parent;
+    if (parent && parent.suggestions!.length > 1) {
+      let currentExpanded = parent.suggestions?.find(
+        (v) => v.state === CARD_STATES.EXPANDED
+      );
+      if (currentExpanded) {
+        currentExpanded.changeState(CARD_STATES.MIN);
+      }
+    }
     card.changeState(CARD_STATES.EXPANDED);
     this.updateState();
   }
