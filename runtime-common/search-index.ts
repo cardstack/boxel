@@ -273,7 +273,7 @@ export class SearchIndex {
             searchData: json.data.attributes
               ? flatten(json.data.attributes)
               : {},
-            ancestors: [], // TODO
+            ancestors: [],
           });
         }
       }
@@ -503,7 +503,13 @@ export class SearchIndex {
   }
 
   async search(query: Query): Promise<CardResource[]> {
-    let matcher = await this.buildMatcher(query.filter, {
+    for (let entry of [...this.instances.values()]) {
+      entry.ancestors = await this.buildAncestors(
+        entry.resource.meta.adoptsFrom
+      );
+    }
+
+    let matcher = this.buildMatcher(query.filter, {
       module: `${baseRealm.url}card-api`,
       name: "Card",
     });
@@ -526,15 +532,21 @@ export class SearchIndex {
     return this.instances.get(url)?.resource;
   }
 
-  async cardHasType(
-    ref: CardRef,
-    type: ExportedCardRef
-  ): Promise<boolean | null> {
-    // only checks for exported cards
-    if (ref.type !== "exportedCard") {
-      return false;
+  async buildAncestors(ref: ExportedCardRef): Promise<CardRef[]> {
+    let ancestors: CardRef[] = [];
+    let def = await this.typeOf({ type: "exportedCard", ...ref });
+    if (!def) {
+      return ancestors;
     }
+    while (def!.super) {
+      ancestors.push(def!.super);
+      def = await this.typeOf(def!.super);
+    }
+    return ancestors;
+  }
 
+  cardHasType(entry: SearchEntry, type: ExportedCardRef): boolean | null {
+    let ref = entry.resource.meta.adoptsFrom;
     if (
       ref.name === type.name &&
       trimExecutableExtension(new URL(ref.module, this.realm.url)).href ===
@@ -543,14 +555,7 @@ export class SearchIndex {
       return true;
     }
 
-    let def = await this.typeOf(ref);
-    if (!def) {
-      return null;
-    }
-    if (def.super) {
-      return await this.cardHasType(def.super, type);
-    }
-    return false;
+    return this.cardHasAncestor(entry.ancestors, type);
   }
 
   cardHasAncestor(ancestors: CardRef[], ref: ExportedCardRef): boolean {
@@ -571,21 +576,20 @@ export class SearchIndex {
   // about a field that is not even present on a given card results in `null` to
   // distinguish it from a field that is present but not matching the filter
   // (`false`)
-  async buildMatcher(
+  buildMatcher(
     filter: Filter | undefined,
     onRef: ExportedCardRef
-  ): Promise<(entry: SearchEntry) => boolean | null> {
+  ): (entry: SearchEntry) => boolean | null {
     if (!filter) {
       return (_entry) => true;
     }
 
     if ("type" in filter) {
-      return (entry) => this.cardHasAncestor(entry.ancestors, filter.type);
+      return (entry) => this.cardHasType(entry, filter.type);
     }
 
     let on = filter?.on ?? onRef;
 
-    // TODO: fix these
     if ("any" in filter) {
       let matchers = filter.any.map((f) => this.buildMatcher(f, on));
       return (entry) => some(matchers, (m) => m(entry));
@@ -597,7 +601,7 @@ export class SearchIndex {
     }
 
     if ("not" in filter) {
-      let matcher = await this.buildMatcher(filter.not, on);
+      let matcher = this.buildMatcher(filter.not, on);
       return (entry) => {
         let inner = matcher(entry);
         if (inner == null) {
@@ -612,7 +616,7 @@ export class SearchIndex {
     if ("eq" in filter) {
       return (entry) =>
         every(Object.entries(filter.eq), ([fieldPath, value]) => {
-          if (this.cardHasAncestor(entry.ancestors, on)) {
+          if (this.cardHasType(entry, on)) {
             return entry.searchData![fieldPath] === value;
           } else {
             return null;
