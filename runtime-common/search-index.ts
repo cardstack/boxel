@@ -193,6 +193,7 @@ class URLMap<T> {
 interface SearchEntry {
   resource: CardResource;
   searchData: Record<string, any>;
+  ancestors: CardRef[]; // TODO
 }
 
 export class SearchIndex {
@@ -272,6 +273,7 @@ export class SearchIndex {
             searchData: json.data.attributes
               ? flatten(json.data.attributes)
               : {},
+            ancestors: [], // TODO
           });
         }
       }
@@ -501,18 +503,14 @@ export class SearchIndex {
   }
 
   async search(query: Query): Promise<CardResource[]> {
-    let matcher = this.buildMatcher(query.filter, {
+    let matcher = await this.buildMatcher(query.filter, {
       module: `${baseRealm.url}card-api`,
       name: "Card",
     });
 
-    let results: SearchEntry[] = [];
-    for (let entry of [...this.instances.values()]) {
-      if (await matcher(entry)) {
-        results.push(entry);
-      }
-    }
-    return results.map((entry) => entry.resource);
+    return [...this.instances.values()]
+      .filter(matcher)
+      .map((entry) => entry.resource);
   }
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
@@ -555,28 +553,39 @@ export class SearchIndex {
     return false;
   }
 
+  cardHasAncestor(ancestors: CardRef[], ref: ExportedCardRef): boolean {
+    if (ancestors.length === 0 || ancestors[0].type !== "exportedCard") {
+      return false;
+    }
+    if (
+      ancestors[0].name === ref.name &&
+      ancestors[0].module ===
+        trimExecutableExtension(new URL(ref.module, this.realm.url)).href
+    ) {
+      return true;
+    }
+    return this.cardHasAncestor(ancestors.slice(1), ref);
+  }
+
   // Matchers are three-valued (true, false, null) because a query that talks
   // about a field that is not even present on a given card results in `null` to
   // distinguish it from a field that is present but not matching the filter
   // (`false`)
-  buildMatcher(
+  async buildMatcher(
     filter: Filter | undefined,
     onRef: ExportedCardRef
-  ): (entry: SearchEntry) => Promise<boolean | null> {
+  ): Promise<(entry: SearchEntry) => boolean | null> {
     if (!filter) {
-      return async (_entry) => true;
+      return (_entry) => true;
     }
 
     if ("type" in filter) {
-      return async (entry) =>
-        await this.cardHasType(
-          { type: "exportedCard", ...entry.resource.meta.adoptsFrom },
-          filter.type
-        );
+      return (entry) => this.cardHasAncestor(entry.ancestors, filter.type);
     }
 
     let on = filter?.on ?? onRef;
 
+    // TODO: fix these
     if ("any" in filter) {
       let matchers = filter.any.map((f) => this.buildMatcher(f, on));
       return (entry) => some(matchers, (m) => m(entry));
@@ -588,9 +597,9 @@ export class SearchIndex {
     }
 
     if ("not" in filter) {
-      let matcher = this.buildMatcher(filter.not, on);
-      return async (entry) => {
-        let inner = await matcher(entry);
+      let matcher = await this.buildMatcher(filter.not, on);
+      return (entry) => {
+        let inner = matcher(entry);
         if (inner == null) {
           // irrelevant cards stay irrelevant, even when the query is inverted
           return null;
@@ -602,13 +611,8 @@ export class SearchIndex {
 
     if ("eq" in filter) {
       return (entry) =>
-        every(Object.entries(filter.eq), async ([fieldPath, value]) => {
-          if (
-            await this.cardHasType(
-              { type: "exportedCard", ...entry.resource.meta.adoptsFrom },
-              on
-            )
-          ) {
+        every(Object.entries(filter.eq), ([fieldPath, value]) => {
+          if (this.cardHasAncestor(entry.ancestors, on)) {
             return entry.searchData![fieldPath] === value;
           } else {
             return null;
@@ -720,13 +724,13 @@ function flatten(obj: Record<string, any>): Record<string, any> {
 
 // three-valued version of Array.every that propagates nulls. Here, the presence
 // of any nulls causes the whole thing to be null.
-async function every<T>(
+function every<T>(
   list: T[],
-  predicate: (t: T) => Promise<boolean | null>
-): Promise<boolean | null> {
+  predicate: (t: T) => boolean | null
+): boolean | null {
   let result = true;
   for (let element of list) {
-    let status = await predicate(element);
+    let status = predicate(element);
     if (status == null) {
       return null;
     }
@@ -737,13 +741,13 @@ async function every<T>(
 
 // three-valued version of Array.some that propagates nulls. Here, the whole
 // expression becomes null only if the whole input is null.
-async function some<T>(
+function some<T>(
   list: T[],
-  predicate: (t: T) => Promise<boolean | null>
-): Promise<boolean | null> {
+  predicate: (t: T) => boolean | null
+): boolean | null {
   let result = null;
   for (let element of list) {
-    let status = await predicate(element);
+    let status = predicate(element);
     if (status === true) {
       return true;
     }
