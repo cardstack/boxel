@@ -4,8 +4,7 @@
     <div>{{@id}}</div>
     <button type="button" {{on "click" (fn @expand @card)}}>Expand</button>
   </div>
-{{else if (eq @state "MAX")}}
-  <div local-class="card">
+{{else if (eq @state "MAX")}}   <div local-class="card max">
     {{#if @canUpdateState}}
       <button type="button" {{on "click" (fn @minimize @card)}}>Minimize</button>
     {{/if}}

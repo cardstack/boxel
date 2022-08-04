@@ -1,0 +1,9 @@
+.card-list {
+  display: flex;
+  gap: 12px;
+  overflow-x: scroll;
+}
+
+.card-list-item {
+  flex-shrink: 0;
+}

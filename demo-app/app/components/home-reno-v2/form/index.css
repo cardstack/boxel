@@ -4,6 +4,9 @@
   max-width: 300px;
 }
 
+.card.max {
+  height: 400px;
+}
 .suggestion-list {
   display: flex;
   flex-direction: column;
