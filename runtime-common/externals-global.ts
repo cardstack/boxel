@@ -7,6 +7,11 @@
  */
 
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS = new Map();
+import * as runtimeLoader from "@cardstack/runtime-common/loader";
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set(
+  "@cardstack/runtime-common/loader",
+  runtimeLoader
+);
 // import * as glimmerComponent from "@glimmer/component";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@glimmer/component", {
   default: class {},

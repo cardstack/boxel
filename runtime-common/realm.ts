@@ -109,6 +109,7 @@ export class Realm {
       .get("/_cardsOf", this.getCardsOf.bind(this))
       .get("/_search", this.search.bind(this))
       .get("/_typeOf", this.getTypeOf.bind(this))
+      .get("/.+/_baseRealm", this.getBaseRealm.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
       .delete("/.+(?<!.json)", this.removeCard.bind(this));
@@ -708,6 +709,18 @@ export class Realm {
     return new Response(JSON.stringify({ data }, null, 2), {
       headers: { "content-type": "application/vnd.api+json" },
     });
+  }
+
+  private getBaseRealm(): Response {
+    return new Response(
+      JSON.stringify({
+        data: {
+          id: "base-realm-url",
+          type: "base-realm-url",
+          attributes: { url: this.baseRealmURL },
+        },
+      })
+    );
   }
 
   private async search(request: Request): Promise<Response> {

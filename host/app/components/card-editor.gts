@@ -183,7 +183,9 @@ export default class Preview extends Component<Signature> {
       return;
     }
     await this.cardAPI.loaded;
-    this.rendered = this.cardAPI.render(this, () => this.card, () => this.format);
+    if (!this.rendered) {
+      this.rendered = this.cardAPI.render(this, () => this.card, () => this.format);
+    }
 
     if (this.args.card.type === 'existing' && this.args.card.json) {
       this.initialCardData = this.args.card.json;

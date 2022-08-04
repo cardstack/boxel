@@ -3,6 +3,7 @@ import { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { render } from "./render-card";
+import { Loader } from "@cardstack/runtime-common/loader";
 // import { taskFor } from 'ember-concurrency-ts';
 
 export interface ExportedCardRef {
@@ -18,15 +19,13 @@ class BaseView extends Component<typeof CardRefCard> {
       Module: {{@model.module}} Name: {{@model.name}}
     </div>
     {{#if this.rendered.component}}
-      <div data-test-card>
-        <this.rendered.component/>
-      </div>
+      <this.rendered.component/>
     {{/if}}
   </template>
 
   @tracked component: ComponentLike<{ Args: {}; Blocks: {} }> | undefined;
   @tracked card: Card | undefined;
-  rendered = render(this, () => this.card, () => 'embedded')
+  rendered = render(this, () => this.card, () => 'embedded');
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -37,9 +36,10 @@ class BaseView extends Component<typeof CardRefCard> {
     if (!this.args.model) {
       return;
     }
-    let module: Record<string, any> = yield import(/* webpackIgnore: true */ this.args.model.module);
-    let Clazz = module[this.args.model.name];
-    this.card = new Clazz({...Clazz.demo ?? {}});
+    let loader: Loader = yield Loader.forOwnRealm(import.meta.url);
+    let module: Record<string, any> = yield loader.load(this.args.model.module);
+    let Clazz: typeof Card = module[this.args.model.name];
+    this.card = Clazz.fromSerialized({...(Clazz as any).demo ?? {}});
   }
 }
 

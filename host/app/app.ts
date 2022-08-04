@@ -16,6 +16,11 @@ import './lib/glint-embroider-workaround';
 //   import "@cardstack/runtime-common/external-globals";
 // when our common external-globals can support glimmer
 (window as any).RUNTIME_SPIKE_EXTERNALS = new Map();
+import * as runtimeLoader from '@cardstack/runtime-common/loader';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  '@cardstack/runtime-common/loader',
+  runtimeLoader
+);
 import * as glimmerComponent from '@glimmer/component';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   '@glimmer/component',

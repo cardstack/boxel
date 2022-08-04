@@ -48,6 +48,7 @@ export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
  */
 
 export const externalsMap: Map<string, string[]> = new Map([
+  ["@cardstack/runtime-common/loader", ["Loader"]],
   ["@glimmer/component", ["default"]],
   ["@ember/component", ["setComponentTemplate", "default"]],
   ["@ember/component/template-only", ["default"]],

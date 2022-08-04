@@ -46,13 +46,44 @@ type Module =
 
 export class Loader {
   private modules = new Map<string, Module>();
-  private realmPath: RealmPaths;
+  private realmPath: RealmPaths | undefined;
+  private baseRealmURL: string;
+  private realm: Realm | undefined;
 
+  constructor(baseRealmURL: string); // this is how realm clients can get a Loader
+  constructor(realm: Realm, readFileAsText?: (url: URL) => Promise<string>); // this is how servers can get a Loader
   constructor(
-    private realm: Realm,
-    private readFileAsText: (url: URL) => Promise<string>
+    realmOrBaseRealmURL: Realm | string,
+    private readFileAsText?: (url: URL) => Promise<string>
   ) {
-    this.realmPath = new RealmPaths(realm.url);
+    if (typeof realmOrBaseRealmURL === "string") {
+      this.baseRealmURL = realmOrBaseRealmURL;
+    } else {
+      this.realm = realmOrBaseRealmURL;
+      this.baseRealmURL = realmOrBaseRealmURL.baseRealmURL;
+      this.realmPath = new RealmPaths(this.realm.url);
+    }
+  }
+
+  static async forOwnRealm(moduleURL: string): Promise<Loader> {
+    let response = await fetch(`${moduleURL}/_baseRealm`, {
+      headers: {
+        Accept: "application/vnd.api+json",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(
+        `could not fetch ${moduleURL}/_baseRealm: ${
+          response.status
+        } - ${await response.text()}`
+      );
+    }
+    let {
+      data: {
+        attributes: { url },
+      },
+    } = await response.json();
+    return new Loader(url);
   }
 
   async load<T extends object>(moduleIdentifier: string): Promise<T> {
@@ -90,7 +121,7 @@ export class Loader {
     }
     let moduleURL = new URL(moduleIdentifier);
     if (baseRealm.inRealm(moduleURL)) {
-      return this.realm.baseRealmURL + baseRealm.local(moduleURL);
+      return this.baseRealmURL + baseRealm.local(moduleURL);
     }
     return moduleIdentifier;
   }
@@ -226,7 +257,11 @@ export class Loader {
   }
 
   private async fetch(moduleURL: URL): Promise<string> {
-    if (this.realmPath.inRealm(moduleURL)) {
+    if (
+      this.readFileAsText &&
+      this.realmPath &&
+      this.realmPath.inRealm(moduleURL)
+    ) {
       return await this.readFileAsText(moduleURL);
     }
 
