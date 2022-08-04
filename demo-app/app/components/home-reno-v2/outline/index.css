@@ -7,6 +7,10 @@
 .card.max {
   height: 400px;
 }
+
+.card.expanded {
+  height: 120px;
+}
 .suggestion-list {
   display: flex;
   flex-direction: column;
