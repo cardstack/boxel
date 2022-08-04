@@ -1,16 +1,3 @@
-.card {
-  border: 1px solid black;
-  padding: 6px;
-  max-width: 300px;
-}
-
-.card.max {
-  height: 400px;
-}
-
-.card.expanded {
-  height: 120px;
-}
 .suggestion-list {
   display: flex;
   flex-direction: column;
