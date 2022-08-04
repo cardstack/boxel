@@ -1,0 +1,26 @@
+<div local-class={{concat "card " @state}}>
+  {{#if (or (eq @state "MAX") (eq @state "EXPANDED"))}}
+    {{#if @minimize}}
+      <button type="button" local-class="minimize-button" {{on "click" @minimize}}>
+        Minimize
+      </button>
+    {{/if}}
+  {{/if}}
+  {{#if (eq @state "MIN")}}
+    {{#if @expand}}
+      <button type="button" local-class="expand-button" {{on "click" @expand}}>
+        Expand
+      </button>
+    {{/if}}
+  {{/if}}
+  {{#if (eq @state "EXPANDED")}}
+    {{#if @maximize}}
+      <button type="button" local-class="maximize-button" {{on "click" @maximize}}>
+        Maximize
+      </button>
+    {{/if}}
+  {{/if}}
+  <div>
+    {{yield}}
+  </div>
+</div>

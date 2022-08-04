@@ -1,0 +1,30 @@
+.card {
+  border: 1px solid black;
+  padding: 6px;
+  max-width: 300px;
+}
+
+.card.MIN {
+  height: 80px;
+}
+
+.card.EXPANDED {
+  height: 120px;
+}
+
+.card.MAX {
+  height: 400px;
+}
+
+.card.MAX .minimize-button {}
+
+.card.EXPANDED .minimize-button {}
+.card.EXPANDED .maximize-button {}
+
+.card.MIN .expand-button {}
+
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
