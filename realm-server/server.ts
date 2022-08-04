@@ -5,6 +5,7 @@ import { resolve } from "path";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { LocalPath, RealmPaths } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
+import "@cardstack/runtime-common/externals-global";
 
 const externalsPath = "/externals/";
 
@@ -137,7 +138,9 @@ function handleExternals(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
-  let src = [`const m = window.RUNTIME_SPIKE_EXTERNALS.get('${moduleName}');`];
+  let src = [
+    `const m = globalThis.RUNTIME_SPIKE_EXTERNALS.get('${moduleName}');`,
+  ];
 
   for (let name of names) {
     if (name === "default") {

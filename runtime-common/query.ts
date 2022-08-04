@@ -2,6 +2,7 @@ import * as JSON from "json-typescript";
 import isEqual from "lodash/isEqual";
 import { assertJSONValue, assertJSONPrimitive } from "./json-validation";
 import qs from "qs";
+import { ExportedCardRef } from "@cardstack/runtime-common/search-index";
 
 export interface Query {
   filter?: Filter;
@@ -20,7 +21,7 @@ export type Filter =
   | CardTypeFilter;
 
 export interface TypedFilter {
-  on?: CardURL;
+  on?: ExportedCardRef;
 }
 
 interface SortExpression {
@@ -35,7 +36,7 @@ export type Sort = SortExpression[];
 // adopt from some particular card type--no other predicates are included in
 // this filter.
 export interface CardTypeFilter {
-  type: CardURL;
+  type: ExportedCardRef;
 }
 
 export interface AnyFilter extends TypedFilter {
@@ -83,33 +84,39 @@ export function assertQuery(
     throw new Error(`${pointer.join("/") || "/"}: missing query object`);
   }
 
-  if ("filter" in query) {
-    assertFilter(query.filter, pointer.concat("filter"));
-  }
-
-  if (
-    "sort" in query &&
-    typeof query.sort !== "string" &&
-    (!Array.isArray(query.sort) ||
-      query.sort.some((i: any) => typeof i !== "string"))
-  ) {
-    throw new Error(
-      `${
-        pointer.concat("sort").join("/") || "/"
-      }: sort must be a string or string array`
-    );
-  }
-
-  if ("queryString" in query && typeof query.queryString !== "string") {
-    throw new Error(
-      `${
-        pointer.concat("queryString").join("/") || "/"
-      }: queryString must be a string`
-    );
-  }
-
-  if ("page" in query) {
-    assertPage(query.page, pointer.concat("page"));
+  for (let [key, value] of Object.entries(query)) {
+    switch (key) {
+      case "filter":
+        assertFilter(value, pointer.concat("filter"));
+        break;
+      case "sort":
+        if (
+          typeof value !== "string" &&
+          (!Array.isArray(value) ||
+            value.some((i: any) => typeof i !== "string"))
+        ) {
+          throw new Error(
+            `${
+              pointer.concat("sort").join("/") || "/"
+            }: sort must be a string or string array`
+          );
+        }
+        break;
+      case "queryString":
+        if (typeof value !== "string") {
+          throw new Error(
+            `${
+              pointer.concat("queryString").join("/") || "/"
+            }: queryString must be a string`
+          );
+        }
+        break;
+      case "page":
+        assertPage(value, pointer.concat("page"));
+        break;
+      default:
+        throw new Error(`unknown field in query: ${key}`);
+    }
   }
 }
 
@@ -148,14 +155,14 @@ function assertFilter(
   }
 
   if ("type" in filter) {
-    assertCardId(filter.type, pointer.concat("type"));
+    assertCardType(filter.type, pointer.concat("type"));
     if (isEqual(Object.keys(filter), ["type"])) {
       return; // This is a pure card type filter
     }
   }
 
   if ("on" in filter) {
-    assertCardId(filter.on, pointer.concat("on"));
+    assertCardType(filter.on, pointer.concat("on"));
   }
 
   if ("any" in filter) {
@@ -175,11 +182,13 @@ function assertFilter(
   }
 }
 
-function assertCardId(id: any, pointer: string[]): asserts id is CardURL {
-  if (typeof id !== "string") {
-    throw new Error(
-      `${pointer.join("/") || "/"}: card id must be a string URL`
-    );
+function assertCardType(type: any, pointer: string[]) {
+  if (
+    Object.keys(type).length > 2 ||
+    !("module" in type) ||
+    !("name" in type)
+  ) {
+    throw new Error(`${pointer.join("/") || "/"}: type is not valid`);
   }
 }
 

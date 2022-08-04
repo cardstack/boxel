@@ -61,10 +61,10 @@ export default class Schema extends Component<Signature> {
               </li>
             {{/each}}
           </ul>
+          {{#let this.cardType.type.exportedCardContext.name as |name|}}
+            <button {{on "click" this.displayEditor}} type="button" data-test-create-card={{name}}>Create New {{name}}</button>
+          {{/let}}
         </p>
-        {{#let this.cardType.type.exportedCardContext.name as |name|}}
-          <button {{on "click" this.displayEditor}} type="button" data-test-create-card={{name}}>Create New {{name}}</button>
-        {{/let}}
       {{/if}}
     {{/if}}
   </template>

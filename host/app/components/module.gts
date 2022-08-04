@@ -4,7 +4,7 @@ import Schema from './schema';
 
 interface Signature {
   Args: {
-    url: string
+    url: string;
   }
 }
 
