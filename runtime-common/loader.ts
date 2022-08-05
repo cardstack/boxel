@@ -2,7 +2,7 @@
 import TransformModulesAmd from "@babel/plugin-transform-modules-amd";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
-import type { Realm } from "@cardstack/runtime-common/realm";
+import { Realm } from "./realm";
 import { RealmPaths } from "./paths";
 import { baseRealm } from "@cardstack/runtime-common";
 
@@ -65,25 +65,30 @@ export class Loader {
     }
   }
 
-  static async forOwnRealm(moduleURL: string): Promise<Loader> {
-    let response = await fetch(`${moduleURL}/_baseRealm`, {
+  static async forModule(moduleURL: string): Promise<Loader> {
+    let realm = Realm.forModule(moduleURL);
+    if (realm) {
+      return realm.loader;
+    }
+
+    let response = await fetch(`${moduleURL}/_realmInfo`, {
       headers: {
         Accept: "application/vnd.api+json",
       },
     });
     if (!response.ok) {
       throw new Error(
-        `could not fetch ${moduleURL}/_baseRealm: ${
+        `could not fetch ${moduleURL}/_realmInfo: ${
           response.status
         } - ${await response.text()}`
       );
     }
     let {
       data: {
-        attributes: { url },
+        attributes: { baseRealm },
       },
     } = await response.json();
-    return new Loader(url);
+    return new Loader(baseRealm);
   }
 
   async load<T extends object>(moduleIdentifier: string): Promise<T> {

@@ -441,7 +441,9 @@ module("Realm Server", function (hooks) {
     );
     await realm.ready;
 
-    let module = await realm.load<Record<string, any>>("./person");
+    let module = await realm.loader.load<Record<string, any>>(
+      `${testRealmHref}person`
+    );
     let Person = module["Person"];
     let person = Person.fromSerialized({ firstName: "Mango" });
     assert.strictEqual(person.firstName, "Mango", "card data is correct");
@@ -456,7 +458,7 @@ module("Realm Server", function (hooks) {
     );
     await realm.ready;
 
-    let module = await realm.load<Record<string, any>>(
+    let module = await realm.loader.load<Record<string, any>>(
       `${testRealm2Href}person`
     );
     let Person = module["Person"];
@@ -473,7 +475,7 @@ module("Realm Server", function (hooks) {
     );
     await realm.ready;
 
-    let module = await realm.load<{ three(): number }>(
+    let module = await realm.loader.load<{ three(): number }>(
       `${testRealm2Href}cycle-two`
     );
     assert.strictEqual(module.three(), 3);

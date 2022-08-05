@@ -36,7 +36,7 @@ class BaseView extends Component<typeof CardRefCard> {
     if (!this.args.model) {
       return;
     }
-    let loader: Loader = yield Loader.forOwnRealm(import.meta.url);
+    let loader: Loader = yield Loader.forModule(import.meta.url);
     let module: Record<string, any> = yield loader.load(this.args.model.module);
     let Clazz: typeof Card = module[this.args.model.name];
     this.card = Clazz.fromSerialized({...(Clazz as any).demo ?? {}});

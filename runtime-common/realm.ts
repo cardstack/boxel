@@ -79,10 +79,21 @@ export class Realm {
   #paths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
-  #loader: Loader;
+  readonly loader: Loader;
 
   get url(): string {
     return this.#paths.url;
+  }
+
+  static #realms = new Map<string, Realm>();
+  static forModule(url: string): Realm | undefined {
+    for (let [realmURL, realm] of Realm.#realms) {
+      let realmPath = new RealmPaths(realmURL);
+      if (realmPath.inRealm(new URL(url))) {
+        return realm;
+      }
+    }
+    return undefined;
   }
 
   constructor(
@@ -90,6 +101,7 @@ export class Realm {
     adapter: RealmAdapter,
     readonly baseRealmURL = baseRealm.url
   ) {
+    Realm.#realms.set(url, this);
     this.#paths = new RealmPaths(url);
     this.#startedUp.fulfill((() => this.#startup())());
     this.#adapter = adapter;
@@ -99,7 +111,7 @@ export class Realm {
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this)
     );
-    this.#loader = new Loader(this, async (url: URL) => {
+    this.loader = new Loader(this, async (url: URL) => {
       return this.transpileJS((await this.getCardSourceAsText(url))!, url.href);
     });
 
@@ -107,10 +119,10 @@ export class Realm {
       .post("/", this.createCard.bind(this))
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
       .get("/_search", this.search.bind(this))
-      // TODO lets move typeOf and cardsOf to be a path you add to the end of a route like /baseRealm
+      // TODO lets move typeOf and cardsOf to be a path you add to the end of a route like realmInfo
       .get("/_typeOf", this.getTypeOf.bind(this))
       .get("/_cardsOf", this.getCardsOf.bind(this))
-      .get("/.+/_baseRealm", this.getBaseRealm.bind(this))
+      .get("/.+/_realmInfo", this.getRealmInfo.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
       .delete("/.+(?<!.json)", this.removeCard.bind(this));
@@ -122,11 +134,6 @@ export class Realm {
       )
       .get("/.+", this.getCardSourceOrRedirect.bind(this))
       .delete("/.+", this.removeCardSource.bind(this));
-  }
-
-  async load<T extends object>(moduleIdentifier: string): Promise<T> {
-    let moduleURL = new URL(moduleIdentifier, this.url);
-    return await this.#loader.load(moduleURL.href);
   }
 
   async write(
@@ -218,7 +225,7 @@ export class Realm {
       this.#paths.local(new URL(request.url)),
       await request.text()
     );
-    this.#loader.clearCache();
+    this.loader.clearCache();
     return new Response(null, {
       status: 204,
       headers: {
@@ -267,7 +274,7 @@ export class Realm {
       delete: true,
     });
     await this.#adapter.remove(handle.path);
-    this.#loader.clearCache();
+    this.loader.clearCache();
     return new Response(null, { status: 204 });
   }
 
@@ -712,13 +719,13 @@ export class Realm {
     });
   }
 
-  private async getBaseRealm(): Promise<Response> {
+  private async getRealmInfo(): Promise<Response> {
     return new Response(
       JSON.stringify({
         data: {
-          id: "base-realm-url",
-          type: "base-realm-url",
-          attributes: { url: this.baseRealmURL },
+          id: this.url,
+          type: "realm-info",
+          attributes: { baseRealm: this.baseRealmURL, url: this.url },
         },
       })
     );
