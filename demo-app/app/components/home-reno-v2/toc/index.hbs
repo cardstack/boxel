@@ -6,9 +6,7 @@
 >
   {{#if (eq @state "MIN")}}
     Minimized TOC
-    <div>{{@id}}</div>
   {{else if (eq @state "MAX")}}
-      <div>{{@id}}</div>
       <ul local-class="suggestion-list">
         {{#each @suggestions as |suggestion|}}
           <li>
@@ -32,6 +30,5 @@
       </ul>
   {{else if (eq @state "EXPANDED")}}
       Expanded TOC
-      <div>{{@id}}</div>
   {{/if}}
 </HomeRenoV2::Card>
