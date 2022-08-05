@@ -1,18 +1,23 @@
 .card {
   border: 1px solid black;
-  padding: 6px;
   max-width: 300px;
+  padding: var(--card-padding, 6px);
+  border-radius: var(--card-border-radius);
 }
 
 .card.MIN {
+  --card-border-radius: 4px;
   height: 80px;
 }
 
 .card.EXPANDED {
+  --card-border-radius: 4px;
   height: 200px;
 }
 
 .card.MAX {
+  --card-border-radius: 12px;
+  --card-padding: 10px;
   height: 400px;
   width: 300px;
 }
