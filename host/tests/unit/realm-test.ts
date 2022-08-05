@@ -513,7 +513,7 @@ module('Unit | realm', function () {
         definition?.id,
         {
           type: 'exportedCard',
-          module: `${testRealmURL}dir/person.gts`,
+          module: `${testRealmURL}dir/person`,
           name: 'Person',
         },
         'the definition id is correct'

@@ -375,7 +375,7 @@ export class SearchIndex {
     let id: CardRef = possibleCard.exportedAs
       ? {
           type: "exportedCard",
-          module: new URL(url, this.realm.url).href,
+          module: trimExecutableExtension(new URL(url, this.realm.url)).href,
           name: possibleCard.exportedAs,
         }
       : ref;
@@ -476,7 +476,9 @@ export class SearchIndex {
   private internalKeyFor(ref: CardRef): string {
     switch (ref.type) {
       case "exportedCard":
-        let module = new URL(ref.module, this.realm.url).href;
+        let module = trimExecutableExtension(
+          new URL(ref.module, this.realm.url)
+        ).href;
         return `${module}/${ref.name}`;
       case "ancestorOf":
         return `${this.internalKeyFor(ref.card)}/ancestor`;
@@ -523,7 +525,7 @@ export class SearchIndex {
   }
 
   async exportedCardsOf(module: string): Promise<CardRef[]> {
-    module = new URL(module, this.realm.url).href;
+    module = trimExecutableExtension(new URL(module, this.realm.url)).href;
     return this.exportedCardRefs.get(module) ?? [];
   }
 
@@ -548,9 +550,7 @@ export class SearchIndex {
   private cardHasType(entry: SearchEntry, type: ExportedCardRef): boolean {
     let ref = this.internalKeyFor({
       type: "exportedCard",
-      module: trimExecutableExtension(new URL(type.module, this.realm.url))
-        .href,
-      name: type.name,
+      ...type,
     });
     return Boolean(entry.types?.find((t) => t === ref));
   }
