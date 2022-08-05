@@ -193,7 +193,7 @@ class URLMap<T> {
 interface SearchEntry {
   resource: CardResource;
   searchData: Record<string, any>;
-  types: string[];
+  types: string[] | undefined; // theses start out undefined during indexing and get defined during semantic phase
 }
 
 export class SearchIndex {
@@ -273,7 +273,7 @@ export class SearchIndex {
             searchData: json.data.attributes
               ? flatten(json.data.attributes)
               : {},
-            types: [],
+            types: undefined,
           });
         }
       }
@@ -358,6 +358,11 @@ export class SearchIndex {
     // atomically update the search index
     this.definitions = newDefinitions;
     this.exportedCardRefs = newExportedCardRefs;
+
+    // once we have definitions we can fill in the instance types
+    for (let entry of [...this.instances.values()]) {
+      entry.types = await this.getTypes(entry.resource.meta.adoptsFrom);
+    }
   }
 
   private async buildDefinition(
@@ -503,11 +508,7 @@ export class SearchIndex {
   }
 
   async search(query: Query): Promise<CardResource[]> {
-    for (let entry of [...this.instances.values()]) {
-      entry.types = await this.getTypes(entry.resource.meta.adoptsFrom);
-    }
-
-    let matcher = this.buildMatcher(query.filter, {
+    let matcher = await this.buildMatcher(query.filter, {
       module: `${baseRealm.url}card-api`,
       name: "Card",
     });
@@ -530,64 +531,65 @@ export class SearchIndex {
     return this.instances.get(url)?.resource;
   }
 
-  async getTypes(ref: ExportedCardRef): Promise<string[]> {
+  private async getTypes(ref: ExportedCardRef): Promise<string[]> {
+    let fullRef: CardRef | undefined = { type: "exportedCard", ...ref };
     let types: string[] = [];
-    ref.module = trimExecutableExtension(
-      new URL(ref.module, this.realm.url)
-    ).href;
-    let def = this.definitions.get(
-      this.internalKeyFor({ type: "exportedCard", ...ref })
-    );
-    if (def) {
-      types.push(this.internalKeyFor({ type: "exportedCard", ...ref }));
-    }
-    while (def?.super) {
-      types.push(this.internalKeyFor(def.super));
-      def = this.definitions.get(this.internalKeyFor(def.super));
+    while (fullRef) {
+      let def: CardDefinition | undefined = await this.typeOf(fullRef);
+      if (!def) {
+        throw new Error("todo: report this error without breaking indexing");
+      }
+      types.push(this.internalKeyFor(fullRef));
+      fullRef = def.super;
     }
     return types;
   }
 
-  cardHasType(entry: SearchEntry, type: ExportedCardRef): boolean {
+  private cardHasType(entry: SearchEntry, type: ExportedCardRef): boolean {
     let ref = this.internalKeyFor({
       type: "exportedCard",
       module: trimExecutableExtension(new URL(type.module, this.realm.url))
         .href,
       name: type.name,
     });
-    return Boolean(entry.types.find((t) => t === ref));
+    return Boolean(entry.types?.find((t) => t === ref));
   }
 
   // Matchers are three-valued (true, false, null) because a query that talks
   // about a field that is not even present on a given card results in `null` to
   // distinguish it from a field that is present but not matching the filter
   // (`false`)
-  buildMatcher(
+  private async buildMatcher(
     filter: Filter | undefined,
     onRef: ExportedCardRef
-  ): (entry: SearchEntry) => boolean | null {
+  ): Promise<(entry: SearchEntry) => boolean | null> {
     if (!filter) {
       return (_entry) => true;
     }
 
     if ("type" in filter) {
+      // TODO: validate that the type exists
       return (entry) => this.cardHasType(entry, filter.type);
     }
 
     let on = filter?.on ?? onRef;
 
     if ("any" in filter) {
-      let matchers = filter.any.map((f) => this.buildMatcher(f, on));
+      let matchers = await Promise.all(
+        filter.any.map((f) => this.buildMatcher(f, on))
+      );
       return (entry) => some(matchers, (m) => m(entry));
     }
 
     if ("every" in filter) {
-      let matchers = filter.every.map((f) => this.buildMatcher(f, on));
+      let matchers = await Promise.all(
+        filter.every.map((f) => this.buildMatcher(f, on))
+      );
       return (entry) => every(matchers, (m) => m(entry));
     }
 
     if ("not" in filter) {
-      let matcher = this.buildMatcher(filter.not, on);
+      let matcher = await this.buildMatcher(filter.not, on);
       return (entry) => {
         let inner = matcher(entry);
         if (inner == null) {
@@ -600,6 +602,8 @@ export class SearchIndex {
     }
 
     if ("eq" in filter) {
+      // TODO: validate that the definition and all the fieldPaths exist let def
+      // = await this.typeOf({ type: "exportedCard", ...on });
       return (entry) =>
         every(Object.entries(filter.eq), ([fieldPath, value]) => {
           if (this.cardHasType(entry, on)) {
