@@ -109,6 +109,7 @@ export type { Kind, RealmAdapter, FileRef } from "./realm";
 
 export type {
   CardRef,
+  ExportedCardRef,
   CardResource,
   CardDocument,
   CardDefinition,

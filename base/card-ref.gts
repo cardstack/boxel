@@ -4,12 +4,9 @@ import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { render } from "./render-card";
 import { Loader } from "@cardstack/runtime-common";
+import type { ExportedCardRef } from "@cardstack/runtime-common";
 // import { taskFor } from 'ember-concurrency-ts';
 
-export interface ExportedCardRef {
-  module: string
-  name: string
-}
 
 // TODO Having difficulty using ember-concurrency-ts here (weird generator
 // errors at runtime). Probably need to work with Ed to help resolve this.

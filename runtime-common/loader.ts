@@ -71,7 +71,7 @@ export class Loader {
   async load<T extends object>(moduleIdentifier: string): Promise<T> {
     moduleIdentifier = this.resolveModule(moduleIdentifier);
     if (
-      globalThis.window && // make sure we are not in a service worker
+      (globalThis as any).window && // make sure we are not in a service worker
       !isNode // make sure we are not in node
     ) {
       return await import(/* webpackIgnore: true */ moduleIdentifier);

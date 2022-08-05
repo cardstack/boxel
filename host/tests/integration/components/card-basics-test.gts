@@ -6,7 +6,7 @@ import { cleanWhiteSpace, p, testRealmURL } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
 import type { SignatureFor, primitive as primitiveType } from "https://cardstack.com/base/card-api";
-import type { ExportedCardRef } from "https://cardstack.com/base/card-ref";
+import type { ExportedCardRef } from "@cardstack/runtime-common";
 
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
