@@ -3,3 +3,11 @@
   flex-direction: column;
   gap: 4px;
 }
+
+.list.indented {
+  margin-left: 8px;
+}
+
+.list-heading {
+  font-weight: 700;
+}

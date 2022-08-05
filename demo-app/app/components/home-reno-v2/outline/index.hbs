@@ -5,11 +5,42 @@
   @expand={{fn @expand @card}}
 >
   {{#if (eq @state "MIN")}}
-      Minimized Outline
-      <div>{{@id}}</div>
+      Outline
   {{else if (eq @state "MAX")}}
-      Maximized Outline
-      <div>{{@id}}</div>
+      <ul local-class="list">
+        <li>
+          <h2 local-class="list-heading">
+            Duck selection
+          </h2>
+          <ol local-class="list indented">
+            <li>
+              What duck?
+            </li>
+            <li>
+              This duck
+            </li>
+            <li>
+              Get it!
+            </li>
+          </ol>
+        </li>
+        <li>
+          <h2 local-class="list-heading">
+            Still duck selection
+          </h2>
+          <ol local-class="list indented">
+            <li>
+              What duck?
+            </li>
+            <li>
+              This duck
+            </li>
+            <li>
+              Get it!
+            </li>
+          </ol>
+        </li>
+      </ul>
       <ul local-class="suggestion-list">
         {{#each @suggestions as |suggestion|}}
           <li>
@@ -32,7 +63,9 @@
         {{/each}}
       </ul>
   {{else if (eq @state "EXPANDED")}}
-      Expanded Outline
-      <div>{{@id}}</div>
+      Outline
+      <div>
+        A list of duck-related questions
+      </div>
   {{/if}}
 </HomeRenoV2::Card>
