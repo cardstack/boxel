@@ -5,11 +5,15 @@
   @expand={{fn @expand @card}}
 >
   {{#if (eq @state "MIN")}}
-      Minimized Form
-      <div>{{@id}}</div>
+      Form
   {{else if (eq @state "MAX")}}
-      Maximized Form
-      <div>{{@id}}</div>
+      Form
+      <div>
+        <label>
+          Item 1
+          <input value="Entry 1">
+        </label>
+      </div>
       <ul local-class="suggestion-list">
         {{#each @suggestions as |suggestion|}}
           <li>
@@ -32,7 +36,9 @@
         {{/each}}
       </ul>
   {{else if (eq @state "EXPANDED")}}
-      Expanded Form
-      <div>{{@id}}</div>
+      Form
+      <div>
+        Item 1: Entry 1
+      </div>
   {{/if}}
 </HomeRenoV2::Card>
