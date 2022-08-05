@@ -13,6 +13,11 @@
             MIN
           </button>
         {{/if}}
+        {{#if @expand}}
+          <button type="button" local-class="expand-button" {{on "click" @expand}}>
+            EXP
+          </button>
+        {{/if}}
       {{/if}}
       {{#if (eq @state "MIN")}}
         {{#if @expand}}
