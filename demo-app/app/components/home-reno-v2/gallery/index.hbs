@@ -5,12 +5,18 @@
   @expand={{fn @expand @card}}
 >
   {{#if (eq @state "MIN")}}
-      Minimized Gallery
+      Gallery
       <div>{{@id}}</div>
   {{else if (eq @state "MAX")}}
-      Maximized Gallery
-      <div>{{@id}}</div>
+      Gallery
       <ul local-class="suggestion-list">
+        <ul local-class="image-list">
+            {{#each @card.model.images as |image|}}
+              <li>
+                  <img src={{image}} alt="Duck">
+              </li>
+            {{/each}}
+        </ul>
         {{#each @suggestions as |suggestion|}}
           <li>
             {{#if (eq suggestion.state "MAX")}}
@@ -32,7 +38,12 @@
         {{/each}}
       </ul>
   {{else if (eq @state "EXPANDED")}}
-      Expanded Gallery
-      <div>{{@id}}</div>
+      <ul local-class="image-list">
+          {{#each @card.model.images as |image|}}
+          <li>
+              <img src={{image}} alt="Duck">
+          </li>
+          {{/each}}
+      </ul>
   {{/if}}
 </HomeRenoV2::Card>
