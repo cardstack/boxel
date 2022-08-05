@@ -13,7 +13,7 @@
         <ul local-class="image-list">
             {{#each @card.model.images as |image|}}
               <li>
-                  <img src={{image}} alt="Duck">
+                  <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
               </li>
             {{/each}}
         </ul>
@@ -41,7 +41,7 @@
       <ul local-class="image-list">
           {{#each @card.model.images as |image|}}
           <li>
-              <img src={{image}} alt="Duck">
+              <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
           </li>
           {{/each}}
       </ul>

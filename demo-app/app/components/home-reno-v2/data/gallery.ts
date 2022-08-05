@@ -5,7 +5,24 @@ const Duck4 = '/images/timothy-dykes-LhqLdDPcSV8-unsplash.jpg';
 
 export default {
   model: {
-    images: [Duck1, Duck2, Duck3, Duck4],
+    images: [
+      {
+        path: Duck1,
+        attribution: 'Photo by Brett Jordan on Unsplash (@brett_jordan)',
+      },
+      {
+        path: Duck2,
+        attribution: 'Photo by Jason Richard on Unsplash (@jasonthedesigner)',
+      },
+      {
+        path: Duck3,
+        attribution: 'Photo of a duck by S. Tsuchiya on Unsplash (@s_tsuchiya)',
+      },
+      {
+        path: Duck4,
+        attribution: 'Photo by Timothy Dykes on Unsplash (@timothycdykes)',
+      },
+    ],
   },
   suggestions: ['form'],
 };
