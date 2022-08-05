@@ -5,8 +5,9 @@
   @expand={{fn @expand @card}}
 >
   {{#if (eq @state "MIN")}}
-    Minimized TOC
+    TOC
   {{else if (eq @state "MAX")}}
+    TOC
       <ul local-class="suggestion-list">
         {{#each @suggestions as |suggestion|}}
           <li>
@@ -29,6 +30,6 @@
         {{/each}}
       </ul>
   {{else if (eq @state "EXPANDED")}}
-      Expanded TOC
+      TOC
   {{/if}}
 </HomeRenoV2::Card>
