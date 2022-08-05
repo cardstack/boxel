@@ -1,42 +1,35 @@
-{{#if (eq @state "MIN")}}
-  <div local-class="card">
+<HomeRenoV2::Card
+  @state={{@state}}
+  @minimize={{null}}
+  @maximize={{fn @maximize @card}}
+  @expand={{fn @expand @card}}
+>
+  {{#if (eq @state "MIN")}}
     Minimized TOC
     <div>{{@id}}</div>
-    <button type="button" {{on "click" (fn @expand @card)}}>Expand</button>
-  </div>
-{{else if (eq @state "MAX")}}   <div local-class="card max">
-    {{#if @canUpdateState}}
-      <button type="button" {{on "click" (fn @minimize @card)}}>Minimize</button>
-    {{/if}}
-    Maximized TOC
-    <div>{{@id}}</div>
-    <ul local-class="suggestion-list">
-      {{#each @suggestions as |suggestion|}}
-    {{#unless (eq suggestion.state "MAX")}}
-        {{component
-          (concat "home-reno-v2/" suggestion.type)
-            card=suggestion
-            model=suggestion.model
-            state=suggestion.state
-            suggestions=suggestion.suggestions
-            canUpdateState=suggestion.canUpdateState
-            minimize=@minimize
-            maximize=@maximize
-            expand=@expand
-        }}
-    {{else}}
-      <HomeRenoV2::Placeholder/>
-    {{/unless}}
-{{/each}}
-    </ul>
-  </div>
-{{else if (eq @state "EXPANDED")}}
-  <div local-class="card expanded">
-    Expanded TOC
-    <div>{{@id}}</div>
-    <div>
-      <button type="button" {{on "click" (fn @minimize @card)}}>Minimize</button>
-      <button type="button" {{on "click" (fn @maximize @card)}}>Maximize</button>
-    </div>
-  </div>
-{{/if}}
+  {{else if (eq @state "MAX")}}
+      <div>{{@id}}</div>
+      <ul local-class="suggestion-list">
+        {{#each @suggestions as |suggestion|}}
+            {{#unless (eq suggestion.state "MAX")}}
+              {{component
+                (concat "home-reno-v2/" suggestion.type)
+                  card=suggestion
+                  model=suggestion.model
+                  state=suggestion.state
+                  suggestions=suggestion.suggestions
+                  canUpdateState=suggestion.canUpdateState
+                  minimize=@minimize
+                  maximize=@maximize
+                  expand=@expand
+              }}
+            {{else}}
+              <HomeRenoV2::Placeholder/>
+            {{/unless}}
+        {{/each}}
+      </ul>
+  {{else if (eq @state "EXPANDED")}}
+      Expanded TOC
+      <div>{{@id}}</div>
+  {{/if}}
+</HomeRenoV2::Card>
