@@ -1,6 +1,7 @@
 <HomeRenoV2::Card
   @state={{@state}}
   @title="GALLERY"
+  @id={{@id}}
   @minimize={{fn @minimize @card}}
   @maximize={{fn @maximize @card}}
   @expand={{fn @expand @card}}
@@ -8,8 +9,8 @@
   {{#if (eq @state "MIN")}}
   {{else if (eq @state "MAX")}}
       <ul local-class={{concat "image-list " @state}}>
-          {{#each @model.images as |image|}}
-            <li>
+          {{#each @model.images as |image index|}}
+            <li  {{sprite id=(concat @id "-image-" index)}}>
                 <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
             </li>
           {{/each}}
@@ -25,6 +26,7 @@
                   card=suggestion
                   model=suggestion.model
                   state=suggestion.state
+                  id=suggestion.id
                   suggestions=suggestion.suggestions
                   canUpdateState=suggestion.canUpdateState
                   minimize=@minimize
@@ -37,8 +39,8 @@
       </ul>
   {{else if (eq @state "EXPANDED")}}
       <ul local-class={{concat "image-list " @state}}>
-          {{#each @model.images as |image|}}
-          <li>
+          {{#each @model.images as |image index|}}
+          <li  {{sprite id=(concat @id "-image-" index)}}>
               <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
           </li>
           {{/each}}

@@ -1,18 +1,20 @@
-<ul local-class="card-list">
-  {{#each this.cardList as |card|}}
-    <li local-class="card-list-item">
-      {{component
-        (concat "home-reno-v2/" card.type)
-        id=card.id
-        state=card.state
-        model=card.model
-        canUpdateState=card.canUpdateState
-        card=card
-        expand=this.expand
-        minimize=this.minimize
-        maximize=this.maximize
-        suggestions=card.suggestions
-      }}
-    </li>
-  {{/each}}
-</ul>
+<AnimationContext>
+  <ul local-class="card-list">
+    {{#each this.cardList as |card|}}
+      <li local-class="card-list-item">
+        {{component
+          (concat "home-reno-v2/" card.type)
+          id=card.id
+          state=card.state
+          model=card.model
+          canUpdateState=card.canUpdateState
+          card=card
+          expand=this.expand
+          minimize=this.minimize
+          maximize=this.maximize
+          suggestions=card.suggestions
+        }}
+      </li>
+    {{/each}}
+  </ul>
+</AnimationContext>

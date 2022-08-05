@@ -1,6 +1,7 @@
 <HomeRenoV2::Card
   @state={{@state}}
   @title="FORM"
+  @id={{@id}}
   @minimize={{fn @minimize @card}}
   @maximize={{fn @maximize @card}}
   @expand={{fn @expand @card}}
@@ -8,9 +9,9 @@
   {{#if (eq @state "MIN")}}
   {{else if (eq @state "MAX")}}
       <div>
-        <label>
+        <label  {{sprite id=(concat @id "-form-label")}}>
           Item 1
-          <input value="Entry 1">
+          <input value="Entry 1" {{sprite id=(concat @id "-form-value")}}>
         </label>
       </div>
       <ul local-class="suggestion-list">
@@ -22,6 +23,7 @@
               {{component
                 (concat "home-reno-v2/" suggestion.type)
                   card=suggestion
+                  id=suggestion.id
                   model=suggestion.model
                   state=suggestion.state
                   suggestions=suggestion.suggestions
@@ -36,7 +38,12 @@
       </ul>
   {{else if (eq @state "EXPANDED")}}
       <div>
-        Item 1: Entry 1
+        <div {{sprite id=(concat @id "-form-label")}}>
+          Item 1:
+        </div>
+        <div {{sprite id=(concat @id "-form-value")}}>
+          Entry 1
+        </div>
       </div>
   {{/if}}
 </HomeRenoV2::Card>

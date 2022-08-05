@@ -1,6 +1,7 @@
 <HomeRenoV2::Card
   @state={{@state}}
   @title="OUTLINE"
+  @id={{@id}}
   @minimize={{fn @minimize @card}}
   @maximize={{fn @maximize @card}}
   @expand={{fn @expand @card}}
@@ -52,6 +53,7 @@
                   card=suggestion
                   model=suggestion.model
                   state=suggestion.state
+                  id=suggestion.id
                   suggestions=suggestion.suggestions
                   canUpdateState=suggestion.canUpdateState
                   minimize=@minimize

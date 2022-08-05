@@ -1,33 +1,35 @@
 <HomeRenoV2::Card
   @state={{@state}}
   @title="TOC"
+  @id={{@id}}
   @minimize={{null}}
   @maximize={{fn @maximize @card}}
   @expand={{fn @expand @card}}
 >
   {{#if (eq @state "MIN")}}
   {{else if (eq @state "MAX")}}
-      <ul local-class="suggestion-list">
-        {{#each @suggestions as |suggestion|}}
-          <li>
-            {{#unless (eq suggestion.state "MAX")}}
-              {{component
-                (concat "home-reno-v2/" suggestion.type)
-                  card=suggestion
-                  model=suggestion.model
-                  state=suggestion.state
-                  suggestions=suggestion.suggestions
-                  canUpdateState=suggestion.canUpdateState
-                  minimize=@minimize
-                  maximize=@maximize
-                  expand=@expand
-              }}
-            {{else}}
-              <HomeRenoV2::Placeholder/>
-            {{/unless}}
-          </li>
-        {{/each}}
-      </ul>
+    <ul local-class="suggestion-list">
+      {{#each @suggestions as |suggestion|}}
+        <li>
+          {{#unless (eq suggestion.state "MAX")}}
+            {{component
+              (concat "home-reno-v2/" suggestion.type)
+                card=suggestion
+                model=suggestion.model
+                state=suggestion.state
+                id=suggestion.id
+                suggestions=suggestion.suggestions
+                canUpdateState=suggestion.canUpdateState
+                minimize=@minimize
+                maximize=@maximize
+                expand=@expand
+            }}
+          {{else}}
+            <HomeRenoV2::Placeholder/>
+          {{/unless}}
+        </li>
+      {{/each}}
+    </ul>
   {{else if (eq @state "EXPANDED")}}
   {{/if}}
 </HomeRenoV2::Card>
