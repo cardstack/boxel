@@ -12,8 +12,12 @@
 }
 
 .image-list.MAX {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.image-list > * img {
+  max-width: 120px;
 }
 

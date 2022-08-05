@@ -3,6 +3,7 @@
   max-width: 300px;
   padding: var(--card-padding, 6px);
   border-radius: var(--card-border-radius);
+  overflow: hidden;
 }
 
 .header {
@@ -47,5 +48,5 @@
 
 .scrollable {
   overflow-y: auto;
-  max-height: 100%;
+  max-height: 90%;
 }
