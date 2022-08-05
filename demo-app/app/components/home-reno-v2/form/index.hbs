@@ -9,9 +9,9 @@
   {{#if (eq @state "MIN")}}
   {{else if (eq @state "MAX")}}
       <div>
-        <label  {{sprite id=(concat @id "-form-label")}}>
+        <label  {{sprite id=(concat @id "-form-label") role="form-label"}}>
           Item 1
-          <input value="Entry 1" {{sprite id=(concat @id "-form-value")}}>
+          <input value="Entry 1" {{sprite id=(concat @id "-form-value") role="form-value"}}>
         </label>
       </div>
       <ul local-class="suggestion-list">
@@ -38,10 +38,10 @@
       </ul>
   {{else if (eq @state "EXPANDED")}}
       <div>
-        <div {{sprite id=(concat @id "-form-label")}}>
+        <div {{sprite id=(concat @id "-form-label") role="form-label"}}>
           Item 1:
         </div>
-        <div {{sprite id=(concat @id "-form-value")}}>
+        <div {{sprite id=(concat @id "-form-value") role="form-value"}}>
           Entry 1
         </div>
       </div>
