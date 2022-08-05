@@ -8,7 +8,7 @@
   {{#if (eq @state "MIN")}}
   {{else if (eq @state "MAX")}}
       <ul local-class={{concat "image-list " @state}}>
-          {{#each @card.model.images as |image|}}
+          {{#each @model.images as |image|}}
             <li>
                 <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
             </li>
@@ -37,7 +37,7 @@
       </ul>
   {{else if (eq @state "EXPANDED")}}
       <ul local-class={{concat "image-list " @state}}>
-          {{#each @card.model.images as |image|}}
+          {{#each @model.images as |image|}}
           <li>
               <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
           </li>
