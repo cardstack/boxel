@@ -529,15 +529,19 @@ export class Realm {
       relationships: {},
     };
 
+    let dir = this.#paths.local(url);
     // the entries are sorted such that the parent directory always
     // appears before the children
-    entries.sort((a, b) => a.kind.localeCompare(b.kind));
+    entries.sort((a, b) =>
+      `/${join(dir, a.name)}`.localeCompare(`/${join(dir, b.name)}`)
+    );
     for (let entry of entries) {
       let relationship: DirectoryEntryRelationship = {
         links: {
           related:
-            new URL(entry.name, url).href +
-            (entry.kind === "directory" ? "/" : ""),
+            entry.kind === "directory"
+              ? this.#paths.directoryURL(join(dir, entry.name)).href
+              : this.#paths.fileURL(join(dir, entry.name)).href,
         },
         meta: {
           kind: entry.kind as "directory" | "file",

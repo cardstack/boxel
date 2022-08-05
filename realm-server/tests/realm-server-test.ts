@@ -256,7 +256,7 @@ module("Realm Server", function (hooks) {
 
   test("serves a directory GET request", async function (assert) {
     let response = await request
-      .get("/")
+      .get("/dir/")
       .set("Accept", "application/vnd.api+json");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
@@ -265,55 +265,31 @@ module("Realm Server", function (hooks) {
       json,
       {
         data: {
-          id: testRealmHref,
+          id: `${testRealmHref}dir/`,
           type: "directory",
           relationships: {
+            "bar.txt": {
+              links: {
+                related: `${testRealmHref}dir/bar.txt`,
+              },
+              meta: {
+                kind: "file",
+              },
+            },
+            "foo.txt": {
+              links: {
+                related: `${testRealmHref}dir/foo.txt`,
+              },
+              meta: {
+                kind: "file",
+              },
+            },
             "subdir/": {
               links: {
-                related: `${testRealmHref}subdir/`,
+                related: `${testRealmHref}dir/subdir/`,
               },
               meta: {
                 kind: "directory",
-              },
-            },
-            "person.gts": {
-              links: {
-                related: `${testRealmHref}person.gts`,
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "cycle-one.js": {
-              links: {
-                related: "http://127.0.0.1:4444/cycle-one.js",
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "cycle-two.js": {
-              links: {
-                related: "http://127.0.0.1:4444/cycle-two.js",
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "person-1.json": {
-              links: {
-                related: `${testRealmHref}person-1.json`,
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "person-2.json": {
-              links: {
-                related: `${testRealmHref}person-2.json`,
-              },
-              meta: {
-                kind: "file",
               },
             },
           },
