@@ -4,8 +4,16 @@
   gap: 4px;
 }
 
-.image-list {
+.image-list.EXPANDED {
+  display: grid;
+  grid-template-columns: 100px 100px;
+  grid-template-rows: 60px;
+  gap: 6px;
+}
+
+.image-list.MAX {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 80px;
 }
+

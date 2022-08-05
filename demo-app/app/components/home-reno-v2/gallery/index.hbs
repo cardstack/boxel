@@ -6,17 +6,16 @@
 >
   {{#if (eq @state "MIN")}}
       Gallery
-      <div>{{@id}}</div>
   {{else if (eq @state "MAX")}}
       Gallery
+      <ul local-class={{concat "image-list " @state}}>
+          {{#each @card.model.images as |image|}}
+            <li>
+                <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
+            </li>
+          {{/each}}
+      </ul>
       <ul local-class="suggestion-list">
-        <ul local-class="image-list">
-            {{#each @card.model.images as |image|}}
-              <li>
-                  <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
-              </li>
-            {{/each}}
-        </ul>
         {{#each @suggestions as |suggestion|}}
           <li>
             {{#if (eq suggestion.state "MAX")}}
@@ -38,7 +37,7 @@
         {{/each}}
       </ul>
   {{else if (eq @state "EXPANDED")}}
-      <ul local-class="image-list">
+      <ul local-class={{concat "image-list " @state}}>
           {{#each @card.model.images as |image|}}
           <li>
               <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
