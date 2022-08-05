@@ -17,7 +17,13 @@
   align-items: center;
 }
 
+/* Note: Loading delays will cause these images to move weirdly, so we have to force a size. */
 .image-list > * img {
-  max-width: 120px;
+  width: 100px;
+  height: 60px;
+  object-fit: cover;
 }
 
+.image-list > * {
+  border: 1px solid black;
+}
