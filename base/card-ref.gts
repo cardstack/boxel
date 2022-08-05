@@ -3,7 +3,7 @@ import { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { render } from "./render-card";
-import { Loader } from "@cardstack/runtime-common/loader";
+import { Loader } from "@cardstack/runtime-common";
 // import { taskFor } from 'ember-concurrency-ts';
 
 export interface ExportedCardRef {
@@ -36,8 +36,7 @@ class BaseView extends Component<typeof CardRefCard> {
     if (!this.args.model) {
       return;
     }
-    let loader: Loader = yield Loader.forModule(import.meta.url);
-    let module: Record<string, any> = yield loader.load(this.args.model.module);
+    let module: Record<string, any> = yield Loader.getLoader().load(this.args.model.module);
     let Clazz: typeof Card = module[this.args.model.name];
     this.card = Clazz.fromSerialized({...(Clazz as any).demo ?? {}});
   }

@@ -2,9 +2,8 @@
 import TransformModulesAmd from "@babel/plugin-transform-modules-amd";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
-import { Realm } from "./realm";
 import { RealmPaths } from "./paths";
-import { baseRealm } from "@cardstack/runtime-common";
+import { isNode } from "./index";
 
 type RegisteredModule = {
   state: "registered";
@@ -44,55 +43,40 @@ type Module =
       exception: any;
     };
 
+type FileLoader = (url: URL) => Promise<string>;
 export class Loader {
   private modules = new Map<string, Module>();
-  private realmPath: RealmPaths | undefined;
-  private baseRealmURL: string;
-  private realm: Realm | undefined;
+  private fileLoaders = new Map<string, FileLoader>();
 
-  constructor(baseRealmURL: string); // this is how realm clients can get a Loader
-  constructor(realm: Realm, readFileAsText?: (url: URL) => Promise<string>); // this is how servers can get a Loader
-  constructor(
-    realmOrBaseRealmURL: Realm | string,
-    private readFileAsText?: (url: URL) => Promise<string>
-  ) {
-    if (typeof realmOrBaseRealmURL === "string") {
-      this.baseRealmURL = realmOrBaseRealmURL;
-    } else {
-      this.realm = realmOrBaseRealmURL;
-      this.baseRealmURL = realmOrBaseRealmURL.baseRealmURL;
-      this.realmPath = new RealmPaths(this.realm.url);
-    }
+  private constructor(fileLoaders: Map<string, FileLoader> = new Map()) {
+    this.fileLoaders = new Map(...[fileLoaders]);
   }
 
-  static async forModule(moduleURL: string): Promise<Loader> {
-    let realm = Realm.forModule(moduleURL);
-    if (realm) {
-      return realm.loader;
-    }
+  static #instance: Loader | undefined;
 
-    let response = await fetch(`${moduleURL}/_realmInfo`, {
-      headers: {
-        Accept: "application/vnd.api+json",
-      },
-    });
-    if (!response.ok) {
-      throw new Error(
-        `could not fetch ${moduleURL}/_realmInfo: ${
-          response.status
-        } - ${await response.text()}`
-      );
+  // TODO at some point we'll probably wanna add custom resolvers
+  static getLoader(fileLoaders?: Map<string, FileLoader>) {
+    if (!Loader.#instance) {
+      Loader.#instance = new Loader(fileLoaders);
+    } else if (fileLoaders) {
+      Loader.#instance.addFileLoaders(fileLoaders);
     }
-    let {
-      data: {
-        attributes: { baseRealm },
-      },
-    } = await response.json();
-    return new Loader(baseRealm);
+    return Loader.#instance;
+  }
+
+  addFileLoaders(fileLoaders: Map<string, FileLoader>) {
+    this.fileLoaders = new Map(...[this.fileLoaders], ...[fileLoaders]);
   }
 
   async load<T extends object>(moduleIdentifier: string): Promise<T> {
     moduleIdentifier = this.resolveModule(moduleIdentifier);
+    if (
+      globalThis.window && // make sure we are not in a service worker
+      !isNode // make sure we are not in node
+    ) {
+      return await import(/* webpackIgnore: true */ moduleIdentifier);
+    }
+
     let module = await this.fetchModule(moduleIdentifier);
     switch (module.state) {
       case "fetching":
@@ -123,10 +107,6 @@ export class Loader {
       throw new Error(
         `expected module identifier to be a URL: "${moduleIdentifier}"`
       );
-    }
-    let moduleURL = new URL(moduleIdentifier);
-    if (baseRealm.inRealm(moduleURL)) {
-      return this.baseRealmURL + baseRealm.local(moduleURL);
     }
     return moduleIdentifier;
   }
@@ -262,12 +242,11 @@ export class Loader {
   }
 
   private async fetch(moduleURL: URL): Promise<string> {
-    if (
-      this.readFileAsText &&
-      this.realmPath &&
-      this.realmPath.inRealm(moduleURL)
-    ) {
-      return await this.readFileAsText(moduleURL);
+    for (let [realmURL, fileLoader] of this.fileLoaders) {
+      let realmPath = new RealmPaths(realmURL);
+      if (realmPath.inRealm(moduleURL)) {
+        return await fileLoader(moduleURL);
+      }
     }
 
     let response: Response;

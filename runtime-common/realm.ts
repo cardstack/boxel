@@ -21,6 +21,7 @@ import {
   DirectoryEntryRelationship,
   executableExtensions,
   baseRealm,
+  isNode,
 } from "./index";
 import merge from "lodash/merge";
 import { parse, stringify } from "qs";
@@ -42,10 +43,6 @@ import typescriptPlugin from "@babel/plugin-transform-typescript";
 import { Router } from "./router";
 import type { Readable } from "stream";
 import { parseQueryString } from "./query";
-
-// From https://github.com/iliakan/detect-node
-const isNode =
-  Object.prototype.toString.call(globalThis.process) === "[object process]";
 
 export interface FileRef {
   path: LocalPath;
@@ -85,23 +82,11 @@ export class Realm {
     return this.#paths.url;
   }
 
-  static #realms = new Map<string, Realm>();
-  static forModule(url: string): Realm | undefined {
-    for (let [realmURL, realm] of Realm.#realms) {
-      let realmPath = new RealmPaths(realmURL);
-      if (realmPath.inRealm(new URL(url))) {
-        return realm;
-      }
-    }
-    return undefined;
-  }
-
   constructor(
     url: string,
     adapter: RealmAdapter,
     readonly baseRealmURL = baseRealm.url
   ) {
-    Realm.#realms.set(url, this);
     this.#paths = new RealmPaths(url);
     this.#startedUp.fulfill((() => this.#startup())());
     this.#adapter = adapter;
@@ -111,9 +96,19 @@ export class Realm {
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this)
     );
-    this.loader = new Loader(this, async (url: URL) => {
-      return this.transpileJS((await this.getCardSourceAsText(url))!, url.href);
-    });
+    this.loader = Loader.getLoader(
+      new Map([
+        [
+          this.url,
+          async (url: URL) => {
+            return this.transpileJS(
+              (await this.getCardSourceAsText(url))!,
+              url.href
+            );
+          },
+        ],
+      ])
+    );
 
     this.#jsonAPIRouter = new Router(new URL(url))
       .post("/", this.createCard.bind(this))
@@ -122,7 +117,7 @@ export class Realm {
       // TODO lets move typeOf and cardsOf to be a path you add to the end of a route like realmInfo
       .get("/_typeOf", this.getTypeOf.bind(this))
       .get("/_cardsOf", this.getCardsOf.bind(this))
-      .get("/.+/_realmInfo", this.getRealmInfo.bind(this))
+      .get("/.*_realmInfo", this.getRealmInfo.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
       .delete("/.+(?<!.json)", this.removeCard.bind(this));

@@ -9,14 +9,19 @@ import {
   cardSrc,
   compiledCard,
 } from "@cardstack/runtime-common/etc/test-fixtures";
-import { CardRef, isCardDocument, Realm } from "@cardstack/runtime-common";
+import {
+  CardRef,
+  isCardDocument,
+  Realm,
+  Loader,
+} from "@cardstack/runtime-common";
 import { stringify } from "qs";
 import { NodeRealm } from "../node-realm";
 
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
 const testRealmHref = testRealmURL.href;
-const testRealm2Href = "http://localhost:4201/node-test/";
+const testRealm2Href = "http://localhost:4202/node-test/";
 
 module("Realm Server", function (hooks) {
   let server: Server;
@@ -426,15 +431,7 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically load a card from a different realm", async function (assert) {
-    let nodeRealm = new NodeRealm(dir.name);
-    let realm = new Realm(
-      "http://test-realm/",
-      nodeRealm,
-      "http://localhost:4201/base/"
-    );
-    await realm.ready;
-
-    let module = await realm.loader.load<Record<string, any>>(
+    let module = await Loader.getLoader().load<Record<string, any>>(
       `${testRealm2Href}person`
     );
     let Person = module["Person"];
@@ -443,17 +440,19 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically modules with cycles", async function (assert) {
-    let nodeRealm = new NodeRealm(dir.name);
-    let realm = new Realm(
-      "http://test-realm/",
-      nodeRealm,
-      "http://localhost:4201/base/"
-    );
-    await realm.ready;
-
-    let module = await realm.loader.load<{ three(): number }>(
+    let module = await Loader.getLoader().load<{ three(): number }>(
       `${testRealm2Href}cycle-two`
     );
     assert.strictEqual(module.three(), 3);
+  });
+
+  test("can instantiate a card that uses a card-ref field", async function (assert) {
+    let module = await Loader.getLoader().load<Record<string, any>>(
+      `${testRealm2Href}card-ref-test`
+    );
+    let TestCard = module["TestCard"];
+    let ref = { module: `${testRealm2Href}person`, name: "Person " };
+    let testCard = TestCard.fromSerialized({ ref });
+    assert.deepEqual(testCard.ref, ref, "card data is correct");
   });
 });
