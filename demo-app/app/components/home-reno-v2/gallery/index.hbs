@@ -1,13 +1,12 @@
 <HomeRenoV2::Card
   @state={{@state}}
+  @title="GALLERY"
   @minimize={{fn @minimize @card}}
   @maximize={{fn @maximize @card}}
   @expand={{fn @expand @card}}
 >
   {{#if (eq @state "MIN")}}
-      Gallery
   {{else if (eq @state "MAX")}}
-      Gallery
       <ul local-class={{concat "image-list " @state}}>
           {{#each @card.model.images as |image|}}
             <li>

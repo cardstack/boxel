@@ -1,13 +1,12 @@
 <HomeRenoV2::Card
   @state={{@state}}
+  @title="TOC"
   @minimize={{null}}
   @maximize={{fn @maximize @card}}
   @expand={{fn @expand @card}}
 >
   {{#if (eq @state "MIN")}}
-    TOC
   {{else if (eq @state "MAX")}}
-    TOC
       <ul local-class="suggestion-list">
         {{#each @suggestions as |suggestion|}}
           <li>
@@ -30,6 +29,5 @@
         {{/each}}
       </ul>
   {{else if (eq @state "EXPANDED")}}
-      TOC
   {{/if}}
 </HomeRenoV2::Card>

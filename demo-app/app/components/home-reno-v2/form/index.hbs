@@ -1,13 +1,12 @@
 <HomeRenoV2::Card
   @state={{@state}}
+  @title="FORM"
   @minimize={{fn @minimize @card}}
   @maximize={{fn @maximize @card}}
   @expand={{fn @expand @card}}
 >
   {{#if (eq @state "MIN")}}
-      Form
   {{else if (eq @state "MAX")}}
-      Form
       <div>
         <label>
           Item 1
@@ -36,7 +35,6 @@
         {{/each}}
       </ul>
   {{else if (eq @state "EXPANDED")}}
-      Form
       <div>
         Item 1: Entry 1
       </div>

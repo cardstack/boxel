@@ -13,6 +13,9 @@
       </button>
     {{/if}}
   {{/if}}
+  <h1 local-class="title">
+    {{@title}}
+  </h1>
   {{#if (eq @state "EXPANDED")}}
     {{#if @maximize}}
       <button type="button" local-class="maximize-button" {{on "click" @maximize}}>

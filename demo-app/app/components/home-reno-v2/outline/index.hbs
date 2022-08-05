@@ -1,11 +1,11 @@
 <HomeRenoV2::Card
   @state={{@state}}
+  @title="OUTLINE"
   @minimize={{fn @minimize @card}}
   @maximize={{fn @maximize @card}}
   @expand={{fn @expand @card}}
 >
   {{#if (eq @state "MIN")}}
-      Outline
   {{else if (eq @state "MAX")}}
       <ul local-class="list">
         <li>
@@ -63,7 +63,6 @@
         {{/each}}
       </ul>
   {{else if (eq @state "EXPANDED")}}
-      Outline
       <div>
         A list of duck-related questions
       </div>
