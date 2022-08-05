@@ -11,6 +11,7 @@
       <div>{{@id}}</div>
       <ul local-class="suggestion-list">
         {{#each @suggestions as |suggestion|}}
+          <li>
             {{#unless (eq suggestion.state "MAX")}}
               {{component
                 (concat "home-reno-v2/" suggestion.type)
@@ -26,6 +27,7 @@
             {{else}}
               <HomeRenoV2::Placeholder/>
             {{/unless}}
+          </li>
         {{/each}}
       </ul>
   {{else if (eq @state "EXPANDED")}}
