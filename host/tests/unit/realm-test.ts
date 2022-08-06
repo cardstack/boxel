@@ -354,6 +354,12 @@ module('Unit | realm', function () {
       'Abdel-Rahman',
       'field value is correct'
     );
+
+    let cards = await searchIndex.search({
+      filter: { eq: { firstName: 'Van Gogh' } },
+    });
+
+    assert.strictEqual(cards.length, 1, 'search finds updated value');
   });
 
   test('realm can serve delete card requests', async function (assert) {
@@ -549,6 +555,64 @@ module('Unit | realm', function () {
       let responseText = await response.text();
       assert.strictEqual(responseText, cardSrc, 'the card source is correct');
     }
+  });
+
+  test('realm can serve card source delete request', async function (assert) {
+    let realm = TestRealm.create({
+      'person.gts': `
+        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+        import StringCard from 'https://cardstack.com/base/string';
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+        }
+      `,
+    });
+    await realm.ready;
+
+    let searchIndex = realm.searchIndex;
+    let card = await searchIndex.typeOf({
+      type: 'exportedCard',
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    assert.ok(card, 'found card in index');
+
+    let response = await realm.handle(
+      new Request(`${testRealmURL}person`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 302, 'file exists');
+
+    response = await realm.handle(
+      new Request(`${testRealmURL}person`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 204, 'file is deleted');
+
+    card = await searchIndex.typeOf({
+      type: 'exportedCard',
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    assert.strictEqual(card, undefined, 'card is deleted from index');
+
+    response = await realm.handle(
+      new Request(`${testRealmURL}person`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 404, 'file no longer exists');
   });
 
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {

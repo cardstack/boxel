@@ -70,8 +70,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-yarn-
       - run: yarn --prefer-offline
-      - name: Base realm server
-        run: yarn start:base &
+      - name: Start realm servers
+        run: yarn start:test-realms &
         working-directory: realm-server
       - name: realm server test suite
         run: yarn test

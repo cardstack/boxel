@@ -5,7 +5,12 @@ import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
 import { stringify } from "qs";
-import { Query, Filter, assertQuery } from "./query";
+import { Query, Filter } from "./query";
+
+export type ExportedCardRef = {
+  module: string;
+  name: string;
+};
 
 export type CardRef =
   | {
@@ -185,8 +190,13 @@ class URLMap<T> {
   }
 }
 
+interface SearchEntry {
+  resource: CardResource;
+  searchData: Record<string, any>;
+}
+
 export class SearchIndex {
-  private instances = new URLMap<CardResource>();
+  private instances = new URLMap<SearchEntry>();
   private modules = new URLMap<ModuleSyntax>();
   private definitions = new Map<string, CardDefinition>();
   private exportedCardRefs = new Map<string, CardRef[]>();
@@ -257,16 +267,30 @@ export class SearchIndex {
         } else {
           json.data.id = instanceURL.href;
           json.data.meta.lastModified = lastModified;
-          this.instances.set(instanceURL, json.data);
+          this.instances.set(instanceURL, {
+            resource: json.data,
+            searchData: json.data.attributes
+              ? flatten(json.data.attributes)
+              : {},
+          });
         }
       }
     } else if (
       hasExecutableExtension(url.href) &&
       url.href !== `${baseRealm.url}card-api.gts` // the base card's module is not analyzable
     ) {
-      let mod = new ModuleSyntax(content);
-      this.modules.set(url, mod);
-      this.modules.set(trimExecutableExtension(url), mod);
+      if (opts?.delete) {
+        if (this.modules.get(url)) {
+          this.modules.remove(url);
+        }
+        if (this.modules.get(trimExecutableExtension(url))) {
+          this.modules.remove(trimExecutableExtension(url));
+        }
+      } else {
+        let mod = new ModuleSyntax(content);
+        this.modules.set(url, mod);
+        this.modules.set(trimExecutableExtension(url), mod);
+      }
     }
   }
 
@@ -476,19 +500,19 @@ export class SearchIndex {
     return url.href.startsWith(this.realm.url);
   }
 
-  // TODO: complete these types
   async search(query: Query): Promise<CardResource[]> {
-    assertQuery(query);
+    let matcher = this.buildMatcher(query.filter, {
+      module: `${baseRealm.url}card-api`,
+      name: "Card",
+    });
 
-    if (!query || Object.keys(query).length === 0) {
-      return [...this.instances.values()];
+    let results: SearchEntry[] = [];
+    for (let entry of [...this.instances.values()]) {
+      if (await matcher(entry)) {
+        results.push(entry);
+      }
     }
-
-    if (query.filter) {
-      return filterCardData(query.filter, [...this.instances.values()]);
-    }
-
-    throw new Error("Not implemented");
+    return results.map((entry) => entry.resource);
   }
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
@@ -501,7 +525,98 @@ export class SearchIndex {
   }
 
   async card(url: URL): Promise<CardResource | undefined> {
-    return this.instances.get(url);
+    return this.instances.get(url)?.resource;
+  }
+
+  async cardHasType(
+    ref: CardRef,
+    type: ExportedCardRef
+  ): Promise<boolean | null> {
+    // only checks for exported cards
+    if (ref.type !== "exportedCard") {
+      return false;
+    }
+
+    if (
+      ref.name === type.name &&
+      trimExecutableExtension(new URL(ref.module, this.realm.url)).href ===
+        trimExecutableExtension(new URL(type.module, this.realm.url)).href
+    ) {
+      return true;
+    }
+
+    let def = await this.typeOf(ref);
+    if (!def) {
+      return null;
+    }
+    if (def.super) {
+      return await this.cardHasType(def.super, type);
+    }
+    return false;
+  }
+
+  // Matchers are three-valued (true, false, null) because a query that talks
+  // about a field that is not even present on a given card results in `null` to
+  // distinguish it from a field that is present but not matching the filter
+  // (`false`)
+  buildMatcher(
+    filter: Filter | undefined,
+    onRef: ExportedCardRef
+  ): (entry: SearchEntry) => Promise<boolean | null> {
+    if (!filter) {
+      return async (_entry) => true;
+    }
+
+    if ("type" in filter) {
+      return async (entry) =>
+        await this.cardHasType(
+          { type: "exportedCard", ...entry.resource.meta.adoptsFrom },
+          filter.type
+        );
+    }
+
+    let on = filter?.on ?? onRef;
+
+    if ("any" in filter) {
+      let matchers = filter.any.map((f) => this.buildMatcher(f, on));
+      return (entry) => some(matchers, (m) => m(entry));
+    }
+
+    if ("every" in filter) {
+      let matchers = filter.every.map((f) => this.buildMatcher(f, on));
+      return (entry) => every(matchers, (m) => m(entry));
+    }
+
+    if ("not" in filter) {
+      let matcher = this.buildMatcher(filter.not, on);
+      return async (entry) => {
+        let inner = await matcher(entry);
+        if (inner == null) {
+          // irrelevant cards stay irrelevant, even when the query is inverted
+          return null;
+        } else {
+          return !inner;
+        }
+      };
+    }
+
+    if ("eq" in filter) {
+      return (entry) =>
+        every(Object.entries(filter.eq), async ([fieldPath, value]) => {
+          if (
+            await this.cardHasType(
+              { type: "exportedCard", ...entry.resource.meta.adoptsFrom },
+              on
+            )
+          ) {
+            return entry.searchData![fieldPath] === value;
+          } else {
+            return null;
+          }
+        });
+    }
+
+    throw new Error("Unknown filter");
   }
 
   public isIgnored(url: URL): boolean {
@@ -535,7 +650,7 @@ export class SearchIndex {
       // so that we now how to ask for it's cards' definitions
       throw new Error(`not implemented`);
     }
-    let url = `${this.realm.baseRealmURL}_typeOf?${stringify(ref)}`;
+    let url = this.realm.baseRealmURL + "_typeOf?" + stringify(ref);
     let response = await fetch(url, {
       headers: {
         Accept: "application/vnd.api+json",
@@ -588,54 +703,53 @@ function getFieldType(
   return undefined;
 }
 
-function filterCardData(
-  filter: Filter,
-  results: CardResource[],
-  opts?: { negate?: true }
-): CardResource[] {
-  if (!("not" in filter) && !("eq" in filter)) {
-    throw new Error("Not implemented");
+function flatten(obj: Record<string, any>): Record<string, any> {
+  let result: Record<string, any> = {};
+  for (let [key, value] of Object.entries(obj)) {
+    if (typeof value === "object") {
+      let res = flatten(value);
+      for (let [k, val] of Object.entries(res)) {
+        result[`${key}.${k}`] = val;
+      }
+    } else {
+      result[key] = value;
+    }
   }
-
-  if ("not" in filter) {
-    results = filterCardData(filter.not, results, { negate: true });
-  }
-
-  if ("eq" in filter) {
-    results = filterByFieldData(filter.eq, results, opts);
-  }
-
-  return results;
+  return result;
 }
 
-function filterByFieldData(
-  query: Record<string, any>,
-  instances: CardResource[],
-  opts?: { negate?: true }
-): CardResource[] {
-  let results = instances as Record<string, any>[];
-
-  for (let [key, value] of Object.entries(query)) {
-    results = results.filter((c) => {
-      let fields = key.split(".");
-      if (fields.length > 1) {
-        let compValue = c;
-        while (fields.length > 0 && compValue) {
-          let field = fields.shift();
-          compValue = compValue?.[field!];
-        }
-        if (opts?.negate) {
-          return compValue !== value;
-        }
-        return compValue === value;
-      } else {
-        if (opts?.negate) {
-          return c[key] !== value;
-        }
-        return c[key] === value;
-      }
-    });
+// three-valued version of Array.every that propagates nulls. Here, the presence
+// of any nulls causes the whole thing to be null.
+async function every<T>(
+  list: T[],
+  predicate: (t: T) => Promise<boolean | null>
+): Promise<boolean | null> {
+  let result = true;
+  for (let element of list) {
+    let status = await predicate(element);
+    if (status == null) {
+      return null;
+    }
+    result = result && status;
   }
+  return result;
+}
 
-  return results as CardResource[];
+// three-valued version of Array.some that propagates nulls. Here, the whole
+// expression becomes null only if the whole input is null.
+async function some<T>(
+  list: T[],
+  predicate: (t: T) => Promise<boolean | null>
+): Promise<boolean | null> {
+  let result = null;
+  for (let element of list) {
+    let status = await predicate(element);
+    if (status === true) {
+      return true;
+    }
+    if (status === false) {
+      result = false;
+    }
+  }
+  return result;
 }
