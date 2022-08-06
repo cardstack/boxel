@@ -1,5 +1,5 @@
 {
-  "name": "ember-concurrency-async",
+  "name": "ember-concurrency-async-plugin",
   "version": "1.0.2",
   "description": "Async task functions for ember-concurrency",
   "repository": "https://github.com/chancancode/ember-concurrency-async",
