@@ -10,7 +10,8 @@
     "cards",
     "base",
     "runtime-common",
-    "vendor/ember-template-imports"
+    "vendor/ember-template-imports",
+    "vendor/ember-concurrency-async"
   ],
   "private": true,
   "volta": {

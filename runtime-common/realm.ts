@@ -40,6 +40,8 @@ import decoratorsProposalPlugin from "@babel/plugin-proposal-decorators";
 import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properties";
 //@ts-ignore ironically no types are available
 import typescriptPlugin from "@babel/plugin-transform-typescript";
+//@ts-ignore ironically no types are available
+import emberConcurrencyAsyncPlugin from "ember-concurrency-async";
 import { Router } from "./router";
 import type { Readable } from "stream";
 import { parseQueryString } from "./query";
@@ -286,6 +288,7 @@ export class Realm {
       filename: debugFilename,
       plugins: [
         glimmerTemplatePlugin,
+        emberConcurrencyAsyncPlugin,
         [typescriptPlugin, { allowDeclareFields: true }],
         [decoratorsProposalPlugin, { legacy: true }],
         classPropertiesProposalPlugin,
