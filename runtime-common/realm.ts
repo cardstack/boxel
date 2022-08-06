@@ -41,7 +41,7 @@ import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properti
 //@ts-ignore ironically no types are available
 import typescriptPlugin from "@babel/plugin-transform-typescript";
 //@ts-ignore ironically no types are available
-import emberConcurrencyAsyncPlugin from "ember-concurrency-async";
+import emberConcurrencyAsyncPlugin from "ember-concurrency-async-plugin";
 import { Router } from "./router";
 import type { Readable } from "stream";
 import { parseQueryString } from "./query";

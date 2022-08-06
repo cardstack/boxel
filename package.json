@@ -11,7 +11,7 @@
     "base",
     "runtime-common",
     "vendor/ember-template-imports",
-    "vendor/ember-concurrency-async"
+    "vendor/ember-concurrency-async-plugin"
   ],
   "private": true,
   "volta": {

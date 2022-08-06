@@ -3,6 +3,7 @@ import { restartableTask } from "ember-concurrency";
 import { tracked } from "@glimmer/tracking";
 import { ComponentLike } from "@glint/template";
 import { Format, Card, prepareToRender } from "./card-api";
+import { taskFor } from "ember-concurrency-ts";
 
 interface Args {
   // note that we are using a Card instance as the arg and not card data so that
@@ -18,13 +19,12 @@ export class RenderedCard extends Resource<Args> {
     super(owner, args);
     let { card, format } = args.named;
     if (card) {
-      (this.load as any).perform(card, format); // ember-concurrency-ts is not cooperating
+      taskFor(this.load).perform(card, format);
     }
   }
 
-  @restartableTask private *load(card: Card, format: Format) {
-    let { component }: { component: ComponentLike<{ Args: {}; Blocks: {} }> } =
-      yield prepareToRender(card, format);
+  @restartableTask private async load(card: Card, format: Format) {
+    let { component } = await prepareToRender(card, format);
     this.component = component;
   }
 }

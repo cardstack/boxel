@@ -5,11 +5,8 @@ import { task } from 'ember-concurrency';
 import { render } from "./render-card";
 import { Loader } from "@cardstack/runtime-common";
 import type { ExportedCardRef } from "@cardstack/runtime-common";
-// import { taskFor } from 'ember-concurrency-ts';
+import { taskFor } from 'ember-concurrency-ts';
 
-
-// TODO Having difficulty using ember-concurrency-ts here (weird generator
-// errors at runtime). Probably need to work with Ed to help resolve this.
 class BaseView extends Component<typeof CardRefCard> {
   <template>
     <div data-test-ref>
@@ -26,14 +23,14 @@ class BaseView extends Component<typeof CardRefCard> {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    (this.loadCard as any).perform(); // having difficulty with ember-concurrency-ts
+    taskFor(this.loadCard).perform();
   }
 
-  @task private *loadCard(this: BaseView) {
+  @task private async loadCard(this: BaseView) {
     if (!this.args.model) {
       return;
     }
-    let module: Record<string, any> = yield Loader.getLoader().load(this.args.model.module);
+    let module: Record<string, any> = await Loader.getLoader().load(this.args.model.module);
     let Clazz: typeof Card = module[this.args.model.name];
     this.card = Clazz.fromSerialized({...(Clazz as any).demo ?? {}});
   }
