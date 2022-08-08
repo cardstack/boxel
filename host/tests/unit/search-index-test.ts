@@ -798,8 +798,42 @@ posts/ignore-me.gts
     });
 
     skip(`can filter on a card's own fields using gt`);
-    skip(`gives a good error when query refers to missing card`);
-    skip(`gives a good error when query refers to missing field`);
+
+    test(`gives a good error when query refers to missing card`, async function (assert) {
+      try {
+        await indexer.search({
+          filter: {
+            on: { module: `${paths.url}nonexistent`, name: 'nonexistent' },
+            eq: { nonExistentField: 'hello' },
+          },
+        });
+        throw new Error('failed to throw expected exception');
+      } catch (err: any) {
+        assert.strictEqual(
+          err.message,
+          `Your filter refers to nonexistent card ${paths.url}nonexistent`
+        );
+        assert.strictEqual(err.status, 400);
+      }
+    });
+
+    test(`gives a good error when query refers to missing field`, async function (assert) {
+      try {
+        await indexer.search({
+          filter: {
+            on: { module: `${paths.url}cards`, name: 'Post' },
+            eq: { 'author.nonExistentField': 'hello' },
+          },
+        });
+        throw new Error('failed to throw expected exception');
+      } catch (err: any) {
+        assert.strictEqual(
+          err.message,
+          `Your filter refers to nonexistent field "nonExistentField" in card ${paths.url}cards/Post`
+        );
+        assert.strictEqual(err.status, 400);
+      }
+    });
 
     test(`can filter on a nested field using 'eq'`, async function (assert) {
       let matching = await indexer.search({
