@@ -527,7 +527,7 @@ export class Realm {
       relationships: {},
     };
 
-    let dir = this.#paths.local(url);
+    let dir = this.paths.local(url);
     // the entries are sorted such that the parent directory always
     // appears before the children
     entries.sort((a, b) =>
@@ -538,8 +538,8 @@ export class Realm {
         links: {
           related:
             entry.kind === "directory"
-              ? this.#paths.directoryURL(join(dir, entry.name)).href
-              : this.#paths.fileURL(join(dir, entry.name)).href,
+              ? this.paths.directoryURL(join(dir, entry.name)).href
+              : this.paths.fileURL(join(dir, entry.name)).href,
         },
         meta: {
           kind: entry.kind as "directory" | "file",

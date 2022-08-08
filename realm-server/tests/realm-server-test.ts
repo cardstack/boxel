@@ -301,14 +301,6 @@ module("Realm Server", function (hooks) {
                 kind: "directory",
               },
             },
-            "unused-card.gts": {
-              links: {
-                related: "http://127.0.0.1:4444/unused-card.gts",
-              },
-              meta: {
-                kind: "file",
-              },
-            },
           },
         },
       },
