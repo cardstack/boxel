@@ -228,11 +228,27 @@ export default class Sprite {
       for (let i = 0; i < count; i++) {
         // TODO: this merge algorithm is too naïve, it implies we can have only 1 of each CSS property or it will be overridden
         // we copy the final frame of a motion if there is another motion that takes longer
+        let currentReductionFrame =
+          previousKeyframes?.[i] ??
+          previousKeyframes[previousKeyframes.length - 1];
+        let incomingFrame =
+          motion.keyframes?.[i] ??
+          motion.keyframes[motion.keyframes.length - 1];
+        let currentReductionTransform = (currentReductionFrame?.['transform'] ??
+          '') as string;
+        let incomingTransform = incomingFrame?.['transform'] ?? '';
+        let transform = currentReductionTransform + incomingTransform;
+        if (this.role === 'image') {
+          transform = (
+            i < previousKeyframes.length
+              ? currentReductionTransform
+              : (incomingTransform as string)
+          ) as string;
+        }
         result.push({
-          ...(previousKeyframes?.[i] ??
-            previousKeyframes[previousKeyframes.length - 1]),
-          ...(motion.keyframes?.[i] ??
-            motion.keyframes[motion.keyframes.length - 1]),
+          ...currentReductionFrame,
+          ...incomingFrame,
+          transform,
         });
       }
       return result;
