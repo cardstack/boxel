@@ -8,11 +8,6 @@
     </h1>
     <div>
       {{#if (eq @state "MAX")}}
-        {{#if @minimize}}
-          <button type="button" local-class="minimize-button" {{on "click" @minimize}}>
-            MIN
-          </button>
-        {{/if}}
         {{#if @expand}}
           <button type="button" local-class="expand-button" {{on "click" @expand}}>
             EXP
