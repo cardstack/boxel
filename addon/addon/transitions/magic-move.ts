@@ -3,6 +3,7 @@ import { assert } from '@ember/debug';
 import LinearBehavior from 'animations-experiment/behaviors/linear';
 import approximatelyEqual from 'animations-experiment/utils/approximately-equal';
 import Behavior from 'animations-experiment/behaviors/base';
+import { Position } from 'animations-experiment/models/context-aware-bounds';
 
 export type TransitionOptions = {
   behavior?: Behavior;
@@ -18,7 +19,9 @@ export type TransitionOptions = {
 */
 export default function (
   changeset: Changeset,
-  options: TransitionOptions = {}
+  options: TransitionOptions & {
+    relativeTo?: { initialBounds: Position; finalBounds: Position };
+  } = {}
 ): void {
   let { keptSprites } = changeset;
   let { behavior = new LinearBehavior(), duration, delay } = options;
@@ -45,16 +48,24 @@ export default function (
         counterpart.initialBounds
       );
 
-      initialBounds = counterpart.initialBounds.relativeToContext;
+      initialBounds = options.relativeTo
+        ? counterpart.initialBounds.relativeToPosition(
+            options.relativeTo.initialBounds
+          )
+        : counterpart.initialBounds.relativeToContext;
       initialStyles = counterpart.initialComputedStyle;
     } else {
       // This is the same Sprite moving elsewhere
-      initialBounds = s.initialBounds.relativeToContext;
+      initialBounds = options.relativeTo
+        ? s.initialBounds.relativeToPosition(options.relativeTo.initialBounds)
+        : s.initialBounds.relativeToContext;
       initialStyles = s.initialComputedStyle;
     }
 
     assert('kept sprite should always have finalBounds', s.finalBounds);
-    let finalBounds = s.finalBounds.relativeToContext;
+    let finalBounds = options.relativeTo
+      ? s.finalBounds.relativeToPosition(options.relativeTo.finalBounds)
+      : s.finalBounds.relativeToContext;
     //let deltaX = finalBounds.left - initialBounds.left;
     //let deltaY = finalBounds.top - initialBounds.top;
     let velocity = initialVelocity;
@@ -66,6 +77,14 @@ export default function (
       velocity,
       behavior,
       delay,
+      ...(options.relativeTo
+        ? {
+            startX: initialBounds.x,
+            startY: initialBounds.y,
+            endX: finalBounds.x,
+            endY: finalBounds.y,
+          }
+        : {}),
     });
     //}
 
