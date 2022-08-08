@@ -11,7 +11,8 @@ import {
 } from "@cardstack/runtime-common/etc/test-fixtures";
 import { CardRef, isCardDocument, Realm } from "@cardstack/runtime-common";
 import { stringify } from "qs";
-import { NodeRealm } from "../node-realm";
+import { NodeAdapter } from "../node-realm";
+import { resolve } from "path";
 
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
@@ -23,14 +24,17 @@ module("Realm Server", function (hooks) {
   let request: SuperTest<Test>;
   let dir: DirResult;
 
-  hooks.beforeEach(function () {
+  hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
 
-    server = createRealmServer(
-      [{ path: dir.name, realmURL: testRealmHref }],
+    let testRealm = new Realm(
+      testRealmHref,
+      new NodeAdapter(resolve(dir.name)),
       "http://localhost:4201/base/"
     );
+    await testRealm.ready;
+    server = createRealmServer([testRealm]);
     server.listen(testRealmURL.port);
     request = supertest(server);
   });
@@ -213,11 +217,11 @@ module("Realm Server", function (hooks) {
 
   test("serves a card-source DELETE request", async function (assert) {
     let response = await request
-      .delete("/person.gts")
+      .delete("/unused-card.gts")
       .set("Accept", "application/vnd.card+source");
 
     assert.strictEqual(response.status, 204, "HTTP 204 status");
-    let cardFile = join(dir.name, "person.gts");
+    let cardFile = join(dir.name, "unused-card.gts");
     assert.strictEqual(
       existsSync(cardFile),
       false,
@@ -227,12 +231,12 @@ module("Realm Server", function (hooks) {
 
   test("serves a card-source POST request", async function (assert) {
     let response = await request
-      .post("/person.gts")
+      .post("/unused-card.gts")
       .set("Accept", "application/vnd.card+source")
       .send(`//TEST UPDATE ${cardSrc}`);
     assert.strictEqual(response.status, 204, "HTTP 204 status");
 
-    let srcFile = join(dir.name, "person.gts");
+    let srcFile = join(dir.name, "unused-card.gts");
     assert.ok(existsSync(srcFile), "card src exists");
     let src = readFileSync(srcFile, { encoding: "utf8" });
     assert.strictEqual(
@@ -311,6 +315,14 @@ module("Realm Server", function (hooks) {
             "person-2.json": {
               links: {
                 related: `${testRealmHref}person-2.json`,
+              },
+              meta: {
+                kind: "file",
+              },
+            },
+            "unused-card.gts": {
+              links: {
+                related: "http://127.0.0.1:4444/unused-card.gts",
               },
               meta: {
                 kind: "file",
@@ -433,7 +445,7 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically load a card from own realm", async function (assert) {
-    let nodeRealm = new NodeRealm(dir.name);
+    let nodeRealm = new NodeAdapter(dir.name);
     let realm = new Realm(
       "http://test-realm/",
       nodeRealm,
@@ -448,7 +460,7 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically load a card from a different realm", async function (assert) {
-    let nodeRealm = new NodeRealm(dir.name);
+    let nodeRealm = new NodeAdapter(dir.name);
     let realm = new Realm(
       "http://test-realm/",
       nodeRealm,
@@ -465,7 +477,7 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically modules with cycles", async function (assert) {
-    let nodeRealm = new NodeRealm(dir.name);
+    let nodeRealm = new NodeAdapter(dir.name);
     let realm = new Realm(
       "http://test-realm/",
       nodeRealm,

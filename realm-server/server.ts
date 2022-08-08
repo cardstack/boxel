@@ -1,9 +1,7 @@
 import http, { IncomingMessage, ServerResponse } from "http";
-import { NodeRealm } from "./node-realm";
-import { Realm, baseRealm, externalsMap } from "@cardstack/runtime-common";
-import { resolve } from "path";
+import { Realm, externalsMap } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
-import { LocalPath, RealmPaths } from "@cardstack/runtime-common/paths";
+import { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
 import "@cardstack/runtime-common/externals-global";
 
@@ -14,24 +12,9 @@ export interface RealmConfig {
   path: string;
 }
 
-export function createRealmServer(
-  configs: RealmConfig[],
-  baseRealmURL: string
-) {
-  detectRealmCollision(configs);
+export function createRealmServer(realms: Realm[]) {
+  detectRealmCollision(realms);
 
-  let realmConfigs = new Map(
-    configs.map(({ realmURL, path }) => [
-      new URL(realmURL).pathname,
-      {
-        realm: new Realm(realmURL, new NodeRealm(resolve(path)), baseRealmURL),
-        realmPath: new RealmPaths(realmURL),
-      },
-    ])
-  );
-  let isServingExternals = configs.find(
-    ({ realmURL }) => realmURL === baseRealm.url
-  );
   let server = http.createServer(async (req, res) => {
     let isStreaming = false;
     try {
@@ -42,29 +25,28 @@ export function createRealmServer(
         throw new Error(`bug: missing URL in request`);
       }
 
-      if (req.url.startsWith(externalsPath) && isServingExternals) {
+      if (req.url.startsWith(externalsPath)) {
         handleExternals(req, res);
         return;
       }
 
-      let configPath = [...realmConfigs.keys()].find((path) =>
-        req.url?.startsWith(path)
+      let realm = realms.find((r) =>
+        req.url!.startsWith(new URL(r.url).pathname)
       );
-      if (!configPath) {
+
+      if (!realm) {
         res.statusCode = 404;
         res.statusMessage = "Not Found";
         res.end();
         return;
       }
 
-      let { realmPath, realm } = realmConfigs.get(configPath)!;
-
       // despite the name, req.url is actually the pathname for the request URL
       let local: LocalPath = req.url === "/" ? "" : req.url;
       let url =
         local.endsWith("/") || local === ""
-          ? realmPath.directoryURL(local)
-          : realmPath.fileURL(local);
+          ? realm.paths.directoryURL(local)
+          : realm.paths.fileURL(local);
 
       let reqBody = await nodeStreamToText(req);
       let request = new Request(url.href, {
@@ -164,11 +146,11 @@ async function nodeStreamToText(stream: Readable): Promise<string> {
   return Buffer.concat(chunks).toString("utf-8");
 }
 
-function detectRealmCollision(configs: RealmConfig[]): void {
+function detectRealmCollision(realms: Realm[]): void {
   let collisions: string[] = [];
-  let realmsURLs = configs.map(({ realmURL }) => ({
-    url: realmURL,
-    path: new URL(realmURL).pathname,
+  let realmsURLs = realms.map(({ url }) => ({
+    url,
+    path: new URL(url).pathname,
   }));
   for (let realmA of realmsURLs) {
     for (let realmB of realmsURLs) {

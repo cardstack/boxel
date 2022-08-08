@@ -76,13 +76,13 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
-  #paths: RealmPaths;
+  readonly paths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
   #loader: Loader;
 
   get url(): string {
-    return this.#paths.url;
+    return this.paths.url;
   }
 
   constructor(
@@ -90,12 +90,12 @@ export class Realm {
     adapter: RealmAdapter,
     readonly baseRealmURL = baseRealm.url
   ) {
-    this.#paths = new RealmPaths(url);
+    this.paths = new RealmPaths(url);
     this.#startedUp.fulfill((() => this.#startup())());
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
-      this.#paths,
+      this.paths,
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this)
     );
@@ -132,7 +132,7 @@ export class Realm {
     contents: string
   ): Promise<{ lastModified: number }> {
     let results = await this.#adapter.write(path, contents);
-    await this.#searchIndex.update(this.#paths.fileURL(path));
+    await this.#searchIndex.update(this.paths.fileURL(path));
 
     return results;
   }
@@ -164,7 +164,7 @@ export class Realm {
       return this.#cardSourceRouter.handle(request);
     }
 
-    let maybeHandle = await this.getFileWithFallbacks(this.#paths.local(url));
+    let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
 
     if (!maybeHandle) {
       return notFound(request, `${request.url} not found`);
@@ -213,7 +213,7 @@ export class Realm {
 
   private async upsertCardSource(request: Request): Promise<Response> {
     let { lastModified } = await this.write(
-      this.#paths.local(new URL(request.url)),
+      this.paths.local(new URL(request.url)),
       await request.text()
     );
     this.#loader.clearCache();
@@ -228,7 +228,7 @@ export class Realm {
   private async getCardSourceOrRedirect(
     request: Request
   ): Promise<ResponseWithNodeStream> {
-    let localName = this.#paths.local(new URL(request.url));
+    let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
       return notFound(request, `${localName} not found`);
@@ -247,7 +247,7 @@ export class Realm {
 
   // as opposed to getCardSourceOrRedirect, this will follow the redirect
   private async getCardSourceAsText(url: URL): Promise<string | undefined> {
-    let localName = this.#paths.local(url);
+    let localName = this.paths.local(url);
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
       return undefined;
@@ -256,12 +256,12 @@ export class Realm {
   }
 
   private async removeCardSource(request: Request): Promise<Response> {
-    let localName = this.#paths.local(new URL(request.url));
+    let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
       return notFound(request, `${localName} not found`);
     }
-    await this.#searchIndex.update(this.#paths.fileURL(handle.path), {
+    await this.#searchIndex.update(this.paths.fileURL(handle.path), {
       delete: true,
     });
     await this.#adapter.remove(handle.path);
@@ -379,8 +379,8 @@ export class Realm {
       }
     }
     let pathname = `${dirName}${++index}.json`;
-    let fileURL = this.#paths.fileURL(pathname);
-    let localPath: LocalPath = this.#paths.local(fileURL);
+    let fileURL = this.paths.fileURL(pathname);
+    let localPath: LocalPath = this.paths.local(fileURL);
     let { lastModified } = await this.write(
       localPath,
       JSON.stringify(json, null, 2)
@@ -409,12 +409,12 @@ export class Realm {
   }
 
   private async patchCard(request: Request): Promise<Response> {
-    let localPath = this.#paths.local(new URL(request.url));
+    let localPath = this.paths.local(new URL(request.url));
     if (localPath.startsWith("_")) {
       return methodNotAllowed(request);
     }
 
-    let url = this.#paths.fileURL(localPath);
+    let url = this.paths.fileURL(localPath);
     let original = await this.#searchIndex.card(url);
     if (!original) {
       return notFound(request);
@@ -448,8 +448,8 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
-    let localPath = this.#paths.local(new URL(request.url));
-    let url = this.#paths.fileURL(localPath);
+    let localPath = this.paths.local(new URL(request.url));
+    let url = this.paths.fileURL(localPath);
     let data = await this.#searchIndex.card(url);
     if (!data) {
       return notFound(request);
@@ -471,8 +471,8 @@ export class Realm {
     if (!data) {
       return notFound(request);
     }
-    let localPath = this.#paths.local(url) + ".json";
-    await this.#searchIndex.update(this.#paths.fileURL(localPath), {
+    let localPath = this.paths.local(url) + ".json";
+    await this.#searchIndex.update(this.paths.fileURL(localPath), {
       delete: true,
     });
     await this.#adapter.remove(localPath);
@@ -485,7 +485,7 @@ export class Realm {
     if (await this.isIgnored(url)) {
       return undefined;
     }
-    let path = this.#paths.local(url);
+    let path = this.paths.local(url);
     if (!(await this.#adapter.exists(path))) {
       return undefined;
     }
@@ -494,8 +494,8 @@ export class Realm {
       let innerPath = join(path, entry.name);
       let innerURL =
         entry.kind === "directory"
-          ? this.#paths.directoryURL(innerPath)
-          : this.#paths.fileURL(innerPath);
+          ? this.paths.directoryURL(innerPath)
+          : this.paths.fileURL(innerPath);
       if (await this.isIgnored(innerURL)) {
         continue;
       }
@@ -506,8 +506,8 @@ export class Realm {
 
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
-    let localPath: LocalPath = this.#paths.local(new URL(request.url));
-    let url = this.#paths.directoryURL(localPath);
+    let localPath: LocalPath = this.paths.local(new URL(request.url));
+    let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
     if (!entries) {
       console.log(`can't find directory ${url.href}`);
@@ -730,7 +730,7 @@ export class Realm {
 
   private cardRefToTypeURL(ref: CardRef): string {
     let module = new URL(getExportedCardContext(ref).module);
-    if (this.#paths.inRealm(module)) {
+    if (this.paths.inRealm(module)) {
       return `${this.url}_typeOf?${stringify(ref)}`;
     }
 

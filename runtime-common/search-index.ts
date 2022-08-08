@@ -539,7 +539,12 @@ export class SearchIndex {
     while (fullRef) {
       let def: CardDefinition | undefined = await this.typeOf(fullRef);
       if (!def) {
-        throw new Error("todo: report this error without breaking indexing");
+        // TODO: create a way to report this error without breaking indexing
+        throw new Error(
+          `Tried to getTypes of ${JSON.stringify(
+            ref
+          )} but couldn't find that definition`
+        );
       }
       types.push(this.internalKeyFor(fullRef));
       fullRef = def.super;
