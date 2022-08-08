@@ -1,0 +1,23 @@
+.card {
+  border: 1px solid black;
+  max-width: 300px;
+  padding: var(--card-padding, 6px);
+  border-radius: var(--card-border-radius);
+  overflow: hidden;
+  background: #eee;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.card.EXPANDED {
+  --card-border-radius: 4px;
+  height: 200px;
+}

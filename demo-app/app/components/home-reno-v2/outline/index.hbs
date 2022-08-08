@@ -46,7 +46,7 @@
         {{#each @suggestions as |suggestion|}}
           <li>
             {{#if (eq suggestion.state "MAX")}}
-              <HomeRenoV2::Placeholder/>
+              <HomeRenoV2::Placeholder @id={{suggestion.id}} />
             {{else}}
               {{component
                 (concat "home-reno-v2/" suggestion.type)
