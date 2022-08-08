@@ -17,9 +17,7 @@ export class RealmPaths {
     // this.#realm has a trailing slash.
     let local = url.href.slice(this.url.length);
 
-    if (local.endsWith("/")) {
-      local = local.slice(0, -1);
-    }
+    local = local.replace(/\/+$/, "");
     return local;
   }
 

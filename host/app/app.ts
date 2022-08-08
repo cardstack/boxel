@@ -12,10 +12,20 @@ import './lib/glint-embroider-workaround';
  * runtime-common/index.js file.
  */
 
-// TODO eventually we should replace this with
+// TODO eventually we should replace this with:
+//
 //   import "@cardstack/runtime-common/external-globals";
-// when our common external-globals can support glimmer
+//
+// when our common external-globals can support glimmer.
+// If you make any changes here make sure to reflect
+// them in /runtime-common/external-globals.ts
+
 (window as any).RUNTIME_SPIKE_EXTERNALS = new Map();
+import * as runtime from '@cardstack/runtime-common';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  '@cardstack/runtime-common',
+  runtime
+);
 import * as glimmerComponent from '@glimmer/component';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   '@glimmer/component',
@@ -49,6 +59,18 @@ import * as emberDestroyable from '@ember/destroyable';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   '@ember/destroyable',
   emberDestroyable
+);
+import * as emberResources from 'ember-resources';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set('ember-resources', emberResources);
+import * as emberConcurrency from 'ember-concurrency';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  'ember-concurrency',
+  emberConcurrency
+);
+import * as emberConcurrencyTS from 'ember-concurrency-ts';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  'ember-concurrency-ts',
+  emberConcurrencyTS
 );
 import * as lodash from 'lodash';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('lodash', lodash);

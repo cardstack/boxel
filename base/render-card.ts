@@ -1,19 +1,19 @@
-import { Resource, useResource } from 'ember-resources';
-import { service } from '@ember/service';
-import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
-import { tracked } from '@glimmer/tracking';
-import { ComponentLike } from '@glint/template';
-import CardAPI from '../services/card-api';
-import type { Format, Card } from 'https://cardstack.com/base/card-api';
+import { Resource, useResource } from "ember-resources";
+import { restartableTask } from "ember-concurrency";
+import { tracked } from "@glimmer/tracking";
+import { ComponentLike } from "@glint/template";
+import { Format, Card, prepareToRender } from "./card-api";
+import { taskFor } from "ember-concurrency-ts";
 
 interface Args {
+  // note that we are using a Card instance as the arg and not card data so that
+  // any changes to the format wont result in lost card data during a rerender
+  // (since a card can be edited after it's rendered)
   named: { card: Card | undefined; format: Format };
 }
 
 export class RenderedCard extends Resource<Args> {
   @tracked component: ComponentLike<{ Args: {}; Blocks: {} }> | undefined;
-  @service declare cardAPI: CardAPI;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
@@ -24,8 +24,7 @@ export class RenderedCard extends Resource<Args> {
   }
 
   @restartableTask private async load(card: Card, format: Format) {
-    await this.cardAPI.loaded;
-    let { component } = await this.cardAPI.api.prepareToRender(card, format);
+    let { component } = await prepareToRender(card, format);
     this.component = component;
   }
 }

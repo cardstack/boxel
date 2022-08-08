@@ -7,6 +7,11 @@
  */
 
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS = new Map();
+import * as runtime from "@cardstack/runtime-common";
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set(
+  "@cardstack/runtime-common",
+  runtime
+);
 // import * as glimmerComponent from "@glimmer/component";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@glimmer/component", {
   default: class {},
@@ -46,6 +51,20 @@
 // import * as emberDestroyable from "ember-source/dist/packages/@ember/destroyable";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@ember/destroyable", {
   registerDestructor() {},
+});
+// import * as emberResources from 'ember-resources';
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("ember-resources", {
+  Resource: class {},
+  useResource() {},
+});
+// import * as emberConcurrency from 'ember-concurrency';
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("ember-concurrency", {
+  task() {},
+  restartableTask() {},
+});
+// import * as emberConcurrencyTS from 'ember-concurrency-ts';
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("ember-concurrency-ts", {
+  taskFor() {},
 });
 // import * as tracked from "tracked-built-ins";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("tracked-built-ins", {
