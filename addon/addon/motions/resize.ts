@@ -34,8 +34,14 @@ export class Resize extends Motion<ResizeOptions> {
 
     this.behavior = opts.behavior || new DEFAULT_BEHAVIOR();
     this.duration = opts.duration ?? DEFAULT_DURATION;
-    this.width = new BaseValue('width', this.startSize.width);
-    this.height = new BaseValue('height', this.startSize.height);
+    this.width = new BaseValue(
+      'width',
+      this.startSize.width / this.endSize.width
+    );
+    this.height = new BaseValue(
+      'height',
+      this.startSize.height / this.endSize.height
+    );
     //this.updateKeyframes();
   }
 
@@ -65,19 +71,23 @@ export class Resize extends Motion<ResizeOptions> {
     for (let i = 0; i < count; i++) {
       let keyframe: Keyframe = {};
 
+      let transform = '';
       // only add height/width to this keyframe if we need to animate the property, we could only be animating one of them.
       if (widthFrames.length) {
         let width =
           widthFrames[i]?.value ?? widthFrames[widthFrames.length - 1]?.value;
-        keyframe['width'] = `${width}px`;
+        transform += `scaleX(${width})`;
       }
 
       if (heightFrames.length) {
         let height =
           heightFrames[i]?.value ??
           heightFrames[heightFrames.length - 1]?.value;
-        keyframe['height'] = `${height}px`;
+        transform += `scaleY(${height})`;
       }
+
+      keyframe['transformOrigin'] = 'top left';
+      keyframe['transform'] = transform;
 
       keyframes.push(keyframe);
     }
@@ -88,7 +98,7 @@ export class Resize extends Motion<ResizeOptions> {
   applyBehavior(time?: number): void {
     this.width.applyBehavior(
       this.behavior,
-      this.endSize.width,
+      1,
       this.duration,
       this.opts.delay,
       time,
@@ -96,7 +106,7 @@ export class Resize extends Motion<ResizeOptions> {
     );
     this.height.applyBehavior(
       this.behavior,
-      this.endSize.height,
+      1,
       this.duration,
       this.opts.delay,
       time,
