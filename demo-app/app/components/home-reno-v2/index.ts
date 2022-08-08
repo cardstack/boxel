@@ -49,7 +49,7 @@ export default class HomeRenoV2 extends Component {
         (v) => v.state === CARD_STATES.MAX
       );
       if (currentMaximized) {
-        currentMaximized.changeState(CARD_STATES.MIN);
+        currentMaximized.changeState(CARD_STATES.EXPANDED);
       }
     }
     card.changeState(CARD_STATES.MAX);
