@@ -193,6 +193,7 @@ class URLMap<T> {
 interface SearchEntry {
   resource: CardResource;
   searchData: Record<string, any>;
+  types: string[] | undefined; // theses start out undefined during indexing and get defined during semantic phase
 }
 
 export class SearchIndex {
@@ -272,6 +273,7 @@ export class SearchIndex {
             searchData: json.data.attributes
               ? flatten(json.data.attributes)
               : {},
+            types: undefined,
           });
         }
       }
@@ -356,6 +358,11 @@ export class SearchIndex {
     // atomically update the search index
     this.definitions = newDefinitions;
     this.exportedCardRefs = newExportedCardRefs;
+
+    // once we have definitions we can fill in the instance types
+    for (let entry of [...this.instances.values()]) {
+      entry.types = await this.getTypes(entry.resource.meta.adoptsFrom);
+    }
   }
 
   private async buildDefinition(
@@ -368,7 +375,7 @@ export class SearchIndex {
     let id: CardRef = possibleCard.exportedAs
       ? {
           type: "exportedCard",
-          module: new URL(url, this.realm.url).href,
+          module: trimExecutableExtension(new URL(url, this.realm.url)).href,
           name: possibleCard.exportedAs,
         }
       : ref;
@@ -469,7 +476,9 @@ export class SearchIndex {
   private internalKeyFor(ref: CardRef): string {
     switch (ref.type) {
       case "exportedCard":
-        let module = new URL(ref.module, this.realm.url).href;
+        let module = trimExecutableExtension(
+          new URL(ref.module, this.realm.url)
+        ).href;
         return `${module}/${ref.name}`;
       case "ancestorOf":
         return `${this.internalKeyFor(ref.card)}/ancestor`;
@@ -501,18 +510,14 @@ export class SearchIndex {
   }
 
   async search(query: Query): Promise<CardResource[]> {
-    let matcher = this.buildMatcher(query.filter, {
+    let matcher = await this.buildMatcher(query.filter, {
       module: `${baseRealm.url}card-api`,
       name: "Card",
     });
 
-    let results: SearchEntry[] = [];
-    for (let entry of [...this.instances.values()]) {
-      if (await matcher(entry)) {
-        results.push(entry);
-      }
-    }
-    return results.map((entry) => entry.resource);
+    return [...this.instances.values()]
+      .filter(matcher)
+      .map((entry) => entry.resource);
   }
 
   async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
@@ -520,7 +525,7 @@ export class SearchIndex {
   }
 
   async exportedCardsOf(module: string): Promise<CardRef[]> {
-    module = new URL(module, this.realm.url).href;
+    module = trimExecutableExtension(new URL(module, this.realm.url)).href;
     return this.exportedCardRefs.get(module) ?? [];
   }
 
@@ -528,69 +533,70 @@ export class SearchIndex {
     return this.instances.get(url)?.resource;
   }
 
-  async cardHasType(
-    ref: CardRef,
-    type: ExportedCardRef
-  ): Promise<boolean | null> {
-    // only checks for exported cards
-    if (ref.type !== "exportedCard") {
-      return false;
+  private async getTypes(ref: ExportedCardRef): Promise<string[]> {
+    let fullRef: CardRef | undefined = { type: "exportedCard", ...ref };
+    let types: string[] = [];
+    while (fullRef) {
+      let def: CardDefinition | undefined = await this.typeOf(fullRef);
+      if (!def) {
+        // TODO: create a way to report this error without breaking indexing
+        throw new Error(
+          `Tried to getTypes of ${JSON.stringify(
+            ref
+          )} but couldn't find that definition`
+        );
+      }
+      types.push(this.internalKeyFor(fullRef));
+      fullRef = def.super;
     }
+    return types;
+  }
 
-    if (
-      ref.name === type.name &&
-      trimExecutableExtension(new URL(ref.module, this.realm.url)).href ===
-        trimExecutableExtension(new URL(type.module, this.realm.url)).href
-    ) {
-      return true;
-    }
-
-    let def = await this.typeOf(ref);
-    if (!def) {
-      return null;
-    }
-    if (def.super) {
-      return await this.cardHasType(def.super, type);
-    }
-    return false;
+  private cardHasType(entry: SearchEntry, type: ExportedCardRef): boolean {
+    let ref = this.internalKeyFor({
+      type: "exportedCard",
+      ...type,
+    });
+    return Boolean(entry.types?.find((t) => t === ref));
   }
 
   // Matchers are three-valued (true, false, null) because a query that talks
   // about a field that is not even present on a given card results in `null` to
   // distinguish it from a field that is present but not matching the filter
   // (`false`)
-  buildMatcher(
+  private async buildMatcher(
     filter: Filter | undefined,
     onRef: ExportedCardRef
-  ): (entry: SearchEntry) => Promise<boolean | null> {
+  ): Promise<(entry: SearchEntry) => boolean | null> {
     if (!filter) {
-      return async (_entry) => true;
+      return (_entry) => true;
     }
 
     if ("type" in filter) {
-      return async (entry) =>
-        await this.cardHasType(
-          { type: "exportedCard", ...entry.resource.meta.adoptsFrom },
-          filter.type
-        );
+      // TODO: validate that the type exists
+      return (entry) => this.cardHasType(entry, filter.type);
     }
 
     let on = filter?.on ?? onRef;
 
     if ("any" in filter) {
-      let matchers = filter.any.map((f) => this.buildMatcher(f, on));
+      let matchers = await Promise.all(
+        filter.any.map((f) => this.buildMatcher(f, on))
+      );
       return (entry) => some(matchers, (m) => m(entry));
     }
 
     if ("every" in filter) {
-      let matchers = filter.every.map((f) => this.buildMatcher(f, on));
+      let matchers = await Promise.all(
+        filter.every.map((f) => this.buildMatcher(f, on))
+      );
       return (entry) => every(matchers, (m) => m(entry));
     }
 
     if ("not" in filter) {
-      let matcher = this.buildMatcher(filter.not, on);
-      return async (entry) => {
-        let inner = await matcher(entry);
+      let matcher = await this.buildMatcher(filter.not, on);
+      return (entry) => {
+        let inner = matcher(entry);
         if (inner == null) {
           // irrelevant cards stay irrelevant, even when the query is inverted
           return null;
@@ -601,14 +607,11 @@ export class SearchIndex {
     }
 
     if ("eq" in filter) {
+      // TODO: validate that the definition and all the fieldPaths exist let def
+      // = await this.typeOf({ type: "exportedCard", ...on });
       return (entry) =>
-        every(Object.entries(filter.eq), async ([fieldPath, value]) => {
-          if (
-            await this.cardHasType(
-              { type: "exportedCard", ...entry.resource.meta.adoptsFrom },
-              on
-            )
-          ) {
+        every(Object.entries(filter.eq), ([fieldPath, value]) => {
+          if (this.cardHasType(entry, on)) {
             return entry.searchData![fieldPath] === value;
           } else {
             return null;
@@ -720,13 +723,13 @@ function flatten(obj: Record<string, any>): Record<string, any> {
 
 // three-valued version of Array.every that propagates nulls. Here, the presence
 // of any nulls causes the whole thing to be null.
-async function every<T>(
+function every<T>(
   list: T[],
-  predicate: (t: T) => Promise<boolean | null>
-): Promise<boolean | null> {
+  predicate: (t: T) => boolean | null
+): boolean | null {
   let result = true;
   for (let element of list) {
-    let status = await predicate(element);
+    let status = predicate(element);
     if (status == null) {
       return null;
     }
@@ -737,13 +740,13 @@ async function every<T>(
 
 // three-valued version of Array.some that propagates nulls. Here, the whole
 // expression becomes null only if the whole input is null.
-async function some<T>(
+function some<T>(
   list: T[],
-  predicate: (t: T) => Promise<boolean | null>
-): Promise<boolean | null> {
+  predicate: (t: T) => boolean | null
+): boolean | null {
   let result = null;
   for (let element of list) {
-    let status = await predicate(element);
+    let status = predicate(element);
     if (status === true) {
       return true;
     }

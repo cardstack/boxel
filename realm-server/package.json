@@ -31,6 +31,6 @@
     "start:base-and-host-test-realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --url='https://cardstack.com/base/' --path='../host/tests/cards' --url='http://test-realm/test/' --baseRealmURL='http://localhost:4201/base/'",
     "start:test-node-realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4202 --url='http://test-realm/node-test/' --path='./tests/cards' --baseRealmURL='http://localhost:4201/base/'",
     "start:test-realms": "NODE_NO_WARNINGS=1 start-server-and-test 'start:base-and-host-test-realm' 'http-get://localhost:4201/base/card-api' 'start:test-node-realm' 'http-get://localhost:4202/node-test/person' 'wait'",
-    "wait": "sleep infinity"
+    "wait": "sleep 10000000"
   }
 }

@@ -1,5 +1,8 @@
+import { Realm } from "@cardstack/runtime-common";
+import { NodeAdapter } from "./node-realm";
 import yargs from "yargs";
-import { createRealmServer, RealmConfig } from "./server";
+import { createRealmServer } from "./server";
+import { resolve } from "path";
 
 let {
   port,
@@ -39,16 +42,20 @@ if (urls.length !== paths.length) {
   process.exit(-1);
 }
 
-let configs: RealmConfig[] = paths.map((path, i) => ({
-  realmURL: String(urls[i]),
-  path: String(path),
-}));
+let realms: Realm[] = paths.map(
+  (path, i) =>
+    new Realm(
+      String(urls[i]),
+      new NodeAdapter(resolve(String(path))),
+      baseRealmURL
+    )
+);
 
-let server = createRealmServer(configs, baseRealmURL);
+let server = createRealmServer(realms);
 server.listen(port);
 console.log(
   `Realm server listening on port ${port} with base realm of ${baseRealmURL}:`
 );
-for (let { realmURL, path } of configs) {
-  console.log(`  ${path} => ${realmURL}`);
+for (let [index, { url }] of realms.entries()) {
+  console.log(`  ${paths[index]} => ${url}`);
 }

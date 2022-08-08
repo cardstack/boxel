@@ -63,7 +63,7 @@ module('Unit | search-index', function () {
     assert.deepEqual(refs, [
       {
         type: 'exportedCard',
-        module: `${testRealmURL}person.gts`,
+        module: `${testRealmURL}person`,
         name: 'FancyPerson',
       },
     ]);
@@ -91,7 +91,7 @@ module('Unit | search-index', function () {
     });
     assert.deepEqual(definition?.id, {
       type: 'exportedCard',
-      module: `${testRealmURL}person.gts`,
+      module: `${testRealmURL}person`,
       name: 'Person',
     });
     assert.deepEqual(definition?.super, {
@@ -147,12 +147,12 @@ module('Unit | search-index', function () {
     });
     assert.deepEqual(definition?.id, {
       type: 'exportedCard',
-      module: `${testRealmURL}fancy-person.gts`,
+      module: `${testRealmURL}fancy-person`,
       name: 'FancyPerson',
     });
     assert.deepEqual(definition?.super, {
       type: 'exportedCard',
-      module: `${testRealmURL}person`, // this does not have the ".gts" extension because we import it as just "./person"
+      module: `${testRealmURL}person`,
       name: 'Person',
     });
 
@@ -200,12 +200,12 @@ module('Unit | search-index', function () {
     });
     assert.deepEqual(definition?.id, {
       type: 'exportedCard',
-      module: `${testRealmURL}person.gts`,
+      module: `${testRealmURL}person`,
       name: 'FancyPerson',
     });
     assert.deepEqual(definition?.super, {
       type: 'exportedCard',
-      module: `${testRealmURL}person.gts`,
+      module: `${testRealmURL}person`,
       name: 'Person',
     });
     assert.deepEqual(definition?.fields.get('lastName'), {
@@ -256,7 +256,7 @@ module('Unit | search-index', function () {
       type: 'ancestorOf',
       card: {
         type: 'exportedCard',
-        module: `${testRealmURL}person.gts`,
+        module: `${testRealmURL}person`,
         name: 'FancyPerson',
       },
     });
@@ -420,7 +420,7 @@ module('Unit | search-index', function () {
       type: 'fieldOf',
       card: {
         type: 'exportedCard',
-        module: `${testRealmURL}person.gts`,
+        module: `${testRealmURL}person`,
         name: 'Person',
       },
       field: 'lastName',
@@ -451,7 +451,7 @@ module('Unit | search-index', function () {
         type: 'fieldOf',
         card: {
           type: 'exportedCard',
-          module: `${testRealmURL}person.gts`,
+          module: `${testRealmURL}person`,
           name: 'Person',
         },
         field: 'lastName',
@@ -832,7 +832,7 @@ posts/ignore-me.gts
         filter: {
           any: [
             {
-              on: { module: `${paths.url}cards`, name: 'Article' },
+              on: { module: `${paths.url}cards.gts`, name: 'Article' },
               eq: { 'author.name': 'Cardy' },
             },
             {
