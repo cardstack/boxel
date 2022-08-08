@@ -803,7 +803,7 @@ posts/ignore-me.gts
       try {
         await indexer.search({
           filter: {
-            on: { module: `${paths.url}nonexistent`, name: 'nonexistent' },
+            on: { module: `${paths.url}nonexistent`, name: 'Nonexistent' },
             eq: { nonExistentField: 'hello' },
           },
         });
@@ -811,9 +811,8 @@ posts/ignore-me.gts
       } catch (err: any) {
         assert.strictEqual(
           err.message,
-          `Your filter refers to nonexistent card ${paths.url}nonexistent`
+          `Your filter refers to nonexistent type ${paths.url}nonexistent/Nonexistent`
         );
-        assert.strictEqual(err.status, 400);
       }
     });
 
@@ -831,7 +830,6 @@ posts/ignore-me.gts
           err.message,
           `Your filter refers to nonexistent field "nonExistentField" in card ${paths.url}cards/Post`
         );
-        assert.strictEqual(err.status, 400);
       }
     });
 
