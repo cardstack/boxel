@@ -194,6 +194,7 @@ interface SearchEntry {
   resource: CardResource;
   searchData: Record<string, any>;
   types: string[] | undefined; // theses start out undefined during indexing and get defined during semantic phase
+  fields: string[] | undefined;
 }
 
 export class SearchIndex {
@@ -274,6 +275,7 @@ export class SearchIndex {
               ? flatten(json.data.attributes)
               : {},
             types: undefined,
+            fields: undefined,
           });
         }
       }
@@ -362,6 +364,8 @@ export class SearchIndex {
     // once we have definitions we can fill in the instance types
     for (let entry of [...this.instances.values()]) {
       entry.types = await this.getTypes(entry.resource.meta.adoptsFrom);
+      let def = this.definitions.get(entry.types[0]);
+      entry.fields = await this.flattenFieldRefs(def!);
     }
   }
 
@@ -609,6 +613,7 @@ export class SearchIndex {
       return (entry) =>
         every(Object.entries(filter.eq), ([fieldPath, value]) => {
           if (this.cardHasType(entry, ref)) {
+            this.validateField(entry.fields, fieldPath, ref);
             return entry.searchData![fieldPath] === value;
           } else {
             return null;
@@ -626,6 +631,41 @@ export class SearchIndex {
         `Your filter refers to nonexistent type ${this.internalKeyFor(ref)}`
       );
     }
+  }
+
+  private validateField(
+    fields: SearchEntry["fields"],
+    fieldPath: string,
+    ref: CardRef
+  ): void {
+    if (
+      ref.type === "exportedCard" &&
+      ref.module === "https://cardstack.com/base/card-api" &&
+      ref.name === "Card"
+    ) {
+      return; // cards that extend base card can have any field
+    }
+    if (!fields?.includes(fieldPath)) {
+      throw new Error(
+        `Your filter refers to nonexistent field "${fieldPath}" on type ${this.internalKeyFor(
+          ref
+        )}`
+      );
+    }
+  }
+
+  private async flattenFieldRefs(def: CardDefinition): Promise<string[]> {
+    let fieldPaths = [];
+    for (let [key, { fieldCard }] of def.fields) {
+      let fieldDef = await this.typeOf(fieldCard);
+      if (!fieldDef) {
+        fieldPaths.push(key);
+      } else {
+        let res = await this.flattenFieldRefs(fieldDef);
+        res.map((f) => fieldPaths.push(`${key}.${f}`));
+      }
+    }
+    return fieldPaths;
   }
 
   public isIgnored(url: URL): boolean {

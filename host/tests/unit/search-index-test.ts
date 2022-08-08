@@ -670,7 +670,7 @@ posts/ignore-me.gts
       `,
       'book.gts': `
         import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import Person from './cards.gts';
+        import { Person } from './cards.gts';
 
         export class Book extends Card {
           @field author = contains(Person);
@@ -821,14 +821,14 @@ posts/ignore-me.gts
         await indexer.search({
           filter: {
             on: { module: `${paths.url}cards`, name: 'Post' },
-            eq: { 'author.nonExistentField': 'hello' },
+            eq: { 'author.name': 'Cardy', 'author.nonExistentField': 'hello' },
           },
         });
         throw new Error('failed to throw expected exception');
       } catch (err: any) {
         assert.strictEqual(
           err.message,
-          `Your filter refers to nonexistent field "nonExistentField" in card ${paths.url}cards/Post`
+          `Your filter refers to nonexistent field "author.nonExistentField" on type ${paths.url}cards/Post`
         );
       }
     });
