@@ -38,6 +38,10 @@ export const baseRealm = new RealmPaths("https://cardstack.com/base/");
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 
+// From https://github.com/iliakan/detect-node
+export const isNode =
+  Object.prototype.toString.call(globalThis.process) === "[object process]";
+
 /* Any new externally consumed modules should be added here,
  * along with the exports from the modules that are consumed.
  * These exports are paired with the host/app/app.ts which is
@@ -48,6 +52,7 @@ export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
  */
 
 export const externalsMap: Map<string, string[]> = new Map([
+  ["@cardstack/runtime-common", ["Loader"]],
   ["@glimmer/component", ["default"]],
   ["@ember/component", ["setComponentTemplate", "default"]],
   ["@ember/component/template-only", ["default"]],
@@ -57,6 +62,9 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["@ember/helper", ["get", "fn"]],
   ["@ember/modifier", ["on"]],
   ["@ember/destroyable", ["registerDestructor"]],
+  ["ember-resources", ["Resource", "useResource"]],
+  ["ember-concurrency", ["task", "restartableTask"]],
+  ["ember-concurrency-ts", ["taskFor"]],
   ["lodash", ["flatMap", "startCase", "get"]],
   ["tracked-built-ins", ["TrackedWeakMap"]],
   ["date-fns", ["parseISO", "format", "parse"]],
@@ -96,10 +104,12 @@ export function isCardJSON(json: any): json is CardJSON {
 }
 
 export { Realm } from "./realm";
+export { Loader } from "./loader";
 export type { Kind, RealmAdapter, FileRef } from "./realm";
 
 export type {
   CardRef,
+  ExportedCardRef,
   CardResource,
   CardDocument,
   CardDefinition,

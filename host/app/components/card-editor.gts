@@ -1,5 +1,4 @@
 import Component from '@glimmer/component';
-import { render } from '../resources/rendered-card';
 //@ts-ignore cached not available yet in definitely typed
 import { tracked, cached } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
@@ -13,7 +12,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
-import CardAPI from '../services/card-api';
+import CardAPI, { RenderedCard } from '../services/card-api';
 import type { Card, Format, } from 'https://cardstack.com/base/card-api';
 
 export interface NewCardArgs {
@@ -59,8 +58,8 @@ export default class Preview extends Component<Signature> {
       </div>
     {{/if}}
 
-    {{#if this.rendered.component}}
-      <this.rendered.component/>
+    {{#if this.renderedCard}}
+      <this.renderedCard/>
       {{!-- @glint-ignore glint doesn't know about EC task properties --}}
       {{#if this.write.last.isRunning}}
         <span>Saving...</span>
@@ -85,7 +84,8 @@ export default class Preview extends Component<Signature> {
   format: Format = this.args.card.type === 'new' ? 'edit' : 'isolated';
   @tracked
   resetTime = Date.now();
-  rendered = render(this, () => this.card, () => this.format)
+  @tracked
+  rendered: RenderedCard | undefined;
   @tracked
   initialCardData: CardJSON | undefined;
   private interval: ReturnType<typeof setInterval>;
@@ -150,6 +150,10 @@ export default class Preview extends Component<Signature> {
     return !isEqual(this.currentJSON, this.initialCardData);
   }
 
+  get renderedCard() {
+    return this.rendered?.component
+  }
+
   @action
   setFormat(format: Format) {
     this.format = format;
@@ -179,8 +183,10 @@ export default class Preview extends Component<Signature> {
       return;
     }
     await this.cardAPI.loaded;
-    // this is just for loading fixtures for testing. remove once we
-    // have an actual service we can mock
+    if (!this.rendered) {
+      this.rendered = this.cardAPI.render(this, () => this.card, () => this.format);
+    }
+
     if (this.args.card.type === 'existing' && this.args.card.json) {
       this.initialCardData = this.args.card.json;
       return;

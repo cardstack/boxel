@@ -21,6 +21,7 @@ import {
   DirectoryEntryRelationship,
   executableExtensions,
   baseRealm,
+  isNode,
 } from "./index";
 import merge from "lodash/merge";
 import { parse, stringify } from "qs";
@@ -39,13 +40,11 @@ import decoratorsProposalPlugin from "@babel/plugin-proposal-decorators";
 import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properties";
 //@ts-ignore ironically no types are available
 import typescriptPlugin from "@babel/plugin-transform-typescript";
+//@ts-ignore ironically no types are available
+import emberConcurrencyAsyncPlugin from "ember-concurrency-async-plugin";
 import { Router } from "./router";
 import type { Readable } from "stream";
 import { parseQueryString } from "./query";
-
-// From https://github.com/iliakan/detect-node
-const isNode =
-  Object.prototype.toString.call(globalThis.process) === "[object process]";
 
 export interface FileRef {
   path: LocalPath;
@@ -79,7 +78,7 @@ export class Realm {
   readonly paths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
-  #loader: Loader;
+  readonly loader: Loader;
 
   get url(): string {
     return this.paths.url;
@@ -99,16 +98,28 @@ export class Realm {
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this)
     );
-    this.#loader = new Loader(this, async (url: URL) => {
-      return this.transpileJS((await this.getCardSourceAsText(url))!, url.href);
-    });
+    this.loader = Loader.getLoader(
+      new Map([
+        [
+          this.url,
+          async (url: URL) => {
+            return this.transpileJS(
+              (await this.getCardSourceAsText(url))!,
+              url.href
+            );
+          },
+        ],
+      ])
+    );
 
     this.#jsonAPIRouter = new Router(new URL(url))
       .post("/", this.createCard.bind(this))
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
-      .get("/_cardsOf", this.getCardsOf.bind(this))
       .get("/_search", this.search.bind(this))
+      // TODO lets move typeOf and cardsOf to be a path you add to the end of a route like realmInfo
       .get("/_typeOf", this.getTypeOf.bind(this))
+      .get("/_cardsOf", this.getCardsOf.bind(this))
+      .get("/.*_realmInfo", this.getRealmInfo.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
       .delete("/.+(?<!.json)", this.removeCard.bind(this));
@@ -120,11 +131,6 @@ export class Realm {
       )
       .get("/.+", this.getCardSourceOrRedirect.bind(this))
       .delete("/.+", this.removeCardSource.bind(this));
-  }
-
-  async load<T extends object>(moduleIdentifier: string): Promise<T> {
-    let moduleURL = new URL(moduleIdentifier, this.url);
-    return await this.#loader.load(moduleURL.href);
   }
 
   async write(
@@ -216,7 +222,7 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    this.#loader.clearCache();
+    this.loader.clearCache();
     return new Response(null, {
       status: 204,
       headers: {
@@ -265,7 +271,7 @@ export class Realm {
       delete: true,
     });
     await this.#adapter.remove(handle.path);
-    this.#loader.clearCache();
+    this.loader.clearCache();
     return new Response(null, { status: 204 });
   }
 
@@ -282,6 +288,7 @@ export class Realm {
       filename: debugFilename,
       plugins: [
         glimmerTemplatePlugin,
+        emberConcurrencyAsyncPlugin,
         [typescriptPlugin, { allowDeclareFields: true }],
         [decoratorsProposalPlugin, { legacy: true }],
         classPropertiesProposalPlugin,
@@ -520,15 +527,19 @@ export class Realm {
       relationships: {},
     };
 
+    let dir = this.#paths.local(url);
     // the entries are sorted such that the parent directory always
     // appears before the children
-    entries.sort((a, b) => a.kind.localeCompare(b.kind));
+    entries.sort((a, b) =>
+      `/${join(dir, a.name)}`.localeCompare(`/${join(dir, b.name)}`)
+    );
     for (let entry of entries) {
       let relationship: DirectoryEntryRelationship = {
         links: {
           related:
-            new URL(entry.name, url).href +
-            (entry.kind === "directory" ? "/" : ""),
+            entry.kind === "directory"
+              ? this.#paths.directoryURL(join(dir, entry.name)).href
+              : this.#paths.fileURL(join(dir, entry.name)).href,
         },
         meta: {
           kind: entry.kind as "directory" | "file",
@@ -708,6 +719,18 @@ export class Realm {
     return new Response(JSON.stringify({ data }, null, 2), {
       headers: { "content-type": "application/vnd.api+json" },
     });
+  }
+
+  private async getRealmInfo(): Promise<Response> {
+    return new Response(
+      JSON.stringify({
+        data: {
+          id: this.url,
+          type: "realm-info",
+          attributes: { baseRealm: this.baseRealmURL, url: this.url },
+        },
+      })
+    );
   }
 
   private async search(request: Request): Promise<Response> {

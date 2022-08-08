@@ -9,7 +9,12 @@ import {
   cardSrc,
   compiledCard,
 } from "@cardstack/runtime-common/etc/test-fixtures";
-import { CardRef, isCardDocument, Realm } from "@cardstack/runtime-common";
+import {
+  CardRef,
+  isCardDocument,
+  Realm,
+  Loader,
+} from "@cardstack/runtime-common";
 import { stringify } from "qs";
 import { NodeAdapter } from "../node-realm";
 import { resolve } from "path";
@@ -17,7 +22,7 @@ import { resolve } from "path";
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
 const testRealmHref = testRealmURL.href;
-const testRealm2Href = "http://localhost:4201/node-test/";
+const testRealm2Href = "http://localhost:4202/node-test/";
 
 module("Realm Server", function (hooks) {
   let server: Server;
@@ -260,7 +265,7 @@ module("Realm Server", function (hooks) {
 
   test("serves a directory GET request", async function (assert) {
     let response = await request
-      .get("/")
+      .get("/dir/")
       .set("Accept", "application/vnd.api+json");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
@@ -269,55 +274,31 @@ module("Realm Server", function (hooks) {
       json,
       {
         data: {
-          id: testRealmHref,
+          id: `${testRealmHref}dir/`,
           type: "directory",
           relationships: {
+            "bar.txt": {
+              links: {
+                related: `${testRealmHref}dir/bar.txt`,
+              },
+              meta: {
+                kind: "file",
+              },
+            },
+            "foo.txt": {
+              links: {
+                related: `${testRealmHref}dir/foo.txt`,
+              },
+              meta: {
+                kind: "file",
+              },
+            },
             "subdir/": {
               links: {
-                related: `${testRealmHref}subdir/`,
+                related: `${testRealmHref}dir/subdir/`,
               },
               meta: {
                 kind: "directory",
-              },
-            },
-            "person.gts": {
-              links: {
-                related: `${testRealmHref}person.gts`,
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "cycle-one.js": {
-              links: {
-                related: "http://127.0.0.1:4444/cycle-one.js",
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "cycle-two.js": {
-              links: {
-                related: "http://127.0.0.1:4444/cycle-two.js",
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "person-1.json": {
-              links: {
-                related: `${testRealmHref}person-1.json`,
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "person-2.json": {
-              links: {
-                related: `${testRealmHref}person-2.json`,
-              },
-              meta: {
-                kind: "file",
               },
             },
             "unused-card.gts": {
@@ -453,22 +434,16 @@ module("Realm Server", function (hooks) {
     );
     await realm.ready;
 
-    let module = await realm.load<Record<string, any>>("./person");
+    let module = await realm.loader.load<Record<string, any>>(
+      `${testRealmHref}person`
+    );
     let Person = module["Person"];
     let person = Person.fromSerialized({ firstName: "Mango" });
     assert.strictEqual(person.firstName, "Mango", "card data is correct");
   });
 
   test("can dynamically load a card from a different realm", async function (assert) {
-    let nodeRealm = new NodeAdapter(dir.name);
-    let realm = new Realm(
-      "http://test-realm/",
-      nodeRealm,
-      "http://localhost:4201/base/"
-    );
-    await realm.ready;
-
-    let module = await realm.load<Record<string, any>>(
+    let module = await Loader.getLoader().load<Record<string, any>>(
       `${testRealm2Href}person`
     );
     let Person = module["Person"];
@@ -477,17 +452,19 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically modules with cycles", async function (assert) {
-    let nodeRealm = new NodeAdapter(dir.name);
-    let realm = new Realm(
-      "http://test-realm/",
-      nodeRealm,
-      "http://localhost:4201/base/"
-    );
-    await realm.ready;
-
-    let module = await realm.load<{ three(): number }>(
+    let module = await Loader.getLoader().load<{ three(): number }>(
       `${testRealm2Href}cycle-two`
     );
     assert.strictEqual(module.three(), 3);
+  });
+
+  test("can instantiate a card that uses a card-ref field", async function (assert) {
+    let module = await Loader.getLoader().load<Record<string, any>>(
+      `${testRealm2Href}card-ref-test`
+    );
+    let TestCard = module["TestCard"];
+    let ref = { module: `${testRealm2Href}person`, name: "Person " };
+    let testCard = TestCard.fromSerialized({ ref });
+    assert.deepEqual(testCard.ref, ref, "card data is correct");
   });
 });
