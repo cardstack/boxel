@@ -4,6 +4,7 @@
   padding: var(--card-padding, 6px);
   border-radius: var(--card-border-radius);
   overflow: hidden;
+  background: white;
 }
 
 .header {
