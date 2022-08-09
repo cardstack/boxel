@@ -753,8 +753,11 @@ posts/ignore-me.gts
     test('can combine multiple filters', async function (assert) {
       let matching = await indexer.search({
         filter: {
+          on: {
+            module: `${paths.url}cards`,
+            name: 'Post',
+          },
           every: [
-            { type: { module: `${paths.url}cards`, name: 'Post' } },
             { eq: { title: 'Card 1' } },
             { not: { eq: { 'author.name': 'Cardy' } } },
           ],
@@ -828,7 +831,7 @@ posts/ignore-me.gts
       } catch (err: any) {
         assert.strictEqual(
           err.message,
-          `Your filter refers to nonexistent field "author.nonExistentField" on type ${paths.url}cards/Post`
+          `Your filter refers to nonexistent field \"nonExistentField\" on type ${paths.url}cards/Person`
         );
       }
     });
@@ -849,10 +852,8 @@ posts/ignore-me.gts
     test('can negate a filter', async function (assert) {
       let matching = await indexer.search({
         filter: {
-          every: [
-            { type: { module: `${paths.url}cards`, name: 'Article' } },
-            { not: { eq: { 'author.email': 'carl@stack.com' } } },
-          ],
+          on: { module: `${paths.url}cards`, name: 'Article' },
+          every: [{ not: { eq: { 'author.email': 'carl@stack.com' } } }],
         },
       });
       assert.strictEqual(matching.length, 1);

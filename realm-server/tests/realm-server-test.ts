@@ -18,6 +18,7 @@ import {
 import { stringify } from "qs";
 import { NodeAdapter } from "../node-realm";
 import { resolve } from "path";
+import { Query } from "@cardstack/runtime-common/query";
 
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
@@ -182,8 +183,20 @@ module("Realm Server", function (hooks) {
       assert.ok(false, "response body is not a card document");
     }
 
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmHref}person`,
+          name: "Person",
+        },
+        eq: {
+          firstName: "Van Gogh",
+        },
+      },
+    };
+
     response = await request
-      .get("/_search?filter[eq][firstName]=Van+Gogh")
+      .get(`/_search?${stringify(query)}`)
       .set("Accept", "application/vnd.api+json");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
@@ -399,8 +412,20 @@ module("Realm Server", function (hooks) {
   });
 
   test("serves a /_search GET request", async function (assert) {
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmHref}person`,
+          name: "Person",
+        },
+        eq: {
+          firstName: "Mango",
+        },
+      },
+    };
+
     let response = await request
-      .get(`/_search?filter[eq][firstName]=Mango`)
+      .get(`/_search?${stringify(query)}`)
       .set("Accept", "application/vnd.api+json");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
