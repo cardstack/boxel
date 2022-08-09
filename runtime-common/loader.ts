@@ -4,7 +4,6 @@ import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
 import { RealmPaths } from "./paths";
 import { isNode } from "./index";
-import { baseRealm } from "@cardstack/runtime-common";
 
 type RegisteredModule = {
   state: "registered";
@@ -48,29 +47,44 @@ type FileLoader = (url: URL) => Promise<string>;
 export class Loader {
   private modules = new Map<string, Module>();
   private fileLoaders = new Map<string, FileLoader>();
+  private urlMappings = new Map<RealmPaths, string>();
 
   private constructor(
-    private baseRealmURL?: string,
-    url?: string,
-    fileLoader?: FileLoader
+    urlMappings?: Map<URL, URL>,
+    loader?: { url: URL; loader: FileLoader }
   ) {
-    if (url && fileLoader) {
-      this.addFileLoader(url, fileLoader);
+    if (urlMappings) {
+      for (let [from, to] of urlMappings) {
+        this.addURLMapping(from, to);
+      }
+    }
+    if (loader) {
+      this.addFileLoader(loader.url, loader.loader);
     }
   }
 
   static #instance: Loader | undefined;
 
-  // TODO at some point we'll probably wanna add custom resolvers
   static getLoader(
-    baseRealmURL?: string,
-    url?: string,
-    fileLoader?: FileLoader
+    opts: {
+      urlMappings?: Map<URL, URL>;
+      loader?: { url: URL; loader: FileLoader };
+    } = {}
   ) {
+    let { urlMappings, loader } = opts;
     if (!Loader.#instance) {
-      Loader.#instance = new Loader(baseRealmURL, url, fileLoader);
-    } else if (url && fileLoader) {
-      Loader.#instance.addFileLoader(url, fileLoader);
+      Loader.#instance = new Loader(urlMappings, loader);
+    } else {
+      if (urlMappings) {
+        if (urlMappings) {
+          for (let [from, to] of urlMappings) {
+            Loader.#instance.addURLMapping(from, to);
+          }
+        }
+        if (loader) {
+          Loader.#instance.addFileLoader(loader.url, loader.loader);
+        }
+      }
     }
     return Loader.#instance;
   }
@@ -80,12 +94,16 @@ export class Loader {
     Loader.#instance = undefined;
   }
 
-  addFileLoader(url: string, fileLoader: FileLoader) {
-    this.fileLoaders.set(url, fileLoader);
+  addFileLoader(url: URL, fileLoader: FileLoader) {
+    this.fileLoaders.set(url.href, fileLoader);
   }
 
-  async load<T extends object>(moduleIdentifier: string): Promise<T> {
-    moduleIdentifier = this.resolveModule(moduleIdentifier);
+  addURLMapping(from: URL, to: URL) {
+    this.urlMappings.set(new RealmPaths(from), to.href);
+  }
+
+  async import<T extends object>(moduleIdentifier: string): Promise<T> {
+    moduleIdentifier = this.resolve(moduleIdentifier);
     if (
       (globalThis as any).window && // make sure we are not in a service worker
       !isNode // make sure we are not in node
@@ -110,11 +128,12 @@ export class Loader {
     }
   }
 
-  clearCache() {
-    this.modules = new Map();
+  async fetch(url: string, init?: RequestInit): Promise<Response> {
+    url = this.resolve(url);
+    return fetch(url, init);
   }
 
-  private resolveModule(moduleIdentifier: string, relativeTo?: string): string {
+  resolve(moduleIdentifier: string, relativeTo?: URL): string {
     if (relativeTo) {
       moduleIdentifier = new URL(moduleIdentifier, relativeTo).href;
     }
@@ -125,16 +144,17 @@ export class Loader {
       );
     }
 
-    // CardRef's may still have canonical base realm URL's in them, so when we
-    // try to load modules that originate from a card ref, we'll need to resolve those
-    // correctly
-    if (this.baseRealmURL && baseRealm.inRealm(new URL(moduleIdentifier))) {
-      moduleIdentifier = new URL(
-        baseRealm.local(new URL(moduleIdentifier)),
-        this.baseRealmURL
-      ).href;
+    for (let [paths, to] of this.urlMappings) {
+      let moduleURL = new URL(moduleIdentifier);
+      if (paths.inRealm(moduleURL)) {
+        return new URL(paths.local(moduleURL), to).href;
+      }
     }
     return moduleIdentifier;
+  }
+
+  clearCache() {
+    this.modules = new Map();
   }
 
   private async fetchModule(moduleIdentifier: string): Promise<Module> {
@@ -150,7 +170,7 @@ export class Loader {
 
     let src: string;
     try {
-      src = await this.fetch(new URL(moduleIdentifier));
+      src = await this.load(new URL(moduleIdentifier));
     } catch (exception) {
       this.modules.set(moduleIdentifier, {
         state: "broken",
@@ -175,7 +195,7 @@ export class Loader {
         if (depId === "exports") {
           return "exports";
         } else {
-          return this.resolveModule(depId, moduleIdentifier);
+          return this.resolve(depId, new URL(moduleIdentifier));
         }
       });
       implementation = impl;
@@ -267,7 +287,7 @@ export class Loader {
     }
   }
 
-  private async fetch(moduleURL: URL): Promise<string> {
+  private async load(moduleURL: URL): Promise<string> {
     for (let [realmURL, fileLoader] of this.fileLoaders) {
       let realmPath = new RealmPaths(realmURL);
       if (realmPath.inRealm(moduleURL)) {
@@ -277,7 +297,7 @@ export class Loader {
 
     let response: Response;
     try {
-      response = await fetch(moduleURL.href);
+      response = await this.fetch(moduleURL.href);
     } catch (err) {
       console.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a

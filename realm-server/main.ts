@@ -7,9 +7,8 @@ import { resolve } from "path";
 let {
   port,
   path: paths,
-  url: urls,
-  canonicalURL: canonicalURLs,
-  baseRealmURL,
+  fromUrl: fromUrls,
+  toUrl: toUrls,
 } = yargs(process.argv.slice(2))
   .usage("Start realm server")
   .options({
@@ -18,14 +17,13 @@ let {
       demandOption: true,
       type: "number",
     },
-    url: {
-      description: "realm URL",
+    fromUrl: {
+      description: "the source of the realm URL proxy",
       demandOption: true,
       type: "array",
     },
-    canonicalURL: {
-      description:
-        "the canonical URL for the realm (which may be different than the URL the realm is hosted at). If this is set to an empty value then it will default to the 'url' parameter",
+    toUrl: {
+      description: "the target of the realm URL proxy",
       demandOption: true,
       type: "array",
     },
@@ -34,38 +32,45 @@ let {
       demandOption: true,
       type: "array",
     },
-    baseRealmURL: {
-      description: "the URL the base realm is served from (optional)",
-      demandOption: true,
-      type: "string",
-    },
   })
   .parseSync();
 
-if (!(urls.length === paths.length && urls.length === canonicalURLs.length)) {
+if (!(fromUrls.length === toUrls.length)) {
   console.error(
-    `Mismatched number of paths, URLs, and canonicalURLs specified. Each --path argument must be paired with a --url argument and a --canonicalURL argument`
+    `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`
+  );
+  process.exit(-1);
+}
+if (fromUrls.length < paths.length) {
+  console.error(
+    `not enough url pairs were provided to satisfy the paths provided. There must be at least one --fromUrl/--toUrl pair for each --path parameter`
   );
   process.exit(-1);
 }
 
+let urlMappings = new Map(
+  fromUrls.map((fromUrl, i) => [
+    new URL(String(fromUrl), `http://localhost:${port}`),
+    new URL(String(toUrls[i]), `http://localhost:${port}`),
+  ])
+);
+let hrefs = [...urlMappings].map(([from, to]) => [from.href, to.href]);
 let realms: Realm[] = paths.map((path, i) => {
-  let url = new URL(String(urls[i]), `http://localhost:${port}`).href;
-  let canonicalURL: string = new URL(
-    String(canonicalURLs[i] || url),
-    `http://localhost:${port}`
-  ).href;
-  return new Realm(canonicalURL, new NodeAdapter(resolve(String(path))), {
-    baseRealmURL,
-    hostedAtURL: url,
+  return new Realm(hrefs[i][0], new NodeAdapter(resolve(String(path))), {
+    urlMappings,
   });
 });
 
 let server = createRealmServer(realms);
 server.listen(port);
-console.log(
-  `Realm server listening on port ${port} with base realm of ${baseRealmURL}:`
-);
-for (let [index, { url, hostedAtURL }] of realms.entries()) {
-  console.log(`  ${paths[index]} => ${hostedAtURL} canonical url (${url})`);
+console.log(`Realm server listening on port ${port}:`);
+let additionalMappings = hrefs.slice(paths.length);
+for (let [index, { url }] of realms.entries()) {
+  console.log(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
+}
+if (additionalMappings.length) {
+  console.log("Additional URL mappings:");
+  for (let [from, to] of additionalMappings) {
+    console.log(`    ${from} => ${to}`);
+  }
 }

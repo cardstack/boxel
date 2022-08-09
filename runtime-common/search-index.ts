@@ -231,8 +231,8 @@ export class SearchIndex {
   ) {}
 
   async run() {
-    this.#api = await Loader.getLoader().load<CardAPI>(
-      `${this.realm.baseRealmURL}card-api`
+    this.#api = await Loader.getLoader().import<CardAPI>(
+      `${baseRealm.url}card-api`
     );
     await this.visitDirectory(new URL(this.realm.url));
     await this.semanticPhase();
@@ -294,10 +294,10 @@ export class SearchIndex {
         } else {
           json.data.id = instanceURL.href;
           json.data.meta.lastModified = lastModified;
-          let module = await Loader.getLoader().load<Record<string, any>>(
+          let module = await Loader.getLoader().import<Record<string, any>>(
             new URL(
               json.data.meta.adoptsFrom.module,
-              new URL(localPath, this.realm.hostedAtURL)
+              new URL(localPath, this.realm.url)
             ).href
           );
           let CardClass = module[json.data.meta.adoptsFrom.name] as typeof Card;
@@ -752,11 +752,8 @@ export class SearchIndex {
     let deferred = new Deferred<CardDefinition | undefined>();
     this.#externalDefinitionsCache.set(key, deferred.promise);
 
-    if (baseRealm.inRealm(moduleURL)) {
-      moduleURL = new URL(baseRealm.local(moduleURL), this.realm.baseRealmURL);
-    }
     let url = `${moduleURL.href}/_typeOf?${stringify(ref)}`;
-    let response = await fetch(url, {
+    let response = await Loader.getLoader().fetch(url, {
       headers: {
         Accept: "application/vnd.api+json",
       },

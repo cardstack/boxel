@@ -14,6 +14,7 @@ import {
   isCardDocument,
   Realm,
   Loader,
+  baseRealm,
 } from "@cardstack/runtime-common";
 import { stringify } from "qs";
 import { NodeAdapter } from "../node-realm";
@@ -37,7 +38,11 @@ module("Realm Server", function (hooks) {
     let testRealm = new Realm(
       testRealmHref,
       new NodeAdapter(resolve(dir.name)),
-      { baseRealmURL: "http://localhost:4201/base/" }
+      {
+        urlMappings: new Map([
+          [new URL(baseRealm.url), new URL("http://localhost:4201/base/")],
+        ]),
+      }
     );
     await testRealm.ready;
     server = createRealmServer([testRealm]);
@@ -445,11 +450,13 @@ module("Realm Server", function (hooks) {
   test("can dynamically load a card from own realm", async function (assert) {
     let nodeRealm = new NodeAdapter(dir.name);
     let realm = new Realm("http://test-realm/", nodeRealm, {
-      baseRealmURL: "http://localhost:4201/base/",
+      urlMappings: new Map([
+        [new URL(baseRealm.url), new URL("http://localhost:4201/base/")],
+      ]),
     });
     await realm.ready;
 
-    let module = await realm.loader.load<Record<string, any>>(
+    let module = await realm.loader.import<Record<string, any>>(
       `${testRealmHref}person`
     );
     let Person = module["Person"];
@@ -458,7 +465,7 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically load a card from a different realm", async function (assert) {
-    let module = await Loader.getLoader().load<Record<string, any>>(
+    let module = await Loader.getLoader().import<Record<string, any>>(
       `${testRealm2Href}person`
     );
     let Person = module["Person"];
@@ -467,14 +474,14 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically modules with cycles", async function (assert) {
-    let module = await Loader.getLoader().load<{ three(): number }>(
+    let module = await Loader.getLoader().import<{ three(): number }>(
       `${testRealm2Href}cycle-two`
     );
     assert.strictEqual(module.three(), 3);
   });
 
   test("can instantiate a card that uses a card-ref field", async function (assert) {
-    let module = await Loader.getLoader().load<Record<string, any>>(
+    let module = await Loader.getLoader().import<Record<string, any>>(
       `${testRealm2Href}card-ref-test`
     );
     let TestCard = module["TestCard"];

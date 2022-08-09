@@ -72,8 +72,7 @@ export interface RealmAdapter {
 }
 
 interface Options {
-  baseRealmURL?: string;
-  hostedAtURL?: string;
+  urlMappings?: Map<URL, URL>;
 }
 
 export class Realm {
@@ -84,8 +83,6 @@ export class Realm {
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
   readonly loader: Loader;
-  readonly baseRealmURL;
-  readonly hostedAtURL: string;
 
   get url(): string {
     return this.paths.url;
@@ -93,13 +90,18 @@ export class Realm {
 
   constructor(url: string, adapter: RealmAdapter, opts: Options = {}) {
     this.paths = new RealmPaths(url);
-    this.baseRealmURL = opts.baseRealmURL ?? baseRealm.url;
-    this.hostedAtURL = opts.hostedAtURL ?? url;
-    this.#adapter = adapter;
-    this.loader = Loader.getLoader(this.baseRealmURL, url, async (url: URL) => {
-      let content = await this.getCardSourceAsText(url);
-      return this.transpileJS(content!, url.href);
+    let { urlMappings = new Map() } = opts;
+    this.loader = Loader.getLoader({
+      urlMappings,
+      loader: {
+        url: new URL(this.url),
+        loader: async (url: URL) => {
+          let content = await this.getCardSourceAsText(url);
+          return this.transpileJS(content!, url.href);
+        },
+      },
     });
+    this.#adapter = adapter;
     this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
       this,
@@ -299,7 +301,7 @@ export class Realm {
               },
             ]
           : (makeEmberTemplatePlugin as any)(() => etc.precompile),
-        [externalsPlugin, { realm: this }],
+        externalsPlugin,
       ],
     })!.code!;
   }
@@ -723,7 +725,7 @@ export class Realm {
         data: {
           id: this.url,
           type: "realm-info",
-          attributes: { baseRealm: this.baseRealmURL, url: this.url },
+          attributes: { url: this.url },
         },
       })
     );
