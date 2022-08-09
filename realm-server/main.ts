@@ -1,4 +1,5 @@
 import { Realm } from "@cardstack/runtime-common";
+import { Loader } from "@cardstack/runtime-common/loader";
 import { NodeAdapter } from "./node-realm";
 import yargs from "yargs";
 import { createRealmServer } from "./server";
@@ -54,11 +55,10 @@ let urlMappings = new Map(
     new URL(String(toUrls[i]), `http://localhost:${port}`),
   ])
 );
+Loader.getLoader({ urlMappings });
 let hrefs = [...urlMappings].map(([from, to]) => [from.href, to.href]);
 let realms: Realm[] = paths.map((path, i) => {
-  return new Realm(hrefs[i][0], new NodeAdapter(resolve(String(path))), {
-    urlMappings,
-  });
+  return new Realm(hrefs[i][0], new NodeAdapter(resolve(String(path))));
 });
 
 let server = createRealmServer(realms);
