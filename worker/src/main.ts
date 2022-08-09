@@ -27,7 +27,7 @@ livenessWatcher.registerShutdownListener(async () => {
       new Realm(
         'http://local-realm/',
         new LocalRealm(messageHandler.fs),
-        'http://localhost:4201/base/' // This is the locally served base realm
+        { baseRealmURL: 'http://localhost:4201/base/' } // This is the locally served base realm
       )
     );
   } catch (err) {

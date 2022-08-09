@@ -2,10 +2,15 @@ import { module, test, skip } from 'qunit';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 let paths = new RealmPaths(testRealmURL);
 
-module('Unit | search-index', function () {
+module('Unit | search-index', function (hooks) {
+  hooks.before(function () {
+    Loader.destroy();
+  });
+
   test('full indexing discovers card instances', async function (assert) {
     let adapter = new TestRealmAdapter({
       'empty.json': {
@@ -643,55 +648,32 @@ posts/ignore-me.gts
     );
   });
 
+  const testModuleRealm = 'http://localhost:4201/test/';
   module('query', function (hooks) {
     const sampleCards = {
-      'cards.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-        import IntegerCard from 'https://cardstack.com/base/integer';
-        import DatetimeCard from 'https://cardstack.com/base/datetime';
-
-        export class Person extends Card {
-          @field name = contains(StringCard);
-          @field email = contains(StringCard);
-        }
-
-        export class Post extends Card {
-          @field title = contains(StringCard);
-          @field description = contains(StringCard);
-          @field author = contains(Person);
-          @fields views = contains(IntegerCard);
-          @fields createdAt = contains(DatetimeCard);
-        }
-
-        export class Article extends Post {
-          @fields publishedDate = contains(DatetimeCard);
-        }
-      `,
-      'book.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import Person from './cards.gts';
-
-        export class Book extends Card {
-          @field author = contains(Person);
-        }
-      `,
       'card-1.json': {
         data: {
           type: 'card',
           attributes: {
             title: 'Card 1',
             description: 'Sample post',
-            author: { name: 'Cardy' },
+            author: { firstName: 'Cardy' },
           },
-          meta: { adoptsFrom: { module: `./cards`, name: 'Article' } },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}article`,
+              name: 'Article',
+            },
+          },
         },
       },
       'card-2.json': {
         data: {
           type: 'card',
-          attributes: { author: { name: 'Cardy' } },
-          meta: { adoptsFrom: { module: `./book.gts`, name: 'Book' } },
+          attributes: { author: { firstName: 'Cardy' } },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
         },
       },
       'cards/1.json': {
@@ -700,12 +682,12 @@ posts/ignore-me.gts
           attributes: {
             title: 'Card 1',
             description: 'Sample post',
-            author: { name: 'Carl Stack' },
+            author: { firstName: 'Carl', lastName: 'Stack' },
             createdAt: new Date(2022, 7, 1),
             views: 10,
           },
           meta: {
-            adoptsFrom: { module: `${paths.url}cards`, name: 'Post' },
+            adoptsFrom: { module: `${testModuleRealm}post`, name: 'Post' },
           },
         },
       },
@@ -716,14 +698,18 @@ posts/ignore-me.gts
             title: 'Card 2',
             description: 'Sample post',
             author: {
-              name: 'Carl Stack',
+              firstName: 'Carl',
+              lastName: 'Deck',
               email: 'carl@stack.com',
             },
             createdAt: new Date(2022, 7, 22),
             views: 5,
           },
           meta: {
-            adoptsFrom: { module: `${paths.url}cards`, name: 'Article' },
+            adoptsFrom: {
+              module: `${testModuleRealm}article`,
+              name: 'Article',
+            },
           },
         },
       },
@@ -740,7 +726,7 @@ posts/ignore-me.gts
     test(`can search for cards by using the 'eq' filter`, async function (assert) {
       let matching = await indexer.search({
         filter: {
-          on: { module: `${paths.url}cards`, name: 'Post' },
+          on: { module: `${testModuleRealm}post`, name: 'Post' },
           eq: { title: 'Card 1', description: 'Sample post' },
         },
       });
@@ -750,13 +736,26 @@ posts/ignore-me.gts
       );
     });
 
+    test(`can search for cards by using a computed field`, async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}post`, name: 'Post' },
+          eq: { 'author.fullName': 'Carl Stack' },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}cards/1`]
+      );
+    });
+
     test('can combine multiple filters', async function (assert) {
       let matching = await indexer.search({
         filter: {
           every: [
-            { type: { module: `${paths.url}cards`, name: 'Post' } },
+            { type: { module: `${testModuleRealm}post`, name: 'Post' } },
             { eq: { title: 'Card 1' } },
-            { not: { eq: { 'author.name': 'Cardy' } } },
+            { not: { eq: { 'author.firstName': 'Cardy' } } },
           ],
         },
       });
@@ -767,7 +766,7 @@ posts/ignore-me.gts
     test('can handle a filter with double negatives', async function (assert) {
       let matching = await indexer.search({
         filter: {
-          on: { module: `${paths.url}cards`, name: 'Post' },
+          on: { module: `${testModuleRealm}post`, name: 'Post' },
           not: { not: { not: { eq: { 'author.email': 'carl@stack.com' } } } },
         },
       });
@@ -779,7 +778,9 @@ posts/ignore-me.gts
 
     test('can filter by card type', async function (assert) {
       let matching = await indexer.search({
-        filter: { type: { module: `${paths.url}cards`, name: 'Article' } },
+        filter: {
+          type: { module: `${testModuleRealm}article`, name: 'Article' },
+        },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -788,7 +789,7 @@ posts/ignore-me.gts
       );
 
       matching = await indexer.search({
-        filter: { type: { module: `${testRealmURL}cards`, name: 'Post' } },
+        filter: { type: { module: `${testModuleRealm}post`, name: 'Post' } },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -804,8 +805,8 @@ posts/ignore-me.gts
     test(`can filter on a nested field using 'eq'`, async function (assert) {
       let matching = await indexer.search({
         filter: {
-          on: { module: `${paths.url}cards`, name: 'Post' },
-          eq: { 'author.name': 'Carl Stack' },
+          on: { module: `${testModuleRealm}post`, name: 'Post' },
+          eq: { 'author.firstName': 'Carl' },
         },
       });
       assert.deepEqual(
@@ -818,7 +819,7 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           every: [
-            { type: { module: `${paths.url}cards`, name: 'Article' } },
+            { type: { module: `${testModuleRealm}article`, name: 'Article' } },
             { not: { eq: { 'author.email': 'carl@stack.com' } } },
           ],
         },
@@ -832,12 +833,12 @@ posts/ignore-me.gts
         filter: {
           any: [
             {
-              on: { module: `${paths.url}cards.gts`, name: 'Article' },
-              eq: { 'author.name': 'Cardy' },
+              on: { module: `${testModuleRealm}article`, name: 'Article' },
+              eq: { 'author.firstName': 'Cardy' },
             },
             {
-              on: { module: `${paths.url}book`, name: 'Book' },
-              eq: { 'author.name': 'Cardy' },
+              on: { module: `${testModuleRealm}book`, name: 'Book' },
+              eq: { 'author.firstName': 'Cardy' },
             },
           ],
         },

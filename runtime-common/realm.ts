@@ -71,6 +71,11 @@ export interface RealmAdapter {
   remove(path: LocalPath): Promise<void>;
 }
 
+interface Options {
+  baseRealmURL?: string;
+  hostedAtURL?: string;
+}
+
 export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
@@ -79,37 +84,28 @@ export class Realm {
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
   readonly loader: Loader;
+  readonly baseRealmURL;
+  readonly hostedAtURL: string;
 
   get url(): string {
     return this.paths.url;
   }
 
-  constructor(
-    url: string,
-    adapter: RealmAdapter,
-    readonly baseRealmURL = baseRealm.url
-  ) {
+  constructor(url: string, adapter: RealmAdapter, opts: Options = {}) {
     this.paths = new RealmPaths(url);
-    this.#startedUp.fulfill((() => this.#startup())());
+    this.baseRealmURL = opts.baseRealmURL ?? baseRealm.url;
+    this.hostedAtURL = opts.hostedAtURL ?? url;
     this.#adapter = adapter;
+    this.loader = Loader.getLoader(this.baseRealmURL, url, async (url: URL) => {
+      let content = await this.getCardSourceAsText(url);
+      return this.transpileJS(content!, url.href);
+    });
+    this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
       this,
       this.paths,
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this)
-    );
-    this.loader = Loader.getLoader(
-      new Map([
-        [
-          this.url,
-          async (url: URL) => {
-            return this.transpileJS(
-              (await this.getCardSourceAsText(url))!,
-              url.href
-            );
-          },
-        ],
-      ])
     );
 
     this.#jsonAPIRouter = new Router(new URL(url))
@@ -117,9 +113,9 @@ export class Realm {
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
       .get("/_search", this.search.bind(this))
       // TODO lets move typeOf and cardsOf to be a path you add to the end of a route like realmInfo
-      .get("/_typeOf", this.getTypeOf.bind(this))
       .get("/_cardsOf", this.getCardsOf.bind(this))
       .get("/.*_realmInfo", this.getRealmInfo.bind(this))
+      .get("/.*_typeOf", this.getTypeOf.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
       .delete("/.+(?<!.json)", this.removeCard.bind(this));

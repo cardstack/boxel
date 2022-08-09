@@ -36,7 +36,7 @@ module("Realm Server", function (hooks) {
     let testRealm = new Realm(
       testRealmHref,
       new NodeAdapter(resolve(dir.name)),
-      "http://localhost:4201/base/"
+      { baseRealmURL: "http://localhost:4201/base/" }
     );
     await testRealm.ready;
     server = createRealmServer([testRealm]);
@@ -419,11 +419,9 @@ module("Realm Server", function (hooks) {
 
   test("can dynamically load a card from own realm", async function (assert) {
     let nodeRealm = new NodeAdapter(dir.name);
-    let realm = new Realm(
-      "http://test-realm/",
-      nodeRealm,
-      "http://localhost:4201/base/"
-    );
+    let realm = new Realm("http://test-realm/", nodeRealm, {
+      baseRealmURL: "http://localhost:4201/base/",
+    });
     await realm.ready;
 
     let module = await realm.loader.load<Record<string, any>>(

@@ -3,18 +3,19 @@ import GlimmerComponent from '@glimmer/component';
 import { CardRef, baseRealm } from '@cardstack/runtime-common';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import { testRealmURL } from '../../helpers';
 import Schema from 'runtime-spike/components/schema';
 import Service from '@ember/service';
 import { waitUntil } from '@ember/test-helpers';
 
+const testRealmURL = 'http://localhost:4201/test/'
+
 // TODO Consider making this a helper
 class NodeRealm extends Service {
   isAvailable = true;
-  url = new URL('http://localhost:4201/test/');
+  url = new URL(testRealmURL);
   realmMappings = new Map([
     [baseRealm.url, 'http://localhost:4201/base/'],
-    [testRealmURL, 'http://localhost:4201/test/']
+    [testRealmURL, testRealmURL]
   ])
   mapURL(url: string, reverseLookup = false) {
     for (let [realm, forwardURL] of this.realmMappings) {

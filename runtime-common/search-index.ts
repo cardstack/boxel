@@ -1,11 +1,22 @@
 import { executableExtensions, baseRealm } from ".";
-import { Kind, Realm, CardDefinitionResource } from "./realm";
+import {
+  Kind,
+  Realm,
+  CardDefinitionResource,
+  getExportedCardContext,
+} from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
 import { stringify } from "qs";
 import { Query, Filter } from "./query";
+import { Loader } from "./loader";
+import { Deferred } from "./deferred";
+//@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
+import type { Card } from "https://cardstack.com/base/card-api";
+//@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
+type CardAPI = typeof import("https://cardstack.com/base/card-api");
 
 export type ExportedCardRef = {
   module: string;
@@ -202,6 +213,12 @@ export class SearchIndex {
   private definitions = new Map<string, CardDefinition>();
   private exportedCardRefs = new Map<string, CardRef[]>();
   private ignoreMap = new URLMap<Ignore>();
+  #api: CardAPI | undefined;
+  #cardModules = new Map<string, Promise<Record<string, any>>>();
+  #externalDefinitionsCache = new Map<
+    string,
+    Promise<CardDefinition | undefined>
+  >();
 
   constructor(
     private realm: Realm,
@@ -215,8 +232,18 @@ export class SearchIndex {
   ) {}
 
   async run() {
+    this.#api = await Loader.getLoader().load<CardAPI>(
+      `${this.realm.baseRealmURL}card-api`
+    );
     await this.visitDirectory(new URL(this.realm.url));
     await this.semanticPhase();
+  }
+
+  private get api(): CardAPI {
+    if (!this.#api) {
+      throw new Error(`Card API was accessed before it was loaded`);
+    }
+    return this.#api;
   }
 
   private async visitDirectory(url: URL): Promise<void> {
@@ -248,6 +275,28 @@ export class SearchIndex {
     await this.semanticPhase();
   }
 
+  private async getCardClass(
+    cardRef: ExportedCardRef,
+    relativeTo: URL
+  ): Promise<typeof Card> {
+    let key = this.internalKeyFor(
+      { type: "exportedCard", ...cardRef },
+      relativeTo
+    );
+    let modulePromise = this.#cardModules.get(key);
+    if (!modulePromise) {
+      modulePromise = Loader.getLoader().load<Record<string, any>>(
+        new URL(cardRef.module, relativeTo).href
+      );
+      this.#cardModules.set(key, modulePromise);
+    }
+    let module = await modulePromise;
+    if (!module) {
+      throw new Error(`Could not load card module ${cardRef.module}`);
+    }
+    return module[cardRef.name] as typeof Card;
+  }
+
   private async visitFile(url: URL, opts?: { delete?: true }): Promise<void> {
     if (this.isIgnored(url)) {
       return;
@@ -268,11 +317,15 @@ export class SearchIndex {
         } else {
           json.data.id = instanceURL.href;
           json.data.meta.lastModified = lastModified;
+          let CardClass = await this.getCardClass(
+            json.data.meta.adoptsFrom,
+            new URL(localPath, this.realm.hostedAtURL)
+          );
+          let card = CardClass.fromSerialized(json.data.attributes);
+          let searchData = await this.api.searchDoc(card);
           this.instances.set(instanceURL, {
             resource: json.data,
-            searchData: json.data.attributes
-              ? flatten(json.data.attributes)
-              : {},
+            searchData,
             types: undefined,
           });
         }
@@ -300,22 +353,28 @@ export class SearchIndex {
     let newDefinitions: Map<string, CardDefinition> = new Map([
       // seed the definitions with the base card
       [
-        this.internalKeyFor({
-          type: "exportedCard",
-          module: `${baseRealm.url}card-api`,
-          name: "Card",
-        }),
+        this.internalKeyFor(
+          {
+            type: "exportedCard",
+            module: `${baseRealm.url}card-api`,
+            name: "Card",
+          },
+          undefined
+        ),
         {
           id: {
             type: "exportedCard",
             module: `${baseRealm.url}card-api`,
             name: "Card",
           },
-          key: this.internalKeyFor({
-            type: "exportedCard",
-            module: `${baseRealm.url}card-api`,
-            name: "Card",
-          }),
+          key: this.internalKeyFor(
+            {
+              type: "exportedCard",
+              module: `${baseRealm.url}card-api`,
+              name: "Card",
+            },
+            undefined
+          ),
           super: undefined,
           fields: new Map(),
         },
@@ -360,8 +419,8 @@ export class SearchIndex {
     this.exportedCardRefs = newExportedCardRefs;
 
     // once we have definitions we can fill in the instance types
-    for (let entry of [...this.instances.values()]) {
-      entry.types = await this.getTypes(entry.resource.meta.adoptsFrom);
+    for (let [url, entry] of [...this.instances]) {
+      entry.types = await this.getTypes(entry.resource.meta.adoptsFrom, url);
     }
   }
 
@@ -380,9 +439,9 @@ export class SearchIndex {
         }
       : ref;
 
-    let def = definitions.get(this.internalKeyFor(id));
+    let def = definitions.get(this.internalKeyFor(id, url));
     if (def) {
-      definitions.set(this.internalKeyFor(ref), def);
+      definitions.set(this.internalKeyFor(ref, url), def);
       return def;
     }
 
@@ -420,7 +479,7 @@ export class SearchIndex {
       }
     }
 
-    let key = this.internalKeyFor(id);
+    let key = this.internalKeyFor(id, url);
     def = { id, key, super: superDef.id, fields };
     definitions.set(key, def);
     return def;
@@ -449,7 +508,7 @@ export class SearchIndex {
         ) {
           let { module, name } = ref;
           return definitions.get(
-            this.internalKeyFor({ module, name, type: "exportedCard" })
+            this.internalKeyFor({ module, name, type: "exportedCard" }, url)
           );
         }
         let inner = this.lookupPossibleCard(new URL(ref.module, url), ref.name);
@@ -473,17 +532,19 @@ export class SearchIndex {
     }
   }
 
-  private internalKeyFor(ref: CardRef): string {
+  private internalKeyFor(ref: CardRef, relativeTo: URL | undefined): string {
     switch (ref.type) {
       case "exportedCard":
         let module = trimExecutableExtension(
-          new URL(ref.module, this.realm.url)
+          new URL(ref.module, relativeTo)
         ).href;
         return `${module}/${ref.name}`;
       case "ancestorOf":
-        return `${this.internalKeyFor(ref.card)}/ancestor`;
+        return `${this.internalKeyFor(ref.card, relativeTo)}/ancestor`;
       case "fieldOf":
-        return `${this.internalKeyFor(ref.card)}/fields/${ref.field}`;
+        return `${this.internalKeyFor(ref.card, relativeTo)}/fields/${
+          ref.field
+        }`;
     }
   }
 
@@ -520,8 +581,20 @@ export class SearchIndex {
       .map((entry) => entry.resource);
   }
 
-  async typeOf(ref: CardRef): Promise<CardDefinition | undefined> {
-    return this.definitions.get(this.internalKeyFor(ref));
+  async typeOf(
+    ref: CardRef,
+    relativeTo = new URL(this.realm.url)
+  ): Promise<CardDefinition | undefined> {
+    let def = this.definitions.get(this.internalKeyFor(ref, relativeTo));
+    if (def) {
+      return def;
+    }
+    let { module } = getExportedCardContext(ref);
+    let moduleURL = new URL(module, relativeTo);
+    if (!this.realm.paths.inRealm(moduleURL)) {
+      return await this.getExternalCardDefinition(moduleURL, ref);
+    }
+    return undefined;
   }
 
   async exportedCardsOf(module: string): Promise<CardRef[]> {
@@ -533,11 +606,17 @@ export class SearchIndex {
     return this.instances.get(url)?.resource;
   }
 
-  private async getTypes(ref: ExportedCardRef): Promise<string[]> {
+  private async getTypes(
+    ref: ExportedCardRef,
+    relativeTo = new URL(ref.module)
+  ): Promise<string[]> {
     let fullRef: CardRef | undefined = { type: "exportedCard", ...ref };
     let types: string[] = [];
     while (fullRef) {
-      let def: CardDefinition | undefined = await this.typeOf(fullRef);
+      let def: CardDefinition | undefined = await this.typeOf(
+        fullRef,
+        relativeTo
+      );
       if (!def) {
         // TODO: create a way to report this error without breaking indexing
         throw new Error(
@@ -546,17 +625,20 @@ export class SearchIndex {
           )} but couldn't find that definition`
         );
       }
-      types.push(this.internalKeyFor(fullRef));
+      types.push(this.internalKeyFor(fullRef, relativeTo));
       fullRef = def.super;
     }
     return types;
   }
 
   private cardHasType(entry: SearchEntry, type: ExportedCardRef): boolean {
-    let ref = this.internalKeyFor({
-      type: "exportedCard",
-      ...type,
-    });
+    let ref = this.internalKeyFor(
+      {
+        type: "exportedCard",
+        ...type,
+      },
+      undefined /*assumes type refers to absolute module URL */
+    );
     return Boolean(entry.types?.find((t) => t === ref));
   }
 
@@ -648,12 +730,18 @@ export class SearchIndex {
     moduleURL: URL,
     ref: CardRef
   ): Promise<CardDefinition | undefined> {
-    if (!baseRealm.inRealm(moduleURL)) {
-      // TODO we need some way to map a module to the realm URL that it comes from
-      // so that we now how to ask for it's cards' definitions
-      throw new Error(`not implemented`);
+    let key = this.internalKeyFor(ref, undefined); // these should always be absolute URLs
+    let promise = this.#externalDefinitionsCache.get(key);
+    if (promise) {
+      return await promise;
     }
-    let url = this.realm.baseRealmURL + "_typeOf?" + stringify(ref);
+    let deferred = new Deferred<CardDefinition | undefined>();
+    this.#externalDefinitionsCache.set(key, deferred.promise);
+
+    if (baseRealm.inRealm(moduleURL)) {
+      moduleURL = new URL(baseRealm.local(moduleURL), this.realm.baseRealmURL);
+    }
+    let url = `${moduleURL.href}/_typeOf?${stringify(ref)}`;
     let response = await fetch(url, {
       headers: {
         Accept: "application/vnd.api+json",
@@ -661,8 +749,10 @@ export class SearchIndex {
     });
     if (!response.ok) {
       console.log(`Could not get card type for ${url}: ${response.status}`);
+      deferred.fulfill(undefined);
       return undefined;
     }
+
     let resource: CardDefinitionResource = (await response.json()).data;
     let def: CardDefinition = {
       id: resource.attributes.cardRef,
@@ -680,6 +770,7 @@ export class SearchIndex {
           ])
       ),
     };
+    deferred.fulfill(def);
     return def;
   }
 }
@@ -704,21 +795,6 @@ function getFieldType(
     return ref.name as ReturnType<typeof getFieldType>;
   }
   return undefined;
-}
-
-function flatten(obj: Record<string, any>): Record<string, any> {
-  let result: Record<string, any> = {};
-  for (let [key, value] of Object.entries(obj)) {
-    if (typeof value === "object") {
-      let res = flatten(value);
-      for (let [k, val] of Object.entries(res)) {
-        result[`${key}.${k}`] = val;
-      }
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
 }
 
 // three-valued version of Array.every that propagates nulls. Here, the presence
