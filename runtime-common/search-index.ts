@@ -214,7 +214,6 @@ export class SearchIndex {
   private exportedCardRefs = new Map<string, CardRef[]>();
   private ignoreMap = new URLMap<Ignore>();
   #api: CardAPI | undefined;
-  #cardModules = new Map<string, Promise<Record<string, any>>>();
   #externalDefinitionsCache = new Map<
     string,
     Promise<CardDefinition | undefined>
@@ -275,28 +274,6 @@ export class SearchIndex {
     await this.semanticPhase();
   }
 
-  private async getCardClass(
-    cardRef: ExportedCardRef,
-    relativeTo: URL
-  ): Promise<typeof Card> {
-    let key = this.internalKeyFor(
-      { type: "exportedCard", ...cardRef },
-      relativeTo
-    );
-    let modulePromise = this.#cardModules.get(key);
-    if (!modulePromise) {
-      modulePromise = Loader.getLoader().load<Record<string, any>>(
-        new URL(cardRef.module, relativeTo).href
-      );
-      this.#cardModules.set(key, modulePromise);
-    }
-    let module = await modulePromise;
-    if (!module) {
-      throw new Error(`Could not load card module ${cardRef.module}`);
-    }
-    return module[cardRef.name] as typeof Card;
-  }
-
   private async visitFile(url: URL, opts?: { delete?: true }): Promise<void> {
     if (this.isIgnored(url)) {
       return;
@@ -317,10 +294,13 @@ export class SearchIndex {
         } else {
           json.data.id = instanceURL.href;
           json.data.meta.lastModified = lastModified;
-          let CardClass = await this.getCardClass(
-            json.data.meta.adoptsFrom,
-            new URL(localPath, this.realm.hostedAtURL)
+          let module = await Loader.getLoader().load<Record<string, any>>(
+            new URL(
+              json.data.meta.adoptsFrom.module,
+              new URL(localPath, this.realm.hostedAtURL)
+            ).href
           );
+          let CardClass = module[json.data.meta.adoptsFrom.name] as typeof Card;
           let card = CardClass.fromSerialized(json.data.attributes);
           this.instances.set(instanceURL, {
             resource: json.data,
