@@ -361,7 +361,10 @@ module('Unit | realm', function (hooks) {
     );
 
     let cards = await searchIndex.search({
-      filter: { eq: { firstName: 'Van Gogh' } },
+      filter: {
+        on: { module: `http://localhost:4201/test/person`, name: 'Person' },
+        eq: { firstName: 'Van Gogh' },
+      },
     });
 
     assert.strictEqual(cards.length, 1, 'search finds updated value');

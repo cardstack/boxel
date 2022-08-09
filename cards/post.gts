@@ -4,7 +4,9 @@ import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
 import lodash from '//cdn.skypack.dev/lodash';
 
-let imageURL = new URL('./logo.png', import.meta.url).href;
+// TODO bring this back after we support import.meta again
+// let imageURL = new URL('./logo.png', import.meta.url).href;
+let imageURL = new URL('https://assets.website-files.com/6182a59f245e661700a870fc/6182a59f245e66fab1a871f6_chris-f4d9cc447cac8e25d1d56fa73b0b85fd.jpeg');
 let test = lodash.isObject({});
 console.log(`{} is object? ${test}`);
 
