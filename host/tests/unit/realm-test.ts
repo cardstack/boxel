@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import {
   CardRef,
   isCardDocument,
@@ -8,9 +8,14 @@ import {
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
+import { Loader } from '@cardstack/runtime-common/loader';
 import { stringify } from 'qs';
 
-module('Unit | realm', function () {
+module('Unit | realm', function (hooks) {
+  hooks.before(function () {
+    Loader.destroy();
+  });
+
   test('realm can serve card data requests', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/empty.json': {
@@ -241,7 +246,7 @@ module('Unit | realm', function () {
     }
   });
 
-  skip('realm can serve patch card requests', async function (assert) {
+  test('realm can serve patch card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/card.json': {
         data: {
@@ -252,8 +257,8 @@ module('Unit | realm', function () {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
-              name: 'Card',
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
             },
           },
         },
@@ -276,8 +281,8 @@ module('Unit | realm', function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
-                  name: 'Card',
+                  module: 'http://localhost:4201/test/person',
+                  name: 'Person',
                 },
               },
             },
@@ -325,8 +330,8 @@ module('Unit | realm', function () {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'Card',
+                module: 'http://localhost:4201/test/person',
+                name: 'Person',
               },
             },
           },
@@ -356,7 +361,10 @@ module('Unit | realm', function () {
     );
 
     let cards = await searchIndex.search({
-      filter: { eq: { firstName: 'Van Gogh' } },
+      filter: {
+        on: { module: `http://localhost:4201/test/person`, name: 'Person' },
+        eq: { firstName: 'Van Gogh' },
+      },
     });
 
     assert.strictEqual(cards.length, 1, 'search finds updated value');

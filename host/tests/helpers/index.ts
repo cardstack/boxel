@@ -21,15 +21,13 @@ export const TestRealm = {
     return new Realm(
       realmURL ?? testRealmURL,
       new TestRealmAdapter(flatFiles),
-      'http://localhost:4201/base/'
+      { baseRealmURL: 'http://localhost:4201/base/' }
     );
   },
   createWithAdapter(adapter: RealmAdapter, realmURL?: string): Realm {
-    return new Realm(
-      realmURL ?? testRealmURL,
-      adapter,
-      'http://localhost:4201/base/'
-    );
+    return new Realm(realmURL ?? testRealmURL, adapter, {
+      baseRealmURL: 'http://localhost:4201/base/',
+    });
   },
 };
 

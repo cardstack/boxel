@@ -4,6 +4,7 @@ import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
 import { RealmPaths } from "./paths";
 import { isNode } from "./index";
+import { baseRealm } from "@cardstack/runtime-common";
 
 type RegisteredModule = {
   state: "registered";
@@ -48,24 +49,39 @@ export class Loader {
   private modules = new Map<string, Module>();
   private fileLoaders = new Map<string, FileLoader>();
 
-  private constructor(fileLoaders: Map<string, FileLoader> = new Map()) {
-    this.fileLoaders = new Map(...[fileLoaders]);
+  private constructor(
+    private baseRealmURL?: string,
+    url?: string,
+    fileLoader?: FileLoader
+  ) {
+    if (url && fileLoader) {
+      this.addFileLoader(url, fileLoader);
+    }
   }
 
   static #instance: Loader | undefined;
 
   // TODO at some point we'll probably wanna add custom resolvers
-  static getLoader(fileLoaders?: Map<string, FileLoader>) {
+  static getLoader(
+    baseRealmURL?: string,
+    url?: string,
+    fileLoader?: FileLoader
+  ) {
     if (!Loader.#instance) {
-      Loader.#instance = new Loader(fileLoaders);
-    } else if (fileLoaders) {
-      Loader.#instance.addFileLoaders(fileLoaders);
+      Loader.#instance = new Loader(baseRealmURL, url, fileLoader);
+    } else if (url && fileLoader) {
+      Loader.#instance.addFileLoader(url, fileLoader);
     }
     return Loader.#instance;
   }
 
-  addFileLoaders(fileLoaders: Map<string, FileLoader>) {
-    this.fileLoaders = new Map(...[this.fileLoaders], ...[fileLoaders]);
+  // for tests only!
+  static destroy() {
+    Loader.#instance = undefined;
+  }
+
+  addFileLoader(url: string, fileLoader: FileLoader) {
+    this.fileLoaders.set(url, fileLoader);
   }
 
   async load<T extends object>(moduleIdentifier: string): Promise<T> {
@@ -107,6 +123,16 @@ export class Loader {
       throw new Error(
         `expected module identifier to be a URL: "${moduleIdentifier}"`
       );
+    }
+
+    // CardRef's may still have canonical base realm URL's in them, so when we
+    // try to load modules that originate from a card ref, we'll need to resolve those
+    // correctly
+    if (this.baseRealmURL && baseRealm.inRealm(new URL(moduleIdentifier))) {
+      moduleIdentifier = new URL(
+        baseRealm.local(new URL(moduleIdentifier)),
+        this.baseRealmURL
+      ).href;
     }
     return moduleIdentifier;
   }
