@@ -71,10 +71,6 @@ export interface RealmAdapter {
   remove(path: LocalPath): Promise<void>;
 }
 
-interface Options {
-  urlMappings?: Map<URL, URL>;
-}
-
 export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
@@ -88,11 +84,9 @@ export class Realm {
     return this.paths.url;
   }
 
-  constructor(url: string, adapter: RealmAdapter, opts: Options = {}) {
+  constructor(url: string, adapter: RealmAdapter) {
     this.paths = new RealmPaths(url);
-    let { urlMappings = new Map() } = opts;
     this.loader = Loader.getLoader({
-      urlMappings,
       loader: {
         url: new URL(this.url),
         loader: async (url: URL) => {

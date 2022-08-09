@@ -34,15 +34,15 @@ module("Realm Server", function (hooks) {
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
+    Loader.getLoader({
+      urlMappings: new Map([
+        [new URL(baseRealm.url), new URL("http://localhost:4201/base/")],
+      ]),
+    });
 
     let testRealm = new Realm(
       testRealmHref,
-      new NodeAdapter(resolve(dir.name)),
-      {
-        urlMappings: new Map([
-          [new URL(baseRealm.url), new URL("http://localhost:4201/base/")],
-        ]),
-      }
+      new NodeAdapter(resolve(dir.name))
     );
     await testRealm.ready;
     server = createRealmServer([testRealm]);
@@ -448,15 +448,11 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically load a card from own realm", async function (assert) {
-    let nodeRealm = new NodeAdapter(dir.name);
-    let realm = new Realm("http://test-realm/", nodeRealm, {
-      urlMappings: new Map([
-        [new URL(baseRealm.url), new URL("http://localhost:4201/base/")],
-      ]),
-    });
-    await realm.ready;
+    // let nodeRealm = new NodeAdapter(dir.name);
+    // let realm = new Realm("http://test-realm/", nodeRealm);
+    // await realm.ready;
 
-    let module = await realm.loader.import<Record<string, any>>(
+    let module = await Loader.getLoader().import<Record<string, any>>(
       `${testRealmHref}person`
     );
     let Person = module["Person"];

@@ -76,14 +76,12 @@ export class Loader {
       Loader.#instance = new Loader(urlMappings, loader);
     } else {
       if (urlMappings) {
-        if (urlMappings) {
-          for (let [from, to] of urlMappings) {
-            Loader.#instance.addURLMapping(from, to);
-          }
+        for (let [from, to] of urlMappings) {
+          Loader.#instance.addURLMapping(from, to);
         }
-        if (loader) {
-          Loader.#instance.addFileLoader(loader.url, loader.loader);
-        }
+      }
+      if (loader) {
+        Loader.#instance.addFileLoader(loader.url, loader.loader);
       }
     }
     return Loader.#instance;
