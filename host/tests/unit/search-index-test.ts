@@ -920,7 +920,7 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         sort: [
           {
-            by: 'author.name',
+            by: 'author.firstName',
             on: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         ],

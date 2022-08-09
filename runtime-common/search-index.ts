@@ -10,7 +10,7 @@ import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
 import { stringify } from "qs";
-import { Query, Filter } from "./query";
+import { Query, Filter, Sort } from "./query";
 import { Loader } from "./loader";
 import { Deferred } from "./deferred";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
@@ -557,6 +557,7 @@ export class SearchIndex {
 
     return [...this.instances.values()]
       .filter(matcher)
+      .sort(this.buildSorter(query.sort))
       .map((entry) => entry.resource);
   }
 
@@ -614,6 +615,43 @@ export class SearchIndex {
     return Boolean(
       entry.types?.find((t) => t === this.internalKeyFor(ref, undefined)) // assumes ref refers to absolute module URL
     );
+  }
+
+  private buildSorter(
+    expressions: Sort | undefined
+  ): (e1: SearchEntry, e2: SearchEntry) => number {
+    if (!expressions || expressions.length === 0) {
+      return () => 0;
+    }
+    let sorters = expressions.map(({ by, direction }) => {
+      return (e1: SearchEntry, e2: SearchEntry) => {
+        let a = e1.searchData[by];
+        let b = e2.searchData[by];
+        if (a === undefined || b === undefined) {
+          return 0;
+        }
+        if (typeof a === "string") {
+          a = a.toLowerCase();
+          b = b.toLowerCase();
+        }
+        if (a < b) {
+          return direction === "desc" ? 1 : -1;
+        } else if (a > b) {
+          return direction === "desc" ? -1 : 1;
+        } else {
+          return 0;
+        }
+      };
+    });
+    return (e1: SearchEntry, e2: SearchEntry) => {
+      for (let sorter of sorters) {
+        let result = sorter(e1, e2);
+        if (result !== 0) {
+          return result;
+        }
+      }
+      return 0;
+    };
   }
 
   // Matchers are three-valued (true, false, null) because a query that talks
