@@ -552,12 +552,8 @@ export class SearchIndex {
     return types;
   }
 
-  private cardHasType(entry: SearchEntry, type: ExportedCardRef): boolean {
-    let ref = this.internalKeyFor({
-      type: "exportedCard",
-      ...type,
-    });
-    return Boolean(entry.types?.find((t) => t === ref));
+  private cardHasType(entry: SearchEntry, ref: CardRef): boolean {
+    return Boolean(entry.types?.find((t) => t === this.internalKeyFor(ref)));
   }
 
   // Matchers are three-valued (true, false, null) because a query that talks
@@ -573,8 +569,9 @@ export class SearchIndex {
     }
 
     if ("type" in filter) {
-      // TODO: validate that the type exists
-      return (entry) => this.cardHasType(entry, filter.type);
+      let ref: CardRef = { type: "exportedCard", ...filter.type };
+      await this.strictTypeOf(ref);
+      return (entry) => this.cardHasType(entry, ref);
     }
 
     let on = filter?.on ?? onRef;
@@ -607,11 +604,17 @@ export class SearchIndex {
     }
 
     if ("eq" in filter) {
-      // TODO: validate that the definition and all the fieldPaths exist let def
-      // = await this.typeOf({ type: "exportedCard", ...on });
+      let ref: CardRef = { type: "exportedCard", ...on };
+
+      await Promise.all(
+        Object.keys(filter.eq).map((fieldPath) =>
+          this.validateField(ref, fieldPath.split("."))
+        )
+      );
+
       return (entry) =>
         every(Object.entries(filter.eq), ([fieldPath, value]) => {
-          if (this.cardHasType(entry, on)) {
+          if (this.cardHasType(entry, ref)) {
             return entry.searchData![fieldPath] === value;
           } else {
             return null;
@@ -620,6 +623,35 @@ export class SearchIndex {
     }
 
     throw new Error("Unknown filter");
+  }
+
+  private async strictTypeOf(ref: CardRef): Promise<CardDefinition> {
+    let def = await this.typeOf(ref);
+    if (!def) {
+      throw new Error(
+        `Your filter refers to nonexistent type ${this.internalKeyFor(ref)}`
+      );
+    }
+    return def;
+  }
+
+  private async validateField(
+    ref: CardRef,
+    fieldPathSegments: string[]
+  ): Promise<void> {
+    let def = await this.strictTypeOf(ref);
+    let first = fieldPathSegments.shift()!;
+    let nextRef = def.fields.get(first);
+    if (!nextRef) {
+      throw new Error(
+        `Your filter refers to nonexistent field "${first}" on type ${this.internalKeyFor(
+          ref
+        )}`
+      );
+    }
+    if (fieldPathSegments.length > 0) {
+      return await this.validateField(nextRef.fieldCard, fieldPathSegments);
+    }
   }
 
   public isIgnored(url: URL): boolean {

@@ -670,7 +670,7 @@ posts/ignore-me.gts
       `,
       'book.gts': `
         import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import Person from './cards.gts';
+        import { Person } from './cards.gts';
 
         export class Book extends Card {
           @field author = contains(Person);
@@ -753,8 +753,11 @@ posts/ignore-me.gts
     test('can combine multiple filters', async function (assert) {
       let matching = await indexer.search({
         filter: {
+          on: {
+            module: `${paths.url}cards`,
+            name: 'Post',
+          },
           every: [
-            { type: { module: `${paths.url}cards`, name: 'Post' } },
             { eq: { title: 'Card 1' } },
             { not: { eq: { 'author.name': 'Cardy' } } },
           ],
@@ -798,8 +801,40 @@ posts/ignore-me.gts
     });
 
     skip(`can filter on a card's own fields using gt`);
-    skip(`gives a good error when query refers to missing card`);
-    skip(`gives a good error when query refers to missing field`);
+
+    test(`gives a good error when query refers to missing card`, async function (assert) {
+      try {
+        await indexer.search({
+          filter: {
+            on: { module: `${paths.url}nonexistent`, name: 'Nonexistent' },
+            eq: { nonExistentField: 'hello' },
+          },
+        });
+        throw new Error('failed to throw expected exception');
+      } catch (err: any) {
+        assert.strictEqual(
+          err.message,
+          `Your filter refers to nonexistent type ${paths.url}nonexistent/Nonexistent`
+        );
+      }
+    });
+
+    test(`gives a good error when query refers to missing field`, async function (assert) {
+      try {
+        await indexer.search({
+          filter: {
+            on: { module: `${paths.url}cards`, name: 'Post' },
+            eq: { 'author.name': 'Cardy', 'author.nonExistentField': 'hello' },
+          },
+        });
+        throw new Error('failed to throw expected exception');
+      } catch (err: any) {
+        assert.strictEqual(
+          err.message,
+          `Your filter refers to nonexistent field \"nonExistentField\" on type ${paths.url}cards/Person`
+        );
+      }
+    });
 
     test(`can filter on a nested field using 'eq'`, async function (assert) {
       let matching = await indexer.search({
@@ -817,10 +852,8 @@ posts/ignore-me.gts
     test('can negate a filter', async function (assert) {
       let matching = await indexer.search({
         filter: {
-          every: [
-            { type: { module: `${paths.url}cards`, name: 'Article' } },
-            { not: { eq: { 'author.email': 'carl@stack.com' } } },
-          ],
+          on: { module: `${paths.url}cards`, name: 'Article' },
+          every: [{ not: { eq: { 'author.email': 'carl@stack.com' } } }],
         },
       });
       assert.strictEqual(matching.length, 1);

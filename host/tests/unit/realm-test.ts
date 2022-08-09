@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import {
   CardRef,
   isCardDocument,
@@ -241,7 +241,7 @@ module('Unit | realm', function () {
     }
   });
 
-  test('realm can serve patch card requests', async function (assert) {
+  skip('realm can serve patch card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/card.json': {
         data: {
