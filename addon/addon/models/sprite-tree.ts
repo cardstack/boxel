@@ -389,11 +389,11 @@ export default class SpriteTree {
       resultNode = node;
     }
 
-    if (!resultNode.parent.isContext()) {
-      console.error(
-        `Sprite "${spriteModifier.id}" cannot have another Sprite as a direct parent. An extra AnimationContext will need to be added.`
-      );
-    }
+    // if (!resultNode.parent.isContext()) {
+    //   console.error(
+    //     `Sprite "${spriteModifier.id}" cannot have another Sprite as a direct parent. An extra AnimationContext will need to be added.`
+    //   );
+    // }
 
     this.freshlyAdded.add(spriteModifier);
 
