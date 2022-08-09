@@ -1,7 +1,7 @@
 .card {
+  --header-height: calc(var(--card-padding, 10px) * 2 + 1.5em);
   border: 1px solid black;
   max-width: 300px;
-  padding: var(--card-padding, 6px);
   border-radius: var(--card-border-radius);
   overflow: visible;
   background: white;
@@ -10,6 +10,8 @@
 .header {
   display: flex;
   justify-content: space-between;
+  height: var(--header-height);
+  padding: var(--card-padding, 10px);
 }
 
 .title {
@@ -19,11 +21,13 @@
 
 .card.MIN {
   --card-border-radius: 4px;
+  --card-padding: 10px;
   height: 80px;
 }
 
 .card.EXPANDED {
   --card-border-radius: 4px;
+  --card-padding: 10px;
   height: 200px;
 }
 
@@ -50,4 +54,21 @@
 .scrollable {
   overflow: visible;
   max-height: 90%;
+  padding: 0 var(--card-padding, 10px) var(--card-padding, 10px) var(--card-padding, 10px);
+}
+
+.transform-inversion {
+  transform-origin: top left;
+  transform:
+    scaleX(var(--animation-scale-inversion-x, 1))
+    scaleY(var(--animation-scale-inversion-y, 1));
+}
+
+.transform-inversion.width-adjust {
+  width: calc(100% / var(--animation-scale-inversion-x, 1));
+}
+
+.transform-inversion.top-adjust {
+  position: relative;
+  top: calc(var(--header-height) * var(--animation-scale-inversion-y, 1) - var(--header-height));
 }

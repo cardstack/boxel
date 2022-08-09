@@ -77,6 +77,7 @@ export class Resize extends Motion<ResizeOptions> {
         let width =
           widthFrames[i]?.value ?? widthFrames[widthFrames.length - 1]?.value;
         transform += `scaleX(${width})`;
+        keyframe['--animation-scale-inversion-x'] = `${1 / width!}`;
       }
 
       if (heightFrames.length) {
@@ -84,6 +85,7 @@ export class Resize extends Motion<ResizeOptions> {
           heightFrames[i]?.value ??
           heightFrames[heightFrames.length - 1]?.value;
         transform += `scaleY(${height})`;
+        keyframe['--animation-scale-inversion-y'] = `${1 / height!}`;
       }
 
       keyframe['transformOrigin'] = 'top left';

@@ -2,7 +2,7 @@
   local-class={{concat "card " @state}}
   {{sprite id=(concat @id "-card") role="card"}}
 >
-  <div local-class="header">
+  <div local-class="header transform-inversion width-adjust" >
     <h1 local-class="title" {{sprite id=(concat @id "-title") role="title"}}>
       {{@title}}
     </h1>
@@ -35,7 +35,7 @@
       {{/if}}
     </div>
   </div>
-  <div local-class="scrollable">
+  <div local-class="scrollable transform-inversion top-adjust" {{sprite id=(concat @id "-card-content") role="card-content"}}>
     {{yield}}
   </div>
 </div>
