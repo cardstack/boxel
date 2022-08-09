@@ -627,8 +627,11 @@ export class SearchIndex {
       return (e1: SearchEntry, e2: SearchEntry) => {
         let a = e1.searchData[by];
         let b = e2.searchData[by];
-        if (a === undefined || b === undefined) {
+        if (a === undefined) {
           return direction === "desc" ? -1 : 1; // if descending, null position is before the rest
+        }
+        if (b === undefined) {
+          return direction === "desc" ? 1 : -1; // `a` is not null
         }
         if (typeof a === "string") {
           a = a.toLowerCase();
