@@ -112,7 +112,7 @@ export class Realm {
       .post("/", this.createCard.bind(this))
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
       .get("/_search", this.search.bind(this))
-      // TODO lets move typeOf and cardsOf to be a path you add to the end of a route like realmInfo
+      // TODO lets move cardsOf to be a path you add to the end of a route like typeOf
       .get("/_cardsOf", this.getCardsOf.bind(this))
       .get("/.*_realmInfo", this.getRealmInfo.bind(this))
       .get("/.*_typeOf", this.getTypeOf.bind(this))

@@ -322,10 +322,9 @@ export class SearchIndex {
             new URL(localPath, this.realm.hostedAtURL)
           );
           let card = CardClass.fromSerialized(json.data.attributes);
-          let searchData = await this.api.searchDoc(card);
           this.instances.set(instanceURL, {
             resource: json.data,
-            searchData,
+            searchData: await this.api.searchDoc(card),
             types: undefined,
           });
         }
