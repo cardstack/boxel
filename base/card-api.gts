@@ -162,7 +162,7 @@ export async function searchDoc<CardT extends CardConstructor>(model: InstanceTy
   for (let fieldName of Object.keys(getFields(model))) {
     // TODO we'll want to use a "queryValue" card field feature here
     let value = serializedGet(model, fieldName);
-    if (value) {
+    if (value != null) {
       result[fieldName] = value;
     }
   }
