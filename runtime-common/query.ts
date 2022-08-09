@@ -26,7 +26,6 @@ export interface TypedFilter {
 
 interface SortExpression {
   by: string;
-  on: ExportedCardRef;
   direction?: "asc" | "desc";
 }
 
