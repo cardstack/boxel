@@ -713,6 +713,33 @@ posts/ignore-me.gts
           },
         },
       },
+      'books/1.json': {
+        data: {
+          type: 'card',
+          attributes: { author: { firstName: 'Mango' } },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+        },
+      },
+      'books/2.json': {
+        data: {
+          type: 'card',
+          attributes: { author: { firstName: 'Van Gogh' } },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+        },
+      },
+      'books/3.json': {
+        data: {
+          type: 'card',
+          attributes: { author: { firstName: 'Jackie' } },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -889,7 +916,27 @@ posts/ignore-me.gts
     });
 
     // sorting
-    skip('can sort in alphabetical order');
+    test('can sort in alphabetical order', async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'author.name',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+        ],
+        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}card-2`, // Cardy
+          `${paths.url}books/3`, // Jackie
+          `${paths.url}books/1`, // Mango
+          `${paths.url}books/2`, // Van Gogh
+        ]
+      );
+    });
+
     skip('can sort in reverse alphabetical order');
     skip('can sort in multiple string field conditions');
     skip('can sort by multiple string field conditions in given directions');
