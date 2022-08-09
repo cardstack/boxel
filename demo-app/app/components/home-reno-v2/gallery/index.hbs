@@ -10,8 +10,8 @@
   {{else if (eq @state "MAX")}}
       <ul local-class={{concat "image-list " @state}}>
           {{#each @model.images as |image index|}}
-            <li  {{sprite id=(concat @id "-image-" index) role="image"}}>
-                <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
+            <li local-class="image-list-item" {{sprite id=(concat @id "-image-" index) role="image"}}>
+                <img local-class="image" src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
             </li>
           {{/each}}
       </ul>
@@ -40,9 +40,9 @@
   {{else if (eq @state "EXPANDED")}}
       <ul local-class={{concat "image-list " @state}}>
           {{#each @model.images as |image index|}}
-          <li  {{sprite id=(concat @id "-image-" index) role="image"}}>
-              <img src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
-          </li>
+            <li local-class="image-list-item" {{sprite id=(concat @id "-image-" index) role="image"}}>
+                <img local-class="image" src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
+            </li>
           {{/each}}
       </ul>
   {{/if}}
