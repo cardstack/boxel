@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
@@ -658,6 +658,7 @@ posts/ignore-me.gts
             title: 'Card 1',
             description: 'Sample post',
             author: { firstName: 'Cardy' },
+            views: 6,
           },
           meta: {
             adoptsFrom: {
@@ -682,7 +683,7 @@ posts/ignore-me.gts
           attributes: {
             title: 'Card 1',
             description: 'Sample post',
-            author: { firstName: 'Carl', lastName: 'Stack' },
+            author: { firstName: 'Carl', lastName: 'Stack', posts: 1 },
             createdAt: new Date(2022, 7, 1),
             views: 10,
           },
@@ -701,6 +702,7 @@ posts/ignore-me.gts
               firstName: 'Carl',
               lastName: 'Deck',
               email: 'carl@stack.com',
+              posts: 3,
             },
             createdAt: new Date(2022, 7, 22),
             views: 5,
@@ -840,7 +842,18 @@ posts/ignore-me.gts
       );
     });
 
-    skip(`can filter on a card's own fields using gt`);
+    test(`can filter on a card's own fields using range`, async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}post`, name: 'Post' },
+          range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}cards/1`]
+      );
+    });
 
     test(`gives a good error when query refers to missing card`, async function (assert) {
       try {

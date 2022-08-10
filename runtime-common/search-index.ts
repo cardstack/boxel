@@ -723,6 +723,36 @@ export class SearchIndex {
         });
     }
 
+    if ("range" in filter) {
+      let ref: CardRef = { type: "exportedCard", ...on };
+
+      await Promise.all(
+        Object.keys(filter.range).map((fieldPath) =>
+          this.validateField(ref, fieldPath.split("."))
+        )
+      );
+
+      return (entry) =>
+        every(Object.entries(filter.range), ([fieldPath, range]) => {
+          if (this.cardHasType(entry, ref)) {
+            let value = entry.searchData[fieldPath];
+            if (value === undefined) {
+              return null;
+            }
+            if (
+              (range.gt && !(value > range.gt)) ||
+              (range.lt && !(value < range.lt)) ||
+              (range.gte && !(value >= range.gte)) ||
+              (range.lte && !(value <= range.lte))
+            ) {
+              return false;
+            }
+            return true;
+          }
+          return null;
+        });
+    }
+
     throw new Error("Unknown filter");
   }
 
