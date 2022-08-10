@@ -1,4 +1,3 @@
-import { CardError } from '@cardstack/runtime-common/error';
 import { Realm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -12,36 +11,26 @@ export class FetchHandler {
   }
 
   async handleFetch(request: Request): Promise<Response> {
-    try {
-      if (this.livenessWatcher && !this.livenessWatcher.alive) {
-        // if we're shutting down, let all requests pass through unchanged
-        return await fetch(request);
-      }
-
-      let searchParams = new URL(request.url).searchParams;
-      if (searchParams.get('dropcache') != null) {
-        return await this.dropCaches();
-      }
-
-      if (!this.realm) {
-        console.warn(`No realm is currently available`);
-      } else if (this.realm.paths.inRealm(new URL(request.url))) {
-        return await this.realm.handle(request);
-      }
-
-      console.log(
-        `Service worker passing through ${request.url} for ${request.referrer}`
-      );
-      return await Loader.fetch(request);
-    } catch (err) {
-      if (err instanceof CardError) {
-        return err.response;
-      }
-      console.error(err);
-      return new Response(`unexpected exception in service worker ${err}`, {
-        status: 500,
-      });
+    if (this.livenessWatcher && !this.livenessWatcher.alive) {
+      // if we're shutting down, let all requests pass through unchanged
+      return await fetch(request);
     }
+
+    let searchParams = new URL(request.url).searchParams;
+    if (searchParams.get('dropcache') != null) {
+      return await this.dropCaches();
+    }
+
+    if (!this.realm) {
+      console.warn(`No realm is currently available`);
+    } else if (this.realm.paths.inRealm(new URL(request.url))) {
+      return await this.realm.handle(request);
+    }
+
+    console.log(
+      `Service worker passing through ${request.url} for ${request.referrer}`
+    );
+    return await Loader.fetch(request);
   }
 
   async dropCaches() {

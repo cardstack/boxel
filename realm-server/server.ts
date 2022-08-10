@@ -78,10 +78,6 @@ export function createRealmServer(realms: Realm[]) {
       } else if (body != null) {
         res.write(body);
       }
-    } catch (e) {
-      console.error("Unexpected server error: ", e);
-      res.statusCode = 500;
-      res.statusMessage = e.message;
     } finally {
       // the node pipe takes care of ending the response for us, so we only have
       // to do this when we are not piping
