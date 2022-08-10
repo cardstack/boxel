@@ -22,12 +22,13 @@ export class ImportResource extends Resource<Args> {
   }
 
   private async load(url: string) {
+    let absoluteURL = new URL(url, 'http://localhost:4200');
     try {
-      let m = await Loader.import(url);
+      let m = await Loader.import(absoluteURL.href);
       moduleURLs.set(m, url);
       this.module = m;
     } catch (err) {
-      let errResponse = await Loader.fetch(url, {
+      let errResponse = await Loader.fetch(absoluteURL, {
         headers: { 'content-type': 'text/javascript' },
       });
       if (!errResponse.ok) {

@@ -160,16 +160,6 @@ export class Loader {
     moduleIdentifier: string | URL,
     relativeTo?: URL
   ): ResolvedURL {
-    if (
-      typeof moduleIdentifier === "string" &&
-      !relativeTo &&
-      !moduleIdentifier.startsWith("http")
-    ) {
-      throw new Error(
-        `expected module identifier to be a URL: "${moduleIdentifier}"`
-      );
-    }
-
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
     for (let [paths, to] of this.urlMappings) {
       if (paths.inRealm(absoluteURL)) {
@@ -183,16 +173,6 @@ export class Loader {
     moduleIdentifier: string | ResolvedURL,
     relativeTo?: URL
   ): URL {
-    if (
-      typeof moduleIdentifier === "string" &&
-      !relativeTo &&
-      !moduleIdentifier.startsWith("http")
-    ) {
-      throw new Error(
-        `expected module identifier to be a URL: "${moduleIdentifier}"`
-      );
-    }
-
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
     for (let [sourcePath, to] of this.urlMappings) {
       let destinationPath = new RealmPaths(to);
