@@ -5,6 +5,8 @@ import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
 import { p, cleanWhiteSpace } from '../../helpers';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm } from '@cardstack/runtime-common';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -17,12 +19,12 @@ module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.before(async function () {
-    cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
-    string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
-    integer = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/integer' + '');
-    date = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/date' + '');
-    datetime = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/datetime' + '');
-    cardRef = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-ref' + '');
+    cardApi = await Loader.import(`${baseRealm.url}card-api`);
+    string = await Loader.import(`${baseRealm.url}string`);
+    integer = await Loader.import(`${baseRealm.url}integer`);
+    date = await Loader.import(`${baseRealm.url}date`);
+    datetime = await Loader.import(`${baseRealm.url}datetime`);
+    cardRef = await Loader.import(`${baseRealm.url}card-ref`);
   });
 
   test('can deserialize field', async function (assert) {

@@ -82,9 +82,20 @@ export class Loader {
     return loader.resolve(moduleIdentifier, relativeTo);
   }
 
-  static async fetch(url: string | URL, init?: RequestInit): Promise<Response> {
+  static reverseResolution(
+    moduleIdentifier: string | ResolvedURL,
+    relativeTo?: URL
+  ): URL {
     let loader = Loader.getLoader();
-    return loader.fetch(url, init);
+    return loader.reverseResolution(moduleIdentifier, relativeTo);
+  }
+
+  static async fetch(
+    urlOrRequest: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> {
+    let loader = Loader.getLoader();
+    return loader.fetch(urlOrRequest, init);
   }
 
   static addFileLoader(url: URL, fileLoader: FileLoader) {
@@ -129,11 +140,20 @@ export class Loader {
   }
 
   private async fetch(
-    url: string | URL,
+    urlOrRequest: string | URL | Request,
     init?: RequestInit
   ): Promise<Response> {
-    let resolvedURL = this.resolve(url);
-    return fetch(resolvedURL.href, init);
+    if (urlOrRequest instanceof Request) {
+      let request = new Request(this.resolve(urlOrRequest.url), {
+        method: urlOrRequest.method,
+        headers: urlOrRequest.headers,
+        body: urlOrRequest.body,
+      });
+      return fetch(request);
+    } else {
+      let resolvedURL = this.resolve(urlOrRequest);
+      return fetch(resolvedURL.href, init);
+    }
   }
 
   private resolve(
@@ -154,6 +174,30 @@ export class Loader {
     for (let [paths, to] of this.urlMappings) {
       if (paths.inRealm(absoluteURL)) {
         return new URL(paths.local(absoluteURL), to);
+      }
+    }
+    return absoluteURL;
+  }
+
+  private reverseResolution(
+    moduleIdentifier: string | ResolvedURL,
+    relativeTo?: URL
+  ): URL {
+    if (
+      typeof moduleIdentifier === "string" &&
+      !relativeTo &&
+      !moduleIdentifier.startsWith("http")
+    ) {
+      throw new Error(
+        `expected module identifier to be a URL: "${moduleIdentifier}"`
+      );
+    }
+
+    let absoluteURL = new URL(moduleIdentifier, relativeTo);
+    for (let [sourcePath, to] of this.urlMappings) {
+      let destinationPath = new RealmPaths(to);
+      if (destinationPath.inRealm(absoluteURL)) {
+        return new URL(destinationPath.local(absoluteURL), sourcePath.url);
       }
     }
     return absoluteURL;

@@ -10,7 +10,7 @@ module('Integration | import-module', function (hooks) {
   test('yields a successfully loaded module', async function (assert) {
     await renderComponent(
       <template>
-        <ImportModule @url="/test-modules/good.js">
+        <ImportModule @url="http://localhost:4200/test-modules/good.js">
           <:ready as |module|>
             <h1 data-test-ready>{{module.message}}</h1>
           </:ready>
@@ -25,7 +25,7 @@ module('Integration | import-module', function (hooks) {
   test('yields module loading errors', async function (assert) {
     await renderComponent(
       <template>
-        <ImportModule @url="/test-modules/bad.js">
+        <ImportModule @url="http://localhost:4200/test-modules/bad.js">
           <:error as |err|>
             <div data-test-type>{{err.type}}</div>
             <div data-test-message>{{err.message}}</div>

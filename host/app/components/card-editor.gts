@@ -10,6 +10,7 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import CardAPI, { RenderedCard } from '../services/card-api';
@@ -192,7 +193,7 @@ export default class Preview extends Component<Signature> {
       return;
     }
 
-    let response = await fetch(url, {
+    let response = await Loader.fetch(url, {
       headers: {
         'Accept': 'application/vnd.api+json'
       },
@@ -216,7 +217,7 @@ export default class Preview extends Component<Signature> {
   @restartableTask private async write(): Promise<void> {
     let url = this.args.card.type === 'new' ? this.args.card.realmURL : this.args.card.url;
     let method = this.args.card.type === 'new' ? 'POST' : 'PATCH';
-    let response = await fetch(url, {
+    let response = await Loader.fetch(url, {
       method,
       headers: {
         'Accept': 'application/vnd.api+json'
