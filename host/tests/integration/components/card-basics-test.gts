@@ -702,7 +702,11 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    assert.strictEqual(getQueryableValue(TestField, { firstName: 'Van Gogh', age: 6}), 'Van Gogh', 'The queryable value from user supplied data is correct')
+    assert.strictEqual(getQueryableValue(TestField, { firstName: 'Van Gogh', age: 6}), 'Van Gogh', 'The queryable value from user supplied data is correct (string)')
+    assert.strictEqual(getQueryableValue(TestField, { firstName: 1, age: 6}), 1, 'The queryable value from user supplied data is correct (number)')
+    assert.strictEqual(getQueryableValue(TestField, { firstName: true, age: 6}), true, 'The queryable value from user supplied data is correct (boolean)')
+    assert.strictEqual(getQueryableValue(TestField, { firstName: undefined, age: 6}), undefined, 'The queryable value from user supplied data is correct (undefined)')
+    assert.strictEqual(getQueryableValue(TestField, { firstName: null, age: 6}), null, 'The queryable value from user supplied data is correct (null)')
   });
 
   test('queryable value for a field defaults to current field value when not specified', async function (assert) {
