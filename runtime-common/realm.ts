@@ -86,16 +86,11 @@ export class Realm {
 
   constructor(url: string, adapter: RealmAdapter) {
     this.paths = new RealmPaths(url);
-    let loader = Loader.getLoader({
-      loader: {
-        url: new URL(this.url),
-        loader: async (url: ResolvedURL) => {
-          let content = await this.cardSourceFromResolvedURL(url);
-          return this.transpileJS(content!, url.href);
-        },
-      },
+    Loader.addFileLoader(new URL(this.url), async (url: ResolvedURL) => {
+      let content = await this.cardSourceFromResolvedURL(url);
+      return this.transpileJS(content!, url.href);
     });
-    this.#resolvedPaths = new RealmPaths(loader.resolve(url)); // this is used to work with ResolvedURL's specifically
+    this.#resolvedPaths = new RealmPaths(Loader.resolve(url)); // this is used to work with ResolvedURL's specifically
     this.#adapter = adapter;
     this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
@@ -215,7 +210,7 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    Loader.getLoader().clearCache();
+    Loader.clearCache();
     return new Response(null, {
       status: 204,
       headers: {
@@ -266,7 +261,7 @@ export class Realm {
       delete: true,
     });
     await this.#adapter.remove(handle.path);
-    Loader.getLoader().clearCache();
+    Loader.clearCache();
     return new Response(null, { status: 204 });
   }
 

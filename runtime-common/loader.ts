@@ -53,40 +53,13 @@ export class Loader {
   private fileLoaders = new Map<string, FileLoader>();
   private urlMappings = new Map<RealmPaths, string>();
 
-  private constructor(
-    urlMappings?: Map<URL, URL>,
-    loader?: { url: URL; loader: FileLoader }
-  ) {
-    if (urlMappings) {
-      for (let [from, to] of urlMappings) {
-        this.addURLMapping(from, to);
-      }
-    }
-    if (loader) {
-      this.addFileLoader(loader.url, loader.loader);
-    }
-  }
+  private constructor() {}
 
   static #instance: Loader | undefined;
 
-  static getLoader(
-    opts: {
-      urlMappings?: Map<URL, URL>;
-      loader?: { url: URL; loader: FileLoader };
-    } = {}
-  ) {
-    let { urlMappings, loader } = opts;
+  private static getLoader() {
     if (!Loader.#instance) {
-      Loader.#instance = new Loader(urlMappings, loader);
-    } else {
-      if (urlMappings) {
-        for (let [from, to] of urlMappings) {
-          Loader.#instance.addURLMapping(from, to);
-        }
-      }
-      if (loader) {
-        Loader.#instance.addFileLoader(loader.url, loader.loader);
-      }
+      Loader.#instance = new Loader();
     }
     return Loader.#instance;
   }
@@ -96,15 +69,40 @@ export class Loader {
     Loader.#instance = undefined;
   }
 
-  addFileLoader(url: URL, fileLoader: FileLoader) {
-    this.fileLoaders.set(url.href, fileLoader);
+  static async import<T extends object>(moduleIdentifier: string): Promise<T> {
+    let loader = Loader.getLoader();
+    return loader.import<T>(moduleIdentifier);
   }
 
-  addURLMapping(from: URL, to: URL) {
-    this.urlMappings.set(new RealmPaths(from), to.href);
+  static resolve(
+    moduleIdentifier: string | URL,
+    relativeTo?: URL
+  ): ResolvedURL {
+    let loader = Loader.getLoader();
+    return loader.resolve(moduleIdentifier, relativeTo);
   }
 
-  async import<T extends object>(moduleIdentifier: string): Promise<T> {
+  static async fetch(url: string | URL, init?: RequestInit): Promise<Response> {
+    let loader = Loader.getLoader();
+    return loader.fetch(url, init);
+  }
+
+  static addFileLoader(url: URL, fileLoader: FileLoader) {
+    let loader = Loader.getLoader();
+    loader.fileLoaders.set(url.href, fileLoader);
+  }
+
+  static addURLMapping(from: URL, to: URL) {
+    let loader = Loader.getLoader();
+    loader.urlMappings.set(new RealmPaths(from), to.href);
+  }
+
+  static clearCache() {
+    let loader = Loader.getLoader();
+    loader.modules = new Map();
+  }
+
+  private async import<T extends object>(moduleIdentifier: string): Promise<T> {
     moduleIdentifier = this.resolve(moduleIdentifier).href;
     if (
       (globalThis as any).window && // make sure we are not in a service worker
@@ -130,12 +128,18 @@ export class Loader {
     }
   }
 
-  async fetch(url: string | URL, init?: RequestInit): Promise<Response> {
+  private async fetch(
+    url: string | URL,
+    init?: RequestInit
+  ): Promise<Response> {
     let resolvedURL = this.resolve(url);
     return fetch(resolvedURL.href, init);
   }
 
-  resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
+  private resolve(
+    moduleIdentifier: string | URL,
+    relativeTo?: URL
+  ): ResolvedURL {
     if (
       typeof moduleIdentifier === "string" &&
       !relativeTo &&
@@ -153,10 +157,6 @@ export class Loader {
       }
     }
     return absoluteURL;
-  }
-
-  clearCache() {
-    this.modules = new Map();
   }
 
   private async fetchModule(moduleIdentifier: string): Promise<Module> {

@@ -34,11 +34,10 @@ module("Realm Server", function (hooks) {
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
-    Loader.getLoader({
-      urlMappings: new Map([
-        [new URL(baseRealm.url), new URL("http://localhost:4201/base/")],
-      ]),
-    });
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
 
     let testRealm = new Realm(
       testRealmHref,
@@ -448,7 +447,7 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically load a card from own realm", async function (assert) {
-    let module = await Loader.getLoader().import<Record<string, any>>(
+    let module = await Loader.import<Record<string, any>>(
       `${testRealmHref}person`
     );
     let Person = module["Person"];
@@ -457,7 +456,7 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically load a card from a different realm", async function (assert) {
-    let module = await Loader.getLoader().import<Record<string, any>>(
+    let module = await Loader.import<Record<string, any>>(
       `${testRealm2Href}person`
     );
     let Person = module["Person"];
@@ -466,14 +465,14 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically modules with cycles", async function (assert) {
-    let module = await Loader.getLoader().import<{ three(): number }>(
+    let module = await Loader.import<{ three(): number }>(
       `${testRealm2Href}cycle-two`
     );
     assert.strictEqual(module.three(), 3);
   });
 
   test("can instantiate a card that uses a card-ref field", async function (assert) {
-    let module = await Loader.getLoader().import<Record<string, any>>(
+    let module = await Loader.import<Record<string, any>>(
       `${testRealm2Href}card-ref-test`
     );
     let TestCard = module["TestCard"];

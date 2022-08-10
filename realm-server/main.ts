@@ -49,14 +49,14 @@ if (fromUrls.length < paths.length) {
   process.exit(-1);
 }
 
-let urlMappings = new Map(
-  fromUrls.map((fromUrl, i) => [
-    new URL(String(fromUrl), `http://localhost:${port}`),
-    new URL(String(toUrls[i]), `http://localhost:${port}`),
-  ])
-);
-Loader.getLoader({ urlMappings });
-let hrefs = [...urlMappings].map(([from, to]) => [from.href, to.href]);
+let urlMappings = fromUrls.map((fromUrl, i) => [
+  new URL(String(fromUrl), `http://localhost:${port}`),
+  new URL(String(toUrls[i]), `http://localhost:${port}`),
+]);
+for (let [from, to] of urlMappings) {
+  Loader.addURLMapping(from, to);
+}
+let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let realms: Realm[] = paths.map((path, i) => {
   return new Realm(hrefs[i][0], new NodeAdapter(resolve(String(path))));
 });

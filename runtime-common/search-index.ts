@@ -231,9 +231,7 @@ export class SearchIndex {
   ) {}
 
   async run() {
-    this.#api = await Loader.getLoader().import<CardAPI>(
-      `${baseRealm.url}card-api`
-    );
+    this.#api = await Loader.import<CardAPI>(`${baseRealm.url}card-api`);
     await this.visitDirectory(new URL(this.realm.url));
     await this.semanticPhase();
   }
@@ -294,7 +292,7 @@ export class SearchIndex {
         } else {
           json.data.id = instanceURL.href;
           json.data.meta.lastModified = lastModified;
-          let module = await Loader.getLoader().import<Record<string, any>>(
+          let module = await Loader.import<Record<string, any>>(
             new URL(
               json.data.meta.adoptsFrom.module,
               new URL(localPath, this.realm.url)
@@ -753,7 +751,7 @@ export class SearchIndex {
     this.#externalDefinitionsCache.set(key, deferred.promise);
 
     let url = `${moduleURL.href}/_typeOf?${stringify(ref)}`;
-    let response = await Loader.getLoader().fetch(url, {
+    let response = await Loader.fetch(url, {
       headers: {
         Accept: "application/vnd.api+json",
       },

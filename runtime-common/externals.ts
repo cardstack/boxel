@@ -10,10 +10,9 @@ export function externalsPlugin(_babel: typeof Babel) {
     visitor: {
       Program: {
         exit(path: NodePath<t.Program>) {
-          let loader = Loader.getLoader();
           let externalsURL = new URL(
             "/externals/",
-            loader.resolve(baseRealm.url)
+            Loader.resolve(baseRealm.url)
           ).href;
           for (let topLevelPath of path.get("body")) {
             if (topLevelPath.isImportDeclaration()) {
@@ -23,7 +22,7 @@ export function externalsPlugin(_babel: typeof Babel) {
                 topLevelPath.node.source.value = `${externalsURL}${topLevelPath.node.source.value}`;
               } else if (topLevelPath.node.source.value.startsWith("http")) {
                 // resolve the import path using the loader
-                topLevelPath.node.source.value = loader.resolve(
+                topLevelPath.node.source.value = Loader.resolve(
                   topLevelPath.node.source.value
                 ).href;
               }
