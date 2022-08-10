@@ -448,10 +448,6 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically load a card from own realm", async function (assert) {
-    // let nodeRealm = new NodeAdapter(dir.name);
-    // let realm = new Realm("http://test-realm/", nodeRealm);
-    // await realm.ready;
-
     let module = await Loader.getLoader().import<Record<string, any>>(
       `${testRealmHref}person`
     );

@@ -5,6 +5,10 @@ import { Deferred } from "./deferred";
 import { RealmPaths } from "./paths";
 import { isNode } from "./index";
 
+// this represents a URL that has already been resolved to aid in documenting
+// when resolution has already been performed
+export interface ResolvedURL extends URL {}
+
 type RegisteredModule = {
   state: "registered";
   dependencyList: string[];
@@ -43,7 +47,7 @@ type Module =
       exception: any;
     };
 
-type FileLoader = (url: URL) => Promise<string>;
+type FileLoader = (url: ResolvedURL) => Promise<string>;
 export class Loader {
   private modules = new Map<string, Module>();
   private fileLoaders = new Map<string, FileLoader>();
@@ -101,7 +105,7 @@ export class Loader {
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
-    moduleIdentifier = this.resolve(moduleIdentifier);
+    moduleIdentifier = this.resolve(moduleIdentifier).href;
     if (
       (globalThis as any).window && // make sure we are not in a service worker
       !isNode // make sure we are not in node
@@ -126,29 +130,29 @@ export class Loader {
     }
   }
 
-  async fetch(url: string, init?: RequestInit): Promise<Response> {
-    url = this.resolve(url);
-    return fetch(url, init);
+  async fetch(url: string | URL, init?: RequestInit): Promise<Response> {
+    let resolvedURL = this.resolve(url);
+    return fetch(resolvedURL.href, init);
   }
 
-  resolve(moduleIdentifier: string, relativeTo?: URL): string {
-    if (relativeTo) {
-      moduleIdentifier = new URL(moduleIdentifier, relativeTo).href;
-    }
-
-    if (!moduleIdentifier.startsWith("http")) {
+  resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
+    if (
+      typeof moduleIdentifier === "string" &&
+      !relativeTo &&
+      !moduleIdentifier.startsWith("http")
+    ) {
       throw new Error(
         `expected module identifier to be a URL: "${moduleIdentifier}"`
       );
     }
 
+    let absoluteURL = new URL(moduleIdentifier, relativeTo);
     for (let [paths, to] of this.urlMappings) {
-      let moduleURL = new URL(moduleIdentifier);
-      if (paths.inRealm(moduleURL)) {
-        return new URL(paths.local(moduleURL), to).href;
+      if (paths.inRealm(absoluteURL)) {
+        return new URL(paths.local(absoluteURL), to);
       }
     }
-    return moduleIdentifier;
+    return absoluteURL;
   }
 
   clearCache() {
@@ -193,7 +197,7 @@ export class Loader {
         if (depId === "exports") {
           return "exports";
         } else {
-          return this.resolve(depId, new URL(moduleIdentifier));
+          return this.resolve(depId, new URL(moduleIdentifier)).href;
         }
       });
       implementation = impl;
@@ -285,9 +289,9 @@ export class Loader {
     }
   }
 
-  private async load(moduleURL: URL): Promise<string> {
+  private async load(moduleURL: ResolvedURL): Promise<string> {
     for (let [realmURL, fileLoader] of this.fileLoaders) {
-      let realmPath = new RealmPaths(realmURL);
+      let realmPath = new RealmPaths(this.resolve(realmURL));
       if (realmPath.inRealm(moduleURL)) {
         return await fileLoader(moduleURL);
       }
@@ -295,7 +299,7 @@ export class Loader {
 
     let response: Response;
     try {
-      response = await this.fetch(moduleURL.href);
+      response = await this.fetch(moduleURL);
     } catch (err) {
       console.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a

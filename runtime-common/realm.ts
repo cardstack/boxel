@@ -6,7 +6,7 @@ import {
   CardDocument,
   isCardDocument,
 } from "./search-index";
-import { Loader } from "./loader";
+import { Loader, ResolvedURL } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
 import {
   systemError,
@@ -76,9 +76,9 @@ export class Realm {
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
   readonly paths: RealmPaths;
+  #resolvedPaths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
-  readonly loader: Loader;
 
   get url(): string {
     return this.paths.url;
@@ -86,15 +86,16 @@ export class Realm {
 
   constructor(url: string, adapter: RealmAdapter) {
     this.paths = new RealmPaths(url);
-    this.loader = Loader.getLoader({
+    let loader = Loader.getLoader({
       loader: {
         url: new URL(this.url),
-        loader: async (url: URL) => {
-          let content = await this.getCardSourceAsText(url);
+        loader: async (url: ResolvedURL) => {
+          let content = await this.cardSourceFromResolvedURL(url);
           return this.transpileJS(content!, url.href);
         },
       },
     });
+    this.#resolvedPaths = new RealmPaths(loader.resolve(url)); // this is used to work with ResolvedURL's specifically
     this.#adapter = adapter;
     this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
@@ -214,7 +215,7 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    this.loader.clearCache();
+    Loader.getLoader().clearCache();
     return new Response(null, {
       status: 204,
       headers: {
@@ -244,8 +245,10 @@ export class Realm {
   }
 
   // as opposed to getCardSourceOrRedirect, this will follow the redirect
-  private async getCardSourceAsText(url: URL): Promise<string | undefined> {
-    let localName = this.paths.local(url);
+  private async cardSourceFromResolvedURL(
+    url: ResolvedURL
+  ): Promise<string | undefined> {
+    let localName = this.#resolvedPaths.local(url);
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
       return undefined;
@@ -263,7 +266,7 @@ export class Realm {
       delete: true,
     });
     await this.#adapter.remove(handle.path);
-    this.loader.clearCache();
+    Loader.getLoader().clearCache();
     return new Response(null, { status: 204 });
   }
 

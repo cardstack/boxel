@@ -25,7 +25,7 @@ export function externalsPlugin(_babel: typeof Babel) {
                 // resolve the import path using the loader
                 topLevelPath.node.source.value = loader.resolve(
                   topLevelPath.node.source.value
-                );
+                ).href;
               }
             }
           }
