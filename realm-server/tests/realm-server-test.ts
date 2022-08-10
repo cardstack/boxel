@@ -9,28 +9,38 @@ import {
   cardSrc,
   compiledCard,
 } from "@cardstack/runtime-common/etc/test-fixtures";
-import { CardRef, isCardDocument, Realm } from "@cardstack/runtime-common";
+import {
+  CardRef,
+  isCardDocument,
+  Realm,
+  Loader,
+} from "@cardstack/runtime-common";
 import { stringify } from "qs";
-import { NodeRealm } from "../node-realm";
+import { NodeAdapter } from "../node-realm";
+import { resolve } from "path";
+import { Query } from "@cardstack/runtime-common/query";
 
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
 const testRealmHref = testRealmURL.href;
-const testRealm2Href = "http://localhost:4201/node-test/";
+const testRealm2Href = "http://localhost:4202/node-test/";
 
 module("Realm Server", function (hooks) {
   let server: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
 
-  hooks.beforeEach(function () {
+  hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
 
-    server = createRealmServer(
-      [{ path: dir.name, realmURL: testRealmHref }],
-      "http://localhost:4201/base/"
+    let testRealm = new Realm(
+      testRealmHref,
+      new NodeAdapter(resolve(dir.name)),
+      { baseRealmURL: "http://localhost:4201/base/" }
     );
+    await testRealm.ready;
+    server = createRealmServer([testRealm]);
     server.listen(testRealmURL.port);
     request = supertest(server);
   });
@@ -173,8 +183,20 @@ module("Realm Server", function (hooks) {
       assert.ok(false, "response body is not a card document");
     }
 
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmHref}person`,
+          name: "Person",
+        },
+        eq: {
+          firstName: "Van Gogh",
+        },
+      },
+    };
+
     response = await request
-      .get("/_search?filter[eq][firstName]=Van+Gogh")
+      .get(`/_search?${stringify(query)}`)
       .set("Accept", "application/vnd.api+json");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
@@ -213,11 +235,11 @@ module("Realm Server", function (hooks) {
 
   test("serves a card-source DELETE request", async function (assert) {
     let response = await request
-      .delete("/person.gts")
+      .delete("/unused-card.gts")
       .set("Accept", "application/vnd.card+source");
 
     assert.strictEqual(response.status, 204, "HTTP 204 status");
-    let cardFile = join(dir.name, "person.gts");
+    let cardFile = join(dir.name, "unused-card.gts");
     assert.strictEqual(
       existsSync(cardFile),
       false,
@@ -227,12 +249,12 @@ module("Realm Server", function (hooks) {
 
   test("serves a card-source POST request", async function (assert) {
     let response = await request
-      .post("/person.gts")
+      .post("/unused-card.gts")
       .set("Accept", "application/vnd.card+source")
       .send(`//TEST UPDATE ${cardSrc}`);
     assert.strictEqual(response.status, 204, "HTTP 204 status");
 
-    let srcFile = join(dir.name, "person.gts");
+    let srcFile = join(dir.name, "unused-card.gts");
     assert.ok(existsSync(srcFile), "card src exists");
     let src = readFileSync(srcFile, { encoding: "utf8" });
     assert.strictEqual(
@@ -256,7 +278,7 @@ module("Realm Server", function (hooks) {
 
   test("serves a directory GET request", async function (assert) {
     let response = await request
-      .get("/")
+      .get("/dir/")
       .set("Accept", "application/vnd.api+json");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
@@ -265,55 +287,31 @@ module("Realm Server", function (hooks) {
       json,
       {
         data: {
-          id: testRealmHref,
+          id: `${testRealmHref}dir/`,
           type: "directory",
           relationships: {
+            "bar.txt": {
+              links: {
+                related: `${testRealmHref}dir/bar.txt`,
+              },
+              meta: {
+                kind: "file",
+              },
+            },
+            "foo.txt": {
+              links: {
+                related: `${testRealmHref}dir/foo.txt`,
+              },
+              meta: {
+                kind: "file",
+              },
+            },
             "subdir/": {
               links: {
-                related: `${testRealmHref}subdir/`,
+                related: `${testRealmHref}dir/subdir/`,
               },
               meta: {
                 kind: "directory",
-              },
-            },
-            "person.gts": {
-              links: {
-                related: `${testRealmHref}person.gts`,
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "cycle-one.js": {
-              links: {
-                related: "http://127.0.0.1:4444/cycle-one.js",
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "cycle-two.js": {
-              links: {
-                related: "http://127.0.0.1:4444/cycle-two.js",
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "person-1.json": {
-              links: {
-                related: `${testRealmHref}person-1.json`,
-              },
-              meta: {
-                kind: "file",
-              },
-            },
-            "person-2.json": {
-              links: {
-                related: `${testRealmHref}person-2.json`,
-              },
-              meta: {
-                kind: "file",
               },
             },
           },
@@ -414,8 +412,20 @@ module("Realm Server", function (hooks) {
   });
 
   test("serves a /_search GET request", async function (assert) {
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmHref}person`,
+          name: "Person",
+        },
+        eq: {
+          firstName: "Mango",
+        },
+      },
+    };
+
     let response = await request
-      .get(`/_search?filter[eq][firstName]=Mango`)
+      .get(`/_search?${stringify(query)}`)
       .set("Accept", "application/vnd.api+json");
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
@@ -433,30 +443,22 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically load a card from own realm", async function (assert) {
-    let nodeRealm = new NodeRealm(dir.name);
-    let realm = new Realm(
-      "http://test-realm/",
-      nodeRealm,
-      "http://localhost:4201/base/"
-    );
+    let nodeRealm = new NodeAdapter(dir.name);
+    let realm = new Realm("http://test-realm/", nodeRealm, {
+      baseRealmURL: "http://localhost:4201/base/",
+    });
     await realm.ready;
 
-    let module = await realm.load<Record<string, any>>("./person");
+    let module = await realm.loader.load<Record<string, any>>(
+      `${testRealmHref}person`
+    );
     let Person = module["Person"];
     let person = Person.fromSerialized({ firstName: "Mango" });
     assert.strictEqual(person.firstName, "Mango", "card data is correct");
   });
 
   test("can dynamically load a card from a different realm", async function (assert) {
-    let nodeRealm = new NodeRealm(dir.name);
-    let realm = new Realm(
-      "http://test-realm/",
-      nodeRealm,
-      "http://localhost:4201/base/"
-    );
-    await realm.ready;
-
-    let module = await realm.load<Record<string, any>>(
+    let module = await Loader.getLoader().load<Record<string, any>>(
       `${testRealm2Href}person`
     );
     let Person = module["Person"];
@@ -465,17 +467,19 @@ module("Realm Server", function (hooks) {
   });
 
   test("can dynamically modules with cycles", async function (assert) {
-    let nodeRealm = new NodeRealm(dir.name);
-    let realm = new Realm(
-      "http://test-realm/",
-      nodeRealm,
-      "http://localhost:4201/base/"
-    );
-    await realm.ready;
-
-    let module = await realm.load<{ three(): number }>(
+    let module = await Loader.getLoader().load<{ three(): number }>(
       `${testRealm2Href}cycle-two`
     );
     assert.strictEqual(module.three(), 3);
+  });
+
+  test("can instantiate a card that uses a card-ref field", async function (assert) {
+    let module = await Loader.getLoader().load<Record<string, any>>(
+      `${testRealm2Href}card-ref-test`
+    );
+    let TestCard = module["TestCard"];
+    let ref = { module: `${testRealm2Href}person`, name: "Person " };
+    let testCard = TestCard.fromSerialized({ ref });
+    assert.deepEqual(testCard.ref, ref, "card data is correct");
   });
 });

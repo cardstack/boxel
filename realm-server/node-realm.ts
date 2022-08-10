@@ -13,7 +13,7 @@ import {
 } from "fs-extra";
 import { join } from "path";
 
-export class NodeRealm implements RealmAdapter {
+export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
 
   async *readdir(

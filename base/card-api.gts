@@ -209,6 +209,35 @@ export function serializeCard<CardT extends CardConstructor>(model: InstanceType
   return resource;
 }
 
+export async function searchDoc<CardT extends CardConstructor>(model: InstanceType<CardT>): Promise<Record<string, any>> {
+  await recompute(model);
+
+  let result: Record<string, any> = {};
+  for (let fieldName of Object.keys(getFields(model))) {
+    // TODO we'll want to use a "queryValue" card field feature here
+    let value = serializedGet(model, fieldName);
+    if (value) {
+      result[fieldName] = value;
+    }
+  }
+  let searchDoc = flatten(result);
+  return searchDoc;
+}
+
+function flatten(obj: Record<string, any>): Record<string, any> {
+  let result: Record<string, any> = {};
+  for (let [key, value] of Object.entries(obj)) {
+    if (typeof value === "object") {
+      let res = flatten(value);
+      for (let [k, val] of Object.entries(res)) {
+        result[`${key}.${k}`] = val;
+      }
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
 
 class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
   constructor(
