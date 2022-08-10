@@ -144,7 +144,7 @@ export class Loader {
     init?: RequestInit
   ): Promise<Response> {
     if (urlOrRequest instanceof Request) {
-      let request = new Request(this.resolve(urlOrRequest.url), {
+      let request = new Request(this.resolve(urlOrRequest.url).href, {
         method: urlOrRequest.method,
         headers: urlOrRequest.headers,
         body: urlOrRequest.body,
