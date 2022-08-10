@@ -693,7 +693,8 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('can get a queryable value for a field', async function(assert) {
-    let { field, contains, Card, getQueryableValue } = cardApi;
+    let { Card, getQueryableValue } = cardApi;
+
     class TestField extends Card {
       static [primitive]: TestShape;
       static [queryableValue](value: TestShape) {
@@ -701,27 +702,15 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    class TestCard extends Card {
-      @field info = contains(TestField);
-    }
-
-    let card = new TestCard({ info: { firstName: 'Mango', age: 2 }});
-    assert.strictEqual(getQueryableValue(card, 'info'), 'Mango', 'The queryable value from card instance is correct');
     assert.strictEqual(getQueryableValue(TestField, { firstName: 'Van Gogh', age: 6}), 'Van Gogh', 'The queryable value from user supplied data is correct')
   });
 
   test('queryable value for a field defaults to current field value when not specified', async function (assert) {
-    let { field, contains, Card, getQueryableValue } = cardApi;
+    let { Card, getQueryableValue } = cardApi;
     class StringCard extends Card {
       static [primitive]: string;
     }
 
-    class TestCard extends Card {
-      @field firstName = contains(StringCard);
-    }
-
-    let card = new TestCard({ firstName: 'Van Gogh' });
-    assert.strictEqual(getQueryableValue(card, 'firstName'), 'Van Gogh', 'The queryable value is correct');
     assert.strictEqual(getQueryableValue(StringCard, 'Van Gogh'), 'Van Gogh', 'The queryable value from user supplied data is correct')
   });
 
@@ -734,14 +723,29 @@ module('Integration | card-basics', function (hooks) {
       @field lastName = contains(StringCard);
     }
 
-    class TestCard extends Card {
-      @field person = contains(CompoundField);
-    }
-
-    let card = TestCard.fromSerialized({ person: { firstName: 'Mango', lastName: 'Abdel-Rahman' }});
-    assert.throws(() => getQueryableValue(card, 'person'), /cannot getQueryableValue for non-primitive field/);
     assert.throws(() => getQueryableValue(CompoundField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /cannot getQueryableValue for non-primitive field/);
   });
+
+  test('throws when card returns non-scalar queryable value from "queryableValue" function', async function (assert) {
+    let { Card, getQueryableValue } = cardApi;
+
+    class TestField extends Card {
+      static [primitive]: TestShape;
+      static [queryableValue](_value: TestShape) {
+        return { notAScalar: true }
+      }
+    }
+    assert.throws(() => getQueryableValue(TestField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected value to be scalar/);
+  })
+
+  test('throws when card returns non-scalar queryable value when there is no "queryableValue" function', async function (assert) {
+    let { Card, getQueryableValue } = cardApi;
+
+    class TestField extends Card {
+      static [primitive]: TestShape;
+    }
+    assert.throws(() => getQueryableValue(TestField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected value to be scalar/);
+  })
 });
 
 async function testString(label: string) {
