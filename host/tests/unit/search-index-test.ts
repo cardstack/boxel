@@ -978,8 +978,8 @@ posts/ignore-me.gts
         matching.map((m) => m.id),
         [
           `${paths.url}cards/1`, // type is post
-          `${paths.url}card-1`,
-          `${paths.url}cards/2`,
+          `${paths.url}cards/2`, // Carl
+          `${paths.url}card-1`, // Cardy
         ]
       );
     });
@@ -1076,8 +1076,8 @@ posts/ignore-me.gts
         matching.map((m) => m.id),
         [
           `${paths.url}books/3`, // 2
-          `${paths.url}books/1`, // 1
-          `${paths.url}card-2`, // 1
+          `${paths.url}books/1`, // 1 // Ab
+          `${paths.url}card-2`, // 1 // null
           `${paths.url}books/2`, // 0
         ]
       );
@@ -1087,12 +1087,13 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         sort: [
           {
-            by: 'author.firstName',
+            by: 'author.lastName',
             on: { module: `${testModuleRealm}book`, name: 'Book' },
           },
           {
-            by: 'author.lastName',
-            on: { module: `${testModuleRealm}article`, name: 'Article' },
+            by: 'author.firstName',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+            direction: 'desc',
           },
         ],
         filter: {
@@ -1105,12 +1106,12 @@ posts/ignore-me.gts
       assert.deepEqual(
         matching.map((m) => m.id),
         [
-          `${paths.url}card-2`, // Cardy
-          `${paths.url}books/3`, // Jackie Ag
-          `${paths.url}books/1`, // Mango Ab
-          `${paths.url}books/2`, // Van Gogh Ab
-          `${paths.url}cards/2`, // Deck (article)
-          `${paths.url}card-1`, // Stackington (article)
+          `${paths.url}books/2`, // Ab Van Gogh
+          `${paths.url}books/1`, // Ab Mango
+          `${paths.url}books/3`, // Ag Jackie
+          `${paths.url}card-2`, // null
+          `${paths.url}card-1`, // (article)
+          `${paths.url}cards/2`, // (article)
         ]
       );
     });
@@ -1139,7 +1140,7 @@ posts/ignore-me.gts
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}books/1`, `${paths.url}card-2`]
+        [`${paths.url}books/1`]
       );
     });
   });

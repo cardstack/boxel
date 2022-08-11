@@ -626,8 +626,15 @@ export class SearchIndex {
     if (!expressions || expressions.length === 0) {
       return () => 0;
     }
-    let sorters = expressions.map(({ by, direction }) => {
+    let sorters = expressions.map(({ by, on, direction }) => {
       return (e1: SearchEntry, e2: SearchEntry) => {
+        let ref: CardRef = { type: "exportedCard", ...on };
+        if (!this.cardHasType(e1, ref)) {
+          return direction === "desc" ? -1 : 1;
+        }
+        if (!this.cardHasType(e2, ref)) {
+          return direction === "desc" ? 1 : -1;
+        }
         let a = e1.searchData[by];
         let b = e2.searchData[by];
         if (a === undefined) {
@@ -636,10 +643,7 @@ export class SearchIndex {
         if (b === undefined) {
           return direction === "desc" ? 1 : -1; // `a` is not null
         }
-        if (typeof a === "string") {
-          a = a.toLowerCase();
-          b = b.toLowerCase();
-        }
+        // TODO: use queryableValue check here
         if (a < b) {
           return direction === "desc" ? 1 : -1;
         } else if (a > b) {
@@ -649,6 +653,7 @@ export class SearchIndex {
         }
       };
     });
+
     return (e1: SearchEntry, e2: SearchEntry) => {
       for (let sorter of sorters) {
         let result = sorter(e1, e2);
