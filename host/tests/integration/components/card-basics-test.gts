@@ -709,6 +709,11 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(getQueryableValue(TestField, { firstName: true, age: 6}), true, 'The queryable value from user supplied data is correct (boolean)')
     assert.strictEqual(getQueryableValue(TestField, { firstName: undefined, age: 6}), undefined, 'The queryable value from user supplied data is correct (undefined)')
     assert.strictEqual(getQueryableValue(TestField, { firstName: null, age: 6}), null, 'The queryable value from user supplied data is correct (null)')
+    assert.deepEqual(getQueryableValue(TestField, { firstName: ['a'], age: 6}), ['a'], 'The queryable value from user supplied data is correct (string[])')
+    assert.deepEqual(getQueryableValue(TestField, { firstName: [1], age: 6}), [1], 'The queryable value from user supplied data is correct (number[])')
+    assert.deepEqual(getQueryableValue(TestField, { firstName: [true], age: 6}), [true], 'The queryable value from user supplied data is correct (boolean[])')
+    assert.deepEqual(getQueryableValue(TestField, { firstName: [null], age: 6}), [null], 'The queryable value from user supplied data is correct (null[])')
+    assert.deepEqual(getQueryableValue(TestField, { firstName: [undefined], age: 6}), [undefined], 'The queryable value from user supplied data is correct (undefined[])')
   });
 
   test('queryable value for a field defaults to current field value when not specified', async function (assert) {
@@ -735,13 +740,21 @@ module('Integration | card-basics', function (hooks) {
   test('throws when card returns non-scalar queryable value from "queryableValue" function', async function (assert) {
     let { Card, getQueryableValue } = cardApi;
 
-    class TestField extends Card {
+    class TestField1 extends Card {
       static [primitive]: TestShape;
       static [queryableValue](_value: TestShape) {
-        return { notAScalar: true }
+        return { notAScalar: true };
       }
     }
-    assert.throws(() => getQueryableValue(TestField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected value to be scalar/);
+    assert.throws(() => getQueryableValue(TestField1, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected value to be scalar/);
+
+    class TestField2 extends Card {
+      static [primitive]: TestShape;
+      static [queryableValue](_value: TestShape) {
+        return [{ notAScalar: true }];
+      }
+    }
+    assert.throws(() => getQueryableValue(TestField2, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected value to be scalar/);
   })
 
   test('throws when card returns non-scalar queryable value when there is no "queryableValue" function', async function (assert) {
