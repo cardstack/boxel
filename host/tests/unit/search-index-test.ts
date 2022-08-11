@@ -62,7 +62,6 @@ module('Unit | search-index', function () {
     let refs = await indexer.exportedCardsOf('person.gts');
     assert.deepEqual(refs, [
       {
-        type: 'exportedCard',
         module: `${testRealmURL}person`,
         name: 'FancyPerson',
       },

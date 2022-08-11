@@ -12,7 +12,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 // since the realm serve currently refuses to host broken modules (which will be
 // addressed in the future).
 const host = config.isCli ? 'http://localhost:4203/' : 'http://localhost:4200/';
-Loader.addURLMapping(new URL("http://module-host/"), new URL(host));
+Loader.addURLMapping(new URL("http://module-host"), new URL(window.origin));
 
 module('Integration | import-module', function (hooks) {
   setupRenderingTest(hooks);
