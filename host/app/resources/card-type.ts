@@ -3,6 +3,7 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { CardRef } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 import {
   CardDefinitionResource,
   getExportedCardContext,
@@ -83,7 +84,7 @@ export class CardType extends Resource<Args> {
   }
 
   private async load(typeOfURL: string): Promise<CardDefinitionResource> {
-    let response = await fetch(this.localRealm.mapURL(typeOfURL), {
+    let response = await Loader.fetch(typeOfURL, {
       headers: {
         Accept: 'application/vnd.api+json',
       },

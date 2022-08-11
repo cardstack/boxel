@@ -5,6 +5,8 @@ import { fillIn } from '@ember/test-helpers';
 import waitUntil from '@ember/test-helpers/wait-until';
 import find from '@ember/test-helpers/dom/find';
 import { cleanWhiteSpace } from '../../helpers';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm } from '@cardstack/runtime-common';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -13,8 +15,8 @@ module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.before(async function () {
-    cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
-    string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
+    cardApi = await Loader.import(`${baseRealm.url}card-api`);
+    string = await Loader.import(`${baseRealm.url}string`);
   });
 
   test('can render a synchronous computed field', async function(assert) {

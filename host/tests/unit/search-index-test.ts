@@ -2,15 +2,10 @@ import { module, test, skip } from 'qunit';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
-import { Loader } from '@cardstack/runtime-common/loader';
 
 let paths = new RealmPaths(testRealmURL);
 
-module('Unit | search-index', function (hooks) {
-  hooks.before(function () {
-    Loader.destroy();
-  });
-
+module('Unit | search-index', function () {
   test('full indexing discovers card instances', async function (assert) {
     let adapter = new TestRealmAdapter({
       'empty.json': {
@@ -67,7 +62,6 @@ module('Unit | search-index', function (hooks) {
     let refs = await indexer.exportedCardsOf('person.gts');
     assert.deepEqual(refs, [
       {
-        type: 'exportedCard',
         module: `${testRealmURL}person`,
         name: 'FancyPerson',
       },

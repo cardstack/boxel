@@ -5,8 +5,10 @@ import { renderCard } from '../../helpers/render-component';
 import { cleanWhiteSpace, p, testRealmURL } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
+import { baseRealm, } from "@cardstack/runtime-common";
+import { Loader } from '@cardstack/runtime-common/loader';
+import type { ExportedCardRef, } from "@cardstack/runtime-common";
 import type { SignatureFor, primitive as primitiveType } from "https://cardstack.com/base/card-api";
-import type { ExportedCardRef } from "@cardstack/runtime-common";
 
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -22,14 +24,14 @@ module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.before(async function () {
-    cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
+    cardApi = await Loader.import(`${baseRealm.url}card-api`);
     primitive = cardApi.primitive;
-    string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
-    integer = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/integer' + '');
-    date = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/date' + '');
-    datetime = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/datetime' + '');
-    cardRef = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-ref' + '');
-    pickModule = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/pick' + '');
+    string = await Loader.import(`${baseRealm.url}string`);
+    integer = await Loader.import(`${baseRealm.url}integer`);
+    date = await Loader.import(`${baseRealm.url}date`);
+    datetime = await Loader.import(`${baseRealm.url}datetime`);
+    cardRef = await Loader.import(`${baseRealm.url}card-ref`);
+    pickModule = await Loader.import(`${baseRealm.url}pick`);
   });
 
   test('primitive field type checking', async function (assert) {
@@ -693,7 +695,7 @@ module('Integration | card-basics', function (hooks) {
 });
 
 async function testString(label: string) {
-  cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
+  cardApi = await Loader.import(`${baseRealm.url}card-api`);
   let {Card, Component } = cardApi;
   return class TestString extends Card {
     static [primitive]: string;

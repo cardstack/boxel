@@ -5,6 +5,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { Loader } from '@cardstack/runtime-common/loader';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
@@ -29,7 +30,7 @@ export default class Schema extends Component<Signature> {
         <ImportModule @url={{this.cardType.type.exportedCardContext.module}}>
           <:ready as |module|>
             <CardEditor
-              @card={{hash type="new" realmURL=this.localRealm.url.href context=this.cardType.type.exportedCardContext}}
+              @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.cardType.type.exportedCardContext}}
               @module={{module}}
               @onSave={{this.onSave}}
               @onCancel={{this.onCancel}}
@@ -79,7 +80,7 @@ export default class Schema extends Component<Signature> {
     if (!this.localRealm.isAvailable) {
       throw new Error('Local realm is not available');
     }
-    return new RealmPaths(this.localRealm.mapURL(this.localRealm.url.href, true));
+    return new RealmPaths(Loader.reverseResolution(this.localRealm.url.href));
   }
 
   @action

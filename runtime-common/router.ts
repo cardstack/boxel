@@ -1,4 +1,4 @@
-import { methodNotAllowed, notFound } from "./error";
+import { methodNotAllowed, notFound, CardError } from "./error";
 import { RealmPaths } from "./paths";
 
 type Handler = (request: Request) => Promise<Response>;
@@ -66,7 +66,17 @@ export class Router {
       // to make it more readable in our config
       let routeRegExp = new RegExp(`^${route.replace("/", "\\/")}$`);
       if (routeRegExp.test(requestPath)) {
-        return await handler(request);
+        try {
+          return await handler(request);
+        } catch (err) {
+          if (err instanceof CardError) {
+            return err.response;
+          }
+          console.error(err);
+          return new Response(`unexpected exception in service worker ${err}`, {
+            status: 500,
+          });
+        }
       }
     }
     return notFound(request);
