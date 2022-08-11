@@ -45,8 +45,11 @@ export default class CardRefCard extends Card {
   static fromSerialized<T extends CardConstructor>(this: T, cardRef: ExportedCardRef): CardInstanceType<T> {
     return {...cardRef} as CardInstanceType<T>;// return a new object so that the model cannot be mutated from the outside
   }
-  static [queryableValue](cardRef: ExportedCardRef) {
-    return `${cardRef.module}/${cardRef.name}`; // this assumes the module is an absolute reference
+  static [queryableValue](cardRef: ExportedCardRef | undefined) {
+    if (cardRef) {
+      return `${cardRef.module}/${cardRef.name}`; // this assumes the module is an absolute reference
+    }
+    return undefined;
   }
 
   static embedded = class Embedded extends BaseView {}

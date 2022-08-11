@@ -1,4 +1,4 @@
-import { Component, primitive, serialize, CardInstanceType, CardConstructor, Card } from './card-api';
+import { Component, primitive, serialize, queryableValue, CardInstanceType, CardConstructor, Card } from './card-api';
 import { format, parseISO } from 'date-fns';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -15,6 +15,8 @@ const Format = new Intl.DateTimeFormat('us-EN', {
   minute: '2-digit',
 });
 
+const datetimeFormat = `yyyy-MM-dd'T'HH:mm`;
+
 export default class DatetimeCard extends Card {
   static [primitive]: Date;
   static [serialize](date: string | Date) {
@@ -26,6 +28,13 @@ export default class DatetimeCard extends Card {
 
   static fromSerialized<T extends CardConstructor>(this: T, date: any): CardInstanceType<T> {
     return parseISO(date) as CardInstanceType<T>;
+  }
+
+  static [queryableValue](date: Date | undefined) {
+    if (date) {
+      return format(date, datetimeFormat);
+    }
+    return undefined;
   }
 
   static embedded = class Embedded extends Component<typeof this> {
@@ -53,7 +62,7 @@ export default class DatetimeCard extends Card {
       if (!this.args.model) {
         return;
       }
-      return format(this.args.model, `yyyy-MM-dd'T'HH:mm`);
+      return format(this.args.model, datetimeFormat);
     }
   }
 }

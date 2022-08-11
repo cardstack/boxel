@@ -300,9 +300,10 @@ export class SearchIndex {
           );
           let CardClass = module[json.data.meta.adoptsFrom.name] as typeof Card;
           let card = CardClass.fromSerialized(json.data.attributes);
+          let searchData = await this.api.searchDoc(card);
           this.instances.set(instanceURL, {
             resource: json.data,
-            searchData: await this.api.searchDoc(card),
+            searchData,
             types: undefined,
           });
         }
@@ -501,8 +502,7 @@ export class SearchIndex {
           inner.possibleCard
         );
       } else {
-        return await this.getExternalCardDefinition(new URL(ref.module, url), {
-          type: "exportedCard",
+        return await this.getExternalCardDefinition({
           name: ref.name,
           module: ref.module,
         });
@@ -569,8 +569,8 @@ export class SearchIndex {
     }
     let { module } = getExportedCardContext(ref);
     let moduleURL = new URL(module, relativeTo);
-    if (!this.realm.paths.inRealm(moduleURL)) {
-      return await this.getExternalCardDefinition(moduleURL, ref);
+    if (!this.realm.paths.inRealm(moduleURL) && ref.type === "exportedCard") {
+      return await this.getExternalCardDefinition(ref);
     }
     return undefined;
   }
@@ -617,6 +617,80 @@ export class SearchIndex {
     return Boolean(
       entry.types?.find((t) => t === this.internalKeyFor(ref, undefined)) // assumes ref refers to absolute module URL
     );
+  }
+
+  private async getCardDefinition(
+    ref: ExportedCardRef
+  ): Promise<CardDefinition | undefined> {
+    return (
+      this.definitions.get(
+        this.internalKeyFor({ type: "exportedCard", ...ref }, undefined) // assumes ref refers to absolute module URL
+      ) ?? (await this.getExternalCardDefinition(ref))
+    );
+  }
+
+  private async getFieldDefinition(
+    ref: ExportedCardRef,
+    fieldSegments: string[]
+  ): Promise<CardDefinition | undefined> {
+    let def = await this.getCardDefinition(ref);
+    if (!def) {
+      return undefined;
+    }
+    let fieldName = fieldSegments.shift()!;
+    let fieldDef = def.fields.get(fieldName);
+    if (!fieldDef) {
+      throw new Error(
+        `Your filter refers to nonexistent field "${fieldName}" on type ${this.internalKeyFor(
+          { type: "exportedCard", ...ref },
+          undefined // assumes absolute module URL
+        )}`
+      );
+    }
+    if (fieldDef.fieldCard.type !== "exportedCard") {
+      throw new Error(
+        `Cannot get field definition of non-exported card ${JSON.stringify(
+          fieldDef.fieldCard
+        )}`
+      );
+    }
+    if (fieldSegments.length > 0) {
+      return await this.getFieldDefinition(fieldDef.fieldCard, [
+        ...fieldSegments,
+      ]);
+    }
+    return this.getCardDefinition(fieldDef.fieldCard);
+  }
+
+  private async loadFieldCard(
+    ref: ExportedCardRef,
+    fieldPath: string
+  ): Promise<typeof Card> {
+    let fieldDef = await this.getFieldDefinition(ref, fieldPath.split("."));
+    if (!fieldDef) {
+      throw new Error(
+        `Your filter refers to nonexistent type: import ${
+          ref.name === "default" ? "default" : `{ ${ref.name} }`
+        } from "${ref.module}"`
+      );
+    }
+    if (fieldDef.id.type !== "exportedCard") {
+      throw new Error(
+        `The field card ${JSON.stringify(
+          fieldDef.id
+        )} enclosed in ${JSON.stringify(
+          ref
+        )} with field path "${fieldPath}" is not exported`
+      );
+    }
+    let module = await Loader.import<Record<string, any>>(fieldDef.id.module);
+    let FieldCard = module[fieldDef.id.name];
+    if (!FieldCard) {
+      throw new Error(
+        `Could not load field card ${JSON.stringify(fieldDef.id)}`
+      );
+    }
+    return FieldCard as typeof Card;
   }
 
   // Matchers are three-valued (true, false, null) because a query that talks
@@ -669,16 +743,23 @@ export class SearchIndex {
     if ("eq" in filter) {
       let ref: CardRef = { type: "exportedCard", ...on };
 
-      await Promise.all(
-        Object.keys(filter.eq).map((fieldPath) =>
-          this.validateField(ref, fieldPath.split("."))
+      // this logic has the side effect of validating the filter fields
+      let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
+        await Promise.all(
+          Object.keys(filter.eq).map(async (fieldPath) => [
+            fieldPath,
+            await this.loadFieldCard(on, fieldPath),
+          ])
         )
       );
 
       return (entry) =>
         every(Object.entries(filter.eq), ([fieldPath, value]) => {
           if (this.cardHasType(entry, ref)) {
-            return entry.searchData![fieldPath] === value;
+            return (
+              entry.searchData![fieldPath] ===
+              this.api.getQueryableValue(fieldCards[fieldPath]!, value)
+            );
           } else {
             return null;
           }
@@ -699,26 +780,6 @@ export class SearchIndex {
       );
     }
     return def;
-  }
-
-  private async validateField(
-    ref: CardRef,
-    fieldPathSegments: string[]
-  ): Promise<void> {
-    let def = await this.strictTypeOf(ref);
-    let first = fieldPathSegments.shift()!;
-    let nextRef = def.fields.get(first);
-    if (!nextRef) {
-      throw new Error(
-        `Your filter refers to nonexistent field "${first}" on type ${this.internalKeyFor(
-          ref,
-          undefined // assumes absolute module URL
-        )}`
-      );
-    }
-    if (fieldPathSegments.length > 0) {
-      return await this.validateField(nextRef.fieldCard, fieldPathSegments);
-    }
   }
 
   public isIgnored(url: URL): boolean {
@@ -744,10 +805,9 @@ export class SearchIndex {
   }
 
   private async getExternalCardDefinition(
-    moduleURL: URL,
-    ref: CardRef
+    ref: ExportedCardRef
   ): Promise<CardDefinition | undefined> {
-    let key = this.internalKeyFor(ref, undefined); // these should always be absolute URLs
+    let key = this.internalKeyFor({ type: "exportedCard", ...ref }, undefined); // these should always be absolute URLs
     let promise = this.#externalDefinitionsCache.get(key);
     if (promise) {
       return await promise;
@@ -755,7 +815,10 @@ export class SearchIndex {
     let deferred = new Deferred<CardDefinition | undefined>();
     this.#externalDefinitionsCache.set(key, deferred.promise);
 
-    let url = `${moduleURL.href}/_typeOf?${stringify(ref)}`;
+    let url = `${ref.module}/_typeOf?${stringify({
+      type: "exportedCard",
+      ...ref,
+    })}`;
     let response = await Loader.fetch(url, {
       headers: {
         Accept: "application/vnd.api+json",

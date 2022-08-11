@@ -725,18 +725,6 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(getQueryableValue(StringCard, 'Van Gogh'), 'Van Gogh', 'The queryable value from user supplied data is correct')
   });
 
-  test('throws when attempting to get a queryable value for a non-primitive field', async function (assert) {
-    let { field, contains, Card, getQueryableValue } = cardApi;
-    let { default: StringCard} = string;
-
-    class CompoundField extends Card {
-      @field firstName = contains(StringCard);
-      @field lastName = contains(StringCard);
-    }
-
-    assert.throws(() => getQueryableValue(CompoundField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /cannot getQueryableValue for non-primitive field/);
-  });
-
   test('throws when card returns non-scalar queryable value from "queryableValue" function', async function (assert) {
     let { Card, getQueryableValue } = cardApi;
 
@@ -746,7 +734,7 @@ module('Integration | card-basics', function (hooks) {
         return { notAScalar: true };
       }
     }
-    assert.throws(() => getQueryableValue(TestField1, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected value to be scalar/);
+    assert.throws(() => getQueryableValue(TestField1, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected queryableValue for field type TestField1 to be scalar/);
 
     class TestField2 extends Card {
       static [primitive]: TestShape;
@@ -754,7 +742,7 @@ module('Integration | card-basics', function (hooks) {
         return [{ notAScalar: true }];
       }
     }
-    assert.throws(() => getQueryableValue(TestField2, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected value to be scalar/);
+    assert.throws(() => getQueryableValue(TestField2, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected queryableValue for field type TestField2 to be scalar/);
   })
 
   test('throws when card returns non-scalar queryable value when there is no "queryableValue" function', async function (assert) {
@@ -763,7 +751,7 @@ module('Integration | card-basics', function (hooks) {
     class TestField extends Card {
       static [primitive]: TestShape;
     }
-    assert.throws(() => getQueryableValue(TestField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected value to be scalar/);
+    assert.throws(() => getQueryableValue(TestField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected queryableValue for field type TestField to be scalar/);
   })
 });
 

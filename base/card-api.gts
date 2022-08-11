@@ -82,6 +82,16 @@ export class Card {
     }
   }
 
+  static [queryableValue](value: any): any {
+    if (primitive in this) {
+      return value;
+    } else {
+      return Object.fromEntries(
+        Object.entries(getFields(value)).map(([fieldName, field]) => [fieldName, getQueryableValue(field!.card, value[fieldName])])
+      );
+    }
+  }
+
   static fromSerialized<T extends CardConstructor>(this: T, data: any): CardInstanceType<T> {
     if (primitive in this) {
       return data;
@@ -125,30 +135,26 @@ type Scalar = string | number | boolean | null | undefined |
   (number | null | undefined)[] |
   (boolean | null | undefined)[] ;
 
-function assertScalar(scalar: any): asserts scalar is Scalar {
+function assertScalar(scalar: any, fieldCard: typeof Card): asserts scalar is Scalar {
   if (Array.isArray(scalar)) {
     if (scalar.find((i) => !['undefined', 'string', 'number', 'boolean'].includes(typeof i) && i !== null)) {
-      throw new Error(`expected value to be scalar but was ${typeof scalar}`);
+      throw new Error(`expected queryableValue for field type ${fieldCard.name} to be scalar but was ${typeof scalar}`);
     }
   } else if (!['undefined', 'string', 'number', 'boolean'].includes(typeof scalar) && scalar !== null) {
-    throw new Error(`expected value to be scalar but was ${typeof scalar}`);
+    throw new Error(`expected queryableValue for field type ${fieldCard.name} to be scalar but was ${typeof scalar}`);
   }
 }
 
-export function getQueryableValue(fieldCard: typeof Card, value: any ): Scalar {
-  if (!(primitive in fieldCard)) {
-    throw new Error(`cannot getQueryableValue for non-primitive field card ${fieldCard.name}`);
+export function getQueryableValue(fieldCard: typeof Card, value: any): any {
+  if ((primitive in fieldCard)) {
+    let result = (fieldCard as any)[queryableValue](value);
+    assertScalar(result, fieldCard);
+    return result;
   }
-
-  let result: any;
-  if (typeof (fieldCard as any)[queryableValue] !== 'function') {
-    result = value;
-  } else {
-    result = (fieldCard as any)[queryableValue](value);
-  }
-
-  assertScalar(result);
-  return result;
+  
+  // this recurses through the fields of the compound card via
+  // the base card's queryableValue implementation
+  return (fieldCard as any)[queryableValue](value);
 }
 
 export function serializedGet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string ) {
@@ -191,12 +197,9 @@ export async function searchDoc<CardT extends CardConstructor>(model: InstanceTy
   await recompute(model);
 
   let result: Record<string, any> = {};
-  for (let fieldName of Object.keys(getFields(model))) {
-    // TODO we'll want to use a "queryValue" card field feature here
-    let value = serializedGet(model, fieldName);
-    if (value) {
-      result[fieldName] = value;
-    }
+  for (let [fieldName, field] of Object.entries(getFields(model))) {
+    let value = getQueryableValue(field.card, model[fieldName as keyof InstanceType<CardT>]);
+    result[fieldName] = value;
   }
   let searchDoc = flatten(result);
   return searchDoc;
