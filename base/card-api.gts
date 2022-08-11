@@ -120,9 +120,17 @@ function getDataBucket(instance: object): Map<string, any> {
   return deserialized;
 }
 
-type Scalar = string | number | boolean | null | undefined;
+type Scalar = string | number | boolean | null | undefined |
+  (string | null | undefined)[] |
+  (number | null | undefined)[] |
+  (boolean | null | undefined)[] ;
+
 function assertScalar(scalar: any): asserts scalar is Scalar {
-  if (!['undefined', 'string', 'number', 'boolean'].includes(typeof scalar) && scalar !== null) {
+  if (Array.isArray(scalar)) {
+    if (scalar.find((i) => !['undefined', 'string', 'number', 'boolean'].includes(typeof i) && i !== null)) {
+      throw new Error(`expected value to be scalar but was ${typeof scalar}`);
+    }
+  } else if (!['undefined', 'string', 'number', 'boolean'].includes(typeof scalar) && scalar !== null) {
     throw new Error(`expected value to be scalar but was ${typeof scalar}`);
   }
 }
