@@ -2,7 +2,7 @@ import { Resource, useResource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
-import { CardRef } from '@cardstack/runtime-common';
+import { CardRef, ExportedCardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import {
   CardDefinitionResource,
@@ -14,7 +14,7 @@ import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
 
 interface Args {
-  named: { ref: CardRef };
+  named: { ref: ExportedCardRef };
 }
 
 interface Type {
@@ -39,7 +39,7 @@ export class CardType extends Resource<Args> {
     }
     this.localRealmURL = this.localRealm.url;
     let { ref } = args.named;
-    taskFor(this.assembleType).perform(ref);
+    taskFor(this.assembleType).perform({ type: 'exportedCard', ...ref });
   }
 
   @restartableTask private async assembleType(ref: CardRef) {
@@ -103,7 +103,7 @@ export class CardType extends Resource<Args> {
   }
 }
 
-export function getCardType(parent: object, ref: () => CardRef) {
+export function getCardType(parent: object, ref: () => ExportedCardRef) {
   return useResource(parent, CardType, () => ({
     named: { ref: ref() },
   }));

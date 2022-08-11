@@ -13,6 +13,7 @@ export const serialize = Symbol('cardstack-serialize');
 export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol('cardstack-field-decorator');
 export const fieldType = Symbol('cardstack-field-type');
+export const queryableValue = Symbol('cardstack-queryable-value');
 
 const isField = Symbol('cardstack-field');
 
@@ -117,6 +118,29 @@ function getDataBucket(instance: object): Map<string, any> {
     deserializedData.set(instance, deserialized);
   }
   return deserialized;
+}
+
+type Scalar = string | number | boolean | null | undefined;
+function assertScalar(scalar: any): asserts scalar is Scalar {
+  if (!['undefined', 'string', 'number', 'boolean'].includes(typeof scalar) && scalar !== null) {
+    throw new Error(`expected value to be scalar but was ${typeof scalar}`);
+  }
+}
+
+export function getQueryableValue(fieldCard: typeof Card, value: any ): Scalar {
+  if (!(primitive in fieldCard)) {
+    throw new Error(`cannot getQueryableValue for non-primitive field card ${fieldCard.name}`);
+  }
+
+  let result: any;
+  if (typeof (fieldCard as any)[queryableValue] !== 'function') {
+    result = value;
+  } else {
+    result = (fieldCard as any)[queryableValue](value);
+  }
+
+  assertScalar(result);
+  return result;
 }
 
 export function serializedGet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string ) {

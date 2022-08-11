@@ -8,7 +8,7 @@ import { on } from '@ember/modifier';
 import { baseRealm, } from "@cardstack/runtime-common";
 import { Loader } from '@cardstack/runtime-common/loader';
 import type { ExportedCardRef, } from "@cardstack/runtime-common";
-import type { SignatureFor, primitive as primitiveType } from "https://cardstack.com/base/card-api";
+import type { SignatureFor, primitive as primitiveType, queryableValue as queryableValueType } from "https://cardstack.com/base/card-api";
 
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -19,6 +19,7 @@ let datetime: typeof import ("https://cardstack.com/base/datetime");
 let cardRef: typeof import ("https://cardstack.com/base/card-ref");
 let pickModule: typeof import ("https://cardstack.com/base/pick");
 let primitive: typeof primitiveType;
+let queryableValue: typeof queryableValueType;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -26,6 +27,7 @@ module('Integration | card-basics', function (hooks) {
   hooks.before(async function () {
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     primitive = cardApi.primitive;
+    queryableValue = cardApi.queryableValue;
     string = await Loader.import(`${baseRealm.url}string`);
     integer = await Loader.import(`${baseRealm.url}integer`);
     date = await Loader.import(`${baseRealm.url}date`);
@@ -692,6 +694,64 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-output="appointments"]').hasText('2022-05-01 2021-05-30');
   });
 
+  test('can get a queryable value for a field', async function(assert) {
+    let { Card, getQueryableValue } = cardApi;
+
+    class TestField extends Card {
+      static [primitive]: TestShape;
+      static [queryableValue](value: TestShape) {
+        return value.firstName;
+      }
+    }
+
+    assert.strictEqual(getQueryableValue(TestField, { firstName: 'Van Gogh', age: 6}), 'Van Gogh', 'The queryable value from user supplied data is correct (string)')
+    assert.strictEqual(getQueryableValue(TestField, { firstName: 1, age: 6}), 1, 'The queryable value from user supplied data is correct (number)')
+    assert.strictEqual(getQueryableValue(TestField, { firstName: true, age: 6}), true, 'The queryable value from user supplied data is correct (boolean)')
+    assert.strictEqual(getQueryableValue(TestField, { firstName: undefined, age: 6}), undefined, 'The queryable value from user supplied data is correct (undefined)')
+    assert.strictEqual(getQueryableValue(TestField, { firstName: null, age: 6}), null, 'The queryable value from user supplied data is correct (null)')
+  });
+
+  test('queryable value for a field defaults to current field value when not specified', async function (assert) {
+    let { Card, getQueryableValue } = cardApi;
+    class StringCard extends Card {
+      static [primitive]: string;
+    }
+
+    assert.strictEqual(getQueryableValue(StringCard, 'Van Gogh'), 'Van Gogh', 'The queryable value from user supplied data is correct')
+  });
+
+  test('throws when attempting to get a queryable value for a non-primitive field', async function (assert) {
+    let { field, contains, Card, getQueryableValue } = cardApi;
+    let { default: StringCard} = string;
+
+    class CompoundField extends Card {
+      @field firstName = contains(StringCard);
+      @field lastName = contains(StringCard);
+    }
+
+    assert.throws(() => getQueryableValue(CompoundField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /cannot getQueryableValue for non-primitive field/);
+  });
+
+  test('throws when card returns non-scalar queryable value from "queryableValue" function', async function (assert) {
+    let { Card, getQueryableValue } = cardApi;
+
+    class TestField extends Card {
+      static [primitive]: TestShape;
+      static [queryableValue](_value: TestShape) {
+        return { notAScalar: true }
+      }
+    }
+    assert.throws(() => getQueryableValue(TestField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected value to be scalar/);
+  })
+
+  test('throws when card returns non-scalar queryable value when there is no "queryableValue" function', async function (assert) {
+    let { Card, getQueryableValue } = cardApi;
+
+    class TestField extends Card {
+      static [primitive]: TestShape;
+    }
+    assert.throws(() => getQueryableValue(TestField, { firstName: 'Mango', lastName: 'Abdel-Rahman'}), /expected value to be scalar/);
+  })
 });
 
 async function testString(label: string) {
@@ -711,4 +771,9 @@ function getDateFromInput(selector: string): Date | undefined {
     return parseISO(input.value);
   }
   return undefined;
+}
+
+interface TestShape {
+  firstName: string;
+  age: number
 }
