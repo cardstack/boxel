@@ -2,7 +2,15 @@ import Application from '@ember/application';
 import Resolver from 'ember-resolver';
 import loadInitializers from 'ember-load-initializers';
 import config from 'runtime-spike/config/environment';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm } from '@cardstack/runtime-common';
 import './lib/glint-embroider-workaround';
+
+// This is the locally served base realm
+Loader.addURLMapping(
+  new URL(baseRealm.url),
+  new URL('http://localhost:4201/base/')
+);
 
 /* The following modules are made available to cards as external modules.
  * This is paired with the worker/src/externals.ts file which is responsible

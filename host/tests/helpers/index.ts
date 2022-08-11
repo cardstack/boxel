@@ -1,6 +1,13 @@
 import { parse } from 'date-fns';
-import { Realm, Kind, RealmAdapter, FileRef } from '@cardstack/runtime-common';
+import {
+  Realm,
+  Kind,
+  RealmAdapter,
+  FileRef,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 export function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -16,18 +23,18 @@ export interface Dir {
 
 export const testRealmURL = 'http://test-realm/test/';
 
+// This is the locally served base realm
+Loader.addURLMapping(
+  new URL(baseRealm.url),
+  new URL('http://localhost:4201/base/')
+);
+
 export const TestRealm = {
   create(flatFiles: Record<string, string | object>, realmURL?: string): Realm {
-    return new Realm(
-      realmURL ?? testRealmURL,
-      new TestRealmAdapter(flatFiles),
-      { baseRealmURL: 'http://localhost:4201/base/' }
-    );
+    return new Realm(realmURL ?? testRealmURL, new TestRealmAdapter(flatFiles));
   },
   createWithAdapter(adapter: RealmAdapter, realmURL?: string): Realm {
-    return new Realm(realmURL ?? testRealmURL, adapter, {
-      baseRealmURL: 'http://localhost:4201/base/',
-    });
+    return new Realm(realmURL ?? testRealmURL, adapter);
   },
 };
 

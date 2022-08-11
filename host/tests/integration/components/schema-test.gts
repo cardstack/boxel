@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
-import { CardRef, baseRealm } from '@cardstack/runtime-common';
+import { CardRef } from '@cardstack/runtime-common';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import Schema from 'runtime-spike/components/schema';
@@ -9,25 +9,9 @@ import { waitUntil } from '@ember/test-helpers';
 
 const testRealmURL = 'http://localhost:4201/test/'
 
-// TODO Consider making this a helper
 class NodeRealm extends Service {
   isAvailable = true;
   url = new URL(testRealmURL);
-  realmMappings = new Map([
-    [baseRealm.url, 'http://localhost:4201/base/'],
-    [testRealmURL, testRealmURL]
-  ])
-  mapURL(url: string, reverseLookup = false) {
-    for (let [realm, forwardURL] of this.realmMappings) {
-      if (!reverseLookup && url.startsWith(realm)) {
-        return url.replace(realm, forwardURL);
-      }
-      if (reverseLookup && url.startsWith(forwardURL)) {
-        return url.replace(forwardURL, realm);
-      }
-    }
-    return url;
-  }
 }
 
 module('Integration | schema', function (hooks) {

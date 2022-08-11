@@ -30,7 +30,7 @@ class BaseView extends Component<typeof CardRefCard> {
     if (!this.args.model) {
       return;
     }
-    let module: Record<string, any> = await Loader.getLoader().load(this.args.model.module);
+    let module: Record<string, any> = await Loader.import(this.args.model.module);
     let Clazz: typeof Card = module[this.args.model.name];
     this.card = Clazz.fromSerialized({...(Clazz as any).demo ?? {}});
   }

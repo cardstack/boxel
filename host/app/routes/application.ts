@@ -5,6 +5,7 @@ import { file, FileResource } from '../resources/file';
 import type RouterService from '@ember/routing/router-service';
 import LocalRealm from '../services/local-realm';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 interface Model {
   path: string | undefined;
@@ -35,7 +36,7 @@ export default class Application extends Route<Model> {
 
     let realmPath = new RealmPaths(this.localRealm.url);
     let url = realmPath.fileURL(path).href;
-    let response = await fetch(url, {
+    let response = await Loader.fetch(url, {
       headers: {
         Accept: 'application/vnd.card+source',
       },

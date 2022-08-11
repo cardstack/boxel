@@ -7,6 +7,7 @@ import { taskFor } from 'ember-concurrency-ts';
 import flatMap from 'lodash/flatMap';
 import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { Loader } from '@cardstack/runtime-common/loader';
 import LocalRealm from '../services/local-realm';
 
 interface Args {
@@ -76,7 +77,7 @@ async function getEntries(
   url: string
 ): Promise<Entry[]> {
   let response: Response | undefined;
-  response = await fetch(url, {
+  response = await Loader.fetch(url, {
     headers: { Accept: 'application/vnd.api+json' },
   });
   if (!response.ok) {

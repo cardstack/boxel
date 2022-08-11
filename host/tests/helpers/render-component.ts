@@ -3,13 +3,13 @@ import { precompileTemplate } from '@ember/template-compilation';
 import { render } from '@ember/test-helpers';
 import { ComponentLike } from '@glint/template';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm } from '@cardstack/runtime-common';
 
 async function cardApi(): Promise<
   typeof import('https://cardstack.com/base/card-api')
 > {
-  return await import(
-    /* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + ''
-  );
+  return await Loader.import(`${baseRealm.url}card-api`);
 }
 
 export async function renderComponent(C: ComponentLike) {

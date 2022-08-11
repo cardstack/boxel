@@ -18,6 +18,7 @@ import {
   languageConfigs
 } from '../utils/editor-language';
 import { isCardJSON } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 import type { Format } from 'https://cardstack.com/base/card-api';
 import type { FileResource } from '../resources/file';
 
@@ -133,7 +134,7 @@ export default class Go extends Component<Signature> {
 
   @restartableTask private async remove(url: string): Promise<void> {
     let headersAccept = url.endsWith('.json') ? 'application/vnd.api+json' : 'application/vnd.card+source';
-    let response = await fetch(url, { method: 'DELETE', headers: { 'Accept': headersAccept }});
+    let response = await Loader.fetch(url, { method: 'DELETE', headers: { 'Accept': headersAccept }});
     if (!response.ok) {
       throw new Error(`could not delete file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
     }

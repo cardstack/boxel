@@ -1,8 +1,9 @@
 import Service, { service } from '@ember/service';
 import { task, timeout } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
-import config from 'runtime-spike/config/environment';
 import LocalRealm from './local-realm';
+import { baseRealm } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 export type { RenderedCard } from 'https://cardstack.com/base/render-card';
 
 export type API = typeof import('https://cardstack.com/base/card-api');
@@ -11,7 +12,6 @@ type RenderCardResource =
 
 export default class CardAPI extends Service {
   #api: API | undefined;
-  #baseRealmURL: undefined;
   #renderCard: RenderCardResource | undefined;
   @service declare localRealm: LocalRealm;
 
@@ -49,31 +49,9 @@ export default class CardAPI extends Service {
   }
 
   @task private async load(): Promise<void> {
-    if (config.environment === 'test') {
-      this.#api = await import(
-        /* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + ''
-      );
-      this.#renderCard = await import(
-        /* webpackIgnore: true */ 'http://localhost:4201/base/render-card' + ''
-      );
-    } else {
-      if (!this.#baseRealmURL) {
-        let response = await fetch(`${this.localRealm.url}_realmInfo`, {
-          headers: { Accept: 'application/vnd.api+json' },
-        });
-        let {
-          data: {
-            attributes: { baseRealm },
-          },
-        } = await response.json();
-        this.#baseRealmURL = baseRealm;
-      }
-      this.#api = await import(
-        /* webpackIgnore: true */ `${this.#baseRealmURL}card-api`
-      );
-      this.#renderCard = await import(
-        /* webpackIgnore: true */ `${this.#baseRealmURL}render-card`
-      );
-    }
+    this.#api = await Loader.import<API>(`${baseRealm.url}card-api`);
+    this.#renderCard = await Loader.import<RenderCardResource>(
+      `${baseRealm.url}render-card`
+    );
   }
 }

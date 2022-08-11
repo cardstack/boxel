@@ -3,6 +3,7 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { CardRef } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 import { stringify } from 'qs';
 import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
@@ -27,7 +28,7 @@ export class CardRefs extends Resource<Args> {
   }
 
   @restartableTask private async getCardRefs(module: string) {
-    let response = await fetch(
+    let response = await Loader.fetch(
       `${this.localRealmURL.href}_cardsOf?${stringify({
         module,
       })}`,

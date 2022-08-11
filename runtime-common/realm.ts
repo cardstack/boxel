@@ -71,11 +71,6 @@ export interface RealmAdapter {
   remove(path: LocalPath): Promise<void>;
 }
 
-interface Options {
-  baseRealmURL?: string;
-  hostedAtURL?: string;
-}
-
 export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
@@ -83,23 +78,18 @@ export class Realm {
   readonly paths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
-  readonly loader: Loader;
-  readonly baseRealmURL;
-  readonly hostedAtURL: string;
 
   get url(): string {
     return this.paths.url;
   }
 
-  constructor(url: string, adapter: RealmAdapter, opts: Options = {}) {
+  constructor(url: string, adapter: RealmAdapter) {
     this.paths = new RealmPaths(url);
-    this.baseRealmURL = opts.baseRealmURL ?? baseRealm.url;
-    this.hostedAtURL = opts.hostedAtURL ?? url;
-    this.#adapter = adapter;
-    this.loader = Loader.getLoader(this.baseRealmURL, url, async (url: URL) => {
-      let content = await this.getCardSourceAsText(url);
-      return this.transpileJS(content!, url.href);
+    Loader.addFileLoader(new URL(this.url), async (path: LocalPath) => {
+      let content = await this.cardSourceFromPath(path);
+      return this.transpileJS(content!, path);
     });
+    this.#adapter = adapter;
     this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
       this,
@@ -114,7 +104,6 @@ export class Realm {
       .get("/_search", this.search.bind(this))
       // TODO lets move cardsOf to be a path you add to the end of a route like typeOf
       .get("/_cardsOf", this.getCardsOf.bind(this))
-      .get("/.*_realmInfo", this.getRealmInfo.bind(this))
       .get("/.*_typeOf", this.getTypeOf.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
@@ -218,7 +207,7 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    this.loader.clearCache();
+    Loader.clearCache();
     return new Response(null, {
       status: 204,
       headers: {
@@ -248,9 +237,10 @@ export class Realm {
   }
 
   // as opposed to getCardSourceOrRedirect, this will follow the redirect
-  private async getCardSourceAsText(url: URL): Promise<string | undefined> {
-    let localName = this.paths.local(url);
-    let handle = await this.getFileWithFallbacks(localName);
+  private async cardSourceFromPath(
+    path: LocalPath
+  ): Promise<string | undefined> {
+    let handle = await this.getFileWithFallbacks(path);
     if (!handle) {
       return undefined;
     }
@@ -267,7 +257,7 @@ export class Realm {
       delete: true,
     });
     await this.#adapter.remove(handle.path);
-    this.loader.clearCache();
+    Loader.clearCache();
     return new Response(null, { status: 204 });
   }
 
@@ -299,7 +289,7 @@ export class Realm {
               },
             ]
           : (makeEmberTemplatePlugin as any)(() => etc.precompile),
-        [externalsPlugin, { realm: this }],
+        externalsPlugin,
       ],
     })!.code!;
   }
@@ -715,18 +705,6 @@ export class Realm {
     return new Response(JSON.stringify({ data }, null, 2), {
       headers: { "content-type": "application/vnd.api+json" },
     });
-  }
-
-  private async getRealmInfo(): Promise<Response> {
-    return new Response(
-      JSON.stringify({
-        data: {
-          id: this.url,
-          type: "realm-info",
-          attributes: { baseRealm: this.baseRealmURL, url: this.url },
-        },
-      })
-    );
   }
 
   private async search(request: Request): Promise<Response> {

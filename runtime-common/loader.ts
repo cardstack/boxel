@@ -2,9 +2,14 @@
 import TransformModulesAmd from "@babel/plugin-transform-modules-amd";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
-import { RealmPaths } from "./paths";
+import { RealmPaths, LocalPath } from "./paths";
 import { isNode } from "./index";
-import { baseRealm } from "@cardstack/runtime-common";
+
+// this represents a URL that has already been resolved to aid in documenting
+// when resolution has already been performed
+export interface ResolvedURL extends URL {
+  _isResolved: undefined;
+}
 
 type RegisteredModule = {
   state: "registered";
@@ -44,33 +49,19 @@ type Module =
       exception: any;
     };
 
-type FileLoader = (url: URL) => Promise<string>;
+type FileLoader = (path: LocalPath) => Promise<string>;
 export class Loader {
   private modules = new Map<string, Module>();
   private fileLoaders = new Map<string, FileLoader>();
+  private urlMappings = new Map<RealmPaths, string>();
 
-  private constructor(
-    private baseRealmURL?: string,
-    url?: string,
-    fileLoader?: FileLoader
-  ) {
-    if (url && fileLoader) {
-      this.addFileLoader(url, fileLoader);
-    }
-  }
+  private constructor() {}
 
   static #instance: Loader | undefined;
 
-  // TODO at some point we'll probably wanna add custom resolvers
-  static getLoader(
-    baseRealmURL?: string,
-    url?: string,
-    fileLoader?: FileLoader
-  ) {
+  private static getLoader() {
     if (!Loader.#instance) {
-      Loader.#instance = new Loader(baseRealmURL, url, fileLoader);
-    } else if (url && fileLoader) {
-      Loader.#instance.addFileLoader(url, fileLoader);
+      Loader.#instance = new Loader();
     }
     return Loader.#instance;
   }
@@ -80,64 +71,123 @@ export class Loader {
     Loader.#instance = undefined;
   }
 
-  addFileLoader(url: string, fileLoader: FileLoader) {
-    this.fileLoaders.set(url, fileLoader);
+  static async import<T extends object>(moduleIdentifier: string): Promise<T> {
+    let loader = Loader.getLoader();
+    return loader.import<T>(moduleIdentifier);
   }
 
-  async load<T extends object>(moduleIdentifier: string): Promise<T> {
-    moduleIdentifier = this.resolveModule(moduleIdentifier);
+  static resolve(
+    moduleIdentifier: string | URL,
+    relativeTo?: URL
+  ): ResolvedURL {
+    let loader = Loader.getLoader();
+    return loader.resolve(moduleIdentifier, relativeTo);
+  }
+
+  static reverseResolution(
+    moduleIdentifier: string | ResolvedURL,
+    relativeTo?: URL
+  ): URL {
+    let loader = Loader.getLoader();
+    return loader.reverseResolution(moduleIdentifier, relativeTo);
+  }
+
+  static async fetch(
+    urlOrRequest: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> {
+    let loader = Loader.getLoader();
+    return loader.fetch(urlOrRequest, init);
+  }
+
+  static addFileLoader(url: URL, fileLoader: FileLoader) {
+    let loader = Loader.getLoader();
+    loader.fileLoaders.set(url.href, fileLoader);
+  }
+
+  static addURLMapping(from: URL, to: URL) {
+    let loader = Loader.getLoader();
+    loader.urlMappings.set(new RealmPaths(from), to.href);
+  }
+
+  static clearCache() {
+    let loader = Loader.getLoader();
+    loader.modules = new Map();
+  }
+
+  private async import<T extends object>(moduleIdentifier: string): Promise<T> {
+    let resolvedModule = this.resolve(moduleIdentifier);
+    let resolvedModuleIdentifier = resolvedModule.href;
     if (
       (globalThis as any).window && // make sure we are not in a service worker
       !isNode // make sure we are not in node
     ) {
-      return await import(/* webpackIgnore: true */ moduleIdentifier);
+      return await import(/* webpackIgnore: true */ resolvedModuleIdentifier);
     }
 
-    let module = await this.fetchModule(moduleIdentifier);
+    let module = await this.fetchModule(resolvedModule);
     switch (module.state) {
       case "fetching":
         await module.deferred.promise;
-        return this.evaluateModule(moduleIdentifier);
+        return this.evaluateModule(resolvedModuleIdentifier);
       case "preparing":
       case "evaluated":
         return module.moduleInstance as T;
       case "broken":
         throw module.exception;
       case "registered":
-        return this.evaluateModule(moduleIdentifier);
+        return this.evaluateModule(resolvedModuleIdentifier);
       default:
         throw assertNever(module);
     }
   }
 
-  clearCache() {
-    this.modules = new Map();
+  private async fetch(
+    urlOrRequest: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> {
+    if (urlOrRequest instanceof Request) {
+      let request = new Request(this.resolve(urlOrRequest.url).href, {
+        method: urlOrRequest.method,
+        headers: urlOrRequest.headers,
+        body: urlOrRequest.body,
+      });
+      return fetch(request);
+    } else {
+      let resolvedURL = this.resolve(urlOrRequest);
+      return fetch(resolvedURL.href, init);
+    }
   }
 
-  private resolveModule(moduleIdentifier: string, relativeTo?: string): string {
-    if (relativeTo) {
-      moduleIdentifier = new URL(moduleIdentifier, relativeTo).href;
+  private resolve(
+    moduleIdentifier: string | URL,
+    relativeTo?: URL
+  ): ResolvedURL {
+    let absoluteURL = new URL(moduleIdentifier, relativeTo);
+    for (let [paths, to] of this.urlMappings) {
+      if (paths.inRealm(absoluteURL)) {
+        return new URL(paths.local(absoluteURL), to) as ResolvedURL;
+      }
     }
-
-    if (!moduleIdentifier.startsWith("http")) {
-      throw new Error(
-        `expected module identifier to be a URL: "${moduleIdentifier}"`
-      );
-    }
-
-    // CardRef's may still have canonical base realm URL's in them, so when we
-    // try to load modules that originate from a card ref, we'll need to resolve those
-    // correctly
-    if (this.baseRealmURL && baseRealm.inRealm(new URL(moduleIdentifier))) {
-      moduleIdentifier = new URL(
-        baseRealm.local(new URL(moduleIdentifier)),
-        this.baseRealmURL
-      ).href;
-    }
-    return moduleIdentifier;
+    return absoluteURL as ResolvedURL;
   }
 
-  private async fetchModule(moduleIdentifier: string): Promise<Module> {
+  private reverseResolution(
+    moduleIdentifier: string | ResolvedURL,
+    relativeTo?: URL
+  ): URL {
+    let absoluteURL = new URL(moduleIdentifier, relativeTo);
+    for (let [sourcePath, to] of this.urlMappings) {
+      let destinationPath = new RealmPaths(to);
+      if (destinationPath.inRealm(absoluteURL)) {
+        return new URL(destinationPath.local(absoluteURL), sourcePath.url);
+      }
+    }
+    return absoluteURL;
+  }
+
+  private async fetchModule(moduleURL: ResolvedURL): Promise<Module> {
+    let moduleIdentifier = moduleURL.href;
     let module = this.modules.get(moduleIdentifier);
     if (module) {
       return module;
@@ -150,7 +200,7 @@ export class Loader {
 
     let src: string;
     try {
-      src = await this.fetch(new URL(moduleIdentifier));
+      src = await this.load(moduleURL);
     } catch (exception) {
       this.modules.set(moduleIdentifier, {
         state: "broken",
@@ -175,7 +225,7 @@ export class Loader {
         if (depId === "exports") {
           return "exports";
         } else {
-          return this.resolveModule(depId, moduleIdentifier);
+          return this.resolve(depId, new URL(moduleIdentifier)).href;
         }
       });
       implementation = impl;
@@ -194,7 +244,7 @@ export class Loader {
     await Promise.all(
       dependencyList!.map((depId) => {
         if (depId !== "exports") {
-          return this.fetchModule(depId);
+          return this.fetchModule(new URL(depId) as ResolvedURL);
         }
         return undefined;
       })
@@ -267,17 +317,17 @@ export class Loader {
     }
   }
 
-  private async fetch(moduleURL: URL): Promise<string> {
+  private async load(moduleURL: ResolvedURL): Promise<string> {
     for (let [realmURL, fileLoader] of this.fileLoaders) {
-      let realmPath = new RealmPaths(realmURL);
+      let realmPath = new RealmPaths(this.resolve(realmURL));
       if (realmPath.inRealm(moduleURL)) {
-        return await fileLoader(moduleURL);
+        return await fileLoader(realmPath.local(moduleURL));
       }
     }
 
     let response: Response;
     try {
-      response = await fetch(moduleURL.href);
+      response = await this.fetch(moduleURL);
     } catch (err) {
       console.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a
