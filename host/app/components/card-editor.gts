@@ -6,7 +6,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import isEqual from 'lodash/isEqual';
 import { eq } from '../helpers/truth-helpers';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common';
@@ -19,7 +19,7 @@ import type { Card, Format, } from 'https://cardstack.com/base/card-api';
 export interface NewCardArgs {
   type: 'new';
   realmURL: string;
-  context: {
+  cardSource: {
     module: string;
     name: string;
   };
@@ -89,15 +89,17 @@ export default class Preview extends Component<Signature> {
   rendered: RenderedCard | undefined;
   @tracked
   initialCardData: CardJSON | undefined;
-  private interval: ReturnType<typeof setInterval>;
+  private declare interval: ReturnType<typeof setInterval>;
   private lastModified: number | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
     if (this.args.card.type === 'existing') {
       taskFor(this.loadData).perform(this.args.card.url);
+      this.interval = setInterval(() => taskFor(this.loadData).perform((this.args.card as any).url), 1000);
+    } else {
+      taskFor(this.prepareNewInstance).perform();
     }
-    this.interval = setInterval(() => taskFor(this.loadData).perform((this.args.card as any).url), 1000);
     registerDestructor(this, () => clearInterval(this.interval));
   }
 
@@ -105,7 +107,7 @@ export default class Preview extends Component<Signature> {
   get card() {
     this.resetTime; // just consume this
     if (this.args.card.type === 'new') {
-      let cardClass = this.args.module[this.args.card.context.name];
+      let cardClass = this.args.module[this.args.card.cardSource.name];
       return new cardClass();
     }
     if (this.initialCardData) {
@@ -123,7 +125,7 @@ export default class Preview extends Component<Signature> {
       }
       json = {
         data: this.cardAPI.api.serializeCard(this.card, {
-          adoptsFrom: this.args.card.context,
+          adoptsFrom: this.args.card.cardSource,
         })
       };
     } else {
@@ -177,6 +179,13 @@ export default class Preview extends Component<Signature> {
   @action
   save() {
     taskFor(this.write).perform();
+  }
+
+  @task private async prepareNewInstance(): Promise<void> {
+    await this.cardAPI.loaded;
+    if (!this.rendered) {
+      this.rendered = this.cardAPI.render(this, () => this.card, () => this.format);
+    }
   }
 
   @restartableTask private async loadData(url: string | undefined): Promise<void> {

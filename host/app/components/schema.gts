@@ -30,7 +30,7 @@ export default class Schema extends Component<Signature> {
         <ImportModule @url={{this.cardType.type.exportedCardContext.module}}>
           <:ready as |module|>
             <CardEditor
-              @card={{hash type="new" realmURL=this.localRealm.url.href context=this.cardType.type.exportedCardContext}}
+              @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.cardType.type.exportedCardContext}}
               @module={{module}}
               @onSave={{this.onSave}}
               @onCancel={{this.onCancel}}
