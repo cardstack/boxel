@@ -342,7 +342,6 @@ module("Realm Server", function (hooks) {
           attributes: {
             cardExports: [
               {
-                type: "exportedCard",
                 module: `${testRealmHref}person`,
                 name: "Person",
               },

@@ -20,9 +20,7 @@
     "lint:js:fix": "eslint . --fix",
     "start": "ember serve",
     "test": "npm-run-all lint test:*",
-    "ember-test": "CLI_TEST=true ember test",
-    "test:ember": "start-server-and-test serve-test-modules 4203 ember-test",
-    "serve-test-modules": "npx http-server --port 4203 --cors='*' ./public"
+    "test:ember": "ember test"
   },
   "devDependencies": {
     "@babel/core": "^7.17.8",
@@ -127,7 +125,6 @@
     "qs": "^6.10.5",
     "qunit": "^2.18.0",
     "qunit-dom": "^2.0.0",
-    "start-server-and-test": "^1.14.0",
     "tracked-built-ins": "^2.0.1",
     "typescript": "^4.6.3",
     "webpack": "^5.69.1"

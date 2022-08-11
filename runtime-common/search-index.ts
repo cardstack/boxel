@@ -388,7 +388,8 @@ export class SearchIndex {
         refsMap = new Map();
         newExportedCardRefs.set(module, refsMap);
       }
-      refsMap.set(this.internalKeyFor(def.id, undefined), def.id);
+      let { type: remove, ...exportedCardRef } = def.id;
+      refsMap.set(this.internalKeyFor(def.id, undefined), exportedCardRef);
     }
 
     // atomically update the search index

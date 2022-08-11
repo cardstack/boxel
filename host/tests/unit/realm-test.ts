@@ -796,7 +796,6 @@ module('Unit | realm', function () {
           attributes: {
             cardExports: [
               {
-                type: 'exportedCard',
                 module: `${testRealmURL}person`,
                 name: 'Person',
               },
