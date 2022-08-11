@@ -2,6 +2,7 @@ import { module, test, skip } from 'qunit';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
+import { baseRealm } from '@cardstack/runtime-common';
 
 let paths = new RealmPaths(testRealmURL);
 
@@ -707,6 +708,44 @@ posts/ignore-me.gts
           },
         },
       },
+      'catalog-entry-1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Post',
+            description: 'A card that represents a blog post',
+            ref: {
+              module: `${testModuleRealm}post`,
+              name: 'Post',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+      'catalog-entry-2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Article',
+            description: 'A card that represents an online article ',
+            ref: {
+              module: `${testModuleRealm}article`,
+              name: 'Article',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -740,6 +779,24 @@ posts/ignore-me.gts
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${paths.url}cards/1`]
+      );
+    });
+
+    test(`can search for cards that have custom queryableValue`, async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          on: { module: `${baseRealm.url}catalog-entry`, name: 'CatalogEntry' },
+          eq: {
+            ref: {
+              module: `${testModuleRealm}post`,
+              name: 'Post',
+            },
+          },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}catalog-entry-1`]
       );
     });
 

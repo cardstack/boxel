@@ -1,4 +1,4 @@
-import { Component, primitive, serialize, Card, CardInstanceType, CardConstructor } from './card-api';
+import { Component, primitive, serialize, queryableValue, Card, CardInstanceType, CardConstructor } from './card-api';
 import { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
@@ -44,6 +44,9 @@ export default class CardRefCard extends Card {
   }
   static fromSerialized<T extends CardConstructor>(this: T, cardRef: ExportedCardRef): CardInstanceType<T> {
     return {...cardRef} as CardInstanceType<T>;// return a new object so that the model cannot be mutated from the outside
+  }
+  static [queryableValue](cardRef: ExportedCardRef) {
+    return `${cardRef.module}/${cardRef.name}`; // this assumes the module is an absolute reference
   }
 
   static embedded = class Embedded extends BaseView {}
