@@ -1,5 +1,6 @@
 import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 interface Args {
   named: { url: string };
@@ -22,11 +23,11 @@ export class ImportResource extends Resource<Args> {
 
   private async load(url: string) {
     try {
-      let m = await import(/* webpackIgnore: true */ url);
+      let m = await Loader.import(url);
       moduleURLs.set(m, url);
       this.module = m;
     } catch (err) {
-      let errResponse = await fetch(url, {
+      let errResponse = await Loader.fetch(url, {
         headers: { 'content-type': 'text/javascript' },
       });
       if (!errResponse.ok) {

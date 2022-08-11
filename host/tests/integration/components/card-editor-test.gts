@@ -5,6 +5,8 @@ import { setupRenderingTest } from 'ember-qunit';
 import CardEditor, { ExistingCardArgs }  from 'runtime-spike/components/card-editor';
 import { renderComponent } from '../../helpers/render-component';
 import { testRealmURL } from '../../helpers';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm } from '@cardstack/runtime-common';
 import type { Format } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -15,8 +17,8 @@ module('Integration | card-editor', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.before(async function () {
-    cardApi = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/card-api' + '');
-    string = await import(/* webpackIgnore: true */ 'http://localhost:4201/base/string' + '');
+    cardApi = await Loader.import(`${baseRealm.url}card-api`);
+    string = await Loader.import(`${baseRealm.url}string`);
   });
 
   test('renders card', async function (assert) {

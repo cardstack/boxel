@@ -3,6 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 interface Args {
   named: {
@@ -76,7 +77,7 @@ class _FileResource extends Resource<Args> {
 
   @restartableTask private async read() {
     let prevState = this.state;
-    let response = await fetch(this.url, {
+    let response = await Loader.fetch(this.url, {
       headers: {
         Accept: 'application/vnd.card+source',
       },
@@ -114,7 +115,7 @@ class _FileResource extends Resource<Args> {
   }
 
   @restartableTask private async doWrite(content: string) {
-    let response = await fetch(this.url, {
+    let response = await Loader.fetch(this.url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.card+source',

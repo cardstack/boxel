@@ -2,7 +2,8 @@ import { Resource, useResource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
-import { CardRef } from '@cardstack/runtime-common';
+import { ExportedCardRef } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 import { stringify } from 'qs';
 import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
@@ -12,7 +13,7 @@ interface Args {
 }
 
 export class CardRefs extends Resource<Args> {
-  @tracked refs: CardRef[] = [];
+  @tracked refs: ExportedCardRef[] = [];
   @service declare localRealm: LocalRealm;
   @tracked localRealmURL: URL;
 
@@ -27,7 +28,7 @@ export class CardRefs extends Resource<Args> {
   }
 
   @restartableTask private async getCardRefs(module: string) {
-    let response = await fetch(
+    let response = await Loader.fetch(
       `${this.localRealmURL.href}_cardsOf?${stringify({
         module,
       })}`,
@@ -47,7 +48,8 @@ export class CardRefs extends Resource<Args> {
     }
     let json = await response.json();
     this.refs =
-      (json.data.attributes?.cardExports as CardRef[] | undefined) ?? [];
+      (json.data.attributes?.cardExports as ExportedCardRef[] | undefined) ??
+      [];
   }
 }
 

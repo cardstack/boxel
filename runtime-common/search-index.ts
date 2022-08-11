@@ -211,7 +211,7 @@ export class SearchIndex {
   private instances = new URLMap<SearchEntry>();
   private modules = new URLMap<ModuleSyntax>();
   private definitions = new Map<string, CardDefinition>();
-  private exportedCardRefs = new Map<string, CardRef[]>();
+  private exportedCardRefs = new Map<string, Map<string, ExportedCardRef>>();
   private ignoreMap = new URLMap<Ignore>();
   #api: CardAPI | undefined;
   #externalDefinitionsCache = new Map<
@@ -231,9 +231,7 @@ export class SearchIndex {
   ) {}
 
   async run() {
-    this.#api = await Loader.getLoader().load<CardAPI>(
-      `${this.realm.baseRealmURL}card-api`
-    );
+    this.#api = await Loader.import<CardAPI>(`${baseRealm.url}card-api`);
     await this.visitDirectory(new URL(this.realm.url));
     await this.semanticPhase();
   }
@@ -294,10 +292,10 @@ export class SearchIndex {
         } else {
           json.data.id = instanceURL.href;
           json.data.meta.lastModified = lastModified;
-          let module = await Loader.getLoader().load<Record<string, any>>(
+          let module = await Loader.import<Record<string, any>>(
             new URL(
               json.data.meta.adoptsFrom.module,
-              new URL(localPath, this.realm.hostedAtURL)
+              new URL(localPath, this.realm.url)
             ).href
           );
           let CardClass = module[json.data.meta.adoptsFrom.name] as typeof Card;
@@ -379,18 +377,19 @@ export class SearchIndex {
         }
       }
     }
-    let newExportedCardRefs = new Map<string, CardRef[]>();
+    let newExportedCardRefs = new Map<string, Map<string, ExportedCardRef>>();
     for (let def of newDefinitions.values()) {
       if (def.id.type !== "exportedCard") {
         continue;
       }
       let { module } = def.id;
-      let refs = newExportedCardRefs.get(module);
-      if (!refs) {
-        refs = [];
-        newExportedCardRefs.set(module, refs);
+      let refsMap = newExportedCardRefs.get(module);
+      if (!refsMap) {
+        refsMap = new Map();
+        newExportedCardRefs.set(module, refsMap);
       }
-      refs.push(def.id);
+      let { type: remove, ...exportedCardRef } = def.id;
+      refsMap.set(this.internalKeyFor(def.id, undefined), exportedCardRef);
     }
 
     // atomically update the search index
@@ -577,9 +576,13 @@ export class SearchIndex {
     return undefined;
   }
 
-  async exportedCardsOf(module: string): Promise<CardRef[]> {
+  async exportedCardsOf(module: string): Promise<ExportedCardRef[]> {
     module = trimExecutableExtension(new URL(module, this.realm.url)).href;
-    return this.exportedCardRefs.get(module) ?? [];
+    let refsMap = this.exportedCardRefs.get(module);
+    if (!refsMap) {
+      return [];
+    }
+    return [...refsMap.values()];
   }
 
   async card(url: URL): Promise<CardResource | undefined> {
@@ -827,11 +830,8 @@ export class SearchIndex {
     let deferred = new Deferred<CardDefinition | undefined>();
     this.#externalDefinitionsCache.set(key, deferred.promise);
 
-    if (baseRealm.inRealm(moduleURL)) {
-      moduleURL = new URL(baseRealm.local(moduleURL), this.realm.baseRealmURL);
-    }
     let url = `${moduleURL.href}/_typeOf?${stringify(ref)}`;
-    let response = await fetch(url, {
+    let response = await Loader.fetch(url, {
       headers: {
         Accept: "application/vnd.api+json",
       },

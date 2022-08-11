@@ -8,14 +8,9 @@ import {
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
-import { Loader } from '@cardstack/runtime-common/loader';
 import { stringify } from 'qs';
 
-module('Unit | realm', function (hooks) {
-  hooks.before(function () {
-    Loader.destroy();
-  });
-
+module('Unit | realm', function () {
   test('realm can serve card data requests', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/empty.json': {
@@ -801,7 +796,6 @@ module('Unit | realm', function (hooks) {
           attributes: {
             cardExports: [
               {
-                type: 'exportedCard',
                 module: `${testRealmURL}person`,
                 name: 'Person',
               },
