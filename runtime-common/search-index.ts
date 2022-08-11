@@ -714,9 +714,13 @@ export class SearchIndex {
       );
 
       return (entry) =>
-        every(Object.entries(filter.eq), ([fieldPath, value]) => {
+        every(Object.entries(filter.eq), ([fieldPath, queryVal]) => {
           if (this.cardHasType(entry, ref)) {
-            return entry.searchData![fieldPath] === value;
+            let value = entry.searchData[fieldPath];
+            if (value === undefined) {
+              return null;
+            }
+            return value == queryVal;
           } else {
             return null;
           }
