@@ -173,7 +173,7 @@ export function serializeCard<CardT extends CardConstructor>(model: InstanceType
   }
 
   if (opts?.adoptsFrom) {
-    resource.meta = { adoptsFrom: { ...opts.adoptsFrom } };;
+    resource.meta = { adoptsFrom: { ...opts.adoptsFrom } };
   }
 
   return resource;
