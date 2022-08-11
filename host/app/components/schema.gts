@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { CardRef } from '@cardstack/runtime-common';
+import { ExportedCardRef } from '@cardstack/runtime-common';
 import { getCardType } from '../resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -19,7 +19,7 @@ import type RouterService from '@ember/routing/router-service';
 
 interface Signature {
   Args: {
-    ref: CardRef;
+    ref: ExportedCardRef;
   }
 }
 
