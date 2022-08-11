@@ -6,7 +6,7 @@ import {
   CardDocument,
   isCardDocument,
 } from "./search-index";
-import { Loader, ResolvedURL } from "./loader";
+import { Loader } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
 import {
   systemError,
@@ -76,7 +76,6 @@ export class Realm {
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
   readonly paths: RealmPaths;
-  #resolvedPaths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
 
@@ -86,11 +85,10 @@ export class Realm {
 
   constructor(url: string, adapter: RealmAdapter) {
     this.paths = new RealmPaths(url);
-    Loader.addFileLoader(new URL(this.url), async (url: ResolvedURL) => {
-      let content = await this.cardSourceFromResolvedURL(url);
-      return this.transpileJS(content!, url.href);
+    Loader.addFileLoader(new URL(this.url), async (path: LocalPath) => {
+      let content = await this.cardSourceFromPath(path);
+      return this.transpileJS(content!, path);
     });
-    this.#resolvedPaths = new RealmPaths(Loader.resolve(url)); // this is used to work with ResolvedURL's specifically
     this.#adapter = adapter;
     this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
@@ -106,7 +104,6 @@ export class Realm {
       .get("/_search", this.search.bind(this))
       // TODO lets move cardsOf to be a path you add to the end of a route like typeOf
       .get("/_cardsOf", this.getCardsOf.bind(this))
-      .get("/.*_realmInfo", this.getRealmInfo.bind(this))
       .get("/.*_typeOf", this.getTypeOf.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
@@ -240,11 +237,10 @@ export class Realm {
   }
 
   // as opposed to getCardSourceOrRedirect, this will follow the redirect
-  private async cardSourceFromResolvedURL(
-    url: ResolvedURL
+  private async cardSourceFromPath(
+    path: LocalPath
   ): Promise<string | undefined> {
-    let localName = this.#resolvedPaths.local(url);
-    let handle = await this.getFileWithFallbacks(localName);
+    let handle = await this.getFileWithFallbacks(path);
     if (!handle) {
       return undefined;
     }
@@ -709,18 +705,6 @@ export class Realm {
     return new Response(JSON.stringify({ data }, null, 2), {
       headers: { "content-type": "application/vnd.api+json" },
     });
-  }
-
-  private async getRealmInfo(): Promise<Response> {
-    return new Response(
-      JSON.stringify({
-        data: {
-          id: this.url,
-          type: "realm-info",
-          attributes: { url: this.url },
-        },
-      })
-    );
   }
 
   private async search(request: Request): Promise<Response> {
