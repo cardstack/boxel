@@ -777,6 +777,18 @@ posts/ignore-me.gts
       );
     });
 
+    test(`can use 'eq' to find 'null' values`, async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          eq: { 'author.lastName': null },
+        },
+      });
+      assert.deepEqual(
+        [`${testRealmURL}card-2`]
+      );
+    });
+
     test(`can search for cards by using a computed field`, async function (assert) {
       let matching = await indexer.search({
         filter: {

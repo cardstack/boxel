@@ -717,7 +717,7 @@ export class SearchIndex {
         every(Object.entries(filter.eq), ([fieldPath, queryVal]) => {
           if (this.cardHasType(entry, ref)) {
             let value = entry.searchData[fieldPath];
-            if (value === undefined) {
+            if (value === undefined && queryVal != null) {
               return null;
             }
             return value == queryVal;
