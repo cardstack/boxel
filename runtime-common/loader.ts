@@ -1,5 +1,4 @@
-// @ts-ignore
-import TransformModulesAmd from "@babel/plugin-transform-modules-amd";
+import TransformModulesAmdPlugin from "transform-modules-amd-plugin";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
 import { RealmPaths, LocalPath } from "./paths";
@@ -210,7 +209,10 @@ export class Loader {
     }
     src = transformSync(src, {
       plugins: [
-        [TransformModulesAmd, { noInterop: true, moduleId: moduleIdentifier }],
+        [
+          TransformModulesAmdPlugin,
+          { noInterop: true, moduleId: moduleIdentifier },
+        ],
       ],
     })?.code!;
 
