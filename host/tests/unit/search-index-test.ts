@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
+import { baseRealm } from '@cardstack/runtime-common';
 
 let paths = new RealmPaths(testRealmURL);
 
@@ -743,6 +744,89 @@ posts/ignore-me.gts
           },
         },
       },
+      'catalog-entry-1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Post',
+            description: 'A card that represents a blog post',
+            ref: {
+              module: `${testModuleRealm}post`,
+              name: 'Post',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+      'catalog-entry-2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Article',
+            description: 'A card that represents an online article ',
+            ref: {
+              module: `${testModuleRealm}article`,
+              name: 'Article',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+      'mango.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+            numberOfTreats: ['one', 'two'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}dog`,
+              name: 'Dog',
+            },
+          },
+        },
+      },
+      'ringo.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Ringo',
+            numberOfTreats: ['three', 'five'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}dog`,
+              name: 'Dog',
+            },
+          },
+        },
+      },
+      'vangogh.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Van Gogh',
+            numberOfTreats: ['two', 'nine'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}dog`,
+              name: 'Dog',
+            },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -789,6 +873,24 @@ posts/ignore-me.gts
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${paths.url}cards/1`]
+      );
+    });
+
+    test(`can search for cards that have custom queryableValue`, async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          on: { module: `${baseRealm.url}catalog-entry`, name: 'CatalogEntry' },
+          eq: {
+            ref: {
+              module: `${testModuleRealm}post`,
+              name: 'Post',
+            },
+          },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}catalog-entry-1`]
       );
     });
 
@@ -854,6 +956,21 @@ posts/ignore-me.gts
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${paths.url}cards/1`]
+      );
+    });
+
+    test('can use a range filter with custom queryableValue', async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}dog`, name: 'Dog' },
+          range: {
+            numberOfTreats: { lt: ['three', 'zero'], gt: ['two', 'zero'] },
+          },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}vangogh`]
       );
     });
 
@@ -980,6 +1097,27 @@ posts/ignore-me.gts
           `${paths.url}cards/1`, // type is post
           `${paths.url}cards/2`, // Carl
           `${paths.url}card-1`, // Cardy
+        ]
+      );
+    });
+
+    test('can sort by custom queryableValue', async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'numberOfTreats',
+            on: { module: `${testModuleRealm}dog`, name: 'Dog' },
+            direction: 'asc',
+          },
+        ],
+        filter: { type: { module: `${testModuleRealm}dog`, name: 'Dog' } },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}mango`, // 12
+          `${paths.url}vangogh`, // 29
+          `${paths.url}ringo`, // 35
         ]
       );
     });
