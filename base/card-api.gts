@@ -154,7 +154,7 @@ export function getQueryableValue(fieldCard: typeof Card, value: any): any {
   
   // this recurses through the fields of the compound card via
   // the base card's queryableValue implementation
-  return (fieldCard as any)[queryableValue](value);
+  return flatten((fieldCard as any)[queryableValue](value));
 }
 
 export function serializedGet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string ) {
@@ -195,14 +195,7 @@ export function serializeCard<CardT extends CardConstructor>(model: InstanceType
 
 export async function searchDoc<CardT extends CardConstructor>(model: InstanceType<CardT>): Promise<Record<string, any>> {
   await recompute(model);
-
-  let result: Record<string, any> = {};
-  for (let [fieldName, field] of Object.entries(getFields(model))) {
-    let value = getQueryableValue(field.card, model[fieldName as keyof InstanceType<CardT>]);
-    result[fieldName] = value;
-  }
-  let searchDoc = flatten(result);
-  return searchDoc;
+  return getQueryableValue(model.constructor, model) as Record<string, any>;
 }
 
 function flatten(obj: Record<string, any>): Record<string, any> {
