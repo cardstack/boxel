@@ -3,7 +3,7 @@ import Sprite from 'animations-experiment/models/sprite';
 import { IContext } from 'animations-experiment/models/sprite-tree';
 import magicMove from 'animations-experiment/transitions/magic-move';
 import { Changeset } from 'animations-experiment/models/changeset';
-import { CARD_STATES } from './data/card';
+import { Card, CardState } from './data/card';
 import LinearBehavior from 'animations-experiment/behaviors/linear';
 
 const DEFAULT_DURATION = 500;
@@ -17,6 +17,7 @@ interface SpriteGroup {
     | 'MAX -> MIN'
     | 'REMOVED'
     | 'INSERTED';
+  model: Card;
   placeholder: Sprite | null;
   mainCardContent: Sprite | null;
   keptContent: Set<Sprite>;
@@ -116,6 +117,8 @@ export async function maxToExpanded(
   fadeInSprites.push(mainCardContent);
 
   await runAnimations(fadeInSprites);
+
+  spriteGroup.model._state.transitionCompleted();
 }
 
 export async function expandedToMax(
@@ -184,6 +187,8 @@ export async function expandedToMax(
   fadeInSprites.push(mainCardContent);
 
   await runAnimations(fadeInSprites);
+
+  spriteGroup.model._state.transitionCompleted();
 }
 
 export async function expandedToMaxImages(
@@ -255,6 +260,8 @@ export async function expandedToMaxImages(
   });
 
   await runAnimations(fadeInSprites);
+
+  spriteGroup.model._state.transitionCompleted();
 }
 
 export async function maxToExpandedImages(
@@ -381,14 +388,7 @@ export async function maxToExpandedImages(
   // spriteGroup.card!.element.style.zIndex = '2';
   await runAnimations([spriteGroup.card!]);
 
-  // images.forEach((image) => {
-  //   image.setupAnimation('position', {
-  //     startX: -image.boundsDelta!.x + spriteGroup.card!.boundsDelta!.x + 5,
-  //     startY: -image.boundsDelta!.y + spriteGroup.card!.boundsDelta!.y + 5,
-  //   });
-  // });
-
-  // await runAnimations(images);
+  spriteGroup.model._state.transitionCompleted();
 }
 
 export async function simple(sprite: Sprite) {
@@ -429,44 +429,63 @@ function getCardId(sprite: Sprite) {
 }
 
 function getStateChange(
-  cardSprite: Sprite
+  cardSprite: Sprite,
+  transition: [CardState, CardState] | []
 ): 'STATIC' | 'MAX -> EXPANDED' | 'EXPANDED -> MAX' | 'MAX -> MIN' {
-  let counterpart = cardSprite.counterpart;
+  if (!transition.length) return 'STATIC';
 
-  if (!counterpart) {
-    return 'STATIC';
+  if (transition[0] === 'MIN' || transition[1] === 'MIN') return 'STATIC';
+
+  if (transition[0] === 'MAX') {
+    return `MAX -> EXPANDED`;
   }
 
-  let counterpartState = [
-    CARD_STATES.EXPANDED,
-    CARD_STATES.MAX,
-    CARD_STATES.MIN,
-  ].find((v) => counterpart?.element.className.includes(v));
-  let spriteState = [
-    CARD_STATES.EXPANDED,
-    CARD_STATES.MAX,
-    CARD_STATES.MIN,
-  ].find((v) => cardSprite.element.className.includes(v));
-  if (
-    spriteState === counterpartState ||
-    (spriteState !== 'MAX' && counterpartState !== 'MAX')
-  ) {
-    return 'STATIC';
-  } else {
-    return `${counterpartState} -> ${spriteState}` as
-      | 'MAX -> EXPANDED'
-      | 'EXPANDED -> MAX'
-      | 'MAX -> MIN';
+  if (transition[0] === 'EXPANDED') {
+    return `EXPANDED -> MAX`;
   }
+
+  return 'STATIC';
+  // let counterpart = cardSprite.counterpart;
+
+  // if (!counterpart) {
+  //   return 'STATIC';
+  // }
+
+  // let counterpartState = [
+  //   CARD_STATES.EXPANDED,
+  //   CARD_STATES.MAX,
+  //   CARD_STATES.MIN,
+  // ].find((v) => counterpart?.element.className.includes(v));
+  // let spriteState = [
+  //   CARD_STATES.EXPANDED,
+  //   CARD_STATES.MAX,
+  //   CARD_STATES.MIN,
+  // ].find((v) => cardSprite.element.className.includes(v));
+  // if (
+  //   spriteState === counterpartState ||
+  //   (spriteState !== 'MAX' && counterpartState !== 'MAX')
+  // ) {
+  //   return 'STATIC';
+  // } else {
+  //   return `${counterpartState} -> ${spriteState}` as
+  //     | 'MAX -> EXPANDED'
+  //     | 'EXPANDED -> MAX'
+  //     | 'MAX -> MIN';
+  // }
 }
 
-export function groupSprites(changeset: Changeset) {
+export function groupSprites(
+  changeset: Changeset,
+  transitionStateLookup: Record<string, [CardState, CardState] | []>,
+  cardData: Record<string, Card>
+) {
   let groupsOfSprites: Record<string, SpriteGroup> = {};
 
   for (let sprite of changeset.keptSprites) {
     let id = getCardId(sprite);
     groupsOfSprites[id as string] ??= {
       state: 'STATIC',
+      model: cardData[id!]!,
       card: null,
       mainCardContent: null,
       title: null,
@@ -478,7 +497,7 @@ export function groupSprites(changeset: Changeset) {
     let group = groupsOfSprites[id as string]!;
     if (sprite.role === 'card') {
       group.card = sprite;
-      group.state = getStateChange(sprite);
+      group.state = getStateChange(sprite, transitionStateLookup[id!]!);
     } else if (sprite.role === 'card-content') {
       group.mainCardContent = sprite;
     } else if (sprite.role === 'title') {
@@ -492,7 +511,8 @@ export function groupSprites(changeset: Changeset) {
   for (let sprite of changeset.insertedSprites) {
     let id = getCardId(sprite);
     groupsOfSprites[id as string] ??= {
-      state: 'STATIC',
+      state: 'INSERTED',
+      model: cardData[id!]!,
       card: null,
       mainCardContent: null,
       title: null,
@@ -519,7 +539,8 @@ export function groupSprites(changeset: Changeset) {
   for (let sprite of changeset.removedSprites) {
     let id = getCardId(sprite);
     groupsOfSprites[id as string] ??= {
-      state: 'STATIC',
+      state: 'REMOVED',
+      model: cardData[id!]!,
       card: null,
       mainCardContent: null,
       title: null,

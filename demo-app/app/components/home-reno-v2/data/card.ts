@@ -23,7 +23,7 @@ export const CARD_STATES = {
 } as const;
 
 type CardType = keyof typeof TYPE_TO_MODEL;
-type CardState = keyof typeof CARD_STATES;
+export type CardState = keyof typeof CARD_STATES;
 
 interface CardOptions {
   type: CardType;
@@ -40,7 +40,7 @@ export class Card {
   readonly canUpdateState: boolean;
   readonly model: any;
   readonly parent?: Card;
-  @tracked state: CardState;
+  _state: CardUiState;
   @tracked suggestions: Card[] | null = null;
 
   constructor(opts: CardOptions) {
@@ -51,7 +51,7 @@ export class Card {
     this.parent = opts.parent;
     this.canUpdateState = opts.canUpdateState ?? true;
     // Almost every card will start at min
-    this.state = opts.state;
+    this._state = new CardUiState(opts.state);
     if (this.state === CARD_STATES.MAX) {
       this.suggestions = this.suggestionCardIds.map(
         (type) =>
@@ -64,6 +64,18 @@ export class Card {
           })
       );
     }
+  }
+
+  get state() {
+    return this._state.state;
+  }
+
+  set state(arg: CardState) {
+    this._state.update(arg);
+  }
+
+  get transition() {
+    return this._state.transition;
   }
 
   changeState(newState: CardState) {
@@ -89,6 +101,31 @@ export class Card {
   }
 }
 
+export class TransitionLookupBuilder {
+  transitionLookup: Record<string, [CardState, CardState] | []>;
+  cardLookup: Record<string, Card>;
+
+  constructor(public card: Card) {
+    let _lookup = this._cardLookupEntries(card, []);
+    this.cardLookup = Object.fromEntries(_lookup);
+    this.transitionLookup = Object.fromEntries(
+      _lookup.map(([k, c]) => [k, c.transition])
+    );
+  }
+
+  _cardLookupEntries(card: Card, entries: [string, Card][]) {
+    entries.push([card.id, card]);
+
+    if (card.suggestions) {
+      for (let suggestion of card.suggestions) {
+        this._cardLookupEntries(suggestion, entries);
+      }
+    }
+
+    return entries;
+  }
+}
+
 export function maximizedCardList(root: Card) {
   let list = [];
 
@@ -103,4 +140,28 @@ export function maximizedCardList(root: Card) {
   }
 
   return list;
+}
+
+class CardUiState {
+  @tracked state: CardState;
+  // This cannot be tracked otherwise it will result in an infinite rendering loop
+  transition: [] | [CardState, CardState] = [];
+
+  constructor(
+    initialState:
+      | typeof CARD_STATES.EXPANDED
+      | typeof CARD_STATES.MAX
+      | typeof CARD_STATES.MIN
+  ) {
+    this.state = initialState;
+  }
+
+  update(newState: CardState) {
+    if (this.state !== newState) this.transition = [this.state, newState];
+    this.state = newState;
+  }
+
+  transitionCompleted() {
+    this.transition = [];
+  }
 }
