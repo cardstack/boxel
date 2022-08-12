@@ -10,7 +10,7 @@ import { ModuleSyntax } from "./module-syntax";
 import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
 import { stringify } from "qs";
-import { Query, Filter } from "./query";
+import { Query, Filter, Sort } from "./query";
 import { Loader } from "./loader";
 import { Deferred } from "./deferred";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
@@ -556,6 +556,7 @@ export class SearchIndex {
 
     return [...this.instances.values()]
       .filter(matcher)
+      .sort(this.buildSorter(query.sort))
       .map((entry) => entry.resource);
   }
 
@@ -693,6 +694,51 @@ export class SearchIndex {
     return FieldCard as typeof Card;
   }
 
+  private buildSorter(
+    expressions: Sort | undefined
+  ): (e1: SearchEntry, e2: SearchEntry) => number {
+    if (!expressions || expressions.length === 0) {
+      return () => 0;
+    }
+    let sorters = expressions.map(({ by, on, direction }) => {
+      return (e1: SearchEntry, e2: SearchEntry) => {
+        let ref: CardRef = { type: "exportedCard", ...on };
+        if (!this.cardHasType(e1, ref)) {
+          return direction === "desc" ? -1 : 1;
+        }
+        if (!this.cardHasType(e2, ref)) {
+          return direction === "desc" ? 1 : -1;
+        }
+        let a = e1.searchData[by];
+        let b = e2.searchData[by];
+        if (a === undefined) {
+          return direction === "desc" ? -1 : 1; // if descending, null position is before the rest
+        }
+        if (b === undefined) {
+          return direction === "desc" ? 1 : -1; // `a` is not null
+        }
+        // TODO: use queryableValue check here
+        if (a < b) {
+          return direction === "desc" ? 1 : -1;
+        } else if (a > b) {
+          return direction === "desc" ? -1 : 1;
+        } else {
+          return 0;
+        }
+      };
+    });
+
+    return (e1: SearchEntry, e2: SearchEntry) => {
+      for (let sorter of sorters) {
+        let result = sorter(e1, e2);
+        if (result !== 0) {
+          return result;
+        }
+      }
+      return 0;
+    };
+  }
+
   // Matchers are three-valued (true, false, null) because a query that talks
   // about a field that is not even present on a given card results in `null` to
   // distinguish it from a field that is present but not matching the filter
@@ -743,7 +789,6 @@ export class SearchIndex {
     if ("eq" in filter) {
       let ref: CardRef = { type: "exportedCard", ...on };
 
-      // this logic has the side effect of validating the filter fields
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
           Object.keys(filter.eq).map(async (fieldPath) => [
@@ -756,13 +801,56 @@ export class SearchIndex {
       return (entry) =>
         every(Object.entries(filter.eq), ([fieldPath, value]) => {
           if (this.cardHasType(entry, ref)) {
-            return (
-              entry.searchData![fieldPath] ===
-              this.api.getQueryableValue(fieldCards[fieldPath]!, value)
+            let queryValue = this.api.getQueryableValue(
+              fieldCards[fieldPath]!,
+              value
             );
+            let instanceValue = entry.searchData[fieldPath];
+            if (instanceValue === undefined && queryValue != null) {
+              return null;
+            }
+            // allows queries for null to work
+            if (queryValue == null && instanceValue == null) {
+              return true;
+            }
+            return instanceValue === queryValue;
           } else {
             return null;
           }
+        });
+    }
+
+    if ("range" in filter) {
+      let ref: CardRef = { type: "exportedCard", ...on };
+
+      let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
+        await Promise.all(
+          Object.keys(filter.range).map(async (fieldPath) => [
+            fieldPath,
+            await this.loadFieldCard(on, fieldPath),
+          ])
+        )
+      );
+
+      return (entry) =>
+        every(Object.entries(filter.range), ([fieldPath, range]) => {
+          if (this.cardHasType(entry, ref)) {
+            let value = entry.searchData[fieldPath];
+            if (value === undefined) {
+              return null;
+            }
+
+            if (
+              (range.gt && !(value > range.gt)) ||
+              (range.lt && !(value < range.lt)) ||
+              (range.gte && !(value >= range.gte)) ||
+              (range.lte && !(value <= range.lte))
+            ) {
+              return false;
+            }
+            return true;
+          }
+          return null;
         });
     }
 

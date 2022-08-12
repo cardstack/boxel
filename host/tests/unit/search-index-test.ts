@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
@@ -652,7 +652,8 @@ posts/ignore-me.gts
           attributes: {
             title: 'Card 1',
             description: 'Sample post',
-            author: { firstName: 'Cardy' },
+            author: { firstName: 'Cardy', lastName: 'Stackington Jr. III' },
+            views: 0,
           },
           meta: {
             adoptsFrom: {
@@ -665,7 +666,7 @@ posts/ignore-me.gts
       'card-2.json': {
         data: {
           type: 'card',
-          attributes: { author: { firstName: 'Cardy' } },
+          attributes: { author: { firstName: 'Cardy' }, editions: 1 },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
           },
@@ -677,7 +678,7 @@ posts/ignore-me.gts
           attributes: {
             title: 'Card 1',
             description: 'Sample post',
-            author: { firstName: 'Carl', lastName: 'Stack' },
+            author: { firstName: 'Carl', lastName: 'Stack', posts: 1 },
             createdAt: new Date(2022, 7, 1),
             views: 10,
           },
@@ -692,11 +693,7 @@ posts/ignore-me.gts
           attributes: {
             title: 'Card 2',
             description: 'Sample post',
-            author: {
-              firstName: 'Carl',
-              lastName: 'Deck',
-              email: 'carl@stack.com',
-            },
+            author: { firstName: 'Carl', lastName: 'Deck', posts: 3 },
             createdAt: new Date(2022, 7, 22),
             views: 5,
           },
@@ -705,6 +702,45 @@ posts/ignore-me.gts
               module: `${testModuleRealm}article`,
               name: 'Article',
             },
+          },
+        },
+      },
+      'books/1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            author: { firstName: 'Mango', lastName: 'Abdel-Rahman' },
+            editions: 1,
+            pubDate: '2022-07-01',
+          },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+        },
+      },
+      'books/2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            author: { firstName: 'Van Gogh', lastName: 'Abdel-Rahman' },
+            editions: 0,
+            pubDate: '2023-08-01',
+          },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+        },
+      },
+      'books/3.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            author: { firstName: 'Jackie', lastName: 'Aguilar' },
+            editions: 2,
+            pubDate: '2022-08-01',
+          },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         },
       },
@@ -769,6 +805,19 @@ posts/ignore-me.gts
       );
     });
 
+    test(`can use 'eq' to find 'null' values`, async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          eq: { 'author.lastName': null },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${testRealmURL}card-2`]
+      );
+    });
+
     test(`can search for cards by using a computed field`, async function (assert) {
       let matching = await indexer.search({
         filter: {
@@ -821,12 +870,12 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
-          not: { not: { not: { eq: { 'author.email': 'carl@stack.com' } } } },
+          not: { not: { not: { eq: { 'author.firstName': 'Carl' } } } },
         },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}card-1`, `${paths.url}cards/1`]
+        [`${paths.url}card-1`]
       );
     });
 
@@ -852,7 +901,18 @@ posts/ignore-me.gts
       );
     });
 
-    skip(`can filter on a card's own fields using gt`);
+    test(`can filter on a card's own fields using range`, async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}post`, name: 'Post' },
+          range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}cards/1`]
+      );
+    });
 
     test(`gives a good error when query refers to missing card`, async function (assert) {
       try {
@@ -911,11 +971,13 @@ posts/ignore-me.gts
       let matching = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}article`, name: 'Article' },
-          every: [{ not: { eq: { 'author.email': 'carl@stack.com' } } }],
+          not: { eq: { 'author.firstName': 'Carl' } },
         },
       });
-      assert.strictEqual(matching.length, 1);
-      assert.strictEqual(matching[0]?.id, `${testRealmURL}card-1`);
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${testRealmURL}card-1`]
+      );
     });
 
     test('can combine multiple types', async function (assert) {
@@ -940,14 +1002,203 @@ posts/ignore-me.gts
     });
 
     // sorting
-    skip('can sort in alphabetical order');
-    skip('can sort in reverse alphabetical order');
-    skip('can sort in multiple string field conditions');
-    skip('can sort by multiple string field conditions in given directions');
-    skip('can sort by integer value');
-    skip('can sort by date');
-    skip('can sort by mixed field types');
-    skip(`can sort on multiple paths in combination with 'any' filter`);
-    skip(`can sort on multiple paths in combination with 'every' filter`);
+    test('can sort in alphabetical order', async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'author.lastName',
+            on: { module: `${testModuleRealm}article`, name: 'Article' },
+          },
+        ],
+        filter: {
+          type: { module: `${testModuleRealm}article`, name: 'Article' },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}cards/2`, `${paths.url}card-1`]
+      );
+    });
+
+    test('can sort in reverse alphabetical order', async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'author.firstName',
+            on: { module: `${testModuleRealm}article`, name: 'Article' },
+            direction: 'desc',
+          },
+        ],
+        filter: { type: { module: `${testModuleRealm}post`, name: 'Post' } },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}cards/1`, // type is post
+          `${paths.url}cards/2`, // Carl
+          `${paths.url}card-1`, // Cardy
+        ]
+      );
+    });
+
+    test('can sort by multiple string field conditions in given directions', async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'author.lastName',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+            direction: 'asc',
+          },
+          {
+            by: 'author.firstName',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+            direction: 'desc',
+          },
+        ],
+        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}books/2`, // Van Gogh Ab
+          `${paths.url}books/1`, // Mango Ab
+          `${paths.url}books/3`, // Jackie Ag
+          `${paths.url}card-2`, // Cardy --> lastName is null
+        ]
+      );
+    });
+
+    test('can sort by integer value', async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'editions',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+          {
+            by: 'author.lastName',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+        ],
+        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}books/2`, // 0
+          `${paths.url}books/1`, // 1
+          `${paths.url}card-2`, // 1
+          `${paths.url}books/3`, // 2
+        ]
+      );
+    });
+
+    test('can sort by date', async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'pubDate',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+        ],
+        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}books/1`, // 2022-07-01
+          `${paths.url}books/3`, // 2022-08-01
+          `${paths.url}books/2`, // 2023-08-01
+          `${paths.url}card-2`, // null
+        ]
+      );
+    });
+
+    test('can sort by mixed field types', async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'editions',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+            direction: 'desc',
+          },
+          {
+            by: 'author.lastName',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+        ],
+        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}books/3`, // 2
+          `${paths.url}books/1`, // 1 // Ab
+          `${paths.url}card-2`, // 1 // null
+          `${paths.url}books/2`, // 0
+        ]
+      );
+    });
+
+    test(`can sort on multiple paths in combination with 'any' filter`, async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'author.lastName',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+          },
+          {
+            by: 'author.firstName',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+            direction: 'desc',
+          },
+        ],
+        filter: {
+          any: [
+            { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+            { type: { module: `${testModuleRealm}article`, name: 'Article' } },
+          ],
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}books/2`, // Ab Van Gogh
+          `${paths.url}books/1`, // Ab Mango
+          `${paths.url}books/3`, // Ag Jackie
+          `${paths.url}card-2`, // null
+          `${paths.url}card-1`, // (article)
+          `${paths.url}cards/2`, // (article)
+        ]
+      );
+    });
+
+    test(`can sort on multiple paths in combination with 'every' filter`, async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'author.firstName',
+            on: { module: `${testModuleRealm}book`, name: 'Book' },
+            direction: 'desc',
+          },
+        ],
+        filter: {
+          every: [
+            {
+              on: { module: `${testModuleRealm}book`, name: 'Book' },
+              not: { eq: { 'author.lastName': 'Aguilar' } },
+            },
+            {
+              on: { module: `${testModuleRealm}book`, name: 'Book' },
+              eq: { editions: 1 },
+            },
+          ],
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}books/1`]
+      );
+    });
   });
 });
