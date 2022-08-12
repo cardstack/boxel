@@ -782,6 +782,51 @@ posts/ignore-me.gts
           },
         },
       },
+      'mango.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+            numberOfTreats: ['one', 'two'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}dog`,
+              name: 'Dog',
+            },
+          },
+        },
+      },
+      'ringo.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Ringo',
+            numberOfTreats: ['three', 'five'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}dog`,
+              name: 'Dog',
+            },
+          },
+        },
+      },
+      'vangogh.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Van Gogh',
+            numberOfTreats: ['two', 'nine'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}dog`,
+              name: 'Dog',
+            },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -914,6 +959,21 @@ posts/ignore-me.gts
       );
     });
 
+    test('can use a range filter with custom queryableValue', async function (assert) {
+      let matching = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}dog`, name: 'Dog' },
+          range: {
+            numberOfTreats: { lt: ['three', 'zero'], gt: ['two', 'zero'] },
+          },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}vangogh`]
+      );
+    });
+
     test(`gives a good error when query refers to missing card`, async function (assert) {
       try {
         await indexer.search({
@@ -1037,6 +1097,27 @@ posts/ignore-me.gts
           `${paths.url}cards/1`, // type is post
           `${paths.url}cards/2`, // Carl
           `${paths.url}card-1`, // Cardy
+        ]
+      );
+    });
+
+    test('can sort by custom queryableValue', async function (assert) {
+      let matching = await indexer.search({
+        sort: [
+          {
+            by: 'numberOfTreats',
+            on: { module: `${testModuleRealm}dog`, name: 'Dog' },
+            direction: 'asc',
+          },
+        ],
+        filter: { type: { module: `${testModuleRealm}dog`, name: 'Dog' } },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}mango`, // 12
+          `${paths.url}vangogh`, // 29
+          `${paths.url}ringo`, // 35
         ]
       );
     });

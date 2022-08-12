@@ -58,10 +58,12 @@ export interface EqFilter extends TypedFilter {
 export interface RangeFilter extends TypedFilter {
   range: {
     [fieldName: string]: {
-      gt?: JSON.Primitive;
-      gte?: JSON.Primitive;
-      lt?: JSON.Primitive;
-      lte?: JSON.Primitive;
+      // these might be objects that have custom queryable values so we need to
+      // be permissive on the types
+      gt?: JSON.Value;
+      gte?: JSON.Value;
+      lt?: JSON.Value;
+      lte?: JSON.Value;
     };
   };
 }

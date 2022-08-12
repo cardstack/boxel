@@ -717,7 +717,6 @@ export class SearchIndex {
         if (b === undefined) {
           return direction === "desc" ? 1 : -1; // `a` is not null
         }
-        // TODO: use queryableValue check here
         if (a < b) {
           return direction === "desc" ? 1 : -1;
         } else if (a > b) {
@@ -841,10 +840,26 @@ export class SearchIndex {
             }
 
             if (
-              (range.gt && !(value > range.gt)) ||
-              (range.lt && !(value < range.lt)) ||
-              (range.gte && !(value >= range.gte)) ||
-              (range.lte && !(value <= range.lte))
+              (range.gt &&
+                !(
+                  value >
+                  this.api.getQueryableValue(fieldCards[fieldPath]!, range.gt)
+                )) ||
+              (range.lt &&
+                !(
+                  value <
+                  this.api.getQueryableValue(fieldCards[fieldPath]!, range.lt)
+                )) ||
+              (range.gte &&
+                !(
+                  value >=
+                  this.api.getQueryableValue(fieldCards[fieldPath]!, range.gte)
+                )) ||
+              (range.lte &&
+                !(
+                  value <=
+                  this.api.getQueryableValue(fieldCards[fieldPath]!, range.lte)
+                ))
             ) {
               return false;
             }
