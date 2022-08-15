@@ -79,10 +79,14 @@ class URLMap<T> {
   }
 }
 
-interface SearchEntry {
+export interface SearchEntry {
   resource: CardResource;
   searchData: Record<string, any>;
   types: string[] | undefined; // theses start out undefined during indexing and get defined during semantic phase
+  // using the internal key for the ref as a uniqueness guarantee, but
+  // additionally providing the card ref object so we don't need to deserialize
+  // the internal key back to a card ref
+  refs: Map<string, CardRef>;
 }
 
 interface Reader {
@@ -338,6 +342,7 @@ export class CurrentRun {
             resource: json.data,
             searchData,
             types: undefined,
+            refs: new Map(),
           });
         }
       }
@@ -394,6 +399,86 @@ export class CurrentRun {
     for (let [url, entry] of [...this.instances]) {
       entry.types = await this.getTypes(entry.resource.meta.adoptsFrom, url);
     }
+
+    await this.buildRefsForInstances();
+  }
+
+  // TODO this is very sub-optimal--replace this after we have invalidation
+  private async buildRefsForInstances() {
+    for (let [url, entry] of this.instances) {
+      let cardRef = {
+        module: new URL(entry.resource.meta.adoptsFrom.module, url).href,
+        name: entry.resource.meta.adoptsFrom.name,
+      };
+      let refs: [string, CardRef][] = (await this.buildRefs(cardRef)).map(
+        (ref) => [
+          internalKeyFor({ type: "exportedCard", ...ref }, undefined),
+          { type: "exportedCard", ...ref },
+        ]
+      );
+      entry.refs = new Map(refs);
+    }
+  }
+
+  // TODO ideally we probably want more than just exported card refs...
+  private async buildRefs(
+    targetRef: ExportedCardRef,
+    refs: ExportedCardRef[] = []
+  ): Promise<ExportedCardRef[]> {
+    let def = await this.getCardDefinition(targetRef);
+    if (!def) {
+      // figure out a way to report this without breaking indexing
+      throw new Error(
+        `todo: card definition ${JSON.stringify(targetRef)} does not exist`
+      );
+    }
+    let ownRef = def.id;
+    if (ownRef.type !== "exportedCard") {
+      throw new Error(
+        `bug - unimplemented don't know how to get non exported ref: ${JSON.stringify(
+          ownRef
+        )}`
+      );
+    }
+    if (
+      refs.find(
+        (ref) =>
+          ref.module === (ownRef as ExportedCardRef).module &&
+          ref.name === (ownRef as ExportedCardRef).name
+      )
+    ) {
+      return refs;
+    }
+    refs.push(ownRef);
+    let fieldRefs = [...def.fields.values()].map((field) => field.fieldCard);
+    let nonExportedCardRef = fieldRefs.find(
+      (ref) => ref.type !== "exportedCard"
+    );
+    if (nonExportedCardRef) {
+      throw new Error(
+        `bug - unimplemented don't know how to get non exported ref: ${JSON.stringify(
+          nonExportedCardRef
+        )}`
+      );
+    }
+    let superRef: ExportedCardRef | undefined;
+    if (def.super) {
+      if (def.super.type !== "exportedCard") {
+        throw new Error(
+          `bug - unimplemented don't know how to get non exported ref: ${JSON.stringify(
+            superRef
+          )}`
+        );
+      }
+      superRef = def.super;
+    }
+    await Promise.all(
+      (
+        [...fieldRefs, ...(superRef ? [superRef] : [])] as ExportedCardRef[]
+      ).map((fieldRef) => this.buildRefs(fieldRef, refs))
+    );
+
+    return refs;
   }
 
   private async buildDefinition(

@@ -1,6 +1,6 @@
 import { executableExtensions, baseRealm } from ".";
 import { Kind, Realm } from "./realm";
-import { CurrentRun } from "./current-run";
+import { CurrentRun, SearchEntry } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import { Loader } from "./loader";
@@ -148,12 +148,6 @@ export function trimExecutableExtension(url: URL): URL {
   return url;
 }
 
-interface SearchEntry {
-  resource: CardResource;
-  searchData: Record<string, any>;
-  types: string[] | undefined; // theses start out undefined during indexing and get defined during semantic phase
-}
-
 export class SearchIndex {
   #currentRun: CurrentRun;
 
@@ -218,6 +212,11 @@ export class SearchIndex {
 
   async card(url: URL): Promise<CardResource | undefined> {
     return this.#currentRun.instances.get(url)?.resource;
+  }
+
+  // this is meant for tests only
+  async searchEntry(url: URL): Promise<SearchEntry | undefined> {
+    return this.#currentRun.instances.get(url);
   }
 
   private cardHasType(entry: SearchEntry, ref: CardRef): boolean {
