@@ -508,7 +508,7 @@ module('Unit | search-index', function () {
     );
   });
 
-  test("full indexing identifies an instance's", async function (assert) {
+  test("indexing identifies an instance's card references", async function (assert) {
     let realm = TestRealm.create({
       'person-1.json': {
         data: {
