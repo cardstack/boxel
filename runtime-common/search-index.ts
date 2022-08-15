@@ -169,11 +169,6 @@ export class SearchIndex {
     this.#currentRun = CurrentRun.empty(realm);
   }
 
-  // TODO this is for debugging only--delete this
-  public get currentRun() {
-    return this.#currentRun;
-  }
-
   async run() {
     this.#currentRun = await CurrentRun.fromScratch(this.realm, {
       readdir: this.readdir,
