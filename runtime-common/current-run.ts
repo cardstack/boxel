@@ -507,7 +507,7 @@ export class CurrentRun {
     return mod;
   }
 
-  // TODO use cached deferreds here to share work
+  // TODO use cached promises here to share work, but beware of cycles!
   public async buildDefinition(
     ref: CardRef,
     relativeTo = new URL(this.realm.url)
