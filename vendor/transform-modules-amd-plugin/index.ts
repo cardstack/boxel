@@ -62,6 +62,7 @@ type State = {
   requireId?: t.Identifier;
   resolveId?: t.Identifier;
   rejectId?: t.Identifier;
+  importMeta?: t.Identifier;
 };
 
 export default declare<State>((api: any, options: Options) => {
@@ -84,6 +85,17 @@ export default declare<State>((api: any, options: Options) => {
     },
 
     visitor: {
+      MetaProperty(path: NodePath<t.MetaProperty>, state: State) {
+        if (
+          path.node.meta.name === "import" &&
+          path.node.property.name === "meta"
+        ) {
+          if (!state.importMeta) {
+            state.importMeta = path.scope.generateUidIdentifier("import_meta");
+          }
+          path.replaceWith(state.importMeta);
+        }
+      },
       CallExpression(path: NodePath<t.CallExpression>, state: State) {
         // @ts-ignore
         if (!this.file.has("@babel/plugin-proposal-dynamic-import")) return;
@@ -117,7 +129,7 @@ export default declare<State>((api: any, options: Options) => {
       },
 
       Program: {
-        exit(path: NodePath<t.Program>, { requireId }: any) {
+        exit(path: NodePath<t.Program>, { requireId, importMeta }: State) {
           if (!isModule(path)) {
             if (requireId) {
               injectWrapper(
@@ -130,11 +142,16 @@ export default declare<State>((api: any, options: Options) => {
             return;
           }
 
-          const amdArgs = [];
-          const importNames = [];
+          const amdArgs: t.StringLiteral[] = [];
+          const importNames: t.Identifier[] = [];
           if (requireId) {
             amdArgs.push(t.stringLiteral("require"));
             importNames.push(t.cloneNode(requireId));
+          }
+
+          if (importMeta) {
+            amdArgs.push(t.stringLiteral("__import_meta__"));
+            importNames.push(t.cloneNode(importMeta));
           }
 
           // @ts-ignore
