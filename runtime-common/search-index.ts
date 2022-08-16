@@ -157,7 +157,8 @@ export class SearchIndex {
       path: string
     ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
     private readFileAsText: (
-      path: LocalPath
+      path: LocalPath,
+      opts?: { withFallbacks?: true }
     ) => Promise<{ content: string; lastModified: number } | undefined>
   ) {
     this.#currentRun = CurrentRun.empty(realm);
@@ -168,6 +169,11 @@ export class SearchIndex {
       readdir: this.readdir,
       readFileAsText: this.readFileAsText,
     });
+  }
+
+  // For debugging only--DELETE THIS
+  get currentRun() {
+    return this.#currentRun;
   }
 
   async update(url: URL, opts?: { delete?: true }): Promise<void> {

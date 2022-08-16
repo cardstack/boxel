@@ -543,9 +543,15 @@ export class Realm {
 
   // todo: I think we get rid of this
   private async readFileAsText(
-    path: LocalPath
+    path: LocalPath,
+    opts: { withFallbacks?: true } = {}
   ): Promise<{ content: string; lastModified: number } | undefined> {
-    let ref = await this.#adapter.openFile(path);
+    let ref: FileRef | undefined;
+    if (opts.withFallbacks) {
+      ref = await this.getFileWithFallbacks(path);
+    } else {
+      ref = await this.#adapter.openFile(path);
+    }
     if (!ref) {
       return;
     }

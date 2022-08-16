@@ -43,6 +43,9 @@ class URLMap<T> {
     }
     this.#map = new Map(mapInit.map(([key, value]) => [key.href, value]));
   }
+  has(url: URL): boolean {
+    return this.#map.has(url.href);
+  }
   get(url: URL): T | undefined {
     return this.#map.get(url.href);
   }
@@ -92,7 +95,8 @@ export interface SearchEntry {
 
 interface Reader {
   readFileAsText: (
-    path: LocalPath
+    path: LocalPath,
+    opts?: { withFallbacks?: true }
   ) => Promise<{ content: string; lastModified: number } | undefined>;
   readdir: (
     path: string
@@ -276,7 +280,7 @@ export class CurrentRun {
     } else {
       await this.visitDirectory(new URL(this.realm.url));
     }
-    await this.semanticPhase();
+    await this.buildExportedCardRefs();
   }
 
   private async visitDirectory(url: URL): Promise<void> {
@@ -311,15 +315,29 @@ export class CurrentRun {
       return;
     }
 
-    let deferred: Deferred<ModuleSyntax> | undefined;
     if (
       hasExecutableExtension(url.href) &&
-      url.href !== `${baseRealm.url}card-api.gts` && // TODO the base card's module is not analyzable
-      !opts?.delete
+      url.href !== `${baseRealm.url}card-api.gts` // TODO the base card's module is not analyzable
     ) {
-      deferred = new Deferred<ModuleSyntax>();
-      this.#modules.set(url, deferred);
-      this.#modules.set(trimExecutableExtension(url), deferred);
+      if (opts?.delete) {
+        this.#modules.remove(url);
+        this.#modules.remove(trimExecutableExtension(url));
+      } else {
+        let mod = await this.parseModule(url);
+        if (!mod) {
+          return;
+        }
+
+        for (let possibleCard of mod.possibleCards) {
+          if (possibleCard.exportedAs) {
+            await this.buildDefinition({
+              type: "exportedCard",
+              module: url.href,
+              name: possibleCard.exportedAs,
+            });
+          }
+        }
+      }
     }
 
     let localPath = this.#realmPaths.local(url);
@@ -334,17 +352,6 @@ export class CurrentRun {
       let json = JSON.parse(content);
       if (isCardDocument(json)) {
         await this.indexCardDocument(localPath, lastModified, json, opts);
-      }
-    } else if (
-      hasExecutableExtension(url.href) &&
-      url.href !== `${baseRealm.url}card-api.gts` // TODO the base card's module is not analyzable
-    ) {
-      if (opts?.delete) {
-        this.#modules.remove(url);
-        this.#modules.remove(trimExecutableExtension(url));
-      } else {
-        let mod = new ModuleSyntax(content);
-        deferred?.fulfill(mod);
       }
     }
   }
@@ -363,37 +370,36 @@ export class CurrentRun {
     } else {
       doc.data.id = instanceURL.href;
       doc.data.meta.lastModified = lastModified;
-      let module = await Loader.import<Record<string, any>>(
-        new URL(doc.data.meta.adoptsFrom.module, new URL(path, this.realm.url))
-          .href
+      let moduleURL = new URL(
+        doc.data.meta.adoptsFrom.module,
+        new URL(path, this.realm.url)
       );
-      let CardClass = module[doc.data.meta.adoptsFrom.name] as typeof Card;
+      let name = doc.data.meta.adoptsFrom.name;
+      let cardRef = { module: moduleURL.href, name };
+      let module = await Loader.import<Record<string, any>>(moduleURL.href);
+      let CardClass = module[name] as typeof Card;
       let card = CardClass.fromSerialized(doc.data.attributes);
       let searchData = await this.api.searchDoc(card);
+      await this.buildDefinition({
+        type: "exportedCard",
+        ...cardRef,
+      });
       this.#instances.set(instanceURL, {
         resource: doc.data,
         searchData,
-        types: undefined,
-        refs: new Map(),
+        types: await this.getTypes(cardRef),
+        refs: new Map(
+          (await this.buildRefs(cardRef)).map((ref) => [
+            internalKeyFor({ type: "exportedCard", ...ref }, undefined),
+            { type: "exportedCard", ...ref },
+          ]) as [string, CardRef][]
+        ),
       });
     }
   }
 
-  private async semanticPhase(): Promise<void> {
-    for (let [url, mod] of this.#modules) {
-      for (let possibleCard of (await mod.promise).possibleCards) {
-        if (possibleCard.exportedAs) {
-          if (this.isIgnored(url)) {
-            continue;
-          }
-          await this.buildDefinition({
-            type: "exportedCard",
-            module: url.href,
-            name: possibleCard.exportedAs,
-          });
-        }
-      }
-    }
+  // TODO this should only operated on the touched modules
+  private async buildExportedCardRefs() {
     for (let def of this.#definitions.values()) {
       if (def.id.type !== "exportedCard") {
         continue;
@@ -406,30 +412,6 @@ export class CurrentRun {
       }
       let { type: remove, ...exportedCardRef } = def.id;
       refsMap.set(internalKeyFor(def.id, undefined), exportedCardRef);
-    }
-
-    // once we have definitions we can fill in the instance types
-    for (let [url, entry] of [...this.instances]) {
-      entry.types = await this.getTypes(entry.resource.meta.adoptsFrom, url);
-    }
-
-    await this.buildRefsForInstances();
-  }
-
-  // TODO this is very sub-optimal--replace this after we have invalidation
-  private async buildRefsForInstances() {
-    for (let [url, entry] of this.instances) {
-      let cardRef = {
-        module: new URL(entry.resource.meta.adoptsFrom.module, url).href,
-        name: entry.resource.meta.adoptsFrom.name,
-      };
-      let refs: [string, CardRef][] = (await this.buildRefs(cardRef)).map(
-        (ref) => [
-          internalKeyFor({ type: "exportedCard", ...ref }, undefined),
-          { type: "exportedCard", ...ref },
-        ]
-      );
-      entry.refs = new Map(refs);
     }
   }
 
@@ -494,16 +476,45 @@ export class CurrentRun {
     return refs;
   }
 
-  private async buildDefinition(
+  // This may return undefined because from a syntax perspective this module was
+  // consumed by something that appeared to be a card, but it may turn out that
+  // the syntax analysis of this module results in no cards being found.
+  private async parseModule(url: URL): Promise<ModuleSyntax | undefined> {
+    if (!this.#realmPaths.inRealm(url)) {
+      return;
+    }
+
+    let deferred = this.#modules.get(url);
+    if (deferred) {
+      return await deferred.promise;
+    }
+
+    deferred = new Deferred<ModuleSyntax>();
+    this.#modules.set(url, deferred);
+    this.#modules.set(trimExecutableExtension(url), deferred);
+
+    let localPath = this.#realmPaths.local(url);
+    let fileRef = await this.reader.readFileAsText(localPath, {
+      withFallbacks: true,
+    });
+    if (!fileRef) {
+      return undefined; // npm modules will fall thru here
+    }
+
+    let { content } = fileRef;
+    let mod = new ModuleSyntax(content);
+    deferred?.fulfill(mod);
+    return mod;
+  }
+
+  public async buildDefinition(
     ref: CardRef,
     relativeTo = new URL(this.realm.url)
   ): Promise<CardDefinition | undefined> {
     let { module } = getExportedCardContext(ref);
     let url = new URL(module, relativeTo);
-    let parsedModule = await this.#modules.get(url)?.promise;
+    let parsedModule = await this.parseModule(url);
     if (!parsedModule) {
-      // this URL from a syntax perspective appeared to be a card, but from a
-      // semantic perspective it actually is not a card
       return undefined;
     }
 
