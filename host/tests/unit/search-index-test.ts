@@ -4,7 +4,8 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import { baseRealm } from '@cardstack/runtime-common';
 
-let paths = new RealmPaths(testRealmURL);
+const paths = new RealmPaths(testRealmURL);
+const testModuleRealm = 'http://localhost:4201/test/';
 
 module('Unit | search-index', function () {
   test('full indexing discovers card instances', async function (assert) {
@@ -507,6 +508,39 @@ module('Unit | search-index', function () {
     );
   });
 
+  test("indexing identifies an instance's card references", async function (assert) {
+    let realm = TestRealm.create({
+      'person-1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}person`,
+              name: 'Person',
+            },
+          },
+        },
+      },
+    });
+    let indexer = realm.searchIndex;
+    await indexer.run();
+    let refs = (await indexer.searchEntry(new URL(`${testRealmURL}person-1`)))
+      ?.refs;
+    assert.deepEqual(
+      [...refs!.keys()].sort(),
+      [
+        `${testModuleRealm}person/Person`,
+        `${baseRealm.url}card-api/Card`,
+        `${baseRealm.url}integer/default`,
+        `${baseRealm.url}string/default`,
+      ],
+      'the card references for the instance are correct'
+    );
+  });
+
   test('parses first-class template syntax', async function (assert) {
     let realm = TestRealm.create({
       'my-card.gts': `
@@ -643,7 +677,6 @@ posts/ignore-me.gts
     );
   });
 
-  const testModuleRealm = 'http://localhost:4201/test/';
   module('query', function (hooks) {
     const sampleCards = {
       'card-1.json': {
