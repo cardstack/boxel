@@ -86,7 +86,7 @@ class URLMap<T> {
 export interface SearchEntry {
   resource: CardResource;
   searchData: Record<string, any>;
-  types: string[] | undefined; // theses start out undefined during indexing and get defined during semantic phase
+  types: string[];
   // using the internal key for the ref as a uniqueness guarantee, but
   // additionally providing the card ref object so we don't need to deserialize
   // the internal key back to a card ref
