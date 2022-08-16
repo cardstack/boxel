@@ -7,7 +7,7 @@ import {
 } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
 import { ModuleSyntax } from "./module-syntax";
-import { ClassReference, PossibleCardClass } from "./schema-analysis-plugin";
+import { ClassReference } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
 import { stringify } from "qs";
 import { Loader } from "./loader";
@@ -213,7 +213,7 @@ export class CurrentRun {
     prev: CurrentRun
   ) {
     let instances = new URLMap(prev.instances);
-    let modules = new URLMap(prev.modules);
+    let modules = new URLMap(prev.#modules);
     let exportedCardRefs = new Map(prev.exportedCardRefs);
     let ignoreMap = new URLMap(prev.ignoreMap);
     let definitions = new Map(prev.definitions);
@@ -252,10 +252,6 @@ export class CurrentRun {
 
   public get instances() {
     return this.#instances;
-  }
-
-  public get modules() {
-    return this.#modules;
   }
 
   public get definitions() {
@@ -362,22 +358,17 @@ export class CurrentRun {
   }
 
   private async semanticPhase(): Promise<void> {
-    for (let [url, mod] of this.modules) {
+    for (let [url, mod] of this.#modules) {
       for (let possibleCard of mod.possibleCards) {
         if (possibleCard.exportedAs) {
           if (this.isIgnored(url)) {
             continue;
           }
-          await this.buildDefinition(
-            url,
-            mod,
-            {
-              type: "exportedCard",
-              module: url.href,
-              name: possibleCard.exportedAs,
-            },
-            possibleCard
-          );
+          await this.buildDefinition({
+            type: "exportedCard",
+            module: url.href,
+            name: possibleCard.exportedAs,
+          });
         }
       }
     }
@@ -482,11 +473,20 @@ export class CurrentRun {
   }
 
   private async buildDefinition(
-    url: URL,
-    mod: ModuleSyntax,
     ref: CardRef,
-    possibleCard: PossibleCardClass
+    relativeTo = new URL(this.realm.url)
   ): Promise<CardDefinition | undefined> {
+    let { module } = getExportedCardContext(ref);
+    let url = new URL(module, relativeTo);
+    let parsedModule = this.#modules.get(url)!;
+    let found = parsedModule.find(ref);
+
+    if (found.result === "remote") {
+      return await this.buildDefinition(found.ref, url);
+    }
+
+    let possibleCard = found.class;
+
     let id: CardRef = possibleCard.exportedAs
       ? {
           type: "exportedCard",
@@ -501,12 +501,10 @@ export class CurrentRun {
       return def;
     }
 
-    let superDef = await this.definitionForClassRef(
-      url,
-      mod,
-      possibleCard.super,
-      { type: "ancestorOf", card: id }
-    );
+    let superDef = await this.definitionForClassRef(url, possibleCard.super, {
+      type: "ancestorOf",
+      card: id,
+    });
 
     if (!superDef) {
       return undefined;
@@ -522,12 +520,11 @@ export class CurrentRun {
       if (!fieldType) {
         continue;
       }
-      let fieldDef = await this.definitionForClassRef(
-        url,
-        mod,
-        possibleField.card,
-        { type: "fieldOf", card: id, field: fieldName }
-      );
+      let fieldDef = await this.definitionForClassRef(url, possibleField.card, {
+        type: "fieldOf",
+        card: id,
+        field: fieldName,
+      });
       if (fieldDef) {
         fields.set(fieldName, { fieldType, fieldCard: fieldDef.id });
       }
@@ -541,17 +538,11 @@ export class CurrentRun {
 
   private async definitionForClassRef(
     url: URL,
-    mod: ModuleSyntax,
     ref: ClassReference,
     targetRef: CardRef
   ): Promise<CardDefinition | undefined> {
     if (ref.type === "internal") {
-      return await this.buildDefinition(
-        url,
-        mod,
-        targetRef,
-        mod.possibleCards[ref.classIndex]
-      );
+      return await this.buildDefinition(targetRef);
     } else {
       if (this.isLocal(new URL(ref.module, url))) {
         if (
@@ -563,16 +554,7 @@ export class CurrentRun {
             internalKeyFor({ module, name, type: "exportedCard" }, url)
           );
         }
-        let inner = this.lookupPossibleCard(new URL(ref.module, url), ref.name);
-        if (!inner) {
-          return undefined;
-        }
-        return await this.buildDefinition(
-          new URL(ref.module, url),
-          inner.mod,
-          targetRef,
-          inner.possibleCard
-        );
+        return await this.buildDefinition(targetRef);
       } else {
         return await this.getExternalCardDefinition({
           name: ref.name,
@@ -580,24 +562,6 @@ export class CurrentRun {
         });
       }
     }
-  }
-
-  private lookupPossibleCard(
-    module: URL,
-    exportedName: string
-  ): { mod: ModuleSyntax; possibleCard: PossibleCardClass } | undefined {
-    let mod = this.modules.get(module);
-    if (!mod) {
-      // TODO: broken import seems bad
-      return undefined;
-    }
-    let possibleCard = mod.possibleCards.find(
-      (c) => c.exportedAs === exportedName
-    );
-    if (!possibleCard) {
-      return undefined;
-    }
-    return { mod, possibleCard };
   }
 
   private isLocal(url: URL): boolean {
