@@ -1,5 +1,4 @@
-// @ts-ignore
-import TransformModulesAmd from "@babel/plugin-transform-modules-amd";
+import TransformModulesAmdPlugin from "transform-modules-amd-plugin";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
 import { RealmPaths, LocalPath } from "./paths";
@@ -55,7 +54,7 @@ export class Loader {
   private fileLoaders = new Map<string, FileLoader>();
   private urlMappings = new Map<RealmPaths, string>();
 
-  private constructor() {}
+  constructor() {}
 
   static #instance: Loader | undefined;
 
@@ -64,11 +63,6 @@ export class Loader {
       Loader.#instance = new Loader();
     }
     return Loader.#instance;
-  }
-
-  // for tests only!
-  static destroy() {
-    Loader.#instance = undefined;
   }
 
   static async import<T extends object>(moduleIdentifier: string): Promise<T> {
@@ -102,12 +96,20 @@ export class Loader {
 
   static addFileLoader(url: URL, fileLoader: FileLoader) {
     let loader = Loader.getLoader();
-    loader.fileLoaders.set(url.href, fileLoader);
+    loader.addFileLoader(url, fileLoader);
+  }
+
+  addFileLoader(url: URL, fileLoader: FileLoader) {
+    this.fileLoaders.set(url.href, fileLoader);
   }
 
   static addURLMapping(from: URL, to: URL) {
     let loader = Loader.getLoader();
-    loader.urlMappings.set(new RealmPaths(from), to.href);
+    loader.addURLMapping(from, to);
+  }
+
+  addURLMapping(from: URL, to: URL) {
+    this.urlMappings.set(new RealmPaths(from), to.href);
   }
 
   static clearCache() {
@@ -115,7 +117,7 @@ export class Loader {
     loader.modules = new Map();
   }
 
-  private async import<T extends object>(moduleIdentifier: string): Promise<T> {
+  async import<T extends object>(moduleIdentifier: string): Promise<T> {
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     if (
@@ -142,7 +144,7 @@ export class Loader {
     }
   }
 
-  private async fetch(
+  async fetch(
     urlOrRequest: string | URL | Request,
     init?: RequestInit
   ): Promise<Response> {
@@ -159,10 +161,7 @@ export class Loader {
     }
   }
 
-  private resolve(
-    moduleIdentifier: string | URL,
-    relativeTo?: URL
-  ): ResolvedURL {
+  resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
     for (let [paths, to] of this.urlMappings) {
       if (paths.inRealm(absoluteURL)) {
@@ -172,7 +171,7 @@ export class Loader {
     return absoluteURL as ResolvedURL;
   }
 
-  private reverseResolution(
+  reverseResolution(
     moduleIdentifier: string | ResolvedURL,
     relativeTo?: URL
   ): URL {
@@ -210,7 +209,10 @@ export class Loader {
     }
     src = transformSync(src, {
       plugins: [
-        [TransformModulesAmd, { noInterop: true, moduleId: moduleIdentifier }],
+        [
+          TransformModulesAmdPlugin,
+          { noInterop: true, moduleId: moduleIdentifier },
+        ],
       ],
     })?.code!;
 
@@ -224,6 +226,8 @@ export class Loader {
       dependencyList = depList.map((depId) => {
         if (depId === "exports") {
           return "exports";
+        } else if (depId === "__import_meta__") {
+          return "__import_meta__";
         } else {
           return this.resolve(depId, new URL(moduleIdentifier)).href;
         }
@@ -243,7 +247,7 @@ export class Loader {
 
     await Promise.all(
       dependencyList!.map((depId) => {
-        if (depId !== "exports") {
+        if (depId !== "exports" && depId !== "__import_meta__") {
           return this.fetchModule(new URL(depId) as ResolvedURL);
         }
         return undefined;
@@ -297,6 +301,8 @@ export class Loader {
       let dependencies = module.dependencyList.map((dependencyIdentifier) => {
         if (dependencyIdentifier === "exports") {
           return moduleInstance;
+        } else if (dependencyIdentifier === "__import_meta__") {
+          return { url: moduleIdentifier };
         } else {
           return this.evaluateModule(dependencyIdentifier);
         }
