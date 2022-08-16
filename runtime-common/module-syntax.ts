@@ -49,19 +49,21 @@ export class ModuleSyntax {
     ref: CardRef
   ):
     | { result: "local"; class: PossibleCardClass }
-    | { result: "remote"; ref: CardRef } {
+    | { result: "remote"; ref: CardRef }
+    | undefined {
     if (ref.type === "exportedCard") {
       let found = this.possibleCards.find((c) => c.exportedAs === ref.name);
       if (!found) {
         // TODO: it could also be a reexport, in which case we should return a
-        // CardRef instead of throwing
-        throw new Error(
-          `module ${ref.module} has no exported card with name ${ref.name}. ${this.src}`
-        );
+        // CardRef instead of undefined
+        return undefined; // the ref we are looking for turns out to not actually be a card
       }
       return { result: "local", class: found };
     } else if (ref.type === "ancestorOf") {
       let parent = this.find(ref.card);
+      if (!parent) {
+        return undefined; // the ref we are looking for turns out to not actually be a card
+      }
       if (parent.result === "remote") {
         // the card whose ancestor they're asking about is not in this module.
         // This would happen due to reexports.
@@ -89,6 +91,9 @@ export class ModuleSyntax {
       }
     } else if (ref.type === "fieldOf") {
       let parent = this.find(ref.card);
+      if (!parent) {
+        return undefined; // the ref we are looking for turns out to not actually be a card
+      }
       if (parent.result === "remote") {
         // the card whose field they're asking about is not in this module. This
         // would happen due to reexports.

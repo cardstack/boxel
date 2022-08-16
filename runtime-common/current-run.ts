@@ -478,9 +478,19 @@ export class CurrentRun {
   ): Promise<CardDefinition | undefined> {
     let { module } = getExportedCardContext(ref);
     let url = new URL(module, relativeTo);
-    let parsedModule = this.#modules.get(url)!;
-    let found = parsedModule.find(ref);
+    let parsedModule = this.#modules.get(url);
+    if (!parsedModule) {
+      // this URL from a syntax perspective appeared to be a card, but from a
+      // semantic perspective it actually is not a card
+      return undefined;
+    }
 
+    let found = parsedModule.find(ref);
+    if (!found) {
+      // this ref from a syntax perspective appeared to be a card, but from a
+      // semantic perspective it actually is not a card
+      return undefined;
+    }
     if (found.result === "remote") {
       return await this.buildDefinition(found.ref, url);
     }
