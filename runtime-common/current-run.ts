@@ -17,6 +17,7 @@ import {
   trimExecutableExtension,
   isCardDocument,
   internalKeyFor,
+  CardDocument,
 } from "./search-index";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
@@ -106,7 +107,7 @@ let externalDefinitionsCache = new Map<
 
 export class CurrentRun {
   #instances: URLMap<SearchEntry>;
-  #modules: URLMap<ModuleSyntax>;
+  #modules: URLMap<Deferred<ModuleSyntax>>;
   #definitions: Map<string, CardDefinition>;
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
@@ -131,7 +132,7 @@ export class CurrentRun {
     realm: Realm;
     reader: Reader | undefined; // the "empty" case doesn't need a reader
     instances: URLMap<SearchEntry>;
-    modules: URLMap<ModuleSyntax>;
+    modules: URLMap<Deferred<ModuleSyntax>>;
     definitions: Map<string, CardDefinition>;
     ignoreMap: URLMap<Ignore>;
     exportedCardRefs: Map<string, Map<string, ExportedCardRef>>;
@@ -310,56 +311,77 @@ export class CurrentRun {
       return;
     }
 
+    let deferred: Deferred<ModuleSyntax> | undefined;
+    if (
+      hasExecutableExtension(url.href) &&
+      url.href !== `${baseRealm.url}card-api.gts` && // TODO the base card's module is not analyzable
+      !opts?.delete
+    ) {
+      deferred = new Deferred<ModuleSyntax>();
+      this.#modules.set(url, deferred);
+      this.#modules.set(trimExecutableExtension(url), deferred);
+    }
+
     let localPath = this.#realmPaths.local(url);
     let fileRef = await this.reader.readFileAsText(localPath);
     if (!fileRef) {
+      this.#modules.remove(url);
       return;
     }
+
     let { content, lastModified } = fileRef;
     if (url.href.endsWith(".json")) {
       let json = JSON.parse(content);
       if (isCardDocument(json)) {
-        let instanceURL = new URL(url.href.replace(/\.json$/, ""));
-        if (opts?.delete && this.#instances.get(instanceURL)) {
-          this.#instances.remove(instanceURL);
-        } else {
-          json.data.id = instanceURL.href;
-          json.data.meta.lastModified = lastModified;
-          let module = await Loader.import<Record<string, any>>(
-            new URL(
-              json.data.meta.adoptsFrom.module,
-              new URL(localPath, this.realm.url)
-            ).href
-          );
-          let CardClass = module[json.data.meta.adoptsFrom.name] as typeof Card;
-          let card = CardClass.fromSerialized(json.data.attributes);
-          let searchData = await this.api.searchDoc(card);
-          this.#instances.set(instanceURL, {
-            resource: json.data,
-            searchData,
-            types: undefined,
-            refs: new Map(),
-          });
-        }
+        await this.indexCardDocument(localPath, lastModified, json, opts);
       }
     } else if (
       hasExecutableExtension(url.href) &&
-      url.href !== `${baseRealm.url}card-api.gts` // the base card's module is not analyzable
+      url.href !== `${baseRealm.url}card-api.gts` // TODO the base card's module is not analyzable
     ) {
       if (opts?.delete) {
         this.#modules.remove(url);
         this.#modules.remove(trimExecutableExtension(url));
       } else {
         let mod = new ModuleSyntax(content);
-        this.#modules.set(url, mod);
-        this.#modules.set(trimExecutableExtension(url), mod);
+        deferred?.fulfill(mod);
       }
+    }
+  }
+
+  private async indexCardDocument(
+    path: LocalPath,
+    lastModified: number,
+    doc: CardDocument,
+    opts?: { delete?: boolean }
+  ): Promise<void> {
+    let instanceURL = new URL(
+      this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
+    );
+    if (opts?.delete && this.#instances.get(instanceURL)) {
+      this.#instances.remove(instanceURL);
+    } else {
+      doc.data.id = instanceURL.href;
+      doc.data.meta.lastModified = lastModified;
+      let module = await Loader.import<Record<string, any>>(
+        new URL(doc.data.meta.adoptsFrom.module, new URL(path, this.realm.url))
+          .href
+      );
+      let CardClass = module[doc.data.meta.adoptsFrom.name] as typeof Card;
+      let card = CardClass.fromSerialized(doc.data.attributes);
+      let searchData = await this.api.searchDoc(card);
+      this.#instances.set(instanceURL, {
+        resource: doc.data,
+        searchData,
+        types: undefined,
+        refs: new Map(),
+      });
     }
   }
 
   private async semanticPhase(): Promise<void> {
     for (let [url, mod] of this.#modules) {
-      for (let possibleCard of mod.possibleCards) {
+      for (let possibleCard of (await mod.promise).possibleCards) {
         if (possibleCard.exportedAs) {
           if (this.isIgnored(url)) {
             continue;
@@ -478,7 +500,7 @@ export class CurrentRun {
   ): Promise<CardDefinition | undefined> {
     let { module } = getExportedCardContext(ref);
     let url = new URL(module, relativeTo);
-    let parsedModule = this.#modules.get(url);
+    let parsedModule = await this.#modules.get(url)?.promise;
     if (!parsedModule) {
       // this URL from a syntax perspective appeared to be a card, but from a
       // semantic perspective it actually is not a card
