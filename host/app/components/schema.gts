@@ -10,7 +10,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
-// import { on } from '@ember/modifier';
+import { on } from '@ember/modifier';
 import { LinkTo } from '@ember/routing';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
@@ -27,7 +27,8 @@ interface Signature {
 export default class Schema extends Component<Signature> {
   <template>
     {{#if this.cardType.type}}
-      {{#if this.showEditor}}
+      <p>
+      {{!-- {{#if this.showEditor}}
         <ImportModule @url={{this.cardType.type.exportedCardContext.module}}>
           <:ready as |module|>
             <CardEditor
@@ -42,8 +43,7 @@ export default class Schema extends Component<Signature> {
             <pre>{{error.message}}</pre>
           </:error>
         </ImportModule>
-      {{else}}
-        <p>
+      {{else}} --}}
           <div data-test-card-id>Card ID: {{this.cardType.type.id}}</div>
           <div data-test-adopts-from>Adopts From: {{this.cardType.type.super.id}}</div>
           <div>Fields:</div>
@@ -63,37 +63,52 @@ export default class Schema extends Component<Signature> {
               </li>
             {{/each}}
           </ul>
-          {{#if this.catalogEntry.entries.length}}
-            <div>Catalog Entries:</div>
-            {{#each this.catalogEntry.entries as |entry|}}
-              <li>
-                <LinkTo @route="application" @query={{hash path=(this.modulePath (addJsonExtension entry.id))}} data-test-catalog-entry-id>
-                {{entry.id}}
-                </LinkTo>
-                <ImportModule @url={{entry.meta.adoptsFrom.module}}>
-                  <:ready as |module|>
-                    <CardEditor
-                      @card={{hash type="existing" url=entry.id format="edit"}}
-                      @module={{module}}
-                      @onSave={{this.onSave}}
-                      @onCancel={{this.onCancel}}
-                    />
-                  </:ready>
-                  <:error as |error|>
-                    <h2>Encountered {{error.type}} error</h2>
-                    <pre>{{error.message}}</pre>
-                  </:error>
-                </ImportModule>
-              </li>
-            {{/each}}
-          {{else}}
-            <button type="button">Publish Card Type</button>
-          {{/if}}
-          {{!-- {{#let this.cardType.type.exportedCardContext.name as |name|}}
-            <button {{on "click" this.displayEditor}} type="button" data-test-create-card={{name}}>Create New {{name}}</button>
-          {{/let}} --}}
-        </p>
+        {{!-- {{#let this.cardType.type.exportedCardContext.name as |name|}}
+          <button {{on "click" this.displayEditor}} type="button" data-test-create-card={{name}}>Create New {{name}}</button>
+        {{/let}}
+      {{/if}} --}}
+      {{#if this.catalogEntry.entries.length}}
+        <header>Catalog Entry:</header>
+        {{#each this.catalogEntry.entries as |entry|}}
+          <li data-test-catalog-entry-id>
+            {{entry.id}}
+            <ImportModule @url={{entry.meta.adoptsFrom.module}}>
+              <:ready as |module|>
+                <CardEditor
+                  @card={{hash type="existing" url=entry.id format="edit"}}
+                  @module={{module}}
+                  @onSave={{this.onSave}}
+                  @onCancel={{this.onCancel}}
+                />
+              </:ready>
+              <:error as |error|>
+                <h2>Encountered {{error.type}} error</h2>
+                <pre>{{error.message}}</pre>
+              </:error>
+            </ImportModule>
+          </li>
+        {{/each}}
+      {{else}}
+        {{#if this.showCatalogEntryEditor}}
+          <ImportModule @url={{this.catalogEntryCardSource.module}}>
+            <:ready as |module|>
+              <CardEditor
+                @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.catalogEntryCardSource initialAttributes=this.catalogEntryAttributes}}
+                @module={{module}}
+                @onSave={{this.onSave}}
+                @onCancel={{this.onCancel}}
+              />
+            </:ready>
+            <:error as |error|>
+              <h2>Encountered {{error.type}} error</h2>
+              <pre>{{error.message}}</pre>
+            </:error>
+          </ImportModule>
+        {{else}}
+          <button {{on "click" this.createCatalogEntry}} type="button">Create Card Type</button>
+        {{/if}}
       {{/if}}
+      </p>
     {{/if}}
   </template>
 
@@ -101,8 +116,18 @@ export default class Schema extends Component<Signature> {
   @service declare router: RouterService;
   cardType = getCardType(this, () => this.args.ref);
   catalogEntry = getCatalogEntry(this, () => this.args.ref);
+  catalogEntryCardSource = {
+    module: 'https://cardstack.com/base/catalog-entry',
+    name: 'CatalogEntry',
+  };
+  catalogEntryAttributes = {
+    title: this.args.ref.name,
+    description: `Catalog entry for ${this.args.ref.name} type`,
+    ref: this.args.ref,
+  }
   formats = ['edit'];
   @tracked showEditor = false;
+  @tracked showCatalogEntryEditor = false;
 
   @cached
   get realmPath() {
@@ -130,6 +155,7 @@ export default class Schema extends Component<Signature> {
   @action
   onCancel() {
     this.showEditor = false;
+    this.showCatalogEntryEditor = false;
   }
 
   @action
@@ -137,11 +163,9 @@ export default class Schema extends Component<Signature> {
     let path = this.realmPath.local(new URL(url));
     this.router.transitionTo({ queryParams: { path } });
   }
-}
 
-function addJsonExtension (url: string) {
-  if (!url.endsWith('.json')) {
-    return url + '.json';
+  @action
+  createCatalogEntry() {
+    this.showCatalogEntryEditor = true;
   }
-  return url;
 }

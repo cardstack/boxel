@@ -23,6 +23,7 @@ export interface NewCardArgs {
     module: string;
     name: string;
   };
+  initialAttributes?: CardJSON['data']['attributes'];
 }
 export interface ExistingCardArgs {
   type: 'existing';
@@ -41,6 +42,7 @@ interface Signature {
     onCancel?: () => void;
     onSave?: (url: string) => void;
     card: NewCardArgs | ExistingCardArgs;
+    publish?: boolean;
   }
 }
 
@@ -101,6 +103,9 @@ export default class Preview extends Component<Signature> {
     } else {
       taskFor(this.prepareNewInstance).perform();
     }
+    if (this.args.publish) {
+      taskFor(this.write).perform();
+    }
     registerDestructor(this, () => clearInterval(this.interval));
   }
 
@@ -109,7 +114,7 @@ export default class Preview extends Component<Signature> {
     this.resetTime; // just consume this
     if (this.args.card.type === 'new') {
       let cardClass = this.args.module[this.args.card.cardSource.name];
-      return new cardClass();
+      return new cardClass(this.args.card.initialAttributes);
     }
     if (this.initialCardData) {
       let cardClass = this.args.module[this.initialCardData.data.meta.adoptsFrom.name];
@@ -225,6 +230,7 @@ export default class Preview extends Component<Signature> {
   }
 
   @restartableTask private async write(): Promise<void> {
+    await this.cardAPI.loaded;
     let url = this.args.card.type === 'new' ? this.args.card.realmURL : this.args.card.url;
     let method = this.args.card.type === 'new' ? 'POST' : 'PATCH';
     let response = await Loader.fetch(url, {
