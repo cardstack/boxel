@@ -36,12 +36,70 @@ export interface PossibleField {
 
 export interface Options {
   possibleCards: PossibleCardClass[];
+  reexports: { exportName: string; ref: ExternalReference }[];
 }
 
 export function schemaAnalysisPlugin(_babel: typeof Babel) {
   // let t = babel.types;
   return {
     visitor: {
+      ExportNamedDeclaration(
+        path: NodePath<t.ExportNamedDeclaration>,
+        state: State
+      ) {
+        // Handle reexports that are not in the module scope
+        if (path.node.source != null) {
+          for (let specifier of path.node.specifiers) {
+            if (specifier.type !== "ExportSpecifier") {
+              continue;
+            }
+            state.opts.reexports.push({
+              exportName: getName(specifier.exported),
+              ref: {
+                type: "external",
+                module: path.node.source.value,
+                name: specifier.local.name,
+              },
+            });
+          }
+        }
+      },
+
+      ImportDeclaration(path: NodePath<t.ImportDeclaration>, state: State) {
+        // Handle reexports that are in module scope
+        for (let specifier of path.node.specifiers) {
+          if (specifier.type === "ImportNamespaceSpecifier") {
+            continue;
+          }
+          let binding = specifier.local
+            ? path.scope.getBinding(getName(specifier.local))
+            : undefined;
+          if (!binding) {
+            continue;
+          }
+          let exportSpecifierLocal = binding.referencePaths.find((b) =>
+            b.parentPath?.isExportSpecifier()
+          ) as NodePath<t.Identifier> | undefined;
+          if (exportSpecifierLocal) {
+            let exportName = getName(
+              (exportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>)
+                .node.exported
+            );
+            state.opts.reexports.push({
+              exportName,
+              ref: {
+                type: "external",
+                module: path.node.source.value,
+                name:
+                  specifier.type === "ImportDefaultSpecifier"
+                    ? "default"
+                    : getName(specifier.imported),
+              },
+            });
+          }
+        }
+      },
+
       ClassDeclaration: {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
           if (!path.node.superClass) {

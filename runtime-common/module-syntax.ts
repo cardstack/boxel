@@ -23,9 +23,10 @@ import typescriptPlugin from "@babel/plugin-syntax-typescript";
 export class ModuleSyntax {
   ast: Babel.types.File;
   possibleCards: PossibleCardClass[];
+  reexports: { exportName: string; ref: ExternalReference }[];
 
   constructor(private src: string) {
-    let moduleAnalysis: Options = { possibleCards: [] };
+    let moduleAnalysis: Options = { possibleCards: [], reexports: [] };
     let preprocessedSrc = this.preprocessTemplateTags();
 
     this.ast = transformSync(preprocessedSrc, {
@@ -39,6 +40,7 @@ export class ModuleSyntax {
       ],
     })!.ast!;
     this.possibleCards = moduleAnalysis.possibleCards;
+    this.reexports = moduleAnalysis.reexports;
   }
 
   // goal: either we find the PossibleCardClass, or we produce a CardRef for a
@@ -54,8 +56,17 @@ export class ModuleSyntax {
     if (ref.type === "exportedCard") {
       let found = this.possibleCards.find((c) => c.exportedAs === ref.name);
       if (!found) {
-        // TODO: it could also be a reexport, in which case we should return a
-        // CardRef instead of undefined
+        let reexport = this.reexports.find((r) => r.exportName === ref.name);
+        if (reexport) {
+          return {
+            result: "remote",
+            ref: {
+              type: "exportedCard",
+              module: reexport.ref.module,
+              name: reexport.ref.name,
+            },
+          };
+        }
         return undefined; // the ref we are looking for turns out to not actually be a card
       }
       return { result: "local", class: found };

@@ -176,6 +176,129 @@ module('Unit | search-index', function () {
     });
   });
 
+  test('full indexing discovers card source where super class card comes from a reexport with no module scope in the local realm', async function (assert) {
+    let realm = TestRealm.create({
+      'person.gts': `
+        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+        import StringCard from 'https://cardstack.com/base/string';
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+        }
+      `,
+      'index.gts': `
+        export { Person as PersonCard } from "./person";
+      `,
+      'fancy-person.gts': `
+        import { contains, field } from 'https://cardstack.com/base/card-api';
+        import StringCard from 'https://cardstack.com/base/string';
+        import { PersonCard } from './index';
+
+        export class FancyPerson extends PersonCard {
+          @field favoriteColor = contains(StringCard);
+        }
+      `,
+    });
+    let indexer = realm.searchIndex;
+    await indexer.run();
+    let definition = await indexer.typeOf({
+      type: 'exportedCard',
+      module: 'fancy-person.gts',
+      name: 'FancyPerson',
+    });
+    assert.deepEqual(definition?.id, {
+      type: 'exportedCard',
+      module: `${testRealmURL}fancy-person`,
+      name: 'FancyPerson',
+    });
+    assert.deepEqual(definition?.super, {
+      type: 'exportedCard',
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+
+    assert.deepEqual(definition?.fields.get('lastName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+
+    assert.deepEqual(definition?.fields.get('favoriteColor'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+  });
+
+  test('full indexing discovers card source where super class card comes from a reexport with module scope in the local realm', async function (assert) {
+    let realm = TestRealm.create({
+      'person.gts': `
+        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+        import StringCard from 'https://cardstack.com/base/string';
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+        }
+      `,
+      'index.gts': `
+        import { Person } from "./person";
+        export { Person as PersonCard };
+      `,
+      'fancy-person.gts': `
+        import { contains, field } from 'https://cardstack.com/base/card-api';
+        import StringCard from 'https://cardstack.com/base/string';
+        import { PersonCard } from './index';
+
+        export class FancyPerson extends PersonCard {
+          @field favoriteColor = contains(StringCard);
+        }
+      `,
+    });
+    let indexer = realm.searchIndex;
+    await indexer.run();
+    let definition = await indexer.typeOf({
+      type: 'exportedCard',
+      module: 'fancy-person.gts',
+      name: 'FancyPerson',
+    });
+    assert.deepEqual(definition?.id, {
+      type: 'exportedCard',
+      module: `${testRealmURL}fancy-person`,
+      name: 'FancyPerson',
+    });
+    assert.deepEqual(definition?.super, {
+      type: 'exportedCard',
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+
+    assert.deepEqual(definition?.fields.get('lastName'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+
+    assert.deepEqual(definition?.fields.get('favoriteColor'), {
+      fieldType: 'contains',
+      fieldCard: {
+        type: 'exportedCard',
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+  });
+
   test('full indexing discovers card source where super class card comes same module', async function (assert) {
     let realm = TestRealm.create({
       'person.gts': `
