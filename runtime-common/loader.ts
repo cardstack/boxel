@@ -3,6 +3,7 @@ import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
 import { RealmPaths, LocalPath } from "./paths";
 import { isNode } from "./index";
+import type { Realm } from "./realm";
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -53,6 +54,8 @@ export class Loader {
   private modules = new Map<string, Module>();
   private fileLoaders = new Map<string, FileLoader>();
   private urlMappings = new Map<RealmPaths, string>();
+  private realmFetchOverride: Realm[] = [];
+  private isNativeImportDisabled = false;
 
   constructor() {}
 
@@ -65,9 +68,26 @@ export class Loader {
     return Loader.#instance;
   }
 
+  // this will return a new loader instance that has the same file loaders and
+  // url mappings as the global loader
+  static createLoaderFromGlobal(): Loader {
+    let globalLoader = Loader.getLoader();
+    let loader = new Loader();
+    loader.fileLoaders = globalLoader.fileLoaders;
+    loader.urlMappings = globalLoader.urlMappings;
+    loader.realmFetchOverride = globalLoader.realmFetchOverride;
+    loader.isNativeImportDisabled = globalLoader.isNativeImportDisabled;
+    return loader;
+  }
+
   static async import<T extends object>(moduleIdentifier: string): Promise<T> {
     let loader = Loader.getLoader();
     return loader.import<T>(moduleIdentifier);
+  }
+
+  // FOR TESTS ONLY!
+  static destroy() {
+    Loader.#instance = undefined;
   }
 
   static resolve(
@@ -112,16 +132,30 @@ export class Loader {
     this.urlMappings.set(new RealmPaths(from), to.href);
   }
 
-  // TODO all the callers of this method probably need their own Loader instance instead
-  static clearCache() {
+  static addRealmFetchOverride(realm: Realm) {
     let loader = Loader.getLoader();
-    loader.modules = new Map();
+    loader.addRealmFetchOverride(realm);
+  }
+
+  addRealmFetchOverride(realm: Realm) {
+    this.realmFetchOverride.push(realm);
+  }
+
+  static disableNativeImport(isDisabled: boolean) {
+    let loader = Loader.getLoader();
+    loader.disableNativeImport(isDisabled);
+  }
+
+  disableNativeImport(isDisabled: boolean) {
+    this.isNativeImportDisabled = isDisabled;
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
+    // TODO move this logic into the static import
     if (
+      !this.isNativeImportDisabled &&
       (globalThis as any).window && // make sure we are not in a service worker
       !isNode // make sure we are not in node
     ) {
@@ -150,6 +184,11 @@ export class Loader {
     init?: RequestInit
   ): Promise<Response> {
     if (urlOrRequest instanceof Request) {
+      for (let realm of this.realmFetchOverride) {
+        if (realm.paths.inRealm(new URL(urlOrRequest.url))) {
+          return await realm.handle(urlOrRequest);
+        }
+      }
       let request = new Request(this.resolve(urlOrRequest.url).href, {
         method: urlOrRequest.method,
         headers: urlOrRequest.headers,
@@ -157,6 +196,15 @@ export class Loader {
       });
       return fetch(request);
     } else {
+      for (let realm of this.realmFetchOverride) {
+        if (realm.paths.inRealm(new URL(urlOrRequest))) {
+          let request = new Request(
+            typeof urlOrRequest === "string" ? urlOrRequest : urlOrRequest.href,
+            init
+          );
+          return await realm.handle(request);
+        }
+      }
       let resolvedURL = this.resolve(urlOrRequest);
       return fetch(resolvedURL.href, init);
     }
@@ -246,6 +294,16 @@ export class Loader {
       throw exception;
     }
 
+    // note that after this promise all, the dep modules here are not
+    // necessarily at a registered state--you may actually have a dep that was
+    // already in the process of fetching when you asked to fetch it again, in
+    // which case you just get back a module in a fetching state with a deferred
+    // that is not yet fulfilled. This means that the module may think that it
+    // and all its deps are ready for evaluation, when in fact there is actually
+    // still work being done by sibling fetch that happened to ask for the same
+    // dep earlier. And there is no guarantee that that the sibling fetch will
+    // have completed the register in time for the evaluation that this fetch
+    // thinks its ready for.
     await Promise.all(
       dependencyList!.map((depId) => {
         if (depId !== "exports" && depId !== "__import_meta__") {
@@ -270,13 +328,13 @@ export class Loader {
     let module = this.modules.get(moduleIdentifier);
     if (!module) {
       throw new Error(
-        `bug in module loader. ${moduleIdentifier} should have been registered before entering evaluateModule`
+        `bug in module loader: can't find module. ${moduleIdentifier} should have been registered before entering evaluateModule`
       );
     }
     switch (module.state) {
       case "fetching":
         throw new Error(
-          `bug in module loader. ${moduleIdentifier} should have been registered before entering evaluateModule`
+          `bug in module loader: module still in fetching state. ${moduleIdentifier} should have been registered before entering evaluateModule`
         );
       case "preparing":
       case "evaluated":

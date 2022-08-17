@@ -73,7 +73,7 @@ export class Router {
             return err.response;
           }
           console.error(err);
-          return new Response(`unexpected exception in service worker ${err}`, {
+          return new Response(`unexpected exception in realm ${err}`, {
             status: 500,
           });
         }

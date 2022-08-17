@@ -10,6 +10,7 @@ import {
   ensureFileSync,
   createReadStream,
   removeSync,
+  ReadStream,
 } from "fs-extra";
 import { join } from "path";
 
@@ -51,10 +52,18 @@ export class NodeAdapter implements RealmAdapter {
       return undefined;
     }
     let { mtime } = statSync(absolutePath);
-    let content = createReadStream(absolutePath);
+    let lazyStream: ReadStream;
     return {
       path,
-      content,
+      get content() {
+        // making this lazy is important because it means that consumers who are
+        // only interested in checking for the existence of the path and never
+        // consume the content don't leave an unconsumed stream.
+        if (!lazyStream) {
+          lazyStream = createReadStream(absolutePath);
+        }
+        return lazyStream;
+      },
       lastModified: mtime.getTime(),
     };
   }

@@ -3,11 +3,20 @@ import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import { baseRealm } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4201/test/';
 
-module('Unit | search-index', function () {
+module('Unit | search-index', function (hooks) {
+  hooks.before(async function () {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
+  });
+
   test('full indexing discovers card instances', async function (assert) {
     let adapter = new TestRealmAdapter({
       'empty.json': {
@@ -651,7 +660,7 @@ module('Unit | search-index', function () {
     let indexer = realm.searchIndex;
     await indexer.run();
     let refs = (await indexer.searchEntry(new URL(`${testRealmURL}person-1`)))
-      ?.refs;
+      ?.deps;
     assert.deepEqual(
       [...refs!.keys()].sort(),
       [
@@ -771,7 +780,7 @@ posts/ignore-me.gts
     }
   });
 
-  test("search index incremental update doesn't process ignored files", async function (assert) {
+  test("incremental indexing doesn't process ignored files", async function (assert) {
     const cardSource = `
       import { Card } from 'https://cardstack.com/base/card-api';
       export class Post extends Card {}
@@ -797,6 +806,11 @@ posts/ignore-me.gts
       def,
       undefined,
       'definition does not exist because file is ignored'
+    );
+    assert.strictEqual(
+      indexer.stats.definitionsBuilt,
+      0,
+      'no definitions were processed'
     );
   });
 

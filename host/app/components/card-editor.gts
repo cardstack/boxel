@@ -9,7 +9,7 @@ import { eq } from '../helpers/truth-helpers';
 import { restartableTask, task } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
-import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common';
+import { CardJSON, isCardJSON, isCardDocument, ExportedCardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
@@ -19,10 +19,8 @@ import type { Card, Format, } from 'https://cardstack.com/base/card-api';
 export interface NewCardArgs {
   type: 'new';
   realmURL: string;
-  cardSource: {
-    module: string;
-    name: string;
-  };
+  cardSource: ExportedCardRef;
+  initialAttributes?: CardJSON['data']['attributes'];
 }
 export interface ExistingCardArgs {
   type: 'existing';
@@ -31,6 +29,7 @@ export interface ExistingCardArgs {
   // have an actual ember service for the API we should just
   //  mock that instead
   json?: CardJSON;
+  format?: Format;
 }
 
 interface Signature {
@@ -82,7 +81,7 @@ export default class Preview extends Component<Signature> {
   @service declare router: RouterService;
   @service declare cardAPI: CardAPI;
   @tracked
-  format: Format = this.args.card.type === 'new' ? 'edit' : 'isolated';
+  format: Format = this.args.card.type === 'new' ? 'edit' : this.args.card.format ?? 'isolated';
   @tracked
   resetTime = Date.now();
   @tracked
@@ -108,7 +107,7 @@ export default class Preview extends Component<Signature> {
     this.resetTime; // just consume this
     if (this.args.card.type === 'new') {
       let cardClass = this.args.module[this.args.card.cardSource.name];
-      return new cardClass();
+      return new cardClass(this.args.card.initialAttributes);
     }
     if (this.initialCardData) {
       let cardClass = this.args.module[this.initialCardData.data.meta.adoptsFrom.name];
