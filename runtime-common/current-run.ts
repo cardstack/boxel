@@ -114,6 +114,8 @@ export class CurrentRun {
   #instances: URLMap<SearchEntry>;
   #modules: URLMap<Deferred<ModuleSyntax>>;
   #definitions: Map<string, CardDefinition>;
+  #definitionBuildCache: Map<string, Deferred<CardDefinition | undefined>> =
+    new Map();
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
   #api: CardAPI | undefined;
@@ -328,16 +330,17 @@ export class CurrentRun {
         if (!mod) {
           return;
         }
-
-        for (let possibleCard of mod.possibleCards) {
-          if (possibleCard.exportedAs) {
-            await this.buildDefinition({
-              type: "exportedCard",
-              module: url.href,
-              name: possibleCard.exportedAs,
-            });
-          }
-        }
+        await Promise.all(
+          mod.possibleCards
+            .filter((possibleCard) => possibleCard.exportedAs)
+            .map((possibleCard) =>
+              this.buildDefinition({
+                type: "exportedCard",
+                module: url.href,
+                name: possibleCard.exportedAs!,
+              })
+            )
+        );
       }
     }
 
@@ -476,15 +479,26 @@ export class CurrentRun {
     return mod;
   }
 
-  // TODO use cached promises here to share work, but beware of cycles!
+  // TODO When we introduce card relationships we'll need to break cycles here
   public async buildDefinition(
     ref: CardRef,
     relativeTo = new URL(this.realm.url)
   ): Promise<CardDefinition | undefined> {
     let { module } = getExportedCardContext(ref);
     let url = new URL(module, relativeTo);
+    // note that this key is _not_ the same as the final CardDefinition key, that
+    // key can only be determined after the syntax analysis
+    let cacheKey = internalKeyFor(ref, url);
+    let cachedDefinitionBuild = this.#definitionBuildCache.get(cacheKey);
+    if (cachedDefinitionBuild) {
+      return await cachedDefinitionBuild.promise;
+    }
+
+    let deferred = new Deferred<CardDefinition | undefined>();
+    this.#definitionBuildCache.set(internalKeyFor(ref, url), deferred);
     let parsedModule = await this.parseModule(url);
     if (!parsedModule) {
+      deferred.resolve(undefined);
       return undefined;
     }
 
@@ -492,10 +506,13 @@ export class CurrentRun {
     if (!found) {
       // this ref from a syntax perspective appeared to be a card, but from a
       // semantic perspective it actually is not a card
+      deferred.resolve(undefined);
       return undefined;
     }
     if (found.result === "remote") {
-      return await this.buildDefinition(found.ref, url);
+      let promise = this.buildDefinition(found.ref, url);
+      deferred.fulfill(promise);
+      return await promise;
     }
 
     let possibleCard = found.class;
@@ -511,6 +528,7 @@ export class CurrentRun {
     let def = this.#definitions.get(internalKeyFor(id, url));
     if (def) {
       this.#definitions.set(internalKeyFor(ref, url), def);
+      deferred.fulfill(def);
       return def;
     }
 
@@ -520,6 +538,7 @@ export class CurrentRun {
     });
 
     if (!superDef) {
+      deferred.resolve(undefined);
       return undefined;
     }
 
@@ -546,6 +565,7 @@ export class CurrentRun {
     let key = internalKeyFor(id, url);
     def = { id, key, super: superDef.id, fields };
     this.#definitions.set(key, def);
+    deferred.resolve(def);
     return def;
   }
 
