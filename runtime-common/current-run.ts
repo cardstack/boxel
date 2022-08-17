@@ -9,6 +9,7 @@ import { RealmPaths, LocalPath } from "./paths";
 import { ModuleSyntax } from "./module-syntax";
 import { ClassReference } from "./schema-analysis-plugin";
 import ignore, { Ignore } from "ignore";
+import isEqual from "lodash/isEqual";
 import { stringify } from "qs";
 import { Loader } from "./loader";
 import { Deferred } from "./deferred";
@@ -389,10 +390,9 @@ export class CurrentRun {
         searchData,
         types: await this.getTypes(cardRef),
         refs: new Map(
-          (await this.buildRefs(cardRef)).map((ref) => [
-            internalKeyFor({ type: "exportedCard", ...ref }, undefined),
-            { type: "exportedCard", ...ref },
-          ]) as [string, CardRef][]
+          (await this.buildRefs({ type: "exportedCard", ...cardRef })).map(
+            (ref) => [internalKeyFor(ref, undefined), ref]
+          ) as [string, CardRef][]
         ),
       });
     }
@@ -415,12 +415,11 @@ export class CurrentRun {
     }
   }
 
-  // TODO ideally we probably want more than just exported card refs...
   private async buildRefs(
-    targetRef: ExportedCardRef,
-    refs: ExportedCardRef[] = []
-  ): Promise<ExportedCardRef[]> {
-    let def = await this.getCardDefinition(targetRef);
+    targetRef: CardRef,
+    refs: CardRef[] = []
+  ): Promise<CardRef[]> {
+    let def = await this.typeOf(targetRef);
     if (!def) {
       // figure out a way to report this without breaking indexing
       throw new Error(
@@ -428,51 +427,21 @@ export class CurrentRun {
       );
     }
     let ownRef = def.id;
-    if (ownRef.type !== "exportedCard") {
-      throw new Error(
-        `bug - unimplemented don't know how to get non exported ref: ${JSON.stringify(
-          ownRef
-        )}`
-      );
-    }
-    if (
-      refs.find(
-        (ref) =>
-          ref.module === (ownRef as ExportedCardRef).module &&
-          ref.name === (ownRef as ExportedCardRef).name
-      )
-    ) {
+    if (refs.find((ref) => isEqual(ref, ownRef))) {
+      // breaks cycles
       return refs;
     }
     refs.push(ownRef);
     let fieldRefs = [...def.fields.values()].map((field) => field.fieldCard);
-    let nonExportedCardRef = fieldRefs.find(
-      (ref) => ref.type !== "exportedCard"
-    );
-    if (nonExportedCardRef) {
-      throw new Error(
-        `bug - unimplemented don't know how to get non exported ref: ${JSON.stringify(
-          nonExportedCardRef
-        )}`
-      );
-    }
-    let superRef: ExportedCardRef | undefined;
+    let superRef: CardRef | undefined;
     if (def.super) {
-      if (def.super.type !== "exportedCard") {
-        throw new Error(
-          `bug - unimplemented don't know how to get non exported ref: ${JSON.stringify(
-            superRef
-          )}`
-        );
-      }
       superRef = def.super;
     }
     await Promise.all(
-      (
-        [...fieldRefs, ...(superRef ? [superRef] : [])] as ExportedCardRef[]
-      ).map((fieldRef) => this.buildRefs(fieldRef, refs))
+      [...fieldRefs, ...(superRef ? [superRef] : [])].map((fieldRef) =>
+        this.buildRefs(fieldRef, refs)
+      )
     );
-
     return refs;
   }
 
