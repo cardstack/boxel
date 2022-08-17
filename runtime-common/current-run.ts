@@ -653,16 +653,6 @@ export class CurrentRun {
     return types;
   }
 
-  public async getCardDefinition(
-    ref: ExportedCardRef
-  ): Promise<CardDefinition | undefined> {
-    return (
-      this.definitions.get(
-        internalKeyFor({ type: "exportedCard", ...ref }, undefined) // assumes ref refers to absolute module URL
-      ) ?? (await this.getExternalCardDefinition(ref))
-    );
-  }
-
   async typeOf(
     ref: CardRef,
     relativeTo = new URL(this.realm.url)

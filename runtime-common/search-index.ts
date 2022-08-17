@@ -232,10 +232,10 @@ export class SearchIndex {
   }
 
   private async getFieldDefinition(
-    ref: ExportedCardRef,
+    ref: CardRef,
     fieldSegments: string[]
   ): Promise<CardDefinition | undefined> {
-    let def = await this.#currentRun.getCardDefinition(ref);
+    let def = await this.#currentRun.typeOf(ref);
     if (!def) {
       return undefined;
     }
@@ -244,15 +244,8 @@ export class SearchIndex {
     if (!fieldDef) {
       throw new Error(
         `Your filter refers to nonexistent field "${fieldName}" on type ${internalKeyFor(
-          { type: "exportedCard", ...ref },
+          ref,
           undefined // assumes absolute module URL
-        )}`
-      );
-    }
-    if (fieldDef.fieldCard.type !== "exportedCard") {
-      throw new Error(
-        `Cannot get field definition of non-exported card ${JSON.stringify(
-          fieldDef.fieldCard
         )}`
       );
     }
@@ -261,14 +254,17 @@ export class SearchIndex {
         ...fieldSegments,
       ]);
     }
-    return this.#currentRun.getCardDefinition(fieldDef.fieldCard);
+    return this.#currentRun.typeOf(fieldDef.fieldCard);
   }
 
   private async loadFieldCard(
     ref: ExportedCardRef,
     fieldPath: string
   ): Promise<typeof Card> {
-    let fieldDef = await this.getFieldDefinition(ref, fieldPath.split("."));
+    let fieldDef = await this.getFieldDefinition(
+      { type: "exportedCard", ...ref },
+      fieldPath.split(".")
+    );
     if (!fieldDef) {
       throw new Error(
         `Your filter refers to nonexistent type: import ${
