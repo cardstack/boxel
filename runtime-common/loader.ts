@@ -112,6 +112,7 @@ export class Loader {
     this.urlMappings.set(new RealmPaths(from), to.href);
   }
 
+  // TODO all the callers of this method probably need their own Loader instance instead
   static clearCache() {
     let loader = Loader.getLoader();
     loader.modules = new Map();
