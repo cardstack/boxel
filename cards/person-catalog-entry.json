@@ -1,0 +1,19 @@
+{
+    "data": {
+      "type": "card",
+      "attributes": {
+        "title": "Person",
+        "description": "A card that represents a person",
+        "ref": {
+          "module": "http://local-realm/person",
+          "name": "Person"
+        }
+      },
+      "meta": {
+        "adoptsFrom": {
+          "module": "https://cardstack.com/base/catalog-entry",
+          "name": "CatalogEntry"
+        }
+      }
+    }
+  }

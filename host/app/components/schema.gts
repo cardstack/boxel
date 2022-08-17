@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { ExportedCardRef } from '@cardstack/runtime-common';
 import { getCardType } from '../resources/card-type';
+import { getCatalogEntry } from '../resources/catalog-entry';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
@@ -9,7 +10,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
+// import { on } from '@ember/modifier';
 import { LinkTo } from '@ember/routing';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
@@ -62,9 +63,35 @@ export default class Schema extends Component<Signature> {
               </li>
             {{/each}}
           </ul>
-          {{#let this.cardType.type.exportedCardContext.name as |name|}}
+          {{#if this.catalogEntry.entries.length}}
+            <div>Catalog Entries:</div>
+            {{#each this.catalogEntry.entries as |entry|}}
+              <li>
+                <LinkTo @route="application" @query={{hash path=(this.modulePath (addJsonExtension entry.id))}} data-test-catalog-entry-id>
+                {{entry.id}}
+                </LinkTo>
+                <ImportModule @url={{entry.meta.adoptsFrom.module}}>
+                  <:ready as |module|>
+                    <CardEditor
+                      @card={{hash type="existing" url=entry.id format="edit"}}
+                      @module={{module}}
+                      @onSave={{this.onSave}}
+                      @onCancel={{this.onCancel}}
+                    />
+                  </:ready>
+                  <:error as |error|>
+                    <h2>Encountered {{error.type}} error</h2>
+                    <pre>{{error.message}}</pre>
+                  </:error>
+                </ImportModule>
+              </li>
+            {{/each}}
+          {{else}}
+            <button type="button">Publish Card Type</button>
+          {{/if}}
+          {{!-- {{#let this.cardType.type.exportedCardContext.name as |name|}}
             <button {{on "click" this.displayEditor}} type="button" data-test-create-card={{name}}>Create New {{name}}</button>
-          {{/let}}
+          {{/let}} --}}
         </p>
       {{/if}}
     {{/if}}
@@ -73,6 +100,8 @@ export default class Schema extends Component<Signature> {
   @service declare localRealm: LocalRealm;
   @service declare router: RouterService;
   cardType = getCardType(this, () => this.args.ref);
+  catalogEntry = getCatalogEntry(this, () => this.args.ref);
+  formats = ['edit'];
   @tracked showEditor = false;
 
   @cached
@@ -108,4 +137,11 @@ export default class Schema extends Component<Signature> {
     let path = this.realmPath.local(new URL(url));
     this.router.transitionTo({ queryParams: { path } });
   }
+}
+
+function addJsonExtension (url: string) {
+  if (!url.endsWith('.json')) {
+    return url + '.json';
+  }
+  return url;
 }

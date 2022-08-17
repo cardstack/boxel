@@ -31,6 +31,7 @@ export interface ExistingCardArgs {
   // have an actual ember service for the API we should just
   //  mock that instead
   json?: CardJSON;
+  format?: Format;
 }
 
 interface Signature {
@@ -82,7 +83,7 @@ export default class Preview extends Component<Signature> {
   @service declare router: RouterService;
   @service declare cardAPI: CardAPI;
   @tracked
-  format: Format = this.args.card.type === 'new' ? 'edit' : 'isolated';
+  format: Format = this.args.card.type === 'new' ? 'edit' : this.args.card.format ?? 'isolated';
   @tracked
   resetTime = Date.now();
   @tracked
