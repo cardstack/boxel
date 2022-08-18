@@ -124,7 +124,6 @@ export class CurrentRun {
   // via the interior map keys so we don't end up with dupe refs
   #exportedCardRefs: Map<string, Map<string, ExportedCardRef>>;
   private realm: Realm;
-  private incremental: { url: URL; operation: "update" | "delete" } | undefined;
 
   private constructor({
     realm,
@@ -134,7 +133,6 @@ export class CurrentRun {
     definitions,
     ignoreMap,
     exportedCardRefs,
-    incremental,
   }: {
     realm: Realm;
     reader: Reader | undefined; // the "empty" case doesn't need a reader
@@ -143,7 +141,6 @@ export class CurrentRun {
     definitions: Map<string, CardDefinition>;
     ignoreMap: URLMap<Ignore>;
     exportedCardRefs: Map<string, Map<string, ExportedCardRef>>;
-    incremental: { url: URL; operation: "update" | "delete" } | undefined;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
     this.#reader = reader;
@@ -151,7 +148,6 @@ export class CurrentRun {
     this.#instances = instances;
     this.#modules = modules;
     this.#definitions = definitions;
-    this.incremental = incremental;
     this.#exportedCardRefs = exportedCardRefs;
     this.#ignoreMap = ignoreMap;
   }
@@ -163,7 +159,6 @@ export class CurrentRun {
       instances: new URLMap(),
       modules: new URLMap(),
       definitions: new Map(),
-      incremental: undefined,
       exportedCardRefs: new Map(),
       ignoreMap: new URLMap(),
     });
@@ -207,7 +202,6 @@ export class CurrentRun {
           },
         ],
       ]),
-      incremental: undefined,
       exportedCardRefs: new Map(),
       ignoreMap: new URLMap(),
     });
@@ -235,12 +229,11 @@ export class CurrentRun {
       modules,
       definitions,
       ignoreMap,
-      incremental: {
-        url,
-        operation,
-      },
     });
-    await current.run();
+    await current.run({
+      url,
+      operation,
+    });
     return current;
   }
 
@@ -274,11 +267,14 @@ export class CurrentRun {
     return this.#ignoreMap;
   }
 
-  private async run() {
+  private async run(incremental?: {
+    url: URL;
+    operation: "update" | "delete";
+  }) {
     this.#api = await Loader.import<CardAPI>(`${baseRealm.url}card-api`);
-    if (this.incremental) {
-      await this.visitFile(this.incremental.url, {
-        delete: this.incremental.operation === "delete",
+    if (incremental) {
+      await this.visitFile(incremental.url, {
+        delete: incremental.operation === "delete",
       });
     } else {
       await this.visitDirectory(new URL(this.realm.url));
