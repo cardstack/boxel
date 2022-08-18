@@ -88,27 +88,37 @@ export async function maxToExpanded(
   // Run these first
   await runAnimations(fadeOutSprites);
 
+  // Card sprite proper resizes and moves together with title
+  // magicMove(
+  //   {
+  //     keptSprites: new Set([counterpartCard!]),
+  //   } as Changeset,
+  //   {
+  //     duration,
+  //   }
+  // );
+  counterpartCard.setupAnimation('position', {
+    duration,
+    behavior,
+  });
+  counterpartCard.element.style.height = `${counterpartCard.finalHeight}px`;
+  counterpartCard.element.style.width = `${counterpartCard.finalWidth}px`;
+  counterpartCard.setupAnimation('size', {
+    duration,
+    behavior,
+  });
+  counterpartCard!.element.style.zIndex = '2';
+  if (placeholder) {
+    placeholder.element.style.zIndex = '0';
+  }
+  await runAnimations([counterpartCard!]);
+
   // Hide counterpart
   if (mainCardContent.counterpart) {
     context.removeOrphan(mainCardContent.counterpart);
   }
   spriteGroup.card!.element.style.opacity = '1';
   context.removeOrphan(counterpartCard);
-
-  // Card sprite proper resizes and moves together with title
-  magicMove(
-    {
-      keptSprites: new Set([spriteGroup.card!]),
-    } as Changeset,
-    {
-      duration,
-    }
-  );
-  spriteGroup.card!.element.style.zIndex = '2';
-  if (placeholder) {
-    placeholder.element.style.zIndex = '0';
-  }
-  await runAnimations([spriteGroup.card!]);
   if (placeholder) context.removeOrphan(placeholder!);
 
   let fadeInSprites: Sprite[] = [];
@@ -313,15 +323,15 @@ export async function maxToExpandedImages(
   }
 
   spriteGroup.card!.element.style.opacity = '0';
-  let counterpart = spriteGroup.card!.counterpart!;
-  context.appendOrphan(counterpart);
-  counterpart.lockStyles();
+  let counterpartCard = spriteGroup.card!.counterpart!;
+  context.appendOrphan(counterpartCard);
+  counterpartCard.lockStyles();
 
   let fadeOutSprites = otherCards
     .filter((group) => {
       return (
-        counterpart!.element !== group.card!.element &&
-        counterpart!.element.contains(group.card!.element)
+        counterpartCard!.element !== group.card!.element &&
+        counterpartCard!.element.contains(group.card!.element)
       );
     })
     .map((v) => v.card!);
@@ -335,39 +345,63 @@ export async function maxToExpandedImages(
 
   await runAnimations(
     fadeOutSprites
-      .concat([counterpart])
+      .concat([counterpartCard])
       .concat(placeholder ? [placeholder] : [])
   );
 
-  spriteGroup.card!.element.style.opacity = '1';
-  context.removeOrphan(counterpart);
-
   spriteGroup.keptContent.forEach((s) => {
-    s.setupAnimation('position', {
+    s.counterpart!.lockStyles();
+    s.counterpart!.element.style.zIndex = '3';
+    context.appendOrphan(s.counterpart!);
+    s.counterpart!.setupAnimation('position', {
       duration,
-      behavior: new LinearBehavior(),
-      startX: -s.boundsDelta!.x + spriteGroup.card!.boundsDelta!.x,
-      startY: -s.boundsDelta!.y + spriteGroup.card!.boundsDelta!.y,
-      // endX: spriteGroup.card!.boundsDelta!.x,
-      // endY: spriteGroup.card!.boundsDelta!.y,
+      behavior,
+      startX: 0,
+      startY: 0,
+      endX: s.boundsDelta!.x - spriteGroup.card!.boundsDelta!.x,
+      endY: s.boundsDelta!.y - spriteGroup.card!.boundsDelta!.y,
     });
-    images.push(s);
+    images.push(s.counterpart!);
   });
 
-  let positionTransform = `translate(${-spriteGroup.card!.boundsDelta!
-    .x}px, ${-spriteGroup.card!.boundsDelta!.y}px)`;
-  let sizeTransform = `scaleY(${
-    spriteGroup.card!.initialHeight! / spriteGroup.card!.finalHeight!
-  }) scaleX(${
-    spriteGroup.card!.initialWidth! / spriteGroup.card!.finalWidth!
-  })`;
+  await runAnimations(images);
 
-  spriteGroup.card!.element.style.transform = `${positionTransform} ${sizeTransform}`;
-  spriteGroup.card!.element.style.transformOrigin = `top left`;
-  spriteGroup.card!.element.style.setProperty(
-    '--animation-scale-inversion-y',
-    `${1 / (spriteGroup.card!.initialHeight! / spriteGroup.card!.finalHeight!)}`
-  );
+
+  // let positionTransform = `translate(${-spriteGroup.card!.boundsDelta!
+  //   .x}px, ${-spriteGroup.card!.boundsDelta!.y}px)`;
+  // let sizeTransform = `scaleY(${
+  //   spriteGroup.card!.initialHeight! / spriteGroup.card!.finalHeight!
+  // }) scaleX(${
+  //   spriteGroup.card!.initialWidth! / spriteGroup.card!.finalWidth!
+  // })`;
+
+  // spriteGroup.card!.element.style.transform = `${positionTransform} ${sizeTransform}`;
+  // spriteGroup.card!.element.style.transformOrigin = `top left`;
+  // spriteGroup.card!.element.style.setProperty(
+  //   '--animation-scale-inversion-y',
+  //   `${1 / (spriteGroup.card!.initialHeight! / spriteGroup.card!.finalHeight!)}`
+  // );
+  counterpartCard.element.style.height = `${counterpartCard.finalHeight}px`;
+  counterpartCard.element.style.width = `${counterpartCard.finalWidth}px`;
+  counterpartCard.setupAnimation('position', {
+    duration,
+    behavior,
+  });
+  counterpartCard.setupAnimation('size', {
+    duration,
+    behavior,
+  });
+
+  images.forEach((image) => {
+    image.setupAnimation('position', {
+      duration,
+      behavior,
+      startX: image.boundsDelta!.x - spriteGroup.card!.boundsDelta!.x,
+      startY: image.boundsDelta!.y - spriteGroup.card!.boundsDelta!.y,
+      endX: image.boundsDelta!.x,
+      endY: image.boundsDelta!.y,
+    });
+  });
 
   // spriteGroup.card!.setupAnimation('size', {
   //   duration,
@@ -378,32 +412,35 @@ export async function maxToExpandedImages(
   //   endHeight: -spriteGroup.card!.finalBounds!.element.height,
   // });
 
-  await runAnimations([...images, spriteGroup.card!]);
+  await runAnimations([...images, counterpartCard]);
 
-  spriteGroup.card!.element.style.transform = '';
-  spriteGroup.card!.element.style.transformOrigin = '';
-  spriteGroup.card!.element.style.setProperty(
-    '--animation-scale-inversion-y',
-    ''
-  );
+  spriteGroup.card!.element.style.opacity = '1';
+  context.removeOrphan(counterpartCard);
 
-  if (placeholder) {
-    placeholder.element.style.zIndex = '0';
-  }
+  // spriteGroup.card!.element.style.transform = '';
+  // spriteGroup.card!.element.style.transformOrigin = '';
+  // spriteGroup.card!.element.style.setProperty(
+  //   '--animation-scale-inversion-y',
+  //   ''
+  // );
 
-  // Card sprite proper resizes and moves together with title
-  spriteGroup.card?.setupAnimation('position', {
-    duration,
-    behavior,
-  });
-  spriteGroup.card?.setupAnimation('size', {
-    duration,
-    behavior,
-    startWidth: spriteGroup.card.counterpart!.initialWidth,
-  });
+  // if (placeholder) {
+  //   placeholder.element.style.zIndex = '0';
+  // }
 
-  // spriteGroup.card!.element.style.zIndex = '2';
-  await runAnimations([spriteGroup.card!]);
+  // // Card sprite proper resizes and moves together with title
+  // spriteGroup.card?.setupAnimation('position', {
+  //   duration,
+  //   behavior,
+  // });
+  // spriteGroup.card?.setupAnimation('size', {
+  //   duration,
+  //   behavior,
+  //   startWidth: spriteGroup.card.counterpart!.initialWidth,
+  // });
+
+  // // spriteGroup.card!.element.style.zIndex = '2';
+  // await runAnimations([spriteGroup.card!]);
 
   // images.forEach((image) => {
   //   image.setupAnimation('position', {
