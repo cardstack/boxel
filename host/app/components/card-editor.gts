@@ -42,7 +42,6 @@ interface Signature {
     onCancel?: () => void;
     onSave?: (url: string) => void;
     card: NewCardArgs | ExistingCardArgs;
-    publish?: boolean;
   }
 }
 
@@ -102,9 +101,6 @@ export default class Preview extends Component<Signature> {
       this.interval = setInterval(() => taskFor(this.loadData).perform((this.args.card as any).url), 1000);
     } else {
       taskFor(this.prepareNewInstance).perform();
-    }
-    if (this.args.publish) {
-      taskFor(this.write).perform();
     }
     registerDestructor(this, () => clearInterval(this.interval));
   }
@@ -230,7 +226,6 @@ export default class Preview extends Component<Signature> {
   }
 
   @restartableTask private async write(): Promise<void> {
-    await this.cardAPI.loaded;
     let url = this.args.card.type === 'new' ? this.args.card.realmURL : this.args.card.url;
     let method = this.args.card.type === 'new' ? 'POST' : 'PATCH';
     let response = await Loader.fetch(url, {
