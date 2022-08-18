@@ -14,28 +14,30 @@
           <input value="Entry 1" {{sprite id=(concat @id "-form-value") role="form-value"}}>
         </label>
       </div>
-      <ul local-class="suggestion-list">
-        {{#each @suggestions as |suggestion|}}
-          <li>
-            {{#if (eq suggestion.state "MAX")}}
-              <HomeRenoV2::Placeholder @id={{suggestion.id}} />
-            {{else}}
-              {{component
-                (concat "home-reno-v2/" suggestion.type)
-                  card=suggestion
-                  id=suggestion.id
-                  model=suggestion.model
-                  state=suggestion.state
-                  suggestions=suggestion.suggestions
-                  canUpdateState=suggestion.canUpdateState
-                  minimize=@minimize
-                  maximize=@maximize
-                  expand=@expand
-              }}
-            {{/if}}
-          </li>
-        {{/each}}
-      </ul>
+      <AnimationContext @use={{this.transition}}>
+        <ul local-class="suggestion-list">
+          {{#each @suggestions as |suggestion|}}
+            <li>
+              {{#if (eq suggestion.state "MAX")}}
+                <HomeRenoV2::Placeholder @id={{suggestion.id}} />
+              {{else}}
+                {{component
+                  (concat "home-reno-v2/" suggestion.type)
+                    card=suggestion
+                    id=suggestion.id
+                    model=suggestion.model
+                    state=suggestion.state
+                    suggestions=suggestion.suggestions
+                    canUpdateState=suggestion.canUpdateState
+                    minimize=@minimize
+                    maximize=@maximize
+                    expand=@expand
+                }}
+              {{/if}}
+            </li>
+          {{/each}}
+        </ul>
+      </AnimationContext>
   {{else if (eq @state "EXPANDED")}}
       <div>
         <div {{sprite id=(concat @id "-form-label") role="form-label"}}>
