@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { ExportedCardRef } from '@cardstack/runtime-common';
 import { getCardType } from '../resources/card-type';
-import { getCatalogEntry } from '../resources/catalog-entry';
+import { getSearchResults } from '../resources/search';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
@@ -67,8 +67,8 @@ export default class Schema extends Component<Signature> {
           <button {{on "click" this.displayEditor}} type="button" data-test-create-card={{name}}>Create New {{name}}</button>
         {{/let}}
       {{/if}} --}}
-      {{#if this.catalogEntry.entries.length}}
-        {{#each this.catalogEntry.entries as |entry|}}
+      {{#if this.catalogEntry.instances.length}}
+        {{#each this.catalogEntry.instances as |entry|}}
           <fieldset data-test-catalog-entry-id>
             <legend>Catalog Entry</legend>
             <LinkTo @route="application" @query={{hash path=(this.modulePath (ensureJsonExtension entry.id))}}>
@@ -119,18 +119,23 @@ export default class Schema extends Component<Signature> {
 
   @service declare localRealm: LocalRealm;
   @service declare router: RouterService;
-  cardType = getCardType(this, () => this.args.ref);
-  catalogEntry = getCatalogEntry(this, () => this.args.ref);
-  catalogEntryCardSource = {
-    module: 'https://cardstack.com/base/catalog-entry',
-    name: 'CatalogEntry',
-  };
   catalogEntryAttributes = {
     title: this.args.ref.name,
     description: `Catalog entry for ${this.args.ref.name} type`,
     ref: this.args.ref,
   }
+  catalogEntryCardSource = {
+    module: 'https://cardstack.com/base/catalog-entry',
+    name: 'CatalogEntry',
+  };
   formats = ['edit'];
+  cardType = getCardType(this, () => this.args.ref);
+  catalogEntry = getSearchResults(this, () => ({
+    filter: {
+      on: this.catalogEntryCardSource,
+      eq: { ref: this.args.ref },
+    },
+  }));
   @tracked showEditor = false;
   @tracked showCatalogEntryEditor = false;
 
