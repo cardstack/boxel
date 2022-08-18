@@ -68,10 +68,12 @@ export default class Schema extends Component<Signature> {
         {{/let}}
       {{/if}} --}}
       {{#if this.catalogEntry.entries.length}}
-        <header>Catalog Entry:</header>
         {{#each this.catalogEntry.entries as |entry|}}
-          <li data-test-catalog-entry-id>
-            {{entry.id}}
+          <fieldset data-test-catalog-entry-id>
+            <legend>Catalog Entry</legend>
+            <LinkTo @route="application" @query={{hash path=(this.modulePath (ensureJsonExtension entry.id))}}>
+              {{entry.id}}
+            </LinkTo>
             <ImportModule @url={{entry.meta.adoptsFrom.module}}>
               <:ready as |module|>
                 <CardEditor
@@ -86,24 +88,27 @@ export default class Schema extends Component<Signature> {
                 <pre>{{error.message}}</pre>
               </:error>
             </ImportModule>
-          </li>
+          </fieldset>
         {{/each}}
       {{else}}
         {{#if this.showCatalogEntryEditor}}
-          <ImportModule @url={{this.catalogEntryCardSource.module}}>
-            <:ready as |module|>
-              <CardEditor
-                @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.catalogEntryCardSource initialAttributes=this.catalogEntryAttributes}}
-                @module={{module}}
-                @onSave={{this.onSave}}
-                @onCancel={{this.onCancel}}
-              />
-            </:ready>
-            <:error as |error|>
-              <h2>Encountered {{error.type}} error</h2>
-              <pre>{{error.message}}</pre>
-            </:error>
-          </ImportModule>
+          <fieldset>
+            <legend>Create Catalog Entry</legend>
+            <ImportModule @url={{this.catalogEntryCardSource.module}}>
+              <:ready as |module|>
+                <CardEditor
+                  @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.catalogEntryCardSource initialAttributes=this.catalogEntryAttributes}}
+                  @module={{module}}
+                  @onSave={{this.onSave}}
+                  @onCancel={{this.onCancel}}
+                />
+              </:ready>
+              <:error as |error|>
+                <h2>Encountered {{error.type}} error</h2>
+                <pre>{{error.message}}</pre>
+              </:error>
+            </ImportModule>
+          </fieldset>
         {{else}}
           <button {{on "click" this.createCatalogEntry}} type="button">Create Card Type</button>
         {{/if}}
@@ -168,4 +173,11 @@ export default class Schema extends Component<Signature> {
   createCatalogEntry() {
     this.showCatalogEntryEditor = true;
   }
+}
+
+function ensureJsonExtension(url: string) {
+  if (!url.endsWith('.json')) {
+    return `${url}.json`;
+  }
+  return url;
 }
