@@ -4,6 +4,10 @@
   gap: 4px;
 }
 
+.image-list.MIN {
+  display: none;
+}
+
 .image-list.EXPANDED {
   display: grid;
   grid-template-columns: 100px 100px;

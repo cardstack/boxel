@@ -6,7 +6,14 @@
   @maximize={{fn @maximize @card}}
   @expand={{fn @expand @card}}
 >
-  {{#if (eq @state "MIN")}}
+  {{#if (or (eq @state "MIN") (eq @state "EXPANDED"))}}
+      <ul local-class={{concat "image-list " @state}}>
+          {{#each @model.images as |image index|}}
+            <li local-class="image-list-item" {{sprite id=(concat @id "-image-" index) role="image"}}>
+                <img local-class="image" src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
+            </li>
+          {{/each}}
+      </ul>
   {{else if (eq @state "MAX")}}
       <ul local-class={{concat "image-list " @state}}>
           {{#each @model.images as |image index|}}
@@ -39,13 +46,5 @@
           {{/each}}
         </ul>
       </AnimationContext>
-  {{else if (eq @state "EXPANDED")}}
-      <ul local-class={{concat "image-list " @state}}>
-          {{#each @model.images as |image index|}}
-            <li local-class="image-list-item" {{sprite id=(concat @id "-image-" index) role="image"}}>
-                <img local-class="image" src={{image.path}} alt={{image.attribution}} title={{image.attribution}}>
-            </li>
-          {{/each}}
-      </ul>
   {{/if}}
 </HomeRenoV2::Card>

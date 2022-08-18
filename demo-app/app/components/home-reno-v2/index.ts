@@ -4,6 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import { Changeset } from 'animations-experiment/models/changeset';
 import { CARD_STATES, maximizedCardList, Card } from './data/card';
 import {
+  clipVertical,
   expandedToMax,
   expandedToMaxImages,
   groupSprites,
@@ -96,6 +97,14 @@ export default class HomeRenoV2 extends Component {
         let group = groupedSprites[cardId]!;
         group.card!.element.style.opacity = '0';
         group.card?.counterpart?.lockStyles();
+        group.card!.counterpart!.element.style.zIndex = '1';
+        clipVertical(
+          group.card!.counterpart!,
+          [
+            group.card!.finalBounds!.element,
+            group.mainCardContent?.finalBounds?.element,
+          ].filter((v) => Boolean(v)) as DOMRect[]
+        );
         changeset.context.appendOrphan(group.card!.counterpart!);
       }
     }

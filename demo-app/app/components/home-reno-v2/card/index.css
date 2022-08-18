@@ -3,7 +3,7 @@
   border: 1px solid black;
   max-width: 300px;
   border-radius: var(--card-border-radius);
-  overflow: visible;
+  overflow: hidden;
   background: white;
 }
 
@@ -52,8 +52,9 @@
 }
 
 .scrollable {
-  overflow: visible;
+  overflow-y: auto;
   max-height: 90%;
+  height: 100%;
   padding: 0 var(--card-padding, 10px) var(--card-padding, 10px) var(--card-padding, 10px);
 }
 

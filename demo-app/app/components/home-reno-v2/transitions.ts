@@ -39,6 +39,13 @@ export async function maxToExpanded(
     placeholder.lockStyles();
     placeholder.element.style.zIndex = '0';
     context.appendOrphan(placeholder);
+    clipVertical(
+      placeholder,
+      [
+        spriteGroup.mainCardContent?.initialBounds?.element,
+        spriteGroup.card?.initialBounds?.element,
+      ].filter((v) => Boolean(v)) as DOMRect[]
+    );
     placeholder.setupAnimation('position', {
       duration,
       behavior,
@@ -125,15 +132,24 @@ export async function expandedToMax(
   let duration = DEFAULT_DURATION;
   let fadeOutSprites: Sprite[] = [];
 
-  // Hide the card proper
-  spriteGroup.card!.element.style.opacity = '0';
-
   // Lock counterpart of card
   let counterpartCard = spriteGroup.card!.counterpart!;
   if (!context.hasOrphan(counterpartCard)) {
     counterpartCard.lockStyles();
     context.appendOrphan(counterpartCard!);
+    counterpartCard.element.style.zIndex = '1';
+    // Makes the assumption that the maximized cards have the same height
+    clipVertical(
+      counterpartCard,
+      [
+        spriteGroup.card?.finalBounds?.element,
+        spriteGroup.mainCardContent?.finalBounds?.element,
+      ].filter((v) => Boolean(v)) as DOMRect[]
+    );
   }
+
+  // Hide the card proper
+  spriteGroup.card!.element.style.opacity = '0';
 
   // Content fades out
   let mainCardContent = spriteGroup.mainCardContent!;
@@ -198,6 +214,8 @@ export async function expandedToMaxImages(
   let duration = DEFAULT_DURATION;
   let images: Sprite[] = [];
 
+  spriteGroup.card!.element.style.zIndex = '2';
+
   let fadeInSprites = otherCards
     .filter((group) => {
       return (
@@ -229,7 +247,6 @@ export async function expandedToMaxImages(
       duration,
     }
   );
-  spriteGroup.card!.element.style.zIndex = '2';
 
   await runAnimations([...images, spriteGroup.card!]);
 
@@ -276,6 +293,13 @@ export async function maxToExpandedImages(
     placeholder.lockStyles();
     placeholder.element.style.zIndex = '0';
     context.appendOrphan(placeholder);
+    clipVertical(
+      placeholder,
+      [
+        spriteGroup.card?.initialBounds?.element,
+        spriteGroup.mainCardContent?.initialBounds?.element,
+      ].filter((v) => Boolean(v)) as DOMRect[]
+    );
     // FIXME?: This is a way of handling changes in the position of the placeholder
     // Because of other cards resizing
     placeholder.setupAnimation('position', {
@@ -544,4 +568,20 @@ export function groupSprites(changeset: Changeset) {
   }
 
   return groupsOfSprites;
+}
+
+export function clipVertical(sprite: Sprite, targets: DOMRect[]) {
+  let bottomDiff = 0;
+  let topDiff = 0;
+  for (let target of targets) {
+    bottomDiff = Math.max(
+      sprite.initialBounds!.element.height +
+        sprite.initialBounds!.element.top -
+        target.bottom +
+        1,
+      bottomDiff
+    );
+    topDiff = Math.max(target.top - sprite.initialBounds!.element.top, topDiff);
+  }
+  sprite.element.style.clipPath = `inset(${topDiff}px 0px ${bottomDiff}px 0px)`;
 }
