@@ -118,11 +118,10 @@ export class CurrentRun {
     new Map();
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
-  #api: CardAPI | undefined;
   #ignoreMap: URLMap<Ignore>;
   // using a map of a map so we have a uniqueness guarantee on the card refs
   // via the interior map keys so we don't end up with dupe refs
-  #exportedCardRefs: Map<string, Map<string, ExportedCardRef>>;
+  #exportedCardRefs: URLMap<Map<string, ExportedCardRef>>;
   private realm: Realm;
 
   private constructor({
@@ -140,7 +139,7 @@ export class CurrentRun {
     modules: URLMap<Deferred<ModuleSyntax>>;
     definitions: Map<string, CardDefinition>;
     ignoreMap: URLMap<Ignore>;
-    exportedCardRefs: Map<string, Map<string, ExportedCardRef>>;
+    exportedCardRefs: URLMap<Map<string, ExportedCardRef>>;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
     this.#reader = reader;
@@ -159,7 +158,7 @@ export class CurrentRun {
       instances: new URLMap(),
       modules: new URLMap(),
       definitions: new Map(),
-      exportedCardRefs: new Map(),
+      exportedCardRefs: new URLMap(),
       ignoreMap: new URLMap(),
     });
   }
@@ -202,10 +201,11 @@ export class CurrentRun {
           },
         ],
       ]),
-      exportedCardRefs: new Map(),
+      exportedCardRefs: new URLMap(),
       ignoreMap: new URLMap(),
     });
-    await current.run();
+    await current.visitDirectory(new URL(realm.url));
+    await current.buildExportedCardRefs();
     return current;
   }
 
@@ -216,11 +216,21 @@ export class CurrentRun {
   ) {
     let instances = new URLMap(prev.instances);
     let modules = new URLMap(prev.#modules);
-    let exportedCardRefs = new Map(prev.exportedCardRefs);
+    let exportedCardRefs = new URLMap(prev.exportedCardRefs);
     let ignoreMap = new URLMap(prev.ignoreMap);
     let definitions = new Map(prev.definitions);
-    // TODO refactor this away via invalidation mechanism...
+
+    modules.remove(url);
+    modules.remove(trimExecutableExtension(url));
+    instances.remove(url);
+    exportedCardRefs.remove(url);
+
+    // TODO this can depend on the deps we've already stored
+    //
+    // TODO this must return the list of URLs that got invalidated so that we
+    // can call visitFile for all of them below
     removeDefinitions(url, definitions);
+
     let current = new this({
       realm: prev.realm,
       reader: prev.reader,
@@ -230,18 +240,12 @@ export class CurrentRun {
       definitions,
       ignoreMap,
     });
-    await current.run({
-      url,
-      operation,
-    });
-    return current;
-  }
 
-  public get api(): CardAPI {
-    if (!this.#api) {
-      throw new Error(`Card API was accessed before it was loaded`);
+    if (operation === "update") {
+      await current.visitFile(url);
     }
-    return this.#api;
+    await current.buildExportedCardRefs();
+    return current;
   }
 
   private get reader(): Reader {
@@ -265,21 +269,6 @@ export class CurrentRun {
 
   public get ignoreMap() {
     return this.#ignoreMap;
-  }
-
-  private async run(incremental?: {
-    url: URL;
-    operation: "update" | "delete";
-  }) {
-    this.#api = await Loader.import<CardAPI>(`${baseRealm.url}card-api`);
-    if (incremental) {
-      await this.visitFile(incremental.url, {
-        delete: incremental.operation === "delete",
-      });
-    } else {
-      await this.visitDirectory(new URL(this.realm.url));
-    }
-    await this.buildExportedCardRefs();
   }
 
   private async visitDirectory(url: URL): Promise<void> {
@@ -306,10 +295,7 @@ export class CurrentRun {
     }
   }
 
-  private async visitFile(
-    url: URL,
-    opts?: { delete?: boolean }
-  ): Promise<void> {
+  private async visitFile(url: URL): Promise<void> {
     if (this.isIgnored(url)) {
       return;
     }
@@ -318,40 +304,34 @@ export class CurrentRun {
       hasExecutableExtension(url.href) &&
       url.href !== `${baseRealm.url}card-api.gts` // TODO the base card's module is not analyzable
     ) {
-      if (opts?.delete) {
-        this.#modules.remove(url);
-        this.#modules.remove(trimExecutableExtension(url));
-      } else {
-        let mod = await this.parseModule(url);
-        if (!mod) {
-          return;
-        }
-        await Promise.all(
-          mod.possibleCards
-            .filter((possibleCard) => possibleCard.exportedAs)
-            .map((possibleCard) =>
-              this.buildDefinition({
-                type: "exportedCard",
-                module: url.href,
-                name: possibleCard.exportedAs!,
-              })
-            )
-        );
+      let mod = await this.parseModule(url);
+      if (!mod) {
+        return;
       }
+      await Promise.all(
+        mod.possibleCards
+          .filter((possibleCard) => possibleCard.exportedAs)
+          .map((possibleCard) =>
+            this.buildDefinition({
+              type: "exportedCard",
+              module: url.href,
+              name: possibleCard.exportedAs!,
+            })
+          )
+      );
     }
 
     let localPath = this.#realmPaths.local(url);
     let fileRef = await this.reader.readFileAsText(localPath);
     if (!fileRef) {
-      this.#modules.remove(url);
-      return;
+      throw new Error(`missing file ${localPath}`);
     }
 
     let { content, lastModified } = fileRef;
     if (url.href.endsWith(".json")) {
       let json = JSON.parse(content);
       if (isCardDocument(json)) {
-        await this.indexCardDocument(localPath, lastModified, json, opts);
+        await this.indexCardDocument(localPath, lastModified, json);
       }
     }
   }
@@ -359,42 +339,39 @@ export class CurrentRun {
   private async indexCardDocument(
     path: LocalPath,
     lastModified: number,
-    doc: CardDocument,
-    opts?: { delete?: boolean }
+    doc: CardDocument
   ): Promise<void> {
     let instanceURL = new URL(
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
-    if (opts?.delete && this.#instances.get(instanceURL)) {
-      this.#instances.remove(instanceURL);
-    } else {
-      doc.data.id = instanceURL.href;
-      doc.data.meta.lastModified = lastModified;
-      let moduleURL = new URL(
-        doc.data.meta.adoptsFrom.module,
-        new URL(path, this.realm.url)
-      );
-      let name = doc.data.meta.adoptsFrom.name;
-      let cardRef = { module: moduleURL.href, name };
-      let module = await Loader.import<Record<string, any>>(moduleURL.href);
-      let CardClass = module[name] as typeof Card;
-      let card = CardClass.fromSerialized(doc.data.attributes);
-      let searchData = await this.api.searchDoc(card);
-      await this.buildDefinition({
-        type: "exportedCard",
-        ...cardRef,
-      });
-      this.#instances.set(instanceURL, {
-        resource: doc.data,
-        searchData,
-        types: await this.getTypes(cardRef),
-        refs: new Map(
-          (await this.buildRefs({ type: "exportedCard", ...cardRef })).map(
-            (ref) => [internalKeyFor(ref, undefined), ref]
-          ) as [string, CardRef][]
-        ),
-      });
-    }
+
+    doc.data.id = instanceURL.href;
+    doc.data.meta.lastModified = lastModified;
+    let moduleURL = new URL(
+      doc.data.meta.adoptsFrom.module,
+      new URL(path, this.realm.url)
+    );
+    let name = doc.data.meta.adoptsFrom.name;
+    let cardRef = { module: moduleURL.href, name };
+    let module = await Loader.import<Record<string, any>>(moduleURL.href);
+    let CardClass = module[name] as typeof Card;
+    let card = CardClass.fromSerialized(doc.data.attributes);
+    let api = await Loader.import<CardAPI>(`${baseRealm.url}card-api`);
+    let searchData = await api.searchDoc(card);
+    await this.buildDefinition({
+      type: "exportedCard",
+      ...cardRef,
+    });
+    this.#instances.set(instanceURL, {
+      resource: doc.data,
+      searchData,
+      types: await this.getTypes(cardRef),
+      refs: new Map(
+        (await this.buildRefs({ type: "exportedCard", ...cardRef })).map(
+          (ref) => [internalKeyFor(ref, undefined), ref]
+        ) as [string, CardRef][]
+      ),
+    });
   }
 
   // TODO this should only operated on the touched modules
@@ -404,10 +381,10 @@ export class CurrentRun {
         continue;
       }
       let { module } = def.id;
-      let refsMap = this.#exportedCardRefs.get(module);
+      let refsMap = this.#exportedCardRefs.get(new URL(module));
       if (!refsMap) {
         refsMap = new Map();
-        this.#exportedCardRefs.set(module, refsMap);
+        this.#exportedCardRefs.set(new URL(module), refsMap);
       }
       let { type: remove, ...exportedCardRef } = def.id;
       refsMap.set(internalKeyFor(def.id, undefined), exportedCardRef);

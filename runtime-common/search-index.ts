@@ -148,6 +148,10 @@ export function trimExecutableExtension(url: URL): URL {
   return url;
 }
 
+function loadAPI(): Promise<CardAPI> {
+  return Loader.import<CardAPI>(`${baseRealm.url}card-api`);
+}
+
 export class SearchIndex {
   #currentRun: CurrentRun;
 
@@ -208,8 +212,8 @@ export class SearchIndex {
   }
 
   async exportedCardsOf(module: string): Promise<ExportedCardRef[]> {
-    module = trimExecutableExtension(new URL(module, this.realm.url)).href;
-    let refsMap = this.#currentRun.exportedCardRefs.get(module);
+    let url = trimExecutableExtension(new URL(module, this.realm.url));
+    let refsMap = this.#currentRun.exportedCardRefs.get(url);
     if (!refsMap) {
       return [];
     }
@@ -394,10 +398,12 @@ export class SearchIndex {
         )
       );
 
+      let api = await loadAPI();
+
       return (entry) =>
         every(Object.entries(filter.eq), ([fieldPath, value]) => {
           if (this.cardHasType(entry, ref)) {
-            let queryValue = this.#currentRun.api.getQueryableValue(
+            let queryValue = api.getQueryableValue(
               fieldCards[fieldPath]!,
               value
             );
@@ -428,6 +434,8 @@ export class SearchIndex {
         )
       );
 
+      let api = await loadAPI();
+
       return (entry) =>
         every(Object.entries(filter.range), ([fieldPath, range]) => {
           if (this.cardHasType(entry, ref)) {
@@ -440,34 +448,22 @@ export class SearchIndex {
               (range.gt &&
                 !(
                   value >
-                  this.#currentRun.api.getQueryableValue(
-                    fieldCards[fieldPath]!,
-                    range.gt
-                  )
+                  api.getQueryableValue(fieldCards[fieldPath]!, range.gt)
                 )) ||
               (range.lt &&
                 !(
                   value <
-                  this.#currentRun.api.getQueryableValue(
-                    fieldCards[fieldPath]!,
-                    range.lt
-                  )
+                  api.getQueryableValue(fieldCards[fieldPath]!, range.lt)
                 )) ||
               (range.gte &&
                 !(
                   value >=
-                  this.#currentRun.api.getQueryableValue(
-                    fieldCards[fieldPath]!,
-                    range.gte
-                  )
+                  api.getQueryableValue(fieldCards[fieldPath]!, range.gte)
                 )) ||
               (range.lte &&
                 !(
                   value <=
-                  this.#currentRun.api.getQueryableValue(
-                    fieldCards[fieldPath]!,
-                    range.lte
-                  )
+                  api.getQueryableValue(fieldCards[fieldPath]!, range.lte)
                 ))
             ) {
               return false;

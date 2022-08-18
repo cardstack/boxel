@@ -541,7 +541,6 @@ export class Realm {
     });
   }
 
-  // todo: I think we get rid of this
   private async readFileAsText(
     path: LocalPath,
     opts: { withFallbacks?: true } = {}
