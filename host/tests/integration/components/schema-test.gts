@@ -36,7 +36,6 @@ module('Integration | schema', function (hooks) {
     assert.dom('[data-test-card-id]').hasText(`Card ID: ${testRealmURL}person/Person`);
     assert.dom('[data-test-adopts-from').hasText('Adopts From: https://cardstack.com/base/card-api/Card');
     assert.dom('[data-test-field="firstName"]').hasText('firstName - contains - field card ID: https://cardstack.com/base/string/default');
-    assert.dom('[data-test-create-card="Person"]').exists();
   });
 
   test('renders link to field card for contained field', async function(assert) {
@@ -53,6 +52,5 @@ module('Integration | schema', function (hooks) {
     assert.dom('[data-test-field="author"] a[href="/?path=person"]').exists('link to person card exists');
     assert.dom('[data-test-field="title"]').exists('the title field exists')
     assert.dom('[data-test-field="title"] a').doesNotExist('the title field has no link');
-    assert.dom('[data-test-create-card="Post"]').exists();
   });
 });
