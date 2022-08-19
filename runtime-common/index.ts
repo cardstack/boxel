@@ -36,11 +36,6 @@ export interface DirectoryEntryRelationship {
 import { RealmPaths } from "./paths";
 export const baseRealm = new RealmPaths("https://cardstack.com/base/");
 
-export const catalogEntryRef = {
-  module: "https://cardstack.com/base/catalog-entry",
-  name: "CatalogEntry",
-};
-
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 
 // From https://github.com/iliakan/detect-node

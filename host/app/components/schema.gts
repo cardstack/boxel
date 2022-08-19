@@ -11,7 +11,7 @@ import { cached } from '@glimmer/tracking';
 import { LinkTo } from '@ember/routing';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
-import CardCatalogEditor from './card-catalog-editor';
+import CardCatalog from './card-catalog';
 
 interface Signature {
   Args: {
@@ -42,7 +42,7 @@ export default class Schema extends Component<Signature> {
             </li>
           {{/each}}
         </ul>
-        <CardCatalogEditor @ref={{@ref}} />
+        <CardCatalog @cardRef={{@ref}} />
       </p>
     {{/if}}
   </template>
