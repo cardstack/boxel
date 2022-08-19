@@ -196,7 +196,6 @@ export async function expandedToMax(
       duration,
     }
   );
-  spriteGroup.card!.element.style.zIndex = '2';
   await runAnimations([spriteGroup.card!]);
 
   let fadeInSprites: Sprite[] = [];
@@ -553,7 +552,7 @@ export function groupSprites(changeset: Changeset) {
   for (let sprite of changeset.insertedSprites) {
     let id = getCardId(sprite);
     groupsOfSprites[id as string] ??= {
-      state: 'STATIC',
+      state: 'INSERTED',
       card: null,
       mainCardContent: null,
       title: null,
@@ -580,7 +579,7 @@ export function groupSprites(changeset: Changeset) {
   for (let sprite of changeset.removedSprites) {
     let id = getCardId(sprite);
     groupsOfSprites[id as string] ??= {
-      state: 'STATIC',
+      state: 'REMOVED',
       card: null,
       mainCardContent: null,
       title: null,
