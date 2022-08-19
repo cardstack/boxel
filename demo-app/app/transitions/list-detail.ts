@@ -62,7 +62,9 @@ export default function listTransition(changeset: Changeset): Promise<void> {
 
       context.appendOrphan(keptSprite.counterpart);
       keptSprite.counterpart.lockStyles(
-        keptSprite.finalBounds.relativeToPosition(keptSprite.finalBounds.parent)
+        keptSprite.finalBounds.relativeToPosition(
+          keptSprite.finalBounds.parent!
+        )
       );
       keptSprite.hide();
       keptSprite.counterpart.setupAnimation('style', {
@@ -130,10 +132,10 @@ export default function listTransition(changeset: Changeset): Promise<void> {
           keptSprite.finalBounds
       );
       let initialBounds = keptSprite.initialBounds.relativeToPosition(
-        keptSprite.finalBounds.parent
+        keptSprite.finalBounds.parent!
       );
       let finalBounds = keptSprite.finalBounds.relativeToPosition(
-        keptSprite.finalBounds.parent
+        keptSprite.finalBounds.parent!
       );
       keptSprite.hide();
 
@@ -142,7 +144,9 @@ export default function listTransition(changeset: Changeset): Promise<void> {
 
       context.appendOrphan(keptSprite.counterpart);
       keptSprite.counterpart.lockStyles(
-        keptSprite.finalBounds.relativeToPosition(keptSprite.finalBounds.parent)
+        keptSprite.finalBounds.relativeToPosition(
+          keptSprite.finalBounds.parent!
+        )
       );
       keptSprite.counterpart.setupAnimation('position', {
         startX: deltaX,

@@ -28,7 +28,7 @@ export default function (
       'kept sprite should always have initialBounds & finalBounds',
       s.initialBounds && s.finalBounds
     );
-    let initialBounds = s.initialBounds.relativeToContext;
+    let initialBounds = s.initialBounds.relativeToParent;
     let initialStyles = s.initialComputedStyle;
     let initialVelocity = s.initialBounds.velocity;
 
@@ -45,16 +45,16 @@ export default function (
         counterpart.initialBounds
       );
 
-      initialBounds = counterpart.initialBounds.relativeToContext;
+      initialBounds = counterpart.initialBounds.relativeToParent;
       initialStyles = counterpart.initialComputedStyle;
     } else {
       // This is the same Sprite moving elsewhere
-      initialBounds = s.initialBounds.relativeToContext;
+      initialBounds = s.initialBounds.relativeToParent;
       initialStyles = s.initialComputedStyle;
     }
 
     assert('kept sprite should always have finalBounds', s.finalBounds);
-    let finalBounds = s.finalBounds.relativeToContext;
+    let finalBounds = s.finalBounds.relativeToParent;
     //let deltaX = finalBounds.left - initialBounds.left;
     //let deltaY = finalBounds.top - initialBounds.top;
     let velocity = initialVelocity;
