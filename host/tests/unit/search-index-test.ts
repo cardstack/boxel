@@ -651,7 +651,7 @@ module('Unit | search-index', function () {
     let indexer = realm.searchIndex;
     await indexer.run();
     let refs = (await indexer.searchEntry(new URL(`${testRealmURL}person-1`)))
-      ?.refs;
+      ?.deps;
     assert.deepEqual(
       [...refs!.keys()].sort(),
       [
@@ -771,7 +771,7 @@ posts/ignore-me.gts
     }
   });
 
-  test("search index incremental update doesn't process ignored files", async function (assert) {
+  test("incremental indexing doesn't process ignored files", async function (assert) {
     const cardSource = `
       import { Card } from 'https://cardstack.com/base/card-api';
       export class Post extends Card {}
@@ -797,6 +797,11 @@ posts/ignore-me.gts
       def,
       undefined,
       'definition does not exist because file is ignored'
+    );
+    assert.strictEqual(
+      indexer.stats.definitionsBuilt,
+      0,
+      'no definitions were processed'
     );
   });
 

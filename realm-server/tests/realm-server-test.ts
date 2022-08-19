@@ -1,7 +1,7 @@
 import { module, test } from "qunit";
 import supertest, { Test, SuperTest } from "supertest";
 import { createRealmServer } from "../server";
-import { join } from "path";
+import { join, resolve } from "path";
 import { Server } from "http";
 import { dirSync, setGracefulCleanup, DirResult } from "tmp";
 import { copySync, existsSync, readFileSync, readJSONSync } from "fs-extra";
@@ -18,7 +18,6 @@ import {
 } from "@cardstack/runtime-common";
 import { stringify } from "qs";
 import { NodeAdapter } from "../node-realm";
-import { resolve } from "path";
 import { Query } from "@cardstack/runtime-common/query";
 
 setGracefulCleanup();

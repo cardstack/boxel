@@ -4,6 +4,7 @@ import { CurrentRun, SearchEntry } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import { Loader } from "./loader";
+import flatMap from "lodash/flatMap";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
@@ -175,9 +176,8 @@ export class SearchIndex {
     });
   }
 
-  // For debugging only--DELETE THIS
-  get currentRun() {
-    return this.#currentRun;
+  get stats() {
+    return this.#currentRun.stats;
   }
 
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
@@ -194,7 +194,9 @@ export class SearchIndex {
       name: "Card",
     });
 
-    return [...this.#currentRun.instances.values()]
+    return flatMap([...this.#currentRun.instances.values()], (maybeError) =>
+      maybeError.type !== "error" ? [maybeError.entry] : []
+    )
       .filter(matcher)
       .sort(this.buildSorter(query.sort))
       .map((entry) => entry.resource);
@@ -208,7 +210,11 @@ export class SearchIndex {
     ref: CardRef,
     relativeTo = new URL(this.realm.url)
   ): Promise<CardDefinition | undefined> {
-    return await this.#currentRun.typeOf(ref, relativeTo);
+    let result = await this.#currentRun.typeOf(ref, relativeTo);
+    if (result?.type !== "error") {
+      return result?.def;
+    }
+    return undefined;
   }
 
   async exportedCardsOf(module: string): Promise<ExportedCardRef[]> {
@@ -221,12 +227,20 @@ export class SearchIndex {
   }
 
   async card(url: URL): Promise<CardResource | undefined> {
-    return this.#currentRun.instances.get(url)?.resource;
+    let maybeError = this.#currentRun.instances.get(url);
+    if (maybeError && maybeError.type !== "error") {
+      return maybeError.entry.resource;
+    }
+    return undefined;
   }
 
   // this is meant for tests only
   async searchEntry(url: URL): Promise<SearchEntry | undefined> {
-    return this.#currentRun.instances.get(url);
+    let result = this.#currentRun.instances.get(url);
+    if (result?.type !== "error") {
+      return result?.entry;
+    }
+    return undefined;
   }
 
   private cardHasType(entry: SearchEntry, ref: CardRef): boolean {
@@ -239,10 +253,11 @@ export class SearchIndex {
     ref: CardRef,
     fieldSegments: string[]
   ): Promise<CardDefinition | undefined> {
-    let def = await this.#currentRun.typeOf(ref);
-    if (!def) {
+    let defOrError = await this.#currentRun.typeOf(ref);
+    if (!defOrError || defOrError?.type === "error") {
       return undefined;
     }
+    let { def } = defOrError;
     let fieldName = fieldSegments.shift()!;
     let fieldDef = def.fields.get(fieldName);
     if (!fieldDef) {
@@ -258,7 +273,11 @@ export class SearchIndex {
         ...fieldSegments,
       ]);
     }
-    return this.#currentRun.typeOf(fieldDef.fieldCard);
+    let maybeError = await this.#currentRun.typeOf(fieldDef.fieldCard);
+    if (maybeError?.type !== "error") {
+      return maybeError?.def;
+    }
+    return undefined;
   }
 
   private async loadFieldCard(
