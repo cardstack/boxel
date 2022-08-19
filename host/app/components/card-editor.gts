@@ -9,7 +9,7 @@ import { eq } from '../helpers/truth-helpers';
 import { restartableTask, task } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
-import { CardJSON, isCardJSON, isCardDocument } from '@cardstack/runtime-common';
+import { CardJSON, isCardJSON, isCardDocument, ExportedCardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
@@ -19,10 +19,7 @@ import type { Card, Format, } from 'https://cardstack.com/base/card-api';
 export interface NewCardArgs {
   type: 'new';
   realmURL: string;
-  cardSource: {
-    module: string;
-    name: string;
-  };
+  cardSource: ExportedCardRef;
   initialAttributes?: CardJSON['data']['attributes'];
 }
 export interface ExistingCardArgs {

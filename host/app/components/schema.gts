@@ -28,46 +28,26 @@ export default class Schema extends Component<Signature> {
   <template>
     {{#if this.cardType.type}}
       <p>
-      {{!-- {{#if this.showEditor}}
-        <ImportModule @url={{this.cardType.type.exportedCardContext.module}}>
-          <:ready as |module|>
-            <CardEditor
-              @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.cardType.type.exportedCardContext}}
-              @module={{module}}
-              @onSave={{this.onSave}}
-              @onCancel={{this.onCancel}}
-            />
-          </:ready>
-          <:error as |error|>
-            <h2>Encountered {{error.type}} error</h2>
-            <pre>{{error.message}}</pre>
-          </:error>
-        </ImportModule>
-      {{else}} --}}
-          <div data-test-card-id>Card ID: {{this.cardType.type.id}}</div>
-          <div data-test-adopts-from>Adopts From: {{this.cardType.type.super.id}}</div>
-          <div>Fields:</div>
-          <ul>
-            {{#each this.cardType.type.fields as |field|}}
-              <li data-test-field={{field.name}}>{{field.name}} - {{field.type}} - field card ID:
-                {{#if (this.inRealm field.card.exportedCardContext.module)}}
-                  <LinkTo
-                    @route="application"
-                    @query={{hash path=(this.modulePath field.card.exportedCardContext.module)}}
-                  >
-                    {{field.card.id}}
-                  </LinkTo>
-                {{else}}
+        <div data-test-card-id>Card ID: {{this.cardType.type.id}}</div>
+        <div data-test-adopts-from>Adopts From: {{this.cardType.type.super.id}}</div>
+        <div>Fields:</div>
+        <ul>
+          {{#each this.cardType.type.fields as |field|}}
+            <li data-test-field={{field.name}}>{{field.name}} - {{field.type}} - field card ID:
+              {{#if (this.inRealm field.card.exportedCardContext.module)}}
+                <LinkTo
+                  @route="application"
+                  @query={{hash path=(this.modulePath field.card.exportedCardContext.module)}}
+                >
                   {{field.card.id}}
-                {{/if}}
-              </li>
-            {{/each}}
-          </ul>
-        {{!-- {{#let this.cardType.type.exportedCardContext.name as |name|}}
-          <button {{on "click" this.displayEditor}} type="button" data-test-create-card={{name}}>Create New {{name}}</button>
-        {{/let}}
-      {{/if}} --}}
-      {{#if this.catalogEntry.instances.length}}
+                </LinkTo>
+              {{else}}
+                {{field.card.id}}
+              {{/if}}
+            </li>
+          {{/each}}
+        </ul>
+
         {{#each this.catalogEntry.instances as |entry|}}
           <fieldset data-test-catalog-entry-id>
             <legend>Catalog Entry</legend>
@@ -90,54 +70,55 @@ export default class Schema extends Component<Signature> {
             </ImportModule>
           </fieldset>
         {{/each}}
-      {{else}}
-        {{#if this.showCatalogEntryEditor}}
-          <fieldset>
-            <legend>Create Catalog Entry</legend>
-            <ImportModule @url={{this.catalogEntryCardSource.module}}>
-              <:ready as |module|>
-                <CardEditor
-                  @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.catalogEntryCardSource initialAttributes=this.catalogEntryAttributes}}
-                  @module={{module}}
-                  @onSave={{this.onSave}}
-                  @onCancel={{this.onCancel}}
-                />
-              </:ready>
-              <:error as |error|>
-                <h2>Encountered {{error.type}} error</h2>
-                <pre>{{error.message}}</pre>
-              </:error>
-            </ImportModule>
-          </fieldset>
-        {{else}}
-          <button {{on "click" this.createCatalogEntry}} type="button">Create Card Type</button>
-        {{/if}}
-      {{/if}}
+
+        {{#unless this.catalogEntry.instances.length}}
+          {{#if this.showEditor}}
+            <fieldset>
+              <legend>Create Catalog Entry</legend>
+              <ImportModule @url={{this.catalogEntryRef.module}}>
+                <:ready as |module|>
+                  <CardEditor
+                    @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.catalogEntryRef initialAttributes=this.catalogEntryAttributes}}
+                    @module={{module}}
+                    @onSave={{this.onSave}}
+                    @onCancel={{this.onCancel}}
+                  />
+                </:ready>
+                <:error as |error|>
+                  <h2>Encountered {{error.type}} error</h2>
+                  <pre>{{error.message}}</pre>
+                </:error>
+              </ImportModule>
+            </fieldset>
+          {{else}}
+            <button {{on "click" this.displayEditor}} type="button">
+              Publish Card Type
+            </button>
+          {{/if}}
+        {{/unless}}
       </p>
     {{/if}}
   </template>
 
   @service declare localRealm: LocalRealm;
   @service declare router: RouterService;
+  catalogEntryRef = {
+    module: 'https://cardstack.com/base/catalog-entry',
+    name: 'CatalogEntry',
+  };
   catalogEntryAttributes = {
     title: this.args.ref.name,
     description: `Catalog entry for ${this.args.ref.name} type`,
     ref: this.args.ref,
   }
-  catalogEntryCardSource = {
-    module: 'https://cardstack.com/base/catalog-entry',
-    name: 'CatalogEntry',
-  };
-  formats = ['edit'];
   cardType = getCardType(this, () => this.args.ref);
   catalogEntry = getSearchResults(this, () => ({
     filter: {
-      on: this.catalogEntryCardSource,
+      on: this.catalogEntryRef,
       eq: { ref: this.args.ref },
     },
   }));
   @tracked showEditor = false;
-  @tracked showCatalogEntryEditor = false;
 
   @cached
   get realmPath() {
@@ -165,18 +146,12 @@ export default class Schema extends Component<Signature> {
   @action
   onCancel() {
     this.showEditor = false;
-    this.showCatalogEntryEditor = false;
   }
 
   @action
   onSave(url: string) {
     let path = this.realmPath.local(new URL(url));
     this.router.transitionTo({ queryParams: { path } });
-  }
-
-  @action
-  createCatalogEntry() {
-    this.showCatalogEntryEditor = true;
   }
 }
 
