@@ -229,6 +229,7 @@ module('Unit | Util | ChangesetBuilder', function () {
       new ContextAwareBounds({
         element: new DOMRect(0, 0, 0, 0),
         contextElement: new DOMRect(0, 0, 0, 0),
+        parent: new DOMRect(0, 0, 0, 0),
       })
     );
     assert.equal(removedSprite?.finalBounds, undefined);
@@ -249,6 +250,7 @@ module('Unit | Util | ChangesetBuilder', function () {
       new ContextAwareBounds({
         element: new DOMRect(0, 0, 0, 0),
         contextElement: new DOMRect(0, 0, 0, 0),
+        parent: new DOMRect(0, 0, 0, 0),
       })
     );
     assert.deepEqual(
@@ -256,6 +258,7 @@ module('Unit | Util | ChangesetBuilder', function () {
       new ContextAwareBounds({
         element: new DOMRect(0, 4, 0, 0),
         contextElement: context1NextDOMRect,
+        parent: context1NextDOMRect,
       })
     );
 
@@ -276,6 +279,7 @@ module('Unit | Util | ChangesetBuilder', function () {
       new ContextAwareBounds({
         element: new DOMRect(0, 0, 0, 0),
         contextElement: context2NextDOMRect,
+        parent: context2NextDOMRect,
       })
     );
     assert.equal(
@@ -498,6 +502,7 @@ module('Unit | Util | ChangesetBuilder', function () {
       new ContextAwareBounds({
         element: freshlyRemovedNextDOMRect,
         contextElement: new DOMRect(),
+        parent: new DOMRect(),
       })
     );
     assert.deepEqual(
@@ -505,6 +510,7 @@ module('Unit | Util | ChangesetBuilder', function () {
       new ContextAwareBounds({
         element: freshlyAddedNextDOMRect,
         contextElement: outerContextNextDOMRect,
+        parent: innerContextNextDOMRect,
       })
     );
     assert.deepEqual(
@@ -512,6 +518,7 @@ module('Unit | Util | ChangesetBuilder', function () {
       new ContextAwareBounds({
         element: freshlyRemovedNextDOMRect,
         contextElement: new DOMRect(),
+        parent: new DOMRect(),
       })
     );
     assert.deepEqual(
@@ -519,6 +526,7 @@ module('Unit | Util | ChangesetBuilder', function () {
       new ContextAwareBounds({
         element: freshlyAddedNextDOMRect,
         contextElement: outerContextNextDOMRect,
+        parent: innerContextNextDOMRect,
       })
     );
   });
@@ -628,6 +636,7 @@ module('Unit | Util | ChangesetBuilder', function () {
       new ContextAwareBounds({
         element: spriteFromPreviousRenderNextDOMRect,
         contextElement: new DOMRect(),
+        parent: new DOMRect(),
       }),
       'kept sprite intiial bounds are ok'
     );
@@ -636,6 +645,7 @@ module('Unit | Util | ChangesetBuilder', function () {
       new ContextAwareBounds({
         element: new DOMRect(0, 1, 1, 0),
         contextElement: innerContextNextDOMRect,
+        parent: innerContextNextDOMRect,
       }),
       'kept sprite final bounds are ok'
     );
