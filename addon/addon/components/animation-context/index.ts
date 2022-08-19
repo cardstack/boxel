@@ -2,7 +2,6 @@ import Component from '@glimmer/component';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import Ember from 'ember';
-import { reads } from 'macro-decorators';
 import { Changeset } from 'animations-experiment/models/changeset';
 import Sprite from 'animations-experiment/models/sprite';
 import { inject as service } from '@ember/service';
@@ -27,7 +26,10 @@ export default class AnimationContextComponent
   implements IContext
 {
   @service declare animations: AnimationsService;
-  @reads('args.id') id: string | undefined;
+
+  get id(): string | undefined {
+    return this.args.id;
+  }
 
   element!: HTMLElement; //set by template
   orphansElement: HTMLElement | null = null; //set by template
