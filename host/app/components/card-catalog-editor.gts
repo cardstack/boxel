@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { getSearchResults } from '../resources/search';
-import type { ExportedCardRef } from '@cardstack/runtime-common';
+import { type ExportedCardRef, catalogEntryRef } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import CardEditor from './card-editor';
@@ -78,10 +78,7 @@ export default class CardCatalogEditor extends Component<Signature> {
 
   @service declare localRealm: LocalRealm;
   @service declare router: RouterService;
-  catalogEntryRef: ExportedCardRef = {
-    module: 'https://cardstack.com/base/catalog-entry',
-    name: 'CatalogEntry',
-  };
+  catalogEntryRef = catalogEntryRef;
   catalogEntryAttributes = {
     title: this.args.ref.name,
     description: `Catalog entry for ${this.args.ref.name} type`,

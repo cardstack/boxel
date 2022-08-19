@@ -7,6 +7,8 @@ import { directory, Entry } from '../resources/directory';
 import { eq } from '../helpers/truth-helpers'
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
+import CreateNew from './create-new';
 
 interface Args {
   Args: {
@@ -23,7 +25,7 @@ export default class FileTree extends Component<Args> {
       <button {{on "click" this.closeRealm}}>Close local realm</button>
       {{#each this.listing.entries key="path" as |entry|}}
         {{#if (eq entry.kind 'file')}}
-          <div class="item file {{if (eq entry.path this.args.path) 'selected'}} indent-{{entry.indent}}"
+          <div class="item file {{if (eq entry.path @path) 'selected'}} indent-{{entry.indent}}"
             {{on "click" (fn this.open entry)}}>
           {{entry.name}}
           </div>
@@ -33,15 +35,21 @@ export default class FileTree extends Component<Args> {
           </div>
         {{/if}}
       {{/each}}
+      <button {{on "click" this.openCatalog}} type="button">Create New Card</button>
+      {{!-- template-lint-disable no-inline-styles --}}
+      <dialog open={{this.isCatalogOpen}} style="position:absolute;z-index:1;top:10vh;">
+        <CreateNew @onClose={{this.closeCatalog}} />
+      </dialog>
     {{else if @localRealm.isLoading }}
       ...
     {{else if @localRealm.isEmpty}}
       <button {{on "click" this.openRealm}}>Open a local realm</button>
     {{/if}}
   </template>
-    
+
   listing = directory(this, () => this.args.localRealm.isAvailable ? "http://local-realm/" : undefined)
   @service declare router: RouterService;
+  @tracked isCatalogOpen = false;
 
   @action
   openRealm() {
@@ -60,5 +68,15 @@ export default class FileTree extends Component<Args> {
   open(entry: Entry) {
     let { path } = entry;
     this.router.transitionTo({ queryParams: { path } });
+  }
+
+  @action
+  openCatalog() {
+    this.isCatalogOpen = true;
+  }
+
+  @action
+  closeCatalog() {
+    this.isCatalogOpen = false;
   }
 }
