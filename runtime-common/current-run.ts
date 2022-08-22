@@ -601,9 +601,7 @@ export class CurrentRun {
       let error: CardDefinitionWithErrors = {
         type: "error",
         id,
-        error: {
-          message,
-        },
+        error: { message },
       };
       this.stats.definitionErrors++;
       this.#definitions.set(key, error);
@@ -612,7 +610,9 @@ export class CurrentRun {
     };
 
     if (
-      !this.isLocal(new URL(getExportedCardContext(ref).module, relativeTo))
+      !this.#realmPaths.inRealm(
+        new URL(getExportedCardContext(ref).module, relativeTo)
+      )
     ) {
       if (ref.type !== "exportedCard") {
         return handleError(
@@ -730,10 +730,6 @@ export class CurrentRun {
       type: "def",
       def: { id, key, super: superDefMaybeError.def.id, fields },
     });
-  }
-
-  private isLocal(url: URL): boolean {
-    return url.href.startsWith(this.realm.url);
   }
 
   private async getExternalCardDefinition(
