@@ -58,9 +58,7 @@ export default class ContextAwareBounds {
     let { element, parent } = this;
 
     if (!parent) {
-      // TODO: in the case of an interrupted orphan, there's no defined parent (in the sprite tree).
-      //  The below is a hotfix to send back the correct bounds for the situation. We need a better solution.
-      return this.relativeToContext;
+      throw new Error('Could not access parent DOMRect in relativeToParent');
     }
 
     return new DOMRect(
