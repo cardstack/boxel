@@ -179,7 +179,7 @@ export class TestRealmAdapter implements RealmAdapter {
       if (name === '') {
         return dir;
       }
-      if (!dir[name]) {
+      if (dir[name] === undefined) {
         if (
           segments.length > 0 ||
           (segments.length === 0 && targetKind === 'directory')
