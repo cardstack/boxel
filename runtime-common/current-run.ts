@@ -509,7 +509,7 @@ export class CurrentRun {
     let ownRef = def.id;
     if (deps.find((ref) => isEqual(ref, ownRef))) {
       // breaks cycles
-      return { type: "deps", deps: deps };
+      return { type: "deps", deps };
     }
     deps.push(ownRef);
     let fieldRefs = [...def.fields.values()].map((field) => field.fieldCard);
@@ -571,69 +571,84 @@ export class CurrentRun {
     if (existing) {
       return existing;
     }
-
     let cachedDefinitionBuild = this.#definitionBuildCache.get(cacheKey);
     if (cachedDefinitionBuild) {
       return await cachedDefinitionBuild.promise;
     }
-
     let deferred = new Deferred<CardDefinitionWithErrors | undefined>();
     this.#definitionBuildCache.set(cacheKey, deferred);
+
+    let createDefinition = (
+      key: string,
+      def: CardDefinitionWithErrors
+    ): CardDefinitionWithErrors => {
+      this.stats.definitionsBuilt++;
+      this.#definitions.set(key, def);
+      deferred.resolve(def);
+      return def;
+    };
+
+    let noDefinition = (): undefined => {
+      deferred.resolve(undefined);
+      return undefined;
+    };
+
+    let handleError = (
+      id: CardRef,
+      key: string,
+      message: string,
+      brokenReference?: CardRef
+    ): CardDefinitionWithErrors => {
+      let error: CardDefinitionWithErrors = {
+        type: "error",
+        id,
+        error: {
+          message,
+          brokenReference,
+        },
+      };
+      this.stats.definitionErrors++;
+      this.#definitions.set(key, error);
+      deferred.resolve(error);
+      return error;
+    };
 
     if (
       !this.isLocal(new URL(getExportedCardContext(ref).module, relativeTo))
     ) {
       if (ref.type !== "exportedCard") {
-        let error: CardDefinitionWithErrors = {
-          type: "error",
-          id: ref,
-          error: {
-            message: `Cannot get non-exported card ref from module in a different realm: ${JSON.stringify(
-              ref
-            )}`,
-          },
-        };
-        this.stats.definitionErrors++;
-        this.#definitions.set(cacheKey, error);
-        deferred.resolve(error);
-        return error;
+        return handleError(
+          ref,
+          cacheKey,
+          `Cannot get non-exported card ref from module in a different realm: ${JSON.stringify(
+            ref
+          )}`
+        );
       }
       let def = await this.getExternalCardDefinition(ref);
       if (!def) {
-        let error: CardDefinitionWithErrors = {
-          type: "error",
-          id: ref,
-          error: {
-            message: `card ref from different realm could not be found ${JSON.stringify(
-              ref
-            )}`,
-            brokenReference: ref,
-          },
-        };
-        this.stats.definitionErrors++;
-        this.#definitions.set(cacheKey, error);
-        deferred.resolve(error);
-        return error;
+        return handleError(
+          ref,
+          cacheKey,
+          `card ref from different realm could not be found ${JSON.stringify(
+            ref
+          )}`,
+          ref
+        );
       }
       // in this case the cacheKey is the actual definition id
-      this.stats.definitionsBuilt++;
-      this.#definitions.set(cacheKey, def);
-      deferred.resolve(def);
-      return def;
+      return createDefinition(cacheKey, def);
     }
 
     let parsedModule = await this.parseModule(url);
     if (!parsedModule) {
-      deferred.resolve(undefined);
-      return undefined;
+      return noDefinition();
     }
-
     let found = parsedModule.find(ref);
     if (!found) {
       // this ref from a syntax perspective appeared to be a card, but from a
       // semantic perspective it actually is not a card
-      deferred.resolve(undefined);
-      return undefined;
+      return noDefinition();
     }
     if (found.result === "remote") {
       let promise = this.buildDefinition(found.ref, url);
@@ -642,7 +657,6 @@ export class CurrentRun {
     }
 
     let possibleCard = found.class;
-
     let id: CardRef = possibleCard.exportedAs
       ? {
           type: "exportedCard",
@@ -650,48 +664,36 @@ export class CurrentRun {
           name: possibleCard.exportedAs,
         }
       : ref;
-
     let key = internalKeyFor(id, url);
     let def = this.#definitions.get(key);
     if (def && key !== cacheKey) {
-      this.#definitions.set(cacheKey, def);
-      deferred.fulfill(def);
-      return def;
+      return createDefinition(cacheKey, def); // we are providing the existing definition at cacheKey too
     }
 
     let superDefMaybeError = await this.buildDefinition({
       type: "ancestorOf",
       card: id,
     });
-
     if (!superDefMaybeError) {
-      deferred.resolve(undefined);
-      return undefined;
+      return noDefinition();
     }
     if (superDefMaybeError.type === "error") {
-      let error: CardDefinitionWithErrors = {
-        type: "error",
+      // something to think about: our error doesn't have an absolute card
+      // ref that it can use to trigger the invalidation of the error
+      // document. which means we might have to always invalidate definition
+      // error results
+      return handleError(
         id,
-        error: {
-          // something to think about: our error doesn't have an absolute card
-          // ref that it can use to trigger the invalidation of the error
-          // document. which means we might have to always invalidate definition
-          // error results
-          message: `parent definition of ${JSON.stringify(
-            id
-          )} has indexing errors: ${superDefMaybeError.error.message}`,
-        },
-      };
-      this.stats.definitionErrors++;
-      this.#definitions.set(cacheKey, error);
-      deferred.resolve(error);
-      return error;
+        key,
+        `parent definition of ${JSON.stringify(id)} has indexing errors: ${
+          superDefMaybeError.error.message
+        }`
+      );
     }
 
     let fields: CardDefinition["fields"] = new Map(
       superDefMaybeError.def.fields
     );
-
     let fieldErrors: string[] = [];
     for (let [fieldName, possibleField] of possibleCard.possibleFields) {
       if (!isOurFieldDecorator(possibleField.decorator, url)) {
@@ -724,27 +726,13 @@ export class CurrentRun {
       }
     }
     if (fieldErrors.length > 0) {
-      let error: CardDefinitionWithErrors = {
-        type: "error",
-        id,
-        error: {
-          message: fieldErrors.join(". "),
-        },
-      };
-      this.stats.definitionErrors++;
-      this.#definitions.set(cacheKey, error);
-      deferred.resolve(error);
-      return error;
+      return handleError(id, key, fieldErrors.join(". "));
     }
 
-    def = {
+    return createDefinition(key, {
       type: "def",
       def: { id, key, super: superDefMaybeError.def.id, fields },
-    };
-    this.stats.definitionsBuilt++;
-    this.#definitions.set(key, def);
-    deferred.resolve(def);
-    return def;
+    });
   }
 
   private isLocal(url: URL): boolean {
