@@ -414,6 +414,9 @@ export class SearchIndex {
         )
       );
 
+      // TODO when we are ready to execute queries within computeds, we'll need to
+      // use the loader instance from current-run and not the global loader, as
+      // the card definitions may have changed in the current-run loader
       let api = await loadAPI();
 
       return (entry) =>
@@ -450,6 +453,9 @@ export class SearchIndex {
         )
       );
 
+      // TODO when we are ready to execute queries within computeds, we'll need to
+      // use the loader instance from current-run and not the global loader, as
+      // the card definitions may have changed in the current-run loader
       let api = await loadAPI();
 
       return (entry) =>

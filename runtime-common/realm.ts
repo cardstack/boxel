@@ -5,7 +5,6 @@ import {
   CardRef,
   CardDocument,
   isCardDocument,
-  hasExecutableExtension,
 } from "./search-index";
 import { Loader } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
@@ -132,9 +131,6 @@ export class Realm {
     contents: string
   ): Promise<{ lastModified: number }> {
     let results = await this.#adapter.write(path, contents);
-    if (hasExecutableExtension(path)) {
-      Loader.clearCache();
-    }
     await this.#searchIndex.update(this.paths.fileURL(path));
 
     return results;
@@ -142,9 +138,6 @@ export class Realm {
 
   async delete(path: LocalPath): Promise<void> {
     await this.#adapter.remove(path);
-    if (hasExecutableExtension(path)) {
-      Loader.clearCache();
-    }
     await this.#searchIndex.update(this.paths.fileURL(path), {
       delete: true,
     });

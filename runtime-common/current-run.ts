@@ -145,6 +145,7 @@ export class CurrentRun {
   // using a map of a map so we have a uniqueness guarantee on the card refs
   // via the interior map keys so we don't end up with dupe refs
   #exportedCardRefs: URLMap<Map<string, ExportedCardRef>>;
+  #loader = Loader.createLoaderFromGlobal();
   private realm: Realm;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -401,7 +402,7 @@ export class CurrentRun {
     let cardRef = { module: moduleURL.href, name };
     let module: Record<string, any> | undefined;
     try {
-      module = await Loader.import<Record<string, any>>(moduleURL.href);
+      module = await this.#loader.import<Record<string, any>>(moduleURL.href);
     } catch (err: any) {
       if (!(err instanceof CardError) || err.response.status !== 404) {
         throw err;
@@ -412,7 +413,7 @@ export class CurrentRun {
     if (module) {
       let CardClass = module[name] as typeof Card;
       let card = CardClass.fromSerialized(doc.data.attributes);
-      let api = await Loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
       let searchData = await api.searchDoc(card);
       typesMaybeError = await this.getTypes(cardRef);
       depsMaybeError = await this.buildDeps({
@@ -757,7 +758,7 @@ export class CurrentRun {
       type: "exportedCard",
       ...ref,
     })}`;
-    let response = await Loader.fetch(url, {
+    let response = await this.#loader.fetch(url, {
       headers: {
         Accept: "application/vnd.api+json",
       },

@@ -65,6 +65,16 @@ export class Loader {
     return Loader.#instance;
   }
 
+  // this will return a new loader instance that has the same file loaders and
+  // url mappings as the global loader
+  static createLoaderFromGlobal(): Loader {
+    let globalLoader = Loader.getLoader();
+    let loader = new Loader();
+    loader.fileLoaders = globalLoader.fileLoaders;
+    loader.urlMappings = globalLoader.urlMappings;
+    return loader;
+  }
+
   static async import<T extends object>(moduleIdentifier: string): Promise<T> {
     let loader = Loader.getLoader();
     return loader.import<T>(moduleIdentifier);
@@ -110,12 +120,6 @@ export class Loader {
 
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.set(new RealmPaths(from), to.href);
-  }
-
-  // TODO all the callers of this method probably need their own Loader instance instead
-  static clearCache() {
-    let loader = Loader.getLoader();
-    loader.modules = new Map();
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
