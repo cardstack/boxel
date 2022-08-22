@@ -596,15 +596,13 @@ export class CurrentRun {
     let handleError = (
       id: CardRef,
       key: string,
-      message: string,
-      brokenReference?: CardRef
+      message: string
     ): CardDefinitionWithErrors => {
       let error: CardDefinitionWithErrors = {
         type: "error",
         id,
         error: {
           message,
-          brokenReference,
         },
       };
       this.stats.definitionErrors++;
@@ -632,8 +630,7 @@ export class CurrentRun {
           cacheKey,
           `card ref from different realm could not be found ${JSON.stringify(
             ref
-          )}`,
-          ref
+          )}`
         );
       }
       // in this case the cacheKey is the actual definition id
