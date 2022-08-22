@@ -210,7 +210,9 @@ export class SearchIndex {
     ref: CardRef,
     relativeTo = new URL(this.realm.url)
   ): Promise<CardDefinition | undefined> {
-    let result = await this.#currentRun.typeOf(ref, relativeTo);
+    let result = await this.#currentRun.definitions.get(
+      internalKeyFor(ref, relativeTo)
+    );
     if (result?.type !== "error") {
       return result?.def;
     }
@@ -253,11 +255,10 @@ export class SearchIndex {
     ref: CardRef,
     fieldSegments: string[]
   ): Promise<CardDefinition | undefined> {
-    let defOrError = await this.#currentRun.typeOf(ref);
-    if (!defOrError || defOrError?.type === "error") {
+    let def = await this.typeOf(ref);
+    if (!def) {
       return undefined;
     }
-    let { def } = defOrError;
     let fieldName = fieldSegments.shift()!;
     let fieldDef = def.fields.get(fieldName);
     if (!fieldDef) {
@@ -273,11 +274,7 @@ export class SearchIndex {
         ...fieldSegments,
       ]);
     }
-    let maybeError = await this.#currentRun.typeOf(fieldDef.fieldCard);
-    if (maybeError?.type !== "error") {
-      return maybeError?.def;
-    }
-    return undefined;
+    return await this.typeOf(fieldDef.fieldCard);
   }
 
   private async loadFieldCard(

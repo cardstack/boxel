@@ -118,12 +118,6 @@ interface Stats {
   modulesAnalyzed: number;
 }
 
-// TODO move this into a better place
-let externalDefinitionsCache = new Map<
-  string,
-  Promise<CardDefinitionWithErrors | undefined>
->();
-
 type SearchEntryWithErrors =
   | { type: "entry"; entry: SearchEntry }
   | { type: "error"; error: IndexError };
@@ -420,11 +414,6 @@ export class CurrentRun {
       let card = CardClass.fromSerialized(doc.data.attributes);
       let api = await Loader.import<CardAPI>(`${baseRealm.url}card-api`);
       let searchData = await api.searchDoc(card);
-      // TODO remove this
-      await this.buildDefinition({
-        type: "exportedCard",
-        ...cardRef,
-      });
       typesMaybeError = await this.getTypes(cardRef);
       depsMaybeError = await this.buildDeps({
         type: "exportedCard",
@@ -499,8 +488,7 @@ export class CurrentRun {
     targetRef: CardRef,
     deps: CardRef[] = []
   ): Promise<DepsWithErrors> {
-    // TODO use this.buildDefinition() instead of this.typeOf()
-    let maybeError = await this.typeOf(targetRef);
+    let maybeError = await this.buildDefinition(targetRef);
     if (!maybeError || maybeError.type === "error") {
       return {
         type: "error",
@@ -590,6 +578,49 @@ export class CurrentRun {
 
     let deferred = new Deferred<CardDefinitionWithErrors | undefined>();
     this.#definitionBuildCache.set(cacheKey, deferred);
+
+    if (
+      !this.isLocal(new URL(getExportedCardContext(ref).module, relativeTo))
+    ) {
+      if (ref.type !== "exportedCard") {
+        let error: CardDefinitionWithErrors = {
+          type: "error",
+          id: ref,
+          error: {
+            message: `Cannot get non-exported card ref from module in a different realm: ${JSON.stringify(
+              ref
+            )}`,
+          },
+        };
+        this.stats.definitionErrors++;
+        this.#definitions.set(cacheKey, error);
+        deferred.resolve(error);
+        return error;
+      }
+      let def = await this.getExternalCardDefinition(ref);
+      if (!def) {
+        let error: CardDefinitionWithErrors = {
+          type: "error",
+          id: ref,
+          error: {
+            message: `card ref from different realm could not be found ${JSON.stringify(
+              ref
+            )}`,
+            brokenReference: ref,
+          },
+        };
+        this.stats.definitionErrors++;
+        this.#definitions.set(cacheKey, error);
+        deferred.resolve(error);
+        return error;
+      }
+      // in this case the cacheKey is the actual definition id
+      this.stats.definitionsBuilt++;
+      this.#definitions.set(cacheKey, def);
+      deferred.resolve(def);
+      return def;
+    }
+
     let parsedModule = await this.parseModule(url);
     if (!parsedModule) {
       deferred.resolve(undefined);
@@ -627,14 +658,10 @@ export class CurrentRun {
       return def;
     }
 
-    let superDefMaybeError = await this.definitionForClassRef(
-      url,
-      possibleCard.super,
-      {
-        type: "ancestorOf",
-        card: id,
-      }
-    );
+    let superDefMaybeError = await this.buildDefinition({
+      type: "ancestorOf",
+      card: id,
+    });
 
     if (!superDefMaybeError) {
       deferred.resolve(undefined);
@@ -673,15 +700,11 @@ export class CurrentRun {
       if (!fieldType) {
         continue;
       }
-      let fieldDefMaybeError = await this.definitionForClassRef(
-        url,
-        possibleField.card,
-        {
-          type: "fieldOf",
-          card: id,
-          field: fieldName,
-        }
-      );
+      let fieldDefMaybeError = await this.buildDefinition({
+        type: "fieldOf",
+        card: id,
+        field: fieldName,
+      });
       if (fieldDefMaybeError?.type === "error") {
         // something to think about: our error doesn't have an absolute card
         // ref that it can use to trigger the invalidation of the error
@@ -723,34 +746,6 @@ export class CurrentRun {
     return def;
   }
 
-  private async definitionForClassRef(
-    url: URL,
-    ref: ClassReference,
-    targetRef: CardRef
-  ): Promise<CardDefinitionWithErrors | undefined> {
-    if (ref.type === "internal") {
-      return await this.buildDefinition(targetRef);
-    } else {
-      if (this.isLocal(new URL(ref.module, url))) {
-        if (
-          baseRealm.fileURL(ref.module).href === `${baseRealm.url}card-api` &&
-          ref.name === "Card"
-        ) {
-          let { module, name } = ref;
-          return this.definitions.get(
-            internalKeyFor({ module, name, type: "exportedCard" }, url)
-          );
-        }
-        return await this.buildDefinition(targetRef);
-      } else {
-        return await this.getExternalCardDefinition({
-          name: ref.name,
-          module: ref.module,
-        });
-      }
-    }
-  }
-
   private isLocal(url: URL): boolean {
     return url.href.startsWith(this.realm.url);
   }
@@ -758,14 +753,6 @@ export class CurrentRun {
   private async getExternalCardDefinition(
     ref: ExportedCardRef
   ): Promise<CardDefinitionWithErrors | undefined> {
-    let key = internalKeyFor({ type: "exportedCard", ...ref }, undefined); // these should always be absolute URLs
-    let promise = externalDefinitionsCache.get(key);
-    if (promise) {
-      return await promise;
-    }
-    let deferred = new Deferred<CardDefinitionWithErrors | undefined>();
-    externalDefinitionsCache.set(key, deferred.promise);
-
     let url = `${ref.module}/_typeOf?${stringify({
       type: "exportedCard",
       ...ref,
@@ -777,7 +764,6 @@ export class CurrentRun {
     });
     if (!response.ok) {
       console.log(`Could not get card type for ${url}: ${response.status}`);
-      deferred.fulfill(undefined);
       return undefined;
     }
 
@@ -801,7 +787,6 @@ export class CurrentRun {
         ),
       },
     };
-    deferred.fulfill(def);
     return def;
   }
 
@@ -812,10 +797,8 @@ export class CurrentRun {
     let fullRef: CardRef | undefined = { type: "exportedCard", ...ref };
     let types: string[] = [];
     while (fullRef) {
-      let maybeError: CardDefinitionWithErrors | undefined = await this.typeOf(
-        fullRef,
-        relativeTo
-      );
+      let maybeError: CardDefinitionWithErrors | undefined =
+        await this.buildDefinition(fullRef, relativeTo);
       if (!maybeError || maybeError.type === "error") {
         return {
           type: "error",
@@ -837,22 +820,6 @@ export class CurrentRun {
       fullRef = maybeError.def.super;
     }
     return { type: "types", types };
-  }
-
-  async typeOf(
-    ref: CardRef,
-    relativeTo = new URL(this.realm.url)
-  ): Promise<CardDefinitionWithErrors | undefined> {
-    let def = this.definitions.get(internalKeyFor(ref, relativeTo));
-    if (def) {
-      return def;
-    }
-    let { module } = getExportedCardContext(ref);
-    let moduleURL = new URL(module, relativeTo);
-    if (!this.realm.paths.inRealm(moduleURL) && ref.type === "exportedCard") {
-      return await this.getExternalCardDefinition(ref);
-    }
-    return undefined;
   }
 
   public isIgnored(url: URL): boolean {
