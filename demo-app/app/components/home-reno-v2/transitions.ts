@@ -70,12 +70,6 @@ export async function maxToExpanded(
   {
     let counterpart = mainCardContent.counterpart;
     if (counterpart) {
-      // Hide all content of card sprite proper besides title
-      mainCardContent.element.style.opacity = '0';
-      counterpart.lockStyles();
-      counterpart.element.style.zIndex =
-        getComputedStyle(counterpartCard.element).zIndex + 1;
-      context.appendOrphan(counterpart);
       counterpart.setupAnimation('opacity', {
         from: 1,
         to: 0,
@@ -89,14 +83,6 @@ export async function maxToExpanded(
   await runAnimations(fadeOutSprites);
 
   // Card sprite proper resizes and moves together with title
-  // magicMove(
-  //   {
-  //     keptSprites: new Set([counterpartCard!]),
-  //   } as Changeset,
-  //   {
-  //     duration,
-  //   }
-  // );
   counterpartCard.setupAnimation('position', {
     duration,
     behavior,
@@ -108,31 +94,20 @@ export async function maxToExpanded(
     behavior,
   });
   counterpartCard!.element.style.zIndex = '2';
-  if (placeholder) {
-    placeholder.element.style.zIndex = '0';
-  }
   await runAnimations([counterpartCard!]);
 
-  // Hide counterpart
-  if (mainCardContent.counterpart) {
-    context.removeOrphan(mainCardContent.counterpart);
-  }
-  spriteGroup.card!.element.style.opacity = '1';
+  // Hide counterpart and handle the main card instead
+  spriteGroup.card!.element.style.removeProperty('opacity');
   context.removeOrphan(counterpartCard);
-  if (placeholder) context.removeOrphan(placeholder!);
-
-  let fadeInSprites: Sprite[] = [];
 
   // Card sprite proper content fades in
-  mainCardContent.element.style.opacity = '1';
   mainCardContent.setupAnimation('opacity', {
     from: 0,
     to: 1,
     duration: duration,
   });
-  fadeInSprites.push(mainCardContent);
 
-  await runAnimations(fadeInSprites);
+  await runAnimations([mainCardContent]);
 }
 
 export async function expandedToMax(
@@ -142,11 +117,12 @@ export async function expandedToMax(
   let duration = DEFAULT_DURATION;
   let fadeOutSprites: Sprite[] = [];
 
-  // Lock counterpart of card
+  // Add counterpart as orphan, we are first animating this
   let counterpartCard = spriteGroup.card!.counterpart!;
   if (!context.hasOrphan(counterpartCard)) {
     counterpartCard.lockStyles();
     context.appendOrphan(counterpartCard!);
+    // z-index bump to keep this above the placeholder
     counterpartCard.element.style.zIndex = '1';
     // Makes the assumption that the maximized cards have the same height
     clipVertical(
@@ -167,25 +143,19 @@ export async function expandedToMax(
     let counterpart = mainCardContent.counterpart;
     if (counterpart) {
       // Hide all content of card sprite proper besides title
-      mainCardContent.element.style.opacity = '0';
-      counterpart.element.style.zIndex =
-        getComputedStyle(counterpartCard.element).zIndex + 1;
-      counterpart.lockStyles();
-      context.appendOrphan(counterpart);
       counterpart.setupAnimation('opacity', { to: 0, duration: duration });
       fadeOutSprites.push(mainCardContent.counterpart!);
     }
   }
 
-  // Run these first
   await runAnimations(fadeOutSprites);
 
-  // Hide counterpart
-  if (mainCardContent.counterpart) {
-    context.removeOrphan(mainCardContent.counterpart);
-  }
-  spriteGroup.card!.element.style.opacity = '1';
-  context.removeOrphan(counterpartCard);
+  // Make main card visible while the content is hidden
+  mainCardContent.element.style.opacity = '0';
+  spriteGroup.card!.element.style.removeProperty('opacity');
+
+  // Hide counterpart, so that only the main card is visible
+  if (context.hasOrphan(counterpartCard)) context.removeOrphan(counterpartCard);
 
   // Card sprite proper resizes and moves together with title
   magicMove(
@@ -198,17 +168,15 @@ export async function expandedToMax(
   );
   await runAnimations([spriteGroup.card!]);
 
-  let fadeInSprites: Sprite[] = [];
   // Card sprite proper content fades in
-  mainCardContent.element.style.opacity = '1';
+  mainCardContent.element.style.removeProperty('opacity');
   mainCardContent.setupAnimation('opacity', {
     from: 0,
     to: 1,
     duration: duration,
   });
-  fadeInSprites.push(mainCardContent);
 
-  await runAnimations(fadeInSprites);
+  await runAnimations([mainCardContent]);
 }
 
 export async function expandedToMaxImages(
@@ -216,14 +184,8 @@ export async function expandedToMaxImages(
   spriteGroup: SpriteGroup,
   otherCards: SpriteGroup[]
 ) {
-  // Put images in old positions
-  // Move the card
-  // Put images in new positions
-
   let duration = DEFAULT_DURATION;
   let images: Sprite[] = [];
-
-  spriteGroup.card!.element.style.zIndex = '2';
 
   let fadeInSprites = otherCards
     .filter((group) => {
@@ -236,14 +198,7 @@ export async function expandedToMaxImages(
   fadeInSprites.forEach((card) => (card.element.style.opacity = '0'));
 
   spriteGroup.keptContent.forEach((s) => {
-    s.setupAnimation('position', {
-      duration,
-      behavior: new LinearBehavior(),
-      startX: -s.boundsDelta!.x + spriteGroup.card!.boundsDelta!.x,
-      startY: -s.boundsDelta!.y + spriteGroup.card!.boundsDelta!.y,
-      endX: -s.boundsDelta!.x + spriteGroup.card!.boundsDelta!.x + 5,
-      endY: -s.boundsDelta!.y + spriteGroup.card!.boundsDelta!.y + 5,
-    });
+    s.element.style.transform = `translate(${-s.boundsDelta!.x + spriteGroup.card!.boundsDelta!.x}px, ${-s.boundsDelta!.y + spriteGroup.card!.boundsDelta!.y}px)`
     images.push(s);
   });
 
@@ -257,9 +212,10 @@ export async function expandedToMaxImages(
     }
   );
 
-  await runAnimations([...images, spriteGroup.card!]);
+  await runAnimations([spriteGroup.card!]);
 
   images.forEach((image) => {
+    image.element.style.removeProperty('transform');
     image.setupAnimation('position', {
       duration,
       behavior: new LinearBehavior(),
@@ -270,7 +226,7 @@ export async function expandedToMaxImages(
 
   await runAnimations(images);
 
-  fadeInSprites.forEach((card) => (card.element.style.opacity = '1'));
+  fadeInSprites.forEach((card) => (card.element.style.removeProperty('opacity')));
 
   fadeInSprites.forEach((sprite) => {
     sprite.setupAnimation('opacity', {
@@ -288,10 +244,6 @@ export async function maxToExpandedImages(
   spriteGroup: SpriteGroup,
   otherCards: SpriteGroup[]
 ) {
-  // Put images in old positions
-  // Move the card
-  // Put images in new positions
-
   let duration = DEFAULT_DURATION;
   let behavior = new LinearBehavior();
   let images: Sprite[] = [];
@@ -325,6 +277,7 @@ export async function maxToExpandedImages(
   let counterpartCard = spriteGroup.card!.counterpart!;
   context.appendOrphan(counterpartCard);
   counterpartCard.lockStyles();
+  counterpartCard.element.style.zIndex = '1';
 
   let fadeOutSprites = otherCards
     .filter((group) => {
@@ -365,21 +318,6 @@ export async function maxToExpandedImages(
 
   await runAnimations(images);
 
-
-  // let positionTransform = `translate(${-spriteGroup.card!.boundsDelta!
-  //   .x}px, ${-spriteGroup.card!.boundsDelta!.y}px)`;
-  // let sizeTransform = `scaleY(${
-  //   spriteGroup.card!.initialHeight! / spriteGroup.card!.finalHeight!
-  // }) scaleX(${
-  //   spriteGroup.card!.initialWidth! / spriteGroup.card!.finalWidth!
-  // })`;
-
-  // spriteGroup.card!.element.style.transform = `${positionTransform} ${sizeTransform}`;
-  // spriteGroup.card!.element.style.transformOrigin = `top left`;
-  // spriteGroup.card!.element.style.setProperty(
-  //   '--animation-scale-inversion-y',
-  //   `${1 / (spriteGroup.card!.initialHeight! / spriteGroup.card!.finalHeight!)}`
-  // );
   counterpartCard.element.style.height = `${counterpartCard.finalHeight}px`;
   counterpartCard.element.style.width = `${counterpartCard.finalWidth}px`;
   counterpartCard.setupAnimation('position', {
@@ -402,53 +340,10 @@ export async function maxToExpandedImages(
     });
   });
 
-  // spriteGroup.card!.setupAnimation('size', {
-  //   duration,
-  //   behavior: new LinearBehavior(),
-  //   startWidth: -spriteGroup.card!.finalBounds!.element.width,
-  //   startHeight: -spriteGroup.card!.finalBounds!.element.height,
-  //   endWidth: -spriteGroup.card!.finalBounds!.element.width,
-  //   endHeight: -spriteGroup.card!.finalBounds!.element.height,
-  // });
-
   await runAnimations([...images, counterpartCard]);
 
-  spriteGroup.card!.element.style.opacity = '1';
+  spriteGroup.card!.element.style.removeProperty('opacity');
   context.removeOrphan(counterpartCard);
-
-  // spriteGroup.card!.element.style.transform = '';
-  // spriteGroup.card!.element.style.transformOrigin = '';
-  // spriteGroup.card!.element.style.setProperty(
-  //   '--animation-scale-inversion-y',
-  //   ''
-  // );
-
-  // if (placeholder) {
-  //   placeholder.element.style.zIndex = '0';
-  // }
-
-  // // Card sprite proper resizes and moves together with title
-  // spriteGroup.card?.setupAnimation('position', {
-  //   duration,
-  //   behavior,
-  // });
-  // spriteGroup.card?.setupAnimation('size', {
-  //   duration,
-  //   behavior,
-  //   startWidth: spriteGroup.card.counterpart!.initialWidth,
-  // });
-
-  // // spriteGroup.card!.element.style.zIndex = '2';
-  // await runAnimations([spriteGroup.card!]);
-
-  // images.forEach((image) => {
-  //   image.setupAnimation('position', {
-  //     startX: -image.boundsDelta!.x + spriteGroup.card!.boundsDelta!.x + 5,
-  //     startY: -image.boundsDelta!.y + spriteGroup.card!.boundsDelta!.y + 5,
-  //   });
-  // });
-
-  // await runAnimations(images);
 }
 
 export async function simple(sprite: Sprite) {
