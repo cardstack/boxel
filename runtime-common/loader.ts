@@ -24,7 +24,7 @@ type FetchingModule = {
 
   // if you encounter a module in this state, you should wait for the deferred
   // and then retry load where you're guarantee to see a new state
-  deferred: Deferred<void>;
+  deferred: Deferred<Module>;
 };
 
 type Module =
@@ -232,15 +232,41 @@ export class Loader {
     return absoluteURL;
   }
 
-  private async fetchModule(moduleURL: ResolvedURL): Promise<Module> {
+  private async fetchModule(
+    moduleURL: ResolvedURL,
+    stack: string[] = []
+  ): Promise<Module> {
     let moduleIdentifier = moduleURL.href;
     let module = this.modules.get(moduleIdentifier);
     if (module) {
+      // in the event of a cycle, we have already evaluated the
+      // define() since we recurse into our deps after the evaluation of the
+      // define, so just return ourselves
+      if (stack.includes(moduleIdentifier)) {
+        return module;
+      }
+      // this closes an otherwise leaky async when there are simultaneous
+      // imports for modules that share a common dep, e.g. where you request
+      // module a and b simultaneously for the following consumption pattern
+      // (also included in our tests):
+      //   a -> b -> c
+      //
+      // In that case both of the imports will try to fetch c, one of them will
+      // start the actual fetch, and the other will short circuit and just
+      // return the cached module in a fetching state. the consumer of the short
+      // circuited module will assume that the dep has already been registered
+      // and immediately proceed to evaluation--when in fact the dep is still
+      // being loaded. to make sure that the consumer will wait until the dep
+      // has actually completed loading we need to return the deferred promise
+      // of the cached module.
+      if (module.state === "fetching") {
+        return module.deferred.promise;
+      }
       return module;
     }
     module = {
       state: "fetching",
-      deferred: new Deferred(),
+      deferred: new Deferred<Module>(),
     };
     this.modules.set(moduleIdentifier, module);
 
@@ -292,20 +318,13 @@ export class Loader {
       throw exception;
     }
 
-    // note that after this promise all, the dep modules here are not
-    // necessarily at a registered state--you may actually have a dep that was
-    // already in the process of fetching when you asked to fetch it again, in
-    // which case you just get back a module in a fetching state with a deferred
-    // that is not yet fulfilled. This means that the module may think that it
-    // and all its deps are ready for evaluation, when in fact there is actually
-    // still work being done by sibling fetch that happened to ask for the same
-    // dep earlier. And there is no guarantee that that the sibling fetch will
-    // have completed the register in time for the evaluation that this fetch
-    // thinks its ready for.
     await Promise.all(
       dependencyList!.map(async (depId) => {
         if (depId !== "exports" && depId !== "__import_meta__") {
-          return this.fetchModule(new URL(depId) as ResolvedURL);
+          return this.fetchModule(new URL(depId) as ResolvedURL, [
+            ...stack,
+            moduleIdentifier,
+          ]);
         }
         return undefined;
       })
@@ -318,7 +337,7 @@ export class Loader {
     };
 
     this.modules.set(moduleIdentifier, registeredModule);
-    module.deferred.fulfill();
+    module.deferred.fulfill(registeredModule);
     return registeredModule;
   }
 
