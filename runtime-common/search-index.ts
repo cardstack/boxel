@@ -213,8 +213,21 @@ export class SearchIndex {
     let result = await this.#currentRun.definitions.get(
       internalKeyFor(ref, relativeTo)
     );
-    if (result?.type !== "error") {
-      return result?.def;
+    if (result && result.type !== "error") {
+      return result.def;
+    }
+    if (
+      !result &&
+      ref.type === "exportedCard" &&
+      !this.realm.paths.inRealm(new URL(ref.module, relativeTo))
+    ) {
+      // we only include external definitions in our definitions cache if we
+      // have a card in our realm that uses an external definition. otherwise we
+      // should forward requests for external cards to the realm in question
+      result = await this.#currentRun.getExternalCardDefinition(ref);
+      if (result?.type !== "error") {
+        return result?.def;
+      }
     }
     return undefined;
   }

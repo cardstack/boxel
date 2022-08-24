@@ -732,7 +732,7 @@ export class CurrentRun {
     });
   }
 
-  private async getExternalCardDefinition(
+  public async getExternalCardDefinition(
     ref: ExportedCardRef
   ): Promise<CardDefinitionWithErrors | undefined> {
     let url = `${ref.module}/_typeOf?${stringify({

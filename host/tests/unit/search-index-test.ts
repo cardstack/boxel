@@ -3,11 +3,20 @@ import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import { baseRealm } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4201/test/';
 
-module('Unit | search-index', function () {
+module('Unit | search-index', function (hooks) {
+  hooks.before(async function () {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
+  });
+
   test('full indexing discovers card instances', async function (assert) {
     let adapter = new TestRealmAdapter({
       'empty.json': {

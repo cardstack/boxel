@@ -9,8 +9,18 @@ import {
 } from '@cardstack/runtime-common/etc/test-fixtures';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
 import { stringify } from 'qs';
+import { baseRealm } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 
-module('Unit | realm', function () {
+module('Unit | realm', function (hooks) {
+  hooks.before(async function () {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
+  });
+
   test('realm can serve card data requests', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/empty.json': {
