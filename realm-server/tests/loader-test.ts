@@ -4,7 +4,7 @@ import { Loader } from "@cardstack/runtime-common";
 const testRealm = "http://localhost:4202/node-test/";
 
 module("loader", function () {
-  test("can dynamically modules with cycles", async function (assert) {
+  test("can dynamically load modules with cycles", async function (assert) {
     let loader = new Loader();
     let module = await loader.import<{ three(): number }>(
       `${testRealm}cycle-two`
