@@ -12,6 +12,7 @@ import type { Query } from '@cardstack/runtime-common/query';
 interface Args {
   named: {
     query: Query;
+    realm?: string;
   };
 }
 
@@ -26,13 +27,14 @@ export class Search extends Resource<Args> {
       throw new Error('Local realm is not available');
     }
     this.localRealmURL = this.localRealm.url;
-    let { query } = args.named;
-    taskFor(this.search).perform(query);
+    let { query, realm } = args.named;
+    taskFor(this.search).perform(query, realm);
   }
 
-  @restartableTask private async search(query: Query) {
+  @restartableTask private async search(query: Query, realm?: string) {
+    let realmURL = realm ?? this.localRealmURL.href;
     let response = await Loader.fetch(
-      `${this.localRealmURL.href}_search?${stringify(query)}`,
+      `${realmURL}_search?${stringify(query)}`,
       { headers: { Accept: 'application/vnd.api+json' } }
     );
     if (!response.ok) {
@@ -47,8 +49,12 @@ export class Search extends Resource<Args> {
   }
 }
 
-export function getSearchResults(parent: object, query: () => Query) {
+export function getSearchResults(
+  parent: object,
+  query: () => Query,
+  realm: string | undefined
+) {
   return useResource(parent, Search, () => ({
-    named: { query: query() },
+    named: { query: query(), realm },
   }));
 }

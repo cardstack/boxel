@@ -36,7 +36,10 @@ export default class CreateNew extends Component<Signature> {
           />
         </fieldset>
       {{else}}
-        <CardCatalog @onSelect={{this.onSelect}} />
+        <CardCatalog
+          @realmURL={{this.localRealm.url.href}}
+          @onSelect={{this.onSelect}}
+        />
       {{/if}}
     </section>
   </template>
