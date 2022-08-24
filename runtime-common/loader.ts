@@ -160,6 +160,7 @@ export class Loader {
     ) {
       return await import(/* webpackIgnore: true */ resolvedModuleIdentifier);
     }
+
     let module = await this.fetchModule(resolvedModule);
     switch (module.state) {
       case "fetching":
