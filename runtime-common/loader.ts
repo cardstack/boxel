@@ -305,9 +305,13 @@ export class Loader {
     // have completed the register in time for the evaluation that this fetch
     // thinks its ready for.
     await Promise.all(
-      dependencyList!.map((depId) => {
+      dependencyList!.map(async (depId) => {
         if (depId !== "exports" && depId !== "__import_meta__") {
-          return this.fetchModule(new URL(depId) as ResolvedURL);
+          await this.fetchModule(new URL(depId) as ResolvedURL);
+          let module = this.modules.get(depId);
+          if (module?.state === "fetching") {
+            await module.deferred.promise;
+          }
         }
         return undefined;
       })
