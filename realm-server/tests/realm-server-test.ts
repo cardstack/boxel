@@ -23,6 +23,7 @@ import { Query } from "@cardstack/runtime-common/query";
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
 const testRealmHref = testRealmURL.href;
+const testRealm2Href = "http://localhost:4202/node-test/";
 
 Loader.addURLMapping(
   new URL(baseRealm.url),
@@ -442,5 +443,36 @@ module("Realm Server", function (hooks) {
       `${testRealmHref}person-1`,
       "card ID is correct"
     );
+  });
+
+  test("can instantiate a card that uses a card-ref field", async function (assert) {
+    let loader = Loader.createLoaderFromGlobal();
+    let module = await loader.import<Record<string, any>>(
+      `${testRealm2Href}card-ref-test`
+    );
+    let TestCard = module["TestCard"];
+    let ref = { module: `${testRealm2Href}person`, name: "Person " };
+    let testCard = TestCard.fromSerialized({ ref });
+    assert.deepEqual(testCard.ref, ref, "card data is correct");
+  });
+
+  test("can dynamically load a card from own realm", async function (assert) {
+    let loader = Loader.createLoaderFromGlobal();
+    let module = await loader.import<Record<string, any>>(
+      `${testRealmHref}person`
+    );
+    let Person = module["Person"];
+    let person = Person.fromSerialized({ firstName: "Mango" });
+    assert.strictEqual(person.firstName, "Mango", "card data is correct");
+  });
+
+  test("can dynamically load a card from a different realm", async function (assert) {
+    let loader = Loader.createLoaderFromGlobal();
+    let module = await loader.import<Record<string, any>>(
+      `${testRealm2Href}person`
+    );
+    let Person = module["Person"];
+    let person = Person.fromSerialized({ firstName: "Mango" });
+    assert.strictEqual(person.firstName, "Mango", "card data is correct");
   });
 });
