@@ -10,4 +10,5 @@ export class Person extends Card {
   static isolated = class Isolated extends Component<typeof this> {
     <template><h1><@fields.firstName/> <@fields.lastName /></h1></template>
   }
+  static demo: Record<string, any> = { firstName: 'Mango', lastName: 'Abdel-Rahman' }
 }

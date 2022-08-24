@@ -24,6 +24,12 @@ export class Post extends Card {
       <em><@fields.title/></em> by <@fields.author/>
     </template>
   }
+  static demo = {
+    title: 'Demo Post',
+    author: {
+      firstName: 'Cardstack',
+    }
+  }
 }
 
 export class BasicCard extends Card {
