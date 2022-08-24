@@ -4,6 +4,7 @@ import { CurrentRun, SearchEntry } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import { Loader } from "./loader";
+import flatMap from "lodash/flatMap";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
@@ -148,6 +149,10 @@ export function trimExecutableExtension(url: URL): URL {
   return url;
 }
 
+function loadAPI(): Promise<CardAPI> {
+  return Loader.import<CardAPI>(`${baseRealm.url}card-api`);
+}
+
 export class SearchIndex {
   #currentRun: CurrentRun;
 
@@ -157,7 +162,8 @@ export class SearchIndex {
       path: string
     ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
     private readFileAsText: (
-      path: LocalPath
+      path: LocalPath,
+      opts?: { withFallbacks?: true }
     ) => Promise<{ content: string; lastModified: number } | undefined>
   ) {
     this.#currentRun = CurrentRun.empty(realm);
@@ -168,6 +174,10 @@ export class SearchIndex {
       readdir: this.readdir,
       readFileAsText: this.readFileAsText,
     });
+  }
+
+  get stats() {
+    return this.#currentRun.stats;
   }
 
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
@@ -184,7 +194,9 @@ export class SearchIndex {
       name: "Card",
     });
 
-    return [...this.#currentRun.instances.values()]
+    return flatMap([...this.#currentRun.instances.values()], (maybeError) =>
+      maybeError.type !== "error" ? [maybeError.entry] : []
+    )
       .filter(matcher)
       .sort(this.buildSorter(query.sort))
       .map((entry) => entry.resource);
@@ -198,12 +210,31 @@ export class SearchIndex {
     ref: CardRef,
     relativeTo = new URL(this.realm.url)
   ): Promise<CardDefinition | undefined> {
-    return await this.#currentRun.typeOf(ref, relativeTo);
+    let result = await this.#currentRun.definitions.get(
+      internalKeyFor(ref, relativeTo)
+    );
+    if (result && result.type !== "error") {
+      return result.def;
+    }
+    if (
+      !result &&
+      ref.type === "exportedCard" &&
+      !this.realm.paths.inRealm(new URL(ref.module, relativeTo))
+    ) {
+      // we only include external definitions in our definitions cache if we
+      // have a card in our realm that uses an external definition. otherwise we
+      // should forward requests for external cards to the realm in question
+      result = await this.#currentRun.getExternalCardDefinition(ref);
+      if (result?.type !== "error") {
+        return result?.def;
+      }
+    }
+    return undefined;
   }
 
   async exportedCardsOf(module: string): Promise<ExportedCardRef[]> {
-    module = trimExecutableExtension(new URL(module, this.realm.url)).href;
-    let refsMap = this.#currentRun.exportedCardRefs.get(module);
+    let url = trimExecutableExtension(new URL(module, this.realm.url));
+    let refsMap = this.#currentRun.exportedCardRefs.get(url);
     if (!refsMap) {
       return [];
     }
@@ -211,12 +242,20 @@ export class SearchIndex {
   }
 
   async card(url: URL): Promise<CardResource | undefined> {
-    return this.#currentRun.instances.get(url)?.resource;
+    let maybeError = this.#currentRun.instances.get(url);
+    if (maybeError && maybeError.type !== "error") {
+      return maybeError.entry.resource;
+    }
+    return undefined;
   }
 
   // this is meant for tests only
   async searchEntry(url: URL): Promise<SearchEntry | undefined> {
-    return this.#currentRun.instances.get(url);
+    let result = this.#currentRun.instances.get(url);
+    if (result?.type !== "error") {
+      return result?.entry;
+    }
+    return undefined;
   }
 
   private cardHasType(entry: SearchEntry, ref: CardRef): boolean {
@@ -226,10 +265,10 @@ export class SearchIndex {
   }
 
   private async getFieldDefinition(
-    ref: ExportedCardRef,
+    ref: CardRef,
     fieldSegments: string[]
   ): Promise<CardDefinition | undefined> {
-    let def = await this.#currentRun.getCardDefinition(ref);
+    let def = await this.typeOf(ref);
     if (!def) {
       return undefined;
     }
@@ -238,15 +277,8 @@ export class SearchIndex {
     if (!fieldDef) {
       throw new Error(
         `Your filter refers to nonexistent field "${fieldName}" on type ${internalKeyFor(
-          { type: "exportedCard", ...ref },
+          ref,
           undefined // assumes absolute module URL
-        )}`
-      );
-    }
-    if (fieldDef.fieldCard.type !== "exportedCard") {
-      throw new Error(
-        `Cannot get field definition of non-exported card ${JSON.stringify(
-          fieldDef.fieldCard
         )}`
       );
     }
@@ -255,14 +287,17 @@ export class SearchIndex {
         ...fieldSegments,
       ]);
     }
-    return this.#currentRun.getCardDefinition(fieldDef.fieldCard);
+    return await this.typeOf(fieldDef.fieldCard);
   }
 
   private async loadFieldCard(
     ref: ExportedCardRef,
     fieldPath: string
   ): Promise<typeof Card> {
-    let fieldDef = await this.getFieldDefinition(ref, fieldPath.split("."));
+    let fieldDef = await this.getFieldDefinition(
+      { type: "exportedCard", ...ref },
+      fieldPath.split(".")
+    );
     if (!fieldDef) {
       throw new Error(
         `Your filter refers to nonexistent type: import ${
@@ -392,10 +427,15 @@ export class SearchIndex {
         )
       );
 
+      // TODO when we are ready to execute queries within computeds, we'll need to
+      // use the loader instance from current-run and not the global loader, as
+      // the card definitions may have changed in the current-run loader
+      let api = await loadAPI();
+
       return (entry) =>
         every(Object.entries(filter.eq), ([fieldPath, value]) => {
           if (this.cardHasType(entry, ref)) {
-            let queryValue = this.#currentRun.api.getQueryableValue(
+            let queryValue = api.getQueryableValue(
               fieldCards[fieldPath]!,
               value
             );
@@ -426,6 +466,11 @@ export class SearchIndex {
         )
       );
 
+      // TODO when we are ready to execute queries within computeds, we'll need to
+      // use the loader instance from current-run and not the global loader, as
+      // the card definitions may have changed in the current-run loader
+      let api = await loadAPI();
+
       return (entry) =>
         every(Object.entries(filter.range), ([fieldPath, range]) => {
           if (this.cardHasType(entry, ref)) {
@@ -438,34 +483,22 @@ export class SearchIndex {
               (range.gt &&
                 !(
                   value >
-                  this.#currentRun.api.getQueryableValue(
-                    fieldCards[fieldPath]!,
-                    range.gt
-                  )
+                  api.getQueryableValue(fieldCards[fieldPath]!, range.gt)
                 )) ||
               (range.lt &&
                 !(
                   value <
-                  this.#currentRun.api.getQueryableValue(
-                    fieldCards[fieldPath]!,
-                    range.lt
-                  )
+                  api.getQueryableValue(fieldCards[fieldPath]!, range.lt)
                 )) ||
               (range.gte &&
                 !(
                   value >=
-                  this.#currentRun.api.getQueryableValue(
-                    fieldCards[fieldPath]!,
-                    range.gte
-                  )
+                  api.getQueryableValue(fieldCards[fieldPath]!, range.gte)
                 )) ||
               (range.lte &&
                 !(
                   value <=
-                  this.#currentRun.api.getQueryableValue(
-                    fieldCards[fieldPath]!,
-                    range.lte
-                  )
+                  api.getQueryableValue(fieldCards[fieldPath]!, range.lte)
                 ))
             ) {
               return false;

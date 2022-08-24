@@ -4,12 +4,20 @@ import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import ImportModule from 'runtime-spike/components/import-module';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm } from '@cardstack/runtime-common';
 
-// testem will serve on a different port than ember cli, so use this mapping
-Loader.addURLMapping(new URL("http://module-host"), new URL(window.origin));
 
 module('Integration | import-module', function (hooks) {
   setupRenderingTest(hooks);
+  hooks.before(async function () {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
+    // testem will serve on a different port than ember cli, so use this mapping
+    Loader.addURLMapping(new URL("http://module-host"), new URL(window.origin));
+  });
 
   test('yields a successfully loaded module', async function (assert) {
     await renderComponent(

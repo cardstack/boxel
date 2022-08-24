@@ -19,6 +19,11 @@ module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.before(async function () {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
     integer = await Loader.import(`${baseRealm.url}integer`);

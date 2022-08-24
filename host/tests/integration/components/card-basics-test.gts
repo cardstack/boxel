@@ -25,6 +25,11 @@ module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.before(async function () {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     primitive = cardApi.primitive;
     queryableValue = cardApi.queryableValue;

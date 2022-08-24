@@ -6,6 +6,8 @@ import { renderComponent } from '../../helpers/render-component';
 import Schema from 'runtime-spike/components/schema';
 import Service from '@ember/service';
 import { waitUntil } from '@ember/test-helpers';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm } from '@cardstack/runtime-common';
 
 const testRealmURL = 'http://localhost:4201/test/'
 
@@ -18,6 +20,11 @@ module('Integration | schema', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function() {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
     this.owner.register('service:local-realm', NodeRealm);
   })
 

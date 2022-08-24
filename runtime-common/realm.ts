@@ -13,6 +13,7 @@ import {
   notFound,
   methodNotAllowed,
   badRequest,
+  CardError,
 } from "@cardstack/runtime-common/error";
 import { formatRFC7231 } from "date-fns";
 import {
@@ -87,7 +88,15 @@ export class Realm {
     this.paths = new RealmPaths(url);
     Loader.addFileLoader(new URL(this.url), async (path: LocalPath) => {
       let content = await this.cardSourceFromPath(path);
-      return this.transpileJS(content!, path);
+      if (!content) {
+        throw CardError.withResponse(
+          notFound(
+            new Request(this.paths.fileURL(path).href),
+            `cannot find module ${path}`
+          )
+        );
+      }
+      return this.transpileJS(content, path);
     });
     this.#adapter = adapter;
     this.#startedUp.fulfill((() => this.#startup())());
@@ -125,6 +134,13 @@ export class Realm {
     await this.#searchIndex.update(this.paths.fileURL(path));
 
     return results;
+  }
+
+  async delete(path: LocalPath): Promise<void> {
+    await this.#adapter.remove(path);
+    await this.#searchIndex.update(this.paths.fileURL(path), {
+      delete: true,
+    });
   }
 
   get searchIndex() {
@@ -206,7 +222,6 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    Loader.clearCache();
     return new Response(null, {
       status: 204,
       headers: {
@@ -252,11 +267,7 @@ export class Realm {
     if (!handle) {
       return notFound(request, `${localName} not found`);
     }
-    await this.#searchIndex.update(this.paths.fileURL(handle.path), {
-      delete: true,
-    });
-    await this.#adapter.remove(handle.path);
-    Loader.clearCache();
+    await this.delete(handle.path);
     return new Response(null, { status: 204 });
   }
 
@@ -464,10 +475,7 @@ export class Realm {
       return notFound(request);
     }
     let localPath = this.paths.local(url) + ".json";
-    await this.#searchIndex.update(this.paths.fileURL(localPath), {
-      delete: true,
-    });
-    await this.#adapter.remove(localPath);
+    await this.delete(localPath);
     return new Response(null, { status: 204 });
   }
 
@@ -541,11 +549,16 @@ export class Realm {
     });
   }
 
-  // todo: I think we get rid of this
   private async readFileAsText(
-    path: LocalPath
+    path: LocalPath,
+    opts: { withFallbacks?: true } = {}
   ): Promise<{ content: string; lastModified: number } | undefined> {
-    let ref = await this.#adapter.openFile(path);
+    let ref: FileRef | undefined;
+    if (opts.withFallbacks) {
+      ref = await this.getFileWithFallbacks(path);
+    } else {
+      ref = await this.#adapter.openFile(path);
+    }
     if (!ref) {
       return;
     }
