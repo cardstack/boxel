@@ -307,11 +307,7 @@ export class Loader {
     await Promise.all(
       dependencyList!.map(async (depId) => {
         if (depId !== "exports" && depId !== "__import_meta__") {
-          await this.fetchModule(new URL(depId) as ResolvedURL);
-          let module = this.modules.get(depId);
-          if (module?.state === "fetching") {
-            await module.deferred.promise;
-          }
+          return this.fetchModule(new URL(depId) as ResolvedURL);
         }
         return undefined;
       })
