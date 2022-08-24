@@ -82,13 +82,6 @@ export class Loader {
 
   static async import<T extends object>(moduleIdentifier: string): Promise<T> {
     let loader = Loader.getLoader();
-    if (
-      !loader.isNativeImportDisabled &&
-      (globalThis as any).window && // make sure we are not in a service worker
-      !isNode // make sure we are not in node
-    ) {
-      return await import(/* webpackIgnore: true */ moduleIdentifier);
-    }
     return loader.import<T>(moduleIdentifier);
   }
 
@@ -160,6 +153,13 @@ export class Loader {
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
+    if (
+      !this.isNativeImportDisabled &&
+      (globalThis as any).window && // make sure we are not in a service worker
+      !isNode // make sure we are not in node
+    ) {
+      return await import(/* webpackIgnore: true */ resolvedModuleIdentifier);
+    }
     let module = await this.fetchModule(resolvedModule);
     switch (module.state) {
       case "fetching":
