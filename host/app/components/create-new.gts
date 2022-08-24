@@ -12,8 +12,7 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 import type RouterService from '@ember/routing/router-service';
 import CardCatalog from './card-catalog';
-import CardEditor from './card-editor';
-import ImportModule from './import-module';
+import ImportedModuleEditor from './imported-module-editor';
 
 interface Signature {
   Args: {
@@ -29,20 +28,12 @@ export default class CreateNew extends Component<Signature> {
       {{#if this.selectedCard}}
         <fieldset>
           <legend>Create New {{this.selectedCard.attributes.title}}</legend>
-          <ImportModule @url={{this.selectedCard.attributes.ref.module}}>
-            <:ready as |module|>
-              <CardEditor
-                @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.selectedCard.attributes.ref}}
-                @module={{module}}
-                @onSave={{this.onSave}}
-                @onCancel={{this.onCancel}}
-              />
-            </:ready>
-            <:error as |error|>
-              <h2>Encountered {{error.type}} error</h2>
-              <pre>{{error.message}}</pre>
-            </:error>
-          </ImportModule>
+          <ImportedModuleEditor
+            @moduleURL={{this.selectedCard.attributes.ref.module}}
+            @cardArgs={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.selectedCard.attributes.ref}}
+            @onSave={{this.onSave}}
+            @onCancel={{this.onCancel}}
+          />
         </fieldset>
       {{else}}
         <CardCatalog @onSelect={{this.onSelect}} />

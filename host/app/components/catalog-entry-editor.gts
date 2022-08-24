@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { getSearchResults } from '../resources/search';
-import type { ExportedCardRef } from '@cardstack/runtime-common';
+import { type ExportedCardRef, catalogEntryRef } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import ImportedModuleEditor from './imported-module-editor';
@@ -25,17 +25,19 @@ export default class CatalogEntryEditor extends Component<Signature> {
   <template>
     <div data-test-catalog-entry-editor>
       {{#if this.entry}}
-        <LinkTo @route="application" @query={{hash path=(this.modulePath (ensureJsonExtension this.entry.id))}} data-test-catalog-entry-id>
-          {{this.entry.id}}
-        </LinkTo>
         <fieldset>
           <legend>Catalog Entry Editor</legend>
+          <div>
+            Card ID:
+            <LinkTo @route="application" @query={{hash path=(this.modulePath (ensureJsonExtension this.entry.id))}} data-test-catalog-entry-id>
+              {{this.entry.id}}
+            </LinkTo>
+          </div>
           <ImportedModuleEditor
             @moduleURL={{this.entry.meta.adoptsFrom.module}}
             @cardArgs={{hash type="existing" url=this.entry.id format="edit"}}
           />
         </fieldset>
-        {{!-- TODO: Catalog Entry Preview --}}
       {{else}}
         {{#if this.showEditor}}
           <fieldset>
@@ -58,10 +60,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
 
   @service declare localRealm: LocalRealm;
   @service declare router: RouterService;
-  catalogEntryRef: ExportedCardRef = {
-    module: 'https://cardstack.com/base/catalog-entry',
-    name: 'CatalogEntry',
-  };
+  catalogEntryRef = catalogEntryRef;
   catalogEntryAttributes = {
     title: this.args.ref.name,
     description: `Catalog entry for ${this.args.ref.name} card`,
