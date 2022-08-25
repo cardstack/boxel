@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import LocalRealm from '../services/local-realm';
+import ModalService from '../services/modal';
 import { directory, Entry } from '../resources/directory';
 import { eq } from '../helpers/truth-helpers'
 import type RouterService from '@ember/routing/router-service';
@@ -19,7 +20,6 @@ interface Args {
     // to open or close it.
     localRealm: LocalRealm;
     path: string | undefined;
-    showCatalog: boolean | undefined;
   }
 }
 
@@ -40,7 +40,7 @@ export default class FileTree extends Component<Args> {
         {{/if}}
       {{/each}}
       <button {{on "click" this.openCatalog}} type="button">Create New Card</button>
-      {{#if @showCatalog}}
+      {{#if this.modal.isShowing}}
         <dialog class="dialog-box" open>
           <button {{on "click" this.closeCatalog}} type="button">X Close</button>
           <CreateNew @realmURL={{@localRealm.url.href}} @onSave={{this.onSave}} />
@@ -55,6 +55,7 @@ export default class FileTree extends Component<Args> {
 
   listing = directory(this, () => this.args.localRealm.isAvailable ? "http://local-realm/" : undefined)
   @service declare router: RouterService;
+  @service declare modal: ModalService;
 
   @cached
   get realmPath() {
@@ -85,11 +86,13 @@ export default class FileTree extends Component<Args> {
 
   @action
   openCatalog() {
+    this.modal.open();
     this.router.transitionTo({ queryParams: { showCatalog: true } });
   }
 
   @action
   closeCatalog() {
+    this.modal.close();
     this.router.transitionTo({ queryParams: { showCatalog: undefined } });
   }
 

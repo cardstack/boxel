@@ -26,7 +26,6 @@ interface Signature {
   Args: {
     openFile: FileResource | undefined;
     path: string | undefined
-    showCatalog: boolean | undefined;
   }
 }
 
@@ -36,7 +35,7 @@ export default class Go extends Component<Signature> {
   <template>
     <div class="editor">
       <div class="file-tree">
-        <FileTree @localRealm={{this.localRealm}} @path={{@path}} @showCatalog={{@showCatalog}} />
+        <FileTree @localRealm={{this.localRealm}} @path={{@path}} />
       </div>
       {{#if this.openFile}}
         <div {{monaco content=this.openFile.content
