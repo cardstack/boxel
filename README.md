@@ -18,6 +18,8 @@ In order to run app
 2. `yarn start` in the host/ workspace to serve the ember app
 3. `yarn start:base` in the realm-server/ to serve the base realm (alternatively you can use `yarn start:test-realms` which also serves the base realm--this is convenient if you wish to switch between the app and the tests without having to restart servers)
 
+The app will be available at http://localhost:4200. Click on the button to connect to your Local Realm, and then select the "cards/" folder within this project. Click "Allow" on the popups that ask for the ability to read and write to the local file sytem.
+
 ## Running the Tests
 There are currently 2 test suites: the host/ workspace tests and the realm-server/ workspace tests.
 
