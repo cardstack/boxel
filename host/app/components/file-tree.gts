@@ -9,6 +9,10 @@ import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import CreateNew from './create-new';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { Loader } from '@cardstack/runtime-common/loader';
+//@ts-ignore cached not available yet in definitely typed
+import { cached } from '@glimmer/tracking';
 
 interface Args {
   Args: {
@@ -36,10 +40,13 @@ export default class FileTree extends Component<Args> {
         {{/if}}
       {{/each}}
       <button {{on "click" this.openCatalog}} type="button">Create New Card</button>
-      {{!-- template-lint-disable no-inline-styles --}}
-      <dialog open={{this.isCatalogOpen}} style="position:absolute;z-index:1;top:10vh;">
-        <CreateNew @onClose={{this.closeCatalog}} />
-      </dialog>
+      {{#if this.isCatalogOpen}}
+        {{!-- template-lint-disable no-inline-styles --}}
+        <dialog style="position:absolute;z-index:1;top:10vh;" open>
+          <button {{on "click" this.closeCatalog}} type="button">X Close</button>
+          <CreateNew @realmURL={{@localRealm.url.href}} @onSave={{this.onSave}} />
+        </dialog>
+      {{/if}}
     {{else if @localRealm.isLoading }}
       ...
     {{else if @localRealm.isEmpty}}
@@ -50,6 +57,14 @@ export default class FileTree extends Component<Args> {
   listing = directory(this, () => this.args.localRealm.isAvailable ? "http://local-realm/" : undefined)
   @service declare router: RouterService;
   @tracked isCatalogOpen = false;
+
+  @cached
+  get realmPath() {
+    if (!this.args.localRealm.isAvailable) {
+      throw new Error('Realm is not available');
+    }
+    return new RealmPaths(Loader.reverseResolution(this.args.localRealm.url.href));
+  }
 
   @action
   openRealm() {
@@ -73,6 +88,13 @@ export default class FileTree extends Component<Args> {
   @action
   openCatalog() {
     this.isCatalogOpen = true;
+  }
+
+  @action
+  onSave(url: string) {
+    let path = this.realmPath.local(new URL(url));
+    this.router.transitionTo({ queryParams: { path } });
+    this.closeCatalog();
   }
 
   @action

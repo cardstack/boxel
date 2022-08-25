@@ -40,38 +40,25 @@ export default class CardCatalog extends Component<Signature> {
   </template>
 
   @tracked selectedRealm = this.args.realmURL;
-  @tracked catalogEntry = getSearchResults(this, () => ({
-    filter: {
-      type: catalogEntryRef,
-    }
-  }), this.selectedRealm);
+  @tracked catalogEntry = getSearchResults(this,
+    () => ({ filter: { type: catalogEntryRef }}),
+    () => this.selectedRealm
+  );
 
   get entries() {
     return this.catalogEntry.instances;
   }
 
-  updateCatalogEntries() {
-    this.catalogEntry = getSearchResults(this, () => ({
-      filter: {
-        type: catalogEntryRef,
-      }
-    }), this.selectedRealm);
-  }
-
   @action
   select(ev: Event) {
     let value = (ev.target as any)?.value;
-    if (this.selectedRealm === value) {
+    if (value === this.selectedRealm) {
       return;
     }
-    switch(value) {
-      case 'base':
-        this.selectedRealm = baseRealm.url;
-        this.updateCatalogEntries();
-        break;
-      default:
-        this.selectedRealm = this.args.realmURL;
-        this.updateCatalogEntries();
+    if (value === 'base') {
+      this.selectedRealm = baseRealm.url;
+    } else {
+      this.selectedRealm = this.args.realmURL;
     }
   }
 }

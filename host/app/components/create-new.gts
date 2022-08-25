@@ -1,28 +1,21 @@
 import Component from '@glimmer/component';
-import { type CardResource } from '@cardstack/runtime-common';
-//@ts-ignore cached not available yet in definitely typed
-import { tracked, cached } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
+import type { CardResource } from '@cardstack/runtime-common';
+import { tracked } from '@glimmer/tracking';
 //@ts-ignore glint does not think `hash` is consumed-but it is in the template
 import { fn, hash } from '@ember/helper';
 import { action } from '@ember/object';
-import { service } from '@ember/service';
-import LocalRealm from '../services/local-realm';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { Loader } from '@cardstack/runtime-common/loader';
-import type RouterService from '@ember/routing/router-service';
 import CardCatalog from './card-catalog';
 import ImportedModuleEditor from './imported-module-editor';
 
 interface Signature {
   Args: {
-    onClose: () => void;
+    realmURL: string;
+    onSave?: (url: string) => void;
   }
 }
 
 export default class CreateNew extends Component<Signature> {
   <template>
-    <button {{on "click" @onClose}} type="button">X Close</button>
     <section>
       <h1>Create New Card:</h1>
       {{#if this.selectedCard}}
@@ -30,31 +23,21 @@ export default class CreateNew extends Component<Signature> {
           <legend>Create New {{this.selectedCard.attributes.title}}</legend>
           <ImportedModuleEditor
             @moduleURL={{this.selectedCard.attributes.ref.module}}
-            @cardArgs={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.selectedCard.attributes.ref}}
+            @cardArgs={{hash type="new" realmURL=@realmURL cardSource=this.selectedCard.attributes.ref}}
             @onSave={{this.onSave}}
             @onCancel={{this.onCancel}}
           />
         </fieldset>
       {{else}}
         <CardCatalog
-          @realmURL={{this.localRealm.url.href}}
+          @realmURL={{@realmURL}}
           @onSelect={{this.onSelect}}
         />
       {{/if}}
     </section>
   </template>
 
-  @service declare localRealm: LocalRealm;
-  @service declare router: RouterService;
-  @tracked selectedCard: CardResource | undefined;
-
-  @cached
-  get realmPath() {
-    if (!this.localRealm.isAvailable) {
-      throw new Error('Local realm is not available');
-    }
-    return new RealmPaths(Loader.reverseResolution(this.localRealm.url.href));
-  }
+  @tracked selectedCard: CardResource | undefined = undefined;
 
   @action
   onSelect(entry: CardResource) {
@@ -63,10 +46,10 @@ export default class CreateNew extends Component<Signature> {
 
   @action
   onSave(url: string) {
-    let path = this.realmPath.local(new URL(url));
-    this.router.transitionTo({ queryParams: { path } });
     this.selectedCard = undefined;
-    this.args.onClose();
+    if (this.args.onSave) {
+      this.args.onSave(url);
+    }
   }
 
   @action

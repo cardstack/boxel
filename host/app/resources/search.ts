@@ -52,9 +52,9 @@ export class Search extends Resource<Args> {
 export function getSearchResults(
   parent: object,
   query: () => Query,
-  realm: string | undefined
+  realm?: () => string | undefined
 ) {
   return useResource(parent, Search, () => ({
-    named: { query: query(), realm },
+    named: { query: query(), realm: realm ? realm() : undefined },
   }));
 }
