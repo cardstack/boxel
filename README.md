@@ -8,7 +8,9 @@
 
 `host` is the ember app
 
-`worker` is a separate build for the service worker
+`worker` is a separate build for the service worker that serves a realm in the service worker
+
+`realm-server` is a node app that serves the realm as an HTTP server
 
 The top-level of the monorepo contains typescript & glint setting for the ember app, because Glint doesn't like monorepos.
 
