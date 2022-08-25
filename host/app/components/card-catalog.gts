@@ -18,22 +18,22 @@ interface Signature {
 
 export default class CardCatalog extends Component<Signature> {
   <template>
-    <section>
+    <div data-test-select-realm>
       <label for="select-realm">Choose a realm:</label>
       <select name="realm" id="select-realm" {{on "change" this.select}}>
         <option value="local">Local Realm</option>
         <option value="base">Base Realm</option>
       </select>
-    </section>
-    <ul class="card-catalog">
+    </div>
+    <ul class="card-catalog" data-test-card-catalog>
       {{#each this.entries as |entry|}}
-        <li>
+        <li data-test-card-catalog-item={{entry.id}}>
           <ImportedModuleEditor
             @moduleURL={{entry.meta.adoptsFrom.module}}
             @cardArgs={{hash type="existing" url=entry.id format="embedded"}}
           />
           {{#if @onSelect}}
-            <button {{on "click" (fn @onSelect entry)}} type="button">
+            <button {{on "click" (fn @onSelect entry)}} type="button" data-test-select={{entry.id}}>
               Select
             </button>
           {{/if}}

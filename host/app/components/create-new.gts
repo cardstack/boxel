@@ -16,7 +16,7 @@ interface Signature {
 
 export default class CreateNew extends Component<Signature> {
   <template>
-    <section>
+    <div data-test-create-new data-test-create-new-card={{this.selectedCard.id}}>
       <h1>Create New Card: {{this.selectedCard.attributes.title}}</h1>
       {{#if this.selectedCard}}
         <ImportedModuleEditor
@@ -31,7 +31,7 @@ export default class CreateNew extends Component<Signature> {
           @onSelect={{this.onSelect}}
         />
       {{/if}}
-    </section>
+    </div>
   </template>
 
   @tracked selectedCard: CardResource | undefined = undefined;
