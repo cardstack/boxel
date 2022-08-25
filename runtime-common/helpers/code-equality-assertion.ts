@@ -49,13 +49,18 @@ function preprocessTemplateTags(code: string): string {
   let matches = parseTemplates(code, "no-filename", "template");
   for (let match of matches) {
     output.push(code.slice(offset, match.start.index));
-    output.push("[templte(`"); // use back tick so we can be tolerant of newlines
+    // its super important that this not be the template function we use in the
+    // module-syntax (templte), so that we can ensure that we are not
+    // inadvertantly comparing precompiled source against an actual template.
+    // rather we want to make sure we compare templates to templates (an apples
+    // to apples comparison).
+    output.push("[template(`");
     output.push(
       code
         .slice(match.start.index! + match.start[0].length, match.end.index)
         .replace(/`/g, "\\`")
     );
-    output.push("`)]        ");
+    output.push("`)]");
     offset = match.end.index! + match.end[0].length;
   }
   output.push(code.slice(offset));

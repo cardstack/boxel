@@ -32,6 +32,7 @@ export interface PossibleField {
   card: ClassReference;
   type: ExternalReference;
   decorator: ExternalReference;
+  path: NodePath<t.ClassProperty>;
 }
 
 export interface Options {
@@ -217,6 +218,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
 
         let possibleField: PossibleField = {
           card: fieldCard,
+          path: maybeClassProperty,
           type: {
             type: "external",
             module: getName(fieldTypeInfo.declaration.node.source),
