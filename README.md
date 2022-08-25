@@ -8,7 +8,7 @@
 
 `host` is the ember app
 
-`worker` is a separate build for the service worker that serves a realm in the service worker
+`worker` is a separate build for the service worker that serves a realm
 
 `realm-server` is a node app that serves the realm as an HTTP server
 
