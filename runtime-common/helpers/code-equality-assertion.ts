@@ -1,0 +1,94 @@
+import { transform } from "@babel/core";
+import { NodePath } from "@babel/traverse";
+import { StringLiteral } from "@babel/types";
+import { createPatch } from "diff";
+import { isNode } from "../index";
+//@ts-ignore unsure where these types live
+import decoratorsPlugin from "@babel/plugin-syntax-decorators";
+//@ts-ignore unsure where these types live
+import classPropertiesPlugin from "@babel/plugin-syntax-class-properties";
+//@ts-ignore unsure where these types live
+import typescriptPlugin from "@babel/plugin-syntax-typescript";
+import { parseTemplates } from "@cardstack/ember-template-imports/lib/parse-templates";
+
+declare global {
+  interface Assert {
+    codeEqual: typeof codeEqual;
+  }
+}
+
+QUnit.assert.codeEqual = codeEqual;
+
+function standardizePlugin() {
+  const visitor = {
+    // all string literals switch to double quotes
+    StringLiteral(path: NodePath<StringLiteral & { extra: { raw: string } }>) {
+      path.node.extra = Object.assign({}, path.node.extra);
+      path.node.extra.raw = `"${path.node.extra.raw.slice(1, -1)}"`;
+      path.replaceWith(path.node);
+    },
+  };
+  return { visitor };
+}
+
+function standardize(code: string) {
+  code = preprocessTemplateTags(code);
+  return transform(code, {
+    plugins: [
+      typescriptPlugin,
+      [decoratorsPlugin, { legacy: true }],
+      classPropertiesPlugin,
+      standardizePlugin,
+    ],
+  })!.code;
+}
+
+function preprocessTemplateTags(code: string): string {
+  let output = [];
+  let offset = 0;
+  let matches = parseTemplates(code, "no-filename", "template");
+  for (let match of matches) {
+    output.push(code.slice(offset, match.start.index));
+    output.push("[templte(`"); // use back tick so we can be tolerant of newlines
+    output.push(
+      code
+        .slice(match.start.index! + match.start[0].length, match.end.index)
+        .replace(/`/g, "\\`")
+    );
+    output.push("`)]        ");
+    offset = match.end.index! + match.end[0].length;
+  }
+  output.push(code.slice(offset));
+  return output.join("");
+}
+
+function codeEqual(
+  this: Assert,
+  actual: string,
+  expected: string,
+  message = "code is not equal."
+) {
+  let parsedActual = standardize(actual)!;
+  let parsedExpected = standardize(expected)!;
+
+  let result = parsedActual === parsedExpected;
+  let msg: string;
+  if (!result) {
+    msg = message;
+    if (isNode) {
+      msg = `${message}
+${createPatch("", parsedExpected, parsedActual)
+  .split("\n")
+  .slice(4)
+  .join("\n")}`;
+    }
+  } else {
+    msg = message;
+  }
+  this.pushResult({
+    result,
+    actual,
+    expected,
+    message: msg,
+  });
+}
