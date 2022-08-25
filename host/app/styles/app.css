@@ -44,7 +44,7 @@
 .card-edit label {
   display: block;
   padding: 0.75rem;
-  margin: 1rem;
+  margin: 1rem auto;
   border: solid gray 1px;
   text-transform: capitalize;
   border-radius: 5px;
@@ -61,4 +61,39 @@
   min-height: 5rem;
   margin-top: .5rem;
   display: block;
+}
+
+.card {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid gray;
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.schema {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid black;
+}
+
+.card-catalog {
+  list-style-type: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 1rem;
+  padding-left: 0;
+}
+
+.dialog-box {
+  position:absolute;
+  z-index:1;
+  top:10vh;
+  width: 50vw;
+  min-height: 50vh;
+  overflow-y: auto;
+}
+
+.catalog-entry-editor {
+  margin-top: 1rem;
 }

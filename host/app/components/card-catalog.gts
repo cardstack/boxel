@@ -5,6 +5,9 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
+import ImportedModuleEditor from './imported-module-editor';
+//@ts-ignore glint does not think this is consumed-but it is consumed in the template
+import { hash } from '@ember/helper';
 
 interface Signature {
   Args: {
@@ -22,11 +25,13 @@ export default class CardCatalog extends Component<Signature> {
         <option value="base">Base Realm</option>
       </select>
     </section>
-    Available Card Types:
-    <ul>
+    <ul class="card-catalog">
       {{#each this.entries as |entry|}}
         <li>
-          {{entry.attributes.title}}
+          <ImportedModuleEditor
+            @moduleURL={{entry.meta.adoptsFrom.module}}
+            @cardArgs={{hash type="existing" url=entry.id format="embedded"}}
+          />
           {{#if @onSelect}}
             <button {{on "click" (fn @onSelect entry)}} type="button">
               Select
@@ -40,7 +45,7 @@ export default class CardCatalog extends Component<Signature> {
   </template>
 
   @tracked selectedRealm = this.args.realmURL;
-  @tracked catalogEntry = getSearchResults(this,
+  catalogEntry = getSearchResults(this,
     () => ({ filter: { type: catalogEntryRef }}),
     () => this.selectedRealm
   );

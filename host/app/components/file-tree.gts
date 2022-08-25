@@ -41,8 +41,7 @@ export default class FileTree extends Component<Args> {
       {{/each}}
       <button {{on "click" this.openCatalog}} type="button">Create New Card</button>
       {{#if this.isCatalogOpen}}
-        {{!-- template-lint-disable no-inline-styles --}}
-        <dialog style="position:absolute;z-index:1;top:10vh;" open>
+        <dialog class="dialog-box" open>
           <button {{on "click" this.closeCatalog}} type="button">X Close</button>
           <CreateNew @realmURL={{@localRealm.url.href}} @onSave={{this.onSave}} />
         </dialog>

@@ -22,7 +22,7 @@ interface Signature {
 export default class Schema extends Component<Signature> {
   <template>
     {{#if this.cardType.type}}
-      <p>
+      <div class="schema">
         <div data-test-card-id>Card ID: {{this.cardType.type.id}}</div>
         <div data-test-adopts-from>Adopts From: {{this.cardType.type.super.id}}</div>
         <div>Fields:</div>
@@ -43,7 +43,7 @@ export default class Schema extends Component<Signature> {
           {{/each}}
         </ul>
         <CatalogEntryEditor @ref={{@ref}} />
-      </p>
+      </div>
     {{/if}}
   </template>
 

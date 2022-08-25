@@ -17,17 +17,14 @@ interface Signature {
 export default class CreateNew extends Component<Signature> {
   <template>
     <section>
-      <h1>Create New Card:</h1>
+      <h1>Create New Card: {{this.selectedCard.attributes.title}}</h1>
       {{#if this.selectedCard}}
-        <fieldset>
-          <legend>Create New {{this.selectedCard.attributes.title}}</legend>
-          <ImportedModuleEditor
-            @moduleURL={{this.selectedCard.attributes.ref.module}}
-            @cardArgs={{hash type="new" realmURL=@realmURL cardSource=this.selectedCard.attributes.ref}}
-            @onSave={{this.onSave}}
-            @onCancel={{this.onCancel}}
-          />
-        </fieldset>
+        <ImportedModuleEditor
+          @moduleURL={{this.selectedCard.attributes.ref.module}}
+          @cardArgs={{hash type="new" realmURL=@realmURL cardSource=this.selectedCard.attributes.ref}}
+          @onSave={{this.onSave}}
+          @onCancel={{this.onCancel}}
+        />
       {{else}}
         <CardCatalog
           @realmURL={{@realmURL}}

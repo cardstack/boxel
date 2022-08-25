@@ -23,16 +23,13 @@ interface Signature {
 
 export default class CatalogEntryEditor extends Component<Signature> {
   <template>
-    <div data-test-catalog-entry-editor>
+    <div class="catalog-entry-editor" data-test-catalog-entry-editor>
       {{#if this.entry}}
         <fieldset>
-          <legend>Catalog Entry Editor</legend>
-          <div>
-            Card ID:
-            <LinkTo @route="application" @query={{hash path=(this.modulePath (ensureJsonExtension this.entry.id))}} data-test-catalog-entry-id>
-              {{this.entry.id}}
-            </LinkTo>
-          </div>
+          <legend>Edit Catalog Entry</legend>
+          <LinkTo @route="application" @query={{hash path=(this.modulePath (ensureJsonExtension this.entry.id))}} data-test-catalog-entry-id>
+            {{this.entry.id}}
+          </LinkTo>
           <ImportedModuleEditor
             @moduleURL={{this.entry.meta.adoptsFrom.module}}
             @cardArgs={{hash type="existing" url=this.entry.id format="edit"}}
