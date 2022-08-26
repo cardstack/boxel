@@ -20,7 +20,7 @@ import classPropertiesPlugin from "@babel/plugin-syntax-class-properties";
 //@ts-ignore unsure where these types live
 import typescriptPlugin from "@babel/plugin-syntax-typescript";
 
-import { types as t } from "@babel/core";
+import type { types as t } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
 import type { CardRef, ExportedCardRef } from "./search-index";
 
@@ -70,60 +70,53 @@ export class ModuleSyntax {
     fieldType: "contains" | "containsMany"
   ) {
     let card = this.getCard(cardName);
+    if (card.possibleFields.has(fieldName)) {
+      // At this level, we can only see this specific module. we'll need the
+      // upstream caller to perform a field existence check on the card
+      // definition to ensure this field does not already exist in the adoption chain
+      throw new Error(`the field "${fieldName}" already exists`);
+    }
     let lastField = [...card.possibleFields.values()].pop();
+    let insertPosition: number;
+    let newField: string;
+    let src: string;
     if (lastField) {
-      let path: NodePath | null = lastField.path;
-      while (path && path.type !== "Program") {
-        path = path.parentPath;
-      }
-      if (!path) {
-        throw new Error(`bug: could not determine program path for module`);
-      }
-      let programPath = path as NodePath<t.Program>;
-
-      //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
-      //typeof Babel.types
-      let importUtil = new ImportUtil(t, programPath);
-      let fieldDecorator = importUtil.import(
-        lastField.path as any, // casting to NodePath<t.Node> isn't working
-        `${baseRealm.url}card-api`,
-        "field"
-      );
-      let fieldTypeIdentifier = importUtil.import(
-        lastField.path as any, // casting to NodePath<t.Node> isn't working
-        `${baseRealm.url}card-api`,
-        fieldType
-      );
-      let fieldCardIdentifier = importUtil.import(
-        lastField.path as any, // casting to NodePath<t.Node> isn't working
-        fieldRef.module,
-        fieldRef.name,
-        suggestedCardName(fieldRef)
-      );
-
-      // reanalyzing the code causes the last field node start and end positions
-      // to update based on the AST mutations made above.
-      let src = this.code();
-      this.analyze(src);
+      let { fieldDecorator, fieldTypeIdentifier, fieldCardIdentifier } =
+        addFieldImports(lastField.path, fieldRef, fieldType);
+      newField = `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
+      src = this.code();
+      this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
       lastField = [...this.getCard(cardName).possibleFields.values()].pop()!;
-      let lastFieldEnd = lastField.path.node.end;
-      if (typeof lastFieldEnd !== "number") {
+      if (typeof lastField.path.node.end !== "number") {
         throw new Error(
           `bug: could not determine the string end position to insert the new field`
         );
       }
-      // we use string manipulation to add the field into the src so that we
-      // don't have to suffer babel's decorator transpilation
-      let fieldSrc = `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
-      src = `${src.substring(0, lastFieldEnd)}\n  ${fieldSrc}\n${src.substring(
-        lastFieldEnd
-      )}`;
-
-      // analyze one more time to incorporate the new field
-      this.analyze(src);
+      insertPosition = lastField.path.node.end;
     } else {
-      throw new Error("TODO");
+      let { fieldDecorator, fieldTypeIdentifier, fieldCardIdentifier } =
+        addFieldImports(card.path, fieldRef, fieldType);
+      newField = `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
+      src = this.code();
+      this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
+      let bodyStart = this.getCard(cardName).path.get("body").node.start;
+      if (typeof bodyStart !== "number") {
+        throw new Error(
+          `bug: could not determine the string end position to insert the new field`
+        );
+      }
+      insertPosition = bodyStart + 1;
     }
+
+    // we use string manipulation to add the field into the src so that we
+    // don't have to suffer babel's decorator transpilation
+    src = `
+      ${src.substring(0, insertPosition)}
+      ${newField}
+      ${src.substring(insertPosition)}
+    `;
+    // analyze one more time to incorporate the new field
+    this.analyze(src);
   }
 
   private getCard(
@@ -249,7 +242,9 @@ function preprocessTemplateTags(src: string): string {
   let matches = parseTemplates(src, "no-filename", "template");
   for (let match of matches) {
     output.push(src.slice(offset, match.start.index));
-    output.push("[templte(`"); // use back tick so we can be tolerant of newlines
+    // we are using this name as well as padded spaces at the end so that source
+    // maps are unaffected
+    output.push("[templte(`");
     output.push(
       src
         .slice(match.start.index! + match.start[0].length, match.end.index)
@@ -262,8 +257,50 @@ function preprocessTemplateTags(src: string): string {
   return output.join("");
 }
 
-function assertNever(value: never) {
-  return new Error(`should never happen ${value}`);
+function addFieldImports(
+  target: NodePath<t.Node>,
+  fieldRef: ExportedCardRef,
+  fieldType: "contains" | "containsMany"
+): {
+  fieldDecorator: ReturnType<ImportUtil["import"]>;
+  fieldTypeIdentifier: ReturnType<ImportUtil["import"]>;
+  fieldCardIdentifier: ReturnType<ImportUtil["import"]>;
+} {
+  let programPath = getProgramPath(target);
+  //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
+  //typeof Babel.types
+  let importUtil = new ImportUtil(Babel.types, programPath);
+  let fieldDecorator = importUtil.import(
+    // there is some type of mismatch here--importUtil expects the
+    // target.parentPath to be non-nullable, but unable to express that in types
+    target as NodePath<any>,
+    `${baseRealm.url}card-api`,
+    "field"
+  );
+  let fieldTypeIdentifier = importUtil.import(
+    target as NodePath<any>,
+    `${baseRealm.url}card-api`,
+    fieldType
+  );
+  let fieldCardIdentifier = importUtil.import(
+    target as NodePath<any>,
+    fieldRef.module,
+    fieldRef.name,
+    suggestedCardName(fieldRef)
+  );
+
+  return { fieldDecorator, fieldTypeIdentifier, fieldCardIdentifier };
+}
+
+function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
+  let currentPath: NodePath | null = path;
+  while (currentPath && currentPath.type !== "Program") {
+    currentPath = currentPath.parentPath;
+  }
+  if (!currentPath) {
+    throw new Error(`bug: could not determine program path for module`);
+  }
+  return currentPath as NodePath<t.Program>;
 }
 
 function suggestedCardName(ref: ExportedCardRef): string {
@@ -275,4 +312,8 @@ function suggestedCardName(ref: ExportedCardRef): string {
     name = ref.module.split("/").pop()!;
   }
   return upperFirst(camelCase(`${name} card`));
+}
+
+function assertNever(value: never) {
+  return new Error(`should never happen ${value}`);
 }

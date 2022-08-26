@@ -1,4 +1,4 @@
-import { module, test, skip } from "qunit";
+import { module, test } from "qunit";
 import { ModuleSyntax } from "@cardstack/runtime-common/module-syntax";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 
@@ -47,19 +47,18 @@ module("module-syntax", function () {
     assert.codeEqual(
       mod.code(),
       `
-      import IntegerCard from "https://cardstack.com/base/integer";
-      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
+        import IntegerCard from "https://cardstack.com/base/integer";
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-        @field age = contains(IntegerCard);
-        static embedded = class Embedded extends Component<typeof this> {
-          <template><h1><@fields.firstName/></h1></template>
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field age = contains(IntegerCard);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><h1><@fields.firstName/></h1></template>
+          }
         }
-      }
-    `,
-      "card src is correct"
+      `
     );
 
     let card = mod.possibleCards.find((c) => c.exportedAs === "Person");
@@ -93,17 +92,239 @@ module("module-syntax", function () {
       "the field decorator is correct"
     );
 
-    // TODO add another field which will assert that the field path is correct
-    // (since the new field must go after this field)
+    // add another field which will assert that the field path is correct since
+    // the new field must go after this field
+    mod.addField(
+      { type: "exportedName", name: "Person" },
+      "lastName",
+      {
+        module: "https://cardstack.com/base/string",
+        name: "default",
+      },
+      "contains"
+    );
+    assert.codeEqual(
+      mod.code(),
+      `
+        import IntegerCard from "https://cardstack.com/base/integer";
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field age = contains(IntegerCard);
+          @field lastName = contains(StringCard);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><h1><@fields.firstName/></h1></template>
+          }
+        }
+      `
+    );
   });
 
-  skip("can add a field to a card that doesn't have any fields");
+  test("can add a field to a card that doesn't have any fields", async function (assert) {
+    let src = `
+        import { Card } from "https://cardstack.com/base/card-api";
 
-  // TESTS:
-  // containsMany
-  // computed (?)
-  // test fieldCard declaration collisions
-  // test fieldCard declaration reuse
-  // fieldName collisions
-  // fieldName collision with parent card
+        export class Person extends Card { }
+      `;
+
+    let mod = new ModuleSyntax(src);
+    mod.addField(
+      { type: "exportedName", name: "Person" },
+      "firstName",
+      {
+        module: "https://cardstack.com/base/string",
+        name: "default",
+      },
+      "contains"
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+          import StringCard from "https://cardstack.com/base/string";
+          import { Card, field, contains } from "https://cardstack.com/base/card-api";
+
+          export class Person extends Card {
+            @field firstName = contains(StringCard);
+          }
+        `
+    );
+  });
+
+  test("can add a field to a card that is not exported", async function (assert) {
+    let src = `
+      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.firstName/></h1></template>
+        }
+      }
+
+      export class FancyPerson extends Person {
+        @field favoriteColor = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+    mod.addField(
+      { type: "localName", name: "Person" },
+      "age",
+      {
+        module: "https://cardstack.com/base/integer",
+        name: "default",
+      },
+      "contains"
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import IntegerCard from "https://cardstack.com/base/integer";
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field age = contains(IntegerCard);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><h1><@fields.firstName/></h1></template>
+          }
+        }
+
+        export class FancyPerson extends Person {
+          @field favoriteColor = contains(StringCard);
+        }
+      `
+    );
+  });
+
+  test("can add a containsMany field", async function (assert) {
+    let src = `
+      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.firstName/></h1></template>
+        }
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+    mod.addField(
+      { type: "exportedName", name: "Person" },
+      "aliases",
+      {
+        module: "https://cardstack.com/base/string",
+        name: "default",
+      },
+      "containsMany"
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { contains, field, Component, Card, containsMany } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field aliases = containsMany(StringCard);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><h1><@fields.firstName/></h1></template>
+          }
+        }
+      `
+    );
+    let card = mod.possibleCards.find((c) => c.exportedAs === "Person");
+    let field = card!.possibleFields.get("aliases");
+    assert.ok(field, "new field was added to syntax");
+    assert.deepEqual(
+      field?.type,
+      {
+        type: "external",
+        module: "https://cardstack.com/base/card-api",
+        name: "containsMany",
+      },
+      "the field type is correct"
+    );
+  });
+
+  test("can handle field card declaration collisions when adding field", async function (assert) {
+    let src = `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      const IntegerCard = "don't collide with me";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+    mod.addField(
+      { type: "exportedName", name: "Person" },
+      "age",
+      {
+        module: "https://cardstack.com/base/integer",
+        name: "default",
+      },
+      "contains"
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import IntegerCard0 from "https://cardstack.com/base/integer";
+        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        const IntegerCard = "don't collide with me";
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field age = contains(IntegerCard0);
+        }
+      `
+    );
+  });
+
+  // At this level, we can only see this specific module. we'll need the
+  // upstream caller to perform a field existence check on the card
+  // definition to ensure this field does not already exist in the adoption chain
+  test("throws when adding a field with a name the card already has", async function (assert) {
+    let src = `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `;
+    let mod = new ModuleSyntax(src);
+    try {
+      mod.addField(
+        { type: "exportedName", name: "Person" },
+        "firstName",
+        {
+          module: "https://cardstack.com/base/string",
+          name: "default",
+        },
+        "contains"
+      );
+      throw new Error("expected error was not thrown");
+    } catch (err: any) {
+      assert.ok(
+        err.message.match(/field "firstName" already exists/),
+        "expected error was thrown"
+      );
+    }
+  });
 });
