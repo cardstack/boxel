@@ -1,0 +1,15 @@
+import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
+import StringCard from 'https://cardstack.com/base/string';
+
+export class Person extends Card {
+  @field firstName = contains(StringCard);
+  @field lastName = contains(StringCard);
+  // @field fullName = contains(StringCard, { computeVia: function(this: Person) { return `${this.firstName} ${this.lastName}`; }});
+  static embedded = class Embedded extends Component<typeof this> {
+    <template><@fields.firstName /> <@fields.lastName /></template>
+  }
+  static isolated = class Isolated extends Component<typeof this> {
+    <template><h1><@fields.firstName /> <@fields.lastName /></h1></template>
+  }
+  static demo: Record<string, any> = { firstName: 'Mango', lastName: 'Abdel-Rahman' }
+}
