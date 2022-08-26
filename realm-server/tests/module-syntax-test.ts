@@ -327,4 +327,112 @@ module("module-syntax", function () {
       );
     }
   });
+
+  test("can remove a field from a card", async function (assert) {
+    let src = `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+      }
+    `;
+    let mod = new ModuleSyntax(src);
+    mod.removeField({ type: "exportedName", name: "Person" }, "firstName");
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends Card {
+          @field lastName = contains(StringCard);
+        }
+      `
+    );
+
+    let card = mod.possibleCards.find((c) => c.exportedAs === "Person");
+    let field = card!.possibleFields.get("firstName");
+    assert.strictEqual(field, undefined, "field does not exist in syntax");
+  });
+
+  test("can remove the last field from a card", async function (assert) {
+    let src = `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+    mod.removeField({ type: "exportedName", name: "Person" }, "firstName");
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { Card } from "https://cardstack.com/base/card-api";
+        export class Person extends Card { }
+      `
+    );
+  });
+
+  test("can remove the field from a card that is not exported", async function (assert) {
+    let src = `
+      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+      }
+
+      export class FancyPerson extends Person {
+        @field favoriteColor = contains(StringCard);
+      }
+    `;
+    let mod = new ModuleSyntax(src);
+    mod.removeField({ type: "localName", name: "Person" }, "firstName");
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        class Person extends Card {
+          @field lastName = contains(StringCard);
+        }
+
+        export class FancyPerson extends Person {
+          @field favoriteColor = contains(StringCard);
+        }
+      `
+    );
+  });
+
+  test("throws when field to remove does not actually exist", async function (assert) {
+    let src = `
+      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+    try {
+      mod.removeField({ type: "exportedName", name: "Person" }, "foo");
+      throw new Error("expected error was not thrown");
+    } catch (err: any) {
+      assert.ok(
+        err.message.match(/field "foo" does not exist/),
+        "expected error was thrown"
+      );
+    }
+  });
 });

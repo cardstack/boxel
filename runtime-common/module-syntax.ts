@@ -7,6 +7,10 @@ import {
   ClassReference,
   ExternalReference,
 } from "./schema-analysis-plugin";
+import {
+  removeFieldPlugin,
+  Options as RemoveOptions,
+} from "./removeFieldPlugin";
 import { ImportUtil } from "babel-import-util";
 import startCase from "lodash/startCase";
 import camelCase from "lodash/camelCase";
@@ -117,6 +121,37 @@ export class ModuleSyntax {
     `;
     // analyze one more time to incorporate the new field
     this.analyze(src);
+  }
+
+  // Note that we will rely on the fact that the card author first updated the
+  // card so that the field is unused in the card's templates or computeds or
+  // child cards. Removing a field that is consumed by this card or cards that
+  // adopt from this card will cause runtime errors. We'd probably need to rely
+  // on card compilation to be able to guard for this scenario
+  removeField(
+    cardName:
+      | { type: "exportedName"; name: string }
+      | { type: "localName"; name: string },
+    fieldName: string
+  ) {
+    let card = this.getCard(cardName);
+    let field = card.possibleFields.get(fieldName);
+    if (!field) {
+      throw new Error(`field "${fieldName}" does not exist`);
+    }
+
+    this.ast = Babel.transformFromAstSync(this.ast, undefined, {
+      code: false,
+      ast: true,
+      plugins: [
+        typescriptPlugin,
+        [decoratorsPlugin, { legacy: true }],
+        classPropertiesPlugin,
+        [removeFieldPlugin, { card, field } as RemoveOptions],
+      ],
+    })!.ast!;
+
+    this.analyze(this.code());
   }
 
   private getCard(
