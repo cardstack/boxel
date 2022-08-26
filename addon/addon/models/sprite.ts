@@ -87,8 +87,8 @@ export default class Sprite {
     if (!this.initialBounds || !this.finalBounds) {
       return undefined;
     }
-    let initialBounds = this.initialBounds.relativeToContext;
-    let finalBounds = this.finalBounds.relativeToContext;
+    let initialBounds = this.initialBounds.relativeToParent;
+    let finalBounds = this.finalBounds.relativeToParent;
     return {
       x: finalBounds.left - initialBounds.left,
       y: finalBounds.top - initialBounds.top,

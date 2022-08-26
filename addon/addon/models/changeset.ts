@@ -199,11 +199,18 @@ export class ChangesetBuilder {
             sprite.identifier.toString()
           );
 
+          let spriteNode =
+            spriteTree.lookupNodeByElement(sprite.element) ??
+            spriteTree.freshlyRemovedToNode.get(spriteModifier);
+          let parentNode = spriteNode!.parent;
+          let parent = parentNode.contextModel ?? parentNode.spriteModel!;
+
           this.addSpriteTo(
             changeset,
             sprite,
             spriteModifier,
             context,
+            parent,
             counterpartModifier,
             intermediateSprite
           );
@@ -381,6 +388,7 @@ export class ChangesetBuilder {
     sprite: Sprite,
     spriteModifier: ISpriteModifier,
     context: IContext,
+    parent: IContext | ISpriteModifier,
     counterpartModifier?: ISpriteModifier,
     intermediateSprite?: IntermediateSprite
   ) {
@@ -398,12 +406,14 @@ export class ChangesetBuilder {
         sprite.initialBounds = new ContextAwareBounds({
           element: intermediateSprite.intermediateBounds,
           contextElement: context.lastBounds,
+          parent: parent.lastBounds,
         });
         sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
       } else {
         sprite.initialBounds = new ContextAwareBounds({
           element: spriteModifier.lastBounds,
           contextElement: context.lastBounds,
+          parent: parent.lastBounds,
         });
         sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
       }
@@ -411,6 +421,7 @@ export class ChangesetBuilder {
       sprite.finalBounds = new ContextAwareBounds({
         element: spriteModifier.currentBounds,
         contextElement: context.currentBounds,
+        parent: parent.currentBounds,
       });
       sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
 
@@ -434,6 +445,7 @@ export class ChangesetBuilder {
             sprite.counterpart.initialBounds = new ContextAwareBounds({
               element: counterpartModifier.currentBounds,
               contextElement: context.lastBounds,
+              parent: parent.lastBounds,
             });
             sprite.counterpart.initialComputedStyle =
               counterpartModifier.lastComputedStyle;
@@ -462,6 +474,7 @@ export class ChangesetBuilder {
       sprite.finalBounds = new ContextAwareBounds({
         element: spriteModifier.currentBounds,
         contextElement: context.currentBounds,
+        parent: parent.currentBounds,
       });
       sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
 
@@ -476,12 +489,14 @@ export class ChangesetBuilder {
         sprite.initialBounds = new ContextAwareBounds({
           element: intermediateSprite.intermediateBounds,
           contextElement: context.lastBounds,
+          parent: parent.lastBounds,
         });
         sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
       } else {
         sprite.initialBounds = new ContextAwareBounds({
           element: spriteModifier.currentBounds,
           contextElement: context.lastBounds,
+          parent: parent.lastBounds,
         });
         sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
       }

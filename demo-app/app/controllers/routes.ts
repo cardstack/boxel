@@ -65,17 +65,12 @@ export default class RoutesController extends Controller {
             removedSprite.initialBounds.element.height
           );
         }
-        removedSprite.finalBounds = new ContextAwareBounds({
-          element: finalElementBounds,
-          contextElement: context.currentBounds,
-        });
 
         let initialBounds = removedSprite.initialBounds.relativeToContext;
-        let finalBounds = removedSprite.finalBounds.relativeToContext;
 
         removedSprite.setupAnimation('position', {
           startX: initialBounds.x,
-          endX: finalBounds.x,
+          endX: finalElementBounds.x - context.currentBounds.x,
           behavior: springBehavior,
         });
       }

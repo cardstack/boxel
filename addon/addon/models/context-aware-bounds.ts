@@ -3,6 +3,7 @@ import { BoundsVelocity } from '../utils/measurement';
 type ContextAwareBoundsConstructorArgs = {
   element: DOMRect;
   contextElement: DOMRect;
+  parent?: DOMRect;
 };
 
 export interface Position {
@@ -24,7 +25,8 @@ export type BoundsDelta = {
 
 export default class ContextAwareBounds {
   element: DOMRect;
-  parent: DOMRect;
+  context: DOMRect;
+  parent: DOMRect | undefined;
   velocity: BoundsVelocity = {
     x: 0,
     y: 0,
@@ -32,13 +34,33 @@ export default class ContextAwareBounds {
     height: 0,
   };
 
-  constructor({ element, contextElement }: ContextAwareBoundsConstructorArgs) {
+  constructor({
+    element,
+    contextElement,
+    parent,
+  }: ContextAwareBoundsConstructorArgs) {
     this.element = element;
-    this.parent = contextElement;
+    this.context = contextElement;
+    this.parent = parent;
   }
 
   get relativeToContext(): DOMRect {
+    let { element, context } = this;
+    return new DOMRect(
+      element.left - context.left,
+      element.top - context.top,
+      element.width,
+      element.height
+    );
+  }
+
+  get relativeToParent(): DOMRect {
     let { element, parent } = this;
+
+    if (!parent) {
+      throw new Error('Could not access parent DOMRect in relativeToParent');
+    }
+
     return new DOMRect(
       element.left - parent.left,
       element.top - parent.top,
@@ -54,18 +76,6 @@ export default class ContextAwareBounds {
       this.element.top - top,
       element.width,
       element.height
-    );
-  }
-
-  isEqualTo(other: ContextAwareBounds): boolean {
-    let parentLeftChange = other.parent.left - this.parent.left;
-    let parentTopChange = other.parent.top - this.parent.top;
-
-    return (
-      other.element.left - this.element.left - parentLeftChange === 0 &&
-      other.element.top - this.element.top - parentTopChange === 0 &&
-      other.element.width - this.element.width === 0 &&
-      other.element.height - this.element.height === 0
     );
   }
 }
