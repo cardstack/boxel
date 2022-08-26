@@ -19,7 +19,7 @@ interface Signature {
   }
 }
 
-export default class CreateNew extends Component<Signature> {
+export default class CreateNewCard extends Component<Signature> {
   <template>
     <button {{on "click" this.openCatalog}} type="button" data-test-create-new-card-button>
       Create New Card

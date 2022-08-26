@@ -7,7 +7,7 @@ import { directory, Entry } from '../resources/directory';
 import { eq } from '../helpers/truth-helpers'
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
-import CreateNew from './create-new';
+import CreateNewCard from './create-new-card';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 //@ts-ignore cached not available yet in definitely typed
@@ -38,7 +38,7 @@ export default class FileTree extends Component<Args> {
           </div>
         {{/if}}
       {{/each}}
-      <CreateNew
+      <CreateNewCard
         @realmURL={{@localRealm.url.href}}
         @onSave={{this.onSave}}
         @onOpenCatalog={{this.onOpenCatalog}}

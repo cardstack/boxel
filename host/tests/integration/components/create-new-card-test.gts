@@ -9,7 +9,7 @@ import { renderComponent } from '../../helpers/render-component';
 import Service from '@ember/service';
 import { waitFor, click, fillIn, select } from '@ember/test-helpers';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
-import CreateNew from 'runtime-spike/components/create-new';
+import CreateNewCard from 'runtime-spike/components/create-new-card';
 
 class MockLocalRealm extends Service {
   isAvailable = true;
@@ -31,7 +31,7 @@ class MockRouter extends Service {
   }
 }
 
-module('Integration | create-new', function (hooks) {
+module('Integration | create-new-card', function (hooks) {
   let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
@@ -143,7 +143,7 @@ module('Integration | create-new', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CreateNew @realmURL={{testRealmURL}} @onSave={{onSave}} />
+          <CreateNewCard @realmURL={{testRealmURL}} @onSave={{onSave}} />
         </template>
       }
     );
@@ -199,7 +199,7 @@ module('Integration | create-new', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CreateNew @realmURL={{testRealmURL}} @onSave={{onSave}} />
+          <CreateNewCard @realmURL={{testRealmURL}} @onSave={{onSave}} />
         </template>
       }
     );
