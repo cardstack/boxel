@@ -151,6 +151,7 @@ module('Integration | create-new', function (hooks) {
       }
     );
 
+    await click('[data-test-create-new-card-button]');
     await waitFor('[data-test-create-new] [data-test-ref]');
 
     assert.dom('[data-test-card-catalog] li').exists({ count: 2 }, 'number of catalog items is correct');
