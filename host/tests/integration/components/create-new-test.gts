@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from "@cardstack/runtime-common/loader";
@@ -133,7 +133,10 @@ module('Integration | create-new', function (hooks) {
     Loader.destroy();
   });
 
-  test('can create new card from catalog', async function (assert) {
+  skip('can create new card from base realm catalog', async function (_assert) {
+  });
+
+  test('can create new card from local realm catalog', async function (assert) {
     let router = this.owner.lookup('service:router') as MockRouter;
     let deferred = new Deferred<void>();
     router.initialize(assert, { queryParams: { path: `${testRealmURL}Person/1.json` }}, deferred);
