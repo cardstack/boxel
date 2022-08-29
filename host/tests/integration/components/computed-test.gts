@@ -331,24 +331,6 @@ module('Integration | computeds', function (hooks) {
     assert.deepEqual(abdelRahmans.slowPeople, [], 'empty containsMany field is initialized to an empty array');
   });
 
-  test('cannot set a computed field', async function(assert) {
-    let { field, contains, Card, } = cardApi;
-    let { default: StringCard} = string;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field fastName = contains(StringCard, { computeVia: function(this: Person) { return this.firstName; } });
-      @field slowName = contains(StringCard, { computeVia: 'computeSlowName'})
-      async computeSlowName() {
-        await new Promise(resolve => setTimeout(resolve, 10));
-        return this.firstName;
-      }
-    }
-
-    let card = new Person();
-    assert.throws(() => card.fastName = 'Mango', /Cannot set property fastName/, 'cannot set synchronous computed field');
-    assert.throws(() => card.slowName = 'Mango', /Cannot set property slowName/, 'cannot set asynchronous computed field');
-  });
-
   test('computed fields render as embedded in the edit format', async function(assert) {
     let { field, contains, Card, } = cardApi;
     let { default: StringCard} = string;
