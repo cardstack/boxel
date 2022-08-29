@@ -192,6 +192,9 @@ module('Integration | create-new-card', function (hooks) {
     );
   });
 
+  // TODO let's use field creation as a way to test selecting cards from the
+  // base realm instead of adding cards to teh base realm which probably
+  // don't really belong there.
   test('can create new card from base realm catalog', async function (assert) {
     let router = this.owner.lookup('service:router') as MockRouter;
     let deferred = new Deferred<void>();
@@ -240,7 +243,6 @@ module('Integration | create-new-card', function (hooks) {
           attributes: {
             firstName: 'Jackie',
             lastName: 'Aguilar',
-            // fullName: 'Jackie Aguilar',
           },
           meta: {
             adoptsFrom: {
