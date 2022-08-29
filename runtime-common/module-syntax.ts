@@ -80,16 +80,14 @@ export class ModuleSyntax {
       // definition to ensure this field does not already exist in the adoption chain
       throw new Error(`the field "${fieldName}" already exists`);
     }
-    let lastField = [...card.possibleFields.values()].pop();
+
+    let newField = makeNewField(card.path, fieldRef, fieldType, fieldName);
+    let src = this.code();
+    this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
+
     let insertPosition: number;
-    let newField: string;
-    let src: string;
+    let lastField = [...card.possibleFields.values()].pop();
     if (lastField) {
-      let { fieldDecorator, fieldTypeIdentifier, fieldCardIdentifier } =
-        addFieldImports(lastField.path, fieldRef, fieldType);
-      newField = `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
-      src = this.code();
-      this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
       lastField = [...this.getCard(cardName).possibleFields.values()].pop()!;
       if (typeof lastField.path.node.end !== "number") {
         throw new Error(
@@ -98,11 +96,6 @@ export class ModuleSyntax {
       }
       insertPosition = lastField.path.node.end;
     } else {
-      let { fieldDecorator, fieldTypeIdentifier, fieldCardIdentifier } =
-        addFieldImports(card.path, fieldRef, fieldType);
-      newField = `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
-      src = this.code();
-      this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
       let bodyStart = this.getCard(cardName).path.get("body").node.start;
       if (typeof bodyStart !== "number") {
         throw new Error(
@@ -292,15 +285,12 @@ function preprocessTemplateTags(src: string): string {
   return output.join("");
 }
 
-function addFieldImports(
+function makeNewField(
   target: NodePath<t.Node>,
   fieldRef: ExportedCardRef,
-  fieldType: "contains" | "containsMany"
-): {
-  fieldDecorator: ReturnType<ImportUtil["import"]>;
-  fieldTypeIdentifier: ReturnType<ImportUtil["import"]>;
-  fieldCardIdentifier: ReturnType<ImportUtil["import"]>;
-} {
+  fieldType: "contains" | "containsMany",
+  fieldName: string
+): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
   //typeof Babel.types
@@ -324,7 +314,7 @@ function addFieldImports(
     suggestedCardName(fieldRef)
   );
 
-  return { fieldDecorator, fieldTypeIdentifier, fieldCardIdentifier };
+  return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
 }
 
 function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
