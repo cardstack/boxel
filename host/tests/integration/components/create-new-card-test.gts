@@ -158,6 +158,7 @@ module('Integration | create-new-card', function (hooks) {
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
     await waitFor(`[data-test-create-new-card="${testRealmURL}person-entry"]`);
+    await waitFor(`[data-test-field="firstName"] input`);
 
     await fillIn('[data-test-field="firstName"] input', 'Jackie');
     await click('[data-test-save-card]');
@@ -217,6 +218,7 @@ module('Integration | create-new-card', function (hooks) {
 
     await click(`[data-test-select="${baseRealm.url}CatalogEntry/person-catalog-entry"]`);
     await waitFor(`[data-test-create-new-card="${baseRealm.url}CatalogEntry/person-catalog-entry"]`);
+    await waitFor(`[data-test-field="firstName"] input`);
 
     await fillIn('[data-test-field="firstName"] input', 'Jackie');
     await fillIn('[data-test-field="lastName"] input', 'Aguilar');
