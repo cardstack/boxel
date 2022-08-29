@@ -97,7 +97,10 @@ export default class Preview extends Component<Signature> {
     super(owner, args);
     if (this.args.card.type === 'existing') {
       taskFor(this.loadData).perform(this.args.card.url);
-      this.interval = setInterval(() => taskFor(this.loadData).perform((this.args.card as any).url), 1000);
+      // This polling seems to be exposing some kind of race condition in our
+      // index--the data.meta.lastModified is undefined after PATCHing for some
+      // reason even though this value definitely exists in our search index.
+      // this.interval = setInterval(() => taskFor(this.loadData).perform((this.args.card as any).url), 1000);
     } else {
       taskFor(this.prepareNewInstance).perform();
     }
@@ -239,10 +242,23 @@ export default class Preview extends Component<Signature> {
       throw new Error(`could not save file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
     }
     let json = await response.json();
-    if (json.data.links?.self && this.args.onSave) {
+    
+    // reset our dirty checking to be detect dirtiness from the
+    // current JSON to reflect save that just happened
+    this.initialCardData = this.currentJSON;
+
+    if (json.data.links?.self) {
       // this is to notify the application route to load a
       // new source path, so we use the actual .json extension
-      this.args.onSave(json.data.links.self + '.json');
+      this.doSave(json.data.links.self + '.json');
+    }
+  }
+
+  doSave(path: string) {
+    if (this.args.onSave) {
+      this.args.onSave(path);
+    } else {
+      this.setFormat('isolated')
     }
   }
 }

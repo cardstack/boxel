@@ -80,6 +80,8 @@ import * as emberConcurrencyTS from 'ember-concurrency-ts';
   'ember-concurrency-ts',
   emberConcurrencyTS
 );
+import * as emberModifier2 from 'ember-modifier';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set('ember-modifier', emberModifier2);
 import * as lodash from 'lodash';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('lodash', lodash);
 import * as tracked from 'tracked-built-ins';

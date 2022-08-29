@@ -16,6 +16,7 @@ let string: typeof import ("https://cardstack.com/base/string");
 let integer: typeof import ("https://cardstack.com/base/integer");
 let date: typeof import ("https://cardstack.com/base/date");
 let datetime: typeof import ("https://cardstack.com/base/datetime");
+let boolean: typeof import ("https://cardstack.com/base/boolean");
 let cardRef: typeof import ("https://cardstack.com/base/card-ref");
 let pickModule: typeof import ("https://cardstack.com/base/pick");
 let primitive: typeof primitiveType;
@@ -37,14 +38,16 @@ module('Integration | card-basics', function (hooks) {
     integer = await Loader.import(`${baseRealm.url}integer`);
     date = await Loader.import(`${baseRealm.url}date`);
     datetime = await Loader.import(`${baseRealm.url}datetime`);
+    boolean = await Loader.import(`${baseRealm.url}boolean`);
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
     pickModule = await Loader.import(`${baseRealm.url}pick`);
   });
 
   test('primitive field type checking', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
-    let { default: StringCard} = string;
-    let { default: IntegerCard} = integer;
+    let { default: StringCard } = string;
+    let { default: IntegerCard } = integer;
+    let { default: BooleanCard } = boolean;
     let { default: CardRefCard } = cardRef;
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -52,6 +55,7 @@ module('Integration | card-basics', function (hooks) {
       @field number = contains(IntegerCard);
       @field languagesSpoken = containsMany(StringCard);
       @field ref = contains(CardRefCard);
+      @field boolean = contains(BooleanCard);
 
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -60,6 +64,7 @@ module('Integration | card-basics', function (hooks) {
           {{@model.number}}
           {{@model.ref.module}}
           {{@model.ref.name}}
+          {{@model.boolean}}
           {{#each @model.languagesSpoken as |language|}}
             {{language}}
           {{/each}}
@@ -69,6 +74,7 @@ module('Integration | card-basics', function (hooks) {
     let card = new Person();
     card.firstName = 'arthur';
     card.number = 42;
+    card.boolean = true;
     card.languagesSpoken = ['english', 'japanese'];
     card.ref = { module: `${testRealmURL}person`, name: "Person" };
     let readName: string = card.firstName;
@@ -79,16 +85,20 @@ module('Integration | card-basics', function (hooks) {
     assert.deepEqual(readLanguages, ['english', 'japanese']);
     let readRef: ExportedCardRef = card.ref; 
     assert.deepEqual(readRef, { module: `${testRealmURL}person`, name: "Person" });
+    let readBoolean: boolean = card.boolean;
+    assert.deepEqual(readBoolean, true);
   });
 
   test('access @model for primitive and composite fields', async function (assert) {
     let {field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard} = string;
     let { default: IntegerCard} = integer;
+    let { default: BooleanCard } = boolean;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field subscribers = contains(IntegerCard);
       @field languagesSpoken = containsMany(StringCard);
+      @field isCool = contains(BooleanCard);
     }
 
     class Post extends Card {
@@ -100,6 +110,7 @@ module('Integration | card-basics', function (hooks) {
           {{@model.title}} by {{@model.author.firstName}}
           speaks {{#each @model.author.languagesSpoken as |language|}} {{language}} {{/each}}
           {{@model.author.subscribers}} subscribers
+          is cool {{@model.author.isCool}}
         </template>
       }
     }
@@ -109,12 +120,13 @@ module('Integration | card-basics', function (hooks) {
       author: {
           firstName: 'Arthur',
           subscribers: 5,
+          isCool: true,
           languagesSpoken: ['english', 'japanese']
         },
     });
 
     await renderCard(helloWorld, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Arthur speaks english japanese 5 subscribers');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Arthur speaks english japanese 5 subscribers is cool true');
   });
 
   test('render primitive field', async function (assert) {
@@ -486,6 +498,61 @@ module('Integration | card-basics', function (hooks) {
     await fillIn('[data-test-field="title"] input', 'New Post');
     await fillIn('[data-test-field="author"] input', 'Carl Stack');
     // Check that outputs have changed
+  });
+
+  test('renders field name for boolean default view values', async function (assert) {
+    let {field, contains, Card, } = cardApi;
+    let { default: StringCard} = string;
+    let { default: BooleanCard } = boolean;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field isCool = contains(BooleanCard);
+    }
+
+    let mango = Person.fromSerialized({
+      firstName: 'Mango',
+      isCool: true
+    })
+    await renderCard(mango, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango isCool: true');
+  })
+
+  test('renders boolean edit view', async function(assert) {
+    let {field, contains, Card, } = cardApi;
+    let { default: StringCard} = string;
+    let { default: BooleanCard } = boolean;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field isCool = contains(BooleanCard);
+      @field isHuman = contains(BooleanCard);
+    }
+    let mango = Person.fromSerialized({
+      firstName: 'Mango',
+      isCool: true,
+      isHuman: false
+    })
+
+    const TRUE = 0;
+    const FALSE = 1;
+    await renderCard(mango, 'edit');
+    let isCoolRadios: NodeListOf<HTMLInputElement> = document.querySelectorAll('[data-test-field="isCool"] input');
+    let isHumanRadios: NodeListOf<HTMLInputElement> = document.querySelectorAll('[data-test-field="isHuman"] input');
+    assert.strictEqual(isCoolRadios[TRUE].checked, true, 'the isCool true radio has correct state');
+    assert.strictEqual(isCoolRadios[FALSE].checked, false, 'the isCool false radio has correct state');
+    assert.strictEqual(isHumanRadios[TRUE].checked, false, 'the isHuman true radio has correct state');
+    assert.strictEqual(isHumanRadios[FALSE].checked, true, 'the isHuman false radio has correct state');
+
+    await click(isHumanRadios[TRUE]);
+    // make sure radio group changes don't bleed into one another
+    assert.strictEqual(isCoolRadios[TRUE].checked, true, 'the isCool true radio has correct state');
+    assert.strictEqual(isCoolRadios[FALSE].checked, false, 'the isCool false radio has correct state');
+    assert.strictEqual(isHumanRadios[TRUE].checked, true, 'the isHuman true radio has correct state');
+    assert.strictEqual(isHumanRadios[FALSE].checked, false, 'the isHuman false radio has correct state');
+
+    assert.strictEqual(mango.isCool, true, 'the isCool field has the correct value');
+    assert.strictEqual(mango.isHuman, true, 'the isHuman field has the correct value');
   });
 
   test('can adopt a card', async function (assert) {

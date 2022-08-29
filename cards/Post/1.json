@@ -4,7 +4,9 @@
     "attributes": {
       "author": {
         "firstName": "a3",
-        "lastName": "F"
+        "lastName": "F",
+        "isCool": true,
+        "isHuman": true
       },
       "title": "The title",
       "body": "Hello"
@@ -13,8 +15,7 @@
       "adoptsFrom": {
         "module": "http://local-realm/post.gts",
         "name": "Post"
-      },
-      "lastModified": 1657122628758
+      }
     },
     "links": {
       "self": "http://local-realm/Post/1"
