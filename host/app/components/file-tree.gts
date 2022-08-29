@@ -7,6 +7,11 @@ import { directory, Entry } from '../resources/directory';
 import { eq } from '../helpers/truth-helpers'
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
+import CreateNewCard from './create-new-card';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { Loader } from '@cardstack/runtime-common/loader';
+//@ts-ignore cached not available yet in definitely typed
+import { cached } from '@glimmer/tracking';
 
 interface Args {
   Args: {
@@ -20,11 +25,11 @@ interface Args {
 export default class FileTree extends Component<Args> {
   <template>
     {{#if @localRealm.isAvailable}}
-      <button {{on "click" this.closeRealm}}>Close local realm</button>
+      <button {{on "click" this.closeRealm}} type="button">Close local realm</button>
       {{#each this.listing.entries key="path" as |entry|}}
         {{#if (eq entry.kind 'file')}}
-          <div class="item file {{if (eq entry.path this.args.path) 'selected'}} indent-{{entry.indent}}"
-            {{on "click" (fn this.open entry)}}>
+          <div class="item file {{if (eq entry.path @path) 'selected'}} indent-{{entry.indent}}"
+            {{on "click" (fn this.open entry)}} role="button">
           {{entry.name}}
           </div>
         {{else}}
@@ -33,15 +38,29 @@ export default class FileTree extends Component<Args> {
           </div>
         {{/if}}
       {{/each}}
+      <CreateNewCard
+        @realmURL={{@localRealm.url.href}}
+        @onSave={{this.onSave}}
+        @onOpenCatalog={{this.onOpenCatalog}}
+        @onCloseCatalog={{this.onCloseCatalog}}
+      />
     {{else if @localRealm.isLoading }}
       ...
     {{else if @localRealm.isEmpty}}
-      <button {{on "click" this.openRealm}}>Open a local realm</button>
+      <button {{on "click" this.openRealm}} type="button">Open a local realm</button>
     {{/if}}
   </template>
-    
+
   listing = directory(this, () => this.args.localRealm.isAvailable ? "http://local-realm/" : undefined)
   @service declare router: RouterService;
+
+  @cached
+  get realmPath() {
+    if (!this.args.localRealm.isAvailable) {
+      throw new Error('Realm is not available');
+    }
+    return new RealmPaths(Loader.reverseResolution(this.args.localRealm.url.href));
+  }
 
   @action
   openRealm() {
@@ -52,13 +71,29 @@ export default class FileTree extends Component<Args> {
   closeRealm() {
     if (this.args.localRealm.isAvailable) {
       this.args.localRealm.close();
-      this.router.transitionTo({ queryParams: { path: undefined } });
+      this.router.transitionTo({ queryParams: { path: undefined, showCatalog: undefined } });
     }
   }
 
   @action
   open(entry: Entry) {
     let { path } = entry;
-    this.router.transitionTo({ queryParams: { path } });
+    this.router.transitionTo({ queryParams: { path, showCatalog: undefined } });
+  }
+
+  @action
+  onOpenCatalog() {
+    this.router.transitionTo({ queryParams: { showCatalog: true } });
+  }
+
+  @action
+  onCloseCatalog() {
+    this.router.transitionTo({ queryParams: { showCatalog: undefined } });
+  }
+
+  @action
+  onSave(url: string) {
+    let path = this.realmPath.local(new URL(url));
+    this.router.transitionTo({ queryParams: { path, showCatalog: undefined } });
   }
 }

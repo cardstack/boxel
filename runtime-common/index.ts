@@ -38,6 +38,12 @@ export const baseRealm = new RealmPaths("https://cardstack.com/base/");
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 
+import type { ExportedCardRef } from "./search-index";
+export const catalogEntryRef: ExportedCardRef = {
+  module: "https://cardstack.com/base/catalog-entry",
+  name: "CatalogEntry",
+};
+
 // From https://github.com/iliakan/detect-node
 export const isNode =
   Object.prototype.toString.call(globalThis.process) === "[object process]";

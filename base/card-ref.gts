@@ -13,7 +13,9 @@ class BaseView extends Component<typeof CardRefCard> {
       Module: {{@model.module}} Name: {{@model.name}}
     </div>
     {{#if this.rendered.component}}
-      <this.rendered.component/>
+      <div class="card">
+        <this.rendered.component/>
+      </div>
     {{/if}}
   </template>
 
