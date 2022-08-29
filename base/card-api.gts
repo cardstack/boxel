@@ -312,6 +312,9 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
       }
       return value;
     };
+    descriptor.set = function() {
+      // computeds should just no-op when an assignment occurs
+    };
   } else {
     descriptor.get = function(this: CardInstanceType<CardT>) {
       let deserialized = getDataBucket(this);

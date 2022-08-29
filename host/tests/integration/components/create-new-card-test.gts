@@ -62,6 +62,7 @@ module('Integration | create-new-card', function (hooks) {
 
       export class Person extends Card {
         @field firstName = contains(StringCard);
+        @field nickName = contains(StringCard, { computeVia: function() { return this.firstName + '-poo'; }});
         static isolated = class Isolated extends Component<typeof this> {
           <template><h1><@fields.firstName/></h1></template>
         }
@@ -157,6 +158,7 @@ module('Integration | create-new-card', function (hooks) {
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
     await waitFor(`[data-test-create-new-card="${testRealmURL}person-entry"]`);
+    await waitFor(`[data-test-field="firstName"] input`);
 
     await fillIn('[data-test-field="firstName"] input', 'Jackie');
     await click('[data-test-save-card]');
@@ -176,6 +178,7 @@ module('Integration | create-new-card', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Jackie',
+            nickName: 'Jackie-poo'
           },
           meta: {
             adoptsFrom: {
@@ -189,6 +192,9 @@ module('Integration | create-new-card', function (hooks) {
     );
   });
 
+  // TODO let's use field creation as a way to test selecting cards from the
+  // base realm instead of adding cards to teh base realm which probably
+  // don't really belong there.
   test('can create new card from base realm catalog', async function (assert) {
     let router = this.owner.lookup('service:router') as MockRouter;
     let deferred = new Deferred<void>();
@@ -215,6 +221,7 @@ module('Integration | create-new-card', function (hooks) {
 
     await click(`[data-test-select="${baseRealm.url}CatalogEntry/person-catalog-entry"]`);
     await waitFor(`[data-test-create-new-card="${baseRealm.url}CatalogEntry/person-catalog-entry"]`);
+    await waitFor(`[data-test-field="firstName"] input`);
 
     await fillIn('[data-test-field="firstName"] input', 'Jackie');
     await fillIn('[data-test-field="lastName"] input', 'Aguilar');
@@ -236,7 +243,6 @@ module('Integration | create-new-card', function (hooks) {
           attributes: {
             firstName: 'Jackie',
             lastName: 'Aguilar',
-            // fullName: 'Jackie Aguilar',
           },
           meta: {
             adoptsFrom: {
