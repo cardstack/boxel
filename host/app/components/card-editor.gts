@@ -6,7 +6,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import isEqual from 'lodash/isEqual';
 import { eq } from '../helpers/truth-helpers';
-import { restartableTask, task } from 'ember-concurrency';
+import { restartableTask, task, timeout } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { CardJSON, isCardJSON, isCardDocument, ExportedCardRef } from '@cardstack/runtime-common';
@@ -97,10 +97,7 @@ export default class Preview extends Component<Signature> {
     super(owner, args);
     if (this.args.card.type === 'existing') {
       taskFor(this.loadData).perform(this.args.card.url);
-      // This polling seems to be exposing some kind of race condition in our
-      // index--the data.meta.lastModified is undefined after PATCHing for some
-      // reason even though this value definitely exists in our search index.
-      // this.interval = setInterval(() => taskFor(this.loadData).perform((this.args.card as any).url), 1000);
+      this.interval = setInterval(() => taskFor(this.loadData).perform((this.args.card as any).url), 1000);
     } else {
       taskFor(this.prepareNewInstance).perform();
     }
@@ -197,6 +194,7 @@ export default class Preview extends Component<Signature> {
       return;
     }
     await this.cardAPI.loaded;
+    await this.writing;
     if (!this.rendered) {
       this.rendered = this.cardAPI.render(this, () => this.card, () => this.format);
     }
@@ -252,6 +250,16 @@ export default class Preview extends Component<Signature> {
       // new source path, so we use the actual .json extension
       this.doSave(json.data.links.self + '.json');
     }
+  }
+
+  get writing(): Promise<void> {
+    // TODO probably there is a more elegant way to express this in EC
+    return new Promise(async (res) => {
+      while (taskFor(this.write).isRunning) {
+        await timeout(10);
+      }
+      res();
+    });
   }
 
   doSave(path: string) {
