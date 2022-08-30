@@ -6,7 +6,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import isEqual from 'lodash/isEqual';
 import { eq } from '../helpers/truth-helpers';
-import { restartableTask, task } from 'ember-concurrency';
+import { restartableTask, task, timeout } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { CardJSON, isCardJSON, isCardDocument, ExportedCardRef } from '@cardstack/runtime-common';
@@ -194,6 +194,7 @@ export default class Preview extends Component<Signature> {
       return;
     }
     await this.cardAPI.loaded;
+    await this.writing;
     if (!this.rendered) {
       this.rendered = this.cardAPI.render(this, () => this.card, () => this.format);
     }
@@ -239,10 +240,33 @@ export default class Preview extends Component<Signature> {
       throw new Error(`could not save file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
     }
     let json = await response.json();
-    if (json.data.links?.self && this.args.onSave) {
+    
+    // reset our dirty checking to be detect dirtiness from the
+    // current JSON to reflect save that just happened
+    this.initialCardData = this.currentJSON;
+
+    if (json.data.links?.self) {
       // this is to notify the application route to load a
       // new source path, so we use the actual .json extension
-      this.args.onSave(json.data.links.self + '.json');
+      this.doSave(json.data.links.self + '.json');
+    }
+  }
+
+  get writing(): Promise<void> {
+    // TODO probably there is a more elegant way to express this in EC
+    return new Promise(async (res) => {
+      while (taskFor(this.write).isRunning) {
+        await timeout(10);
+      }
+      res();
+    });
+  }
+
+  doSave(path: string) {
+    if (this.args.onSave) {
+      this.args.onSave(path);
+    } else {
+      this.setFormat('isolated')
     }
   }
 }
