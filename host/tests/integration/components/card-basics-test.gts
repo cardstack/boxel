@@ -18,6 +18,7 @@ let date: typeof import ("https://cardstack.com/base/date");
 let datetime: typeof import ("https://cardstack.com/base/datetime");
 let boolean: typeof import ("https://cardstack.com/base/boolean");
 let cardRef: typeof import ("https://cardstack.com/base/card-ref");
+let catalogEntry: typeof import ("https://cardstack.com/base/catalog-entry");
 let pickModule: typeof import ("https://cardstack.com/base/pick");
 let primitive: typeof primitiveType;
 let queryableValue: typeof queryableValueType;
@@ -40,6 +41,7 @@ module('Integration | card-basics', function (hooks) {
     datetime = await Loader.import(`${baseRealm.url}datetime`);
     boolean = await Loader.import(`${baseRealm.url}boolean`);
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
+    catalogEntry = await Loader.import(`${baseRealm.url}catalog-entry`);
     pickModule = await Loader.import(`${baseRealm.url}pick`);
   });
 
@@ -202,6 +204,26 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
     await waitUntil(() => cleanWhiteSpace(document.querySelector('h3')?.textContent ?? '') === 'Person: Mango');
     assert.dom('h3').containsText('Person: Mango', 'the referenced card is rendered');
+  });
+
+  test('catalog entry isPrimitive indicates if the catalog entry is a primitive field card', async function (assert) {
+    let { CatalogEntry } = catalogEntry;
+
+    let nonPrimitiveEntry = CatalogEntry.fromSerialized({ 
+      title: "CatalogEntry Card",
+      ref: { module: "https://cardstack.com/base/catalog-entry", name: "CatalogEntry" }
+    });
+    let primitiveEntry = CatalogEntry.fromSerialized({
+      title: "String Card",
+      ref: { module: "https://cardstack.com/base/string", name: "default" }
+    });
+
+    await cardApi.recompute(nonPrimitiveEntry);
+    await cardApi.recompute(primitiveEntry);
+
+    assert.strictEqual(nonPrimitiveEntry.isPrimitive, false, 'isPrimitive is correct');
+    assert.strictEqual(primitiveEntry.isPrimitive, true, 'isPrimitive is correct');
+
   });
 
   test('render whole composite field', async function (assert) {

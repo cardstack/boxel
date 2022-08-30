@@ -457,7 +457,7 @@ export async function prepareToRender(model: Card, format: Format): Promise<{ co
   return { component };
 }
 
-async function recompute(card: Card): Promise<void> {
+export async function recompute(card: Card): Promise<void> {
   // Note that after each async step we check to see if we are still the
   // current promise, otherwise we bail
   let done: () => void;
