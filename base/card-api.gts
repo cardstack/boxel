@@ -97,8 +97,9 @@ export class Card {
       return data;
     }
     let model = new this() as InstanceType<T>;
-    for (let [fieldName, value] of Object.entries(data)) {
-      serializedSet(model, fieldName, value);
+    let fields = getNonComputedFields(model);
+    for (let fieldName of Object.keys(fields)) {
+      serializedSet(model, fieldName, data[fieldName]);
     }
     return model as CardInstanceType<T>;
   }
@@ -228,7 +229,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return value.map(entry => this.card[serialize](entry))
   }
 
-  deserialize(instance: Card, value: any[]): CardInstanceType<FieldT>[] {
+  deserialize(instance: Card, value: any[] = []): CardInstanceType<FieldT>[] {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
@@ -554,8 +555,14 @@ function getFields<T extends Card>(card: T): { [P in keyof T]?: Field<CardConstr
 
 function getComputedFields<T extends Card>(card: T): { [P in keyof T]?: Field<CardConstructor> } {
   let fields = Object.entries(getFields(card)) as [string, Field<CardConstructor>][];
-  let computedFields = fields.filter(([_, field]) => field.computeVia)
+  let computedFields = fields.filter(([_, field]) => field.computeVia);
   return Object.fromEntries(computedFields) as { [P in keyof T]?: Field<CardConstructor> };
+}
+
+function getNonComputedFields<T extends Card>(card: T): { [P in keyof T]?: Field<CardConstructor> } {
+  let fields = Object.entries(getFields(card)) as [string, Field<CardConstructor>][];
+  let nonComputedFields = fields.filter(([_, field]) => !field.computeVia);
+  return Object.fromEntries(nonComputedFields) as { [P in keyof T]?: Field<CardConstructor> };
 }
 
 function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defaultFormat: Format): FieldsTypeFor<T> {
