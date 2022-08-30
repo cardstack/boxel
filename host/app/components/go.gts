@@ -133,7 +133,8 @@ export default class Go extends Component<Signature> {
   }
 
   @restartableTask private async remove(url: string): Promise<void> {
-    let headersAccept = url.endsWith('.json') ? 'application/vnd.api+json' : 'application/vnd.card+source';
+    let headersAccept = this.openFileCardJSON ? 'application/vnd.api+json' : 'application/vnd.card+source';
+    url = this.openFileCardJSON ? url.replace(/\.json$/, '') : url;
     let response = await Loader.fetch(url, { method: 'DELETE', headers: { 'Accept': headersAccept }});
     if (!response.ok) {
       throw new Error(`could not delete file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
