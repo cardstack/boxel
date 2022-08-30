@@ -181,7 +181,7 @@ export function serializeCard<CardT extends CardConstructor>(model: InstanceType
 
   for (let fieldName of Object.keys(getFields(model))) {
     let value = serializedGet(model, fieldName);
-    if (value) {
+    if (value !== undefined) {
       resource.attributes = resource.attributes || {};
       resource.attributes[fieldName] = value;
     }
@@ -374,7 +374,7 @@ export const field = function(_target: CardConstructor, key: string | symbol, { 
 } as unknown as PropertyDecorator;
 (field as any)[fieldDecorator] = undefined;
 
-export type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; } }
+export type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; fieldName: string | undefined } }
 
 export class Component<CardT extends CardConstructor> extends GlimmerComponent<SignatureFor<CardT>> {
 
@@ -430,9 +430,8 @@ function getComponent<CardT extends CardConstructor>(card: CardT, format: Format
   // up our fields on demand.
   let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
 
-
   let component: ComponentLike<{ Args: {}, Blocks: {} }> = <template>
-    <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} />
+    <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
   </template>
 
   // when viewed from *outside*, our component is both an invokable component
@@ -459,7 +458,7 @@ export async function prepareToRender(model: Card, format: Format): Promise<{ co
   return { component };
 }
 
-async function recompute(card: Card): Promise<void> {
+export async function recompute(card: Card): Promise<void> {
   // Note that after each async step we check to see if we are still the
   // current promise, otherwise we bail
   let done: () => void;
@@ -676,6 +675,10 @@ export class Box<T> {
     } else {
       return this.state.containingBox.value[this.state.fieldName];
     }
+  }
+
+  get name() {
+    return this.state.type === 'derived' ? this.state.fieldName : undefined;
   }
 
   set value(v: T) {

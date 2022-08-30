@@ -130,6 +130,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           attributes: {
             title: 'Person test',
             description: 'test description',
+            isPrimitive: false,
             ref: {
               module: `${testRealmURL}person`,
               name: 'Person'
