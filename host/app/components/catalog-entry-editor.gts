@@ -1,19 +1,19 @@
 import Component from '@glimmer/component';
-import { getSearchResults } from '../resources/search';
-import { type ExportedCardRef, catalogEntryRef } from '@cardstack/runtime-common';
+import { RealmPaths, Loader, catalogEntryRef, type ExportedCardRef } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import ImportedModuleEditor from './imported-module-editor';
+import { tracked } from '@glimmer/tracking';
 import { LinkTo } from '@ember/routing';
 import { service } from '@ember/service';
-import LocalRealm from '../services/local-realm';
 import type RouterService from '@ember/routing/router-service';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { Loader } from '@cardstack/runtime-common/loader';
 //@ts-ignore cached not available yet in definitely typed
-import { tracked, cached } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
+
+import { getSearchResults } from '../resources/search';
+import LocalRealm from '../services/local-realm';
+import CardEditor from './card-editor';
 
 interface Signature {
   Args: {
@@ -30,7 +30,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
           <LinkTo @route="application" @query={{hash path=(this.modulePath (ensureJsonExtension this.entry.id))}} data-test-catalog-entry-id>
             {{this.entry.id}}
           </LinkTo>
-          <ImportedModuleEditor
+          <CardEditor
             @moduleURL={{this.entry.meta.adoptsFrom.module}}
             @cardArgs={{hash type="existing" url=this.entry.id format="edit"}}
           />
@@ -39,7 +39,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
         {{#if this.showEditor}}
           <fieldset>
             <legend>Publish New Card Type</legend>
-            <ImportedModuleEditor
+            <CardEditor
               @moduleURL={{this.catalogEntryRef.module}}
               @cardArgs={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.catalogEntryRef initialAttributes=this.catalogEntryAttributes}}
               @onSave={{this.onSave}}

@@ -2,11 +2,10 @@ import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { click, fillIn, waitFor } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import CardEditor, { ExistingCardArgs }  from 'runtime-spike/components/card-editor';
+import { Loader, baseRealm, type ExistingCardArgs } from '@cardstack/runtime-common';
+import Preview  from 'runtime-spike/components/preview';
 import { renderComponent } from '../../helpers/render-component';
 import { testRealmURL } from '../../helpers';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Format } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -47,7 +46,7 @@ module('Integration | card-editor', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
+          <Preview @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -82,7 +81,7 @@ module('Integration | card-editor', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
+          <Preview @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -129,7 +128,7 @@ module('Integration | card-editor', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
+          <Preview @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -177,7 +176,7 @@ module('Integration | card-editor', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CardEditor @module={{module}} @card={{args}} @formats={{formats}}/>
+          <Preview @module={{module}} @card={{args}} @formats={{formats}}/>
         </template>
       }
     )

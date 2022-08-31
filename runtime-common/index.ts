@@ -35,6 +35,7 @@ export interface DirectoryEntryRelationship {
 }
 import { RealmPaths } from "./paths";
 export const baseRealm = new RealmPaths("https://cardstack.com/base/");
+export { RealmPaths };
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 
@@ -43,6 +44,23 @@ export const catalogEntryRef: ExportedCardRef = {
   module: "https://cardstack.com/base/catalog-entry",
   name: "CatalogEntry",
 };
+
+type Format = "isolated" | "embedded" | "edit";
+export interface NewCardArgs {
+  type: "new";
+  realmURL: string;
+  cardSource: ExportedCardRef;
+  initialAttributes?: CardJSON["data"]["attributes"];
+}
+export interface ExistingCardArgs {
+  type: "existing";
+  url: string;
+  // this is just used for test fixture data. as soon as we
+  // have an actual ember service for the API we should just
+  //  mock that instead
+  json?: CardJSON;
+  format?: Format;
+}
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
