@@ -88,7 +88,9 @@ class URLMap<T> {
 
 interface IndexError {
   message: string;
-  brokenReference?: CardRef;
+  errorReference?: CardRef;
+  // TODO we need to serialize the stack trace too, checkout the mono repo card compiler for examples
+  // TODO when we support relationships we'll need to have instance references too.
 }
 export interface SearchEntry {
   resource: CardResource;
@@ -118,10 +120,10 @@ interface Stats {
   modulesAnalyzed: number;
 }
 
-type SearchEntryWithErrors =
+export type SearchEntryWithErrors =
   | { type: "entry"; entry: SearchEntry }
   | { type: "error"; error: IndexError };
-type CardDefinitionWithErrors =
+export type CardDefinitionWithErrors =
   | { type: "def"; def: CardDefinition }
   | { type: "error"; id: CardRef; error: IndexError };
 type DepsWithErrors =
@@ -410,11 +412,19 @@ export class CurrentRun {
     }
     let typesMaybeError: TypesWithErrors | undefined;
     let depsMaybeError: DepsWithErrors | undefined;
+    let uncaughtError: Error | undefined;
     if (module) {
-      let CardClass = module[name] as typeof Card;
-      let card = CardClass.fromSerialized(doc.data.attributes);
-      let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
-      let searchData = await api.searchDoc(card);
+      let searchData: any;
+      try {
+        let CardClass = module[name] as typeof Card;
+        let card = CardClass.fromSerialized(doc.data.attributes);
+        let api = await this.#loader.import<CardAPI>(
+          `${baseRealm.url}card-api`
+        );
+        searchData = await api.searchDoc(card);
+      } catch (err: any) {
+        uncaughtError = err;
+      }
       typesMaybeError = await this.getTypes(cardRef);
       depsMaybeError = await this.buildDeps({
         type: "exportedCard",
@@ -440,18 +450,27 @@ export class CurrentRun {
     }
 
     if (
+      uncaughtError ||
       !module ||
       typesMaybeError?.type === "error" ||
       depsMaybeError?.type === "error"
     ) {
       this.stats.instanceErrors++;
       let error: SearchEntryWithErrors;
-      if (!module) {
+      if (uncaughtError) {
+        error = {
+          type: "error",
+          error: {
+            message: `${uncaughtError.message} (TODO include stack trace)`,
+            errorReference: { type: "exportedCard", ...cardRef },
+          },
+        };
+      } else if (!module) {
         error = {
           type: "error",
           error: {
             message: `could not load card ref ${JSON.stringify(cardRef)}`,
-            brokenReference: { type: "exportedCard", ...cardRef },
+            errorReference: { type: "exportedCard", ...cardRef },
           },
         };
       } else if (typesMaybeError?.type === "error") {
@@ -461,6 +480,9 @@ export class CurrentRun {
       } else {
         throw new Error(`bug: should never get here`);
       }
+      console.warn(
+        `encountered error indexing card instance ${path}: ${error.error.message}`
+      );
       this.#instances.set(instanceURL, error);
     }
   }
@@ -501,7 +523,7 @@ export class CurrentRun {
               ? `. caused by error: ` + maybeError.error.message
               : ""
           }`,
-          brokenReference: targetRef,
+          errorReference: targetRef,
         },
       };
     }
@@ -794,7 +816,7 @@ export class CurrentRun {
                 ? `. caused by error: ` + maybeError.error.message
                 : ""
             }`,
-            brokenReference: fullRef,
+            errorReference: fullRef,
           },
         };
       }
@@ -865,8 +887,8 @@ function invalidate(
   let invalidatedInstances = [...instances]
     .filter(([instanceURL, item]) => {
       if (item.type === "error") {
-        let errorModule = item.error.brokenReference
-          ? getExportedCardContext(item.error.brokenReference).module
+        let errorModule = item.error.errorReference
+          ? getExportedCardContext(item.error.errorReference).module
           : undefined;
         if (
           errorModule === url.href ||

@@ -36,39 +36,43 @@ interface Signature {
 
 export default class Preview extends Component<Signature> {
   <template>
-    {{#if @formats}}
-      <div>
-        Format:
-        {{#each @formats as |format|}}
-          {{!-- template-lint-disable require-button-type --}}
-          <button {{on "click" (fn this.setFormat format)}}
-            class="format-button {{format}} {{if (eq this.format format) 'selected'}}"
-            disabled={{if (eq this.format format) true false}}>
-            {{format}}
-          </button>
-        {{/each}}
-      </div>
-    {{/if}}
+    {{#if this.cardError}}
+      <h1>Error: {{this.cardError}}</h1>
+    {{else}}
+      {{#if @formats}}
+        <div>
+          Format:
+          {{#each @formats as |format|}}
+            {{!-- template-lint-disable require-button-type --}}
+            <button {{on "click" (fn this.setFormat format)}}
+              class="format-button {{format}} {{if (eq this.format format) 'selected'}}"
+              disabled={{if (eq this.format format) true false}}>
+              {{format}}
+            </button>
+          {{/each}}
+        </div>
+      {{/if}}
 
-    {{#if this.renderedCard}}
-      <div class="card">
-        <this.renderedCard/>
-        {{!-- @glint-ignore glint doesn't know about EC task properties --}}
-        {{#if this.write.last.isRunning}}
-          <span>Saving...</span>
-        {{else}}
-          {{#if this.isDirty}}
-            <div>
-              <button data-test-save-card {{on "click" this.save}}>Save</button>
-              {{#if (eq @card.type "new")}}
-                <button data-test-cancel-create {{on "click" this.cancel}}>Cancel</button>
-              {{else}}
-                <button data-test-reset {{on "click" this.reset}}>Reset</button>
-              {{/if}}
-            </div>
+      {{#if this.renderedCard}}
+        <div class="card">
+          <this.renderedCard/>
+          {{!-- @glint-ignore glint doesn't know about EC task properties --}}
+          {{#if this.write.last.isRunning}}
+            <span>Saving...</span>
+          {{else}}
+            {{#if this.isDirty}}
+              <div>
+                <button data-test-save-card {{on "click" this.save}}>Save</button>
+                {{#if (eq @card.type "new")}}
+                  <button data-test-cancel-create {{on "click" this.cancel}}>Cancel</button>
+                {{else}}
+                  <button data-test-reset {{on "click" this.reset}}>Reset</button>
+                {{/if}}
+              </div>
+            {{/if}}
           {{/if}}
-        {{/if}}
-      </div>
+        </div>
+      {{/if}}
     {{/if}}
   </template>
 
@@ -82,6 +86,7 @@ export default class Preview extends Component<Signature> {
   rendered: RenderedCard | undefined;
   @tracked
   initialCardData: CardJSON | undefined;
+  @tracked cardError: string | undefined;
   private declare interval: ReturnType<typeof setInterval>;
   private lastModified: number | undefined;
 
@@ -201,10 +206,12 @@ export default class Preview extends Component<Signature> {
         'Accept': 'application/vnd.api+json'
       },
     });
-    if (!response.ok) {
-      throw new Error(`could not load card data: ${response.status} - ${response.statusText}. ${await response.text()}`);
-    }
     let json = await response.json();
+    if (!response.ok) {
+      this.cardError = (json.errors as string[]).join();
+      return;
+    } 
+    this.cardError = undefined;
     if (!isCardDocument(json)) {
       throw new Error(`bug: server returned a non card document to us for ${url}`);
     }

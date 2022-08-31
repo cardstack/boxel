@@ -418,10 +418,16 @@ export class Realm {
     }
 
     let url = this.paths.fileURL(localPath);
-    let original = await this.#searchIndex.card(url);
-    if (!original) {
+    let originalMaybeError = await this.#searchIndex.card(url);
+    if (!originalMaybeError) {
       return notFound(request);
     }
+    if (originalMaybeError.type === "error") {
+      return systemError(originalMaybeError.error.message);
+    }
+    let {
+      entry: { resource: original },
+    } = originalMaybeError;
     delete original.meta.lastModified;
 
     let patch = await request.json();
@@ -453,10 +459,16 @@ export class Realm {
   private async getCard(request: Request): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     let url = this.paths.fileURL(localPath);
-    let data = await this.#searchIndex.card(url);
-    if (!data) {
+    let maybeError = await this.#searchIndex.card(url);
+    if (!maybeError) {
       return notFound(request);
     }
+    if (maybeError.type === "error") {
+      return systemError(maybeError.error.message);
+    }
+    let {
+      entry: { resource: data },
+    } = maybeError;
     (data as any).links = { self: url.href };
     let card = { data };
     return new Response(JSON.stringify(card, null, 2), {
