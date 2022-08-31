@@ -1,17 +1,18 @@
 import Component from '@glimmer/component';
+import { service } from '@ember/service';
+import { RealmPaths, Loader } from '@cardstack/runtime-common';
+import type RouterService from '@ember/routing/router-service';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import LocalRealm from '../services/local-realm';
-import { directory, Entry } from '../resources/directory';
 import { eq } from '../helpers/truth-helpers'
-import type RouterService from '@ember/routing/router-service';
-import { service } from '@ember/service';
-import CreateNewCard from './create-new-card';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { Loader } from '@cardstack/runtime-common/loader';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
+
+import LocalRealm from '../services/local-realm';
+import ModalService from '../services/modal';
+import { directory, Entry } from '../resources/directory';
+import CreateNewCard from './create-new-card';
 
 interface Args {
   Args: {
@@ -38,12 +39,16 @@ export default class FileTree extends Component<Args> {
           </div>
         {{/if}}
       {{/each}}
-      <CreateNewCard
-        @realmURL={{@localRealm.url.href}}
-        @onSave={{this.onSave}}
-        @onOpenCatalog={{this.onOpenCatalog}}
-        @onCloseCatalog={{this.onCloseCatalog}}
-      />
+      <button {{on "click" this.openCatalog}} type="button" data-test-create-new-card-button>
+        Create New Card
+      </button>
+      {{#if this.modal.isShowing}}
+        <CreateNewCard
+          @realmURL={{@localRealm.url.href}}
+          @onSave={{this.onSave}}
+          @onClose={{this.closeCatalog}}
+        />
+      {{/if}}
     {{else if @localRealm.isLoading }}
       ...
     {{else if @localRealm.isEmpty}}
@@ -53,6 +58,7 @@ export default class FileTree extends Component<Args> {
 
   listing = directory(this, () => this.args.localRealm.isAvailable ? "http://local-realm/" : undefined)
   @service declare router: RouterService;
+  @service declare modal: ModalService;
 
   @cached
   get realmPath() {
@@ -82,12 +88,14 @@ export default class FileTree extends Component<Args> {
   }
 
   @action
-  onOpenCatalog() {
+  openCatalog() {
+    this.modal.open();
     this.router.transitionTo({ queryParams: { showCatalog: true } });
   }
 
   @action
-  onCloseCatalog() {
+  closeCatalog() {
+    this.modal.close();
     this.router.transitionTo({ queryParams: { showCatalog: undefined } });
   }
 
