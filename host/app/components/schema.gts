@@ -57,14 +57,9 @@ export default class Schema extends Component<Signature> {
         <CatalogEntryEditor @ref={{@ref}} />
       </div>
     {{/if}}
-    {{#if this.isUpdating}}
-      <div><em>Updating...</em></div>
-    {{/if}}
   </template>
 
   @service declare localRealm: LocalRealm;
-  cardType = getCardType(this, () => this.args.ref, () => this.args.moduleSyntax);
-  @tracked isUpdating = false;
 
   @cached
   get realmPath() {
@@ -72,6 +67,12 @@ export default class Schema extends Component<Signature> {
       throw new Error('Local realm is not available');
     }
     return new RealmPaths(Loader.reverseResolution(this.localRealm.url.href));
+  }
+
+  @cached
+  get cardType() {
+    this.args.moduleSyntax;
+    return getCardType(this, () => this.args.ref);
   }
 
   get card() {
@@ -110,10 +111,6 @@ export default class Schema extends Component<Signature> {
     if (this.args.file.state !== 'ready') {
       throw new Error(`the file ${this.args.file.url} is not open`);
     }
-    // this component is rerendered after the write has completed which
-    // will reset the isUpdating. not super elegant, but until we get an
-    // actual design, this is super simplistic approach
-    this.isUpdating = true;
     await this.args.file.write(src);
   }
 }

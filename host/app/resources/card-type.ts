@@ -12,15 +12,10 @@ import { isCardRef } from '@cardstack/runtime-common/search-index';
 import { stringify, parse } from 'qs';
 import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
-import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 interface Args {
   named: {
     ref: ExportedCardRef;
-    // moduleSyntax is unconsumed, rather we are using it was a way to
-    // invalidate the resource so that we refetch the type when we see the
-    // moduleSyntax has changed
-    moduleSyntax: ModuleSyntax;
   };
 }
 
@@ -110,12 +105,8 @@ export class CardType extends Resource<Args> {
   }
 }
 
-export function getCardType(
-  parent: object,
-  ref: () => ExportedCardRef,
-  moduleSyntax: () => ModuleSyntax
-) {
+export function getCardType(parent: object, ref: () => ExportedCardRef) {
   return useResource(parent, CardType, () => ({
-    named: { ref: ref(), moduleSyntax: moduleSyntax() },
+    named: { ref: ref() },
   }));
 }
