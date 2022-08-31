@@ -43,7 +43,7 @@ export default class Go extends Component<Signature> {
                       contentChanged=this.contentChanged}}></div>
         <div class="preview">
           {{#if (isRunnable this.openFile.name)}}
-            <Module @url={{this.openFile.url}} />
+            <Module @file={{this.openFile}}/>
           {{else if this.openFileCardJSON}}
             <CardEditor
               @moduleURL={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module this.openFile.url}}

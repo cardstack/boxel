@@ -276,10 +276,21 @@ module("indexing", function (hooks) {
           `Your filter refers to nonexistent type: import { Post } from "http://test-realm/post"`
         );
       }
-      assert.strictEqual(
+      assert.deepEqual(
         await realm.searchIndex.card(new URL(`${testRealm}post-1`)),
-        undefined,
-        "card instance does not exist"
+        {
+          type: "error",
+          error: {
+            message:
+              'could not load card ref {"module":"http://test-realm/post","name":"Post"}',
+            errorReference: {
+              type: "exportedCard",
+              module: "http://test-realm/post",
+              name: "Post",
+            },
+          },
+        },
+        "card instance is an error document"
       );
       assert.deepEqual(
         realm.searchIndex.stats,

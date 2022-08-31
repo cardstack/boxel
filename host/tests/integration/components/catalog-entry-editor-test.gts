@@ -194,8 +194,14 @@ module('Integration | catalog-entry-editor', function (hooks) {
     assert.dom('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Test title');
     assert.dom('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Test entry');
 
-    let entry = await realm.searchIndex.card(new URL(`${testRealmURL}person-catalog-entry`));
-    assert.strictEqual(entry?.attributes?.title, 'Test title', 'catalog entry title was updated');
-    assert.strictEqual(entry?.attributes?.description, 'Test entry', 'catalog entry description was updated');
+    let maybeError = await realm.searchIndex.card(new URL(`${testRealmURL}person-catalog-entry`));
+    if (maybeError?.type === 'error') {
+      throw new Error(
+        `unexpected error when getting card from index: ${maybeError.error.message}`
+      );
+    }
+    let { entry } = maybeError!;
+    assert.strictEqual(entry?.resource.attributes?.title, 'Test title', 'catalog entry title was updated');
+    assert.strictEqual(entry?.resource.attributes?.description, 'Test entry', 'catalog entry description was updated');
   });
 });

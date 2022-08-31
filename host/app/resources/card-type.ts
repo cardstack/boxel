@@ -14,7 +14,9 @@ import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
 
 interface Args {
-  named: { ref: ExportedCardRef };
+  named: {
+    ref: ExportedCardRef;
+  };
 }
 
 interface Type {

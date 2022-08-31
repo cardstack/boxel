@@ -1,6 +1,6 @@
 import { executableExtensions, baseRealm } from ".";
 import { Kind, Realm } from "./realm";
-import { CurrentRun, SearchEntry } from "./current-run";
+import { CurrentRun, SearchEntry, SearchEntryWithErrors } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import { Loader } from "./loader";
@@ -241,12 +241,8 @@ export class SearchIndex {
     return [...refsMap.values()];
   }
 
-  async card(url: URL): Promise<CardResource | undefined> {
-    let maybeError = this.#currentRun.instances.get(url);
-    if (maybeError && maybeError.type !== "error") {
-      return maybeError.entry.resource;
-    }
-    return undefined;
+  async card(url: URL): Promise<SearchEntryWithErrors | undefined> {
+    return this.#currentRun.instances.get(url);
   }
 
   // this is meant for tests only

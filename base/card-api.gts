@@ -553,7 +553,7 @@ function getFields<T extends Card>(card: T): { [P in keyof T]?: Field<CardConstr
 
 function getComputedFields<T extends Card>(card: T): { [P in keyof T]?: Field<CardConstructor> } {
   let fields = Object.entries(getFields(card)) as [string, Field<CardConstructor>][];
-  let computedFields = fields.filter(([_, field]) => field.computeVia)
+  let computedFields = fields.filter(([_, field]) => field.computeVia);
   return Object.fromEntries(computedFields) as { [P in keyof T]?: Field<CardConstructor> };
 }
 
