@@ -192,8 +192,13 @@ module('Unit | realm', function (hooks) {
 
       let searchIndex = realm.searchIndex;
       let card = await searchIndex.card(new URL(json.data.links.self));
+      if (card?.type === 'error') {
+        throw new Error(
+          `unexpected error when getting card from index: ${card.error.message}`
+        );
+      }
       assert.strictEqual(
-        card?.id,
+        card?.entry.resource.id,
         `${testRealmURL}Card/1`,
         'found card in index'
       );
@@ -243,8 +248,13 @@ module('Unit | realm', function (hooks) {
 
       let searchIndex = realm.searchIndex;
       let card = await searchIndex.card(new URL(json.data.links.self));
+      if (card?.type === 'error') {
+        throw new Error(
+          `unexpected error when getting card from index: ${card.error.message}`
+        );
+      }
       assert.strictEqual(
-        card?.id,
+        card?.entry.resource.id,
         `${testRealmURL}Card/2`,
         'found card in index'
       );
@@ -349,18 +359,23 @@ module('Unit | realm', function (hooks) {
 
     let searchIndex = realm.searchIndex;
     let card = await searchIndex.card(new URL(json.data.links.self));
+    if (card?.type === 'error') {
+      throw new Error(
+        `unexpected error when getting card from index: ${card.error.message}`
+      );
+    }
     assert.strictEqual(
-      card?.id,
+      card?.entry.resource.id,
       `${testRealmURL}dir/card`,
       'found card in index'
     );
     assert.strictEqual(
-      card?.attributes?.firstName,
+      card?.entry.resource.attributes?.firstName,
       'Van Gogh',
       'field value is correct'
     );
     assert.strictEqual(
-      card?.attributes?.lastName,
+      card?.entry.resource.attributes?.lastName,
       'Abdel-Rahman',
       'field value is correct'
     );
@@ -411,8 +426,13 @@ module('Unit | realm', function (hooks) {
     assert.strictEqual(cards.length, 2, 'two cards found');
 
     let card = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
+    if (card?.type === 'error') {
+      throw new Error(
+        `unexpected error when getting card from index: ${card.error.message}`
+      );
+    }
     assert.strictEqual(
-      card?.id,
+      card?.entry.resource.id,
       `${testRealmURL}cards/2`,
       'found card in index'
     );
@@ -431,8 +451,13 @@ module('Unit | realm', function (hooks) {
     assert.strictEqual(card, undefined, 'card was deleted');
 
     card = await searchIndex.card(new URL(`${testRealmURL}cards/1`));
+    if (card?.type === 'error') {
+      throw new Error(
+        `unexpected error when getting card from index: ${card.error.message}`
+      );
+    }
     assert.strictEqual(
-      card?.id,
+      card?.entry.resource.id,
       `${testRealmURL}cards/1`,
       'card 1 is still there'
     );
