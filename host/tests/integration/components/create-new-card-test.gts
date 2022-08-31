@@ -7,7 +7,7 @@ import { Deferred } from "@cardstack/runtime-common/deferred";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import Service from '@ember/service';
-import { waitFor, click, fillIn, select } from '@ember/test-helpers';
+import { waitFor, click, fillIn } from '@ember/test-helpers';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import CreateNewCard from 'runtime-spike/components/create-new-card';
 
@@ -149,7 +149,6 @@ module('Integration | create-new-card', function (hooks) {
       }
     );
 
-    await click('[data-test-create-new-card-button]');
     await waitFor('[data-test-create-new] [data-test-ref]');
 
     assert.dom('[data-test-card-catalog] li').exists({ count: 2 }, 'number of catalog items is correct');
@@ -183,70 +182,6 @@ module('Integration | create-new-card', function (hooks) {
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'file contents are correct'
-    );
-  });
-
-  // TODO let's use field creation as a way to test selecting cards from the
-  // base realm instead of adding cards to teh base realm which probably
-  // don't really belong there.
-  test('can create new card from base realm catalog', async function (assert) {
-    let router = this.owner.lookup('service:router') as MockRouter;
-    let deferred = new Deferred<void>();
-    router.initialize(assert, { queryParams: { path: `${testRealmURL}Person/1.json` }}, deferred);
-    let onSave = function(path: string) {
-      router.transitionTo({ queryParams: { path }});
-    }
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <CreateNewCard @realmURL={{testRealmURL}} @onSave={{onSave}} />
-        </template>
-      }
-    );
-
-    await click('[data-test-create-new-card-button]');
-    await waitFor('[data-test-create-new] [data-test-ref]');
-
-    await select('select', 'base');
-    await waitFor('[data-test-create-new] [data-test-ref]');
-
-    assert.dom('[data-test-card-catalog] li').exists({ count: 1 }, 'number of catalog items is correct');
-    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}CatalogEntry/person-catalog-entry"]`).exists('catalog item is correct');
-
-    await click(`[data-test-select="${baseRealm.url}CatalogEntry/person-catalog-entry"]`);
-    await waitFor(`[data-test-create-new-card="${baseRealm.url}CatalogEntry/person-catalog-entry"]`);
-    await waitFor(`[data-test-field="firstName"] input`);
-
-    await fillIn('[data-test-field="firstName"] input', 'Jackie');
-    await fillIn('[data-test-field="lastName"] input', 'Aguilar');
-    await click('[data-test-save-card]');
-
-    await deferred.promise; // wait for the component to transition on save
-    let entry = await realm.searchIndex.card(new URL(`${testRealmURL}Person/1`));
-    assert.ok(entry, 'the new person card was created');
-
-    let fileRef = await adapter.openFile('Person/1.json');
-    if (!fileRef) {
-      throw new Error('file not found');
-    }
-    assert.deepEqual(
-      JSON.parse(fileRef.content as string),
-      {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Jackie',
-            lastName: 'Aguilar',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${baseRealm.url}person`,
               name: 'Person',
             },
           },

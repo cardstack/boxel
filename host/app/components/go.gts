@@ -3,13 +3,16 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
-import monaco from '../modifiers/monaco';
 import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
-import { tracked, cached } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
+import { isCardJSON, Loader, type ExistingCardArgs } from '@cardstack/runtime-common';
+import type { Format } from "https://cardstack.com/base/card-api";
+
 import LocalRealm from '../services/local-realm';
-import CardEditor, { ExistingCardArgs } from './card-editor';
-import ImportModule from './import-module';
+import type { FileResource } from '../resources/file';
+import CardEditor from './card-editor';
 import Module from './module';
 import FileTree from './file-tree';
 import {
@@ -17,10 +20,7 @@ import {
   extendMonacoLanguage,
   languageConfigs
 } from '../utils/editor-language';
-import { isCardJSON } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-import type { Format } from 'https://cardstack.com/base/card-api';
-import type { FileResource } from '../resources/file';
+import monaco from '../modifiers/monaco';
 
 interface Signature {
   Args: {
@@ -45,19 +45,11 @@ export default class Go extends Component<Signature> {
           {{#if (isRunnable this.openFile.name)}}
             <Module @url={{this.openFile.url}} />
           {{else if this.openFileCardJSON}}
-            <ImportModule @url={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module this.openFile.url}} >
-              <:ready as |module|>
-                <CardEditor
-                  @module={{module}}
-                  @card={{this.cardArgs}}
-                  @formats={{this.formats}}
-                />
-              </:ready>
-              <:error as |error|>
-                <h2>Encountered {{error.type}} error</h2>
-                <pre>{{error.message}}</pre>
-              </:error>
-            </ImportModule>
+            <CardEditor
+              @moduleURL={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module this.openFile.url}}
+              @cardArgs={{this.cardArgs}}
+              @formats={{this.formats}}
+            />
           {{else if this.jsonError}}
             <h2>Encountered error parsing JSON</h2>
             <pre>{{this.jsonError}}</pre>
