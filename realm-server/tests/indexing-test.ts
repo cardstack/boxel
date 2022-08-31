@@ -276,7 +276,7 @@ module("indexing", function (hooks) {
           `Your filter refers to nonexistent type: import { Post } from "http://test-realm/post"`
         );
       }
-      assert.strictEqual(
+      assert.deepEqual(
         await realm.searchIndex.card(new URL(`${testRealm}post-1`)),
         {
           type: "error",
