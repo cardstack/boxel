@@ -38,6 +38,12 @@ export class FetchHandler {
     for (let name of names) {
       await self.caches.delete(name);
     }
+
+    if (this.realm) {
+      await this.realm.searchIndex.run();
+    }
+
+    console.warn(`Caches dropped and search index rebuilt`);
     return new Response(`Caches dropped!`, {
       headers: {
         'content-type': 'text/html',
