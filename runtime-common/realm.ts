@@ -26,6 +26,7 @@ import {
   isNode,
 } from "./index";
 import merge from "lodash/merge";
+import cloneDeep from "lodash/cloneDeep";
 import { parse, stringify } from "qs";
 import { webStreamToText } from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
@@ -431,7 +432,9 @@ export class Realm {
     let {
       entry: { resource: original },
     } = originalMaybeError;
-    delete original.meta.lastModified;
+
+    let originalClone = cloneDeep(original);
+    delete originalClone.meta.lastModified;
 
     let patch = await request.json();
     if (!isCardDocument(patch)) {
@@ -441,7 +444,7 @@ export class Realm {
     delete (patch as any).data.meta;
     delete (patch as any).data.type;
 
-    let card = merge({ data: original }, patch);
+    let card = merge({}, { data: originalClone }, patch);
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
     let { lastModified } = await this.write(
