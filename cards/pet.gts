@@ -1,6 +1,6 @@
 import { contains, field, Card } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-import IntegerCard from 'https://cardstack.com/base/string';
+import IntegerCard from 'https://cardstack.com/base/integer';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 
 export class Pet extends Card {
