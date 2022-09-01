@@ -33,7 +33,6 @@ module('Integration | schema', function (hooks) {
       new URL('http://localhost:4201/base/')
     );
     Loader.disableNativeImport(true);
-
     adapter = new TestRealmAdapter({});
     realm = TestRealm.createWithAdapter(adapter);
     Loader.addRealmFetchOverride(realm);

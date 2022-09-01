@@ -177,7 +177,6 @@ module('Integration | create-new-card', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Jackie',
-            nickName: 'Jackie-poo'
           },
           meta: {
             adoptsFrom: {

@@ -180,6 +180,10 @@ export class SearchIndex {
     return this.#currentRun.stats;
   }
 
+  get loader() {
+    return this.#currentRun.loader;
+  }
+
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
     this.#currentRun = await CurrentRun.incremental(
       url,

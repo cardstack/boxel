@@ -1,4 +1,4 @@
-import { baseRealm } from ".";
+import { baseRealm, CardJSON, isCardJSON } from ".";
 import {
   Kind,
   Realm,
@@ -14,6 +14,7 @@ import { stringify } from "qs";
 import { Loader } from "./loader";
 import { Deferred } from "./deferred";
 import flatMap from "lodash/flatMap";
+import merge from "lodash/merge";
 import {
   hasExecutableExtension,
   trimExecutableExtension,
@@ -314,6 +315,10 @@ export class CurrentRun {
     return this.#ignoreMap;
   }
 
+  public get loader() {
+    return this.#loader;
+  }
+
   private async visitDirectory(url: URL): Promise<void> {
     let ignorePatterns = await this.reader.readFileAsText(
       this.#realmPaths.local(new URL(".gitignore", url))
@@ -361,8 +366,8 @@ export class CurrentRun {
     let { content, lastModified } = fileRef;
     if (url.href.endsWith(".json")) {
       let json = JSON.parse(content);
-      if (isCardDocument(json)) {
-        await this.indexCardDocument(localPath, lastModified, json);
+      if (isCardJSON(json)) {
+        await this.indexCard(localPath, lastModified, json);
       }
     }
   }
@@ -385,22 +390,19 @@ export class CurrentRun {
     );
   }
 
-  private async indexCardDocument(
+  private async indexCard(
     path: LocalPath,
     lastModified: number,
-    doc: CardDocument
+    json: CardJSON
   ): Promise<void> {
     let instanceURL = new URL(
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
-
-    doc.data.id = instanceURL.href;
-    doc.data.meta.lastModified = lastModified;
     let moduleURL = new URL(
-      doc.data.meta.adoptsFrom.module,
+      json.data.meta.adoptsFrom.module,
       new URL(path, this.realm.url)
     );
-    let name = doc.data.meta.adoptsFrom.name;
+    let name = json.data.meta.adoptsFrom.name;
     let cardRef = { module: moduleURL.href, name };
     let module: Record<string, any> | undefined;
     try {
@@ -414,13 +416,31 @@ export class CurrentRun {
     let depsMaybeError: DepsWithErrors | undefined;
     let uncaughtError: Error | undefined;
     if (module) {
+      let doc: CardDocument | undefined;
       let searchData: any;
       try {
         let CardClass = module[name] as typeof Card;
-        let card = CardClass.fromSerialized(doc.data.attributes);
+        let card = CardClass.fromSerialized(json.data.attributes);
         let api = await this.#loader.import<CardAPI>(
           `${baseRealm.url}card-api`
         );
+        await api.recompute(card);
+        let data = api.serializeCard(card, {
+          adoptsFrom: json.data.meta.adoptsFrom,
+          includeComputeds: true,
+        });
+        let maybeDoc = {
+          data: merge(data, {
+            id: instanceURL.href,
+            meta: { lastModified: lastModified },
+          }),
+        };
+        if (!isCardDocument(maybeDoc)) {
+          throw new Error(
+            `bug: card serialization produced non-card document for ${instanceURL.href}`
+          );
+        }
+        doc = maybeDoc;
         searchData = await api.searchDoc(card);
       } catch (err: any) {
         uncaughtError = err;
@@ -430,7 +450,11 @@ export class CurrentRun {
         type: "exportedCard",
         ...cardRef,
       });
-      if (typesMaybeError.type === "types" && depsMaybeError.type === "deps") {
+      if (
+        doc &&
+        typesMaybeError.type === "types" &&
+        depsMaybeError.type === "deps"
+      ) {
         this.stats.instancesIndexed++;
         this.#instances.set(instanceURL, {
           type: "entry",

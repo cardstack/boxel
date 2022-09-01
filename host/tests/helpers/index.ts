@@ -1,5 +1,11 @@
 import { parse } from 'date-fns';
-import { Realm, Kind, RealmAdapter, FileRef } from '@cardstack/runtime-common';
+import {
+  Realm,
+  Kind,
+  RealmAdapter,
+  FileRef,
+  CardJSON,
+} from '@cardstack/runtime-common';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 
 export function cleanWhiteSpace(text: string) {
@@ -17,7 +23,10 @@ export interface Dir {
 export const testRealmURL = 'http://test-realm/test/';
 
 export const TestRealm = {
-  create(flatFiles: Record<string, string | object>, realmURL?: string): Realm {
+  create(
+    flatFiles: Record<string, string | CardJSON>,
+    realmURL?: string
+  ): Realm {
     return new Realm(realmURL ?? testRealmURL, new TestRealmAdapter(flatFiles));
   },
   createWithAdapter(adapter: RealmAdapter, realmURL?: string): Realm {
@@ -31,7 +40,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #paths: RealmPaths;
 
   constructor(
-    flatFiles: Record<string, string | object>,
+    flatFiles: Record<string, string | CardJSON>,
     realmURL = new URL(testRealmURL)
   ) {
     this.#paths = new RealmPaths(realmURL);

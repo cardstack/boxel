@@ -21,7 +21,6 @@ module('Unit | search-index', function (hooks) {
     let adapter = new TestRealmAdapter({
       'empty.json': {
         data: {
-          type: 'card',
           attributes: {},
           meta: {
             adoptsFrom: {
@@ -644,7 +643,6 @@ module('Unit | search-index', function (hooks) {
     let realm = TestRealm.create({
       'person-1.json': {
         data: {
-          type: 'card',
           attributes: {
             firstName: 'Mango',
           },

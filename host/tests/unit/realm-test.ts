@@ -25,7 +25,6 @@ module('Unit | realm', function (hooks) {
     let adapter = new TestRealmAdapter({
       'dir/empty.json': {
         data: {
-          type: 'card',
           attributes: {},
           meta: {
             adoptsFrom: {
@@ -76,7 +75,6 @@ module('Unit | realm', function (hooks) {
       {
         'dir/empty.json': {
           data: {
-            type: 'card',
             attributes: {},
             meta: {
               adoptsFrom: {
@@ -265,7 +263,6 @@ module('Unit | realm', function (hooks) {
     let adapter = new TestRealmAdapter({
       'dir/card.json': {
         data: {
-          type: 'card',
           attributes: {
             firstName: 'Mango',
             lastName: 'Abdel-Rahman',
@@ -394,7 +391,6 @@ module('Unit | realm', function (hooks) {
     let adapter = new TestRealmAdapter({
       'cards/1.json': {
         data: {
-          type: 'card',
           attributes: {},
           meta: {
             adoptsFrom: {
@@ -406,7 +402,6 @@ module('Unit | realm', function (hooks) {
       },
       'cards/2.json': {
         data: {
-          type: 'card',
           attributes: {},
           meta: {
             adoptsFrom: {
@@ -701,7 +696,6 @@ module('Unit | realm', function (hooks) {
     let realm = TestRealm.create({
       'dir/empty.json': {
         data: {
-          type: 'card',
           attributes: {},
           meta: {
             adoptsFrom: {
@@ -846,7 +840,6 @@ module('Unit | realm', function (hooks) {
     let realm = TestRealm.create({
       'dir/empty.json': {
         data: {
-          type: 'card',
           attributes: {},
           meta: {
             adoptsFrom: {

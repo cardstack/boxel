@@ -17,6 +17,7 @@ import {
 } from "@cardstack/runtime-common/error";
 import { formatRFC7231 } from "date-fns";
 import {
+  CardJSON,
   isCardJSON,
   ResourceObjectWithId,
   DirectoryEntryRelationship,
@@ -44,8 +45,10 @@ import typescriptPlugin from "@babel/plugin-transform-typescript";
 //@ts-ignore ironically no types are available
 import emberConcurrencyAsyncPlugin from "ember-concurrency-async-plugin";
 import { Router } from "./router";
-import type { Readable } from "stream";
 import { parseQueryString } from "./query";
+import type { Readable } from "stream";
+//@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
+type CardAPI = typeof import("https://cardstack.com/base/card-api");
 
 export interface FileRef {
   path: LocalPath;
@@ -386,7 +389,7 @@ export class Realm {
     let localPath: LocalPath = this.paths.local(fileURL);
     let { lastModified } = await this.write(
       localPath,
-      JSON.stringify(json, null, 2)
+      JSON.stringify(await this.fileSerialization(json, fileURL), null, 2)
     );
     let newURL = fileURL.href.replace(/\.json$/, "");
     if (!isCardDocument(json)) {
@@ -443,7 +446,7 @@ export class Realm {
     let path: LocalPath = `${localPath}.json`;
     let { lastModified } = await this.write(
       path,
-      JSON.stringify(card, null, 2)
+      JSON.stringify(await this.fileSerialization(card, url), null, 2)
     );
     card.data.id = url.href.replace(/\.json$/, "");
     card.data.links = { self: url.href };
@@ -768,6 +771,29 @@ export class Realm {
       `Don't know how to resolve realm URL for module ${module.href}`
     );
   }
+
+  private async fileSerialization(
+    json: CardJSON,
+    relativeTo: URL
+  ): Promise<CardJSON> {
+    let api = await this.searchIndex.loader.import<CardAPI>(
+      "https://cardstack.com/base/card-api"
+    );
+    let module = await this.searchIndex.loader.import<Record<string, any>>(
+      new URL(json.data.meta.adoptsFrom.module, relativeTo).href
+    );
+    let CardClass = module[json.data.meta.adoptsFrom.name] as CardAPI["Card"];
+    let card = CardClass.fromSerialized(json.data.attributes ?? {});
+    let data = {
+      data: api.serializeCard(card, { adoptsFrom: json.data.meta.adoptsFrom }),
+    }; // this strips out computeds
+    if (!isCardJSON(data)) {
+      throw new Error(
+        `bug: card was serialized into a non-card JSON structure`
+      );
+    }
+    return data;
+  }
 }
 
 export type Kind = "file" | "directory";
@@ -782,6 +808,7 @@ export function getExportedCardContext(ref: CardRef): {
     return getExportedCardContext(ref.card);
   }
 }
+
 function lastModifiedHeader(
   card: CardDocument
 ): {} | { "last-modified": string } {

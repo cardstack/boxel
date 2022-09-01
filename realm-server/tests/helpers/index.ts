@@ -1,14 +1,13 @@
 import { writeFileSync, writeJSONSync } from "fs-extra";
 import { NodeAdapter } from "../../node-realm";
 import { join } from "path";
-import { Realm, CardDocument } from "@cardstack/runtime-common";
-import { Saved, Unsaved } from "@cardstack/runtime-common/search-index";
+import { Realm, CardJSON } from "@cardstack/runtime-common";
 
 export const testRealm = "http://test-realm/";
 
 export function createRealm(
   dir: string,
-  flatFiles: Record<string, string | CardDocument<Unsaved | Saved>>,
+  flatFiles: Record<string, string | CardJSON>,
   realmURL = testRealm
 ): Realm {
   for (let [filename, contents] of Object.entries(flatFiles)) {
