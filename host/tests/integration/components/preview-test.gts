@@ -157,6 +157,11 @@ module('Integration | card-editor', function (hooks) {
     class Post extends Card{
       @field title = contains(StringCard);
       @field author = contains(Person);
+      @field nickName = contains(StringCard, {
+        computeVia: function(this: Post) {
+          return this.author.firstName + '-poo';
+        }
+      });
     }
 
     let module = { default: Post };

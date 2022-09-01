@@ -6,7 +6,7 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import isEqual from 'lodash/isEqual';
-import { restartableTask, task, timeout } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { service } from '@ember/service';
@@ -58,7 +58,7 @@ export default class Preview extends Component<Signature> {
           <this.renderedCard/>
           {{!-- @glint-ignore glint doesn't know about EC task properties --}}
           {{#if this.write.last.isRunning}}
-            <span>Saving...</span>
+            <span data-test-saving>Saving...</span>
           {{else}}
             {{#if this.isDirty}}
               <div>
@@ -115,7 +115,7 @@ export default class Preview extends Component<Signature> {
     return undefined;
   }
 
-  get currentJSON() {
+  private _currentJSON(includeComputeds: boolean) {
     let json;
     if (this.args.card.type === 'new') {
       if (this.card === undefined) {
@@ -124,11 +124,17 @@ export default class Preview extends Component<Signature> {
       json = {
         data: this.cardAPI.api.serializeCard(this.card, {
           adoptsFrom: this.args.card.cardSource,
+          includeComputeds
         })
       };
     } else {
       if (this.card && this.initialCardData) {
-        json = { data: this.cardAPI.api.serializeCard(this.card, { adoptsFrom: this.initialCardData.data.meta.adoptsFrom }) };
+        json = {
+          data: this.cardAPI.api.serializeCard(this.card, {
+            adoptsFrom: this.initialCardData.data.meta.adoptsFrom,
+            includeComputeds
+          })
+        };
       } else {
         return undefined;
       }
@@ -137,6 +143,16 @@ export default class Preview extends Component<Signature> {
       throw new Error(`can't serialize card data for ${JSON.stringify(json)}`);
     }
     return json;
+  }
+
+  @cached
+  get currentJSON() {
+    return this._currentJSON(true);
+  }
+
+  @cached
+  get comparableCurrentJSON() {
+    return this._currentJSON(false);
   }
 
   // i would expect that this finds a new home after we start refactoring and
@@ -148,7 +164,7 @@ export default class Preview extends Component<Signature> {
     if (!this.currentJSON) {
       return false;
     }
-    return !isEqual(this.currentJSON, this.initialCardData);
+    return !isEqual(this.initialCardData, this.comparableCurrentJSON);
   }
 
   get renderedCard() {
@@ -191,13 +207,12 @@ export default class Preview extends Component<Signature> {
       return;
     }
     await this.cardAPI.loaded;
-    await this.writing;
     if (!this.rendered) {
       this.rendered = this.cardAPI.render(this, () => this.card, () => this.format);
     }
 
     if (this.args.card.type === 'existing' && this.args.card.json) {
-      this.initialCardData = this.args.card.json;
+      this.initialCardData = this.getComparableCardJson(this.args.card.json);
       return;
     }
 
@@ -217,10 +232,7 @@ export default class Preview extends Component<Signature> {
     }
     if (this.lastModified !== json.data.meta.lastModified) {
       this.lastModified = json.data.meta.lastModified;
-      delete json.data.links;
-      delete json.data.meta.lastModified
-      delete (json as any).data.id;
-      this.initialCardData = json;
+      this.initialCardData = this.getComparableCardJson(json);
     }
   }
 
@@ -242,7 +254,7 @@ export default class Preview extends Component<Signature> {
 
     // reset our dirty checking to be detect dirtiness from the
     // current JSON to reflect save that just happened
-    this.initialCardData = this.currentJSON;
+    this.initialCardData = this.getComparableCardJson(this.currentJSON!);
 
     if (json.data.links?.self) {
       // this is to notify the application route to load a
@@ -251,21 +263,21 @@ export default class Preview extends Component<Signature> {
     }
   }
 
-  get writing(): Promise<void> {
-    // TODO probably there is a more elegant way to express this in EC
-    return new Promise(async (res) => {
-      while (taskFor(this.write).isRunning) {
-        await timeout(10);
-      }
-      res();
-    });
-  }
-
   doSave(path: string) {
     if (this.args.onSave) {
       this.args.onSave(path);
     } else {
       this.setFormat('isolated')
     }
+  }
+
+  private getComparableCardJson(json: CardJSON): CardJSON {
+    let CardClass = this.args.module[json.data.meta.adoptsFrom.name] as typeof Card;
+    let card = CardClass.fromSerialized(json.data.attributes);
+    let result = { data: this.cardAPI.api.serializeCard(card, { adoptsFrom: json.data.meta.adoptsFrom }) };
+    if (!isCardJSON(result)) {
+      throw new Error(`bug: card serialization resulted in non-Card JSON`);
+    }
+    return result;
   }
 }

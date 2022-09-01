@@ -188,10 +188,11 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await fillIn('[data-test-catalog-entry-editor] [data-test-field="description"] input', 'Test entry');
 
     await click('button[data-test-save-card');
+    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
 
     assert.dom('button[data-test-save-card').doesNotExist();
-    assert.dom('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Test title');
-    assert.dom('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Test entry');
+    assert.dom('[data-test-title]').containsText('Test title');
+    assert.dom('[data-test-description]').containsText('Test entry');
 
     let maybeError = await realm.searchIndex.card(new URL(`${testRealmURL}person-catalog-entry`));
     if (maybeError?.type === 'error') {

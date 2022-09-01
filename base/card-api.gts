@@ -72,7 +72,7 @@ export class Card {
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
 
-  static [serialize](value: any, opts?: { includeComputeds?: true}) {
+  static [serialize](value: any, opts?: { includeComputeds?: boolean}) {
     if (primitive in this) {
       return value;
     } else {
@@ -177,7 +177,7 @@ export function serializeCard<CardT extends CardConstructor>(
   model: InstanceType<CardT>,
   opts?: {
     adoptsFrom?: { module: string, name: string },
-    includeComputeds?: true
+    includeComputeds?: boolean
   }
 ): ResourceObject {
   let resource: ResourceObject = {
@@ -538,7 +538,7 @@ function getField<CardT extends CardConstructor>(card: CardT, fieldName: string)
   return undefined;
 }
 
-function getFields<T extends Card>(card: T, opts?: { includeComputeds?: true }): { [P in keyof T]?: Field<CardConstructor> } {
+function getFields<T extends Card>(card: T, opts?: { includeComputeds?: boolean }): { [P in keyof T]?: Field<CardConstructor> } {
   let obj = Reflect.getPrototypeOf(card);
   let fields: { [P in keyof T]?: Field<CardConstructor> } = {};
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
