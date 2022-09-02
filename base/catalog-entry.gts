@@ -36,15 +36,16 @@ export class CatalogEntry extends Card {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div><@fields.title/></div>
+      <div><@fields.description/></div>
       <div><@fields.ref/></div>
       <div><@fields.isPrimitive/></div>
     </template>
   }
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div><@fields.title/></div>
-      <div><@fields.description/></div>
-      <div><@fields.ref/></div>
+      <div data-test-title><@fields.title/></div>
+      <div data-test-description><@fields.description/></div>
+      <div data-test-ref><@fields.ref/></div>
       <div><@fields.isPrimitive/></div>
     </template>
   }

@@ -1,13 +1,7 @@
 import { module, test } from "qunit";
 import { dirSync, setGracefulCleanup } from "tmp";
-import {
-  Loader,
-  baseRealm,
-  CardDocument,
-  Realm,
-} from "@cardstack/runtime-common";
+import { Loader, baseRealm, CardJSON, Realm } from "@cardstack/runtime-common";
 import { createRealm, testRealm } from "./helpers";
-import { Unsaved } from "@cardstack/runtime-common/search-index";
 
 setGracefulCleanup();
 
@@ -56,8 +50,6 @@ module("indexing", function (hooks) {
       `,
       "mango.json": {
         data: {
-          id: undefined,
-          type: "card",
           attributes: {
             firstName: "Mango",
           },
@@ -71,8 +63,6 @@ module("indexing", function (hooks) {
       },
       "vangogh.json": {
         data: {
-          id: undefined,
-          type: "card",
           attributes: {
             firstName: "Van Gogh",
           },
@@ -86,8 +76,6 @@ module("indexing", function (hooks) {
       },
       "post-1.json": {
         data: {
-          id: undefined,
-          type: "card",
           attributes: {
             author: {
               firstName: "Van Gogh",
@@ -104,8 +92,6 @@ module("indexing", function (hooks) {
       },
       "empty.json": {
         data: {
-          id: undefined,
-          type: "card",
           attributes: {},
           meta: {
             adoptsFrom: {
@@ -124,8 +110,6 @@ module("indexing", function (hooks) {
       "mango.json",
       JSON.stringify({
         data: {
-          id: undefined,
-          type: "card",
           attributes: {
             firstName: "Mang-Mang",
           },
@@ -136,7 +120,7 @@ module("indexing", function (hooks) {
             },
           },
         },
-      } as CardDocument<Unsaved>)
+      } as CardJSON)
     );
 
     let result = await realm.searchIndex.search({

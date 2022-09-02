@@ -72,12 +72,12 @@ export class Card {
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
 
-  static [serialize](value: any) {
+  static [serialize](value: any, opts?: { includeComputeds?: boolean}) {
     if (primitive in this) {
       return value;
     } else {
       return Object.fromEntries(
-        Object.keys(getFields(value)).map(fieldName => [fieldName, serializedGet(value, fieldName)])
+        Object.keys(getFields(value, opts)).map(fieldName => [fieldName, serializedGet(value, fieldName)])
       )
     }
   }
@@ -87,7 +87,7 @@ export class Card {
       return value;
     } else {
       return Object.fromEntries(
-        Object.entries(getFields(value)).map(([fieldName, field]) => [fieldName, getQueryableValue(field!.card, value[fieldName])])
+        Object.entries(getFields(value, { includeComputeds: true })).map(([fieldName, field]) => [fieldName, getQueryableValue(field!.card, value[fieldName])])
       );
     }
   }
@@ -173,18 +173,25 @@ export function serializedSet<CardT extends CardConstructor>(model: InstanceType
   (model as any)[fieldName] = field.deserialize(model, value);
 }
 
-export function serializeCard<CardT extends CardConstructor>(model: InstanceType<CardT>, opts?: { adoptsFrom?: { module: string, name: string } }): ResourceObject {
+export function serializeCard<CardT extends CardConstructor>(
+  model: InstanceType<CardT>,
+  opts?: {
+    adoptsFrom?: { module: string, name: string },
+    includeComputeds?: boolean
+  }
+): ResourceObject {
   let resource: ResourceObject = {
     type: 'card',
   };
 
-  for (let fieldName of Object.keys(getFields(model))) {
+  for (let fieldName of Object.keys(getFields(model, opts))) {
     let value = serializedGet(model, fieldName);
     if (value !== undefined) {
-      resource.attributes = resource.attributes || {};
+      resource.attributes = resource.attributes ?? {};
       resource.attributes[fieldName] = value;
     }
   }
+  resource.attributes = resource.attributes ?? {};
 
   if (opts?.adoptsFrom) {
     resource.meta = { adoptsFrom: { ...opts.adoptsFrom } };
@@ -471,7 +478,7 @@ export async function recompute(card: Card): Promise<void> {
   }
 
   async function _loadModel<T extends Card>(model: T, stack: { from: T, to: T, name: string}[] = []): Promise<void> {
-    for (let [fieldName, field] of Object.entries(getFields(model))) {
+    for (let [fieldName, field] of Object.entries(getFields(model, { includeComputeds: true }))) {
       let value: any = await loadField(model, fieldName as keyof T);
       if (recomputePromises.get(card) !== recomputePromise) {
         return;
@@ -531,7 +538,7 @@ function getField<CardT extends CardConstructor>(card: CardT, fieldName: string)
   return undefined;
 }
 
-function getFields<T extends Card>(card: T): { [P in keyof T]?: Field<CardConstructor> } {
+function getFields<T extends Card>(card: T, opts?: { includeComputeds?: boolean }): { [P in keyof T]?: Field<CardConstructor> } {
   let obj = Reflect.getPrototypeOf(card);
   let fields: { [P in keyof T]?: Field<CardConstructor> } = {};
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
@@ -539,6 +546,9 @@ function getFields<T extends Card>(card: T): { [P in keyof T]?: Field<CardConstr
     let currentFields = flatMap(Object.keys(descs), maybeFieldName => {
       if (maybeFieldName !== 'constructor') {
         let maybeField = getField(card.constructor, maybeFieldName);
+        if (maybeField?.computeVia && !opts?.includeComputeds) {
+          return [];
+        }
         if (maybeField) {
           return [[maybeFieldName, maybeField]];
         }
@@ -552,7 +562,7 @@ function getFields<T extends Card>(card: T): { [P in keyof T]?: Field<CardConstr
 }
 
 function getComputedFields<T extends Card>(card: T): { [P in keyof T]?: Field<CardConstructor> } {
-  let fields = Object.entries(getFields(card)) as [string, Field<CardConstructor>][];
+  let fields = Object.entries(getFields(card, { includeComputeds: true })) as [string, Field<CardConstructor>][];
   let computedFields = fields.filter(([_, field]) => field.computeVia);
   return Object.fromEntries(computedFields) as { [P in keyof T]?: Field<CardConstructor> };
 }

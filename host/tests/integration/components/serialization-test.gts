@@ -470,9 +470,20 @@ module('Integration | serialization', function (hooks) {
     }
     let mango = new Person({ birthdate: p('2019-10-30') });
     await renderCard(mango, 'isolated');
-    let payload = serializeCard(mango);
+    let withoutComputeds = serializeCard(mango);
     assert.deepEqual(
-      payload as any,
+      withoutComputeds as any,
+      {
+        type: 'card',
+        attributes: {
+          birthdate: '2019-10-30',
+        },
+      }
+    );
+
+    let withComputeds = serializeCard(mango, { includeComputeds: true });
+    assert.deepEqual(
+      withComputeds as any,
       {
         type: 'card',
         attributes: {
