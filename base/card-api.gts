@@ -10,6 +10,7 @@ import type { ResourceObject } from '@cardstack/runtime-common';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
+export const deserialize = Symbol('cardstack-deserialize');
 export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol('cardstack-field-decorator');
 export const fieldType = Symbol('cardstack-field-type');
@@ -48,7 +49,7 @@ interface Field<CardT extends CardConstructor> {
   computeVia: undefined | string | (() => unknown);
   containsMany: boolean;
   serialize(value: any): any;
-  deserialize(instance: Card, value: any): any;
+  deserialize(instance: Card, value: any): Promise<any>;
   emptyValue(instance: Card): any;
   prepareSet(instance: Card, value: any): void;
 }
@@ -92,14 +93,12 @@ export class Card {
     }
   }
 
-  static fromSerialized<T extends CardConstructor>(this: T, data: any): CardInstanceType<T> {
+  static async [deserialize]<T extends CardConstructor>(this: T, data: any): Promise<CardInstanceType<T>> {
     if (primitive in this) {
       return data;
     }
     let model = new this() as InstanceType<T>;
-    for (let [fieldName, value] of Object.entries(data)) {
-      serializedSet(model, fieldName, value);
-    }
+    await Promise.all(Object.entries(data).map(([fieldName, value]) => serializedSet(model, fieldName, value)));
     return model as CardInstanceType<T>;
   }
 
@@ -165,12 +164,12 @@ export function serializedGet<CardT extends CardConstructor>(model: InstanceType
   return field.serialize((model as any)[fieldName]);
 }
 
-export function serializedSet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string, value: any ) {
+export async function serializedSet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string, value: any ) {
   let field = getField(model.constructor, fieldName);
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${model.constructor.name}`);
   }
-  (model as any)[fieldName] = field.deserialize(model, value);
+  (model as any)[fieldName] = await field.deserialize(model, value);
 }
 
 export function serializeCard<CardT extends CardConstructor>(
@@ -235,11 +234,11 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return value.map(entry => this.card[serialize](entry))
   }
 
-  deserialize(instance: Card, value: any[]): CardInstanceType<FieldT>[] {
+  async deserialize(instance: Card, value: any[]): Promise<CardInstanceType<FieldT>[]> {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray(() => recompute(instance), value.map(entry => this.card.fromSerialized(entry)));
+    return new WatchedArray(() => recompute(instance), await Promise.all(value.map(entry => this.card[deserialize](entry))));
   }
 
   containsMany = true;
@@ -271,9 +270,9 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     }
   }
 
-  deserialize(_instance: Card, value: any): CardInstanceType<CardT> {
+  async deserialize(_instance: Card, value: any): Promise<CardInstanceType<CardT>> {
     if (value != null) {
-      return this.card.fromSerialized(value);
+      return this.card[deserialize](value);
     } else {
       return value;
     }
@@ -456,6 +455,16 @@ function getComponent<CardT extends CardConstructor>(card: CardT, format: Format
   return stable;
 }
 
+export async function createFromSerialized<T extends CardConstructor>(CardClass: T, data: any): Promise<CardInstanceType<T>> {
+  if (primitive in CardClass) {
+    return data;
+  }
+  let model = new CardClass() as InstanceType<T>;
+  for (let [fieldName, value] of Object.entries(data ?? {})) {
+    await serializedSet(model, fieldName, value);
+  }
+  return model as CardInstanceType<T>;
+}
 
 export async function prepareToRender(model: Card, format: Format): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
   await recompute(model); // absorb model asynchronicity

@@ -12,7 +12,7 @@ let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
 
 const formats: Format[] = ['isolated', 'embedded', 'edit'];
-module('Integration | card-editor', function (hooks) {
+module('Integration | preview', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.before(async function () {

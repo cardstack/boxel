@@ -1,4 +1,4 @@
-import { Component, primitive, serialize, queryableValue, Card, CardInstanceType, CardConstructor } from './card-api';
+import { Component, primitive, serialize, deserialize, queryableValue, Card, CardInstanceType, CardConstructor } from './card-api';
 import { parse, format } from 'date-fns';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -23,7 +23,7 @@ export default class DateCard extends Card {
     return format(date, dateFormat);
   }
 
-  static fromSerialized<T extends CardConstructor>(this: T, date: any): CardInstanceType<T> {
+  static async [deserialize]<T extends CardConstructor>(this: T, date: any): Promise<CardInstanceType<T>> {
     return parse(date, dateFormat, new Date()) as CardInstanceType<T>;
   }
 
@@ -51,8 +51,7 @@ export default class DateCard extends Card {
     </template>
 
     parseInput(set: Function, date: string) {
-      let deserialized = DateCard.fromSerialized(date);
-      return set(deserialized);
+      return set(parse(date, dateFormat, new Date()));
     }
 
     get formatted() {

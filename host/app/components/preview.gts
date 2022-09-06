@@ -11,6 +11,9 @@ import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { service } from '@ember/service';
 import RouterService from '@ember/routing/router-service';
+import CardAPI, { RenderedCard } from '../services/card-api';
+import { eq } from '../helpers/truth-helpers';
+import { cardInstance } from '../resources/card-instance';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
 import {
   CardJSON,
@@ -21,8 +24,6 @@ import {
   type ExistingCardArgs
 } from '@cardstack/runtime-common';
 
-import CardAPI, { RenderedCard } from '../services/card-api';
-import { eq } from '../helpers/truth-helpers';
 
 interface Signature {
   Args: {
@@ -102,17 +103,31 @@ export default class Preview extends Component<Signature> {
   }
 
   @cached
+  get cardInstance() {
+    this.resetTime;
+    return cardInstance(
+      this,
+      () => {
+        if (this.args.card.type === 'new') {
+          return this.args.module[this.args.card.cardSource.name];
+        } else if (this.initialCardData) {
+          return this.args.module[this.initialCardData.data.meta.adoptsFrom.name];
+        }
+        return;
+      },
+      () => {
+        if (this.args.card.type === 'new') {
+          return this.args.card.initialAttributes;
+        } else if (this.initialCardData) {
+          return this.initialCardData.data.attributes;
+        }
+        return;
+      }
+    );
+  }
+
   get card() {
-    this.resetTime; // just consume this
-    if (this.args.card.type === 'new') {
-      let cardClass = this.args.module[this.args.card.cardSource.name];
-      return new cardClass(this.args.card.initialAttributes);
-    }
-    if (this.initialCardData) {
-      let cardClass = this.args.module[this.initialCardData.data.meta.adoptsFrom.name];
-      return cardClass.fromSerialized(this.initialCardData.data.attributes ?? {});
-    }
-    return undefined;
+    return this.cardInstance.instance;
   }
 
   private _currentJSON(includeComputeds: boolean) {
@@ -212,7 +227,7 @@ export default class Preview extends Component<Signature> {
     }
 
     if (this.args.card.type === 'existing' && this.args.card.json) {
-      this.initialCardData = this.getComparableCardJson(this.args.card.json);
+      this.initialCardData = await this.getComparableCardJson(this.args.card.json);
       return;
     }
 
@@ -232,7 +247,7 @@ export default class Preview extends Component<Signature> {
     }
     if (this.lastModified !== json.data.meta.lastModified) {
       this.lastModified = json.data.meta.lastModified;
-      this.initialCardData = this.getComparableCardJson(json);
+      this.initialCardData = await this.getComparableCardJson(json);
     }
   }
 
@@ -254,7 +269,7 @@ export default class Preview extends Component<Signature> {
 
     // reset our dirty checking to be detect dirtiness from the
     // current JSON to reflect save that just happened
-    this.initialCardData = this.getComparableCardJson(this.currentJSON!);
+    this.initialCardData = await this.getComparableCardJson(this.currentJSON!);
 
     if (json.data.links?.self) {
       // this is to notify the application route to load a
@@ -271,9 +286,9 @@ export default class Preview extends Component<Signature> {
     }
   }
 
-  private getComparableCardJson(json: CardJSON): CardJSON {
+  private async getComparableCardJson(json: CardJSON): Promise<CardJSON> {
     let CardClass = this.args.module[json.data.meta.adoptsFrom.name] as typeof Card;
-    let card = CardClass.fromSerialized(json.data.attributes);
+    let card = await this.cardAPI.api.createFromSerialized(CardClass, json.data.attributes);
     let result = { data: this.cardAPI.api.serializeCard(card, { adoptsFrom: json.data.meta.adoptsFrom }) };
     if (!isCardJSON(result)) {
       throw new Error(`bug: card serialization resulted in non-Card JSON`);

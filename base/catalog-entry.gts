@@ -9,6 +9,14 @@ export class CatalogEntry extends Card {
   @field description = contains(StringCard);
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, { computeVia: async function(this: CatalogEntry) {
+    // during instantiation from serialized data there may be a moment that we started recomputing 
+    // before this field is set (since we iterate over each field and call serializedSet
+    // in a particular order where this field is not necessarily the first one processed). This computed
+    // will eventually settle after all the fields have been loaded.
+    if (!this.ref) {
+      return undefined; // undefined returned in a computed means continue to wait for all NotReadyErrors to settle
+    }
+
     let module: Record<string, any> = await Loader.import(this.ref.module);
     let Clazz: typeof Card = module[this.ref.name];
     return primitive in Clazz;
