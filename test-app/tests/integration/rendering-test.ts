@@ -4,6 +4,8 @@ import { render } from '@ember/test-helpers';
 import hbs from 'htmlbars-inline-precompile';
 import { Changeset } from 'animations-experiment/models/changeset';
 import Sprite from 'animations-experiment/models/sprite';
+import LinearBehavior from 'animations-experiment/behaviors/linear';
+import runAnimations from 'animations-experiment/utils/run-animations';
 
 module('Integration | Rendering', function (hooks) {
   setupRenderingTest(hooks);
@@ -151,6 +153,55 @@ module('Integration | Rendering', function (hooks) {
     });
   });
 
-  // module('position transitions', function (hooks) {});
-  // module('resize transitions', function (hooks) {});
+  module.only('position transitions', function (hooks) {
+    let element: HTMLElement;
+    hooks.beforeEach(function () {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      element = undefined;
+      this.set('setSpriteElement', (e: HTMLElement) => (element = e));
+      this.set('animate', async (changeset: Changeset) => {
+        let sprite = changeset.spriteFor({ id: 'sprite' })!;
+
+        sprite.setupAnimation('position', {
+          duration: 500,
+          behavior: new LinearBehavior(),
+        });
+
+        await runAnimations([sprite]);
+      });
+    });
+
+    test('position transition has correct position at different times', async function (assert) {
+      this.set('left', true);
+
+      await render(hbs`
+      {{!-- template-lint-disable no-inline-styles --}}
+      <AnimationContext @use={{this.animate}} style="position: relative;">
+        {{!-- template-lint-disable style-concatenation --}}
+        <div {{did-insert this.setSpriteElement}} style={{concat "position: absolute; " (if this.left "left: 0px;" "left: 100px;")}} {{sprite id="sprite" }}>A</div>
+      </AnimationContext>
+      `);
+
+      let initialDOMRect = element.getBoundingClientRect();
+
+      this.set('left', false);
+
+      element.getAnimations()[0]?.pause();
+      element.getAnimations()[0]!.currentTime = 0;
+      assert.equal(element.getBoundingClientRect().left, initialDOMRect.left);
+
+      element.getAnimations()[0]!.currentTime = 250;
+      assert.equal(
+        element.getBoundingClientRect().left,
+        initialDOMRect.left + 50
+      );
+
+      element.getAnimations()[0]!.currentTime = 500;
+      assert.equal(
+        element.getBoundingClientRect().left,
+        initialDOMRect.left + 100
+      );
+    });
+  });
 });
