@@ -458,7 +458,7 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card whose composite field value uses a card that adopts from the composite field card', async function (assert) {
-    let { field, contains, serializeCard, Card, } = cardApi;
+    let { field, contains, serializeCard, Card, createFromSerialized } = cardApi;
     let { default: StringCard } = string;
     let { default: DateCard } = date;
 
@@ -499,7 +499,7 @@ module('Integration | serialization', function (hooks) {
       }
     );
 
-    let post2 = Post.fromSerialized(payload.attributes); // success is not blowing up
+    let post2 = await createFromSerialized(Post, payload.attributes); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
   });
 
