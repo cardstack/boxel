@@ -101,5 +101,8 @@
   },
   "volta": {
     "extends": "../package.json"
+  },
+  "dependencies": {
+    "@ember/render-modifiers": "^2.0.4"
   }
 }
