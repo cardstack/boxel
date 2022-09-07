@@ -457,6 +457,53 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('can serialize a card whose composite field value uses a card that adopts from the composite field card', async function (assert) {
+    let { field, contains, serializeCard, Card, } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field birthdate = contains(DateCard);
+    }
+
+    class Employee extends Person {
+      @field department = contains(StringCard);
+    }
+
+    class Post extends Card {
+      @field title = contains(StringCard);
+      @field author = contains(Person);
+    }
+    let firstPost = new Post({
+      title: 'First Post',
+      author: new Employee({
+        firstName: 'Mango',
+        birthdate: p('2019-10-30'),
+        department: 'wagging'
+      })
+    });
+    await renderCard(firstPost, 'isolated');
+    let payload = serializeCard(firstPost);
+    assert.deepEqual(
+      payload as any,
+      {
+        type: 'card',
+        attributes: {
+          title: 'First Post',
+          author: {
+            firstName: 'Mango',
+            birthdate: '2019-10-30',
+          }
+        },
+      }
+    );
+
+    let post2 = Post.fromSerialized(payload.attributes); // success is not blowing up
+    assert.strictEqual(post2.author.firstName, 'Mango');
+  });
+
+
   test('can serialize a card with computed field', async function (assert) {
     let { field, contains, serializeCard, Card, } = cardApi;
     let { default: DateCard } = date;
