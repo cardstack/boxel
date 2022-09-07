@@ -76,7 +76,7 @@ export const isNode =
  */
 
 export const externalsMap: Map<string, string[]> = new Map([
-  ["@cardstack/runtime-common", ["Loader"]],
+  ["@cardstack/runtime-common", ["Loader", "Deferred"]],
   ["@glimmer/component", ["default"]],
   ["@ember/component", ["setComponentTemplate", "default"]],
   ["@ember/component/template-only", ["default"]],

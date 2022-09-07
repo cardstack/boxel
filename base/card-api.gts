@@ -6,6 +6,7 @@ import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
 import ContainsManyEditor from './contains-many';
 import { WatchedArray } from './watched-array';
+import { Deferred } from '@cardstack/runtime-common';
 import type { ResourceObject } from '@cardstack/runtime-common';
 
 export const primitive = Symbol('cardstack-primitive');
@@ -49,7 +50,7 @@ interface Field<CardT extends CardConstructor> {
   computeVia: undefined | string | (() => unknown);
   containsMany: boolean;
   serialize(value: any): any;
-  deserialize(instance: Card, value: any): Promise<any>;
+  deserialize(value: any, instancePromise: Promise<Card>): Promise<any>;
   emptyValue(instance: Card): any;
   prepareSet(instance: Card, value: any): void;
 }
@@ -68,7 +69,7 @@ export class Card {
   // this is here because Card has no public instance methods, so without it
   // typescript considers everything a valid card.
   [isBaseCard] = true;
-
+  
   declare ["constructor"]: CardConstructor;
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
@@ -95,11 +96,10 @@ export class Card {
 
   static async [deserialize]<T extends CardConstructor>(this: T, data: any): Promise<CardInstanceType<T>> {
     if (primitive in this) {
+      // primitive cards can override this as need be
       return data;
     }
-    let model = new this() as InstanceType<T>;
-    await Promise.all(Object.entries(data).map(([fieldName, value]) => serializedSet(model, fieldName, value)));
-    return model as CardInstanceType<T>;
+    return createFromSerialized(this, data);
   }
 
   static async didRecompute(card: Card): Promise<void> {
@@ -167,12 +167,12 @@ export function serializedGet<CardT extends CardConstructor>(
   return field.serialize((model as any)[fieldName]);
 }
 
-export async function serializedSet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string, value: any ) {
-  let field = getField(model.constructor, fieldName);
+async function serializedValues<CardT extends CardConstructor>(card: CardT, fieldName: string, value: any, modelPromise: Promise<Card>): Promise<any> {
+  let field = getField(card, fieldName);
   if (!field) {
-    throw new Error(`could not find field ${fieldName} in card ${model.constructor.name}`);
+    throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
-  (model as any)[fieldName] = await field.deserialize(model, value);
+  return await field.deserialize(value, modelPromise);
 }
 
 export function serializeCard<CardT extends CardConstructor>(
@@ -200,6 +200,28 @@ export function serializeCard<CardT extends CardConstructor>(
   }
 
   return resource;
+}
+
+export async function createFromSerialized<T extends CardConstructor>(CardClass: T, data: any): Promise<CardInstanceType<T>> {
+  if (primitive in CardClass) {
+    return CardClass[deserialize](data);
+  }
+
+  let deferred = new Deferred<Card>();
+  let values = await Promise.all(
+    Object.entries(data ?? {}).map(
+      async ([fieldName, value]) => [
+        fieldName, 
+        await serializedValues(CardClass, fieldName, value, deferred.promise)
+      ]
+    )
+  ) as [keyof InstanceType<T>, any][];
+  let model = new CardClass() as InstanceType<T>;
+  for (let [fieldName, value] of values) {
+    model[fieldName] = value;
+  }
+  deferred.fulfill(model);
+  return model as CardInstanceType<T>;
 }
 
 export async function searchDoc<CardT extends CardConstructor>(model: InstanceType<CardT>): Promise<Record<string, any>> {
@@ -237,11 +259,11 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return value.map(entry => this.card[serialize](entry))
   }
 
-  async deserialize(instance: Card, value: any[]): Promise<CardInstanceType<FieldT>[]> {
+  async deserialize(value: any[], instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray(() => recompute(instance), await Promise.all(value.map(entry => this.card[deserialize](entry))));
+    return new WatchedArray((_, instance) => recompute(instance!), await Promise.all(value.map(entry => this.card[deserialize](entry))), instancePromise);
   }
 
   containsMany = true;
@@ -273,7 +295,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     }
   }
 
-  async deserialize(_instance: Card, value: any): Promise<CardInstanceType<CardT>> {
+  async deserialize(value: any): Promise<CardInstanceType<CardT>> {
     if (value != null) {
       return this.card[deserialize](value);
     } else {
@@ -456,17 +478,6 @@ function getComponent<CardT extends CardConstructor>(card: CardT, format: Format
   stable = externalFields as unknown as typeof component;
   componentCache.set(model, stable);
   return stable;
-}
-
-export async function createFromSerialized<T extends CardConstructor>(CardClass: T, data: any): Promise<CardInstanceType<T>> {
-  if (primitive in CardClass) {
-    return data;
-  }
-  let model = new CardClass() as InstanceType<T>;
-  for (let [fieldName, value] of Object.entries(data ?? {})) {
-    await serializedSet(model, fieldName, value);
-  }
-  return model as CardInstanceType<T>;
 }
 
 export async function prepareToRender(model: Card, format: Format): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
