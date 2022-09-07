@@ -9,6 +9,12 @@ module('Integration | Rendering', function (hooks) {
   setupRenderingTest(hooks);
   let changeset: Changeset;
 
+  hooks.beforeEach(function () {
+    // TODO: fix how we perform measurements in situations where scale is applied on a container of animated stuff
+    (document.querySelector('#ember-testing') as HTMLElement).style.transform =
+      'scale(1)';
+  });
+
   module('AnimationContext receives correct sprites', function (hooks) {
     hooks.beforeEach(function () {
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -125,5 +131,26 @@ module('Integration | Rendering', function (hooks) {
         []
       );
     });
+
+    test('sprite measurements are correct', async function (assert) {
+      this.set('left', true);
+
+      await render(hbs`
+      {{!-- template-lint-disable no-inline-styles --}}
+      <AnimationContext @use={{this.setChangeset}} style="position: relative;">
+        {{!-- template-lint-disable style-concatenation --}}
+        <div style={{concat "position: absolute; " (if this.left "left: 0;" "left: 100px;" )}} {{sprite id="sprite" }}>A</div>
+      </AnimationContext>
+      `);
+
+      this.set('left', false);
+
+      let sprite = Array.from(changeset.keptSprites)[0] as Sprite;
+      assert.deepEqual(sprite.initialBounds?.relativeToParent.left, 0);
+      assert.deepEqual(sprite.finalBounds?.relativeToParent.left, 100);
+    });
   });
+
+  // module('position transitions', function (hooks) {});
+  // module('resize transitions', function (hooks) {});
 });
