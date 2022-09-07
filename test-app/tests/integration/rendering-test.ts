@@ -187,17 +187,18 @@ module('Integration | Rendering', function (hooks) {
 
       this.set('left', false);
 
-      element.getAnimations()[0]?.pause();
-      element.getAnimations()[0]!.currentTime = 0;
+      let animation = element.getAnimations()[0] as Animation;
+      animation.pause();
+      animation.currentTime = 0;
       assert.equal(element.getBoundingClientRect().left, initialDOMRect.left);
 
-      element.getAnimations()[0]!.currentTime = 250;
+      animation.currentTime = 250;
       assert.equal(
         element.getBoundingClientRect().left,
         initialDOMRect.left + 50
       );
 
-      element.getAnimations()[0]!.currentTime = 500;
+      animation.currentTime = 500;
       assert.equal(
         element.getBoundingClientRect().left,
         initialDOMRect.left + 100
