@@ -1,4 +1,4 @@
-import { Component, primitive, serialize, queryableValue, Card, CardInstanceType, CardConstructor } from './card-api';
+import { Component, primitive, serialize, deserialize, queryableValue, Card, CardConstructor, CardInstanceType, createFromSerialized } from './card-api';
 import { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
@@ -34,7 +34,7 @@ class BaseView extends Component<typeof CardRefCard> {
     }
     let module: Record<string, any> = await Loader.import(this.args.model.module);
     let Clazz: typeof Card = module[this.args.model.name];
-    this.card = Clazz.fromSerialized({...(Clazz as any).demo ?? {}});
+    this.card = await createFromSerialized(Clazz, {...(Clazz as any).demo ?? {}});
   }
 }
 
@@ -44,7 +44,7 @@ export default class CardRefCard extends Card {
   static [serialize](cardRef: ExportedCardRef) {
     return {...cardRef}; // return a new object so that the model cannot be mutated from the outside
   }
-  static fromSerialized<T extends CardConstructor>(this: T, cardRef: ExportedCardRef): CardInstanceType<T> {
+  static async [deserialize]<T extends CardConstructor>(this: T, cardRef: ExportedCardRef): Promise<CardInstanceType<T>> {
     return {...cardRef} as CardInstanceType<T>;// return a new object so that the model cannot be mutated from the outside
   }
   static [queryableValue](cardRef: ExportedCardRef | undefined) {

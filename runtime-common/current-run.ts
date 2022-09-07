@@ -419,10 +419,13 @@ export class CurrentRun {
       let doc: CardDocument | undefined;
       let searchData: any;
       try {
-        let CardClass = module[name] as typeof Card;
-        let card = CardClass.fromSerialized(json.data.attributes);
         let api = await this.#loader.import<CardAPI>(
           `${baseRealm.url}card-api`
+        );
+        let CardClass = module[name] as typeof Card;
+        let card = await api.createFromSerialized(
+          CardClass,
+          json.data.attributes
         );
         await api.recompute(card);
         let data = api.serializeCard(card, {

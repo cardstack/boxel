@@ -92,7 +92,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('access @model for primitive and composite fields', async function (assert) {
-    let {field, contains, containsMany, Card, Component } = cardApi;
+    let {field, contains, containsMany, Card, Component, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     let { default: IntegerCard} = integer;
     let { default: BooleanCard } = boolean;
@@ -117,7 +117,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = Post.fromSerialized({
+    let helloWorld = await createFromSerialized(Post, {
       title: 'First Post',
       author: {
           firstName: 'Arthur',
@@ -207,13 +207,14 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('catalog entry isPrimitive indicates if the catalog entry is a primitive field card', async function (assert) {
+    let { createFromSerialized } = cardApi;
     let { CatalogEntry } = catalogEntry;
 
-    let nonPrimitiveEntry = CatalogEntry.fromSerialized({ 
+    let nonPrimitiveEntry = await createFromSerialized(CatalogEntry, { 
       title: "CatalogEntry Card",
       ref: { module: "https://cardstack.com/base/catalog-entry", name: "CatalogEntry" }
     });
-    let primitiveEntry = CatalogEntry.fromSerialized({
+    let primitiveEntry = await createFromSerialized(CatalogEntry, {
       title: "String Card",
       ref: { module: "https://cardstack.com/base/string", name: "default" }
     });
@@ -223,11 +224,10 @@ module('Integration | card-basics', function (hooks) {
 
     assert.strictEqual(nonPrimitiveEntry.isPrimitive, false, 'isPrimitive is correct');
     assert.strictEqual(primitiveEntry.isPrimitive, true, 'isPrimitive is correct');
-
   });
 
   test('render whole composite field', async function (assert) {
-    let {field, contains, Card, Component } = cardApi;
+    let {field, contains, Card, Component, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     let { default: IntegerCard} = integer;
     class Person extends Card {
@@ -246,14 +246,14 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = Post.fromSerialized({ author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
+    let helloWorld = await createFromSerialized(Post, { author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
     await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test]').containsText('Mr Arthur 10');
   });
 
   // this will apply to linksTo, but doesn't apply to contains
   skip('render a field that is the enclosing card', async function(assert) {
-    let {field, contains,  Card, Component } = cardApi;
+    let {field, contains,  Card, Component, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -266,13 +266,13 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let mango = Person.fromSerialized({ firstName: 'Mango', friend: { firstName: 'Van Gogh' } });
+    let mango = await createFromSerialized(Person, { firstName: 'Mango', friend: { firstName: 'Van Gogh' } });
     await renderCard(mango, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango friend is Van Gogh');
   });
 
   test('render nested composite field', async function (assert) {
-    let {field, contains, Card, Component } = cardApi;
+    let {field, contains, Card, Component, createFromSerialized } = cardApi;
     class TestString extends Card {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
@@ -300,7 +300,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = Post.fromSerialized({ author: { firstName: 'Arthur', number: 10 } });
+    let helloWorld = await createFromSerialized(Post, { author: { firstName: 'Arthur', number: 10 } });
 
     await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test="string"]').containsText('Arthur');
@@ -308,7 +308,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render default isolated template', async function (assert) {
-    let {field, contains, Card, Component } = cardApi;
+    let {field, contains, Card, Component, createFromSerialized } = cardApi;
     let firstName = await testString('first-name');
     class Person extends Card {
       @field firstName = contains(firstName);
@@ -324,7 +324,7 @@ module('Integration | card-basics', function (hooks) {
       @field author = contains(Person);
     }
 
-    let helloWorld = Post.fromSerialized({ title: 'First Post', author: { firstName: 'Arthur' } });
+    let helloWorld = await createFromSerialized(Post, { title: 'First Post', author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'isolated');
 
@@ -367,7 +367,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render a containsMany composite field', async function (assert) {
-    let {field, contains, containsMany, Card, Component } = cardApi;
+    let {field, contains, containsMany, Card, Component, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -382,7 +382,7 @@ module('Integration | card-basics', function (hooks) {
         <template><@fields.people/></template>
       }
     }
-    let abdelRahmans = Family.fromSerialized({
+    let abdelRahmans = await createFromSerialized(Family, {
       people: [
         { firstName: 'Mango'},
         { firstName: 'Van Gogh'},
@@ -487,18 +487,23 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('throws if contains many value is set with a non-array', async function(assert) {
-    let {field, contains, containsMany, Card, } = cardApi;
+    let {field, contains, containsMany, Card, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
     }
     assert.throws(() => new Person({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken/);
-    assert.throws(() => Person.fromSerialized({ languagesSpoken: 'english' }).languagesSpoken, /Expected array for field value languagesSpoken/);
+    try {
+      await createFromSerialized(Person, { languagesSpoken: 'english' });
+      throw new Error(`expected exception to be thrown`);
+    } catch (err: any) {
+      assert.ok(err.message.match(/Expected array for field value languagesSpoken/), 'expected error received')
+    }
   });
 
   test('render default edit template', async function (assert) {
-    let {field, contains, Card, } = cardApi;
+    let {field, contains, Card, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -509,7 +514,7 @@ module('Integration | card-basics', function (hooks) {
       @field author = contains(Person);
     }
 
-    let helloWorld = Post.fromSerialized({ title: 'My Post', author: { firstName: 'Arthur' } });
+    let helloWorld = await createFromSerialized(Post, { title: 'My Post', author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"]').containsText('Title');
@@ -523,7 +528,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('renders field name for boolean default view values', async function (assert) {
-    let {field, contains, Card, } = cardApi;
+    let {field, contains, Card, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     let { default: BooleanCard } = boolean;
 
@@ -532,7 +537,7 @@ module('Integration | card-basics', function (hooks) {
       @field isCool = contains(BooleanCard);
     }
 
-    let mango = Person.fromSerialized({
+    let mango = await createFromSerialized(Person, {
       firstName: 'Mango',
       isCool: true
     })
@@ -541,7 +546,7 @@ module('Integration | card-basics', function (hooks) {
   })
 
   test('renders boolean edit view', async function(assert) {
-    let {field, contains, Card, } = cardApi;
+    let {field, contains, Card, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     let { default: BooleanCard } = boolean;
 
@@ -550,7 +555,7 @@ module('Integration | card-basics', function (hooks) {
       @field isCool = contains(BooleanCard);
       @field isHuman = contains(BooleanCard);
     }
-    let mango = Person.fromSerialized({
+    let mango = await createFromSerialized(Person, {
       firstName: 'Mango',
       isCool: true,
       isHuman: false
@@ -599,7 +604,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('can edit primitive and composite fields', async function (assert) {
-    let {field, contains, Card, Component } = cardApi;
+    let {field, contains, Card, Component, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     let { default: IntegerCard} = integer;
     class Person extends Card {
@@ -628,7 +633,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = Post.fromSerialized({ title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
+    let helloWorld = await createFromSerialized(Post, { title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
 
     await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"] input').hasValue('First Post');

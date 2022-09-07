@@ -786,7 +786,10 @@ export class Realm {
       new URL(json.data.meta.adoptsFrom.module, relativeTo).href
     );
     let CardClass = module[json.data.meta.adoptsFrom.name] as CardAPI["Card"];
-    let card = CardClass.fromSerialized(json.data.attributes ?? {});
+    let card = await api.createFromSerialized(
+      CardClass,
+      json.data.attributes ?? {}
+    );
     let data = {
       data: api.serializeCard(card, { adoptsFrom: json.data.meta.adoptsFrom }),
     }; // this strips out computeds
