@@ -72,13 +72,13 @@ export class Card {
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
 
-  static [serialize](value: any, opts?: { includeComputeds?: boolean}) {
+  static [serialize](value: any, opts?: { includeComputeds?: boolean}): any {
     if (primitive in this) {
       return value;
     } else {
       return Object.fromEntries(
-        Object.keys(getFields(value, opts)).map(fieldName => [fieldName, serializedGet(value, fieldName)])
-      )
+        Object.entries(getFields(this, opts)).map(([fieldName, field]) => [fieldName, serializedGet(value, fieldName, field)])
+      );
     }
   }
 
@@ -157,8 +157,11 @@ export function getQueryableValue(fieldCard: typeof Card, value: any): any {
   return flatten((fieldCard as any)[queryableValue](value));
 }
 
-export function serializedGet<CardT extends CardConstructor>(model: InstanceType<CardT>, fieldName: string ) {
-  let field = getField(model.constructor, fieldName);
+export function serializedGet<CardT extends CardConstructor>(
+  model: InstanceType<CardT>,
+  fieldName: string,
+  field: Field<typeof Card> | undefined = getField(model.constructor, fieldName) // providing a default value to make tests easier
+) {
   if (!field) {
     throw new Error(`tried to serializedGet field ${fieldName} which does not exist in card ${model.constructor.name}`);
   }
@@ -184,8 +187,8 @@ export function serializeCard<CardT extends CardConstructor>(
     type: 'card',
   };
 
-  for (let fieldName of Object.keys(getFields(model, opts))) {
-    let value = serializedGet(model, fieldName);
+  for (let [fieldName, field ] of Object.entries(getFields(model, opts))) {
+    let value = serializedGet(model, fieldName, field);
     if (value !== undefined) {
       resource.attributes = resource.attributes ?? {};
       resource.attributes[fieldName] = value;
@@ -538,14 +541,23 @@ function getField<CardT extends CardConstructor>(card: CardT, fieldName: string)
   return undefined;
 }
 
-function getFields<T extends Card>(card: T, opts?: { includeComputeds?: boolean }): { [P in keyof T]?: Field<CardConstructor> } {
-  let obj = Reflect.getPrototypeOf(card);
-  let fields: { [P in keyof T]?: Field<CardConstructor> } = {};
+function getFields(card: typeof Card, opts?: { includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> };
+function getFields<T extends Card>(card: T, opts?: { includeComputeds?: boolean }): { [P in keyof T]?: Field<CardConstructor> };
+function getFields(cardInstanceOrClass: Card | typeof Card, opts?: { includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> } {
+  let obj: object | null;
+  if (isBaseCard in cardInstanceOrClass) {
+    // this is a card instance
+    obj = Reflect.getPrototypeOf(cardInstanceOrClass as Card);
+  } else {
+    // this is a card class
+    obj = (cardInstanceOrClass as typeof Card).prototype;
+  }
+  let fields: { [fieldName: string]: Field<CardConstructor> } = {};
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
     let descs = Object.getOwnPropertyDescriptors(obj);
     let currentFields = flatMap(Object.keys(descs), maybeFieldName => {
       if (maybeFieldName !== 'constructor') {
-        let maybeField = getField(card.constructor, maybeFieldName);
+        let maybeField = getField((isBaseCard in cardInstanceOrClass ? cardInstanceOrClass.constructor : cardInstanceOrClass) as typeof Card, maybeFieldName);
         if (maybeField?.computeVia && !opts?.includeComputeds) {
           return [];
         }
