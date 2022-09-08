@@ -4,8 +4,9 @@ import stringify from 'fast-json-stable-stringify'
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
-import { p, cleanWhiteSpace } from '../../helpers';
+import { p, cleanWhiteSpace, TestRealm } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { Realm } from "@cardstack/runtime-common/realm";
 import { baseRealm } from '@cardstack/runtime-common';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -17,6 +18,7 @@ let cardRef: typeof import ("https://cardstack.com/base/card-ref");
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
+  let realm: Realm;
 
   hooks.before(async function () {
     Loader.destroy();
@@ -24,6 +26,11 @@ module('Integration | serialization', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+    Loader.disableNativeImport(true);
+    realm = TestRealm.create({});
+    Loader.addRealmFetchOverride(realm);
+    await realm.ready;
+
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
     integer = await Loader.import(`${baseRealm.url}integer`);
@@ -172,7 +179,14 @@ module('Integration | serialization', function (hooks) {
       }
     }
 
-    let firstPost = await createFromSerialized(Post, { title: 'First Post', author: { firstName: 'Mango', birthdate: '2019-10-30', lastLogin: '2022-04-27T16:58' } });
+    let firstPost = await createFromSerialized(Post,
+      {
+        title: 'First Post',
+        "author.firstName": 'Mango',
+        "author.birthdate": '2019-10-30',
+        "author.lastLogin": '2022-04-27T16:58'
+      }
+    );
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM');
   });
@@ -199,7 +213,14 @@ module('Integration | serialization', function (hooks) {
       }
     }
 
-    let firstPost = await createFromSerialized(Post, { title: 'First Post', author: { firstName: 'Mango', birthdate: '2019-10-30', lastLogin: '2022-04-27T17:00' } });
+    let firstPost = await createFromSerialized(Post,
+      {
+        title: 'First Post',
+        "author.firstName": 'Mango',
+        "author.birthdate": '2019-10-30',
+        "author.lastLogin": '2022-04-27T17:00'
+      }
+    );
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM');
   });
@@ -275,7 +296,13 @@ module('Integration | serialization', function (hooks) {
       }
     }
 
-    let helloWorld = await createFromSerialized(Post, { title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
+    let helloWorld = await createFromSerialized(Post,
+      {
+        title: 'First Post',
+        reviews: 1,
+        "author.firstName": 'Arthur'
+      }
+    );
     await renderCard(helloWorld, 'edit');
     await fillIn('[data-test-field="author"] input', 'Carl Stack');
 
@@ -285,7 +312,7 @@ module('Integration | serialization', function (hooks) {
         attributes: {
           title: 'First Post',
           reviews: 1,
-          author: { firstName: 'Carl Stack' }
+          "author.firstName": 'Carl Stack'
         }
       }
     )
@@ -344,10 +371,14 @@ module('Integration | serialization', function (hooks) {
         <template><@fields.appointments/></template>
       }
     }
-    let classSchedule = await createFromSerialized(Schedule, { appointments: [
-      { date: '2022-4-1', location: 'Room 332', title: 'Biology' },
-      { date: '2022-4-4', location: 'Room 102', title: 'Civics' }
-    ]});
+    let classSchedule = await createFromSerialized(Schedule,
+      {
+        appointments: [
+          { date: '2022-4-1', location: 'Room 332', title: 'Biology' },
+          { date: '2022-4-4', location: 'Room 102', title: 'Civics' }
+        ]
+      }
+    );
     await renderCard(classSchedule, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Biology on Apr 1, 2022 at Room 332 Civics on Apr 4, 2022 at Room 102');
   });
@@ -447,11 +478,9 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           title: 'First Post',
-          author: {
-            firstName: 'Mango',
-            birthdate: '2019-10-30',
-            species: 'canis familiaris',
-          }
+          "author.firstName": 'Mango',
+          "author.birthdate": '2019-10-30',
+          "author.species": 'canis familiaris',
         },
       }
     );
@@ -491,16 +520,219 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           title: 'First Post',
-          author: {
-            firstName: 'Mango',
-            birthdate: '2019-10-30',
-          }
+          "author.firstName": 'Mango',
+          "author.birthdate": '2019-10-30',
         },
       }
     );
 
     let post2 = await createFromSerialized(Post, payload.attributes); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
+  });
+
+  test('can deserialize a card from a resource object', async function(assert) {
+    let { field, contains, serializeCard, Card, createFromSerialized } = cardApi;
+    let { default: StringCard } = string;
+
+    await realm.write('person.gts', `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `);
+    // just making this for the types only
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    let person = await createFromSerialized({
+      type: 'card',
+      attributes: {
+        firstName: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: "./person",
+          name: "Person"
+        }
+      }
+    }, new URL(realm.url)) as Person;
+    assert.strictEqual(person.firstName, 'Mango');
+    assert.deepEqual(serializeCard(person, {
+      adoptsFrom: {
+        module: "./person",
+        name: "Person"
+      }
+    }), {
+      type: 'card',
+      attributes: {
+        firstName: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: "./person",
+          name: "Person"
+        }
+      }
+    }, 'card serialization is correct')
+  });
+
+  test('can deserialize a card from a resource object with composite fields', async function(assert) {
+    let { field, contains, serializeCard, Card, createFromSerialized } = cardApi;
+    let { default: StringCard } = string;
+
+    await realm.write('person.gts', `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `);
+    await realm.write('post.gts', `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { Person } from "./person";
+
+      export class Post extends Card {
+        @field title = contains(StringCard);
+        @field author = contains(Person);
+      }
+    `);
+    // just making this for the types only
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class Post extends Card {
+      @field title = contains(StringCard);
+      @field author = contains(Person);
+    }
+    let post = await createFromSerialized({
+      type: 'card',
+      attributes: {
+        title: "Things I Want to Chew",
+        "author.firstName": 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: "./post",
+          name: "Post"
+        }
+      }
+    }, new URL(realm.url)) as Post;
+    assert.strictEqual(post.title, 'Things I Want to Chew');
+    assert.strictEqual(post.author.firstName, 'Mango');
+    assert.deepEqual(serializeCard(post, {
+      adoptsFrom: {
+        module: "./post",
+        name: "Post"
+      }
+    }), {
+      type: 'card',
+      attributes: {
+        title: "Things I Want to Chew",
+        "author.firstName": 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: "./post",
+          name: "Post"
+        }
+      }
+    }, 'card serialization is correct')
+  });
+
+  test('can deserialize a card with contains many of a compound card field', async function(assert) {
+    let { field, contains, containsMany, serializeCard, Card, createFromSerialized } = cardApi;
+    let { default: StringCard } = string;
+    await realm.write('person.gts', `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `);
+    await realm.write('post.gts', `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { Person } from "./person";
+
+      export class Post extends Card {
+        @field title = contains(StringCard);
+        @field author = contains(Person);
+      }
+    `);
+    await realm.write('blog.gts', `
+      import { containsMany, field, Card } from "https://cardstack.com/base/card-api";
+      import { Post } from "./post";
+
+      export class Blog extends Card {
+        @field posts = containsMany(Post);
+      }
+    `);
+    // just making this for the types only
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class Post extends Card {
+      @field title = contains(StringCard);
+      @field author = contains(Person);
+    }
+    class Blog extends Card {
+      @field posts = containsMany(Post);
+    }
+
+    let blog = await createFromSerialized({
+      type: 'card',
+      attributes: {
+        posts: [{
+          title: "Things I Want to Chew",
+          "author.firstName": 'Mango',
+        },{
+          title: "When Mango Steals My Bone",
+          "author.firstName": 'Van Gogh',
+        }]
+      },
+      meta: {
+        adoptsFrom: {
+          module: "./blog",
+          name: "Blog"
+        }
+      }
+    }, new URL(realm.url)) as Blog;
+    let posts = blog.posts;
+    assert.strictEqual(posts.length, 2, 'number of posts is correct');
+    assert.strictEqual(posts[0].title, 'Things I Want to Chew');
+    assert.strictEqual(posts[0].author.firstName, 'Mango');
+    assert.strictEqual(posts[1].title, 'When Mango Steals My Bone');
+    assert.strictEqual(posts[1].author.firstName, 'Van Gogh');
+
+    assert.deepEqual(serializeCard(blog, {
+      adoptsFrom: {
+        module: "./blog",
+        name: "Blog"
+      }
+    }), {
+      type: 'card',
+      attributes: {
+        posts: [{
+          title: "Things I Want to Chew",
+          "author.firstName": 'Mango',
+        },{
+          title: "When Mango Steals My Bone",
+          "author.firstName": 'Van Gogh',
+        }]
+      },
+      meta: {
+        adoptsFrom: {
+          module: "./blog",
+          name: "Blog"
+        }
+      }
+    }, 'card serialization is correct')
   });
 
 

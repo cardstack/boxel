@@ -6,8 +6,9 @@ import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
 import ContainsManyEditor from './contains-many';
 import { WatchedArray } from './watched-array';
-import { Deferred } from '@cardstack/runtime-common';
-import type { ResourceObject } from '@cardstack/runtime-common';
+import { Deferred, isCardResource, Loader } from '@cardstack/runtime-common';
+import { flatten, unflatten } from "flat";
+import type { ResourceObject, CardResource } from '@cardstack/runtime-common';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -69,7 +70,6 @@ export class Card {
   // this is here because Card has no public instance methods, so without it
   // typescript considers everything a valid card.
   [isBaseCard] = true;
-  
   declare ["constructor"]: CardConstructor;
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
@@ -78,9 +78,9 @@ export class Card {
     if (primitive in this) {
       return value;
     } else {
-      return Object.fromEntries(
+      return flatten(Object.fromEntries(
         Object.entries(getFields(this, opts)).map(([fieldName, field]) => [fieldName, serializedGet(value, fieldName, field)])
-      );
+      ), { safe: true });
     }
   }
 
@@ -153,7 +153,7 @@ export function getQueryableValue(fieldCard: typeof Card, value: any): any {
   
   // this recurses through the fields of the compound card via
   // the base card's queryableValue implementation
-  return flatten((fieldCard as any)[queryableValue](value));
+  return flatten((fieldCard as any)[queryableValue](value), { safe: true });
 }
 
 export function serializedGet<CardT extends CardConstructor>(
@@ -175,17 +175,33 @@ async function serializedValues<CardT extends CardConstructor>(card: CardT, fiel
   return await field.deserialize(value, modelPromise);
 }
 
+// a card resource but with optional "id" and "type" props
+type LooseCardResource = Omit<CardResource, "id" | "type"> & { type?: "card", id?: string };
+
 export function serializeCard<CardT extends CardConstructor>(
   model: InstanceType<CardT>,
   opts?: {
-    adoptsFrom?: { module: string, name: string },
     includeComputeds?: boolean
   }
-): ResourceObject {
+): ResourceObject;
+// if the caller provides an adoptsFrom, then we can be more precise with the return type
+export function serializeCard<CardT extends CardConstructor>(
+  model: InstanceType<CardT>,
+  opts: {
+    adoptsFrom: { module: string, name: string },
+    includeComputeds?: boolean
+  }
+): LooseCardResource;
+export function serializeCard<CardT extends CardConstructor>(
+  model: InstanceType<CardT>,
+  opts?: {
+    adoptsFrom: { module: string, name: string },
+    includeComputeds?: boolean
+  }
+): LooseCardResource | ResourceObject {
   let resource: ResourceObject = {
     type: 'card',
   };
-
   for (let [fieldName, field ] of Object.entries(getFields(model, opts))) {
     let value = serializedGet(model, fieldName, field);
     if (value !== undefined) {
@@ -193,16 +209,41 @@ export function serializeCard<CardT extends CardConstructor>(
       resource.attributes[fieldName] = value;
     }
   }
-  resource.attributes = resource.attributes ?? {};
-
+  resource.attributes = flatten(resource.attributes ?? {}, { safe: true });
   if (opts?.adoptsFrom) {
     resource.meta = { adoptsFrom: { ...opts.adoptsFrom } };
+    if (!isCardResource(resource)) {
+      throw new Error(`serializeCard resulted in non-card resource: ${JSON.stringify(resource, null, 2)}`);
+    }
+    return resource;
   }
-
   return resource;
 }
 
-export async function createFromSerialized<T extends CardConstructor>(CardClass: T, data: any): Promise<CardInstanceType<T>> {
+
+export async function createFromSerialized<T extends CardConstructor>(CardClass: T, data: any, opts?: { loader?: Loader }): Promise<CardInstanceType<T>>;
+export async function createFromSerialized<T extends CardConstructor>(resource: LooseCardResource, relativeTo: URL | undefined, opts?: { loader?: Loader}): Promise<CardInstanceType<T>>;
+export async function createFromSerialized<T extends CardConstructor>(CardClassOrResource: T | LooseCardResource, dataOrRelativeTo?: any | URL, opts?: { loader?: Loader }): Promise<CardInstanceType<T>> {
+  let CardClass: T;
+  let data: any;
+  let loader = opts?.loader ?? Loader;
+  if (isCardResource(CardClassOrResource)){
+    let relativeTo = dataOrRelativeTo instanceof URL ? dataOrRelativeTo : undefined;
+    let { attributes, meta: { adoptsFrom } } = CardClassOrResource;
+    let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);
+    CardClass = module[adoptsFrom.name];
+    data = unflatten(attributes);
+  } else if ("baseCard" in CardClassOrResource) {
+    CardClass = CardClassOrResource;
+    if (primitive in CardClass) {
+      data = dataOrRelativeTo;
+    } else {
+      data = unflatten(dataOrRelativeTo);
+    }
+  } else {
+    throw new Error(`don't know how to serialize ${JSON.stringify(CardClassOrResource, null, 2)}`);
+  }
+
   if (primitive in CardClass) {
     return CardClass[deserialize](data);
   }
@@ -227,21 +268,6 @@ export async function createFromSerialized<T extends CardConstructor>(CardClass:
 export async function searchDoc<CardT extends CardConstructor>(model: InstanceType<CardT>): Promise<Record<string, any>> {
   await recompute(model);
   return getQueryableValue(model.constructor, model) as Record<string, any>;
-}
-
-function flatten(obj: Record<string, any>): Record<string, any> {
-  let result: Record<string, any> = {};
-  for (let [key, value] of Object.entries(obj)) {
-    if (typeof value === "object") {
-      let res = flatten(value);
-      for (let [k, val] of Object.entries(res)) {
-        result[`${key}.${k}`] = val;
-      }
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
 }
 
 class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {

@@ -246,48 +246,45 @@ module("indexing", function (hooks) {
 
   test("can incrementally index deleted card source", async function (assert) {
     await realm.delete("post.gts");
-    {
-      try {
-        await realm.searchIndex.search({
-          filter: {
-            type: { module: `${testRealm}post`, name: "Post" },
-          },
-        });
-        throw new Error(`failed to throw expected exception`);
-      } catch (err: any) {
-        assert.strictEqual(
-          err.message,
-          `Your filter refers to nonexistent type: import { Post } from "http://test-realm/post"`
-        );
-      }
-      assert.deepEqual(
-        await realm.searchIndex.card(new URL(`${testRealm}post-1`)),
-        {
-          type: "error",
-          error: {
-            message:
-              'could not load card ref {"module":"http://test-realm/post","name":"Post"}',
-            errorReference: {
-              type: "exportedCard",
-              module: "http://test-realm/post",
-              name: "Post",
-            },
-          },
+    try {
+      await realm.searchIndex.search({
+        filter: {
+          type: { module: `${testRealm}post`, name: "Post" },
         },
-        "card instance is an error document"
-      );
-      assert.deepEqual(
-        realm.searchIndex.stats,
-        {
-          instancesIndexed: 0,
-          definitionsBuilt: 0,
-          modulesAnalyzed: 0,
-          instanceErrors: 1,
-          definitionErrors: 0,
-        },
-        "indexed correct number of files"
+      });
+      throw new Error(`failed to throw expected exception`);
+    } catch (err: any) {
+      assert.strictEqual(
+        err.message,
+        `Your filter refers to nonexistent type: import { Post } from "http://test-realm/post"`
       );
     }
+    assert.deepEqual(
+      await realm.searchIndex.card(new URL(`${testRealm}post-1`)),
+      {
+        type: "error",
+        error: {
+          message: "CardError 404 (TODO include stack trace)",
+          errorReference: {
+            type: "exportedCard",
+            module: "http://test-realm/post",
+            name: "Post",
+          },
+        },
+      },
+      "card instance is an error document"
+    );
+    assert.deepEqual(
+      realm.searchIndex.stats,
+      {
+        instancesIndexed: 0,
+        definitionsBuilt: 0,
+        modulesAnalyzed: 0,
+        instanceErrors: 1,
+        definitionErrors: 0,
+      },
+      "indexed correct number of files"
+    );
 
     // when the definitions is created again, the instance should mend its broken link
     await realm.write(
@@ -308,25 +305,23 @@ module("indexing", function (hooks) {
         }
       `
     );
-    {
-      let result = await realm.searchIndex.search({
-        filter: {
-          on: { module: `${testRealm}post`, name: "Post" },
-          eq: { nickName: "Van Gogh-poo" },
-        },
-      });
-      assert.strictEqual(result.length, 1, "found the post instance");
-      assert.deepEqual(
-        realm.searchIndex.stats,
-        {
-          instancesIndexed: 1,
-          definitionsBuilt: 1,
-          modulesAnalyzed: 1,
-          instanceErrors: 0,
-          definitionErrors: 0,
-        },
-        "indexed correct number of files"
-      );
-    }
+    let result = await realm.searchIndex.search({
+      filter: {
+        on: { module: `${testRealm}post`, name: "Post" },
+        eq: { nickName: "Van Gogh-poo" },
+      },
+    });
+    assert.strictEqual(result.length, 1, "found the post instance");
+    assert.deepEqual(
+      realm.searchIndex.stats,
+      {
+        instancesIndexed: 1,
+        definitionsBuilt: 1,
+        modulesAnalyzed: 1,
+        instanceErrors: 0,
+        definitionErrors: 0,
+      },
+      "indexed correct number of files"
+    );
   });
 });

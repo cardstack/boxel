@@ -782,14 +782,9 @@ export class Realm {
     let api = await this.searchIndex.loader.import<CardAPI>(
       "https://cardstack.com/base/card-api"
     );
-    let module = await this.searchIndex.loader.import<Record<string, any>>(
-      new URL(json.data.meta.adoptsFrom.module, relativeTo).href
-    );
-    let CardClass = module[json.data.meta.adoptsFrom.name] as CardAPI["Card"];
-    let card = await api.createFromSerialized(
-      CardClass,
-      json.data.attributes ?? {}
-    );
+    let card = await api.createFromSerialized(json.data, relativeTo, {
+      loader: this.searchIndex.loader,
+    });
     let data = {
       data: api.serializeCard(card, { adoptsFrom: json.data.meta.adoptsFrom }),
     }; // this strips out computeds

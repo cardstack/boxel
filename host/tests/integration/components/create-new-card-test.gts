@@ -93,10 +93,8 @@ module('Integration | create-new-card', function (hooks) {
         attributes: {
           title: 'Person',
           description: 'Catalog entry',
-          ref: {
-            module: `${testRealmURL}person`,
-            name: 'Person'
-          }
+          "ref.module": `${testRealmURL}person`,
+          "ref.name": 'Person'
         },
         meta: {
           adoptsFrom: {
@@ -112,10 +110,8 @@ module('Integration | create-new-card', function (hooks) {
         attributes: {
           title: 'Post',
           description: 'Catalog entry',
-          ref: {
-            module: `${testRealmURL}post`,
-            name: 'Post'
-          }
+          "ref.module": `${testRealmURL}post`,
+          "ref.name": 'Post'
         },
         meta: {
           adoptsFrom: {

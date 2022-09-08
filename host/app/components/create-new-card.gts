@@ -3,6 +3,7 @@ import type { CardResource } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import get from 'lodash/get';
 //@ts-ignore glint does not think `hash` is consumed-but it is in the template
 import { hash } from '@ember/helper';
 
@@ -27,8 +28,8 @@ export default class CreateNewCard extends Component<Signature> {
         <h1>Create New Card: {{this.selectedCard.attributes.title}}</h1>
         {{#if this.selectedCard}}
           <CardEditor
-            @moduleURL={{this.selectedCard.attributes.ref.module}}
-            @cardArgs={{hash type="new" realmURL=@realmURL cardSource=this.selectedCard.attributes.ref}}
+            @moduleURL={{get (getRef this.selectedCard) "module"}}
+            @cardArgs={{hash type="new" realmURL=@realmURL cardSource=(getRef this.selectedCard)}}
             @onSave={{this.onSave}}
             @onCancel={{this.onCancel}}
           />
@@ -61,4 +62,11 @@ export default class CreateNewCard extends Component<Signature> {
   onCancel() {
     this.selectedCard = undefined;
   }
+}
+
+function getRef(card: CardResource) {
+  return {
+    module: card.attributes?.["ref.module"],
+    name: card.attributes?.["ref.name"],
+  };
 }

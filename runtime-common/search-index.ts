@@ -90,7 +90,7 @@ export function isCardResource(resource: any): resource is CardResource {
   if ("id" in resource && typeof resource.id !== "string") {
     return false;
   }
-  if (!("type" in resource) || resource.type !== "card") {
+  if ("type" in resource && resource.type !== "card") {
     return false;
   }
   if ("attributes" in resource && typeof resource.attributes !== "object") {
