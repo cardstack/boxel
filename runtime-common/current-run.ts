@@ -30,7 +30,6 @@ import type {
   CardRef,
   CardResource,
 } from "./search-index";
-import { CardError } from "./error";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 type CardAPI = typeof import("https://cardstack.com/base/card-api");
 
@@ -404,81 +403,69 @@ export class CurrentRun {
     );
     let name = json.data.meta.adoptsFrom.name;
     let cardRef = { module: moduleURL.href, name };
-    let module: Record<string, any> | undefined;
-    try {
-      module = await this.#loader.import<Record<string, any>>(moduleURL.href);
-    } catch (err: any) {
-      if (!(err instanceof CardError) || err.response.status !== 404) {
-        throw err;
-      }
-    }
     let typesMaybeError: TypesWithErrors | undefined;
     let depsMaybeError: DepsWithErrors | undefined;
     let uncaughtError: Error | undefined;
-    if (module) {
-      let doc: CardDocument | undefined;
-      let searchData: any;
-      try {
-        let api = await this.#loader.import<CardAPI>(
-          `${baseRealm.url}card-api`
+    let doc: CardDocument | undefined;
+    let searchData: any;
+    try {
+      let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      let card = await api.createFromSerialized(json.data, moduleURL, {
+        loader: this.#loader,
+      });
+      await api.recompute(card);
+      let data = api.serializeCard(card, {
+        adoptsFrom: json.data.meta.adoptsFrom,
+        includeComputeds: true,
+      });
+      let maybeDoc = {
+        data: merge(data, {
+          id: instanceURL.href,
+          meta: { lastModified: lastModified },
+        }),
+      };
+      if (!isCardDocument(maybeDoc)) {
+        throw new Error(
+          `bug: card serialization produced non-card document for ${instanceURL.href}`
         );
-        let CardClass = module[name] as typeof Card;
-        let card = await api.createFromSerialized(
-          CardClass,
-          json.data.attributes
-        );
-        await api.recompute(card);
-        let data = api.serializeCard(card, {
-          adoptsFrom: json.data.meta.adoptsFrom,
-          includeComputeds: true,
-        });
-        let maybeDoc = {
-          data: merge(data, {
-            id: instanceURL.href,
-            meta: { lastModified: lastModified },
-          }),
-        };
-        if (!isCardDocument(maybeDoc)) {
-          throw new Error(
-            `bug: card serialization produced non-card document for ${instanceURL.href}`
-          );
-        }
-        doc = maybeDoc;
-        searchData = await api.searchDoc(card);
-      } catch (err: any) {
-        uncaughtError = err;
       }
+      doc = maybeDoc;
+      searchData = await api.searchDoc(card);
+    } catch (err: any) {
+      uncaughtError = err;
+    }
+    // if we already encountered an uncaught error then no need to deal with this
+    if (!uncaughtError) {
       typesMaybeError = await this.getTypes(cardRef);
       depsMaybeError = await this.buildDeps({
         type: "exportedCard",
         ...cardRef,
       });
-      if (
-        doc &&
-        typesMaybeError.type === "types" &&
-        depsMaybeError.type === "deps"
-      ) {
-        this.stats.instancesIndexed++;
-        this.#instances.set(instanceURL, {
-          type: "entry",
-          entry: {
-            resource: doc.data,
-            searchData,
-            types: typesMaybeError.types,
-            deps: new Map(
-              depsMaybeError.deps.map((ref) => [
-                internalKeyFor(ref, undefined),
-                ref,
-              ]) as [string, CardRef][]
-            ),
-          },
-        });
-      }
+    }
+    if (
+      doc &&
+      typesMaybeError?.type === "types" &&
+      depsMaybeError?.type === "deps"
+    ) {
+      this.stats.instancesIndexed++;
+      this.#instances.set(instanceURL, {
+        type: "entry",
+        entry: {
+          resource: doc.data,
+          searchData,
+          types: typesMaybeError.types,
+          deps: new Map(
+            depsMaybeError.deps.map((ref) => [
+              internalKeyFor(ref, undefined),
+              ref,
+            ]) as [string, CardRef][]
+          ),
+        },
+      });
     }
 
     if (
       uncaughtError ||
-      !module ||
       typesMaybeError?.type === "error" ||
       depsMaybeError?.type === "error"
     ) {
@@ -489,14 +476,6 @@ export class CurrentRun {
           type: "error",
           error: {
             message: `${uncaughtError.message} (TODO include stack trace)`,
-            errorReference: { type: "exportedCard", ...cardRef },
-          },
-        };
-      } else if (!module) {
-        error = {
-          type: "error",
-          error: {
-            message: `could not load card ref ${JSON.stringify(cardRef)}`,
             errorReference: { type: "exportedCard", ...cardRef },
           },
         };

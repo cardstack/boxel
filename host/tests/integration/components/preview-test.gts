@@ -169,9 +169,7 @@ module('Integration | preview', function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          author: {
-            firstName: 'Mango'
-          },
+          "author.firstName": 'Mango',
           title: 'We Need to Go to the Dog Park Now!'
         },
         meta: { adoptsFrom: { module: '', name: 'default'} }

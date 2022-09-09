@@ -119,12 +119,10 @@ module('Integration | card-basics', function (hooks) {
 
     let helloWorld = await createFromSerialized(Post, {
       title: 'First Post',
-      author: {
-          firstName: 'Arthur',
-          subscribers: 5,
-          isCool: true,
-          languagesSpoken: ['english', 'japanese']
-        },
+      "author.firstName": 'Arthur',
+      "author.subscribers": 5,
+      "author.isCool": true,
+      "author.languagesSpoken": ['english', 'japanese']
     });
 
     await renderCard(helloWorld, 'isolated');
@@ -212,11 +210,13 @@ module('Integration | card-basics', function (hooks) {
 
     let nonPrimitiveEntry = await createFromSerialized(CatalogEntry, { 
       title: "CatalogEntry Card",
-      ref: { module: "https://cardstack.com/base/catalog-entry", name: "CatalogEntry" }
+      "ref.module": "https://cardstack.com/base/catalog-entry",
+      "ref.name": "CatalogEntry" 
     });
     let primitiveEntry = await createFromSerialized(CatalogEntry, {
       title: "String Card",
-      ref: { module: "https://cardstack.com/base/string", name: "default" }
+      "ref.module": "https://cardstack.com/base/string",
+      "ref.name": "default"
     });
 
     await cardApi.recompute(nonPrimitiveEntry);
@@ -246,7 +246,13 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = await createFromSerialized(Post, { author: { firstName: 'Arthur', title: 'Mr', number: 10 } });
+    let helloWorld = await createFromSerialized(Post,
+      {
+        "author.firstName": 'Arthur',
+        "author.title": 'Mr',
+        "author.number": 10
+      }
+    );
     await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test]').containsText('Mr Arthur 10');
   });
@@ -266,7 +272,12 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let mango = await createFromSerialized(Person, { firstName: 'Mango', friend: { firstName: 'Van Gogh' } });
+    let mango = await createFromSerialized(Person,
+      {
+        firstName: 'Mango',
+        "friend.firstName": 'Van Gogh'
+      }
+    );
     await renderCard(mango, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango friend is Van Gogh');
   });
@@ -300,7 +311,12 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = await createFromSerialized(Post, { author: { firstName: 'Arthur', number: 10 } });
+    let helloWorld = await createFromSerialized(Post,
+      {
+        "author.firstName": 'Arthur',
+        "author.number": 10
+      }
+    );
 
     await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test="string"]').containsText('Arthur');
@@ -324,7 +340,12 @@ module('Integration | card-basics', function (hooks) {
       @field author = contains(Person);
     }
 
-    let helloWorld = await createFromSerialized(Post, { title: 'First Post', author: { firstName: 'Arthur' } });
+    let helloWorld = await createFromSerialized(Post,
+      {
+        title: 'First Post',
+        "author.firstName": 'Arthur'
+      }
+    );
 
     await renderCard(helloWorld, 'isolated');
 
@@ -514,7 +535,7 @@ module('Integration | card-basics', function (hooks) {
       @field author = contains(Person);
     }
 
-    let helloWorld = await createFromSerialized(Post, { title: 'My Post', author: { firstName: 'Arthur' } });
+    let helloWorld = await createFromSerialized(Post, { title: 'My Post', "author.firstName": 'Arthur' });
 
     await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"]').containsText('Title');
@@ -633,7 +654,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let helloWorld = await createFromSerialized(Post, { title: 'First Post', reviews: 1, author: { firstName: 'Arthur' } });
+    let helloWorld = await createFromSerialized(Post, { title: 'First Post', reviews: 1, "author.firstName": 'Arthur' });
 
     await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"] input').hasValue('First Post');

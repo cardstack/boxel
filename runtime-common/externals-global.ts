@@ -70,6 +70,8 @@ import * as runtime from "@cardstack/runtime-common";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("ember-modifier", {
   default: class {},
 });
+import * as flat from "flat";
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("flat", flat);
 // import * as tracked from "tracked-built-ins";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("tracked-built-ins", {
   // TODO replace with actual TrackedWeakMap when we add real glimmer

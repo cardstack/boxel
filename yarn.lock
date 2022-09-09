@@ -2715,6 +2715,11 @@
     "@types/qs" "*"
     "@types/serve-static" "*"
 
+"@types/flat@^5.0.2":
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/@types/flat/-/flat-5.0.2.tgz#642a51a037d1f52fda082312b0e4566dc09a9f8f"
+  integrity sha512-3zsplnP2djeps5P9OyarTxwRpMLoe5Ash8aL9iprw0JxB+FAHjY+ifn4yZUuW4/9hqtnmor6uvjSRzJhiVbrEQ==
+
 "@types/fs-extra@^5.0.5":
   version "5.1.0"
   resolved "https://registry.yarnpkg.com/@types/fs-extra/-/fs-extra-5.1.0.tgz#2a325ef97901504a3828718c390d34b8426a10a1"
@@ -9033,6 +9038,11 @@ flat-cache@^3.0.4:
   dependencies:
     flatted "^3.1.0"
     rimraf "^3.0.2"
+
+flat@^5.0.2:
+  version "5.0.2"
+  resolved "https://registry.yarnpkg.com/flat/-/flat-5.0.2.tgz#8ca6fe332069ffa9d324c327198c598259ceb241"
+  integrity sha512-b6suED+5/3rTpUBdG1gupIl8MPFCAMA0QXwmljLhvCUKcUvdE4gWky9zpuGCcXHOsz4J9wPGNWq6OKpmIzz3hQ==
 
 flatted@^3.1.0:
   version "3.2.5"

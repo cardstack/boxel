@@ -76,7 +76,7 @@ export const isNode =
  */
 
 export const externalsMap: Map<string, string[]> = new Map([
-  ["@cardstack/runtime-common", ["Loader"]],
+  ["@cardstack/runtime-common", ["Loader", "Deferred", "isCardResource"]],
   ["@glimmer/component", ["default"]],
   ["@ember/component", ["setComponentTemplate", "default"]],
   ["@ember/component/template-only", ["default"]],
@@ -90,6 +90,7 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["ember-concurrency", ["task", "restartableTask"]],
   ["ember-concurrency-ts", ["taskFor"]],
   ["ember-modifier", ["default"]],
+  ["flat", ["flatten", "unflatten"]],
   ["lodash", ["flatMap", "startCase", "get"]],
   ["tracked-built-ins", ["TrackedWeakMap"]],
   ["date-fns", ["parseISO", "format", "parse"]],
