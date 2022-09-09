@@ -178,9 +178,11 @@ module('Integration | serialization', function (hooks) {
     let firstPost = await createFromSerialized(Post,
       {
         title: 'First Post',
-        "author.firstName": 'Mango',
-        "author.birthdate": '2019-10-30',
-        "author.lastLogin": '2022-04-27T16:58'
+        author: {
+          firstName: 'Mango',
+          birthdate: '2019-10-30',
+          lastLogin: '2022-04-27T16:58'
+        }
       }
     );
     await renderCard(firstPost, 'isolated');
@@ -212,9 +214,11 @@ module('Integration | serialization', function (hooks) {
     let firstPost = await createFromSerialized(Post,
       {
         title: 'First Post',
-        "author.firstName": 'Mango',
-        "author.birthdate": '2019-10-30',
-        "author.lastLogin": '2022-04-27T17:00'
+        author: {
+          firstName: 'Mango',
+          birthdate: '2019-10-30',
+          lastLogin: '2022-04-27T17:00'
+        }
       }
     );
     await renderCard(firstPost, 'isolated');
@@ -338,13 +342,13 @@ module('Integration | serialization', function (hooks) {
       }
     }
 
-    let helloWorld = await createFromSerialized(Post,
-      {
+    let helloWorld = await createFromSerialized(Post, {
         title: 'First Post',
         reviews: 1,
-        "author.firstName": 'Arthur'
-      }
-    );
+        author: {
+          firstName: 'Arthur'
+        }
+    });
     await renderCard(helloWorld, 'edit');
     await fillIn('[data-test-field="author"] input', 'Carl Stack');
 
@@ -354,7 +358,9 @@ module('Integration | serialization', function (hooks) {
         attributes: {
           title: 'First Post',
           reviews: 1,
-          "author.firstName": 'Carl Stack'
+          author: {
+            firstName: 'Carl Stack'
+          }
         }
       }
     )
@@ -426,21 +432,17 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a containsMany field', async function(assert) {
-    let { field, containsMany, serializedGet, Card, Component } = cardApi;
+    let { field, containsMany, serializedGet, Card } = cardApi;
     let { default: DateCard } = date;
     class Schedule extends Card {
       @field dates = containsMany(DateCard);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>{{stringify (serializedGet @model 'dates')}}</template>
-      }
     }
     let classSchedule = new Schedule({ dates: [p('2022-4-1'), p('2022-4-4')] });
-    await renderCard(classSchedule, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), '["2022-04-01","2022-04-04"]');
+    assert.deepEqual(serializedGet(classSchedule, 'dates'), ["2022-04-01","2022-04-04"]);
   });
 
   test("can serialize a containsMany's nested field", async function(assert) {
-    let { field, contains, containsMany, serializedGet, Card, Component } = cardApi;
+    let { field, contains, containsMany, serializedGet, Card } = cardApi;
     let { default: StringCard } = string;
     let { default: DateCard } = date;
     class Appointment extends Card {
@@ -450,16 +452,23 @@ module('Integration | serialization', function (hooks) {
     }
     class Schedule extends Card {
       @field appointments = containsMany(Appointment);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>{{stringify (serializedGet @model 'appointments')}}</template>
-      }
     }
     let classSchedule = new Schedule({ appointments: [
       new Appointment({ date: p('2022-4-1'), location: 'Room 332', title: 'Biology' }),
       new Appointment({ date: p('2022-4-4'), location: 'Room 102', title: 'Civics' }),
     ]});
-    await renderCard(classSchedule, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), '[{"date":"2022-04-01","location":"Room 332","title":"Biology"},{"date":"2022-04-04","location":"Room 102","title":"Civics"}]');
+
+    assert.deepEqual(serializedGet(classSchedule, 'appointments'), 
+      [{
+        date:"2022-04-01",
+        location:"Room 332",
+        title:"Biology"
+      },{
+        date:"2022-04-04",
+        location:"Room 102",
+        title:"Civics"
+      }]
+    )
   });
 
   test('can serialize a card with primitive fields', async function (assert) {
@@ -512,7 +521,6 @@ module('Integration | serialization', function (hooks) {
         species: 'canis familiaris'
       })
     });
-    await renderCard(firstPost, 'isolated');
     let payload = serializeCard(firstPost);
     assert.deepEqual(
       payload as any,
@@ -520,9 +528,11 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           title: 'First Post',
-          "author.firstName": 'Mango',
-          "author.birthdate": '2019-10-30',
-          "author.species": 'canis familiaris',
+          author: {
+            firstName: 'Mango',
+            birthdate: '2019-10-30',
+            species: 'canis familiaris',
+          }
         },
       }
     );
@@ -558,21 +568,18 @@ module('Integration | serialization', function (hooks) {
       })
     });
     await renderCard(firstPost, 'isolated');
-    let payload = serializeCard(firstPost, { 
-      adoptsFrom: { 
-        module: `./test-cards`, 
-        name: 'Post',
-      }
-    });
+    let payload = serializeCard(firstPost);
     assert.deepEqual(
       payload as any,
       {
         type: 'card',
         attributes: {
           title: 'First Post',
-          "author.firstName": 'Mango',
-          "author.birthdate": '2019-10-30',
-          "author.department": 'wagging',
+          author: {
+            firstName: 'Mango',
+            birthdate: '2019-10-30',
+            department: 'wagging'
+          }
         },
         meta: {
           adoptsFrom: { 
@@ -661,7 +668,9 @@ module('Integration | serialization', function (hooks) {
       type: 'card',
       attributes: {
         title: "Things I Want to Chew",
-        "author.firstName": 'Mango',
+        author: {
+          firstName: 'Mango',
+        }
       },
       meta: {
         adoptsFrom: {
@@ -681,7 +690,9 @@ module('Integration | serialization', function (hooks) {
       type: 'card',
       attributes: {
         title: "Things I Want to Chew",
-        "author.firstName": 'Mango',
+        author: {
+          firstName: 'Mango',
+        }
       },
       meta: {
         adoptsFrom: {
@@ -716,10 +727,14 @@ module('Integration | serialization', function (hooks) {
       attributes: {
         posts: [{
           title: "Things I Want to Chew",
-          "author.firstName": 'Mango',
+          author: {
+            firstName: 'Mango',
+          }
         },{
           title: "When Mango Steals My Bone",
-          "author.firstName": 'Van Gogh',
+          author: {
+            firstName: 'Van Gogh',
+          }
         }]
       },
       meta: {
@@ -746,10 +761,14 @@ module('Integration | serialization', function (hooks) {
       attributes: {
         posts: [{
           title: "Things I Want to Chew",
-          "author.firstName": 'Mango',
+          author: {
+            firstName: 'Mango',
+          }
         },{
           title: "When Mango Steals My Bone",
-          "author.firstName": 'Van Gogh',
+          author: {
+            firstName: 'Van Gogh',
+          }
         }]
       },
       meta: {

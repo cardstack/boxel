@@ -820,8 +820,10 @@ posts/ignore-me.gts
           attributes: {
             title: 'Card 1',
             description: 'Sample post',
-            'author.firstName': 'Cardy',
-            'author.lastName': 'Stackington Jr. III',
+            author: {
+              firstName: 'Cardy',
+              lastName: 'Stackington Jr. III',
+            },
             views: 0,
           },
           meta: {
@@ -835,7 +837,7 @@ posts/ignore-me.gts
       'card-2.json': {
         data: {
           type: 'card',
-          attributes: { 'author.firstName': 'Cardy', editions: 1 },
+          attributes: { author: { firstName: 'Cardy' }, editions: 1 },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
           },
@@ -847,9 +849,11 @@ posts/ignore-me.gts
           attributes: {
             title: 'Card 1',
             description: 'Sample post',
-            'author.firstName': 'Carl',
-            'author.lastName': 'Stack',
-            'author.posts': 1,
+            author: {
+              firstName: 'Carl',
+              lastName: 'Stack',
+              posts: 1,
+            },
             createdAt: new Date(2022, 7, 1),
             views: 10,
           },
@@ -864,9 +868,11 @@ posts/ignore-me.gts
           attributes: {
             title: 'Card 2',
             description: 'Sample post',
-            'author.firstName': 'Carl',
-            'author.lastName': 'Deck',
-            'author.posts': 3,
+            author: {
+              firstName: 'Carl',
+              lastName: 'Deck',
+              posts: 3,
+            },
             createdAt: new Date(2022, 7, 22),
             views: 5,
           },
@@ -882,8 +888,10 @@ posts/ignore-me.gts
         data: {
           type: 'card',
           attributes: {
-            'author.firstName': 'Mango',
-            'author.lastName': 'Abdel-Rahman',
+            author: {
+              firstName: 'Mango',
+              lastName: 'Abdel-Rahman',
+            },
             editions: 1,
             pubDate: '2022-07-01',
           },
@@ -896,8 +904,10 @@ posts/ignore-me.gts
         data: {
           type: 'card',
           attributes: {
-            'author.firstName': 'Van Gogh',
-            'author.lastName': 'Abdel-Rahman',
+            author: {
+              firstName: 'Van Gogh',
+              lastName: 'Abdel-Rahman',
+            },
             editions: 0,
             pubDate: '2023-08-01',
           },
@@ -910,8 +920,10 @@ posts/ignore-me.gts
         data: {
           type: 'card',
           attributes: {
-            'author.firstName': 'Jackie',
-            'author.lastName': 'Aguilar',
+            author: {
+              firstName: 'Jackie',
+              lastName: 'Aguilar',
+            },
             editions: 2,
             pubDate: '2022-08-01',
           },

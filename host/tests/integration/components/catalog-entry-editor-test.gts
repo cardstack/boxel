@@ -130,8 +130,10 @@ module('Integration | catalog-entry-editor', function (hooks) {
           attributes: {
             title: 'Person test',
             description: 'test description',
-            "ref.module": `${testRealmURL}person`,
-            "ref.name": 'Person'
+            ref: {
+              module: `${testRealmURL}person`,
+              name: 'Person'
+            }
           },
           meta: {
             adoptsFrom: {
@@ -152,8 +154,10 @@ module('Integration | catalog-entry-editor', function (hooks) {
         attributes: {
           title: 'Person',
           description: 'Catalog entry',
-          "ref.module": `${testRealmURL}person`,
-          "ref.name": 'Person'
+          ref: {
+            module: `${testRealmURL}person`,
+            name: 'Person'
+          }
         },
         meta: {
           adoptsFrom: {
