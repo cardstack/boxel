@@ -568,7 +568,12 @@ module('Integration | serialization', function (hooks) {
       })
     });
     await renderCard(firstPost, 'isolated');
-    let payload = serializeCard(firstPost);
+    let payload = serializeCard(firstPost, {
+      adoptsFrom: {
+        module: './test-cards',
+        name: 'Post'
+      }
+    });
     assert.deepEqual(
       payload as any,
       {
