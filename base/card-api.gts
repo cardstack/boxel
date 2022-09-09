@@ -178,20 +178,9 @@ async function serializedValues<CardT extends CardConstructor>(card: CardT, fiel
 // a card resource but with optional "id" and "type" props
 type LooseCardResource = Omit<CardResource, "id" | "type"> & { type?: "card", id?: string };
 
-export function serializeCard<CardT extends CardConstructor>(
-  model: InstanceType<CardT>,
-  opts?: {
-    includeComputeds?: boolean
-  }
-): ResourceObject;
-// if the caller provides an adoptsFrom, then we can be more precise with the return type
-export function serializeCard<CardT extends CardConstructor>(
-  model: InstanceType<CardT>,
-  opts: {
-    adoptsFrom: { module: string, name: string },
-    includeComputeds?: boolean
-  }
-): LooseCardResource;
+export function serializeCard<CardT extends CardConstructor>( model: InstanceType<CardT>, opts: { adoptsFrom: { module: string, name: string }, includeComputeds?: boolean }): LooseCardResource;
+// this is just for tests--its tricky to perform this outside of this function, since that would result in returning less precise types
+export function serializeCard<CardT extends CardConstructor>( model: InstanceType<CardT>, opts?: { includeComputeds?: boolean }): ResourceObject;
 export function serializeCard<CardT extends CardConstructor>(
   model: InstanceType<CardT>,
   opts?: {
@@ -285,7 +274,10 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray((_, instance) => recompute(instance!), await Promise.all(value.map(entry => this.card[deserialize](entry))), instancePromise);
+    return new WatchedArray(
+     () => instancePromise.then(instance => recompute(instance)),
+     await Promise.all(value.map(entry => this.card[deserialize](entry)))
+    );
   }
 
   containsMany = true;
