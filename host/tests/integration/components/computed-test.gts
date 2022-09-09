@@ -77,7 +77,7 @@ module('Integration | computeds', function (hooks) {
       }
     }
 
-    let firstPost = await createFromSerialized(Post, { title: 'First Post', "author.firstName": 'Mango' });
+    let firstPost = await createFromSerialized(Post, { title: 'First Post', author: { firstName: 'Mango' }});
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(this.element.textContent!.trim(), 'First Post by Mango');
   });
@@ -190,7 +190,7 @@ module('Integration | computeds', function (hooks) {
       }
     }
 
-    let firstPost = await createFromSerialized(Post, { title: 'First Post', "author.firstName": 'Mango' });
+    let firstPost = await createFromSerialized(Post, { title: 'First Post', author: { firstName: 'Mango' }});
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Mango');
   });
@@ -379,7 +379,7 @@ module('Integration | computeds', function (hooks) {
       }
     }
 
-    let person = await createFromSerialized(Person, { firstName: 'Mango', "homeTown.city": 'Bronxville' });
+    let person = await createFromSerialized(Person, { firstName: 'Mango', homeTown: { city: 'Bronxville' }});
 
     await renderCard(person, 'edit');
     assert.dom('[data-test-field="slowName"]').containsText('Mango');

@@ -7,7 +7,7 @@ import { registerDestructor } from '@ember/destroyable';
 import ContainsManyEditor from './contains-many';
 import { WatchedArray } from './watched-array';
 import { Deferred, isCardResource, Loader } from '@cardstack/runtime-common';
-import { flatten, unflatten } from "flat";
+import { flatten } from "flat";
 import type { ResourceObject, CardResource } from '@cardstack/runtime-common';
 
 export const primitive = Symbol('cardstack-primitive');
@@ -78,9 +78,9 @@ export class Card {
     if (primitive in this) {
       return value;
     } else {
-      return flatten(Object.fromEntries(
+      return Object.fromEntries(
         Object.entries(getFields(this, opts)).map(([fieldName, field]) => [fieldName, serializedGet(value, fieldName, field)])
-      ), { safe: true });
+      );
     }
   }
 
@@ -209,7 +209,7 @@ export function serializeCard<CardT extends CardConstructor>(
       resource.attributes[fieldName] = value;
     }
   }
-  resource.attributes = flatten(resource.attributes ?? {}, { safe: true });
+  resource.attributes = resource.attributes ?? {};
   if (opts?.adoptsFrom) {
     resource.meta = { adoptsFrom: { ...opts.adoptsFrom } };
     if (!isCardResource(resource)) {
@@ -232,14 +232,10 @@ export async function createFromSerialized<T extends CardConstructor>(CardClassO
     let { attributes, meta: { adoptsFrom } } = CardClassOrResource;
     let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);
     CardClass = module[adoptsFrom.name];
-    data = unflatten(attributes);
+    data = attributes;
   } else if ("baseCard" in CardClassOrResource) {
     CardClass = CardClassOrResource;
-    if (primitive in CardClass) {
-      data = dataOrRelativeTo;
-    } else {
-      data = unflatten(dataOrRelativeTo);
-    }
+    data = dataOrRelativeTo;
   } else {
     throw new Error(`don't know how to serialize ${JSON.stringify(CardClassOrResource, null, 2)}`);
   }
