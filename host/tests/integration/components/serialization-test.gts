@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import stringify from 'fast-json-stable-stringify'
 import { fillIn } from '@ember/test-helpers';
@@ -221,44 +221,90 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM');
   });
 
-  test('can serialize a composite field', async function(assert) {
-    let { field, contains, serializedGet, Card, Component } = cardApi;
+  skip('can serialize a composite field', async function(assert) {
+    let { field, contains, serializedGet, Card } = cardApi;
     let { default: StringCard } = string;
     let { default: DateCard } = date;
     let { default: DatetimeCard } = datetime;
-    class Animal extends Card {
-      @field species = contains(StringCard);
-    }
 
-    class Person extends Animal {
+    class Person extends Card {
       @field firstName = contains(StringCard);
       @field birthdate = contains(DateCard);
       @field lastLogin = contains(DatetimeCard);
     }
 
     class Post extends Card {
-      @field title = contains(StringCard);
       @field author = contains(Person);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>{{stringify (serializedGet @model 'author')}}</template>
-      }
     }
 
     let firstPost = new Post({
-      title: 'First Post',
       author: new Person({
         firstName: 'Mango',
         birthdate: p('2019-10-30'),
-        species: 'canis familiaris',
         lastLogin: parseISO('2022-04-27T16:30+00:00')
       })
     });
 
     assert.deepEqual(serializedGet(firstPost, 'author'), {
-      birthdate: "2019-10-30",
-      firstName:"Mango",
-      lastLogin:"2022-04-27T16:30:00.000Z",
-      species:"canis familiaris"
+      attributes: {
+        birthdate: "2019-10-30",
+        firstName:"Mango",
+        lastLogin:"2022-04-27T16:30:00.000Z",
+      }
+    });
+  });
+
+
+  skip('can serialize a polymorphic composite field', async function(assert) {
+    let { field, contains, serializedGet, Card } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+    let { default: DatetimeCard } = datetime;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field birthdate = contains(DateCard);
+      @field lastLogin = contains(DatetimeCard);
+    }
+
+    class Employee extends Person {
+      @field department = contains(StringCard);
+    }
+
+    class Post extends Card {
+      @field author = contains(Person);
+    }
+
+    // this is only theoretic right now, but I'm assuming our upcoming loader
+    // object identity tracking will be able to identify these classes after this
+    Loader.shimModule(`${realmURL}test-cards`, { Person, Employee, Post });
+    let module = await Loader.import<any>(`${realmURL}test-cards`);
+    module.Post;
+    module.Employee;
+    module.Person;
+
+    let firstPost = new Post({
+      author: new Employee({
+        firstName: 'Mango',
+        birthdate: p('2019-10-30'),
+        lastLogin: parseISO('2022-04-27T16:30+00:00'),
+        department: 'wagging'
+      })
+    });
+
+    assert.deepEqual(serializedGet(firstPost, 'author'), {
+      attributes: {
+        birthdate: "2019-10-30",
+        firstName:"Mango",
+        lastLogin:"2022-04-27T16:30:00.000Z",
+        department: 'wagging'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Employee',
+        },
+      }
     });
   });
 
@@ -482,7 +528,7 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
-  test('can serialize a card whose composite field value uses a card that adopts from the composite field card', async function (assert) {
+  skip('can serialize a card whose composite field value uses a card that adopts from the composite field card', async function (assert) {
     let { field, contains, serializeCard, Card, createFromSerialized } = cardApi;
     let { default: StringCard } = string;
     let { default: DateCard } = date;
@@ -500,6 +546,9 @@ module('Integration | serialization', function (hooks) {
       @field title = contains(StringCard);
       @field author = contains(Person);
     }
+
+    Loader.shimModule(`${realmURL}test-cards`, { Person, Employee, Post });
+
     let firstPost = new Post({
       title: 'First Post',
       author: new Employee({
@@ -509,7 +558,12 @@ module('Integration | serialization', function (hooks) {
       })
     });
     await renderCard(firstPost, 'isolated');
-    let payload = serializeCard(firstPost);
+    let payload = serializeCard(firstPost, { 
+      adoptsFrom: { 
+        module: `./test-cards`, 
+        name: 'Post',
+      }
+    });
     assert.deepEqual(
       payload as any,
       {
@@ -518,12 +572,33 @@ module('Integration | serialization', function (hooks) {
           title: 'First Post',
           "author.firstName": 'Mango',
           "author.birthdate": '2019-10-30',
+          "author.department": 'wagging',
         },
+        meta: {
+          adoptsFrom: { 
+            module: `./test-cards`, 
+            name: 'Post',
+          },
+          fields: {
+            author: {
+              adoptsFrom: {
+                module: `./test-cards`, 
+                name: 'Employee',
+              }
+            }
+          }
+        }
       }
     );
 
-    let post2 = await createFromSerialized(Post, payload.attributes); // success is not blowing up
+    let post2 = await createFromSerialized<typeof Post>(payload, new URL(realmURL)); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
+    let { author } = post2;
+    if (author instanceof Employee) {
+      assert.strictEqual(author.department, 'wagging');
+    } else {
+      assert.ok(false, 'Not an employee');
+    }
   });
 
   test('can deserialize a card from a resource object', async function(assert) {
