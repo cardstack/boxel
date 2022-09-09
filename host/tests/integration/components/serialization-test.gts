@@ -567,7 +567,6 @@ module('Integration | serialization', function (hooks) {
         department: 'wagging'
       })
     });
-    await renderCard(firstPost, 'isolated');
     let payload = serializeCard(firstPost, {
       adoptsFrom: {
         module: './test-cards',
