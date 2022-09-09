@@ -4,9 +4,8 @@ import stringify from 'fast-json-stable-stringify'
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
-import { p, cleanWhiteSpace, TestRealm } from '../../helpers';
+import { p, cleanWhiteSpace,  } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { Realm } from "@cardstack/runtime-common/realm";
 import { baseRealm } from '@cardstack/runtime-common';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -18,7 +17,7 @@ let cardRef: typeof import ("https://cardstack.com/base/card-ref");
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
-  let realm: Realm;
+  const realmURL = `https://test-realm/`;
 
   hooks.before(async function () {
     Loader.destroy();
@@ -27,9 +26,6 @@ module('Integration | serialization', function (hooks) {
       new URL('http://localhost:4201/base/')
     );
     Loader.disableNativeImport(true);
-    realm = TestRealm.create({});
-    Loader.addRealmFetchOverride(realm);
-    await realm.ready;
 
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
@@ -534,18 +530,10 @@ module('Integration | serialization', function (hooks) {
     let { field, contains, serializeCard, Card, createFromSerialized } = cardApi;
     let { default: StringCard } = string;
 
-    await realm.write('person.gts', `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-      }
-    `);
-    // just making this for the types only
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
+    Loader.shimModule(`${realmURL}person`, { Person });
 
     let person = await createFromSerialized({
       type: 'card',
@@ -558,7 +546,7 @@ module('Integration | serialization', function (hooks) {
           name: "Person"
         }
       }
-    }, new URL(realm.url)) as Person;
+    }, new URL(realmURL)) as Person;
     assert.strictEqual(person.firstName, 'Mango');
     assert.deepEqual(serializeCard(person, {
       adoptsFrom: {
@@ -583,25 +571,6 @@ module('Integration | serialization', function (hooks) {
     let { field, contains, serializeCard, Card, createFromSerialized } = cardApi;
     let { default: StringCard } = string;
 
-    await realm.write('person.gts', `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-      }
-    `);
-    await realm.write('post.gts', `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import { Person } from "./person";
-
-      export class Post extends Card {
-        @field title = contains(StringCard);
-        @field author = contains(Person);
-      }
-    `);
-    // just making this for the types only
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
@@ -609,7 +578,11 @@ module('Integration | serialization', function (hooks) {
       @field title = contains(StringCard);
       @field author = contains(Person);
     }
-    let post = await createFromSerialized({
+
+    Loader.shimModule(`${realmURL}person`, { Person });
+    Loader.shimModule(`${realmURL}post`, { Post });
+
+    let post = await createFromSerialized<typeof Post>({
       type: 'card',
       attributes: {
         title: "Things I Want to Chew",
@@ -621,7 +594,7 @@ module('Integration | serialization', function (hooks) {
           name: "Post"
         }
       }
-    }, new URL(realm.url)) as Post;
+    }, new URL(realmURL));
     assert.strictEqual(post.title, 'Things I Want to Chew');
     assert.strictEqual(post.author.firstName, 'Mango');
     assert.deepEqual(serializeCard(post, {
@@ -647,33 +620,7 @@ module('Integration | serialization', function (hooks) {
   test('can deserialize a card with contains many of a compound card field', async function(assert) {
     let { field, contains, containsMany, serializeCard, Card, createFromSerialized } = cardApi;
     let { default: StringCard } = string;
-    await realm.write('person.gts', `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-      }
-    `);
-    await realm.write('post.gts', `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import { Person } from "./person";
-
-      export class Post extends Card {
-        @field title = contains(StringCard);
-        @field author = contains(Person);
-      }
-    `);
-    await realm.write('blog.gts', `
-      import { containsMany, field, Card } from "https://cardstack.com/base/card-api";
-      import { Post } from "./post";
-
-      export class Blog extends Card {
-        @field posts = containsMany(Post);
-      }
-    `);
-    // just making this for the types only
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
@@ -684,6 +631,10 @@ module('Integration | serialization', function (hooks) {
     class Blog extends Card {
       @field posts = containsMany(Post);
     }
+    Loader.shimModule(`${realmURL}person`, { Person });
+    Loader.shimModule(`${realmURL}post`, { Post });
+    Loader.shimModule(`${realmURL}blog`, { Blog });
+
 
     let blog = await createFromSerialized({
       type: 'card',
@@ -702,7 +653,7 @@ module('Integration | serialization', function (hooks) {
           name: "Blog"
         }
       }
-    }, new URL(realm.url)) as Blog;
+    }, new URL(realmURL)) as Blog;
     let posts = blog.posts;
     assert.strictEqual(posts.length, 2, 'number of posts is correct');
     assert.strictEqual(posts[0].title, 'Things I Want to Chew');
