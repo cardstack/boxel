@@ -167,7 +167,7 @@ export function serializedGet<CardT extends CardConstructor>(
   return field.serialize((model as any)[fieldName]);
 }
 
-async function serializedValues<CardT extends CardConstructor>(card: CardT, fieldName: string, value: any, modelPromise: Promise<Card>): Promise<any> {
+async function getDeserializedValues<CardT extends CardConstructor>(card: CardT, fieldName: string, value: any, modelPromise: Promise<Card>): Promise<any> {
   let field = getField(card, fieldName);
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
@@ -190,15 +190,11 @@ export function serializeCard<CardT extends CardConstructor>(
 ): LooseCardResource | ResourceObject {
   let resource: ResourceObject = {
     type: 'card',
+    attributes: {}
   };
   for (let [fieldName, field ] of Object.entries(getFields(model, opts))) {
-    let value = serializedGet(model, fieldName, field);
-    if (value !== undefined) {
-      resource.attributes = resource.attributes ?? {};
-      resource.attributes[fieldName] = value;
-    }
+    resource.attributes![fieldName] = serializedGet(model, fieldName, field);
   }
-  resource.attributes = resource.attributes ?? {};
   if (opts?.adoptsFrom) {
     resource.meta = { adoptsFrom: { ...opts.adoptsFrom } };
     if (!isCardResource(resource)) {
@@ -238,7 +234,7 @@ export async function createFromSerialized<T extends CardConstructor>(CardClassO
     Object.entries(data ?? {}).map(
       async ([fieldName, value]) => [
         fieldName, 
-        await serializedValues(CardClass, fieldName, value, deferred.promise)
+        await getDeserializedValues(CardClass, fieldName, value, deferred.promise)
       ]
     )
   ) as [keyof InstanceType<T>, any][];
