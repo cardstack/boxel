@@ -173,6 +173,14 @@ export class ChangesetBuilder {
       intermediateSprites
     );
 
+    // Users specify a bunch of rules attached to a context
+    // Rules can match sprites, and apply animations to those sprites
+    // Rules only apply to sprites contained within the context they are specified on
+    // Each rule has a certain amount of specificity, maybe this can be manually set with some restrictions
+    // Contexts closer to a sprite have additional specificity on their rules so they will win a tie breaker
+    // Go through rules for each sprite (group?) in order of specificity
+    // From outer context to inner context, since there might be groups that need both
+
     for (let context of contexts) {
       if (context.isStable) {
         let changeset = new Changeset(context);
