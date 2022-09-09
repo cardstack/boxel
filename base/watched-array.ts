@@ -1,9 +1,5 @@
-class WatchedArray<T, K> {
-  constructor(
-    subscriber: (arr: WatchedArray<T, K>, context: K | undefined) => void,
-    arr: T[] = [],
-    contextPromise?: Promise<K>
-  ) {
+class WatchedArray<T> {
+  constructor(subscriber: (arr: WatchedArray<T>) => void, arr: T[] = []) {
     this.#subscriber = subscriber;
     let clone = arr.slice();
     let self = this;
@@ -17,9 +13,8 @@ class WatchedArray<T, K> {
         ));
         (async () => {
           await Promise.resolve();
-          let context = await contextPromise;
           if (self.#notifyPromise === notifyPromise) {
-            self.#subscriber(self, context);
+            self.#subscriber(self);
           }
         })().then(done!);
         return true;
@@ -27,16 +22,16 @@ class WatchedArray<T, K> {
       getPrototypeOf() {
         return WatchedArray.prototype;
       },
-    }) as WatchedArray<T, K>;
+    }) as WatchedArray<T>;
   }
 
   #notifyPromise: Promise<void> | undefined;
 
-  #subscriber: (arr: WatchedArray<T, K>, context: K | undefined) => void;
+  #subscriber: (arr: WatchedArray<T>) => void;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
-interface WatchedArray<T = unknown, K = unknown> extends Array<T> {}
+interface WatchedArray<T = unknown> extends Array<T> {}
 
 export { WatchedArray };
 

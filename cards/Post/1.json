@@ -2,10 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "author.firstName": "a3",
-      "author.lastName": "F",
-      "author.isCool": true,
-      "author.isHuman": true,
+      "author": {
+        "firstName": "a3",
+        "lastName": "F",
+        "isCool": true,
+        "isHuman": true
+      },
       "title": "The title",
       "body": "Hello"
     },
