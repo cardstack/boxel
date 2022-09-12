@@ -15,6 +15,7 @@ Router.map(function () {
   this.route('motion-study', function () {
     this.route('details', { path: '/:id' });
   });
+  this.route('selectors');
   this.route('accordion');
   this.route('nested-contexts');
   this.route('context-selection');

@@ -1,0 +1,23 @@
+{{!-- template-lint-disable no-inline-styles --}}
+<div style=""
+  {{on-key 'i'}}
+>
+  <AnimationContext @rules={{this.outerRules}} @use={{this.outerTransition}}>
+    <div local-class="grid-container">
+      {{#each this.rows as |row|}}
+        {{#each this.columns as |column|}}
+          {{!-- template-lint-disable style-concatenation --}}
+          <button type="button" local-class="tile" style={{concat "--grid-row:" row "; --grid-column:" column}} {{on "click" (fn this.move row column)}}>
+            Tile
+          </button>
+        {{/each}}
+      {{/each}}
+      <div local-class="sprite outer whole-grid nopointer" style={{concat "--grid-row:" this.outer.top "; --grid-column:" this.outer.left}} {{sprite id="outer"}}>
+      </div>
+      <AnimationContext @use={{this.innerTransition}} local-class="whole-grid grid-container nopointer">
+        <div local-class="sprite inner" style={{concat "--grid-row:" this.inner.top "; --grid-column:" this.inner.left}} {{sprite id="inner"}}>
+        </div>
+      </AnimationContext>
+    </div>
+  </AnimationContext>
+</div>

@@ -1,0 +1,60 @@
+.centered-container {
+  display: flex;
+  min-width: min(40rem, 100vw);
+  min-height: 90px;
+  justify-content: center;
+  align-items: center;
+  margin: auto;
+  gap: 4px;
+}
+
+.grid-container {
+  display: grid;
+  max-width: min(40rem, 100vw);
+  padding: 12px;
+  grid-template-columns: 140px 140px 140px 140px;
+  grid-template-rows: 140px 140px 140px ;
+}
+
+.tile {
+  width: 140px;
+  height: 140px;
+  border: 1px dashed gray;
+  grid-row: var(--grid-row);
+  grid-column: var(--grid-column);
+}
+
+.whole-grid {
+  grid-row: 1 / -1;
+  grid-column: 1 / -1;
+}
+
+.button {
+  border: 1px solid black;
+  background: #eee;
+}
+
+.sprite {
+  border-radius: 9999px;
+  grid-row: var(--grid-row);
+  grid-column: var(--grid-column);
+}
+
+.sprite.outer {
+  background: #aea;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  place-items: center center;
+  place-content: center center;
+}
+
+.sprite.inner {
+  background: pink;
+  width: 120px;
+  height: 120px;
+}
+
+.nopointer {
+  pointer-events: none;
+}

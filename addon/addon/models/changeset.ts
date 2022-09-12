@@ -11,6 +11,7 @@ import SpriteTree, {
 } from 'animations-experiment/models/sprite-tree';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
 import { IntermediateSprite } from 'animations-experiment/services/animations';
+import SpriteModifier from 'animations-experiment/modifiers/sprite';
 
 export type SpritesForArgs = {
   type?: SpriteType | undefined;
@@ -181,6 +182,28 @@ export class ChangesetBuilder {
     // Go through rules for each sprite (group?) in order of specificity
     // From outer context to inner context, since there might be groups that need both
 
+    let rules = [...contexts]
+      .sort((a, b) => {
+        let bitmask = a.element.compareDocumentPosition(b.element);
+        return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      })
+      .flatMap(
+        (ctx) =>
+          ctx.args.rules?.map((v) => ({
+            ...v,
+            context: ctx,
+          })) ?? []
+      );
+
+    let modifiersFromRules = new Map<IContext, SpriteModifier[]>();
+    for (let { select, context } of rules) {
+      let matched = select(spriteModifiers);
+      if (!matched.length) continue;
+      let current = modifiersFromRules.get(context) ?? [];
+      matched.forEach((m: SpriteModifier) => spriteModifiers.delete(m));
+      modifiersFromRules.set(context, [...current, ...matched]);
+    }
+
     for (let context of contexts) {
       if (context.isStable) {
         let changeset = new Changeset(context);
@@ -195,6 +218,12 @@ export class ChangesetBuilder {
         if (contextToKeptSpriteModifierMap.has(context)) {
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           for (let modifier of contextToKeptSpriteModifierMap.get(context)!) {
+            spriteModifiersForContext.add(modifier);
+          }
+        }
+
+        if (modifiersFromRules.has(context)) {
+          for (let modifier of modifiersFromRules.get(context)!) {
             spriteModifiersForContext.add(modifier);
           }
         }

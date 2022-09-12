@@ -23,6 +23,7 @@ export interface IContext {
   clearOrphans(): void;
   args: {
     use?(changeset: Changeset): Promise<void>;
+    rules?: any[];
     id?: string;
   };
 }
