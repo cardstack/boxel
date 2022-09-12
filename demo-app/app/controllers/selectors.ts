@@ -74,8 +74,11 @@ class InterruptionController extends Controller {
 
   @action async innerTransition(changeset: Changeset) {
     magicMove(changeset, { duration: 500 });
-    let transitioningSprites = [...changeset.keptSprites].map((v) => v.id!);
-    this.infoDiv1!.textContent = 'inner:' + JSON.stringify(transitioningSprites);
+    let transitioningSprites = [...changeset.keptSprites].map(
+      (v) => v.identifier!
+    );
+    this.infoDiv1!.textContent =
+      'inner:' + JSON.stringify(transitioningSprites, null, 2);
     this.infoDiv1?.getBoundingClientRect();
     await runAnimations([
       changeset.spriteFor({
@@ -87,8 +90,11 @@ class InterruptionController extends Controller {
 
   @action async outerTransition(changeset: Changeset) {
     magicMove(changeset, { duration: 1000 });
-    let transitioningSprites = [...changeset.keptSprites].map((v) => v.id!);
-    this.infoDiv2!.textContent = 'outer:' + JSON.stringify(transitioningSprites);
+    let transitioningSprites = [...changeset.keptSprites].map(
+      (v) => v.identifier!
+    );
+    this.infoDiv2!.textContent =
+      'outer:' + JSON.stringify(transitioningSprites, null, 2);
     this.infoDiv2?.getBoundingClientRect();
     await runAnimations([
       changeset.spriteFor({

@@ -25,7 +25,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   currentBounds: DOMRect | undefined;
   lastComputedStyle: CopiedCSS | undefined;
   currentComputedStyle: CopiedCSS | undefined;
-
+  registered = false;
   alreadyTracked = false;
 
   @service declare animations: AnimationsService;
@@ -33,7 +33,10 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   didReceiveArguments(): void {
     this.id = this.args.named.id;
     this.role = this.args.named.role;
-    this.animations.registerSpriteModifier(this);
+    if (!this.registered) {
+      this.animations.registerSpriteModifier(this);
+      this.registered = true;
+    }
     this.captureSnapshot();
   }
 

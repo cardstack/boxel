@@ -12,10 +12,10 @@
           </button>
         {{/each}}
       {{/each}}
-      <div local-class="sprite outer whole-grid nopointer" style={{concat "--grid-row:" this.outer.top "; --grid-column:" this.outer.left}} {{sprite id="outer"}}>
+      <div local-class="sprite outer whole-grid nopointer" style={{concat "--grid-row:" this.outer.top "; --grid-column:" this.outer.left}} {{sprite id="outer" role=(concat "col:" this.outer.left "; row:" this.outer.top)}}>
       </div>
       <AnimationContext @use={{this.innerTransition}} local-class="whole-grid grid-container nopointer">
-        <div local-class="sprite inner" style={{concat "--grid-row:" this.inner.top "; --grid-column:" this.inner.left}} {{sprite id="inner"}}>
+        <div local-class="sprite inner" style={{concat "--grid-row:" this.inner.top "; --grid-column:" this.inner.left}} {{sprite id="inner" role=(concat "col:" this.inner.left "; row:" this.inner.top)}}>
         </div>
       </AnimationContext>
     </div>

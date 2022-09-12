@@ -23,7 +23,7 @@ export default class TransitionRunner {
     //playUnrelatedAnimations();
 
     if (animationContext.shouldAnimate()) {
-      this.logChangeset(changeset, animationContext); // For debugging
+      // this.logChangeset(changeset, animationContext); // For debugging
       let animation = animationContext.args.use?.(changeset);
       try {
         yield Promise.resolve(animation);

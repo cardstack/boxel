@@ -236,7 +236,13 @@ export class SpriteTreeNode {
     }
     if (this.isSprite()) {
       let spriteId = this.spriteModel.id;
-      text += `🥠${spriteId ? ` ${spriteId}` : ''}`;
+      text += `🥠${
+        spriteId
+          ? ` ${spriteId}${
+              this.spriteModel.role ? ':' + this.spriteModel.role : ''
+            }`
+          : ''
+      }`;
     }
     let extra = isRemoved ? '❌' : undefined;
     return {
