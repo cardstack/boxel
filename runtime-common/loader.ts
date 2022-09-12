@@ -296,6 +296,8 @@ export class Loader {
           { noInterop: true, moduleId: moduleIdentifier },
         ],
       ],
+      sourceMaps: "inline",
+      filename: moduleIdentifier,
     })?.code!;
 
     let dependencyList: string[];
@@ -318,7 +320,7 @@ export class Loader {
     };
 
     try {
-      eval(src + "\n//# sourceURL=" + moduleIdentifier);
+      eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
     } catch (exception) {
       this.modules.set(moduleIdentifier, {
         state: "broken",
