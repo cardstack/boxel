@@ -42,7 +42,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    Loader.disableNativeImport(true);
 
     // We have a bit of a chicken and egg problem here in that in order for us
     // to short circuit the fetch we need a Realm instance, however, we can't

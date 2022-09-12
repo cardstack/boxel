@@ -2,7 +2,6 @@ import TransformModulesAmdPlugin from "transform-modules-amd-plugin";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
 import { RealmPaths, LocalPath } from "./paths";
-import { isNode } from "./index";
 import type { Realm } from "./realm";
 
 // this represents a URL that has already been resolved to aid in documenting
@@ -56,7 +55,10 @@ export class Loader {
   private urlMappings = new Map<RealmPaths, string>();
   private realmFetchOverride: Realm[] = [];
   private moduleShims = new Map<string, Record<string, any>>();
-  private isNativeImportDisabled = false;
+  private identities = new WeakMap<
+    Function,
+    { module: string; name: string }
+  >();
 
   constructor() {}
 
@@ -77,7 +79,6 @@ export class Loader {
     loader.fileLoaders = globalLoader.fileLoaders;
     loader.urlMappings = globalLoader.urlMappings;
     loader.realmFetchOverride = globalLoader.realmFetchOverride;
-    loader.isNativeImportDisabled = globalLoader.isNativeImportDisabled;
     return loader;
   }
 
@@ -151,13 +152,12 @@ export class Loader {
     this.moduleShims.set(moduleIdentifier, module);
   }
 
-  static disableNativeImport(isDisabled: boolean) {
-    let loader = Loader.getLoader();
-    loader.disableNativeImport(isDisabled);
-  }
-
-  disableNativeImport(isDisabled: boolean) {
-    this.isNativeImportDisabled = isDisabled;
+  identify(value: unknown): { module: string; name: string } | undefined {
+    if (typeof value === "function") {
+      return this.identities.get(value);
+    } else {
+      return undefined;
+    }
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
@@ -167,14 +167,6 @@ export class Loader {
     let shimmed = this.moduleShims.get(moduleIdentifier);
     if (shimmed) {
       return shimmed as T;
-    }
-
-    if (
-      !this.isNativeImportDisabled &&
-      (globalThis as any).window && // make sure we are not in a service worker
-      !isNode // make sure we are not in node
-    ) {
-      return await import(/* webpackIgnore: true */ resolvedModuleIdentifier);
     }
 
     let module = await this.fetchModule(resolvedModule);
@@ -326,7 +318,7 @@ export class Loader {
     };
 
     try {
-      eval(src);
+      eval(src + "\n//# sourceURL=" + moduleIdentifier);
     } catch (exception) {
       this.modules.set(moduleIdentifier, {
         state: "broken",
@@ -383,7 +375,23 @@ export class Loader {
   }
 
   private evaluate<T>(moduleIdentifier: string, module: RegisteredModule): T {
-    let moduleInstance = Object.create(null);
+    let privateModuleInstance = Object.create(null);
+    let moduleInstance = new Proxy(privateModuleInstance, {
+      get: (target, property, received) => {
+        let value = Reflect.get(target, property, received);
+        if (typeof value === "function" && typeof property === "string") {
+          this.identities.set(value, {
+            module: moduleIdentifier,
+            name: property,
+          });
+        }
+        return value;
+      },
+      set() {
+        throw new Error(`modules are read only`);
+      },
+    });
+
     this.modules.set(moduleIdentifier, {
       state: "preparing",
       implementation: module.implementation,
@@ -393,7 +401,7 @@ export class Loader {
     try {
       let dependencies = module.dependencyList.map((dependencyIdentifier) => {
         if (dependencyIdentifier === "exports") {
-          return moduleInstance;
+          return privateModuleInstance;
         } else if (dependencyIdentifier === "__import_meta__") {
           return { url: moduleIdentifier };
         } else {
