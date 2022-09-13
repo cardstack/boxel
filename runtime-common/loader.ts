@@ -63,6 +63,7 @@ export class Loader {
   constructor() {}
 
   static #instance: Loader | undefined;
+  static loaders = new WeakMap<Function, Loader>();
 
   private static getLoader() {
     if (!Loader.#instance) {
@@ -149,7 +150,31 @@ export class Loader {
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    this.moduleShims.set(moduleIdentifier, module);
+    this.moduleShims.set(
+      moduleIdentifier,
+      this.createModuleProxy(module, moduleIdentifier)
+    );
+  }
+
+  static identify(
+    value: unknown
+  ): { module: string; name: string } | undefined {
+    if (typeof value !== "function") {
+      return undefined;
+    }
+    let loader = Loader.loaders.get(value);
+    if (loader) {
+      return loader.identify(value);
+    } else {
+      return undefined;
+    }
+  }
+
+  static getLoaderFor(value: unknown): Loader {
+    if (typeof value === "function") {
+      return Loader.loaders.get(value) ?? Loader.getLoader();
+    }
+    return Loader.getLoader();
   }
 
   identify(value: unknown): { module: string; name: string } | undefined {
@@ -239,6 +264,25 @@ export class Loader {
       }
     }
     return absoluteURL;
+  }
+
+  private createModuleProxy(module: any, moduleIdentifier: string) {
+    return new Proxy(module, {
+      get: (target, property, received) => {
+        let value = Reflect.get(target, property, received);
+        if (typeof value === "function" && typeof property === "string") {
+          this.identities.set(value, {
+            module: moduleIdentifier,
+            name: property,
+          });
+          Loader.loaders.set(value, this);
+        }
+        return value;
+      },
+      set() {
+        throw new Error(`modules are read only`);
+      },
+    });
   }
 
   private async fetchModule(
@@ -378,22 +422,10 @@ export class Loader {
 
   private evaluate<T>(moduleIdentifier: string, module: RegisteredModule): T {
     let privateModuleInstance = Object.create(null);
-    let moduleInstance = new Proxy(privateModuleInstance, {
-      get: (target, property, received) => {
-        let value = Reflect.get(target, property, received);
-        if (typeof value === "function" && typeof property === "string") {
-          this.identities.set(value, {
-            module: moduleIdentifier,
-            name: property,
-          });
-        }
-        return value;
-      },
-      set() {
-        throw new Error(`modules are read only`);
-      },
-    });
-
+    let moduleInstance = this.createModuleProxy(
+      privateModuleInstance,
+      moduleIdentifier
+    );
     this.modules.set(moduleIdentifier, {
       state: "preparing",
       implementation: module.implementation,

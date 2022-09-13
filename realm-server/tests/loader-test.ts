@@ -43,6 +43,11 @@ module("loader", function () {
       module: `${testRealm}person`,
       name: "Person",
     });
+    // The loader knows which loader instance was used to import the card
+    assert.deepEqual(Loader.identify(Person), {
+      module: `${testRealm}person`,
+      name: "Person",
+    });
   });
 
   test("exports cannot be mutated", async function (assert) {
@@ -51,5 +56,14 @@ module("loader", function () {
     assert.throws(() => {
       module.Person = 1;
     }, /modules are read only/);
+  });
+
+  test("a module can access the loader used to import it", async function (assert) {
+    let loader = new Loader();
+    let module = await loader.import<{ __loader__: Loader }>(
+      `${testRealm}person`
+    );
+    let testingLoader = Loader.getLoaderFor(module);
+    assert.strictEqual(testingLoader, loader, "the loaders are the same");
   });
 });

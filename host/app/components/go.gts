@@ -7,7 +7,7 @@ import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
-import { isCardJSON, Loader, type ExistingCardArgs } from '@cardstack/runtime-common';
+import { isCardDocument, Loader, type ExistingCardArgs } from '@cardstack/runtime-common';
 import type { Format } from "https://cardstack.com/base/card-api";
 
 import LocalRealm from '../services/local-realm';
@@ -87,7 +87,7 @@ export default class Go extends Component<Signature> {
         this.jsonError = err.message;
         return undefined;
       }
-      if (isCardJSON(maybeCard)) {
+      if (isCardDocument(maybeCard)) {
         return maybeCard;
       }
     }

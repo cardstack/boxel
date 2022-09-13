@@ -1,15 +1,13 @@
-export interface CardJSON {
-  data: {
-    attributes?: Record<string, any>;
-    // TODO add relationships
-    meta: {
-      adoptsFrom: {
-        module: string;
-        name: string;
-      };
-    };
-  };
-  // TODO add included
+import { CardResource } from "./search-index";
+
+// a card resource but with optional "id" and "type" props
+export type LooseCardResource = Omit<CardResource, "id" | "type"> & {
+  type?: "card";
+  id?: string;
+};
+
+export interface LooseCardDocument {
+  data: LooseCardResource;
 }
 
 export { Deferred } from "./deferred";
@@ -50,7 +48,7 @@ export interface NewCardArgs {
   type: "new";
   realmURL: string;
   cardSource: ExportedCardRef;
-  initialAttributes?: CardJSON["data"]["attributes"];
+  initialAttributes?: LooseCardResource["attributes"];
 }
 export interface ExistingCardArgs {
   type: "existing";
@@ -58,7 +56,7 @@ export interface ExistingCardArgs {
   // this is just used for test fixture data. as soon as we
   // have an actual ember service for the API we should just
   //  mock that instead
-  json?: CardJSON;
+  json?: LooseCardDocument;
   format?: Format;
 }
 
@@ -95,39 +93,6 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["tracked-built-ins", ["TrackedWeakMap"]],
   ["date-fns", ["parseISO", "format", "parse"]],
 ]);
-
-export function isCardJSON(json: any): json is CardJSON {
-  if (typeof json !== "object" || !("data" in json)) {
-    return false;
-  }
-  let { data } = json;
-  if (typeof data !== "object") {
-    return false;
-  }
-
-  let { meta, attributes } = data;
-  if (
-    typeof meta !== "object" ||
-    ("attributes" in data && typeof attributes !== "object")
-  ) {
-    return false;
-  }
-
-  if (!("adoptsFrom" in meta)) {
-    return false;
-  }
-
-  let { adoptsFrom } = meta;
-  if (typeof adoptsFrom !== "object") {
-    return false;
-  }
-  if (!("module" in adoptsFrom) || !("name" in adoptsFrom)) {
-    return false;
-  }
-
-  let { module, name } = adoptsFrom;
-  return typeof module === "string" && typeof name === "string";
-}
 
 export { Realm } from "./realm";
 export { Loader } from "./loader";

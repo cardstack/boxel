@@ -16,8 +16,7 @@ import { eq } from '../helpers/truth-helpers';
 import { cardInstance } from '../resources/card-instance';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
 import {
-  CardJSON,
-  isCardJSON,
+  LooseCardDocument,
   isCardDocument,
   Loader,
   type NewCardArgs,
@@ -86,7 +85,7 @@ export default class Preview extends Component<Signature> {
   @tracked
   rendered: RenderedCard | undefined;
   @tracked
-  initialCardData: CardJSON | undefined;
+  initialCardData: LooseCardDocument | undefined;
   @tracked cardError: string | undefined;
   private declare interval: ReturnType<typeof setInterval>;
   private lastModified: number | undefined;
@@ -137,24 +136,18 @@ export default class Preview extends Component<Signature> {
         throw new Error('bug: this should never happen');
       }
       json = {
-        data: this.cardAPI.api.serializeCard(this.card, {
-          adoptsFrom: this.args.card.cardSource,
-          includeComputeds
-        })
+        data: this.cardAPI.api.serializeCard(this.card, { includeComputeds })
       };
     } else {
       if (this.card && this.initialCardData) {
         json = {
-          data: this.cardAPI.api.serializeCard(this.card, {
-            adoptsFrom: this.initialCardData.data.meta.adoptsFrom,
-            includeComputeds
-          })
+          data: this.cardAPI.api.serializeCard(this.card, { includeComputeds })
         };
       } else {
         return undefined;
       }
     }
-    if (!isCardJSON(json)) {
+    if (!isCardDocument(json)) {
       throw new Error(`can't serialize card data for ${JSON.stringify(json)}`);
     }
     return json;
@@ -286,13 +279,9 @@ export default class Preview extends Component<Signature> {
     }
   }
 
-  private async getComparableCardJson(json: CardJSON): Promise<CardJSON> {
+  private async getComparableCardJson(json: LooseCardDocument): Promise<LooseCardDocument> {
     let CardClass = this.args.module[json.data.meta.adoptsFrom.name] as typeof Card;
-    let card = await this.cardAPI.api.createFromSerialized(CardClass, json.data.attributes);
-    let result = { data: this.cardAPI.api.serializeCard(card, { adoptsFrom: json.data.meta.adoptsFrom }) };
-    if (!isCardJSON(result)) {
-      throw new Error(`bug: card serialization resulted in non-Card JSON`);
-    }
-    return result;
+    let card = await this.cardAPI.api.createFromSerialized(CardClass, json.data);
+    return { data: this.cardAPI.api.serializeCard(card) };
   }
 }
