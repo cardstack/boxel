@@ -39,6 +39,61 @@ export interface IntermediateSprite {
   intermediateStyles: CopiedCSS;
 }
 
+interface AnimationTiming {
+  delay: number;
+  duration: number;
+}
+
+export class Orchestrator {
+  private timings: Map<IContext, AnimationTiming> = new Map();
+
+  constructor(public spriteTree: SpriteTree) {}
+
+  /**
+   * Sets timing and/or delay for another context.
+   */
+  setTimingForContext(
+    callingContext: IContext,
+    options: {
+      match: string;
+      delay: number;
+      duration: number;
+    }
+  ) {
+    let node = this.spriteTree.lookupNodeByElement(callingContext.element);
+    let context: IContext | undefined = node
+      ?.getContextDescendants({ deep: true })
+      .find((v) => v.node.contextModel?.id === options.match)
+      ?.node.contextModel;
+
+    if (!context) {
+      console.log('oh no');
+      return;
+    }
+
+    // There's no reason or way for controls to decide what to do with another contexts' animations.
+    // So we don't return anything
+    this.timings.set(context, { ...options });
+  }
+
+  animate(
+    context: IContext,
+    sprite: Sprite,
+    ...animationArgs: Parameters<Sprite['setupAnimation']>
+  ) {
+    let timing = this.timings.get(context);
+    console.log(timing);
+    let [property, opts] = animationArgs;
+    if (timing) {
+      opts = {
+        ...opts,
+        delay: timing.delay + (opts.delay ?? 0),
+      };
+    }
+    sprite.setupAnimation(property, opts);
+  }
+}
+
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
   eligibleContexts: Set<IContext> = new Set();
@@ -272,16 +327,28 @@ export default class AnimationsService extends Service {
     this.runningAnimations = new Map();
     this.intent = undefined;
 
-    // TODO: let runningAnimations = this.runningAnimations;
+    let orchestrator = new Orchestrator(this.spriteTree);
 
     let promises = [];
     let contexts = this.spriteTree.getContextRunList(this.eligibleContexts);
-    for (let context of contexts) {
+    for (let context of contexts.sort((a, b) => {
+      let bitmask = a.element.compareDocumentPosition(b.element);
+
+      assert(
+        'Sorting sprite tree additions - Document position of two compared nodes is implementation-specific or disconnected',
+        !(
+          bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
+          bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
+        )
+      );
+
+      return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    })) {
       let changeset = changesetBuilder.contextToChangeset.get(context);
       if (changeset && changeset.hasSprites) {
         let transitionRunner = new TransitionRunner(context);
         let task = taskFor(transitionRunner.maybeTransitionTask);
-        promises.push(task.perform(changeset));
+        promises.push(task.perform(changeset, orchestrator));
       }
     }
     yield all(promises);

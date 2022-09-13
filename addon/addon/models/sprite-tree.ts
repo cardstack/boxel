@@ -3,6 +3,7 @@ import { CopiedCSS } from '../utils/measurement';
 import { formatTreeString, TreeNode } from '../utils/format-tree';
 import Sprite, { SpriteIdentifier } from './sprite';
 import { Changeset } from './changeset';
+import { Orchestrator } from 'animations-experiment/services/animations';
 
 export interface IContext {
   id: string | undefined;
@@ -22,7 +23,7 @@ export interface IContext {
   appendOrphan(spriteOrElement: Sprite): void;
   clearOrphans(): void;
   args: {
-    use?(changeset: Changeset): Promise<void>;
+    use?(changeset: Changeset, orchestrator?: Orchestrator): Promise<void>;
     id?: string;
   };
 }
@@ -181,6 +182,32 @@ export class SpriteTreeNode {
         throw new Error(
           'Sprite tree node that is not child or context encountered'
         );
+      }
+    }
+
+    return result;
+  }
+
+  getContextDescendants(
+    opts: {
+      deep: boolean;
+    } = { deep: true }
+  ): {
+    node: SpriteTreeNode;
+  }[] {
+    let result: {
+      node: SpriteTreeNode;
+    }[] = [];
+
+    for (let child of this.children) {
+      child
+        .getContextDescendants({ deep: opts.deep })
+        .forEach((c) => result.push(c));
+
+      if (child.isContext()) {
+        result.push({
+          node: child,
+        });
       }
     }
 

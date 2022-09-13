@@ -3,6 +3,7 @@ import { Changeset } from '../models/changeset';
 import Sprite, { SpriteType } from '../models/sprite';
 import { assert } from '@ember/debug';
 import { IContext } from './sprite-tree';
+import { Orchestrator } from 'animations-experiment/services/animations';
 
 export default class TransitionRunner {
   animationContext: IContext;
@@ -13,7 +14,7 @@ export default class TransitionRunner {
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  @task *maybeTransitionTask(changeset: Changeset) {
+  @task *maybeTransitionTask(changeset: Changeset, orchestrator: Orchestrator) {
     assert('No changeset was passed to the TransitionRunner', !!changeset);
 
     let { animationContext } = this;
@@ -24,7 +25,7 @@ export default class TransitionRunner {
 
     if (animationContext.shouldAnimate()) {
       this.logChangeset(changeset, animationContext); // For debugging
-      let animation = animationContext.args.use?.(changeset);
+      let animation = animationContext.args.use?.(changeset, orchestrator);
       try {
         yield Promise.resolve(animation);
       } catch (error) {
