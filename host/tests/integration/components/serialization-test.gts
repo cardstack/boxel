@@ -3,9 +3,9 @@ import { setupRenderingTest } from 'ember-qunit';
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
-import { p, cleanWhiteSpace,  } from '../../helpers';
+import { p, cleanWhiteSpace, loadCards } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm, ExportedCardRef } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -13,13 +13,6 @@ let integer: typeof import ("https://cardstack.com/base/integer");
 let date: typeof import ("https://cardstack.com/base/date");
 let datetime: typeof import ("https://cardstack.com/base/datetime");
 let cardRef: typeof import ("https://cardstack.com/base/card-ref");
-
-async function loadCards(refs: ExportedCardRef[]) {
-  await Promise.all(refs.map(async (ref) => {
-    let module = await Loader.import<any>(ref.module);
-    module[ref.name];
-  }));
-}
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);

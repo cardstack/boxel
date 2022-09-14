@@ -58,12 +58,11 @@ module("loader", function () {
     }, /modules are read only/);
   });
 
-  test("a module can access the loader used to import it", async function (assert) {
+  test("can get a loader used to import a specific card", async function (assert) {
     let loader = new Loader();
-    let module = await loader.import<{ __loader__: Loader }>(
-      `${testRealm}person`
-    );
-    let testingLoader = Loader.getLoaderFor(module);
+    let module = await loader.import<any>(`${testRealm}person`);
+    let card = module.Person;
+    let testingLoader = Loader.getLoaderFor(card);
     assert.strictEqual(testingLoader, loader, "the loaders are the same");
   });
 });

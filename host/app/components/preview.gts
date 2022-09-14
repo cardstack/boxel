@@ -14,7 +14,7 @@ import RouterService from '@ember/routing/router-service';
 import CardAPI, { RenderedCard } from '../services/card-api';
 import { eq } from '../helpers/truth-helpers';
 import { cardInstance } from '../resources/card-instance';
-import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from 'https://cardstack.com/base/card-api';
 import {
   LooseCardDocument,
   isCardDocument,
@@ -22,11 +22,11 @@ import {
   type NewCardArgs,
   type ExistingCardArgs
 } from '@cardstack/runtime-common';
+import type LocalRealm from '../services/local-realm';
 
 
 interface Signature {
   Args: {
-    module: Record<string, typeof Card>;
     formats?: Format[];
     onCancel?: () => void;
     onSave?: (url: string) => void;
@@ -78,6 +78,7 @@ export default class Preview extends Component<Signature> {
 
   @service declare router: RouterService;
   @service declare cardAPI: CardAPI;
+  @service declare localRealm: LocalRealm;
   @tracked
   format: Format = this.args.card.type === 'new' ? 'edit' : this.args.card.format ?? 'isolated';
   @tracked
@@ -108,17 +109,18 @@ export default class Preview extends Component<Signature> {
       this,
       () => {
         if (this.args.card.type === 'new') {
-          return this.args.module[this.args.card.cardSource.name];
+          return {
+            attributes: {
+            ...this.args.card.initialAttributes
+            },
+            meta: {
+              adoptsFrom: {
+                ...this.args.card.cardSource
+              }
+            }
+          }
         } else if (this.initialCardData) {
-          return this.args.module[this.initialCardData.data.meta.adoptsFrom.name];
-        }
-        return;
-      },
-      () => {
-        if (this.args.card.type === 'new') {
-          return this.args.card.initialAttributes;
-        } else if (this.initialCardData) {
-          return this.initialCardData.data.attributes;
+          return this.initialCardData.data;
         }
         return;
       }
@@ -280,8 +282,7 @@ export default class Preview extends Component<Signature> {
   }
 
   private async getComparableCardJson(json: LooseCardDocument): Promise<LooseCardDocument> {
-    let CardClass = this.args.module[json.data.meta.adoptsFrom.name] as typeof Card;
-    let card = await this.cardAPI.api.createFromSerialized(CardClass, json.data);
+    let card = await this.cardAPI.api.createFromSerialized(json.data, this.localRealm.url);
     return { data: this.cardAPI.api.serializeCard(card) };
   }
 }

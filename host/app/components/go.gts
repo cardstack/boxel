@@ -12,7 +12,7 @@ import type { Format } from "https://cardstack.com/base/card-api";
 
 import LocalRealm from '../services/local-realm';
 import type { FileResource } from '../resources/file';
-import CardEditor from './card-editor';
+import Preview from './preview';
 import Module from './module';
 import FileTree from './file-tree';
 import {
@@ -45,9 +45,8 @@ export default class Go extends Component<Signature> {
           {{#if (isRunnable this.openFile.name)}}
             <Module @file={{this.openFile}}/>
           {{else if this.openFileCardJSON}}
-            <CardEditor
-              @moduleURL={{relativeFrom this.openFileCardJSON.data.meta.adoptsFrom.module this.openFile.url}}
-              @cardArgs={{this.cardArgs}}
+            <Preview
+              @card={{this.cardArgs}}
               @formats={{this.formats}}
             />
           {{else if this.jsonError}}
@@ -136,10 +135,6 @@ export default class Go extends Component<Signature> {
 
 function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some(extension => filename.endsWith(extension));
-}
-
-function relativeFrom(url: string, base: string): string {
-  return new URL(url, base).href;
 }
 
 declare module '@glint/environment-ember-loose/registry' {

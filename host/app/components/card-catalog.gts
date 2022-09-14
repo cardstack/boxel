@@ -6,7 +6,7 @@ import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 
 import { getSearchResults } from '../resources/search';
-import CardEditor from './card-editor';
+import Preview from './preview';
 
 interface Signature {
   Args: {
@@ -20,9 +20,8 @@ export default class CardCatalog extends Component<Signature> {
     <ul class="card-catalog" data-test-card-catalog>
       {{#each this.entries as |entry|}}
         <li data-test-card-catalog-item={{entry.id}}>
-          <CardEditor
-            @moduleURL={{entry.meta.adoptsFrom.module}}
-            @cardArgs={{hash type="existing" url=entry.id format="embedded"}}
+          <Preview
+            @card={{hash type="existing" url=entry.id format="embedded"}}
           />
           {{#if @onSelect}}
             <button {{on "click" (fn @onSelect entry)}} type="button" data-test-select={{entry.id}}>

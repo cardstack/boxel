@@ -787,7 +787,7 @@ export class Realm {
       loader: this.searchIndex.loader,
     });
     let data = { data: api.serializeCard(card) }; // this strips out computeds
-    if (!isCardResource(data)) {
+    if (!isCardDocument(data)) {
       throw new Error(
         `bug: card was serialized into a non-card JSON structure`
       );

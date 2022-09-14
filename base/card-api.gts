@@ -183,10 +183,16 @@ export function serializeCard<CardT extends CardConstructor>(
 ): LooseCardResource {
   let attributes: Record<string, any> = {};
   let fields: LooseCardResource["meta"]["fields"] = {};
-  let adoptsFrom = Loader.identify(model.constructor);
-  if (!adoptsFrom) {
+  let cardIdentity = Loader.identify(model.constructor);
+  if (!cardIdentity) {
     throw new Error(`bug: encountered a card that has no Loader identity: ${model.constructor.name}`);
   }
+  let adoptsFrom = {
+    module: Loader.reverseResolution(cardIdentity.module).href,
+    name: cardIdentity.name
+  };
+
+  let loader = Loader.getLoaderFor(model.constructor);
   for (let [fieldName, field] of Object.entries(getFields(model, opts))) {
     if (primitive in field.card) {
       attributes[fieldName] = serializedGet(model, fieldName);
@@ -213,10 +219,20 @@ export function serializeCard<CardT extends CardConstructor>(
       }
       if (fieldCardRef.module !== nestedCard.meta.adoptsFrom.module || fieldCardRef.name !== nestedCard.meta.adoptsFrom.name) {
         // Only write out the field meta when the field value is a different card than the field card
-        fields[fieldName] = { adoptsFrom: nestedCard.meta.adoptsFrom };
+        fields[fieldName] = {
+          adoptsFrom: {
+            module: loader.reverseResolution(nestedCard.meta.adoptsFrom.module).href,
+            name: nestedCard.meta.adoptsFrom.name
+          }
+        };
       }
       for (let [nestedFieldName, nestedField] of Object.entries(nestedCard.meta.fields ?? {})) {
-        fields[`${fieldName}.${nestedFieldName}`] = { adoptsFrom: nestedField.adoptsFrom };
+        fields[`${fieldName}.${nestedFieldName}`] = {
+          adoptsFrom: {
+            module: loader.reverseResolution(nestedField.adoptsFrom.module).href,
+            name: nestedField.adoptsFrom.name,
+          }
+        };
       }
     }
   }
