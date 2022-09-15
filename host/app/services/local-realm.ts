@@ -202,6 +202,13 @@ export default class LocalRealm extends Service {
     while (registration.active?.state !== 'activated') {
       await timeout(10);
     }
+    navigator.serviceWorker.oncontrollerchange = () => {
+      console.log('worker changed');
+      if ('worker' in this.state) {
+        // update worker reference to the new one
+        this.state.worker = navigator.serviceWorker.controller!;
+      }
+    };
 
     return navigator.serviceWorker.controller!;
   }
