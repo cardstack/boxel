@@ -6,7 +6,7 @@ import { Loader, baseRealm, type ExistingCardArgs } from '@cardstack/runtime-com
 import Preview  from 'runtime-spike/components/preview';
 import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
-import { testRealmURL, loadCards } from '../../helpers';
+import { testRealmURL, shimModule } from '../../helpers';
 import type { Format } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -41,8 +41,7 @@ module('Integration | preview', function (hooks) {
         <template> <div data-test-firstName><@fields.firstName/></div> </template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { TestCard });
-    await loadCards([ { module: `${testRealmURL}test-cards`, name: 'TestCard' } ]);
+    await shimModule(`${testRealmURL}test-cards`, { TestCard });
     let json = {
       data: {
         attributes: { firstName: 'Mango' },
@@ -82,8 +81,7 @@ module('Integration | preview', function (hooks) {
         <template> <div data-test-edit-firstName><@fields.firstName/></div> </template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { TestCard });
-    await loadCards([ { module: `${testRealmURL}test-cards`, name: 'TestCard' } ]);
+    await shimModule(`${testRealmURL}test-cards`, { TestCard });
 
     let json = {
       data: {
@@ -136,8 +134,7 @@ module('Integration | preview', function (hooks) {
         <template> <div data-test-edit-firstName><@fields.firstName/></div> </template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { TestCard });
-    await loadCards([ { module: `${testRealmURL}test-cards`, name: 'TestCard' } ]);
+    await shimModule(`${testRealmURL}test-cards`, { TestCard });
     let json = {
       data: {
         attributes: { firstName: 'Mango' },
@@ -189,11 +186,7 @@ module('Integration | preview', function (hooks) {
         }
       });
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Person, Post });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Post' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' }
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Person, Post });
 
     let json = {
       data: {
