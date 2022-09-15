@@ -188,7 +188,6 @@ export function serializeCard<CardT extends CardConstructor>(
     throw new Error(`bug: encountered a card that has no Loader identity: ${model.constructor.name}`);
   }
 
-  let loader = Loader.getLoaderFor(model.constructor);
   for (let [fieldName, field] of Object.entries(getFields(model, opts))) {
     if (primitive in field.card) {
       attributes[fieldName] = serializedGet(model, fieldName);
