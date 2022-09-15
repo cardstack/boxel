@@ -7,7 +7,7 @@ import { action } from '@ember/object';
 import { hash } from '@ember/helper';
 
 import CardCatalog from './card-catalog';
-import CardEditor from './card-editor';
+import Preview from './preview';
 
 interface Signature {
   Args: {
@@ -26,9 +26,8 @@ export default class CreateNewCard extends Component<Signature> {
       <div data-test-create-new data-test-create-new-card={{this.selectedCard.id}}>
         <h1>Create New Card: {{this.selectedCard.attributes.title}}</h1>
         {{#if this.selectedCard}}
-          <CardEditor
-            @moduleURL={{this.selectedCard.attributes.ref.module}}
-            @cardArgs={{hash type="new" realmURL=@realmURL cardSource=this.selectedCard.attributes.ref}}
+          <Preview
+            @card={{hash type="new" realmURL=@realmURL cardSource=this.selectedCard.attributes.ref}}
             @onSave={{this.onSave}}
             @onCancel={{this.onCancel}}
           />

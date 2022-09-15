@@ -13,7 +13,7 @@ import { hash } from '@ember/helper';
 
 import { getSearchResults } from '../resources/search';
 import LocalRealm from '../services/local-realm';
-import CardEditor from './card-editor';
+import Preview from './preview';
 
 interface Signature {
   Args: {
@@ -30,18 +30,16 @@ export default class CatalogEntryEditor extends Component<Signature> {
           <LinkTo @route="application" @query={{hash path=(this.modulePath (ensureJsonExtension this.entry.id))}} data-test-catalog-entry-id>
             {{this.entry.id}}
           </LinkTo>
-          <CardEditor
-            @moduleURL={{this.entry.meta.adoptsFrom.module}}
-            @cardArgs={{hash type="existing" url=this.entry.id format="edit"}}
+          <Preview
+            @card={{hash type="existing" url=this.entry.id format="edit"}}
           />
         </fieldset>
       {{else}}
         {{#if this.showEditor}}
           <fieldset>
             <legend>Publish New Card Type</legend>
-            <CardEditor
-              @moduleURL={{this.catalogEntryRef.module}}
-              @cardArgs={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.catalogEntryRef initialAttributes=this.catalogEntryAttributes}}
+            <Preview
+              @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.catalogEntryRef initialAttributes=this.catalogEntryAttributes}}
               @onSave={{this.onSave}}
               @onCancel={{this.onCancel}}
             />

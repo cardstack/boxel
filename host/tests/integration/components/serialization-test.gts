@@ -1,12 +1,10 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import stringify from 'fast-json-stable-stringify'
 import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
-import { p, cleanWhiteSpace, TestRealm } from '../../helpers';
+import { p, cleanWhiteSpace, loadCards } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { Realm } from "@cardstack/runtime-common/realm";
 import { baseRealm } from '@cardstack/runtime-common';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -18,7 +16,7 @@ let cardRef: typeof import ("https://cardstack.com/base/card-ref");
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
-  let realm: Realm;
+  const realmURL = `https://test-realm/`;
 
   hooks.before(async function () {
     Loader.destroy();
@@ -26,10 +24,6 @@ module('Integration | serialization', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    Loader.disableNativeImport(true);
-    realm = TestRealm.create({});
-    Loader.addRealmFetchOverride(realm);
-    await realm.ready;
 
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
@@ -52,9 +46,22 @@ module('Integration | serialization', function (hooks) {
         <template><@fields.title/> created <@fields.created/> published <@fields.published /></template>
       }
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Post });
 
     // initialize card data as serialized to force us to deserialize instead of using cached data
-    let firstPost = await createFromSerialized(Post, { title: 'First Post', created: '2022-04-22', published: '2022-04-27T16:02' });
+    let firstPost = await createFromSerialized(Post, {
+      attributes: {
+        title: 'First Post',
+        created: '2022-04-22',
+        published: '2022-04-27T16:02'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Post'
+        }
+      }
+    });
     await renderCard(firstPost, 'isolated');
 
     // the template value 'Apr 22, 2022' can only be realized when the card has
@@ -71,9 +78,20 @@ module('Integration | serialization', function (hooks) {
         <template><div data-test-ref><@fields.ref/></div></template>
       }
     }
+    Loader.shimModule(`${realmURL}test-cards`, { DriverCard });
 
     let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
-    let driver = await createFromSerialized(DriverCard, { ref });
+    let driver = await createFromSerialized(DriverCard, {
+      attributes: {
+        ref
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'DriverCard'
+        }
+      }
+    });
     assert.ok(driver.ref !== ref, 'the card ref value is not strict equals to its serialized counter part');
     assert.deepEqual(driver.ref, ref, 'the card ref value is deep equal to its serialized counter part')
   });
@@ -128,8 +146,21 @@ module('Integration | serialization', function (hooks) {
         <template><@fields.title/> created <@fields.created/> published <@fields.published /></template>
       }
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Post });
 
-    let firstPost = await createFromSerialized(Post, { title: 'First Post', created: null, published: null });
+    let firstPost = await createFromSerialized(Post, {
+      attributes: {
+        title: 'First Post',
+        created: null,
+        published: null
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Post'
+        }
+      }
+    });
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post created [no date] published [no date-time]');
   });
@@ -178,17 +209,28 @@ module('Integration | serialization', function (hooks) {
         <template>birthdate <@fields.author.birthdate/> last login <@fields.author.lastLogin/></template>
       }
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Post, Person });
+    await loadCards([
+      { module: `${realmURL}test-cards`, name: 'Post' },
+      { module: `${realmURL}test-cards`, name: 'Person' }
+    ]);
 
-    let firstPost = await createFromSerialized(Post,
-      {
+    let firstPost = await createFromSerialized(Post, {
+      attributes: {
         title: 'First Post',
         author: {
           firstName: 'Mango',
           birthdate: '2019-10-30',
           lastLogin: '2022-04-27T16:58'
         }
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Post'
+        }
       }
-    );
+    });
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM');
   });
@@ -214,59 +256,128 @@ module('Integration | serialization', function (hooks) {
         <template><@fields.author/></template>
       }
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Post, Person });
+    await loadCards([
+      { module: `${realmURL}test-cards`, name: 'Post' },
+      { module: `${realmURL}test-cards`, name: 'Person' }
+    ]);
 
-    let firstPost = await createFromSerialized(Post,
-      {
+    let firstPost = await createFromSerialized(Post, {
+      attributes: {
         title: 'First Post',
         author: {
           firstName: 'Mango',
           birthdate: '2019-10-30',
           lastLogin: '2022-04-27T17:00'
         }
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Post'
+        }
       }
-    );
+    });
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM');
   });
 
   test('can serialize a composite field', async function(assert) {
-    let { field, contains, serializedGet, Card, Component } = cardApi;
+    let { field, contains, serializedGet, Card } = cardApi;
     let { default: StringCard } = string;
     let { default: DateCard } = date;
     let { default: DatetimeCard } = datetime;
-    class Animal extends Card {
-      @field species = contains(StringCard);
-    }
 
-    class Person extends Animal {
+    class Person extends Card {
       @field firstName = contains(StringCard);
       @field birthdate = contains(DateCard);
       @field lastLogin = contains(DatetimeCard);
     }
 
     class Post extends Card {
-      @field title = contains(StringCard);
       @field author = contains(Person);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>{{stringify (serializedGet @model 'author')}}</template>
-      }
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Person, Post });
+    await loadCards([
+      { module: `${realmURL}test-cards`, name: 'Post'},
+      { module: `${realmURL}test-cards`, name: 'Person'},
+    ]);
 
     let firstPost = new Post({
-      title: 'First Post',
       author: new Person({
         firstName: 'Mango',
         birthdate: p('2019-10-30'),
-        species: 'canis familiaris',
         lastLogin: parseISO('2022-04-27T16:30+00:00')
       })
     });
 
     assert.deepEqual(serializedGet(firstPost, 'author'), {
-      birthdate: "2019-10-30",
-      firstName:"Mango",
-      lastLogin:"2022-04-27T16:30:00.000Z",
-      species:"canis familiaris"
+      type: "card",
+      attributes: {
+        birthdate: "2019-10-30",
+        firstName:"Mango",
+        lastLogin:"2022-04-27T16:30:00.000Z",
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Person'
+        }
+      }
+    });
+  });
+
+
+  test('can serialize a polymorphic composite field', async function(assert) {
+    let { field, contains, serializedGet, Card } = cardApi;
+    let { default: StringCard } = string;
+    let { default: DateCard } = date;
+    let { default: DatetimeCard } = datetime;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field birthdate = contains(DateCard);
+      @field lastLogin = contains(DatetimeCard);
+    }
+
+    class Employee extends Person {
+      @field department = contains(StringCard);
+    }
+
+    class Post extends Card {
+      @field author = contains(Person);
+    }
+
+    Loader.shimModule(`${realmURL}test-cards`, { Person, Employee, Post });
+    await loadCards([
+      { module: `${realmURL}test-cards`, name: 'Post'},
+      { module: `${realmURL}test-cards`, name: 'Employee'},
+      { module: `${realmURL}test-cards`, name: 'Person'},
+    ]);
+
+    let firstPost = new Post({
+      author: new Employee({
+        firstName: 'Mango',
+        birthdate: p('2019-10-30'),
+        lastLogin: parseISO('2022-04-27T16:30+00:00'),
+        department: 'wagging'
+      })
+    });
+
+    assert.deepEqual(serializedGet(firstPost, 'author'), {
+      type: "card",
+      attributes: {
+        birthdate: "2019-10-30",
+        firstName:"Mango",
+        lastLogin:"2022-04-27T16:30:00.000Z",
+        department: 'wagging'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Employee',
+        },
+      }
     });
   });
 
@@ -299,13 +410,26 @@ module('Integration | serialization', function (hooks) {
         </template>
       }
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Post, Person });
+    await loadCards([
+      { module: `${realmURL}test-cards`, name: 'Post'},
+      { module: `${realmURL}test-cards`, name: 'Person'}
+    ]);
 
     let helloWorld = await createFromSerialized(Post, {
+      attributes: {
         title: 'First Post',
         reviews: 1,
         author: {
           firstName: 'Arthur'
         }
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Post'
+        }
+      }
     });
     await renderCard(helloWorld, 'edit');
     await fillIn('[data-test-field="author"] input', 'Carl Stack');
@@ -318,6 +442,12 @@ module('Integration | serialization', function (hooks) {
           reviews: 1,
           author: {
             firstName: 'Carl Stack'
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Post'
           }
         }
       }
@@ -353,8 +483,19 @@ module('Integration | serialization', function (hooks) {
         <template><@fields.dates/></template>
       }
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Schedule });
 
-    let classSchedule = await createFromSerialized(Schedule, { dates: ['2022-4-1', '2022-4-4'] });
+    let classSchedule = await createFromSerialized(Schedule, {
+      attributes: {
+        dates: ['2022-4-1', '2022-4-4']
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Schedule'
+        }
+      }
+    });
     await renderCard(classSchedule, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Apr 1, 2022 Apr 4, 2022');
   });
@@ -377,14 +518,26 @@ module('Integration | serialization', function (hooks) {
         <template><@fields.appointments/></template>
       }
     }
-    let classSchedule = await createFromSerialized(Schedule,
-      {
+    Loader.shimModule(`${realmURL}test-cards`, { Schedule, Appointment });
+    await loadCards([
+      { module: `${realmURL}test-cards`, name: 'Schedule' },
+      { module: `${realmURL}test-cards`, name: 'Appointment' }
+    ]);
+
+    let classSchedule = await createFromSerialized(Schedule, {
+      attributes: {
         appointments: [
           { date: '2022-4-1', location: 'Room 332', title: 'Biology' },
           { date: '2022-4-4', location: 'Room 102', title: 'Civics' }
         ]
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Schedule'
+        }
       }
-    );
+    });
     await renderCard(classSchedule, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Biology on Apr 1, 2022 at Room 332 Civics on Apr 4, 2022 at Room 102');
   });
@@ -395,9 +548,14 @@ module('Integration | serialization', function (hooks) {
     class Schedule extends Card {
       @field dates = containsMany(DateCard);
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Schedule });
+
     let classSchedule = new Schedule({ dates: [p('2022-4-1'), p('2022-4-4')] });
     assert.deepEqual(serializedGet(classSchedule, 'dates'), ["2022-04-01","2022-04-04"]);
   });
+
+  skip('can serialize a polymorphic containsMany field');
+  // need to work thru how to describe the card ref for each item in the containsMany field
 
   test("can serialize a containsMany's nested field", async function(assert) {
     let { field, contains, containsMany, serializedGet, Card } = cardApi;
@@ -411,6 +569,12 @@ module('Integration | serialization', function (hooks) {
     class Schedule extends Card {
       @field appointments = containsMany(Appointment);
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Schedule, Appointment });
+    await loadCards([
+      { module: `${realmURL}test-cards`, name: 'Schedule'},
+      { module: `${realmURL}test-cards`, name: 'Appointment'}
+    ]);
+
     let classSchedule = new Schedule({ appointments: [
       new Appointment({ date: p('2022-4-1'), location: 'Room 332', title: 'Biology' }),
       new Appointment({ date: p('2022-4-4'), location: 'Room 102', title: 'Civics' }),
@@ -418,19 +582,37 @@ module('Integration | serialization', function (hooks) {
 
     assert.deepEqual(serializedGet(classSchedule, 'appointments'), 
       [{
-        date:"2022-04-01",
-        location:"Room 332",
-        title:"Biology"
+        type: "card",
+        attributes: {
+          date:"2022-04-01",
+          location:"Room 332",
+          title:"Biology"
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Appointment'
+          }
+        }
       },{
-        date:"2022-04-04",
-        location:"Room 102",
-        title:"Civics"
+        type: "card",
+        attributes: {
+          date:"2022-04-04",
+          location:"Room 102",
+          title:"Civics"
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Appointment'
+          }
+        }
       }]
     )
   });
 
   test('can serialize a card with primitive fields', async function (assert) {
-    let { field, contains, serializeCard, Card, } = cardApi;
+    let { field, contains, serializeCard, Card, recompute } = cardApi;
     let { default: StringCard } = string;
     let { default: DateCard } = date;
     let { default: DatetimeCard } = datetime;
@@ -439,8 +621,11 @@ module('Integration | serialization', function (hooks) {
       @field created = contains(DateCard);
       @field published = contains(DatetimeCard);
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Post });
+    await loadCards([{ module: `${realmURL}test-cards`, name: 'Post'}]);
+
     let firstPost = new Post({ title: 'First Post', created: p('2022-04-22'), published: parseISO('2022-04-27T16:30+00:00') });
-    await renderCard(firstPost, 'isolated');
+    await recompute(firstPost);
     let payload = serializeCard(firstPost);
     assert.deepEqual(
       payload as any,
@@ -451,6 +636,12 @@ module('Integration | serialization', function (hooks) {
           created: '2022-04-22',
           published: '2022-04-27T16:30:00.000Z',
         },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Post'
+          }
+        }
       },
       'A model can be serialized once instantiated'
     );
@@ -471,6 +662,13 @@ module('Integration | serialization', function (hooks) {
       @field title = contains(StringCard);
       @field author = contains(Person);
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Post, Person, Animal });
+    await loadCards([
+      { module: `${realmURL}test-cards`, name: 'Post'},
+      { module: `${realmURL}test-cards`, name: 'Person'},
+      { module: `${realmURL}test-cards`, name: 'Animal'}
+    ]);
+
     let firstPost = new Post({
       title: 'First Post',
       author: new Person({
@@ -492,6 +690,12 @@ module('Integration | serialization', function (hooks) {
             species: 'canis familiaris',
           }
         },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Post'
+          }
+        }
       }
     );
   });
@@ -514,6 +718,14 @@ module('Integration | serialization', function (hooks) {
       @field title = contains(StringCard);
       @field author = contains(Person);
     }
+
+    Loader.shimModule(`${realmURL}test-cards`, { Person, Employee, Post });
+    await loadCards([
+      { module: `${realmURL}test-cards`, name: 'Person'},
+      { module: `${realmURL}test-cards`, name: 'Employee'},
+      { module: `${realmURL}test-cards`, name: 'Post'}
+    ]);
+
     let firstPost = new Post({
       title: 'First Post',
       author: new Employee({
@@ -532,31 +744,45 @@ module('Integration | serialization', function (hooks) {
           author: {
             firstName: 'Mango',
             birthdate: '2019-10-30',
-          }
+            department: 'wagging'
+          },
         },
+        meta: {
+          adoptsFrom: { 
+            module: `${realmURL}test-cards`, 
+            name: 'Post',
+          },
+          fields: {
+            author: {
+              adoptsFrom: {
+                module: `${realmURL}test-cards`, 
+                name: 'Employee',
+              }
+            }
+          }
+        }
       }
     );
 
-    let post2 = await createFromSerialized(Post, payload.attributes); // success is not blowing up
+    let post2 = await createFromSerialized<typeof Post>(payload, new URL(realmURL)); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
+    let { author } = post2;
+    if (author instanceof Employee) {
+      assert.strictEqual(author.department, 'wagging');
+    } else {
+      assert.ok(false, 'Not an employee');
+    }
   });
 
   test('can deserialize a card from a resource object', async function(assert) {
     let { field, contains, serializeCard, Card, createFromSerialized } = cardApi;
     let { default: StringCard } = string;
 
-    await realm.write('person.gts', `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-      }
-    `);
-    // just making this for the types only
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
+    Loader.shimModule(`${realmURL}person`, { Person });
+    await loadCards([ { module: `${realmURL}test-cards`, name: 'Person'} ]);
 
     let person = await createFromSerialized({
       type: 'card',
@@ -569,21 +795,16 @@ module('Integration | serialization', function (hooks) {
           name: "Person"
         }
       }
-    }, new URL(realm.url)) as Person;
+    }, new URL(realmURL)) as Person;
     assert.strictEqual(person.firstName, 'Mango');
-    assert.deepEqual(serializeCard(person, {
-      adoptsFrom: {
-        module: "./person",
-        name: "Person"
-      }
-    }), {
+    assert.deepEqual(serializeCard(person), {
       type: 'card',
       attributes: {
         firstName: 'Mango',
       },
       meta: {
         adoptsFrom: {
-          module: "./person",
+          module: `${realmURL}person`,
           name: "Person"
         }
       }
@@ -594,25 +815,6 @@ module('Integration | serialization', function (hooks) {
     let { field, contains, serializeCard, Card, createFromSerialized } = cardApi;
     let { default: StringCard } = string;
 
-    await realm.write('person.gts', `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-      }
-    `);
-    await realm.write('post.gts', `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import { Person } from "./person";
-
-      export class Post extends Card {
-        @field title = contains(StringCard);
-        @field author = contains(Person);
-      }
-    `);
-    // just making this for the types only
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
@@ -620,7 +822,15 @@ module('Integration | serialization', function (hooks) {
       @field title = contains(StringCard);
       @field author = contains(Person);
     }
-    let post = await createFromSerialized({
+
+    Loader.shimModule(`${realmURL}person`, { Person });
+    Loader.shimModule(`${realmURL}post`, { Post });
+    await loadCards([
+      { module: `${realmURL}person`, name: 'Person'},
+      { module: `${realmURL}post`, name: 'Post'}
+    ]);
+
+    let post = await createFromSerialized<typeof Post>({
       type: 'card',
       attributes: {
         title: "Things I Want to Chew",
@@ -634,15 +844,10 @@ module('Integration | serialization', function (hooks) {
           name: "Post"
         }
       }
-    }, new URL(realm.url)) as Post;
+    }, new URL(realmURL));
     assert.strictEqual(post.title, 'Things I Want to Chew');
     assert.strictEqual(post.author.firstName, 'Mango');
-    assert.deepEqual(serializeCard(post, {
-      adoptsFrom: {
-        module: "./post",
-        name: "Post"
-      }
-    }), {
+    assert.deepEqual(serializeCard(post), {
       type: 'card',
       attributes: {
         title: "Things I Want to Chew",
@@ -652,7 +857,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: "./post",
+          module: `${realmURL}post`,
           name: "Post"
         }
       }
@@ -662,33 +867,7 @@ module('Integration | serialization', function (hooks) {
   test('can deserialize a card with contains many of a compound card field', async function(assert) {
     let { field, contains, containsMany, serializeCard, Card, createFromSerialized } = cardApi;
     let { default: StringCard } = string;
-    await realm.write('person.gts', `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-      }
-    `);
-    await realm.write('post.gts', `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import { Person } from "./person";
-
-      export class Post extends Card {
-        @field title = contains(StringCard);
-        @field author = contains(Person);
-      }
-    `);
-    await realm.write('blog.gts', `
-      import { containsMany, field, Card } from "https://cardstack.com/base/card-api";
-      import { Post } from "./post";
-
-      export class Blog extends Card {
-        @field posts = containsMany(Post);
-      }
-    `);
-    // just making this for the types only
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
@@ -699,6 +878,14 @@ module('Integration | serialization', function (hooks) {
     class Blog extends Card {
       @field posts = containsMany(Post);
     }
+    Loader.shimModule(`${realmURL}person`, { Person });
+    Loader.shimModule(`${realmURL}post`, { Post });
+    Loader.shimModule(`${realmURL}blog`, { Blog });
+    await loadCards([
+      { module: `${realmURL}person`, name: 'Person'},
+      { module: `${realmURL}post`, name: 'Post'},
+      { module: `${realmURL}blog`, name: 'Blog'}
+    ]);
 
     let blog = await createFromSerialized({
       type: 'card',
@@ -721,7 +908,7 @@ module('Integration | serialization', function (hooks) {
           name: "Blog"
         }
       }
-    }, new URL(realm.url)) as Blog;
+    }, new URL(realmURL)) as Blog;
     let posts = blog.posts;
     assert.strictEqual(posts.length, 2, 'number of posts is correct');
     assert.strictEqual(posts[0].title, 'Things I Want to Chew');
@@ -729,12 +916,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(posts[1].title, 'When Mango Steals My Bone');
     assert.strictEqual(posts[1].author.firstName, 'Van Gogh');
 
-    assert.deepEqual(serializeCard(blog, {
-      adoptsFrom: {
-        module: "./blog",
-        name: "Blog"
-      }
-    }), {
+    assert.deepEqual(serializeCard(blog), {
       type: 'card',
       attributes: {
         posts: [{
@@ -751,7 +933,7 @@ module('Integration | serialization', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: "./blog",
+          module: `${realmURL}blog`,
           name: "Blog"
         }
       }
@@ -770,6 +952,9 @@ module('Integration | serialization', function (hooks) {
         }
       });
     }
+    Loader.shimModule(`${realmURL}test-cards`, { Person });
+    await loadCards([ { module: `${realmURL}test-cards`, name: 'Person'} ]);
+
     let mango = new Person({ birthdate: p('2019-10-30') });
     await renderCard(mango, 'isolated');
     let withoutComputeds = serializeCard(mango);
@@ -780,6 +965,12 @@ module('Integration | serialization', function (hooks) {
         attributes: {
           birthdate: '2019-10-30',
         },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
       }
     );
 
@@ -792,6 +983,12 @@ module('Integration | serialization', function (hooks) {
           birthdate: '2019-10-30',
           firstBirthday: '2020-10-30',
         },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
       }
     );
   });

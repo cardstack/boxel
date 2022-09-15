@@ -1,5 +1,10 @@
 import { module, test } from 'qunit';
-import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
+import {
+  TestRealm,
+  TestRealmAdapter,
+  testRealmURL,
+  type CardDocFiles,
+} from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import { baseRealm } from '@cardstack/runtime-common';
@@ -813,7 +818,7 @@ posts/ignore-me.gts
   });
 
   module('query', function (hooks) {
-    const sampleCards = {
+    const sampleCards: CardDocFiles = {
       'card-1.json': {
         data: {
           type: 'card',

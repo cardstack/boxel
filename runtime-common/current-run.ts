@@ -1,4 +1,4 @@
-import { baseRealm, CardJSON, isCardJSON } from ".";
+import { baseRealm, LooseCardResource, isCardResource } from ".";
 import {
   Kind,
   Realm,
@@ -364,9 +364,9 @@ export class CurrentRun {
 
     let { content, lastModified } = fileRef;
     if (url.href.endsWith(".json")) {
-      let json = JSON.parse(content);
-      if (isCardJSON(json)) {
-        await this.indexCard(localPath, lastModified, json);
+      let { data: resource } = JSON.parse(content);
+      if (isCardResource(resource)) {
+        await this.indexCard(localPath, lastModified, resource);
       }
     }
   }
@@ -392,16 +392,16 @@ export class CurrentRun {
   private async indexCard(
     path: LocalPath,
     lastModified: number,
-    json: CardJSON
+    resource: LooseCardResource
   ): Promise<void> {
     let instanceURL = new URL(
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
     let moduleURL = new URL(
-      json.data.meta.adoptsFrom.module,
+      resource.meta.adoptsFrom.module,
       new URL(path, this.realm.url)
     );
-    let name = json.data.meta.adoptsFrom.name;
+    let name = resource.meta.adoptsFrom.name;
     let cardRef = { module: moduleURL.href, name };
     let typesMaybeError: TypesWithErrors | undefined;
     let depsMaybeError: DepsWithErrors | undefined;
@@ -410,14 +410,11 @@ export class CurrentRun {
     let searchData: any;
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
-      let card = await api.createFromSerialized(json.data, moduleURL, {
+      let card = await api.createFromSerialized(resource, moduleURL, {
         loader: this.#loader,
       });
       await api.recompute(card);
-      let data = api.serializeCard(card, {
-        adoptsFrom: json.data.meta.adoptsFrom,
-        includeComputeds: true,
-      });
+      let data = api.serializeCard(card, { includeComputeds: true });
       let maybeDoc = {
         data: merge(data, {
           id: instanceURL.href,

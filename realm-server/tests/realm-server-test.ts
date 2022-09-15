@@ -71,7 +71,7 @@ module("Realm Server", function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: "./person.gts",
+            module: `${testRealmURL}person.gts`,
             name: "Person",
           },
         },
@@ -175,7 +175,7 @@ module("Realm Server", function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: "./person.gts",
+                module: `${testRealmHref}person.gts`,
                 name: "Person",
               },
             },
@@ -445,37 +445,73 @@ module("Realm Server", function (hooks) {
     );
   });
 
-  test("can dynamically load a card from own realm", async function (assert) {
+  test("can dynamically load a card definition from own realm", async function (assert) {
     let loader = Loader.createLoaderFromGlobal();
     let api = await loader.import<any>("https://cardstack.com/base/card-api");
-    let module = await loader.import<Record<string, any>>(
-      `${testRealmHref}person`
+    let module = await loader.import<any>(`${testRealmHref}person`);
+    module.Person;
+    let person = await api.createFromSerialized(
+      {
+        attributes: {
+          firstName: "Mango",
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmHref}person`,
+            name: "Person",
+          },
+        },
+      },
+      undefined,
+      { loader }
     );
-    let Person = module["Person"];
-    let person = await api.createFromSerialized(Person, { firstName: "Mango" });
     assert.strictEqual(person.firstName, "Mango", "card data is correct");
   });
 
-  test("can dynamically load a card from a different realm", async function (assert) {
+  test("can dynamically load a card definition from a different realm", async function (assert) {
     let loader = Loader.createLoaderFromGlobal();
     let api = await loader.import<any>("https://cardstack.com/base/card-api");
-    let module = await loader.import<Record<string, any>>(
-      `${testRealm2Href}person`
+    let module = await loader.import<any>(`${testRealm2Href}person`);
+    module.Person;
+    let person = await api.createFromSerialized(
+      {
+        attributes: {
+          firstName: "Mango",
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealm2Href}person`,
+            name: "Person",
+          },
+        },
+      },
+      undefined,
+      { loader }
     );
-    let Person = module["Person"];
-    let person = await api.createFromSerialized(Person, { firstName: "Mango" });
     assert.strictEqual(person.firstName, "Mango", "card data is correct");
   });
 
   test("can instantiate a card that uses a card-ref field", async function (assert) {
     let loader = Loader.createLoaderFromGlobal();
     let api = await loader.import<any>("https://cardstack.com/base/card-api");
-    let module = await loader.import<Record<string, any>>(
-      `${testRealm2Href}card-ref-test`
-    );
-    let TestCard = module["TestCard"];
+    let module = await loader.import<any>(`${testRealm2Href}card-ref-test`);
+    module.TestCard;
     let ref = { module: `${testRealm2Href}person`, name: "Person" };
-    let testCard = await api.createFromSerialized(TestCard, { ref });
+    let testCard = await api.createFromSerialized(
+      {
+        attributes: {
+          ref,
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealm2Href}card-ref-test`,
+            name: "TestCard",
+          },
+        },
+      },
+      undefined,
+      { loader }
+    );
     assert.deepEqual(testCard.ref, ref, "card data is correct");
   });
 });

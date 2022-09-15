@@ -73,6 +73,14 @@ export interface CardResource<Identity extends Unsaved = Saved> {
       module: string;
       name: string;
     };
+    fields?: {
+      [fieldName: string]: {
+        adoptsFrom: {
+          module: string;
+          name: string;
+        };
+      };
+    };
     lastModified?: number;
   };
   links?: {
@@ -100,6 +108,38 @@ export function isCardResource(resource: any): resource is CardResource {
     return false;
   }
   let { meta } = resource;
+
+  if ("fields" in meta) {
+    let { fields } = meta;
+    if (typeof fields !== "object") {
+      return false;
+    }
+    for (let [fieldName, field] of Object.entries(
+      fields as { [fieldName: string | symbol]: any }
+    )) {
+      if (
+        typeof fieldName !== "string" ||
+        typeof field !== "object" ||
+        field == null
+      ) {
+        return false;
+      }
+      if ("adoptsFrom" in field) {
+        let { adoptsFrom } = field;
+        if (
+          !("module" in adoptsFrom) ||
+          typeof adoptsFrom.module !== "string" ||
+          !("name" in adoptsFrom) ||
+          typeof adoptsFrom.name !== "string"
+        ) {
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
+  }
+
   if (!("adoptsFrom" in meta) && typeof meta.adoptsFrom !== "object") {
     return false;
   }
