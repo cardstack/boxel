@@ -6,7 +6,6 @@ import {
   FileRef,
   LooseCardDocument,
   Loader,
-  type ExportedCardRef,
 } from '@cardstack/runtime-common';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 
@@ -40,11 +39,16 @@ export const TestRealm = {
   },
 };
 
-export async function loadCards(refs: ExportedCardRef[]) {
+export async function shimModule(
+  moduleURL: string,
+  module: Record<string, any>,
+  loader?: Loader
+) {
+  (loader ?? Loader).shimModule(moduleURL, module);
   await Promise.all(
-    refs.map(async (ref) => {
-      let module = await Loader.import<any>(ref.module);
-      module[ref.name];
+    Object.keys(module).map(async (name) => {
+      let m = await Loader.import<any>(moduleURL);
+      m[name];
     })
   );
 }

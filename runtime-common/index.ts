@@ -89,7 +89,7 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["ember-concurrency-ts", ["taskFor"]],
   ["ember-modifier", ["default"]],
   ["flat", ["flatten", "unflatten"]],
-  ["lodash", ["flatMap", "startCase", "get"]],
+  ["lodash", ["flatMap", "startCase", "get", "set"]],
   ["tracked-built-ins", ["TrackedWeakMap"]],
   ["date-fns", ["parseISO", "format", "parse"]],
 ]);

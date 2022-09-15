@@ -2,7 +2,7 @@ import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { fillIn, click, waitUntil } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
-import { cleanWhiteSpace, p, testRealmURL, loadCards } from '../../helpers';
+import { cleanWhiteSpace, p, testRealmURL, shimModule } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
 import { baseRealm, } from "@cardstack/runtime-common";
@@ -116,11 +116,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Post' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized(Post, {
       attributes: {
@@ -280,11 +276,7 @@ module('Integration | card-basics', function (hooks) {
         <template><div data-test><@fields.author /></div></template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Post' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized({
       attributes: {
@@ -319,8 +311,7 @@ module('Integration | card-basics', function (hooks) {
         <template><@fields.firstName/></template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Person });
-    await loadCards([ { module: `${testRealmURL}test-cards`, name: 'Person' }]);
+    await shimModule(`${testRealmURL}test-cards`, { Person });
 
     let mango = await createFromSerialized({
       attributes: {
@@ -368,13 +359,7 @@ module('Integration | card-basics', function (hooks) {
       <template><@fields.author.firstName /><@fields.author.number /></template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Post, Person, TestInteger, TestString });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Post' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-      { module: `${testRealmURL}test-cards`, name: 'TestInteger' },
-      { module: `${testRealmURL}test-cards`, name: 'TestString' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person, TestInteger, TestString });
 
     let helloWorld = await createFromSerialized({
       attributes: {
@@ -412,11 +397,7 @@ module('Integration | card-basics', function (hooks) {
       @field title = contains(title);
       @field author = contains(Person);
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Post' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized({
       attributes: {
@@ -489,11 +470,7 @@ module('Integration | card-basics', function (hooks) {
         <template><@fields.people/></template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Family' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
     let abdelRahmans = await createFromSerialized({
       attributes: {
@@ -614,8 +591,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Person });
-    await loadCards([ { module: `${testRealmURL}test-cards`, name: 'Person' }, ]);
+    await shimModule(`${testRealmURL}test-cards`, { Person });
     assert.throws(() => new Person({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken/);
     try {
       await createFromSerialized({
@@ -646,11 +622,7 @@ module('Integration | card-basics', function (hooks) {
       @field title = contains(StringCard);
       @field author = contains(Person);
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Post' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized({
       attributes: {
@@ -685,8 +657,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field isCool = contains(BooleanCard);
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Person });
-    await loadCards([ { module: `${testRealmURL}test-cards`, name: 'Person' } ]);
+    await shimModule(`${testRealmURL}test-cards`, { Person });
 
     let mango = await createFromSerialized({
       attributes: {
@@ -714,8 +685,7 @@ module('Integration | card-basics', function (hooks) {
       @field isCool = contains(BooleanCard);
       @field isHuman = contains(BooleanCard);
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Person });
-    await loadCards([ { module: `${testRealmURL}test-cards`, name: 'Person' } ]);
+    await shimModule(`${testRealmURL}test-cards`, { Person });
     let mango = await createFromSerialized<typeof Person>({
       attributes: {
         firstName: 'Mango',
@@ -801,11 +771,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Post' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized({
       attributes: {

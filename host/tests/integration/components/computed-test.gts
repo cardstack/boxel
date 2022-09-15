@@ -4,7 +4,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import { fillIn } from '@ember/test-helpers';
 import waitUntil from '@ember/test-helpers/wait-until';
 import find from '@ember/test-helpers/dom/find';
-import { cleanWhiteSpace, testRealmURL, loadCards } from '../../helpers';
+import { cleanWhiteSpace, testRealmURL, shimModule } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -78,11 +78,7 @@ module('Integration | computeds', function (hooks) {
         <template><@fields.summary/></template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Post' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let firstPost = await createFromSerialized({
       attributes: {
@@ -207,11 +203,7 @@ module('Integration | computeds', function (hooks) {
         <template><@fields.title/> by {{@model.author.slowName}}</template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Post' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let firstPost = await createFromSerialized({
       attributes: {
@@ -324,11 +316,7 @@ module('Integration | computeds', function (hooks) {
         <template><@fields.slowPeople/></template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Family' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
     let abdelRahmans = await createFromSerialized({
       attributes: {
@@ -397,11 +385,7 @@ module('Integration | computeds', function (hooks) {
         return totalAge;
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Family' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
     let family = await createFromSerialized<typeof Family>({
       attributes: {
@@ -476,11 +460,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       }
     }
-    Loader.shimModule(`${testRealmURL}test-cards`, { Location, Person });
-    await loadCards([
-      { module: `${testRealmURL}test-cards`, name: 'Location' },
-      { module: `${testRealmURL}test-cards`, name: 'Person' },
-    ]);
+    await shimModule(`${testRealmURL}test-cards`, { Location, Person });
 
     let person = await createFromSerialized({
       attributes: {

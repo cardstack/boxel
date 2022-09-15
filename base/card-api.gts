@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
-import { flatMap, startCase } from 'lodash';
+import { flatMap, startCase, set, get } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
 import ContainsManyEditor from './contains-many';
@@ -51,10 +51,9 @@ interface Field<CardT extends CardConstructor> {
   computeVia: undefined | string | (() => unknown);
   containsMany: boolean;
   serialize(value: any): any;
-  deserialize(value: any, instancePromise: Promise<Card>): Promise<any>;
+  deserialize(value: any, fromResource: LooseCardResource | undefined, instancePromise: Promise<Card>): Promise<any>;
   emptyValue(instance: Card): any;
   prepareSet(instance: Card, value: any): void;
-  hydrateField(resource: LooseCardResource, fieldName: string, debugCardName: string): LooseCardResource | LooseCardResource[];
 }
 
 export type FieldType = 'contains' | 'contains-many';
@@ -167,12 +166,12 @@ export function serializedGet<CardT extends CardConstructor>(
   return field.serialize((model as any)[fieldName]);
 }
 
-async function getDeserializedValues<CardT extends CardConstructor>(card: CardT, fieldName: string, value: any, modelPromise: Promise<Card>): Promise<any> {
+async function getDeserializedValues<CardT extends CardConstructor>(card: CardT, fieldName: string, value: any, modelPromise: Promise<Card>, fromResource: LooseCardResource | undefined): Promise<any> {
   let field = getField(card, fieldName);
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
-  return await field.deserialize(value, modelPromise);
+  return await field.deserialize(value, fromResource, modelPromise);
 }
 
 export function serializeCard<CardT extends CardConstructor>(
@@ -219,9 +218,9 @@ export function serializeCard<CardT extends CardConstructor>(
         };
       }
       for (let [nestedFieldName, nestedField] of Object.entries(nestedCard.meta.fields ?? {})) {
-        fields[`${fieldName}.${nestedFieldName}`] = {
+        set(fields, `${fieldName}.fields.${nestedFieldName}`, {
           adoptsFrom: nestedField.adoptsFrom
-        };
+        });
       }
     }
   }
@@ -269,19 +268,16 @@ export async function createFromSerialized<T extends CardConstructor>(CardClassO
         if (!field) {
           throw new Error(`could not find field '${fieldName}' in card '${CardClass.name}'`);
         }
-        if (primitive in field.card) {
-          return [ fieldName, await getDeserializedValues(CardClass, fieldName, value, deferred.promise)];
-        } else {
-          return [
+        return [
+          fieldName,
+          await getDeserializedValues(
+            CardClass,
             fieldName,
-            await getDeserializedValues(
-              CardClass,
-              fieldName,
-              await field.hydrateField(resource, fieldName, CardClass.name),
-              deferred.promise
-            )
-          ];
-        }
+            value,
+            deferred.promise,
+            primitive in field.card ? undefined : resource
+          )
+        ];
       }
     )
   ) as [keyof InstanceType<T>, any][];
@@ -313,13 +309,18 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return value.map(entry => this.card[serialize](entry))
   }
 
-  async deserialize(value: any[], instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
+  async deserialize(value: any[], fromResource: LooseCardResource | undefined, instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
     return new WatchedArray(
-     () => instancePromise.then(instance => recompute(instance)),
-     await Promise.all(value.map(async entry => (await cardClassFromData(entry, this.card))[deserialize](entry)))
+      () => instancePromise.then(instance => recompute(instance)),
+      await Promise.all(value.map(async (entry, index) => {
+        if (isCardResource(fromResource)) {
+          entry = hydrateField(fromResource, `${this.name}.${index}`, this.card);
+        }
+        return (await cardClassFromData(entry, this.card))[deserialize](entry);
+      }))
     );
   }
 
@@ -333,34 +334,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     }
     return new WatchedArray(() => recompute(instance), value);
   }
-
-  hydrateField(resource: LooseCardResource, fieldName: string, debugCardName: string): LooseCardResource[] {
-    let value = resource.attributes?.[fieldName];
-    if (value && !Array.isArray(value)) {
-      throw new Error(`Expected array for field value ${this.name}`);
-    }
-
-    let maybeAdoptsFrom = resource.meta.fields?.[fieldName].adoptsFrom ?? Loader.identify(this.card);
-    if (!maybeAdoptsFrom) {
-      throw new Error(`bug: cannot determine identity for field '${fieldName}' in card '${debugCardName}'`);
-    }
-    let adoptsFrom = maybeAdoptsFrom;
-    let fields: LooseCardResource["meta"]["fields"] = {};
-    for (let [fieldNameForInfo, fieldInfo] of Object.entries(resource.meta.fields ?? {})) {
-      if (fieldNameForInfo.startsWith(`${fieldName}.`)) {
-        fields[fieldNameForInfo.substring(fieldName.length + 1)] = fieldInfo;
-      }
-    }
-    return (value as any[]).map(entry => ({
-      attributes: entry,
-      meta: {
-        adoptsFrom,
-        ...(Object.keys(fields!).length > 0 ? { fields } : {})
-      }
-    }));
-  }
 }
-
 
 class Contains<CardT extends CardConstructor> implements Field<CardT> {
   constructor(private cardThunk: () => CardT, readonly computeVia: undefined | string | (() => unknown), readonly name: string) {
@@ -378,8 +352,11 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     }
   }
 
-  async deserialize(value: any): Promise<CardInstanceType<CardT>> {
+  async deserialize(value: any, fromResource: LooseCardResource | undefined): Promise<CardInstanceType<CardT>> {
     if (value != null) {
+      if (isCardResource(fromResource)) {
+        value = hydrateField(fromResource, this.name, this.card);
+      }
       return (await cardClassFromData(value, this.card))[deserialize](value);
     } else {
       return value;
@@ -406,26 +383,24 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     }
     return value;
   }
+}
 
-  hydrateField(resource: LooseCardResource, fieldName: string, debugCardName: string): LooseCardResource {
-    let adoptsFrom = resource.meta.fields?.[fieldName].adoptsFrom ?? Loader.identify(this.card);
-    if (!adoptsFrom) {
-      throw new Error(`bug: cannot determine identity for field '${fieldName}' in card '${debugCardName}'`);
-    }
-    let fields: LooseCardResource["meta"]["fields"] = {};
-    for (let [fieldNameForInfo, fieldInfo] of Object.entries(resource.meta.fields ?? {})) {
-      if (fieldNameForInfo.startsWith(`${fieldName}.`)) {
-        fields[fieldNameForInfo.substring(fieldName.length + 1)] = fieldInfo;
-      }
-    }
-    return {
-      attributes: resource.attributes?.[fieldName],
-      meta: {
-        adoptsFrom,
-        ...(Object.keys(fields).length > 0 ? { fields } : {})
-      }
-    };
+function hydrateField(resource: LooseCardResource, fieldName: string, fallback: typeof Card): LooseCardResource {
+  let realField = fieldName.split('.').shift()!;
+  let adoptsFrom = resource.meta.fields?.[realField].adoptsFrom ?? Loader.identify(fallback);
+  if (!adoptsFrom) {
+    throw new Error(`bug: cannot determine identity for field '${realField}'`);
   }
+  let fields: LooseCardResource["meta"]["fields"] = {
+    ...(resource.meta.fields?.[realField]?.fields ?? {})
+  };
+  return {
+    attributes: get(resource, `attributes.${fieldName}`),
+    meta: {
+      adoptsFrom,
+      ...(Object.keys(fields).length > 0 ? { fields } : {})
+    }
+  };
 }
 
 async function cardClassFromData<CardT extends CardConstructor>(value: any, fallback: CardT): Promise<CardT> {
