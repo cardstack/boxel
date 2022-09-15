@@ -272,7 +272,7 @@ export class Loader {
         let value = Reflect.get(target, property, received);
         if (typeof value === "function" && typeof property === "string") {
           this.identities.set(value, {
-            module: moduleIdentifier,
+            module: this.reverseResolution(moduleIdentifier).href,
             name: property,
           });
           Loader.loaders.set(value, this);

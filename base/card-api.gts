@@ -150,7 +150,7 @@ export function getQueryableValue(fieldCard: typeof Card, value: any): any {
     assertScalar(result, fieldCard);
     return result;
   }
-  
+
   // this recurses through the fields of the compound card via
   // the base card's queryableValue implementation
   return flatten((fieldCard as any)[queryableValue](value), { safe: true });
@@ -183,14 +183,10 @@ export function serializeCard<CardT extends CardConstructor>(
 ): LooseCardResource {
   let attributes: Record<string, any> = {};
   let fields: LooseCardResource["meta"]["fields"] = {};
-  let cardIdentity = Loader.identify(model.constructor);
-  if (!cardIdentity) {
+  let adoptsFrom = Loader.identify(model.constructor);
+  if (!adoptsFrom) {
     throw new Error(`bug: encountered a card that has no Loader identity: ${model.constructor.name}`);
   }
-  let adoptsFrom = {
-    module: Loader.reverseResolution(cardIdentity.module).href,
-    name: cardIdentity.name
-  };
 
   let loader = Loader.getLoaderFor(model.constructor);
   for (let [fieldName, field] of Object.entries(getFields(model, opts))) {
@@ -220,18 +216,12 @@ export function serializeCard<CardT extends CardConstructor>(
       if (fieldCardRef.module !== nestedCard.meta.adoptsFrom.module || fieldCardRef.name !== nestedCard.meta.adoptsFrom.name) {
         // Only write out the field meta when the field value is a different card than the field card
         fields[fieldName] = {
-          adoptsFrom: {
-            module: loader.reverseResolution(nestedCard.meta.adoptsFrom.module).href,
-            name: nestedCard.meta.adoptsFrom.name
-          }
+          adoptsFrom: nestedCard.meta.adoptsFrom
         };
       }
       for (let [nestedFieldName, nestedField] of Object.entries(nestedCard.meta.fields ?? {})) {
         fields[`${fieldName}.${nestedFieldName}`] = {
-          adoptsFrom: {
-            module: loader.reverseResolution(nestedField.adoptsFrom.module).href,
-            name: nestedField.adoptsFrom.name,
-          }
+          adoptsFrom: nestedField.adoptsFrom
         };
       }
     }
@@ -287,7 +277,7 @@ export async function createFromSerialized<T extends CardConstructor>(CardClassO
             fieldName,
             await getDeserializedValues(
               CardClass,
-              fieldName, 
+              fieldName,
               await field.hydrateField(resource, fieldName, CardClass.name),
               deferred.promise
             )
@@ -311,8 +301,8 @@ export async function searchDoc<CardT extends CardConstructor>(model: InstanceTy
 
 class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
   constructor(
-    private cardThunk: () => FieldT, 
-    readonly computeVia: undefined | string | (() => unknown), 
+    private cardThunk: () => FieldT,
+    readonly computeVia: undefined | string | (() => unknown),
     readonly name: string
   ) {}
 
@@ -403,7 +393,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     if (primitive in this.card) {
       return undefined;
     } else {
-      return new this.card; 
+      return new this.card;
     }
   }
 
@@ -817,19 +807,19 @@ export class Box<T> {
     return new Box({ type: 'root', model });
   }
 
-  private state: 
-    { 
+  private state:
+    {
       type: 'root';
-      model: any 
-    } | 
-    { 
+      model: any
+    } |
+    {
       type: 'derived';
       containingBox: Box<any>;
       fieldName: string | number| symbol;
       useIndexBasedKeys: boolean;
     };
 
-  private constructor(state: Box<T>["state"]) { 
+  private constructor(state: Box<T>["state"]) {
     this.state = state;
   }
 
@@ -866,8 +856,8 @@ export class Box<T> {
     if (!box) {
       box = new Box({
         type: 'derived',
-        containingBox: this, 
-        fieldName, 
+        containingBox: this,
+        fieldName,
         useIndexBasedKeys,
       });
       this.fieldBoxes.set(fieldName as string, box);
@@ -904,7 +894,7 @@ export class Box<T> {
         }
         return found;
       } else {
-        return new Box({ 
+        return new Box({
           type: 'derived',
           containingBox: this,
           fieldName: index,
