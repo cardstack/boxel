@@ -170,19 +170,19 @@ export class Loader {
     }
   }
 
-  static getLoaderFor(value: unknown): Loader {
-    if (typeof value === "function") {
-      return Loader.loaders.get(value) ?? Loader.getLoader();
-    }
-    return Loader.getLoader();
-  }
-
   identify(value: unknown): { module: string; name: string } | undefined {
     if (typeof value === "function") {
       return this.identities.get(value);
     } else {
       return undefined;
     }
+  }
+
+  static getLoaderFor(value: unknown): Loader {
+    if (typeof value === "function") {
+      return Loader.loaders.get(value) ?? Loader.getLoader();
+    }
+    return Loader.getLoader();
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
