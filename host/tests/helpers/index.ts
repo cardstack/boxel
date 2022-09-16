@@ -4,7 +4,8 @@ import {
   Kind,
   RealmAdapter,
   FileRef,
-  CardJSON,
+  LooseCardDocument,
+  Loader,
 } from '@cardstack/runtime-common';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 
@@ -22,9 +23,13 @@ export interface Dir {
 
 export const testRealmURL = 'http://test-realm/test/';
 
+export interface CardDocFiles {
+  [filename: string]: LooseCardDocument;
+}
+
 export const TestRealm = {
   create(
-    flatFiles: Record<string, string | CardJSON>,
+    flatFiles: Record<string, string | LooseCardDocument | CardDocFiles>,
     realmURL?: string
   ): Realm {
     return new Realm(realmURL ?? testRealmURL, new TestRealmAdapter(flatFiles));
@@ -34,13 +39,27 @@ export const TestRealm = {
   },
 };
 
+export async function shimModule(
+  moduleURL: string,
+  module: Record<string, any>,
+  loader?: Loader
+) {
+  (loader ?? Loader).shimModule(moduleURL, module);
+  await Promise.all(
+    Object.keys(module).map(async (name) => {
+      let m = await Loader.import<any>(moduleURL);
+      m[name];
+    })
+  );
+}
+
 export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
 
   constructor(
-    flatFiles: Record<string, string | CardJSON>,
+    flatFiles: Record<string, string | LooseCardDocument | CardDocFiles>,
     realmURL = new URL(testRealmURL)
   ) {
     this.#paths = new RealmPaths(realmURL);

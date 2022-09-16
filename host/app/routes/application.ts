@@ -4,9 +4,7 @@ import { action } from '@ember/object';
 import { file, FileResource } from '../resources/file';
 import type RouterService from '@ember/routing/router-service';
 import LocalRealm from '../services/local-realm';
-import ModalService from '../services/modal';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { Loader } from '@cardstack/runtime-common/loader';
+import { RealmPaths, Loader } from '@cardstack/runtime-common';
 
 interface Model {
   path: string | undefined;
@@ -17,25 +15,13 @@ export default class Application extends Route<Model> {
     path: {
       refreshModel: true,
     },
-    showCatalog: {
-      replace: true,
-    },
   };
 
   @service declare router: RouterService;
   @service declare localRealm: LocalRealm;
-  @service declare modal: ModalService;
 
-  async model(args: {
-    path: string | undefined;
-    showCatalog: 'true' | undefined;
-  }): Promise<Model> {
-    let { path, showCatalog } = args;
-    if (showCatalog === 'true') {
-      this.modal.open();
-    } else if (this.modal.isShowing) {
-      this.modal.close();
-    }
+  async model(args: { path: string | undefined }): Promise<Model> {
+    let { path } = args;
 
     let openFile: FileResource | undefined;
     if (!path) {

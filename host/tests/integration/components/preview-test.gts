@@ -4,18 +4,24 @@ import { click, fillIn, waitFor } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { Loader, baseRealm, type ExistingCardArgs } from '@cardstack/runtime-common';
 import Preview  from 'runtime-spike/components/preview';
+import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
-import { testRealmURL } from '../../helpers';
+import { testRealmURL, shimModule } from '../../helpers';
 import type { Format } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
 
+class MockLocalRealm extends Service {
+  isAvailable = true;
+  url = new URL(testRealmURL);
+}
+
 const formats: Format[] = ['isolated', 'embedded', 'edit'];
 module('Integration | preview', function (hooks) {
   setupRenderingTest(hooks);
 
-  hooks.before(async function () {
+  hooks.beforeEach(async function () {
     Loader.destroy();
     Loader.addURLMapping(
       new URL(baseRealm.url),
@@ -23,6 +29,7 @@ module('Integration | preview', function (hooks) {
     );
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
+    this.owner.register('service:local-realm', MockLocalRealm);
   });
 
   test('renders card', async function (assert) {
@@ -34,19 +41,24 @@ module('Integration | preview', function (hooks) {
         <template> <div data-test-firstName><@fields.firstName/></div> </template>
       }
     }
-    let module = { default: TestCard };
+    await shimModule(`${testRealmURL}test-cards`, { TestCard });
     let json = {
       data: {
-        type: 'card',
         attributes: { firstName: 'Mango' },
-        meta: { adoptsFrom: { module: '', name: 'default'} }
+        meta: {
+          adoptsFrom:
+          {
+            module: `${testRealmURL}test-cards`,
+            name: 'TestCard'
+          }
+        }
       }
     };
     const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @card={{args}} @formats={{formats}}/>
+          <Preview @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -69,19 +81,25 @@ module('Integration | preview', function (hooks) {
         <template> <div data-test-edit-firstName><@fields.firstName/></div> </template>
       }
     }
-    let module = { default: TestCard };
+    await shimModule(`${testRealmURL}test-cards`, { TestCard });
+
     let json = {
       data: {
-        type: 'card',
         attributes: { firstName: 'Mango' },
-        meta: { adoptsFrom: { module: '', name: 'default'} }
+        meta: {
+          adoptsFrom:
+          {
+            module: `${testRealmURL}test-cards`,
+            name: 'TestCard'
+          }
+        }
       }
     };
     const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @card={{args}} @formats={{formats}}/>
+          <Preview @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -116,19 +134,24 @@ module('Integration | preview', function (hooks) {
         <template> <div data-test-edit-firstName><@fields.firstName/></div> </template>
       }
     }
-    let module = { default: TestCard };
+    await shimModule(`${testRealmURL}test-cards`, { TestCard });
     let json = {
       data: {
-        type: 'card',
         attributes: { firstName: 'Mango' },
-        meta: { adoptsFrom: { module: '', name: 'default'} }
+        meta: {
+          adoptsFrom:
+          {
+            module: `${testRealmURL}test-cards`,
+            name: 'TestCard'
+          }
+        }
       }
     };
     const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @card={{args}} @formats={{formats}}/>
+          <Preview @card={{args}} @formats={{formats}}/>
         </template>
       }
     )
@@ -163,25 +186,30 @@ module('Integration | preview', function (hooks) {
         }
       });
     }
+    await shimModule(`${testRealmURL}test-cards`, { Person, Post });
 
-    let module = { default: Post };
     let json = {
       data: {
-        type: 'card',
         attributes: {
           author: {
             firstName: 'Mango',
           },
           title: 'We Need to Go to the Dog Park Now!'
         },
-        meta: { adoptsFrom: { module: '', name: 'default'} }
+        meta: {
+          adoptsFrom:
+          {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post'
+          }
+        }
       }
     };
     const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @module={{module}} @card={{args}} @formats={{formats}}/>
+          <Preview @card={{args}} @formats={{formats}}/>
         </template>
       }
     )

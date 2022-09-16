@@ -4,7 +4,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import { fillIn } from '@ember/test-helpers';
 import waitUntil from '@ember/test-helpers/wait-until';
 import find from '@ember/test-helpers/dom/find';
-import { cleanWhiteSpace } from '../../helpers';
+import { cleanWhiteSpace, testRealmURL, shimModule } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -78,8 +78,20 @@ module('Integration | computeds', function (hooks) {
         <template><@fields.summary/></template>
       }
     }
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
-    let firstPost = await createFromSerialized(Post, { title: 'First Post', author: { firstName: 'Mango' }});
+    let firstPost = await createFromSerialized({
+      attributes: {
+        title: 'First Post',
+        author: { firstName: 'Mango' }
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'Post'
+        }
+      }
+    }, undefined);
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(this.element.textContent!.trim(), 'First Post by Mango');
   });
@@ -191,8 +203,20 @@ module('Integration | computeds', function (hooks) {
         <template><@fields.title/> by {{@model.author.slowName}}</template>
       }
     }
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
-    let firstPost = await createFromSerialized(Post, { title: 'First Post', author: { firstName: 'Mango' }});
+    let firstPost = await createFromSerialized({
+      attributes: {
+        title: 'First Post',
+        author: { firstName: 'Mango' }
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'Post'
+        }
+      }
+    }, undefined);
     await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Mango');
   });
@@ -292,16 +316,26 @@ module('Integration | computeds', function (hooks) {
         <template><@fields.slowPeople/></template>
       }
     }
-    let abdelRahmans = await createFromSerialized(Family, {
-      people: [
-        { firstName: 'Mango'},
-        { firstName: 'Van Gogh'},
-        { firstName: 'Hassan'},
-        { firstName: 'Mariko'},
-        { firstName: 'Yume'},
-        { firstName: 'Sakura'},
-      ]
-    });
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
+
+    let abdelRahmans = await createFromSerialized({
+      attributes: {
+        people: [
+          { firstName: 'Mango'},
+          { firstName: 'Van Gogh'},
+          { firstName: 'Hassan'},
+          { firstName: 'Mariko'},
+          { firstName: 'Yume'},
+          { firstName: 'Sakura'},
+        ]
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'Family'
+        }
+      }
+    }, undefined);
 
     await renderCard(abdelRahmans, 'isolated');
     assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
@@ -351,16 +385,25 @@ module('Integration | computeds', function (hooks) {
         return totalAge;
       }
     }
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
-    let family = await createFromSerialized(Family, {
-      people: [{
-        firstName: "Mango",
-        age: 3
-      }, {
-        firstName: "Van Gogh",
-        age: 6
-      }]
-    });
+    let family = await createFromSerialized<typeof Family>({
+      attributes: {
+        people: [{
+          firstName: "Mango",
+          age: 3
+        }, {
+          firstName: "Van Gogh",
+          age: 6
+        }]
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'Family'
+        }
+      }
+    }, undefined);
     await recompute(family);
     assert.strictEqual(family.totalAge, 9, 'computed is correct');
     family.people[0].age = 4;
@@ -417,8 +460,20 @@ module('Integration | computeds', function (hooks) {
         </template>
       }
     }
+    await shimModule(`${testRealmURL}test-cards`, { Location, Person });
 
-    let person = await createFromSerialized(Person, { firstName: 'Mango', homeTown: { city: 'Bronxville' }});
+    let person = await createFromSerialized({
+      attributes: {
+        firstName: 'Mango',
+        homeTown: { city: 'Bronxville' }
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'Person'
+        }
+      }
+     }, undefined);
 
     await renderCard(person, 'edit');
     assert.dom('[data-test-field="slowName"]').containsText('Mango');

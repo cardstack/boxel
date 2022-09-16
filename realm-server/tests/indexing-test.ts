@@ -1,6 +1,11 @@
 import { module, test } from "qunit";
 import { dirSync, setGracefulCleanup } from "tmp";
-import { Loader, baseRealm, CardJSON, Realm } from "@cardstack/runtime-common";
+import {
+  Loader,
+  baseRealm,
+  LooseCardDocument,
+  Realm,
+} from "@cardstack/runtime-common";
 import { createRealm, testRealm } from "./helpers";
 
 setGracefulCleanup();
@@ -120,7 +125,7 @@ module("indexing", function (hooks) {
             },
           },
         },
-      } as CardJSON)
+      } as LooseCardDocument)
     );
 
     let result = await realm.searchIndex.search({

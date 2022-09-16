@@ -28,11 +28,11 @@ export class Search extends Resource<Args> {
     }
     this.localRealmURL = this.localRealm.url;
     let { query, realm } = args.named;
-    taskFor(this.search).perform(query, realm);
+    let realmURL = realm ?? this.localRealmURL.href;
+    taskFor(this.search).perform(query, realmURL);
   }
 
-  @restartableTask private async search(query: Query, realm?: string) {
-    let realmURL = realm ?? this.localRealmURL.href;
+  @restartableTask private async search(query: Query, realmURL: string) {
     let response = await Loader.fetch(
       `${realmURL}_search?${stringify(query)}`,
       { headers: { Accept: 'application/vnd.api+json' } }
@@ -46,6 +46,10 @@ export class Search extends Resource<Args> {
     }
     let json = await response.json();
     this.instances = (json.data as CardResource[]) ?? [];
+  }
+
+  get isLoading() {
+    return taskFor(this.search).isRunning;
   }
 }
 

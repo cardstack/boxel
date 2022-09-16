@@ -60,9 +60,17 @@ export function isCardRef(ref: any): ref is CardRef {
   return false;
 }
 
-// TODO
 export type Saved = string;
 export type Unsaved = string | undefined;
+interface CardFields {
+  [fieldName: string]: {
+    adoptsFrom: {
+      module: string;
+      name: string;
+    };
+    fields?: CardFields;
+  };
+}
 export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
   type: "card";
@@ -73,6 +81,7 @@ export interface CardResource<Identity extends Unsaved = Saved> {
       module: string;
       name: string;
     };
+    fields?: CardFields;
     lastModified?: number;
   };
   links?: {
@@ -100,6 +109,13 @@ export function isCardResource(resource: any): resource is CardResource {
     return false;
   }
   let { meta } = resource;
+
+  if ("fields" in meta) {
+    if (!isCardFields(meta.fields)) {
+      return false;
+    }
+  }
+
   if (!("adoptsFrom" in meta) && typeof meta.adoptsFrom !== "object") {
     return false;
   }
@@ -111,6 +127,43 @@ export function isCardResource(resource: any): resource is CardResource {
     typeof adoptsFrom.name === "string"
   );
 }
+
+export function isCardFields(fields: any): fields is CardFields {
+  if (typeof fields !== "object") {
+    return false;
+  }
+  for (let [fieldName, field] of Object.entries(
+    fields as { [fieldName: string | symbol]: any }
+  )) {
+    if (
+      typeof fieldName !== "string" ||
+      typeof field !== "object" ||
+      field == null
+    ) {
+      return false;
+    }
+    if ("adoptsFrom" in field) {
+      let { adoptsFrom } = field;
+      if (
+        !("module" in adoptsFrom) ||
+        typeof adoptsFrom.module !== "string" ||
+        !("name" in adoptsFrom) ||
+        typeof adoptsFrom.name !== "string"
+      ) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+    if ("fields" in field) {
+      if (!isCardFields(field.fields)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 export function isCardDocument(doc: any): doc is CardDocument {
   if (typeof doc !== "object") {
     return false;

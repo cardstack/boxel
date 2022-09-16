@@ -34,7 +34,15 @@ class BaseView extends Component<typeof CardRefCard> {
     }
     let module: Record<string, any> = await Loader.import(this.args.model.module);
     let Clazz: typeof Card = module[this.args.model.name];
-    this.card = await createFromSerialized(Clazz, {...(Clazz as any).demo ?? {}});
+    let resource = {
+      attributes: {
+        ...((Clazz as any).demo ?? {}),
+      },
+      meta: {
+        adoptsFrom: this.args.model
+      }
+    }
+    this.card = await createFromSerialized(resource, undefined);
   }
 }
 

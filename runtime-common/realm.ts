@@ -17,8 +17,8 @@ import {
 } from "@cardstack/runtime-common/error";
 import { formatRFC7231 } from "date-fns";
 import {
-  CardJSON,
-  isCardJSON,
+  LooseCardDocument,
+  isCardResource,
   ResourceObjectWithId,
   DirectoryEntryRelationship,
   executableExtensions,
@@ -362,14 +362,15 @@ export class Realm {
     } catch (e) {
       return badRequest(`Request body is not valid card JSON-API`);
     }
-    if (!isCardJSON(json)) {
+    let { data: resource } = json;
+    if (!isCardResource(resource)) {
       return badRequest(`Request body is not valid card JSON-API`);
     }
 
     // new instances are created in a folder named after the card
     let dirName = `/${join(
       new URL(this.url).pathname,
-      json.data.meta.adoptsFrom.name
+      resource.meta.adoptsFrom.name
     )}/`;
     let entries = await this.directoryEntries(new URL(dirName, this.url));
     let index = 0;
@@ -776,19 +777,17 @@ export class Realm {
   }
 
   private async fileSerialization(
-    json: CardJSON,
+    doc: LooseCardDocument,
     relativeTo: URL
-  ): Promise<CardJSON> {
+  ): Promise<LooseCardDocument> {
     let api = await this.searchIndex.loader.import<CardAPI>(
       "https://cardstack.com/base/card-api"
     );
-    let card = await api.createFromSerialized(json.data, relativeTo, {
+    let card = await api.createFromSerialized(doc.data, relativeTo, {
       loader: this.searchIndex.loader,
     });
-    let data = {
-      data: api.serializeCard(card, { adoptsFrom: json.data.meta.adoptsFrom }),
-    }; // this strips out computeds
-    if (!isCardJSON(data)) {
+    let data = { data: api.serializeCard(card) }; // this strips out computeds
+    if (!isCardDocument(data)) {
       throw new Error(
         `bug: card was serialized into a non-card JSON structure`
       );

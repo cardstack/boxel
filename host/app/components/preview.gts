@@ -14,20 +14,19 @@ import RouterService from '@ember/routing/router-service';
 import CardAPI, { RenderedCard } from '../services/card-api';
 import { eq } from '../helpers/truth-helpers';
 import { cardInstance } from '../resources/card-instance';
-import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from 'https://cardstack.com/base/card-api';
 import {
-  CardJSON,
-  isCardJSON,
+  LooseCardDocument,
   isCardDocument,
   Loader,
   type NewCardArgs,
   type ExistingCardArgs
 } from '@cardstack/runtime-common';
+import type LocalRealm from '../services/local-realm';
 
 
 interface Signature {
   Args: {
-    module: Record<string, typeof Card>;
     formats?: Format[];
     onCancel?: () => void;
     onSave?: (url: string) => void;
@@ -79,6 +78,7 @@ export default class Preview extends Component<Signature> {
 
   @service declare router: RouterService;
   @service declare cardAPI: CardAPI;
+  @service declare localRealm: LocalRealm;
   @tracked
   format: Format = this.args.card.type === 'new' ? 'edit' : this.args.card.format ?? 'isolated';
   @tracked
@@ -86,7 +86,7 @@ export default class Preview extends Component<Signature> {
   @tracked
   rendered: RenderedCard | undefined;
   @tracked
-  initialCardData: CardJSON | undefined;
+  initialCardData: LooseCardDocument | undefined;
   @tracked cardError: string | undefined;
   private declare interval: ReturnType<typeof setInterval>;
   private lastModified: number | undefined;
@@ -109,17 +109,18 @@ export default class Preview extends Component<Signature> {
       this,
       () => {
         if (this.args.card.type === 'new') {
-          return this.args.module[this.args.card.cardSource.name];
+          return {
+            attributes: {
+            ...this.args.card.initialAttributes
+            },
+            meta: {
+              adoptsFrom: {
+                ...this.args.card.cardSource
+              }
+            }
+          }
         } else if (this.initialCardData) {
-          return this.args.module[this.initialCardData.data.meta.adoptsFrom.name];
-        }
-        return;
-      },
-      () => {
-        if (this.args.card.type === 'new') {
-          return this.args.card.initialAttributes;
-        } else if (this.initialCardData) {
-          return this.initialCardData.data.attributes;
+          return this.initialCardData.data;
         }
         return;
       }
@@ -137,24 +138,18 @@ export default class Preview extends Component<Signature> {
         throw new Error('bug: this should never happen');
       }
       json = {
-        data: this.cardAPI.api.serializeCard(this.card, {
-          adoptsFrom: this.args.card.cardSource,
-          includeComputeds
-        })
+        data: this.cardAPI.api.serializeCard(this.card, { includeComputeds })
       };
     } else {
       if (this.card && this.initialCardData) {
         json = {
-          data: this.cardAPI.api.serializeCard(this.card, {
-            adoptsFrom: this.initialCardData.data.meta.adoptsFrom,
-            includeComputeds
-          })
+          data: this.cardAPI.api.serializeCard(this.card, { includeComputeds })
         };
       } else {
         return undefined;
       }
     }
-    if (!isCardJSON(json)) {
+    if (!isCardDocument(json)) {
       throw new Error(`can't serialize card data for ${JSON.stringify(json)}`);
     }
     return json;
@@ -286,13 +281,8 @@ export default class Preview extends Component<Signature> {
     }
   }
 
-  private async getComparableCardJson(json: CardJSON): Promise<CardJSON> {
-    let CardClass = this.args.module[json.data.meta.adoptsFrom.name] as typeof Card;
-    let card = await this.cardAPI.api.createFromSerialized(CardClass, json.data.attributes);
-    let result = { data: this.cardAPI.api.serializeCard(card, { adoptsFrom: json.data.meta.adoptsFrom }) };
-    if (!isCardJSON(result)) {
-      throw new Error(`bug: card serialization resulted in non-Card JSON`);
-    }
-    return result;
+  private async getComparableCardJson(json: LooseCardDocument): Promise<LooseCardDocument> {
+    let card = await this.cardAPI.api.createFromSerialized(json.data, this.localRealm.url);
+    return { data: this.cardAPI.api.serializeCard(card) };
   }
 }

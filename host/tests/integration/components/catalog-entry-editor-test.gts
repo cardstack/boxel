@@ -42,7 +42,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    Loader.disableNativeImport(true);
 
     // We have a bit of a chicken and egg problem here in that in order for us
     // to short circuit the fetch we need a Realm instance, however, we can't
@@ -91,7 +90,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   test('can publish new catalog entry', async function (assert) {
     let router = this.owner.lookup('service:router') as MockRouter;
     let deferred = new Deferred<void>();
-    router.initialize(assert, { queryParams: { path: 'CatalogEntry/1.json'}}, deferred);
+    router.initialize(assert, { queryParams: { path: `${testRealmURL}CatalogEntry/1.json`}}, deferred);
     const args: ExportedCardRef =  { module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -133,7 +132,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
             ref: {
               module: `${testRealmURL}person`,
               name: 'Person'
-            }
+            },
           },
           meta: {
             adoptsFrom: {

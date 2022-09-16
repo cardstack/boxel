@@ -10,6 +10,7 @@ import Service from '@ember/service';
 import { waitFor, click, fillIn } from '@ember/test-helpers';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import CreateNewCard from 'runtime-spike/components/create-new-card';
+import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
 
 class MockLocalRealm extends Service {
   isAvailable = true;
@@ -42,7 +43,6 @@ module('Integration | create-new-card', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    Loader.disableNativeImport(true);
 
     // We have a bit of a chicken and egg problem here in that in order for us
     // to short circuit the fetch we need a Realm instance, however, we can't
@@ -145,18 +145,20 @@ module('Integration | create-new-card', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CreateNewCard @realmURL={{testRealmURL}} @onSave={{onSave}} />
+          <CardCatalogModal />
         </template>
       }
     );
 
-    await waitFor('[data-test-create-new] [data-test-ref]');
+    await click('[data-test-create-new-card-button]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
 
     assert.dom('[data-test-card-catalog] li').exists({ count: 2 }, 'number of catalog items is correct');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`).exists('first item is correct');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`).exists('second item is correct');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
-    await waitFor(`[data-test-create-new-card="${testRealmURL}person-entry"]`);
+    await waitFor(`[data-test-create-new-card="Person"]`);
     await waitFor(`[data-test-field="firstName"] input`);
 
     await fillIn('[data-test-field="firstName"] input', 'Jackie');
