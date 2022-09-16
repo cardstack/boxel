@@ -232,8 +232,7 @@ export function serializeCard<CardT extends CardConstructor>(
   return { attributes, meta, type: "card" } as LooseCardResource;
 }
 
-
-export async function createFromSerialized<T extends CardConstructor>(CardClass: T, data: T extends { [primitive]: any } ? any : LooseCardResource, opts?: { loader?: Loader }): Promise<CardInstanceType<T>>;
+export async function createFromSerialized<T extends CardConstructor>(CardClass: T, data: T extends { [primitive]: infer P } ? P : LooseCardResource, opts?: { loader?: Loader }): Promise<CardInstanceType<T>>;
 export async function createFromSerialized<T extends CardConstructor>(resource: LooseCardResource, relativeTo: URL | undefined, opts?: { loader?: Loader}): Promise<CardInstanceType<T>>;
 export async function createFromSerialized<T extends CardConstructor>(CardClassOrResource: T | LooseCardResource, dataOrRelativeTo?: any | URL, opts?: { loader?: Loader }): Promise<CardInstanceType<T>> {
   let CardClass: T;
