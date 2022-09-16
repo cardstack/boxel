@@ -90,7 +90,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   test('can publish new catalog entry', async function (assert) {
     let router = this.owner.lookup('service:router') as MockRouter;
     let deferred = new Deferred<void>();
-    router.initialize(assert, { queryParams: { path: 'CatalogEntry/1.json'}}, deferred);
+    router.initialize(assert, { queryParams: { path: `${testRealmURL}CatalogEntry/1.json`}}, deferred);
     const args: ExportedCardRef =  { module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -132,7 +132,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
             ref: {
               module: `${testRealmURL}person`,
               name: 'Person'
-            }
+            },
           },
           meta: {
             adoptsFrom: {

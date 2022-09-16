@@ -32,6 +32,7 @@ export interface DirectoryEntryRelationship {
   };
 }
 import { RealmPaths } from "./paths";
+import { Query } from "./query";
 export const baseRealm = new RealmPaths("https://cardstack.com/base/");
 export { RealmPaths };
 
@@ -74,7 +75,10 @@ export const isNode =
  */
 
 export const externalsMap: Map<string, string[]> = new Map([
-  ["@cardstack/runtime-common", ["Loader", "Deferred", "isCardResource"]],
+  [
+    "@cardstack/runtime-common",
+    ["Loader", "Deferred", "isCardResource", "chooseCard"],
+  ],
   ["@glimmer/component", ["default"]],
   ["@ember/component", ["setComponentTemplate", "default"]],
   ["@ember/component/template-only", ["default"]],
@@ -106,3 +110,24 @@ export type {
   CardDefinition,
 } from "./search-index";
 export { isCardResource, isCardDocument } from "./search-index";
+
+// @ts-ignore
+import type { Card } from "https://cardstack.com/base/card-api";
+
+export interface CardChooser {
+  chooseCard<T extends Card>(query: Query): Promise<undefined | T>;
+}
+
+export async function chooseCard<T extends Card>(
+  query: Query
+): Promise<undefined | T> {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_CARD_CHOOSER) {
+    throw new Error(
+      `no cardstack card chooser is available in this environment`
+    );
+  }
+  let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
+
+  return await chooser.chooseCard<T>(query);
+}

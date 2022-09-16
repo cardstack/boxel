@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { RealmPaths, Loader, catalogEntryRef, type ExportedCardRef } from '@cardstack/runtime-common';
+import { catalogEntryRef, type ExportedCardRef, type NewCardArgs } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -10,7 +10,6 @@ import type RouterService from '@ember/routing/router-service';
 import { cached } from '@glimmer/tracking';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
-
 import { getSearchResults } from '../resources/search';
 import LocalRealm from '../services/local-realm';
 import Preview from './preview';
@@ -27,7 +26,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
       {{#if this.entry}}
         <fieldset>
           <legend>Edit Catalog Entry</legend>
-          <LinkTo @route="application" @query={{hash path=(this.modulePath (ensureJsonExtension this.entry.id))}} data-test-catalog-entry-id>
+          <LinkTo @route="application" @query={{hash path=(ensureJsonExtension this.entry.id)}} data-test-catalog-entry-id>
             {{this.entry.id}}
           </LinkTo>
           <Preview
@@ -39,7 +38,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
           <fieldset>
             <legend>Publish New Card Type</legend>
             <Preview
-              @card={{hash type="new" realmURL=this.localRealm.url.href cardSource=this.catalogEntryRef initialAttributes=this.catalogEntryAttributes}}
+              @card={{this.cardArgs}}
               @onSave={{this.onSave}}
               @onCancel={{this.onCancel}}
             />
@@ -69,21 +68,17 @@ export default class CatalogEntryEditor extends Component<Signature> {
   }));
   @tracked showEditor = false;
 
-  @cached
-  get realmPath() {
-    if (!this.localRealm.isAvailable) {
-      throw new Error('Local realm is not available');
-    }
-    return new RealmPaths(Loader.reverseResolution(this.localRealm.url.href));
-  }
-
   get entry() {
     return this.catalogEntry.instances[0];
   }
 
-  @action
-  modulePath(url: string): string {
-    return this.realmPath.local(new URL(url));
+  get cardArgs(): NewCardArgs {
+    return {
+      type: 'new',
+      realmURL: this.localRealm.url.href,
+      cardSource: this.catalogEntryRef,
+      initialAttributes: this.catalogEntryAttributes,
+    }
   }
 
   @action
@@ -97,9 +92,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
   }
 
   @action
-  onSave(url: string) {
-    let path = this.realmPath.local(new URL(url));
-    this.router.transitionTo({ queryParams: { path } });
+  onSave(path: string) {
+    this.router.transitionTo({ queryParams: { path }});
   }
 }
 

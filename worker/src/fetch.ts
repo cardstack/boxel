@@ -27,9 +27,6 @@ export class FetchHandler {
       return await this.realm.handle(request);
     }
 
-    console.log(
-      `Service worker passing through ${request.url} for ${request.referrer}`
-    );
     return await Loader.fetch(request);
   }
 
