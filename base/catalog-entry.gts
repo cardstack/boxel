@@ -9,8 +9,8 @@ export class CatalogEntry extends Card {
   @field description = contains(StringCard);
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, { computeVia: async function(this: CatalogEntry) {
-    // TODO this manner of getting the correct loader works specifically instead a card's class scope
-    // It would be great to generalize this so that it works anywhere in this module's scope.
+    // TODO this manner of getting the correct loader works specifically inside a card's class scope.
+    // It would be great, tho, to generalize this so that it works anywhere in this module's scope.
     let module: Record<string, any> = await Loader.getLoaderFor(this.constructor).import(this.ref.module);
     let Clazz: typeof Card = module[this.ref.name];
     return primitive in Clazz ||
