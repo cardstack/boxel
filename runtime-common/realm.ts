@@ -3,8 +3,8 @@ import {
   SearchIndex,
   isCardRef,
   CardRef,
-  CardDocument,
-  isCardDocument,
+  CardSingleResourceDocument,
+  isCardSingleResourceDocument,
 } from "./search-index";
 import { Loader } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
@@ -394,7 +394,7 @@ export class Realm {
       JSON.stringify(await this.fileSerialization(json, fileURL), null, 2)
     );
     let newURL = fileURL.href.replace(/\.json$/, "");
-    if (!isCardDocument(json)) {
+    if (!isCardSingleResourceDocument(json)) {
       return badRequest(
         `bug: the card document is not actually a card document`
       );
@@ -402,7 +402,7 @@ export class Realm {
     json.data.id = newURL;
     json.data.links = { self: newURL };
     json.data.meta.lastModified = lastModified;
-    if (!isCardDocument(json)) {
+    if (!isCardSingleResourceDocument(json)) {
       return systemError(
         `bug: constructed non-card document resource in JSON-API request for ${newURL}`
       );
@@ -438,7 +438,7 @@ export class Realm {
     delete originalClone.meta.lastModified;
 
     let patch = await request.json();
-    if (!isCardDocument(patch)) {
+    if (!isCardSingleResourceDocument(patch)) {
       return badRequest(`The request body was not a card document`);
     }
     // prevent the client from changing the card type or ID in the patch
@@ -787,7 +787,7 @@ export class Realm {
       loader: this.searchIndex.loader,
     });
     let data = { data: api.serializeCard(card) }; // this strips out computeds
-    if (!isCardDocument(data)) {
+    if (!isCardSingleResourceDocument(data)) {
       throw new Error(
         `bug: card was serialized into a non-card JSON structure`
       );
@@ -810,7 +810,7 @@ export function getExportedCardContext(ref: CardRef): {
 }
 
 function lastModifiedHeader(
-  card: CardDocument
+  card: CardSingleResourceDocument
 ): {} | { "last-modified": string } {
   return (
     card.data.meta.lastModified != null

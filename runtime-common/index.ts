@@ -40,8 +40,12 @@ export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 
 import type { ExportedCardRef } from "./search-index";
 export const catalogEntryRef: ExportedCardRef = {
-  module: "https://cardstack.com/base/catalog-entry",
+  module: `${baseRealm.url}catalog-entry`,
   name: "CatalogEntry",
+};
+export const baseCardRef: ExportedCardRef = {
+  module: `${baseRealm.url}card-api`,
+  name: "Card",
 };
 
 type Format = "isolated" | "embedded" | "edit";
@@ -77,7 +81,7 @@ export const isNode =
 export const externalsMap: Map<string, string[]> = new Map([
   [
     "@cardstack/runtime-common",
-    ["Loader", "Deferred", "isCardResource", "chooseCard"],
+    ["Loader", "Deferred", "isCardResource", "chooseCard", "baseCardRef"],
   ],
   ["@glimmer/component", ["default"]],
   ["@ember/component", ["setComponentTemplate", "default"]],
@@ -109,7 +113,12 @@ export type {
   CardDocument,
   CardDefinition,
 } from "./search-index";
-export { isCardResource, isCardDocument } from "./search-index";
+export {
+  isCardResource,
+  isCardDocument,
+  isCardCollectionDocument,
+  isCardSingleResourceDocument,
+} from "./search-index";
 
 // @ts-ignore
 import type { Card } from "https://cardstack.com/base/card-api";

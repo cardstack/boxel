@@ -45,8 +45,11 @@ export default class CreateNewCard extends Component<Signature> {
   }
 
   @restartableTask private async chooseNewCard() {
-  let entry: CatalogEntry | undefined = await chooseCard({
-      filter: { type: catalogEntryRef }
+    let entry: CatalogEntry | undefined = await chooseCard({
+      filter: {
+        on: catalogEntryRef,
+        eq: { isPrimitive: false },
+      }
     });
     if (!entry) {
       return;

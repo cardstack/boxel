@@ -1,4 +1,4 @@
-import { primitive, serialize, Component, Card, useIndexBasedKey } from './card-api';
+import { primitive, serialize, queryableValue, Component, Card, useIndexBasedKey } from './card-api';
 import { on, } from '@ember/modifier';
 import Modifier from 'ember-modifier';
 import { fn } from '@ember/helper';
@@ -23,6 +23,12 @@ export default class BooleanCard extends Card {
   static [primitive]: boolean;
   static [useIndexBasedKey]: never;
   static [serialize](val: any) {
+    return Boolean(val);
+  }
+  static [queryableValue](val: any): boolean {
+    if (typeof val === 'string') {
+      return val.toLowerCase() === 'true';
+    }
     return Boolean(val);
   }
 

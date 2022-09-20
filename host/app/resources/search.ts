@@ -2,17 +2,21 @@ import { Resource, useResource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
-import { CardResource } from '@cardstack/runtime-common';
+import {
+  CardResource,
+  baseRealm,
+  isCardCollectionDocument,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
 import { stringify } from 'qs';
+import flatMap from 'lodash/flatMap';
 import type { Query } from '@cardstack/runtime-common/query';
 
 interface Args {
   named: {
     query: Query;
-    realm?: string;
   };
 }
 
@@ -27,25 +31,45 @@ export class Search extends Resource<Args> {
       throw new Error('Local realm is not available');
     }
     this.localRealmURL = this.localRealm.url;
-    let { query, realm } = args.named;
-    let realmURL = realm ?? this.localRealmURL.href;
-    taskFor(this.search).perform(query, realmURL);
+    let { query } = args.named;
+    taskFor(this.search).perform(query);
   }
 
-  @restartableTask private async search(query: Query, realmURL: string) {
-    let response = await Loader.fetch(
-      `${realmURL}_search?${stringify(query)}`,
-      { headers: { Accept: 'application/vnd.api+json' } }
+  @restartableTask private async search(query: Query) {
+    // until we have realm index rollup, search all the realms as separate
+    // queries that we merge together
+    this.instances = flatMap(
+      await Promise.all(
+        [this.localRealmURL.href, Loader.resolve(baseRealm.url)].map(
+          async (realm) => {
+            let response = await Loader.fetch(
+              `${realm}_search?${stringify(query)}`,
+              {
+                headers: { Accept: 'application/vnd.api+json' },
+              }
+            );
+            if (!response.ok) {
+              throw new Error(
+                `Could not load card for query ${stringify(query)}: ${
+                  response.status
+                } - ${await response.text()}`
+              );
+            }
+            let json = await response.json();
+            if (!isCardCollectionDocument(json)) {
+              throw new Error(
+                `The realm search response was not a card collection document: ${JSON.stringify(
+                  json,
+                  null,
+                  2
+                )}`
+              );
+            }
+            return json.data;
+          }
+        )
+      )
     );
-    if (!response.ok) {
-      throw new Error(
-        `Could not load card for query ${stringify(query)}: ${
-          response.status
-        } - ${await response.text()}`
-      );
-    }
-    let json = await response.json();
-    this.instances = (json.data as CardResource[]) ?? [];
   }
 
   get isLoading() {
@@ -53,12 +77,8 @@ export class Search extends Resource<Args> {
   }
 }
 
-export function getSearchResults(
-  parent: object,
-  query: () => Query,
-  realm?: () => string | undefined
-) {
+export function getSearchResults(parent: object, query: () => Query) {
   return useResource(parent, Search, () => ({
-    named: { query: query(), realm: realm ? realm() : undefined },
+    named: { query: query() },
   }));
 }
