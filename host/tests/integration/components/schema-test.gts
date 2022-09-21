@@ -8,12 +8,13 @@ import Schema from 'runtime-spike/components/schema';
 import { file, FileResource } from 'runtime-spike/resources/file';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import Service from '@ember/service';
-import { waitUntil, click } from '@ember/test-helpers';
+import { waitFor, click, fillIn } from '@ember/test-helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
+import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 
 class MockLocalRealm extends Service {
@@ -58,7 +59,7 @@ module('Integration | schema', function (hooks) {
       }
     );
 
-    await waitUntil(() => Boolean(document.querySelector('[data-test-card-id]')));
+    await waitFor('[data-test-card-id]');
 
     assert.dom('[data-test-card-id]').hasText(`Card ID: ${testRealmURL}person/Person`);
     assert.dom('[data-test-adopts-from').hasText('Adopts From: https://cardstack.com/base/card-api/Card');
@@ -94,7 +95,7 @@ module('Integration | schema', function (hooks) {
       }
     );
 
-    await waitUntil(() => Boolean(document.querySelector('[data-test-card-id]')));
+    await waitFor('[data-test-card-id]');
     assert.dom('[data-test-field="author"] a[href="/?path=person"]').exists('link to person card exists');
     assert.dom('[data-test-field="title"]').exists('the title field exists')
     assert.dom('[data-test-field="title"] a').doesNotExist('the title field has no link');
@@ -119,7 +120,7 @@ module('Integration | schema', function (hooks) {
       }
     );
 
-    await waitUntil(() => Boolean(document.querySelector('[data-test-card-id]')));
+    await waitFor('[data-test-card-id]');
     await click('[data-test-field="firstName"] button[data-test-delete]');
     let fileRef = await adapter.openFile('person.gts');
     let src = fileRef?.content as string;
@@ -161,10 +162,197 @@ module('Integration | schema', function (hooks) {
       }
     );
 
-    await waitUntil(() => Boolean(document.querySelector('[data-test-card-id]')));
+    await waitFor('[data-test-card-id]');
     assert.dom('[data-test-field="firstName"]').exists('firstName field exists');
     assert.dom('[data-test-field="firstName"] button[data-test-delete]').doesNotExist('delete button does not exist');
     assert.dom('[data-test-field="favoriteColor"] button[data-test-delete]').exists('delete button exists');
+  });
+
+  test('it can add a new contains field to a card', async function(assert) {
+    await realm.write('person.gts', `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+      }
+    `);
+    await realm.write('post.gts', `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Post extends Card {
+        @field title = contains(StringCard);
+      }
+    `);
+    await realm.write('person-entry.json', JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'Person',
+          description: 'Catalog entry',
+          ref: {
+            module: `${testRealmURL}person`,
+            name: 'Person'
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module:`${baseRealm.url}catalog-entry`,
+            name: 'CatalogEntry'
+          }
+        }
+      }
+    }));
+    await realm.write('post-entry.json', JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'Post',
+          description: 'Catalog entry',
+          ref: {
+            module: `${testRealmURL}post`,
+            name: 'Post'
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module:`${baseRealm.url}catalog-entry`,
+            name: 'CatalogEntry'
+          }
+        }
+      }
+    }));
+    let { ref, openFile, moduleSyntax } = await getSchemaArgs(this, adapter, { module: `${testRealmURL}post`, name: 'Post'});
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Schema @ref={{ref}} @file={{openFile}} @moduleSyntax={{moduleSyntax}} />
+          <CardCatalogModal />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-card-id]');
+    await fillIn('[data-test-new-field-name]', 'author');
+    await click('[data-test-add-field]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`).exists('local realm composite card displayed');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/boolean-field`).exists('base realm primitive field displayed');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/card-field`).exists('base realm primitive field displayed');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/card-ref-field`).exists('base realm primitive field displayed');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/date-field`).exists('base realm primitive field displayed');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/datetime-field`).exists('base realm primitive field displayed');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/integer-field`).exists('base realm primitive field displayed');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`).exists('base realm primitive field displayed');
+
+    // a "contains" field cannot be the same card as it's enclosing card
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`).doesNotExist('own card is not available to choose as a field');
+
+    await click(`[data-test-select="${testRealmURL}person-entry"]`);
+    await waitFor('.schema [data-test-field="author"]')
+    assert.dom('[data-test-field="author"]').hasText(`Delete author - contains - field card ID: ${testRealmURL}person/Person`);
+
+    let fileRef = await adapter.openFile('post.gts');
+    let src = fileRef?.content as string;
+    assert.codeEqual(src, `
+      import { Person as PersonCard } from "${testRealmURL}person";
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Post extends Card {
+        @field title = contains(StringCard);
+        @field author = contains(PersonCard);
+      }
+    `);
+  });
+
+  test('it can add containsMany field to a card', async function(assert) {
+    await realm.write('person.gts', `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+      }
+    `);
+    let { ref, openFile, moduleSyntax } = await getSchemaArgs(this, adapter, { module: `${testRealmURL}person`, name: 'Person'});
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Schema @ref={{ref}} @file={{openFile}} @moduleSyntax={{moduleSyntax}} />
+          <CardCatalogModal />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-card-id]');
+    await fillIn('[data-test-new-field-name]', 'aliases');
+    await click('[data-test-new-field-containsMany]');
+    await click('[data-test-add-field]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+
+    await click(`[data-test-select="${baseRealm.url}fields/string-field"]`);
+    await waitFor('.schema [data-test-field="aliases"]')
+
+    assert.dom('[data-test-field="aliases"]').hasText(`Delete aliases - containsMany - field card ID: ${baseRealm.url}string/default`);
+
+    let fileRef = await adapter.openFile('person.gts');
+    let src = fileRef?.content as string;
+    assert.codeEqual(src, `
+      import { contains, field, Card, containsMany } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+        @field aliases = containsMany(StringCard);
+      }
+    `);
+  });
+
+  test('it does not allow duplicate field to be created', async function (assert){
+    await realm.write('person.gts', `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+      }
+    `);
+    await realm.write('employee.gts', `
+      import { contains, field } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { Person } from "./person";
+
+      export class Employee extends Person {
+        @field department = contains(StringCard);
+      }
+    `);
+
+    let { ref, openFile, moduleSyntax } = await getSchemaArgs(this, adapter, { module: `${testRealmURL}employee`, name: 'Employee'});
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Schema @ref={{ref}} @file={{openFile}} @moduleSyntax={{moduleSyntax}} />
+          <CardCatalogModal />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-card-id]');
+    assert.dom('data-test-error-msg').doesNotExist('error message does not exist');
+
+    await fillIn('[data-test-new-field-name]', 'department');
+    assert.dom('[data-test-error-msg').hasText('The field name "department" already exists, please choose a different name.');
+    await fillIn('[data-test-new-field-name]', 'firstName');
+    assert.dom('[data-test-error-msg').hasText('The field name "firstName" already exists, please choose a different name.');
+    await fillIn('[data-test-new-field-name]', 'newFieldName');
+    assert.dom('data-test-error-msg').doesNotExist('error message does not exist');
   });
 });
 

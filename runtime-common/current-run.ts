@@ -18,9 +18,9 @@ import merge from "lodash/merge";
 import {
   hasExecutableExtension,
   trimExecutableExtension,
-  isCardDocument,
+  isCardSingleResourceDocument,
   internalKeyFor,
-  CardDocument,
+  CardSingleResourceDocument,
 } from "./search-index";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
@@ -406,7 +406,7 @@ export class CurrentRun {
     let typesMaybeError: TypesWithErrors | undefined;
     let depsMaybeError: DepsWithErrors | undefined;
     let uncaughtError: Error | undefined;
-    let doc: CardDocument | undefined;
+    let doc: CardSingleResourceDocument | undefined;
     let searchData: any;
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
@@ -421,7 +421,7 @@ export class CurrentRun {
           meta: { lastModified: lastModified },
         }),
       };
-      if (!isCardDocument(maybeDoc)) {
+      if (!isCardSingleResourceDocument(maybeDoc)) {
         throw new Error(
           `bug: card serialization produced non-card document for ${instanceURL.href}`
         );

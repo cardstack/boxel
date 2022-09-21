@@ -17,7 +17,7 @@ import { cardInstance } from '../resources/card-instance';
 import type { Format } from 'https://cardstack.com/base/card-api';
 import {
   LooseCardDocument,
-  isCardDocument,
+  isCardSingleResourceDocument,
   Loader,
   type NewCardArgs,
   type ExistingCardArgs
@@ -149,7 +149,7 @@ export default class Preview extends Component<Signature> {
         return undefined;
       }
     }
-    if (!isCardDocument(json)) {
+    if (!isCardSingleResourceDocument(json)) {
       throw new Error(`can't serialize card data for ${JSON.stringify(json)}`);
     }
     return json;
@@ -237,7 +237,7 @@ export default class Preview extends Component<Signature> {
       return;
     } 
     this.cardError = undefined;
-    if (!isCardDocument(json)) {
+    if (!isCardSingleResourceDocument(json)) {
       throw new Error(`bug: server returned a non card document to us for ${url}`);
     }
     if (this.lastModified !== json.data.meta.lastModified) {
