@@ -208,13 +208,14 @@ export default class LocalRealm extends Service {
     }
     navigator.serviceWorker.oncontrollerchange = () => {
       console.log('worker changed');
-      this.router.transitionTo('application', {
-        queryParams: { path: undefined },
-      });
-      this.state = { type: 'starting-up' };
-      this.maybeSetup();
+      if ('worker' in this.state) {
+        this.router.transitionTo('application', {
+          queryParams: { path: undefined },
+        });
+        this.state = { type: 'starting-up' };
+        this.maybeSetup();
+      }
     };
-
     return navigator.serviceWorker.controller!;
   }
 }
