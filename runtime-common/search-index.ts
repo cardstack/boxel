@@ -3,7 +3,6 @@ import { Kind, Realm } from "./realm";
 import { CurrentRun, SearchEntry, SearchEntryWithErrors } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
-import { Loader } from "./loader";
 import flatMap from "lodash/flatMap";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
@@ -88,9 +87,14 @@ export interface CardResource<Identity extends Unsaved = Saved> {
     self?: string;
   };
 }
-export interface CardDocument<Identity extends Unsaved = Saved> {
+export interface CardSingleResourceDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>;
 }
+export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
+  data: CardResource<Identity>[];
+}
+
+export type CardDocument = CardSingleResourceDocument | CardCollectionDocument;
 
 export function isCardResource(resource: any): resource is CardResource {
   if (typeof resource !== "object") {
@@ -165,10 +169,39 @@ export function isCardFields(fields: any): fields is CardFields {
 }
 
 export function isCardDocument(doc: any): doc is CardDocument {
+  return isCardSingleResourceDocument(doc) || isCardCollectionDocument(doc);
+}
+
+export function isCardSingleResourceDocument(
+  doc: any
+): doc is CardSingleResourceDocument {
   if (typeof doc !== "object") {
     return false;
   }
-  return "data" in doc && isCardResource(doc.data);
+  if (!("data" in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (Array.isArray(data)) {
+    return false;
+  }
+  return isCardResource(data);
+}
+
+export function isCardCollectionDocument(
+  doc: any
+): doc is CardCollectionDocument {
+  if (typeof doc !== "object") {
+    return false;
+  }
+  if (!("data" in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  return data.every((resource) => isCardResource(resource));
 }
 
 export interface CardDefinition {
@@ -200,10 +233,6 @@ export function trimExecutableExtension(url: URL): URL {
     }
   }
   return url;
-}
-
-function loadAPI(): Promise<CardAPI> {
-  return Loader.import<CardAPI>(`${baseRealm.url}card-api`);
 }
 
 export class SearchIndex {
@@ -311,6 +340,10 @@ export class SearchIndex {
     return undefined;
   }
 
+  private loadAPI(): Promise<CardAPI> {
+    return this.loader.import<CardAPI>(`${baseRealm.url}card-api`);
+  }
+
   private cardHasType(entry: SearchEntry, ref: CardRef): boolean {
     return Boolean(
       entry.types?.find((t) => t === internalKeyFor(ref, undefined)) // assumes ref refers to absolute module URL
@@ -367,7 +400,9 @@ export class SearchIndex {
         )} with field path "${fieldPath}" is not exported`
       );
     }
-    let module = await Loader.import<Record<string, any>>(fieldDef.id.module);
+    let module = await this.loader.import<Record<string, any>>(
+      fieldDef.id.module
+    );
     let FieldCard = module[fieldDef.id.name];
     if (!FieldCard) {
       throw new Error(
@@ -483,7 +518,7 @@ export class SearchIndex {
       // TODO when we are ready to execute queries within computeds, we'll need to
       // use the loader instance from current-run and not the global loader, as
       // the card definitions may have changed in the current-run loader
-      let api = await loadAPI();
+      let api = await this.loadAPI();
 
       return (entry) =>
         every(Object.entries(filter.eq), ([fieldPath, value]) => {
@@ -522,7 +557,7 @@ export class SearchIndex {
       // TODO when we are ready to execute queries within computeds, we'll need to
       // use the loader instance from current-run and not the global loader, as
       // the card definitions may have changed in the current-run loader
-      let api = await loadAPI();
+      let api = await this.loadAPI();
 
       return (entry) =>
         every(Object.entries(filter.range), ([fieldPath, range]) => {

@@ -134,7 +134,7 @@ module('Integration | create-new-card', function (hooks) {
     Loader.destroy();
   });
 
-  test('can create new card from local realm catalog', async function (assert) {
+  test('can create new card', async function (assert) {
     let router = this.owner.lookup('service:router') as MockRouter;
     let deferred = new Deferred<void>();
     router.initialize(assert, { queryParams: { path: `${testRealmURL}Person/1.json` }}, deferred);
@@ -156,6 +156,7 @@ module('Integration | create-new-card', function (hooks) {
     assert.dom('[data-test-card-catalog] li').exists({ count: 2 }, 'number of catalog items is correct');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`).exists('first item is correct');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`).exists('second item is correct');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`).doesNotExist('primitive field cards are not displayed');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
     await waitFor(`[data-test-create-new-card="Person"]`);
