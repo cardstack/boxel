@@ -3,6 +3,8 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
+import { service } from '@ember/service';
+import type RouterService from '@ember/routing/router-service';
 
 import {
   isWorkerMessage,
@@ -98,6 +100,8 @@ export default class LocalRealm extends Service {
         handle: FileSystemDirectoryHandle;
         wait: Deferred<URL>;
       } = { type: 'starting-up' };
+
+  @service declare router: RouterService;
 
   get isAvailable(): boolean {
     this.maybeSetup();
@@ -202,6 +206,14 @@ export default class LocalRealm extends Service {
     while (registration.active?.state !== 'activated') {
       await timeout(10);
     }
+    navigator.serviceWorker.oncontrollerchange = () => {
+      console.log('worker changed');
+      this.router.transitionTo('application', {
+        queryParams: { path: undefined },
+      });
+      this.state = { type: 'starting-up' };
+      this.maybeSetup();
+    };
 
     return navigator.serviceWorker.controller!;
   }
