@@ -25,7 +25,7 @@
     "yargs": "^17.5.1"
   },
   "scripts": {
-    "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register tests/index.ts",
+    "test": "NODE_NO_WARNINGS=1 SUPPRESS_ERRORS=true qunit --require ts-node/register tests/index.ts",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/'",
     "start:base-and-host-test-realms": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --path='../host/tests/cards' --fromUrl='/test/' --toUrl='/test/'",

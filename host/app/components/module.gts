@@ -26,6 +26,6 @@ export default class Module extends Component<Signature> {
     if (this.args.file.state !== 'ready') {
       throw new Error(`the file ${this.args.file.url} is not open`);
     }
-    return new ModuleSyntax(this.args.file.content);
+    return new ModuleSyntax(this.args.file.content, new URL(this.args.file.url));
   }
 }

@@ -1,9 +1,15 @@
-import { executableExtensions, baseRealm } from ".";
-import { Kind, Realm } from "./realm";
-import { CurrentRun, SearchEntry, SearchEntryWithErrors } from "./current-run";
+import { trimExecutableExtension, baseRealm } from ".";
+import { Kind, Realm, CardDefinitionResource } from "./realm";
+import {
+  CurrentRun,
+  SearchEntry,
+  SearchEntryWithErrors,
+  CardDefinitionWithErrors,
+} from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import flatMap from "lodash/flatMap";
+import { stringify } from "qs";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
@@ -217,24 +223,6 @@ export interface CardDefinition {
   >;
 }
 
-export function hasExecutableExtension(path: string): boolean {
-  for (let extension of executableExtensions) {
-    if (path.endsWith(extension)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-export function trimExecutableExtension(url: URL): URL {
-  for (let extension of executableExtensions) {
-    if (url.href.endsWith(extension)) {
-      return new URL(url.href.replace(new RegExp(`\\${extension}$`), ""));
-    }
-  }
-  return url;
-}
-
 export class SearchIndex {
   #currentRun: CurrentRun;
 
@@ -264,6 +252,11 @@ export class SearchIndex {
 
   get loader() {
     return this.#currentRun.loader;
+  }
+
+  // TODO delete this!
+  get currentRun() {
+    return this.#currentRun;
   }
 
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
@@ -310,12 +303,58 @@ export class SearchIndex {
       // we only include external definitions in our definitions cache if we
       // have a card in our realm that uses an external definition. otherwise we
       // should forward requests for external cards to the realm in question
-      result = await this.#currentRun.getExternalCardDefinition(ref);
+      result = await this.getExternalCardDefinition(ref);
       if (result?.type !== "error") {
         return result?.def;
       }
     }
     return undefined;
+  }
+
+  private async getExternalCardDefinition(
+    ref: ExportedCardRef
+  ): Promise<CardDefinitionWithErrors | undefined> {
+    let url = `${ref.module}/_typeOf?${stringify({
+      type: "exportedCard",
+      ...ref,
+    })}`;
+    let response = await this.loader.fetch(url, {
+      headers: {
+        Accept: "application/vnd.api+json",
+      },
+    });
+    if (!response.ok) {
+      console.warn(`Could not get card type for ${url}: ${response.status}`);
+      return {
+        type: "error",
+        id: { type: "exportedCard", ...ref },
+        error: {
+          message: (await response.json()).errors.join(),
+        },
+      };
+    }
+
+    let resource: CardDefinitionResource = (await response.json()).data;
+    let def: CardDefinitionWithErrors = {
+      type: "def",
+      def: {
+        id: resource.attributes.cardRef,
+        key: resource.id,
+        super: resource.relationships._super?.meta.ref,
+        fields: new Map(
+          Object.entries(resource.relationships)
+            .filter(([fieldName]) => fieldName !== "_super")
+            .map(([fieldName, fieldInfo]) => [
+              fieldName,
+              {
+                fieldType: fieldInfo.meta.type as "contains" | "containsMany",
+                fieldCard: fieldInfo.meta.ref,
+              },
+            ])
+        ),
+      },
+    };
+    return def;
   }
 
   async exportedCardsOf(module: string): Promise<ExportedCardRef[]> {

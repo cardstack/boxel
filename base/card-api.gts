@@ -49,6 +49,8 @@ interface Field<CardT extends CardConstructor> {
   card: CardT;
   name: string;
   computeVia: undefined | string | (() => unknown);
+  // TODO once we add linksTo, we'll probably want a better property here, maybe:
+  // fieldType: "contains" | "containsMany" | "linksTo" | "linksToMany"
   containsMany: boolean;
   serialize(value: any): any;
   deserialize(value: any, fromResource: LooseCardResource | undefined, instancePromise: Promise<Card>): Promise<any>;
@@ -640,7 +642,7 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
   return result!;
 }
 
-function getField<CardT extends CardConstructor>(card: CardT, fieldName: string): Field<CardConstructor> | undefined {
+export function getField<CardT extends CardConstructor>(card: CardT, fieldName: string): Field<CardConstructor> | undefined {
   let obj: object | null = card.prototype;
   while (obj) {
     let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
@@ -653,9 +655,9 @@ function getField<CardT extends CardConstructor>(card: CardT, fieldName: string)
   return undefined;
 }
 
-function getFields(card: typeof Card, opts?: { includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> };
-function getFields<T extends Card>(card: T, opts?: { includeComputeds?: boolean }): { [P in keyof T]?: Field<CardConstructor> };
-function getFields(cardInstanceOrClass: Card | typeof Card, opts?: { includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> } {
+export function getFields(card: typeof Card, opts?: { includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> };
+export function getFields<T extends Card>(card: T, opts?: { includeComputeds?: boolean }): { [P in keyof T]?: Field<CardConstructor> };
+export function getFields(cardInstanceOrClass: Card | typeof Card, opts?: { includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> } {
   let obj: object | null;
   if (isBaseCard in cardInstanceOrClass) {
     // this is a card instance

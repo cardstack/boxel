@@ -1,6 +1,7 @@
 import TransformModulesAmdPlugin from "transform-modules-amd-plugin";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
+import { trimExecutableExtension } from "./index";
 import { RealmPaths, LocalPath } from "./paths";
 import type { Realm } from "./realm";
 
@@ -272,7 +273,9 @@ export class Loader {
         let value = Reflect.get(target, property, received);
         if (typeof value === "function" && typeof property === "string") {
           this.identities.set(value, {
-            module: this.reverseResolution(moduleIdentifier).href,
+            module: trimExecutableExtension(
+              this.reverseResolution(moduleIdentifier)
+            ).href,
             name: property,
           });
           Loader.loaders.set(value, this);
