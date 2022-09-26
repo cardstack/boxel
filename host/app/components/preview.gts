@@ -109,10 +109,11 @@ export default class Preview extends Component<Signature> {
       this,
       () => {
         if (this.args.card.type === 'new') {
+          if (this.args.card.initialCardResource) {
+            return this.args.card.initialCardResource;
+          }
           return {
-            attributes: {
-            ...this.args.card.initialAttributes
-            },
+            attributes: {},
             meta: {
               adoptsFrom: {
                 ...this.args.card.cardSource
@@ -235,7 +236,7 @@ export default class Preview extends Component<Signature> {
     if (!response.ok) {
       this.cardError = (json.errors as string[]).join();
       return;
-    } 
+    }
     this.cardError = undefined;
     if (!isCardSingleResourceDocument(json)) {
       throw new Error(`bug: server returned a non card document to us for ${url}`);

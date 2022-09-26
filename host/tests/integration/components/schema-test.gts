@@ -248,6 +248,8 @@ module('Integration | schema', function (hooks) {
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/integer-field`).exists('base realm primitive field displayed');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`).exists('base realm primitive field displayed');
 
+    assert.dom('[data-test-demo-embedded]').exists({ count: 1 }, 'demo card is not displayed for primitive fields');
+
     // a "contains" field cannot be the same card as it's enclosing card
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`).doesNotExist('own card is not available to choose as a field');
 

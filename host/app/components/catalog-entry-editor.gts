@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { catalogEntryRef, type ExportedCardRef, type NewCardArgs } from '@cardstack/runtime-common';
+import { catalogEntryRef, type ExportedCardRef, type NewCardArgs, type LooseCardResource } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -55,11 +55,6 @@ export default class CatalogEntryEditor extends Component<Signature> {
   @service declare localRealm: LocalRealm;
   @service declare router: RouterService;
   catalogEntryRef = catalogEntryRef;
-  catalogEntryAttributes = {
-    title: this.args.ref.name,
-    description: `Catalog entry for ${this.args.ref.name} card`,
-    ref: this.args.ref,
-  }
   catalogEntry = getSearchResults(this, () => ({
     filter: {
       on: this.catalogEntryRef,
@@ -72,12 +67,35 @@ export default class CatalogEntryEditor extends Component<Signature> {
     return this.catalogEntry.instances[0];
   }
 
+  get initialCardResource(): LooseCardResource | undefined {
+    if (!this.args.ref) {
+      return;
+    }
+    let resource = {
+      attributes: {
+        title: this.args.ref.name,
+        description: `Catalog entry for ${this.args.ref.name} card`,
+        ref: this.args.ref,
+        demo: undefined
+      },
+      meta: {
+        adoptsFrom: this.catalogEntryRef,
+        fields: {
+          demo: {
+            adoptsFrom: this.args.ref
+          }
+        }
+      }
+    }
+    return resource;
+  }
+
   get cardArgs(): NewCardArgs {
     return {
       type: 'new',
       realmURL: this.localRealm.url.href,
       cardSource: this.catalogEntryRef,
-      initialAttributes: this.catalogEntryAttributes,
+      initialCardResource: this.initialCardResource,
     }
   }
 

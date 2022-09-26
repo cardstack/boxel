@@ -69,7 +69,6 @@ module('Integration | create-new-card', function (hooks) {
         static embedded = class Embedded extends Component<typeof this> {
           <template><h3>Person: <@fields.firstName/></h3></template>
         }
-        static demo: Record<string, any> = { firstName: 'Mango' }
       }
     `);
     await realm.write('post.gts', `
@@ -84,7 +83,6 @@ module('Integration | create-new-card', function (hooks) {
         static embedded = class Embedded extends Component<typeof this> {
           <template><h3>Person: <@fields.title/></h3></template>
         }
-        static demo: Record<string, any> = { title: 'First Post' }
       }
     `);
     await realm.write('person-entry.json', JSON.stringify({

@@ -27,6 +27,9 @@ export default class DatetimeCard extends Card {
   }
 
   static async [deserialize]<T extends CardConstructor>(this: T, date: any): Promise<CardInstanceType<T>> {
+    if (date == null) {
+      return date;
+    }
     return parseISO(date) as CardInstanceType<T>;
   }
 

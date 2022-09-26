@@ -97,7 +97,7 @@ export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
 export type CardDocument = CardSingleResourceDocument | CardCollectionDocument;
 
 export function isCardResource(resource: any): resource is CardResource {
-  if (typeof resource !== "object") {
+  if (typeof resource !== "object" || resource == null) {
     return false;
   }
   if ("id" in resource && typeof resource.id !== "string") {

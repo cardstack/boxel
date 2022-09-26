@@ -352,14 +352,10 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
   }
 
   async deserialize(value: any, fromResource: LooseCardResource | undefined): Promise<CardInstanceType<CardT>> {
-    if (value != null) {
-      if (isCardResource(fromResource)) {
-        value = hydrateField(fromResource, this.name, this.card);
-      }
-      return (await cardClassFromData(value, this.card))[deserialize](value);
-    } else {
-      return value;
+    if (isCardResource(fromResource)) {
+      value = hydrateField(fromResource, this.name, this.card);
     }
+    return (await cardClassFromData(value, this.card))[deserialize](value);
   }
 
   containsMany = false;
@@ -394,7 +390,7 @@ function hydrateField(resource: LooseCardResource, fieldName: string, fallback: 
     ...(resource.meta.fields?.[realField]?.fields ?? {})
   };
   return {
-    attributes: get(resource, `attributes.${fieldName}`),
+    attributes: get(resource, `attributes.${fieldName}`) ?? {},
     meta: {
       adoptsFrom,
       ...(Object.keys(fields).length > 0 ? { fields } : {})
@@ -706,7 +702,21 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       }
       let field = maybeField;
       defaultFormat = getField(modelValue.constructor, property)?.computeVia ? 'embedded' : defaultFormat;
+      let fieldValueCard: typeof Card | undefined = undefined;
       if (getField(modelValue.constructor, property)?.containsMany) {
+        if (primitive in field.card) {
+          fieldValueCard = field.card;
+        } else {
+          let fieldValue = modelValue[property as keyof T];
+          if (fieldValue == null) {
+            fieldValueCard = field.card;
+          } else if (!Array.isArray(fieldValue)) {
+            throw new Error(`field ${property} should be an array`);
+          } else if (fieldValue.length > 0) {
+            // we don't know how to support polymorphic containsMany fields yet, so instead we're picking the card of the first value
+            fieldValueCard = fieldValue[0].constructor as typeof Card;
+          }
+        }
         if (defaultFormat === 'edit') {
           let fieldName = property as keyof Card; // to get around linting error
           let arrayField = model.field(property as keyof T, useIndexBasedKey in field.card) as unknown as Box<Card[]>;
@@ -733,9 +743,16 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
             {{/each}}
           </template>
         };
+      } else {
+        if (primitive in field.card) {
+          fieldValueCard = field.card;
+        } else {
+          let modelValueCard = modelValue[property as keyof T] as unknown as Card;
+          fieldValueCard = modelValueCard.constructor;
+        }
       }
       let innerModel = model.field(property as keyof T) as unknown as Box<Card>; // casts are safe because we know the field is present
-      return getComponent(field.card, defaultFormat, innerModel);
+      return getComponent(fieldValueCard, defaultFormat, innerModel);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated

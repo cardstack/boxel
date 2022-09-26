@@ -8,10 +8,15 @@ export class Person extends Card {
   @field isCool = contains(BooleanCard);
   @field isHuman = contains(BooleanCard);
   static embedded = class Embedded extends Component<typeof this> {
-    <template><@fields.firstName/> <@fields.lastName /></template>
+    <template>
+      <@fields.firstName/> <@fields.lastName />
+    </template>
   }
   static isolated = class Isolated extends Component<typeof this> {
-    <template><h1><@fields.firstName/> <@fields.lastName /><@fields.isCool/><@fields.isHuman/></h1></template>
+    <template>
+      <h1><@fields.firstName/> <@fields.lastName /></h1>
+      <div><@fields.isCool/></div>
+      <div><@fields.isHuman/></div>
+    </template>
   }
-  static demo: Record<string, any> = { firstName: 'Mango', lastName: 'Abdel-Rahman' }
 }

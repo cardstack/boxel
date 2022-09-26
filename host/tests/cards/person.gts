@@ -17,5 +17,4 @@ export class Person extends Card {
   static embedded = class Embedded extends Component<typeof this> {
     <template><h3>Person: <@fields.firstName/></h3></template>
   }
-  static demo: Record<string, any> = { firstName: 'Mango' }
 }

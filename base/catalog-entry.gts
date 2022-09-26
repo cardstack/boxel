@@ -18,6 +18,11 @@ export class CatalogEntry extends Card {
       // it is not useful to treat as a composite card (for the purposes of creating new card instances).
       (baseCardRef.module === this.ref.module && baseCardRef.name === this.ref.name);
   }});
+  @field demo = contains(Card);
+
+  get showDemo() {
+    return !this.isPrimitive;
+  }
 
   // An explicit edit template is provided since computed isPrimitive bool
   // field (which renders in the embedded format) looks a little wonky
@@ -31,27 +36,34 @@ export class CatalogEntry extends Card {
         <label data-test-field="description">Description
           <@fields.description/>
         </label>
-        <label data-test-field="ref">Ref
+        <div data-test-field="ref">Ref
           <@fields.ref/>
-        </label>
+        </div>
+        <div data-test-field="demo">Demo
+          <@fields.demo/>
+        </div>
       </div>
     </template>
   }
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div><@fields.title/></div>
-      <div><@fields.description/></div>
+      <h3><@fields.title/></h3>
+      <p><em><@fields.description/></em></p>
       <div><@fields.ref/></div>
-      <div><@fields.isPrimitive/></div>
+      {{#if @model.showDemo}}
+        <div class="card" data-test-demo-embedded><@fields.demo/></div>
+      {{/if}}
     </template>
   }
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div data-test-title><@fields.title/></div>
-      <div data-test-description><@fields.description/></div>
-      <div data-test-ref><@fields.ref/></div>
-      <div><@fields.isPrimitive/></div>
+      <h1 data-test-title><@fields.title/></h1>
+      <p data-test-description><em><@fields.description/></em></p>
+      <div><@fields.ref/></div>
+      {{#if @model.showDemo}}
+        <div class="card" data-test-demo><@fields.demo/></div>
+      {{/if}}
     </template>
   }
 }

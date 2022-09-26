@@ -15,20 +15,14 @@ export class Post extends Card {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <h1><@fields.title/><img src="{{imageURL}}"></h1>
-      <h3>by <@fields.author.firstName/> <@fields.author.lastName/></h3>
+      <h3>by <@fields.author/></h3>
       <p><@fields.body/></p>
     </template>
   }
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <em><@fields.title/></em> by <@fields.author.firstName/> <@fields.author.lastName/>
+      <em><@fields.title/></em> by <@fields.author/>
     </template>
-  }
-  static demo = {
-    title: 'Demo Post',
-    author: {
-      firstName: 'Cardstack',
-    }
   }
 }
 

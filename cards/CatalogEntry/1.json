@@ -1,19 +1,33 @@
 {
   "data": {
-    "type": "card",
     "attributes": {
       "title": "Person",
       "description": "Catalog entry for Person card",
       "ref": {
         "module": "http://local-realm/person",
         "name": "Person"
+      },
+      "demo": {
+        "firstName": "Mango",
+        "lastName": "Abdel-Rahman",
+        "isCool": false,
+        "isHuman": false
       }
     },
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/catalog-entry",
         "name": "CatalogEntry"
+      },
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://local-realm/person",
+            "name": "Person"
+          }
+        }
       }
-    }
+    },
+    "type": "card"
   }
 }
