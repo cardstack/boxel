@@ -437,7 +437,7 @@ export class Loader {
         if (dependencyIdentifier === "exports") {
           return privateModuleInstance;
         } else if (dependencyIdentifier === "__import_meta__") {
-          return { url: moduleIdentifier };
+          return { url: moduleIdentifier, loader: this };
         } else {
           return this.evaluateModule(dependencyIdentifier);
         }

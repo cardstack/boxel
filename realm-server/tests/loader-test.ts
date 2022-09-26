@@ -26,12 +26,17 @@ module("loader", function () {
     loader.addFileLoader(
       new URL("http://example.com/"),
       async (_localPath) =>
-        `export function checkImportMeta() { return import.meta.url }`
+        `
+        export function checkImportMeta() { return import.meta.url; }
+        export function myLoader() { return import.meta.loader; }
+      `
     );
-    let { checkImportMeta } = await loader.import<{
+    let { checkImportMeta, myLoader } = await loader.import<{
       checkImportMeta: () => string;
+      myLoader: () => Loader;
     }>("http://example.com/foo");
     assert.strictEqual(checkImportMeta(), "http://example.com/foo");
+    assert.strictEqual(myLoader(), loader, "the loader instance is correct");
   });
 
   test("supports identify API", async function (assert) {
