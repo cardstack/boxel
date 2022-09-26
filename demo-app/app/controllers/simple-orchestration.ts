@@ -67,11 +67,11 @@ export default class SimpleOrchestration extends Controller {
           {
             sprites: keptSprites,
             properties: {
-              opacity: { to: 0.5 },
+              opacity: { from: 1, to: 0.1 },
             },
             timing: {
               behavior: new LinearBehavior(),
-              duration: 300,
+              duration: 1200,
             },
           },
           {
@@ -80,7 +80,8 @@ export default class SimpleOrchestration extends Controller {
               position: {},
             },
             timing: {
-              behavior: new SpringBehavior(),
+              behavior: new LinearBehavior(),
+              duration: 1200,
             },
           },
         ],
