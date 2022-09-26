@@ -66,6 +66,8 @@ export default class TransitionRunner {
               sprite.setupAnimation(property as MotionProperty, {
                 ...options,
                 ...animation.timing,
+                // This relies on delay being implemented with no-op frames
+                // If it's not, then we'll end up having overlapping effects from animation keyframes
                 delay: delay + (animation.timing?.delay ?? 0),
               });
             }
