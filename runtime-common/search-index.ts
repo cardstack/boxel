@@ -254,11 +254,6 @@ export class SearchIndex {
     return this.#currentRun.loader;
   }
 
-  // TODO delete this!
-  get currentRun() {
-    return this.#currentRun;
-  }
-
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
     this.#currentRun = await CurrentRun.incremental(
       url,
