@@ -60,7 +60,7 @@ export class Loader {
     Function,
     { module: string; name: string }
   >();
-  private trackedLoaders = new WeakMap<object, TrackedLoader>();
+  private trackedLoaders = new WeakMap<object | Error, TrackedLoader>();
 
   constructor() {}
 
@@ -211,8 +211,10 @@ export class Loader {
     let module: T;
     try {
       module = await trackedLoader.import(moduleIdentifier);
-    } catch (err) {
-      this.trackedLoaders.set(err, trackedLoader);
+    } catch (err: any) {
+      if (err instanceof Error) {
+        this.trackedLoaders.set(err, trackedLoader);
+      }
       throw err;
     }
     this.trackedLoaders.set(module, trackedLoader);
