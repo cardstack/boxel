@@ -3,7 +3,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import CardRefCard from 'https://cardstack.com/base/card-ref';
 import { baseCardRef } from "@cardstack/runtime-common";
-import CardContainer from 'https://cardstack.com/base/card-container';
+import Modifier from 'ember-modifier';
 
 export class CatalogEntry extends Card {
   @field title = contains(StringCard);
@@ -28,7 +28,7 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer @label={{@model.constructor.name}} class="card-edit">
+      <div {{CardShadow @model.constructor.name 'edit'}}>
         <label data-test-field="title">Title
           <@fields.title/>
         </label>
@@ -41,32 +41,72 @@ export class CatalogEntry extends Card {
         <div class="field" data-test-field="demo">Demo
           <@fields.demo/>
         </div>
-      </CardContainer>
+      </div>
     </template>
   }
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer @label={{@model.constructor.name}}>
+      <div {{CardShadow @model.constructor.name}}>
         <h3><@fields.title/></h3>
         <p><em><@fields.description/></em></p>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
           <div data-test-demo-embedded><@fields.demo/></div>
         {{/if}}
-      </CardContainer>
+      </div>
     </template>
   }
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CardContainer @label={{@model.constructor.name}}>
+      <div {{CardShadow @model.constructor.name}}>
         <h1 data-test-title><@fields.title/></h1>
         <p data-test-description><em><@fields.description/></em></p>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo/></div>
         {{/if}}
-      </CardContainer>
+      </div>
     </template>
+  }
+}
+
+interface Signature {
+  element: HTMLElement;
+  Args: {
+    Positional: [name: string | undefined, mode?: 'edit']
+  };
+}
+
+class CardShadow extends Modifier<Signature> {
+  modify(
+    element: HTMLElement,
+    [name, mode]: Signature["Args"]["Positional"]
+  ) {
+    const shadow = element.attachShadow({ mode: 'open' });
+    
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = element.innerHTML;
+
+    if (name) {
+      wrapper.classList.add(name);
+    }
+
+    if (mode === 'edit') {
+      wrapper.classList.add('card-edit');
+    }
+
+    const styles = document.createElement('style');
+    styles.textContent = `
+      .CatalogEntry {
+        background-color: #cbf3f0;
+        border: 1px solid gray;
+        border-radius: 10px;
+        padding: 1rem;
+      }
+    `;
+
+    shadow.appendChild(wrapper);
+    shadow.appendChild(styles);
   }
 }

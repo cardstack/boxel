@@ -20,6 +20,10 @@ button {
   min-width: 10rem;
 }
 
+.preview > * + * {
+  margin-top: 1rem;
+}
+
 .item.file:hover {
   background-color: cornflowerblue;
   color: white;
@@ -47,8 +51,8 @@ button {
   padding-left: 4rem;
 }
 
-.card-edit > label,
-.card-edit > .field {
+.card-edit label,
+.card-edit .field {
   display: block;
   padding: 0.75rem;
   margin: 1rem auto;
@@ -108,30 +112,6 @@ button {
   color: red;
 }
 
-/* Card Container */
-.card {
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-  border: 1px solid gray;
-  border-radius: 10px;
-  padding: 1rem;
-  background-color: white;
-}
-.card-label {
-  margin-bottom: 1em;
-  text-align: right;
-}
-.card-label > span {
-  display: inline-block;
-  background: aliceblue;
-  color: cadetblue;
-  font-size: 0.9rem;
-  font-weight: bold;
-  font-family: Arial, Helvetica, sans-serif;
-  border: 1px solid;
-  border-radius: 10px;
-  padding: 0.5em 1em;
-}
 
 /* Cards */
 .BlogPerson {
@@ -143,19 +123,11 @@ button {
 }
 
 .Post {
-  background: #ffcad4;
-}
-
-.CatalogEntry {
-  background: #cbf3f0;
+  background-color: #ffcad4;
 }
 
 .Pet {
-  background: #fdfcdc;
-}
-
-.Person {
-  background: #90dbf4;
+  background-color: #fdfcdc;
 }
 
 .Employee {
