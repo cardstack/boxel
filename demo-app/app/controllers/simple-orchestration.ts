@@ -41,7 +41,7 @@ export default class SimpleOrchestration extends Controller {
             },
             timing: {
               behavior: new LinearBehavior(),
-              duration: 300,
+              duration: 500,
             },
           },
           {
@@ -67,22 +67,35 @@ export default class SimpleOrchestration extends Controller {
           {
             sprites: keptSprites,
             properties: {
-              opacity: { from: 1, to: 0.1 },
-            },
-            timing: {
-              behavior: new LinearBehavior(),
-              duration: 1200,
-            },
-          },
-          {
-            sprites: keptSprites,
-            properties: {
               position: {},
             },
             timing: {
               behavior: new LinearBehavior(),
-              duration: 1200,
+              duration: 2400,
             },
+          },
+          {
+            sequence: [
+              {
+                sprites: keptSprites,
+                properties: {
+                  opacity: { from: 1, to: 0.1 },
+                },
+                timing: {
+                  behavior: new SpringBehavior(),
+                },
+              },
+              {
+                sprites: keptSprites,
+                properties: {
+                  opacity: { to: 1, from: 0.1 },
+                },
+                timing: {
+                  behavior: new LinearBehavior(),
+                  duration: 1200,
+                },
+              },
+            ],
           },
         ],
       },
