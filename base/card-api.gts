@@ -9,6 +9,7 @@ import { WatchedArray } from './watched-array';
 import { Deferred, isCardResource, Loader } from '@cardstack/runtime-common';
 import { flatten } from "flat";
 import type { LooseCardResource } from '@cardstack/runtime-common';
+import CardContainer from 'https://cardstack.com/base/card-container';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -500,17 +501,19 @@ export class Component<CardT extends CardConstructor> extends GlimmerComponent<S
 
 }
 
-class DefaultIsolated extends GlimmerComponent<{ Args: { fields: Record<string, new() => GlimmerComponent>}}> {
+class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    {{#each-in @fields as |_key Field|}}
-      <Field />
-    {{/each-in}}
+    <CardContainer @label={{@model.constructor.name}}>
+      {{#each-in @fields as |_key Field|}}
+        <Field />
+      {{/each-in}}
+    </CardContainer>
   </template>;
 }
 
-class DefaultEdit extends GlimmerComponent<{ Args: { fields: Record<string, new() => GlimmerComponent>}}> {
+class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <div class="card-edit">
+    <CardContainer @label={{@model.constructor.name}} class="card-edit">
       {{#each-in @fields as |key Field|}}
         <label data-test-field={{key}}>
           {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
@@ -518,7 +521,7 @@ class DefaultEdit extends GlimmerComponent<{ Args: { fields: Record<string, new(
           <Field />
         </label>
       {{/each-in}}
-    </div>
+    </CardContainer>
   </template>;
 }
 

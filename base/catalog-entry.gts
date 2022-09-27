@@ -3,6 +3,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import CardRefCard from 'https://cardstack.com/base/card-ref';
 import { baseCardRef } from "@cardstack/runtime-common";
+import CardContainer from 'https://cardstack.com/base/card-container';
 
 export class CatalogEntry extends Card {
   @field title = contains(StringCard);
@@ -27,41 +28,45 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div class="card-edit">
+      <CardContainer @label={{@model.constructor.name}} class="card-edit">
         <label data-test-field="title">Title
           <@fields.title/>
         </label>
         <label data-test-field="description">Description
           <@fields.description/>
         </label>
-        <div data-test-field="ref">Ref
+        <div class="field" data-test-field="ref">Ref
           <@fields.ref/>
         </div>
-        <div data-test-field="demo">Demo
+        <div class="field" data-test-field="demo">Demo
           <@fields.demo/>
         </div>
-      </div>
+      </CardContainer>
     </template>
   }
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <h3><@fields.title/></h3>
-      <p><em><@fields.description/></em></p>
-      <div><@fields.ref/></div>
-      {{#if @model.showDemo}}
-        <div class="card" data-test-demo-embedded><@fields.demo/></div>
-      {{/if}}
+      <CardContainer @label={{@model.constructor.name}}>
+        <h3><@fields.title/></h3>
+        <p><em><@fields.description/></em></p>
+        <div><@fields.ref/></div>
+        {{#if @model.showDemo}}
+          <div data-test-demo-embedded><@fields.demo/></div>
+        {{/if}}
+      </CardContainer>
     </template>
   }
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <h1 data-test-title><@fields.title/></h1>
-      <p data-test-description><em><@fields.description/></em></p>
-      <div><@fields.ref/></div>
-      {{#if @model.showDemo}}
-        <div class="card" data-test-demo><@fields.demo/></div>
-      {{/if}}
+      <CardContainer @label={{@model.constructor.name}}>
+        <h1 data-test-title><@fields.title/></h1>
+        <p data-test-description><em><@fields.description/></em></p>
+        <div><@fields.ref/></div>
+        {{#if @model.showDemo}}
+          <div data-test-demo><@fields.demo/></div>
+        {{/if}}
+      </CardContainer>
     </template>
   }
 }

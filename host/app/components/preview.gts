@@ -54,24 +54,22 @@ export default class Preview extends Component<Signature> {
       {{/if}}
 
       {{#if this.renderedCard}}
-        <div class="card">
-          <this.renderedCard/>
-          {{!-- @glint-ignore glint doesn't know about EC task properties --}}
-          {{#if this.write.last.isRunning}}
-            <span data-test-saving>Saving...</span>
-          {{else}}
-            {{#if this.isDirty}}
-              <div>
-                <button data-test-save-card {{on "click" this.save}}>Save</button>
-                {{#if (eq @card.type "new")}}
-                  <button data-test-cancel-create {{on "click" this.cancel}}>Cancel</button>
-                {{else}}
-                  <button data-test-reset {{on "click" this.reset}}>Reset</button>
-                {{/if}}
-              </div>
-            {{/if}}
+        <this.renderedCard/>
+        {{!-- @glint-ignore glint doesn't know about EC task properties --}}
+        {{#if this.write.last.isRunning}}
+          <span data-test-saving>Saving...</span>
+        {{else}}
+          {{#if this.isDirty}}
+            <div>
+              <button data-test-save-card {{on "click" this.save}}>Save</button>
+              {{#if (eq @card.type "new")}}
+                <button data-test-cancel-create {{on "click" this.cancel}}>Cancel</button>
+              {{else}}
+                <button data-test-reset {{on "click" this.reset}}>Reset</button>
+              {{/if}}
+            </div>
           {{/if}}
-        </div>
+        {{/if}}
       {{/if}}
     {{/if}}
   </template>

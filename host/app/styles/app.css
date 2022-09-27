@@ -1,3 +1,9 @@
+input,
+textarea,
+button {
+  font: inherit;
+}
+
 .editor {
   display: flex;
   align-items: stretch;
@@ -41,17 +47,18 @@
   padding-left: 4rem;
 }
 
-.card-edit label,
-.card-edit > div {
+.card-edit > label,
+.card-edit > .field {
   display: block;
   padding: 0.75rem;
   margin: 1rem auto;
-  border: solid gray 1px;
   text-transform: capitalize;
   border-radius: 5px;
+  background-color: #ffffff6e;
 }
 
-.card-edit input[type=text],.card-preview input[type=number] {
+.card-edit input[type=text],
+.card-preview input[type=number] {
   width: 100%;
   margin-top: .5rem;
   display: block;
@@ -64,19 +71,12 @@
   display: block;
 }
 
-.card {
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-  border: 1px solid gray;
-  border-radius: 10px;
-  padding: 1rem;
-  background-color: white;
-}
-
 .schema {
   margin-bottom: 1rem;
   padding: 1rem;
-  border: 1px solid black;
+  border: 1px solid grey;
+  border-radius: 10px;
+  background-color: #faebd769;
 }
 
 .card-catalog {
@@ -100,6 +100,64 @@
   margin-top: 1rem;
 }
 
+.catalog-entry-editor > fieldset {
+  background-color: aliceblue;
+}
+
 .error {
   color: red;
+}
+
+/* Card Container */
+.card {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid gray;
+  border-radius: 10px;
+  padding: 1rem;
+  background-color: white;
+}
+.card-label {
+  margin-bottom: 1em;
+  text-align: right;
+}
+.card-label > span {
+  display: inline-block;
+  background: aliceblue;
+  color: cadetblue;
+  font-size: 0.9rem;
+  font-weight: bold;
+  font-family: Arial, Helvetica, sans-serif;
+  border: 1px solid;
+  border-radius: 10px;
+  padding: 0.5em 1em;
+}
+
+/* Cards */
+.BlogPerson {
+  background-color: #87e9f6;
+}
+
+.BlogPost {
+  background-color: #ffc9d2;
+}
+
+.Post {
+  background: #ffcad4;
+}
+
+.CatalogEntry {
+  background: #cbf3f0;
+}
+
+.Pet {
+  background: #fdfcdc;
+}
+
+.Person {
+  background: #90dbf4;
+}
+
+.Employee {
+  background-color: darkgray;
 }

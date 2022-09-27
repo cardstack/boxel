@@ -85,7 +85,7 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(readNumber, 42);
     let readLanguages: string[] = card.languagesSpoken;
     assert.deepEqual(readLanguages, ['english', 'japanese']);
-    let readRef: ExportedCardRef = card.ref; 
+    let readRef: ExportedCardRef = card.ref;
     assert.deepEqual(readRef, { module: `${testRealmURL}person`, name: "Person" });
     let readBoolean: boolean = card.boolean;
     assert.deepEqual(readBoolean, true);
@@ -214,12 +214,12 @@ module('Integration | card-basics', function (hooks) {
     let { createFromSerialized } = cardApi;
     let { CatalogEntry } = catalogEntry;
 
-    let nonPrimitiveEntry = await createFromSerialized<typeof CatalogEntry>({ 
+    let nonPrimitiveEntry = await createFromSerialized<typeof CatalogEntry>({
       attributes: {
         title: "CatalogEntry Card",
         ref: {
           module: "https://cardstack.com/base/catalog-entry",
-          name: "CatalogEntry" 
+          name: "CatalogEntry"
         }
       },
       meta: {
@@ -635,7 +635,7 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(helloWorld, 'edit');
     assert.dom('[data-test-field="title"]').containsText('Title');
     assert.dom('[data-test-field="title"] input').hasValue('My Post');
-    assert.dom('[data-test-field="author"]').containsText('Author First Name'); // TODO: fix nested labels
+    assert.dom('[data-test-field="author"]').containsText('Author Person First Name');
     assert.dom('[data-test-field="author"] input').hasValue('Arthur');
 
     await fillIn('[data-test-field="title"] input', 'New Post');
@@ -667,7 +667,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }, undefined);
     await renderCard(mango, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango isCool: true');
+    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Person Mango isCool: true');
   });
 
   test('renders boolean edit view', async function(assert) {

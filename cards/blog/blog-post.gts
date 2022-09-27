@@ -1,6 +1,7 @@
 import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
+import CardContainer from 'https://cardstack.com/base/card-container';
 import { BlogPerson } from './blog-person';
 
 export class BlogPost extends Card {
@@ -9,14 +10,18 @@ export class BlogPost extends Card {
   @field body = contains(TextAreaCard);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <h1><@fields.title/></h1>
-      <h3>by <@fields.author/></h3>
-      <p><@fields.body/></p>
+      <CardContainer @label={{@model.constructor.name}}>
+        <h1><@fields.title/></h1>
+        <h3>by <@fields.author/></h3>
+        <p><@fields.body/></p>
+      </CardContainer>
     </template>
   }
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <em><@fields.title/></em> by <@fields.author/>
+      <CardContainer @label={{@model.constructor.name}}>
+        <em><@fields.title/></em> by <@fields.author/>
+      </CardContainer>
     </template>
   }
 }
