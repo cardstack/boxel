@@ -1,15 +1,9 @@
 import { trimExecutableExtension, baseRealm } from ".";
-import { Kind, Realm, CardDefinitionResource } from "./realm";
-import {
-  CurrentRun,
-  SearchEntry,
-  SearchEntryWithErrors,
-  CardDefinitionWithErrors,
-} from "./current-run";
+import { Kind, Realm } from "./realm";
+import { CurrentRun, SearchEntry, SearchEntryWithErrors } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import flatMap from "lodash/flatMap";
-import { stringify } from "qs";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
@@ -290,66 +284,7 @@ export class SearchIndex {
     if (result && result.type !== "error") {
       return result.def;
     }
-    if (
-      !result &&
-      ref.type === "exportedCard" &&
-      !this.realm.paths.inRealm(new URL(ref.module, relativeTo))
-    ) {
-      // we only include external definitions in our definitions cache if we
-      // have a card in our realm that uses an external definition. otherwise we
-      // should forward requests for external cards to the realm in question
-      result = await this.getExternalCardDefinition(ref);
-      if (result?.type !== "error") {
-        return result?.def;
-      }
-    }
     return undefined;
-  }
-
-  private async getExternalCardDefinition(
-    ref: ExportedCardRef
-  ): Promise<CardDefinitionWithErrors | undefined> {
-    let url = `${ref.module}/_typeOf?${stringify({
-      type: "exportedCard",
-      ...ref,
-    })}`;
-    let response = await this.loader.fetch(url, {
-      headers: {
-        Accept: "application/vnd.api+json",
-      },
-    });
-    if (!response.ok) {
-      console.warn(`Could not get card type for ${url}: ${response.status}`);
-      return {
-        type: "error",
-        id: { type: "exportedCard", ...ref },
-        error: {
-          message: (await response.json()).errors.join(),
-        },
-      };
-    }
-
-    let resource: CardDefinitionResource = (await response.json()).data;
-    let def: CardDefinitionWithErrors = {
-      type: "def",
-      def: {
-        id: resource.attributes.cardRef,
-        key: resource.id,
-        super: resource.relationships._super?.meta.ref,
-        fields: new Map(
-          Object.entries(resource.relationships)
-            .filter(([fieldName]) => fieldName !== "_super")
-            .map(([fieldName, fieldInfo]) => [
-              fieldName,
-              {
-                fieldType: fieldInfo.meta.type as "contains" | "containsMany",
-                fieldCard: fieldInfo.meta.ref,
-              },
-            ])
-        ),
-      },
-    };
-    return def;
   }
 
   async exportedCardsOf(module: string): Promise<ExportedCardRef[]> {
@@ -384,66 +319,38 @@ export class SearchIndex {
     );
   }
 
-  private async getFieldDefinition(
-    ref: CardRef,
-    fieldSegments: string[]
-  ): Promise<CardDefinition | undefined> {
-    let def = await this.typeOf(ref);
-    if (!def) {
-      return undefined;
-    }
-    let fieldName = fieldSegments.shift()!;
-    let fieldDef = def.fields.get(fieldName);
-    if (!fieldDef) {
-      throw new Error(
-        `Your filter refers to nonexistent field "${fieldName}" on type ${internalKeyFor(
-          ref,
-          undefined // assumes absolute module URL
-        )}`
-      );
-    }
-    if (fieldSegments.length > 0) {
-      return await this.getFieldDefinition(fieldDef.fieldCard, [
-        ...fieldSegments,
-      ]);
-    }
-    return await this.typeOf(fieldDef.fieldCard);
-  }
-
   private async loadFieldCard(
     ref: ExportedCardRef,
     fieldPath: string
   ): Promise<typeof Card> {
-    let fieldDef = await this.getFieldDefinition(
-      { type: "exportedCard", ...ref },
-      fieldPath.split(".")
-    );
-    if (!fieldDef) {
+    let api = await this.loadAPI();
+    let module: Record<string, typeof Card>;
+    try {
+      module = await this.loader.import<Record<string, typeof Card>>(
+        ref.module
+      );
+    } catch (err: any) {
       throw new Error(
         `Your filter refers to nonexistent type: import ${
           ref.name === "default" ? "default" : `{ ${ref.name} }`
         } from "${ref.module}"`
       );
     }
-    if (fieldDef.id.type !== "exportedCard") {
-      throw new Error(
-        `The field card ${JSON.stringify(
-          fieldDef.id
-        )} enclosed in ${JSON.stringify(
-          ref
-        )} with field path "${fieldPath}" is not exported`
-      );
+    let card: typeof Card | undefined = module[ref.name];
+    let segments = fieldPath.split(".");
+    while (segments.length) {
+      let fieldName = segments.shift()!;
+      let prevCard = card;
+      card = (await api.getField(card, fieldName))?.card;
+      if (!card) {
+        throw new Error(
+          `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(
+            this.loader.identify(prevCard)
+          )}`
+        );
+      }
     }
-    let module = await this.loader.import<Record<string, any>>(
-      fieldDef.id.module
-    );
-    let FieldCard = module[fieldDef.id.name];
-    if (!FieldCard) {
-      throw new Error(
-        `Could not load field card ${JSON.stringify(fieldDef.id)}`
-      );
-    }
-    return FieldCard as typeof Card;
+    return card;
   }
 
   private buildSorter(
