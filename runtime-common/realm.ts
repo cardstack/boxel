@@ -186,10 +186,7 @@ export class Realm {
     if (
       executableExtensions.some((extension) => handle.path.endsWith(extension))
     ) {
-      return await this.makeJS(
-        await this.fileContentToText(handle),
-        handle.path
-      );
+      return this.makeJS(await this.fileContentToText(handle), handle.path);
     } else {
       return await this.serveLocalFile(handle);
     }
@@ -310,16 +307,10 @@ export class Realm {
     })!.code!;
   }
 
-  private async makeJS(
-    content: string,
-    debugFilename: string
-  ): Promise<Response> {
+  private makeJS(content: string, debugFilename: string): Response {
     try {
       content = this.transpileJS(content, debugFilename);
     } catch (err: any) {
-      Promise.resolve().then(() => {
-        throw err;
-      });
       return new Response(err.message, {
         // using "Not Acceptable" here because no text/javascript representation
         // can be made and we're sending text/html error page instead

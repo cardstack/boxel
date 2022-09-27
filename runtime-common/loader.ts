@@ -60,6 +60,7 @@ export class Loader {
     Function,
     { module: string; name: string }
   >();
+  private trackedLoaders = new WeakMap<object, TrackedLoader>();
 
   constructor() {}
 
@@ -151,10 +152,19 @@ export class Loader {
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    this.moduleShims.set(
+    let trackedLoader = this.makeTrackedLoader();
+    trackedLoader.moduleShims.set(
       moduleIdentifier,
-      this.createModuleProxy(module, moduleIdentifier)
+      trackedLoader.createModuleProxy(module, moduleIdentifier)
     );
+  }
+
+  getConsumedModules(moduleOrError: object | Error): string[] | undefined {
+    let trackedLoader = this.trackedLoaders.get(moduleOrError);
+    if (!trackedLoader) {
+      return undefined;
+    }
+    return [...trackedLoader.consumedModules];
   }
 
   static identify(
@@ -186,30 +196,27 @@ export class Loader {
     return Loader.getLoader();
   }
 
+  private makeTrackedLoader(): TrackedLoader {
+    return new TrackedLoader({
+      loader: this,
+      modules: this.modules,
+      fileLoaders: this.fileLoaders,
+      moduleShims: this.moduleShims,
+      identities: this.identities,
+    });
+  }
+
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
-    let resolvedModule = this.resolve(moduleIdentifier);
-    let resolvedModuleIdentifier = resolvedModule.href;
-
-    let shimmed = this.moduleShims.get(moduleIdentifier);
-    if (shimmed) {
-      return shimmed as T;
+    let trackedLoader = this.makeTrackedLoader();
+    let module: T;
+    try {
+      module = await trackedLoader.import(moduleIdentifier);
+    } catch (err) {
+      this.trackedLoaders.set(err, trackedLoader);
+      throw err;
     }
-
-    let module = await this.fetchModule(resolvedModule);
-    switch (module.state) {
-      case "fetching":
-        await module.deferred.promise;
-        return this.evaluateModule(resolvedModuleIdentifier);
-      case "preparing":
-      case "evaluated":
-        return module.moduleInstance as T;
-      case "broken":
-        throw module.exception;
-      case "registered":
-        return this.evaluateModule(resolvedModuleIdentifier);
-      default:
-        throw assertNever(module);
-    }
+    this.trackedLoaders.set(module, trackedLoader);
+    return module;
   }
 
   async fetch(
@@ -266,19 +273,73 @@ export class Loader {
     }
     return absoluteURL;
   }
+}
 
-  private createModuleProxy(module: any, moduleIdentifier: string) {
+class TrackedLoader {
+  private loader: Loader;
+  private modules: Map<string, Module>;
+  private fileLoaders: Map<string, FileLoader>;
+  private identities: WeakMap<Function, { module: string; name: string }>;
+  public moduleShims: Map<string, Record<string, any>>;
+  public consumedModules: Set<string> = new Set();
+  constructor({
+    loader,
+    modules,
+    fileLoaders,
+    moduleShims,
+    identities,
+  }: {
+    loader: Loader;
+    modules: Map<string, Module>;
+    fileLoaders: Map<string, FileLoader>;
+    moduleShims: Map<string, Record<string, any>>;
+    identities: WeakMap<Function, { module: string; name: string }>;
+  }) {
+    this.loader = loader;
+    this.modules = modules;
+    this.fileLoaders = fileLoaders;
+    this.moduleShims = moduleShims;
+    this.identities = identities;
+  }
+
+  async import<T extends object>(moduleIdentifier: string): Promise<T> {
+    let resolvedModule = this.loader.resolve(moduleIdentifier);
+    let resolvedModuleIdentifier = resolvedModule.href;
+
+    let shimmed = this.moduleShims.get(moduleIdentifier);
+    if (shimmed) {
+      return shimmed as T;
+    }
+
+    let module = await this.fetchModule(resolvedModule);
+    switch (module.state) {
+      case "fetching":
+        await module.deferred.promise;
+        return this.evaluateModule(resolvedModuleIdentifier);
+      case "preparing":
+      case "evaluated":
+        return module.moduleInstance as T;
+      case "broken":
+        throw module.exception;
+      case "registered":
+        return this.evaluateModule(resolvedModuleIdentifier);
+      default:
+        throw assertNever(module);
+    }
+  }
+
+  createModuleProxy(module: any, moduleIdentifier: string) {
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
         if (typeof value === "function" && typeof property === "string") {
           this.identities.set(value, {
             module: trimExecutableExtension(
-              this.reverseResolution(moduleIdentifier)
+              this.loader.reverseResolution(moduleIdentifier)
             ).href,
             name: property,
           });
-          Loader.loaders.set(value, this);
+          Loader.loaders.set(value, this.loader);
         }
         return value;
       },
@@ -292,6 +353,7 @@ export class Loader {
     moduleURL: ResolvedURL,
     stack: string[] = []
   ): Promise<Module> {
+    this.consumedModules.add(this.loader.reverseResolution(moduleURL).href);
     let moduleIdentifier = moduleURL.href;
     let module = this.modules.get(moduleIdentifier);
     if (module) {
@@ -360,7 +422,7 @@ export class Loader {
         } else if (depId === "__import_meta__") {
           return "__import_meta__";
         } else {
-          return this.resolve(depId, new URL(moduleIdentifier)).href;
+          return this.loader.resolve(depId, new URL(moduleIdentifier)).href;
         }
       });
       implementation = impl;
@@ -440,7 +502,7 @@ export class Loader {
         if (dependencyIdentifier === "exports") {
           return privateModuleInstance;
         } else if (dependencyIdentifier === "__import_meta__") {
-          return { url: moduleIdentifier, loader: this };
+          return { url: moduleIdentifier, loader: this.loader };
         } else {
           return this.evaluateModule(dependencyIdentifier);
         }
@@ -463,7 +525,7 @@ export class Loader {
 
   private async load(moduleURL: ResolvedURL): Promise<string> {
     for (let [realmURL, fileLoader] of this.fileLoaders) {
-      let realmPath = new RealmPaths(this.resolve(realmURL));
+      let realmPath = new RealmPaths(this.loader.resolve(realmURL));
       if (realmPath.inRealm(moduleURL)) {
         return await fileLoader(realmPath.local(moduleURL));
       }
@@ -471,7 +533,7 @@ export class Loader {
 
     let response: Response;
     try {
-      response = await this.fetch(moduleURL);
+      response = await this.loader.fetch(moduleURL);
     } catch (err) {
       console.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a
