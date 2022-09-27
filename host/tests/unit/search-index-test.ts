@@ -14,7 +14,7 @@ const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4201/test/';
 
 module('Unit | search-index', function (hooks) {
-  hooks.before(async function () {
+  hooks.beforeEach(async function () {
     Loader.destroy();
     Loader.addURLMapping(
       new URL(baseRealm.url),
@@ -227,8 +227,8 @@ module('Unit | search-index', function (hooks) {
     });
     assert.deepEqual(definition?.super, {
       type: 'exportedCard',
-      module: `${testRealmURL}person`,
-      name: 'Person',
+      module: `${testRealmURL}index`,
+      name: 'PersonCard',
     });
 
     assert.deepEqual(definition?.fields.get('lastName'), {
@@ -289,8 +289,8 @@ module('Unit | search-index', function (hooks) {
     });
     assert.deepEqual(definition?.super, {
       type: 'exportedCard',
-      module: `${testRealmURL}person`,
-      name: 'Person',
+      module: `${testRealmURL}index`,
+      name: 'PersonCard',
     });
 
     assert.deepEqual(definition?.fields.get('lastName'), {
@@ -340,10 +340,16 @@ module('Unit | search-index', function (hooks) {
       module: `${testRealmURL}person`,
       name: 'FancyPerson',
     });
+    // we did not go thru the loader to consume our super class because it's in
+    // the same module, so the loader never stamped it. This results in its
+    // super definitions getting the non-exported style card ref.
     assert.deepEqual(definition?.super, {
-      type: 'exportedCard',
-      module: `${testRealmURL}person`,
-      name: 'Person',
+      type: 'ancestorOf',
+      card: {
+        type: 'exportedCard',
+        module: `${testRealmURL}person`,
+        name: 'FancyPerson',
+      },
     });
     assert.deepEqual(definition?.fields.get('lastName'), {
       fieldType: 'contains',
@@ -504,30 +510,6 @@ module('Unit | search-index', function (hooks) {
     );
   });
 
-  test('full indexing ignores card source where super class is in a different realm, but the realm says that the export is not actually a card', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, NotACard } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        export class FancyPerson extends NotACard {
-          @field favoriteColor = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    assert.strictEqual(
-      await indexer.typeOf({
-        type: 'exportedCard',
-        module: 'person.gts',
-        name: 'FancyPerson',
-      }),
-      undefined,
-      'FancyPerson is not actually a card'
-    );
-  });
-
   test('full indexing discovers internal field cards that are consumed by an exported card', async function (assert) {
     let realm = TestRealm.create({
       'person.gts': `
@@ -594,54 +576,6 @@ module('Unit | search-index', function (hooks) {
         field: 'lastName',
       },
     });
-  });
-
-  test('full indexing ignores fields that are not actually fields', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, Card, notAFieldDecorator, notAFieldType } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        class NotAFieldCard {}
-
-        export class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(NotAFieldCard);
-          @notAFieldDecorator notAField = contains(StringCard);
-          @field alsoNotAField = notAFieldType(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    let definition = await indexer.typeOf({
-      type: 'exportedCard',
-      module: 'person.gts',
-      name: 'Person',
-    });
-    assert.deepEqual(definition?.fields.get('firstName'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-    assert.strictEqual(
-      definition?.fields.get('lastName'),
-      undefined,
-      'lastName field does not exist'
-    );
-    assert.strictEqual(
-      definition?.fields.get('notAField'),
-      undefined,
-      'notAField field does not exist'
-    );
-    assert.strictEqual(
-      definition?.fields.get('alsoNotAField'),
-      undefined,
-      'alsoNotAField field does not exist'
-    );
   });
 
   test("indexing identifies an instance's card references", async function (assert) {
@@ -1202,7 +1136,7 @@ posts/ignore-me.gts
       } catch (err: any) {
         assert.strictEqual(
           err.message,
-          `Your filter refers to nonexistent field \"nonExistentField\" on type ${testModuleRealm}person/Person`
+          `Your filter refers to nonexistent field \"nonExistentField\" on type {\"module\":\"${testModuleRealm}person\",\"name\":\"Person\"}`
         );
       }
     });

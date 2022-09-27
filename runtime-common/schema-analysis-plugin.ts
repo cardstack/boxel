@@ -38,6 +38,7 @@ export interface PossibleField {
 export interface Options {
   possibleCards: PossibleCardClass[];
   reexports: { exportName: string; ref: ExternalReference }[];
+  imports: ExternalReference[];
 }
 
 export function schemaAnalysisPlugin(_babel: typeof Babel) {
@@ -72,6 +73,14 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
           if (specifier.type === "ImportNamespaceSpecifier") {
             continue;
           }
+          state.opts.imports.push({
+            type: "external",
+            module: path.node.source.value,
+            name:
+              specifier.type === "ImportDefaultSpecifier"
+                ? "default"
+                : getName(specifier.imported),
+          });
           let binding = specifier.local
             ? path.scope.getBinding(getName(specifier.local))
             : undefined;

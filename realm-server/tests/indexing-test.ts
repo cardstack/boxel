@@ -35,8 +35,17 @@ module("indexing", function (hooks) {
           @field firstName = contains(StringCard);
         }
       `,
+      "pet.gts": `
+        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Pet extends Card {
+          @field firstName = contains(StringCard);
+        }
+      `,
       "fancy-person.gts": `
         import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
         export class FancyPerson extends Person {
@@ -75,6 +84,19 @@ module("indexing", function (hooks) {
             adoptsFrom: {
               module: "./person",
               name: "Person",
+            },
+          },
+        },
+      },
+      "ringo.json": {
+        data: {
+          attributes: {
+            firstName: "Ringo",
+          },
+          meta: {
+            adoptsFrom: {
+              module: "./pet",
+              name: "Pet",
             },
           },
         },
@@ -140,11 +162,104 @@ module("indexing", function (hooks) {
       {
         instancesIndexed: 1,
         definitionsBuilt: 0,
-        modulesAnalyzed: 0,
         instanceErrors: 0,
         definitionErrors: 0,
+        moduleErrors: 0,
       },
       "indexed correct number of files"
+    );
+  });
+
+  test("can recover from a card error after error is removed from card source", async function (assert) {
+    // introduce errors into 2 cards and observe that invalidation doesn't
+    // blindly invalidate all cards are in an error state
+    await realm.write(
+      "pet.gts",
+      `
+          import { contains, field, Card } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+          export class Pet extends Card {
+            @field firstName = contains(StringCard);
+          }
+          throw new Error('boom!');
+        `
+    );
+    assert.deepEqual(
+      realm.searchIndex.stats,
+      {
+        instancesIndexed: 0,
+        definitionsBuilt: 0,
+        instanceErrors: 1,
+        definitionErrors: 1,
+        moduleErrors: 1,
+      },
+      "indexed correct number of files"
+    );
+    await realm.write(
+      "person.gts",
+      `
+          // syntax error
+          export class IntentionallyThrownError {
+        `
+    );
+    assert.deepEqual(
+      realm.searchIndex.stats,
+      {
+        instancesIndexed: 0,
+        definitionsBuilt: 0,
+        instanceErrors: 3, // 1 post, 2 persons
+        definitionErrors: 2, // post, fancy person (person is not a def error because the syntax failed)
+        moduleErrors: 3, // post, fancy person, person
+      },
+      "indexed correct number of files"
+    );
+    try {
+      await realm.searchIndex.search({
+        filter: {
+          type: { module: `${testRealm}person`, name: "Person" },
+        },
+      });
+      throw new Error("expected error was not thrown");
+    } catch (err: any) {
+      assert.ok(
+        err.message.match(
+          /filter refers to nonexistent type: import { Person } from "http:\/\/test-realm\/person"/
+        ),
+        "person card does not exist"
+      );
+    }
+
+    await realm.write(
+      "person.gts",
+      `
+          import { contains, field, Card } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+
+          export class Person extends Card {
+            @field firstName = contains(StringCard);
+          }
+        `
+    );
+    assert.deepEqual(
+      realm.searchIndex.stats,
+      {
+        instancesIndexed: 3, // 1 post and 2 persons
+        definitionsBuilt: 3, // person, fancy-person, post
+        instanceErrors: 0,
+        definitionErrors: 0,
+        moduleErrors: 0,
+      },
+      "indexed correct number of files"
+    );
+    let result = await realm.searchIndex.search({
+      filter: {
+        type: { module: `${testRealm}person`, name: "Person" },
+      },
+    });
+    assert.strictEqual(
+      result.length,
+      2,
+      "correct number of instances returned"
     );
   });
 
@@ -163,9 +278,9 @@ module("indexing", function (hooks) {
       {
         instancesIndexed: 0,
         definitionsBuilt: 0,
-        modulesAnalyzed: 0,
         instanceErrors: 0,
         definitionErrors: 0,
+        moduleErrors: 0,
       },
       "index did not touch any files"
     );
@@ -203,9 +318,9 @@ module("indexing", function (hooks) {
       {
         instancesIndexed: 1,
         definitionsBuilt: 1,
-        modulesAnalyzed: 1,
         instanceErrors: 0,
         definitionErrors: 0,
+        moduleErrors: 0,
       },
       "indexed correct number of files"
     );
@@ -241,9 +356,9 @@ module("indexing", function (hooks) {
       {
         instancesIndexed: 3,
         definitionsBuilt: 3,
-        modulesAnalyzed: 1,
         instanceErrors: 0,
         definitionErrors: 0,
+        moduleErrors: 0,
       },
       "indexed correct number of files"
     );
@@ -270,11 +385,13 @@ module("indexing", function (hooks) {
         type: "error",
         error: {
           message: "CardError 404 (TODO include stack trace)",
-          errorReference: {
-            type: "exportedCard",
-            module: "http://test-realm/post",
-            name: "Post",
-          },
+          errorReferences: [
+            {
+              type: "exportedCard",
+              module: "http://test-realm/post",
+              name: "Post",
+            },
+          ],
         },
       },
       "card instance is an error document"
@@ -284,9 +401,9 @@ module("indexing", function (hooks) {
       {
         instancesIndexed: 0,
         definitionsBuilt: 0,
-        modulesAnalyzed: 0,
         instanceErrors: 1,
         definitionErrors: 0,
+        moduleErrors: 0,
       },
       "indexed correct number of files"
     );
@@ -322,9 +439,9 @@ module("indexing", function (hooks) {
       {
         instancesIndexed: 1,
         definitionsBuilt: 1,
-        modulesAnalyzed: 1,
         instanceErrors: 0,
         definitionErrors: 0,
+        moduleErrors: 0,
       },
       "indexed correct number of files"
     );

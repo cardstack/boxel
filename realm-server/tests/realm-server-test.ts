@@ -19,6 +19,7 @@ import {
 import { stringify } from "qs";
 import { NodeAdapter } from "../node-realm";
 import { Query } from "@cardstack/runtime-common/query";
+import "@cardstack/runtime-common/helpers/code-equality-assertion";
 
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
@@ -71,7 +72,7 @@ module("Realm Server", function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}person.gts`,
+            module: `${testRealmURL}person`,
             name: "Person",
           },
         },
@@ -175,7 +176,7 @@ module("Realm Server", function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmHref}person.gts`,
+                module: `${testRealmHref}person`,
                 name: "Person",
               },
             },
@@ -255,16 +256,16 @@ module("Realm Server", function (hooks) {
     let response = await request
       .post("/unused-card.gts")
       .set("Accept", "application/vnd.card+source")
-      .send(`//TEST UPDATE ${cardSrc}`);
+      .send(`//TEST UPDATE\n${cardSrc}`);
     assert.strictEqual(response.status, 204, "HTTP 204 status");
 
     let srcFile = join(dir.name, "unused-card.gts");
     assert.ok(existsSync(srcFile), "card src exists");
     let src = readFileSync(srcFile, { encoding: "utf8" });
-    assert.strictEqual(
+    assert.codeEqual(
       src,
-      `//TEST UPDATE ${cardSrc}`,
-      "file contents are correct"
+      `//TEST UPDATE
+      ${cardSrc}`
     );
   });
 

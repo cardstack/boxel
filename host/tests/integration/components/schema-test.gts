@@ -376,6 +376,6 @@ async function getSchemaArgs(context: TestContext, adapter: TestRealmAdapter, re
   if (openFile.state !== "ready") {
     throw new Error(`could not open file ${openFile.url}`);
   }
-  let moduleSyntax = new ModuleSyntax(openFile.content);
+  let moduleSyntax = new ModuleSyntax(openFile.content, new URL(openFile.url));
   return { moduleSyntax, ref, openFile };
 }

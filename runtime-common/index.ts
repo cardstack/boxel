@@ -120,8 +120,11 @@ export {
   isCardSingleResourceDocument,
 } from "./search-index";
 
-// @ts-ignore
+// @ts-ignore tsc doesn't understand .gts files
+import type CardAPI from "https://cardstack.com/base/card-api";
+// @ts-ignore tsc doesn't understand .gts files
 import type { Card } from "https://cardstack.com/base/card-api";
+export { CardAPI, Card };
 
 export interface CardChooser {
   chooseCard<T extends Card>(query: Query): Promise<undefined | T>;
@@ -139,4 +142,22 @@ export async function chooseCard<T extends Card>(
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
 
   return await chooser.chooseCard<T>(query);
+}
+
+export function hasExecutableExtension(path: string): boolean {
+  for (let extension of executableExtensions) {
+    if (path.endsWith(extension)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function trimExecutableExtension(url: URL): URL {
+  for (let extension of executableExtensions) {
+    if (url.href.endsWith(extension)) {
+      return new URL(url.href.replace(new RegExp(`\\${extension}$`), ""));
+    }
+  }
+  return url;
 }

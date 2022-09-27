@@ -16,7 +16,7 @@ import startCase from "lodash/startCase";
 import camelCase from "lodash/camelCase";
 import upperFirst from "lodash/upperFirst";
 import { parseTemplates } from "@cardstack/ember-template-imports/lib/parse-templates";
-import { baseRealm } from "@cardstack/runtime-common";
+import { baseRealm, CardRef } from "@cardstack/runtime-common";
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from "@babel/plugin-syntax-decorators";
 //@ts-ignore unsure where these types live
@@ -26,21 +26,68 @@ import typescriptPlugin from "@babel/plugin-syntax-typescript";
 
 import type { types as t } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
-import type { CardRef, ExportedCardRef } from "./search-index";
+import type { ExportedCardRef } from "./search-index";
 
 export type { ClassReference, ExternalReference };
 
 export class ModuleSyntax {
-  declare ast: t.File;
   declare possibleCards: PossibleCardClass[];
   declare reexports: { exportName: string; ref: ExternalReference }[];
+  declare imports: ExternalReference[];
+  private declare ast: t.File;
+  private cardRefs = new WeakMap<PossibleCardClass, CardRef>();
 
-  constructor(src: string) {
+  constructor(src: string, private url: URL) {
     this.analyze(src);
+    for (let card of this.possibleCards) {
+      if (card.exportedAs) {
+        let cardRef: CardRef = {
+          type: "exportedCard",
+          name: card.exportedAs,
+          module: this.url.href,
+        };
+        this.cardRefs.set(card, cardRef);
+        this.makeCardRefsFor(card, cardRef);
+      }
+    }
+  }
+
+  private makeCardRefsFor(card: PossibleCardClass, cardRef: CardRef) {
+    let superClass = card.super;
+    if (superClass.type === "internal") {
+      let superCard = this.possibleCards[superClass.classIndex];
+      if (!this.cardRefs.has(superCard)) {
+        let superCardRef: CardRef = {
+          type: "ancestorOf",
+          card: cardRef,
+        };
+        this.cardRefs.set(superCard, superCardRef);
+        this.makeCardRefsFor(superCard, superCardRef);
+      }
+    }
+    for (let [fieldName, field] of card.possibleFields.entries()) {
+      if (field.card.type === "internal") {
+        let fieldCard = this.possibleCards[field.card.classIndex];
+        if (this.cardRefs.has(fieldCard)) {
+          continue;
+        }
+        let fieldCardRef: CardRef = {
+          type: "fieldOf",
+          field: fieldName,
+          card: cardRef,
+        };
+        this.cardRefs.set(fieldCard, fieldCardRef);
+        this.makeCardRefsFor(fieldCard, fieldCardRef);
+      }
+    }
   }
 
   private analyze(src: string) {
-    let moduleAnalysis: Options = { possibleCards: [], reexports: [] };
+    let moduleAnalysis: Options = {
+      possibleCards: [],
+      imports: [],
+      reexports: [],
+    };
     let preprocessedSrc = preprocessTemplateTags(src);
 
     this.ast = Babel.transformSync(preprocessedSrc, {
@@ -55,6 +102,11 @@ export class ModuleSyntax {
     })!.ast!;
     this.possibleCards = moduleAnalysis.possibleCards;
     this.reexports = moduleAnalysis.reexports;
+    this.imports = moduleAnalysis.imports;
+  }
+
+  cardRefFor(possibleCard: PossibleCardClass) {
+    return this.cardRefs.get(possibleCard);
   }
 
   code(): string {
@@ -168,100 +220,6 @@ export class ModuleSyntax {
     }
     return cardClass;
   }
-
-  // goal: either we find the PossibleCardClass, or we produce a CardRef for a
-  // *different* module than us so that progress can be made by following that,
-  // or we error because we can see the thing you're asking about is not
-  // possibly a card (because it's not class definition).
-  find(
-    ref: CardRef
-  ):
-    | { result: "local"; class: PossibleCardClass }
-    | { result: "remote"; ref: CardRef }
-    | undefined {
-    if (ref.type === "exportedCard") {
-      let found = this.possibleCards.find((c) => c.exportedAs === ref.name);
-      if (!found) {
-        let reexport = this.reexports.find((r) => r.exportName === ref.name);
-        if (reexport) {
-          return {
-            result: "remote",
-            ref: {
-              type: "exportedCard",
-              module: reexport.ref.module,
-              name: reexport.ref.name,
-            },
-          };
-        }
-        return undefined; // the ref we are looking for turns out to not actually be a card
-      }
-      return { result: "local", class: found };
-    } else if (ref.type === "ancestorOf") {
-      let parent = this.find(ref.card);
-      if (!parent) {
-        return undefined; // the ref we are looking for turns out to not actually be a card
-      }
-      if (parent.result === "remote") {
-        // the card whose ancestor they're asking about is not in this module.
-        // This would happen due to reexports.
-        return {
-          result: "remote",
-          ref: { type: "ancestorOf", card: parent.ref },
-        };
-      } else {
-        let ancestorRef = parent.class.super;
-        if (ancestorRef.type === "internal") {
-          return {
-            result: "local",
-            class: this.possibleCards[ancestorRef.classIndex],
-          };
-        } else {
-          return {
-            result: "remote",
-            ref: {
-              type: "exportedCard",
-              module: ancestorRef.module,
-              name: ancestorRef.name,
-            },
-          };
-        }
-      }
-    } else if (ref.type === "fieldOf") {
-      let parent = this.find(ref.card);
-      if (!parent) {
-        return undefined; // the ref we are looking for turns out to not actually be a card
-      }
-      if (parent.result === "remote") {
-        // the card whose field they're asking about is not in this module. This
-        // would happen due to reexports.
-        return {
-          result: "remote",
-          ref: { type: "fieldOf", field: ref.field, card: parent.ref },
-        };
-      } else {
-        let field = parent.class.possibleFields.get(ref.field);
-        if (!field) {
-          throw new Error(`no such field ${ref.field}`);
-        }
-        if (field.card.type === "internal") {
-          return {
-            result: "local",
-            class: this.possibleCards[field.card.classIndex],
-          };
-        } else {
-          return {
-            result: "remote",
-            ref: {
-              type: "exportedCard",
-              module: field.card.module,
-              name: field.card.name,
-            },
-          };
-        }
-      }
-    }
-    throw assertNever(ref);
-  }
 }
 
 function preprocessTemplateTags(src: string): string {
@@ -337,8 +295,4 @@ function suggestedCardName(ref: ExportedCardRef): string {
     name = ref.module.split("/").pop()!;
   }
   return upperFirst(camelCase(`${name} card`));
-}
-
-function assertNever(value: never) {
-  return new Error(`should never happen ${value}`);
 }

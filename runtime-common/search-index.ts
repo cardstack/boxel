@@ -1,4 +1,4 @@
-import { executableExtensions, baseRealm } from ".";
+import { trimExecutableExtension, baseRealm } from ".";
 import { Kind, Realm } from "./realm";
 import { CurrentRun, SearchEntry, SearchEntryWithErrors } from "./current-run";
 import { LocalPath } from "./paths";
@@ -217,24 +217,6 @@ export interface CardDefinition {
   >;
 }
 
-export function hasExecutableExtension(path: string): boolean {
-  for (let extension of executableExtensions) {
-    if (path.endsWith(extension)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-export function trimExecutableExtension(url: URL): URL {
-  for (let extension of executableExtensions) {
-    if (url.href.endsWith(extension)) {
-      return new URL(url.href.replace(new RegExp(`\\${extension}$`), ""));
-    }
-  }
-  return url;
-}
-
 export class SearchIndex {
   #currentRun: CurrentRun;
 
@@ -302,19 +284,6 @@ export class SearchIndex {
     if (result && result.type !== "error") {
       return result.def;
     }
-    if (
-      !result &&
-      ref.type === "exportedCard" &&
-      !this.realm.paths.inRealm(new URL(ref.module, relativeTo))
-    ) {
-      // we only include external definitions in our definitions cache if we
-      // have a card in our realm that uses an external definition. otherwise we
-      // should forward requests for external cards to the realm in question
-      result = await this.#currentRun.getExternalCardDefinition(ref);
-      if (result?.type !== "error") {
-        return result?.def;
-      }
-    }
     return undefined;
   }
 
@@ -350,66 +319,38 @@ export class SearchIndex {
     );
   }
 
-  private async getFieldDefinition(
-    ref: CardRef,
-    fieldSegments: string[]
-  ): Promise<CardDefinition | undefined> {
-    let def = await this.typeOf(ref);
-    if (!def) {
-      return undefined;
-    }
-    let fieldName = fieldSegments.shift()!;
-    let fieldDef = def.fields.get(fieldName);
-    if (!fieldDef) {
-      throw new Error(
-        `Your filter refers to nonexistent field "${fieldName}" on type ${internalKeyFor(
-          ref,
-          undefined // assumes absolute module URL
-        )}`
-      );
-    }
-    if (fieldSegments.length > 0) {
-      return await this.getFieldDefinition(fieldDef.fieldCard, [
-        ...fieldSegments,
-      ]);
-    }
-    return await this.typeOf(fieldDef.fieldCard);
-  }
-
   private async loadFieldCard(
     ref: ExportedCardRef,
     fieldPath: string
   ): Promise<typeof Card> {
-    let fieldDef = await this.getFieldDefinition(
-      { type: "exportedCard", ...ref },
-      fieldPath.split(".")
-    );
-    if (!fieldDef) {
+    let api = await this.loadAPI();
+    let module: Record<string, typeof Card>;
+    try {
+      module = await this.loader.import<Record<string, typeof Card>>(
+        ref.module
+      );
+    } catch (err: any) {
       throw new Error(
         `Your filter refers to nonexistent type: import ${
           ref.name === "default" ? "default" : `{ ${ref.name} }`
         } from "${ref.module}"`
       );
     }
-    if (fieldDef.id.type !== "exportedCard") {
-      throw new Error(
-        `The field card ${JSON.stringify(
-          fieldDef.id
-        )} enclosed in ${JSON.stringify(
-          ref
-        )} with field path "${fieldPath}" is not exported`
-      );
+    let card: typeof Card | undefined = module[ref.name];
+    let segments = fieldPath.split(".");
+    while (segments.length) {
+      let fieldName = segments.shift()!;
+      let prevCard = card;
+      card = (await api.getField(card, fieldName))?.card;
+      if (!card) {
+        throw new Error(
+          `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(
+            this.loader.identify(prevCard)
+          )}`
+        );
+      }
     }
-    let module = await this.loader.import<Record<string, any>>(
-      fieldDef.id.module
-    );
-    let FieldCard = module[fieldDef.id.name];
-    if (!FieldCard) {
-      throw new Error(
-        `Could not load field card ${JSON.stringify(fieldDef.id)}`
-      );
-    }
-    return FieldCard as typeof Card;
+    return card;
   }
 
   private buildSorter(
