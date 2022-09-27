@@ -2,16 +2,14 @@ import { contains, field, Component, Card, primitive } from 'https://cardstack.c
 import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import CardRefCard from 'https://cardstack.com/base/card-ref';
-import { Loader, baseCardRef } from "@cardstack/runtime-common";
+import { baseCardRef } from "@cardstack/runtime-common";
 
 export class CatalogEntry extends Card {
   @field title = contains(StringCard);
   @field description = contains(StringCard);
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, { computeVia: async function(this: CatalogEntry) {
-    // TODO this manner of getting the correct loader works specifically inside a card's class scope.
-    // It would be great, tho, to generalize this so that it works anywhere in this module's scope.
-    let module: Record<string, any> = await Loader.getLoaderFor(this.constructor).import(this.ref.module);
+    let module: Record<string, any> = await import(this.ref.module);
     let Clazz: typeof Card = module[this.ref.name];
     return primitive in Clazz ||
       // the base card is a special case where it is technically not a primitive, but because it has no fields

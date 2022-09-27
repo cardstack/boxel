@@ -10,7 +10,7 @@ import {
 import {
   removeFieldPlugin,
   Options as RemoveOptions,
-} from "./removeFieldPlugin";
+} from "./remove-field-plugin";
 import { ImportUtil } from "babel-import-util";
 import startCase from "lodash/startCase";
 import camelCase from "lodash/camelCase";
