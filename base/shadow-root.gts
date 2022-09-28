@@ -3,25 +3,29 @@ import Modifier from "ember-modifier";
 interface Signature {
   element: HTMLElement;
   Args: {
-    Positional: [model: any, style: string];
+    Positional: [label?: string, style?: string];
   };
 }
 
 export class ShadowRoot extends Modifier<Signature> {
   modify(
     element: HTMLElement,
-    [model, style]: Signature["Args"]["Positional"]
+    [label, style]: Signature["Args"]["Positional"]
   ) {
     const shadow = element.attachShadow({ mode: "open" });
 
     const wrapper = document.createElement("div");
-    wrapper.className = model.constructor.name;
+    if (label) {
+      wrapper.className = label;
+    }
     wrapper.innerHTML = element.innerHTML;
 
-    const styles = document.createElement("style");
-    styles.innerHTML = style;
+    if (style) {
+      const styles = document.createElement("style");
+      styles.innerHTML = style;
+      shadow.appendChild(styles);
+    }
 
     shadow.appendChild(wrapper);
-    shadow.appendChild(styles);
   }
 }

@@ -51,6 +51,10 @@ button {
   padding-left: 4rem;
 }
 
+.card-edit {
+  padding: 2rem 1rem;
+}
+
 .card-edit label,
 .card-edit .field {
   display: block;

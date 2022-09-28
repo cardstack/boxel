@@ -1,11 +1,12 @@
 import type { TemplateOnlyComponent } from "@ember/component/template-only";
-import Modifier from 'ember-modifier';
+import { ShadowRoot } from 'https://cardstack.com/base/shadow-root';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     label?: string;
-  };
+    styles?: string;
+  }
   Blocks: {
     default: [];
   };
@@ -13,54 +14,16 @@ interface Signature {
 
 const CardContainer: TemplateOnlyComponent<Signature> = (
   <template>
-    <div {{ShadowContainer @label}} ...attributes>
-      {{yield}}
-    </div>
-  </template>
-);
-
-export default CardContainer;
-
-
-interface ShadowSignature {
-  Element: HTMLElement;
-  Args: {
-    Positional: [label: string | undefined]
-  };
-}
-
-class ShadowContainer extends Modifier<ShadowSignature> {
-  modify(
-    element: HTMLElement,
-    [label]: ShadowSignature["Args"]["Positional"]
-  ) {
-    const shadow = element.attachShadow({ mode: 'open' });
-    
-    const container = document.createElement('div');
-    container.setAttribute('class', 'card');
-    container.innerHTML = element.innerHTML;
-
-    if (label) {
-      container.classList.add(label);
-      const labelDiv = document.createElement('div');
-      labelDiv.setAttribute('class', 'card-label');
-      labelDiv.textContent = label;
-      container.prepend(labelDiv);
-    }
-
-    const styles = document.createElement('style');
-    styles.textContent = `
-      .card {
+    <style>
+      .card-container {
         position: relative;
         margin-top: 1rem;
-        margin-bottom: 1rem;
         border: 1px solid gray;
         border-radius: 10px;
-        padding: 2rem 1rem 1rem;
         background-color: white;
         overflow: auto;
       }
-      .card-label {
+      .card-container__label {
         position: absolute;
         top: 0;
         right: 0;
@@ -71,9 +34,16 @@ class ShadowContainer extends Modifier<ShadowSignature> {
         font-family: Arial, Helvetica, sans-serif;
         padding: 0.5em 1em;
       }
-    `;
-    
-    shadow.appendChild(container);
-    shadow.appendChild(styles);
-  }
-}
+    </style>
+    <div class="card-container" ...attributes>
+      {{#if @label}}
+        <span class="card-container__label">{{@label}}</span>
+      {{/if}}
+      <div {{ShadowRoot @label @styles}}>
+        {{yield}}
+      </div>
+    </div>
+  </template>
+);
+
+export default CardContainer;
