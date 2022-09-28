@@ -5,7 +5,7 @@ import CardRefCard from 'https://cardstack.com/base/card-ref';
 import { baseCardRef } from "@cardstack/runtime-common";
 import CardContainer from 'https://cardstack.com/base/card-container';
 
-const sharedStyles = `
+let sharedStyles = `
   .CatalogEntry {
     background-color: #cbf3f0;
     padding: 1rem;

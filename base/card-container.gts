@@ -1,5 +1,5 @@
 import type { TemplateOnlyComponent } from "@ember/component/template-only";
-import { ShadowRoot } from 'https://cardstack.com/base/shadow-root';
+import { ShadowRootModifier } from 'https://cardstack.com/base/shadow-root';
 
 interface Signature {
   Element: HTMLElement;
@@ -39,7 +39,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = (
       {{#if @label}}
         <span class="card-container__label">{{@label}}</span>
       {{/if}}
-      <div {{ShadowRoot @label @styles}}>
+      <div {{ShadowRootModifier @label @styles}}>
         {{yield}}
       </div>
     </div>

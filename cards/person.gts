@@ -3,7 +3,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import CardContainer from 'https://cardstack.com/base/card-container';
 
-const sharedStyles = `
+let sharedStyles = `
   .Person {
     background-color: #90dbf4;
     padding: 1rem;
