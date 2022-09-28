@@ -1,7 +1,7 @@
 import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
-import Modifier from 'ember-modifier';
+import { ShadowRoot } from 'https://cardstack.com/base/shadow-root';
 
 export class Person extends Card {
   @field firstName = contains(StringCard);
@@ -9,55 +9,30 @@ export class Person extends Card {
   @field isCool = contains(BooleanCard);
   @field isHuman = contains(BooleanCard);
   static embedded = class Embedded extends Component<typeof this> {
+    styles = `
+      .Person {
+        background-color: #90dbf4;
+      }
+    `;
     <template>
-      <div {{CardShadow @model.constructor.name}}>
-        <@fields.firstName/> <@fields.lastName />
+      <div {{ShadowRoot @model this.styles}}>
+        <h3><@fields.firstName/> <@fields.lastName /></h3>
       </div>
     </template>
   }
+  
   static isolated = class Isolated extends Component<typeof this> {
+    styles = `
+      .Person {
+        background-color: #90dbf4;
+      }
+    `;
     <template>
-      <div {{CardShadow @model.constructor.name}}>
+      <div {{ShadowRoot @model this.styles}}>
         <h1><@fields.firstName/> <@fields.lastName /></h1>
         <div><@fields.isCool/></div>
         <div><@fields.isHuman/></div>
       </div>
     </template>
-  }
-}
-
-interface Signature {
-  element: HTMLElement;
-  Args: {
-    Positional: [className: string | undefined]
-  };
-}
-
-class CardShadow extends Modifier<Signature> {
-  modify(
-    element: HTMLElement,
-    [className]: Signature["Args"]["Positional"]
-  ) {
-    const shadow = element.attachShadow({ mode: 'open' });
-    
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = element.innerHTML;
-
-    if (className) {
-      wrapper.setAttribute('class', className);
-    }
-
-    const styles = document.createElement('style');
-    styles.textContent = `
-      .Person {
-        background-color: #90dbf4;
-        border: 1px solid gray;
-        border-radius: 10px;
-        padding: 1rem;
-      }
-    `;
-
-    shadow.appendChild(wrapper);
-    shadow.appendChild(styles);
   }
 }
