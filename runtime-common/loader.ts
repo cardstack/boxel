@@ -248,6 +248,61 @@ export class Loader {
     }
   }
 
+  async fetch(
+    urlOrRequest: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> {
+    if (urlOrRequest instanceof Request) {
+      for (let realm of this.realmFetchOverride) {
+        if (realm.paths.inRealm(new URL(urlOrRequest.url))) {
+          return await realm.handle(urlOrRequest);
+        }
+      }
+      let request = new Request(this.resolve(urlOrRequest.url).href, {
+        method: urlOrRequest.method,
+        headers: urlOrRequest.headers,
+        body: urlOrRequest.body,
+      });
+      return fetch(request);
+    } else {
+      for (let realm of this.realmFetchOverride) {
+        if (realm.paths.inRealm(new URL(urlOrRequest))) {
+          let request = new Request(
+            typeof urlOrRequest === "string" ? urlOrRequest : urlOrRequest.href,
+            init
+          );
+          return await realm.handle(request);
+        }
+      }
+      let resolvedURL = this.resolve(urlOrRequest);
+      return fetch(resolvedURL.href, init);
+    }
+  }
+
+  resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
+    let absoluteURL = new URL(moduleIdentifier, relativeTo);
+    for (let [paths, to] of this.urlMappings) {
+      if (paths.inRealm(absoluteURL)) {
+        return new URL(paths.local(absoluteURL), to) as ResolvedURL;
+      }
+    }
+    return absoluteURL as ResolvedURL;
+  }
+
+  reverseResolution(
+    moduleIdentifier: string | ResolvedURL,
+    relativeTo?: URL
+  ): URL {
+    let absoluteURL = new URL(moduleIdentifier, relativeTo);
+    for (let [sourcePath, to] of this.urlMappings) {
+      let destinationPath = new RealmPaths(to);
+      if (destinationPath.inRealm(absoluteURL)) {
+        return new URL(destinationPath.local(absoluteURL), sourcePath.url);
+      }
+    }
+    return absoluteURL;
+  }
+
   createModuleProxy(module: any, moduleIdentifier: string) {
     return new Proxy(module, {
       get: (target, property, received) => {
@@ -478,61 +533,6 @@ export class Loader {
       );
     }
     return await response.text();
-  }
-
-  async fetch(
-    urlOrRequest: string | URL | Request,
-    init?: RequestInit
-  ): Promise<Response> {
-    if (urlOrRequest instanceof Request) {
-      for (let realm of this.realmFetchOverride) {
-        if (realm.paths.inRealm(new URL(urlOrRequest.url))) {
-          return await realm.handle(urlOrRequest);
-        }
-      }
-      let request = new Request(this.resolve(urlOrRequest.url).href, {
-        method: urlOrRequest.method,
-        headers: urlOrRequest.headers,
-        body: urlOrRequest.body,
-      });
-      return fetch(request);
-    } else {
-      for (let realm of this.realmFetchOverride) {
-        if (realm.paths.inRealm(new URL(urlOrRequest))) {
-          let request = new Request(
-            typeof urlOrRequest === "string" ? urlOrRequest : urlOrRequest.href,
-            init
-          );
-          return await realm.handle(request);
-        }
-      }
-      let resolvedURL = this.resolve(urlOrRequest);
-      return fetch(resolvedURL.href, init);
-    }
-  }
-
-  resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
-    let absoluteURL = new URL(moduleIdentifier, relativeTo);
-    for (let [paths, to] of this.urlMappings) {
-      if (paths.inRealm(absoluteURL)) {
-        return new URL(paths.local(absoluteURL), to) as ResolvedURL;
-      }
-    }
-    return absoluteURL as ResolvedURL;
-  }
-
-  reverseResolution(
-    moduleIdentifier: string | ResolvedURL,
-    relativeTo?: URL
-  ): URL {
-    let absoluteURL = new URL(moduleIdentifier, relativeTo);
-    for (let [sourcePath, to] of this.urlMappings) {
-      let destinationPath = new RealmPaths(to);
-      if (destinationPath.inRealm(absoluteURL)) {
-        return new URL(destinationPath.local(absoluteURL), sourcePath.url);
-      }
-    }
-    return absoluteURL;
   }
 }
 
