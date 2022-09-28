@@ -172,10 +172,10 @@ export class Loader {
     let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
     let module = this.modules.get(resolvedModuleIdentifier.href);
     if (!module || module.state === "fetching") {
-      // we haven't yet tried importing the module or we are still in teh process of importing the module
+      // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
         await this.import(moduleIdentifier);
-      } catch (err) {
+      } catch (err: any) {
         console.warn(
           `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`
         );
