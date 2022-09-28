@@ -16,7 +16,7 @@ import startCase from "lodash/startCase";
 import camelCase from "lodash/camelCase";
 import upperFirst from "lodash/upperFirst";
 import { parseTemplates } from "@cardstack/ember-template-imports/lib/parse-templates";
-import { baseRealm, CardRef } from "@cardstack/runtime-common";
+import { baseRealm } from "@cardstack/runtime-common";
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from "@babel/plugin-syntax-decorators";
 //@ts-ignore unsure where these types live
@@ -32,61 +32,15 @@ export type { ClassReference, ExternalReference };
 
 export class ModuleSyntax {
   declare possibleCards: PossibleCardClass[];
-  declare reexports: { exportName: string; ref: ExternalReference }[];
-  declare imports: ExternalReference[];
   private declare ast: t.File;
-  private cardRefs = new WeakMap<PossibleCardClass, CardRef>();
 
-  constructor(src: string, private url: URL) {
+  constructor(src: string) {
     this.analyze(src);
-    for (let card of this.possibleCards) {
-      if (card.exportedAs) {
-        let cardRef: CardRef = {
-          type: "exportedCard",
-          name: card.exportedAs,
-          module: this.url.href,
-        };
-        this.cardRefs.set(card, cardRef);
-        this.makeCardRefsFor(card, cardRef);
-      }
-    }
-  }
-
-  private makeCardRefsFor(card: PossibleCardClass, cardRef: CardRef) {
-    let superClass = card.super;
-    if (superClass.type === "internal") {
-      let superCard = this.possibleCards[superClass.classIndex];
-      if (!this.cardRefs.has(superCard)) {
-        let superCardRef: CardRef = {
-          type: "ancestorOf",
-          card: cardRef,
-        };
-        this.cardRefs.set(superCard, superCardRef);
-        this.makeCardRefsFor(superCard, superCardRef);
-      }
-    }
-    for (let [fieldName, field] of card.possibleFields.entries()) {
-      if (field.card.type === "internal") {
-        let fieldCard = this.possibleCards[field.card.classIndex];
-        if (this.cardRefs.has(fieldCard)) {
-          continue;
-        }
-        let fieldCardRef: CardRef = {
-          type: "fieldOf",
-          field: fieldName,
-          card: cardRef,
-        };
-        this.cardRefs.set(fieldCard, fieldCardRef);
-        this.makeCardRefsFor(fieldCard, fieldCardRef);
-      }
-    }
   }
 
   private analyze(src: string) {
     let moduleAnalysis: Options = {
       possibleCards: [],
-      imports: [],
-      reexports: [],
     };
     let preprocessedSrc = preprocessTemplateTags(src);
 
@@ -101,12 +55,6 @@ export class ModuleSyntax {
       ],
     })!.ast!;
     this.possibleCards = moduleAnalysis.possibleCards;
-    this.reexports = moduleAnalysis.reexports;
-    this.imports = moduleAnalysis.imports;
-  }
-
-  cardRefFor(possibleCard: PossibleCardClass) {
-    return this.cardRefs.get(possibleCard);
   }
 
   code(): string {

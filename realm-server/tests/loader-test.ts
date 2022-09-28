@@ -41,11 +41,10 @@ module("loader", function () {
 
   test("can determine consumed modules", async function (assert) {
     let loader = new Loader();
-    let a = await loader.import<{ a(): string }>(`${testRealm}a`);
-    assert.deepEqual(loader.getConsumedModules(a), [
-      `${testRealm}a`,
-      `${testRealm}b`,
+    await loader.import<{ a(): string }>(`${testRealm}a`);
+    assert.deepEqual(await loader.getConsumedModules(`${testRealm}a`), [
       `${testRealm}c`,
+      `${testRealm}b`,
     ]);
   });
 
@@ -56,8 +55,10 @@ module("loader", function () {
       throw new Error(`expected error was not thrown`);
     } catch (e) {
       assert.strictEqual(e.message, "intentional error thrown");
-      assert.deepEqual(loader.getConsumedModules(e), [
-        `${testRealm}d`,
+      assert.deepEqual(await loader.getConsumedModules(`${testRealm}d`), [
+        `${testRealm}c`,
+        `${testRealm}b`,
+        `${testRealm}a`,
         `${testRealm}e`,
       ]);
     }

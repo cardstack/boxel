@@ -1,6 +1,11 @@
 import { trimExecutableExtension, baseRealm } from ".";
 import { Kind, Realm } from "./realm";
-import { CurrentRun, SearchEntry, SearchEntryWithErrors } from "./current-run";
+import {
+  CurrentRun,
+  SearchEntry,
+  SearchEntryWithErrors,
+  CardDefinition,
+} from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import flatMap from "lodash/flatMap";
@@ -202,19 +207,6 @@ export function isCardCollectionDocument(
     return false;
   }
   return data.every((resource) => isCardResource(resource));
-}
-
-export interface CardDefinition {
-  id: CardRef;
-  key: string; // this is used to help for JSON-API serialization
-  super: CardRef | undefined; // base card has no super
-  fields: Map<
-    string,
-    {
-      fieldType: "contains" | "containsMany";
-      fieldCard: CardRef;
-    }
-  >;
 }
 
 export class SearchIndex {

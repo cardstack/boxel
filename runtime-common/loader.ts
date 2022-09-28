@@ -15,6 +15,7 @@ type RegisteredModule = {
   state: "registered";
   dependencyList: string[];
   implementation: Function;
+  consumedModules: Set<string>;
 };
 
 // a module is in this state until its own code *and the code for all its deps*
@@ -39,14 +40,17 @@ type Module =
       state: "preparing";
       implementation: Function;
       moduleInstance: object;
+      consumedModules: Set<string>;
     }
   | {
       state: "evaluated";
       moduleInstance: object;
+      consumedModules: Set<string>;
     }
   | {
       state: "broken";
       exception: any;
+      consumedModules: Set<string>;
     };
 
 type FileLoader = (path: LocalPath) => Promise<string>;
@@ -60,7 +64,6 @@ export class Loader {
     Function,
     { module: string; name: string }
   >();
-  private trackedLoaders = new WeakMap<object | Error, TrackedLoader>();
 
   constructor() {}
 
@@ -152,19 +155,42 @@ export class Loader {
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    let trackedLoader = this.makeTrackedLoader();
-    trackedLoader.moduleShims.set(
+    this.moduleShims.set(
       moduleIdentifier,
-      trackedLoader.createModuleProxy(module, moduleIdentifier)
+      this.createModuleProxy(module, moduleIdentifier)
     );
   }
 
-  getConsumedModules(moduleOrError: object | Error): string[] | undefined {
-    let trackedLoader = this.trackedLoaders.get(moduleOrError);
-    if (!trackedLoader) {
-      return undefined;
+  async getConsumedModules(
+    moduleIdentifier: string,
+    accumulator = new Set<string>()
+  ): Promise<string[]> {
+    if (accumulator.has(moduleIdentifier)) {
+      return [];
     }
-    return [...trackedLoader.consumedModules];
+
+    let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
+    let module = this.modules.get(resolvedModuleIdentifier.href);
+    if (!module || module.state === "fetching") {
+      // we haven't yet tried importing the module or we are still in teh process of importing the module
+      try {
+        await this.import(moduleIdentifier);
+      } catch (err) {
+        console.warn(
+          `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`
+        );
+      }
+    }
+    if (module?.state === "fetching") {
+      throw new Error(
+        `bug: could not determine the consumed modules for ${moduleIdentifier} because it is still in "fetching" state`
+      );
+    }
+    for (let consumed of module?.consumedModules ?? []) {
+      await this.getConsumedModules(consumed, accumulator);
+      accumulator.add(consumed);
+    }
+    return [...accumulator];
   }
 
   static identify(
@@ -196,29 +222,262 @@ export class Loader {
     return Loader.getLoader();
   }
 
-  private makeTrackedLoader(): TrackedLoader {
-    return new TrackedLoader({
-      loader: this,
-      modules: this.modules,
-      fileLoaders: this.fileLoaders,
-      moduleShims: this.moduleShims,
-      identities: this.identities,
+  async import<T extends object>(moduleIdentifier: string): Promise<T> {
+    let resolvedModule = this.resolve(moduleIdentifier);
+    let resolvedModuleIdentifier = resolvedModule.href;
+
+    let shimmed = this.moduleShims.get(moduleIdentifier);
+    if (shimmed) {
+      return shimmed as T;
+    }
+
+    let module = await this.fetchModule(resolvedModule);
+    switch (module.state) {
+      case "fetching":
+        await module.deferred.promise;
+        return this.evaluateModule(resolvedModuleIdentifier);
+      case "preparing":
+      case "evaluated":
+        return module.moduleInstance as T;
+      case "broken":
+        throw module.exception;
+      case "registered":
+        return this.evaluateModule(resolvedModuleIdentifier);
+      default:
+        throw assertNever(module);
+    }
+  }
+
+  createModuleProxy(module: any, moduleIdentifier: string) {
+    return new Proxy(module, {
+      get: (target, property, received) => {
+        let value = Reflect.get(target, property, received);
+        if (typeof value === "function" && typeof property === "string") {
+          this.identities.set(value, {
+            module: trimExecutableExtension(
+              this.reverseResolution(moduleIdentifier)
+            ).href,
+            name: property,
+          });
+          Loader.loaders.set(value, this);
+        }
+        return value;
+      },
+      set() {
+        throw new Error(`modules are read only`);
+      },
     });
   }
 
-  async import<T extends object>(moduleIdentifier: string): Promise<T> {
-    let trackedLoader = this.makeTrackedLoader();
-    let module: T;
-    try {
-      module = await trackedLoader.import(moduleIdentifier);
-    } catch (err: any) {
-      if (err instanceof Error) {
-        this.trackedLoaders.set(err, trackedLoader);
+  private async fetchModule(
+    moduleURL: ResolvedURL,
+    stack: string[] = []
+  ): Promise<Module> {
+    let moduleIdentifier = moduleURL.href;
+    let module = this.modules.get(moduleIdentifier);
+    if (module) {
+      // in the event of a cycle, we have already evaluated the
+      // define() since we recurse into our deps after the evaluation of the
+      // define, so just return ourselves
+      if (stack.includes(moduleIdentifier)) {
+        return module;
       }
+      // this closes an otherwise leaky async when there are simultaneous
+      // imports for modules that share a common dep, e.g. where you request
+      // module a and b simultaneously for the following consumption pattern
+      // (also included in our tests):
+      //   a -> b -> c
+      //
+      // In that case both of the imports will try to fetch c, one of them will
+      // start the actual fetch, and the other will short circuit and just
+      // return the cached module in a fetching state. the consumer of the short
+      // circuited module will assume that the dep has already been registered
+      // and immediately proceed to evaluation--when in fact the dep is still
+      // being loaded. to make sure that the consumer will wait until the dep
+      // has actually completed loading we need to return the deferred promise
+      // of the cached module.
+      if (module.state === "fetching") {
+        return module.deferred.promise;
+      }
+      return module;
+    }
+    module = {
+      state: "fetching",
+      deferred: new Deferred<Module>(),
+    };
+    this.modules.set(moduleIdentifier, module);
+
+    let src: string;
+    try {
+      src = await this.load(moduleURL);
+    } catch (exception) {
+      this.modules.set(moduleIdentifier, {
+        state: "broken",
+        exception,
+        consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
+      });
+      throw exception;
+    }
+    src = transformSync(src, {
+      plugins: [
+        [
+          TransformModulesAmdPlugin,
+          { noInterop: true, moduleId: moduleIdentifier },
+        ],
+      ],
+      sourceMaps: "inline",
+      filename: moduleIdentifier,
+    })?.code!;
+
+    let dependencyList: string[];
+    let implementation: Function;
+
+    // this local is here for the evals to see
+    // @ts-ignore
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    let define = (_mid: string, depList: string[], impl: Function) => {
+      dependencyList = depList.map((depId) => {
+        if (depId === "exports") {
+          return "exports";
+        } else if (depId === "__import_meta__") {
+          return "__import_meta__";
+        } else {
+          return this.resolve(depId, new URL(moduleIdentifier)).href;
+        }
+      });
+      implementation = impl;
+    };
+
+    try {
+      eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
+    } catch (exception) {
+      this.modules.set(moduleIdentifier, {
+        state: "broken",
+        exception,
+        consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
+      });
+      throw exception;
+    }
+
+    await Promise.all(
+      dependencyList!.map(async (depId) => {
+        if (depId !== "exports" && depId !== "__import_meta__") {
+          return await this.fetchModule(new URL(depId) as ResolvedURL, [
+            ...stack,
+            moduleIdentifier,
+          ]);
+        }
+        return undefined;
+      })
+    );
+
+    let registeredModule: RegisteredModule = {
+      state: "registered",
+      dependencyList: dependencyList!,
+      implementation: implementation!,
+      consumedModules: new Set(
+        dependencyList!.filter(
+          (d) => !["exports", "__import_meta__"].includes(d)
+        )
+      ),
+    };
+
+    this.modules.set(moduleIdentifier, registeredModule);
+    module.deferred.fulfill(registeredModule);
+    return registeredModule;
+  }
+
+  private evaluateModule<T extends object>(moduleIdentifier: string): T {
+    let module = this.modules.get(moduleIdentifier);
+    if (!module) {
+      throw new Error(
+        `bug in module loader: can't find module. ${moduleIdentifier} should have been registered before entering evaluateModule`
+      );
+    }
+    switch (module.state) {
+      case "fetching":
+        throw new Error(
+          `bug in module loader: module still in fetching state. ${moduleIdentifier} should have been registered before entering evaluateModule`
+        );
+      case "preparing":
+      case "evaluated":
+        return module.moduleInstance as T;
+      case "broken":
+        throw module.exception;
+      case "registered":
+        return this.evaluate(moduleIdentifier, module);
+      default:
+        throw assertNever(module);
+    }
+  }
+
+  private evaluate<T>(moduleIdentifier: string, module: RegisteredModule): T {
+    let privateModuleInstance = Object.create(null);
+    let moduleInstance = this.createModuleProxy(
+      privateModuleInstance,
+      moduleIdentifier
+    );
+    this.modules.set(moduleIdentifier, {
+      state: "preparing",
+      implementation: module.implementation,
+      moduleInstance,
+      consumedModules: module.consumedModules,
+    });
+
+    try {
+      let dependencies = module.dependencyList.map((dependencyIdentifier) => {
+        if (dependencyIdentifier === "exports") {
+          return privateModuleInstance;
+        } else if (dependencyIdentifier === "__import_meta__") {
+          return { url: moduleIdentifier, loader: this };
+        } else {
+          return this.evaluateModule(dependencyIdentifier);
+        }
+      });
+
+      module.implementation(...dependencies);
+      this.modules.set(moduleIdentifier, {
+        state: "evaluated",
+        moduleInstance,
+        consumedModules: module.consumedModules,
+      });
+      return moduleInstance;
+    } catch (exception) {
+      this.modules.set(moduleIdentifier, {
+        state: "broken",
+        exception,
+        consumedModules: module.consumedModules,
+      });
+      throw exception;
+    }
+  }
+
+  private async load(moduleURL: ResolvedURL): Promise<string> {
+    for (let [realmURL, fileLoader] of this.fileLoaders) {
+      let realmPath = new RealmPaths(this.resolve(realmURL));
+      if (realmPath.inRealm(moduleURL)) {
+        return await fileLoader(realmPath.local(moduleURL));
+      }
+    }
+
+    let response: Response;
+    try {
+      response = await this.fetch(moduleURL);
+    } catch (err) {
+      console.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
+      // this particular exception might not be worth caching the module in a
+      // "broken" state, since the server hosting the module is likely down. it
+      // might be a good idea to be able to try again in this case...
       throw err;
     }
-    this.trackedLoaders.set(module, trackedLoader);
-    return module;
+    if (!response.ok) {
+      throw new Error(
+        `Could not retrieve ${moduleURL}: ${
+          response.status
+        } - ${await response.text()}`
+      );
+    }
+    return await response.text();
   }
 
   async fetch(
@@ -274,283 +533,6 @@ export class Loader {
       }
     }
     return absoluteURL;
-  }
-}
-
-class TrackedLoader {
-  private loader: Loader;
-  private modules: Map<string, Module>;
-  private fileLoaders: Map<string, FileLoader>;
-  private identities: WeakMap<Function, { module: string; name: string }>;
-  public moduleShims: Map<string, Record<string, any>>;
-  public consumedModules: Set<string> = new Set();
-  constructor({
-    loader,
-    modules,
-    fileLoaders,
-    moduleShims,
-    identities,
-  }: {
-    loader: Loader;
-    modules: Map<string, Module>;
-    fileLoaders: Map<string, FileLoader>;
-    moduleShims: Map<string, Record<string, any>>;
-    identities: WeakMap<Function, { module: string; name: string }>;
-  }) {
-    this.loader = loader;
-    this.modules = modules;
-    this.fileLoaders = fileLoaders;
-    this.moduleShims = moduleShims;
-    this.identities = identities;
-  }
-
-  async import<T extends object>(moduleIdentifier: string): Promise<T> {
-    let resolvedModule = this.loader.resolve(moduleIdentifier);
-    let resolvedModuleIdentifier = resolvedModule.href;
-
-    let shimmed = this.moduleShims.get(moduleIdentifier);
-    if (shimmed) {
-      return shimmed as T;
-    }
-
-    let module = await this.fetchModule(resolvedModule);
-    switch (module.state) {
-      case "fetching":
-        await module.deferred.promise;
-        return this.evaluateModule(resolvedModuleIdentifier);
-      case "preparing":
-      case "evaluated":
-        return module.moduleInstance as T;
-      case "broken":
-        throw module.exception;
-      case "registered":
-        return this.evaluateModule(resolvedModuleIdentifier);
-      default:
-        throw assertNever(module);
-    }
-  }
-
-  createModuleProxy(module: any, moduleIdentifier: string) {
-    return new Proxy(module, {
-      get: (target, property, received) => {
-        let value = Reflect.get(target, property, received);
-        if (typeof value === "function" && typeof property === "string") {
-          this.identities.set(value, {
-            module: trimExecutableExtension(
-              this.loader.reverseResolution(moduleIdentifier)
-            ).href,
-            name: property,
-          });
-          Loader.loaders.set(value, this.loader);
-        }
-        return value;
-      },
-      set() {
-        throw new Error(`modules are read only`);
-      },
-    });
-  }
-
-  private async fetchModule(
-    moduleURL: ResolvedURL,
-    stack: string[] = []
-  ): Promise<Module> {
-    this.consumedModules.add(this.loader.reverseResolution(moduleURL).href);
-    let moduleIdentifier = moduleURL.href;
-    let module = this.modules.get(moduleIdentifier);
-    if (module) {
-      // in the event of a cycle, we have already evaluated the
-      // define() since we recurse into our deps after the evaluation of the
-      // define, so just return ourselves
-      if (stack.includes(moduleIdentifier)) {
-        return module;
-      }
-      // this closes an otherwise leaky async when there are simultaneous
-      // imports for modules that share a common dep, e.g. where you request
-      // module a and b simultaneously for the following consumption pattern
-      // (also included in our tests):
-      //   a -> b -> c
-      //
-      // In that case both of the imports will try to fetch c, one of them will
-      // start the actual fetch, and the other will short circuit and just
-      // return the cached module in a fetching state. the consumer of the short
-      // circuited module will assume that the dep has already been registered
-      // and immediately proceed to evaluation--when in fact the dep is still
-      // being loaded. to make sure that the consumer will wait until the dep
-      // has actually completed loading we need to return the deferred promise
-      // of the cached module.
-      if (module.state === "fetching") {
-        return module.deferred.promise;
-      }
-      return module;
-    }
-    module = {
-      state: "fetching",
-      deferred: new Deferred<Module>(),
-    };
-    this.modules.set(moduleIdentifier, module);
-
-    let src: string;
-    try {
-      src = await this.load(moduleURL);
-    } catch (exception) {
-      this.modules.set(moduleIdentifier, {
-        state: "broken",
-        exception,
-      });
-      throw exception;
-    }
-    src = transformSync(src, {
-      plugins: [
-        [
-          TransformModulesAmdPlugin,
-          { noInterop: true, moduleId: moduleIdentifier },
-        ],
-      ],
-      sourceMaps: "inline",
-      filename: moduleIdentifier,
-    })?.code!;
-
-    let dependencyList: string[];
-    let implementation: Function;
-
-    // this local is here for the evals to see
-    // @ts-ignore
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let define = (_mid: string, depList: string[], impl: Function) => {
-      dependencyList = depList.map((depId) => {
-        if (depId === "exports") {
-          return "exports";
-        } else if (depId === "__import_meta__") {
-          return "__import_meta__";
-        } else {
-          return this.loader.resolve(depId, new URL(moduleIdentifier)).href;
-        }
-      });
-      implementation = impl;
-    };
-
-    try {
-      eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
-    } catch (exception) {
-      this.modules.set(moduleIdentifier, {
-        state: "broken",
-        exception,
-      });
-      throw exception;
-    }
-
-    await Promise.all(
-      dependencyList!.map(async (depId) => {
-        if (depId !== "exports" && depId !== "__import_meta__") {
-          return this.fetchModule(new URL(depId) as ResolvedURL, [
-            ...stack,
-            moduleIdentifier,
-          ]);
-        }
-        return undefined;
-      })
-    );
-
-    let registeredModule: RegisteredModule = {
-      state: "registered",
-      dependencyList: dependencyList!,
-      implementation: implementation!,
-    };
-
-    this.modules.set(moduleIdentifier, registeredModule);
-    module.deferred.fulfill(registeredModule);
-    return registeredModule;
-  }
-
-  private evaluateModule<T extends object>(moduleIdentifier: string): T {
-    let module = this.modules.get(moduleIdentifier);
-    if (!module) {
-      throw new Error(
-        `bug in module loader: can't find module. ${moduleIdentifier} should have been registered before entering evaluateModule`
-      );
-    }
-    switch (module.state) {
-      case "fetching":
-        throw new Error(
-          `bug in module loader: module still in fetching state. ${moduleIdentifier} should have been registered before entering evaluateModule`
-        );
-      case "preparing":
-      case "evaluated":
-        return module.moduleInstance as T;
-      case "broken":
-        throw module.exception;
-      case "registered":
-        return this.evaluate(moduleIdentifier, module);
-      default:
-        throw assertNever(module);
-    }
-  }
-
-  private evaluate<T>(moduleIdentifier: string, module: RegisteredModule): T {
-    let privateModuleInstance = Object.create(null);
-    let moduleInstance = this.createModuleProxy(
-      privateModuleInstance,
-      moduleIdentifier
-    );
-    this.modules.set(moduleIdentifier, {
-      state: "preparing",
-      implementation: module.implementation,
-      moduleInstance,
-    });
-
-    try {
-      let dependencies = module.dependencyList.map((dependencyIdentifier) => {
-        if (dependencyIdentifier === "exports") {
-          return privateModuleInstance;
-        } else if (dependencyIdentifier === "__import_meta__") {
-          return { url: moduleIdentifier, loader: this.loader };
-        } else {
-          return this.evaluateModule(dependencyIdentifier);
-        }
-      });
-
-      module.implementation(...dependencies);
-      this.modules.set(moduleIdentifier, {
-        state: "evaluated",
-        moduleInstance,
-      });
-      return moduleInstance;
-    } catch (exception) {
-      this.modules.set(moduleIdentifier, {
-        state: "broken",
-        exception,
-      });
-      throw exception;
-    }
-  }
-
-  private async load(moduleURL: ResolvedURL): Promise<string> {
-    for (let [realmURL, fileLoader] of this.fileLoaders) {
-      let realmPath = new RealmPaths(this.loader.resolve(realmURL));
-      if (realmPath.inRealm(moduleURL)) {
-        return await fileLoader(realmPath.local(moduleURL));
-      }
-    }
-
-    let response: Response;
-    try {
-      response = await this.loader.fetch(moduleURL);
-    } catch (err) {
-      console.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
-      // this particular exception might not be worth caching the module in a
-      // "broken" state, since the server hosting the module is likely down. it
-      // might be a good idea to be able to try again in this case...
-      throw err;
-    }
-    if (!response.ok) {
-      throw new Error(
-        `Could not retrieve ${moduleURL}: ${
-          response.status
-        } - ${await response.text()}`
-      );
-    }
-    return await response.text();
   }
 }
 
