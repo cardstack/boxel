@@ -5,6 +5,12 @@ import CardRefCard from 'https://cardstack.com/base/card-ref';
 import { baseCardRef } from "@cardstack/runtime-common";
 import { ShadowRoot } from 'https://cardstack.com/base/shadow-root';
 
+const sharedStyles = `
+  .CatalogEntry {
+    background-color: #cbf3f0;
+  }
+`;
+
 export class CatalogEntry extends Card {
   @field title = contains(StringCard);
   @field description = contains(StringCard);
@@ -27,13 +33,8 @@ export class CatalogEntry extends Card {
   // field (which renders in the embedded format) looks a little wonky
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
-    styles = `
-      .CatalogEntry {
-        background-color: #cbf3f0;
-      }
-    `;
     <template>
-      <div {{ShadowRoot @model this.styles}}>
+      <div {{ShadowRoot @model sharedStyles}}>
         <label data-test-field="title">Title
           <@fields.title/>
         </label>
@@ -51,13 +52,8 @@ export class CatalogEntry extends Card {
   }
 
   static embedded = class Embedded extends Component<typeof this> {
-    styles = `
-      .CatalogEntry {
-        background-color: #cbf3f0;
-      }
-    `;
     <template>
-      <div {{ShadowRoot @model this.styles}}>
+      <div {{ShadowRoot @model sharedStyles}}>
         <h2><@fields.title/></h2>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
@@ -67,13 +63,8 @@ export class CatalogEntry extends Card {
     </template>
   }
   static isolated = class Isolated extends Component<typeof this> {
-    styles = `
-      .CatalogEntry {
-        background-color: #cbf3f0;
-      }
-    `;
     <template>
-      <div {{ShadowRoot @model this.styles}}>
+      <div {{ShadowRoot @model sharedStyles}}>
         <h1 data-test-title><@fields.title/></h1>
         <p data-test-description><em><@fields.description/></em></p>
         <div><@fields.ref/></div>
