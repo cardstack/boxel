@@ -303,7 +303,7 @@ export class Loader {
     return absoluteURL;
   }
 
-  createModuleProxy(module: any, moduleIdentifier: string) {
+  private createModuleProxy(module: any, moduleIdentifier: string) {
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
