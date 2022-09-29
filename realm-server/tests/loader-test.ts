@@ -39,6 +39,31 @@ module("loader", function () {
     assert.strictEqual(myLoader(), loader, "the loader instance is correct");
   });
 
+  test("can determine consumed modules", async function (assert) {
+    let loader = new Loader();
+    await loader.import<{ a(): string }>(`${testRealm}a`);
+    assert.deepEqual(await loader.getConsumedModules(`${testRealm}a`), [
+      `${testRealm}c`,
+      `${testRealm}b`,
+    ]);
+  });
+
+  test("can determine consumed modules when an error is encountered during loading", async function (assert) {
+    let loader = new Loader();
+    try {
+      await loader.import<{ d(): string }>(`${testRealm}d`);
+      throw new Error(`expected error was not thrown`);
+    } catch (e) {
+      assert.strictEqual(e.message, "intentional error thrown");
+      assert.deepEqual(await loader.getConsumedModules(`${testRealm}d`), [
+        `${testRealm}c`,
+        `${testRealm}b`,
+        `${testRealm}a`,
+        `${testRealm}e`,
+      ]);
+    }
+  });
+
   test("supports identify API", async function (assert) {
     let loader = new Loader();
     let { Person } = await loader.import<{ Person: unknown }>(
