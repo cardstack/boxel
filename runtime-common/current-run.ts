@@ -121,7 +121,7 @@ export interface CardDefinition {
       fieldCard: CardRef;
     }
   >;
-  imports: string[];
+  consumedModules: string[];
 }
 
 export type SearchEntryWithErrors =
@@ -564,7 +564,11 @@ export class CurrentRun {
       return undefined;
     };
 
-    let { card, ref: id, imports = [] } = (await this.loadCard(ref)) ?? {};
+    let {
+      card,
+      ref: id,
+      consumedModules = [],
+    } = (await this.loadCard(ref)) ?? {};
     if (!card || !id) {
       return noDefinition();
     }
@@ -631,7 +635,7 @@ export class CurrentRun {
       key,
       super: superDef?.id,
       fields,
-      imports,
+      consumedModules,
     });
   }
 
@@ -691,27 +695,27 @@ export class CurrentRun {
   private async loadCard(
     ref: CardRef
   ): Promise<
-    { card: typeof Card; ref: CardRef; imports: string[] } | undefined
+    { card: typeof Card; ref: CardRef; consumedModules: string[] } | undefined
   > {
     let maybeCard: unknown;
     let canonicalRef: CardRef | undefined;
-    let imports: string[];
+    let consumedModules: string[];
     if (ref.type === "exportedCard") {
       let module = await this.loader.import<Record<string, any>>(ref.module);
       maybeCard = module[ref.name];
-      imports = await this.loader.getConsumedModules(ref.module);
+      consumedModules = await this.loader.getConsumedModules(ref.module);
       canonicalRef = { ...ref, ...Loader.identify(maybeCard) };
     } else if (ref.type === "ancestorOf") {
       let {
         card: child,
         ref: childRef,
-        imports: childImports,
+        consumedModules: childConsumedMods,
       } = (await this.loadCard(ref.card)) ?? {};
       if (!child || !childRef) {
         return undefined;
       }
       maybeCard = Reflect.getPrototypeOf(child) as typeof Card;
-      imports = childImports ?? [];
+      consumedModules = childConsumedMods ?? [];
       let cardId = Loader.identify(maybeCard);
       canonicalRef = cardId
         ? { type: "exportedCard", ...cardId }
@@ -720,7 +724,7 @@ export class CurrentRun {
       let {
         card: parent,
         ref: parentRef,
-        imports: parentImports,
+        consumedModules: parentConsumedMods,
       } = (await this.loadCard(ref.card)) ?? {};
       if (!parent || !parentRef) {
         return undefined;
@@ -728,7 +732,7 @@ export class CurrentRun {
       let api = await this.loader.import<CardAPI>(`${baseRealm.url}card-api`);
       let field = api.getField(parent, ref.field);
       maybeCard = field?.card;
-      imports = parentImports ?? [];
+      consumedModules = parentConsumedMods ?? [];
       let cardId = Loader.identify(maybeCard);
       canonicalRef = cardId
         ? { type: "exportedCard", ...cardId }
@@ -745,7 +749,7 @@ export class CurrentRun {
       return {
         card: maybeCard as unknown as typeof Card,
         ref: canonicalRef,
-        imports,
+        consumedModules,
       };
     } else {
       return undefined;
@@ -845,7 +849,7 @@ function invalidate(
     }
 
     // invalidate any definitions whose imports come from the URL
-    for (let importURL of def.imports) {
+    for (let importURL of def.consumedModules) {
       if (
         importURL === url.href ||
         importURL === trimExecutableExtension(url).href
