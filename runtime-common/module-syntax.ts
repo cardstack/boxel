@@ -60,7 +60,7 @@ export class ModuleSyntax {
   code(): string {
     let preprocessedSrc = generate(this.ast).code;
     return preprocessedSrc.replace(
-      /\[templte\(`([^`].*)`\)\];*/g,
+      /\[templte\(`([^`].*?)`\)\];/gs,
       `<template>$1</template>`
     );
   }

@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { type ExportedCardRef, chooseCard, catalogEntryRef } from '@cardstack/runtime-common';
+import { chooseCard, catalogEntryRef, Loader } from '@cardstack/runtime-common';
 import { getCardType } from '../resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -8,7 +8,6 @@ import { on } from '@ember/modifier';
 import LocalRealm from '../services/local-realm';
 import { eq } from '../helpers/truth-helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { Loader } from '@cardstack/runtime-common/loader';
 //@ts-ignore cached not available yet in definitely typed
 import { cached, tracked } from '@glimmer/tracking';
 import { LinkTo } from '@ember/routing';
@@ -18,13 +17,16 @@ import CatalogEntryEditor from './catalog-entry-editor';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import Modifier from 'ember-modifier';
+import CardAPI from '../services/card-api';
+import config from 'runtime-spike/config/environment';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
-    ref: ExportedCardRef;
+    card: typeof Card;
     file: FileResource;
     moduleSyntax: ModuleSyntax;
   }
@@ -44,10 +46,10 @@ export default class Schema extends Component<Signature> {
                 <button type="button" {{on "click" (fn this.deleteField field.name)}} data-test-delete>Delete</button>
               {{/if}}
               {{field.name}} - {{field.type}} - field card ID:
-              {{#if (this.inRealm field.card.exportedCardContext.module)}}
+              {{#if (this.inRealm field.card.module)}}
                 <LinkTo
                   @route="application"
-                  @query={{hash path=(this.modulePath field.card.exportedCardContext.module)}}
+                  @query={{hash path=(this.modulePath field.card.module)}}
                 >
                   {{field.card.id}}
                 </LinkTo>
@@ -100,14 +102,28 @@ export default class Schema extends Component<Signature> {
             </button>
           </p>
         </ul>
-        <CatalogEntryEditor @ref={{@ref}} />
+        <CatalogEntryEditor @ref={{this.ref}} />
       </div>
+    {{/if}}
+    {{#if this.isUpdatedTestHook}}
+      <div data-test-schema-updated></div>
     {{/if}}
   </template>
 
   @service declare localRealm: LocalRealm;
+  @service declare cardAPI: CardAPI;
   @tracked newFieldName: string | undefined;
   @tracked newFieldType: 'contains' | 'containsMany' = 'contains';
+  @tracked isUpdatedTestHook = false;
+
+  @cached
+  get ref() {
+    let ref = Loader.identify(this.args.card);
+    if (!ref) {
+      throw new Error(`bug: unable to identify card ${this.args.card.name}`);
+    }
+    return ref;
+  }
 
   @cached
   get realmPath() {
@@ -124,13 +140,14 @@ export default class Schema extends Component<Signature> {
     }
     this.args.file.content;
     this.args.moduleSyntax;
-    return getCardType(this, () => this.args.ref);
+    return getCardType(this, () => this.args.card);
   }
 
-  get card() {
-    let card = this.args.moduleSyntax.possibleCards.find(c => c.exportedAs === this.args.ref.name);
+  @cached
+  get cardFromSyntax() {
+    let card = this.args.moduleSyntax.possibleCards.find(c => c.exportedAs === this.ref.name);
     if (!card) {
-      throw new Error(`cannot find card in module syntax for ref ${JSON.stringify(this.args.ref)}`);
+      throw new Error(`cannot find card in module syntax for ref ${JSON.stringify(this.ref)}`);
     }
     return card;
   }
@@ -152,7 +169,7 @@ export default class Schema extends Component<Signature> {
 
   @action
   isOwnField(fieldName: string): boolean {
-    return this.card.possibleFields.has(fieldName);
+    return this.cardFromSyntax.possibleFields.has(fieldName);
   }
 
   @action
@@ -173,7 +190,7 @@ export default class Schema extends Component<Signature> {
   @action
   deleteField(fieldName: string) {
     this.args.moduleSyntax.removeField(
-      { type: 'exportedName', name: this.args.ref.name },
+      { type: 'exportedName', name: this.ref.name },
       fieldName
     );
     taskFor(this.write).perform(this.args.moduleSyntax.code());
@@ -195,7 +212,7 @@ export default class Schema extends Component<Signature> {
         on: catalogEntryRef,
         // a "contains" field cannot be the same card as it's enclosing card (but it can for a linksTo)
         not: {
-          eq: { ref: this.args.ref }
+          eq: { ref: this.ref }
         }
       }
     });
@@ -207,7 +224,7 @@ export default class Schema extends Component<Signature> {
       throw new Error('bug: new field name is not specified');
     }
     this.args.moduleSyntax.addField(
-      { type: 'exportedName', name: this.args.ref.name},
+      { type: 'exportedName', name: this.ref.name},
       this.newFieldName,
       fieldEntry.ref,
       this.newFieldType
@@ -226,6 +243,13 @@ export default class Schema extends Component<Signature> {
       throw new Error(`the file ${this.args.file.url} is not open`);
     }
     await this.args.file.write(src);
+    // TODO this is a stop gap until we have live module loading
+    if (config.environment === 'test') {
+      this.isUpdatedTestHook = true;
+    } else {
+      // we don't want the reload to blow up qunit
+      window.location.reload();
+    }
   }
 }
 

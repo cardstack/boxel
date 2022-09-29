@@ -1,7 +1,6 @@
 import { Deferred } from "./deferred";
 import {
   SearchIndex,
-  isCardRef,
   CardRef,
   CardSingleResourceDocument,
   isCardSingleResourceDocument,
@@ -22,12 +21,10 @@ import {
   ResourceObjectWithId,
   DirectoryEntryRelationship,
   executableExtensions,
-  baseRealm,
   isNode,
 } from "./index";
 import merge from "lodash/merge";
 import cloneDeep from "lodash/cloneDeep";
-import { parse, stringify } from "qs";
 import { webStreamToText } from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
@@ -115,9 +112,6 @@ export class Realm {
       .post("/", this.createCard.bind(this))
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
       .get("/_search", this.search.bind(this))
-      // TODO lets move cardsOf to be a path you add to the end of a route like typeOf
-      .get("/_cardsOf", this.getCardsOf.bind(this))
-      .get("/.*_typeOf", this.getTypeOf.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
       .delete("/.+(?<!.json)", this.removeCard.bind(this));
@@ -607,130 +601,6 @@ export class Realm {
     }
   }
 
-  private async getCardsOf(request: Request): Promise<Response> {
-    let { module } =
-      parse(new URL(request.url).search, { ignoreQueryPrefix: true }) ?? {};
-    if (typeof module !== "string") {
-      return badRequest(`'module' param was not specified or invalid`);
-    }
-    let refs = await this.#searchIndex.exportedCardsOf(module);
-    return new Response(
-      JSON.stringify(
-        {
-          data: {
-            type: "module",
-            id: new URL(module, this.url).href,
-            attributes: {
-              cardExports: refs,
-            },
-          },
-        },
-        null,
-        2
-      ),
-      {
-        headers: {
-          "content-type": "application/vnd.api+json",
-        },
-      }
-    );
-  }
-
-  /*
-  The card definition response looks like:
-
-  {
-    data: {
-      type: "card-definition",
-      id: "http://local-realm/some/card",
-      relationships: {
-        _: {
-          links: {
-            related: "http://local-realm/_typeOf?type=exportedCard&module=%2Fsuper%2Fcard&name=SuperCard"
-          }
-          meta: {
-            type: "super"
-          }
-        },
-        firstName: {
-          links: {
-            related: "https://cardstack.com/base/_typeOf?type=exportedCard&module%2Fstring&name=default"
-          },
-          meta: {
-            type: "contains"
-          }
-        },
-        lastName: {
-          links: {
-            related: "https://cardstack.com/base/_typeOf?type=exportedCard&module%2Fstring&name=default"
-          },
-          meta: {
-            type: "contains"
-          }
-        }
-      }
-    }
-  }
-
-  random musing based on example above: maybe the base realm should be:
-  http://base.cardstack.com
-  and not
-  http://cardstack.com/base
-
-  the realm API URL's read a little nicer this way....
-*/
-
-  private async getTypeOf(request: Request): Promise<Response> {
-    let ref = parse(new URL(request.url).search, { ignoreQueryPrefix: true });
-    if (!isCardRef(ref)) {
-      return badRequest("a valid card reference was not specified");
-    }
-    let def = await this.#searchIndex.typeOf(ref);
-    if (!def) {
-      return notFound(
-        request,
-        `Could not find card reference ${JSON.stringify(ref)}`
-      );
-    }
-    let data: CardDefinitionResource = {
-      id: def.key,
-      type: "card-definition",
-      attributes: {
-        cardRef: def.id,
-      },
-      relationships: {},
-    };
-    if (!data.relationships) {
-      throw new Error("bug: this should never happen");
-    }
-
-    if (def.super) {
-      data.relationships._super = {
-        links: {
-          related: this.cardRefToTypeURL(def.super),
-        },
-        meta: {
-          type: "super",
-          ref: def.super,
-        },
-      };
-    }
-    for (let [fieldName, field] of def.fields) {
-      data.relationships[fieldName] = {
-        links: {
-          related: this.cardRefToTypeURL(field.fieldCard),
-        },
-        meta: {
-          type: field.fieldType,
-          ref: field.fieldCard,
-        },
-      };
-    }
-    return new Response(JSON.stringify({ data }, null, 2), {
-      headers: { "content-type": "application/vnd.api+json" },
-    });
-  }
-
   private async search(request: Request): Promise<Response> {
     let data = await this.#searchIndex.search(
       parseQueryString(new URL(request.url).search.slice(1))
@@ -746,26 +616,6 @@ export class Realm {
       {
         headers: { "content-type": "application/vnd.api+json" },
       }
-    );
-  }
-
-  private cardRefToTypeURL(ref: CardRef): string {
-    let module = new URL(getExportedCardContext(ref).module);
-    if (this.paths.inRealm(module)) {
-      return `${this.url}_typeOf?${stringify(ref)}`;
-    }
-
-    // TODO how to resolve the Realm URL of a module that does not come from our
-    // own realm For now we can just hardcode realms we know about when
-    // resolving a realm URL from a module, which in this case is only the base
-    // realm. Probably we need some kind of "realm lookup" which is a list of
-    // all realms that our hub knows about
-    if (baseRealm.inRealm(module)) {
-      return `${baseRealm.fileURL("_typeOf")}?${stringify(ref)}`;
-    }
-
-    throw new Error(
-      `Don't know how to resolve realm URL for module ${module.href}`
     );
   }
 

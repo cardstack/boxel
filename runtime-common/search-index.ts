@@ -1,4 +1,4 @@
-import { trimExecutableExtension, baseRealm } from ".";
+import { trimExecutableExtension, baseRealm, internalKeyFor } from ".";
 import { Kind, Realm } from "./realm";
 import {
   CurrentRun,
@@ -544,23 +544,6 @@ export class SearchIndex {
       );
     }
     return def;
-  }
-}
-
-export function internalKeyFor(
-  ref: CardRef,
-  relativeTo: URL | undefined
-): string {
-  switch (ref.type) {
-    case "exportedCard":
-      let module = trimExecutableExtension(
-        new URL(ref.module, relativeTo)
-      ).href;
-      return `${module}/${ref.name}`;
-    case "ancestorOf":
-      return `${internalKeyFor(ref.card, relativeTo)}/ancestor`;
-    case "fieldOf":
-      return `${internalKeyFor(ref.card, relativeTo)}/fields/${ref.field}`;
   }
 }
 

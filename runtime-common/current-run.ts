@@ -3,6 +3,7 @@ import {
   baseRealm,
   LooseCardResource,
   isCardResource,
+  internalKeyFor,
   hasExecutableExtension,
   trimExecutableExtension,
   type Card,
@@ -17,7 +18,6 @@ import flatMap from "lodash/flatMap";
 import merge from "lodash/merge";
 import {
   isCardSingleResourceDocument,
-  internalKeyFor,
   CardSingleResourceDocument,
 } from "./search-index";
 import type { ExportedCardRef, CardRef, CardResource } from "./search-index";
