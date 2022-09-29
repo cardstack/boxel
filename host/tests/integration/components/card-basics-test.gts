@@ -23,6 +23,13 @@ let pickModule: typeof import ("https://cardstack.com/base/pick");
 let primitive: typeof primitiveType;
 let queryableValue: typeof queryableValueType;
 
+function getShadowRoot(root: Document | Element | ShadowRoot = document) {
+  return root.querySelector('[data-test-shadow-component]')?.shadowRoot;
+}
+function getShadowElement(root: Document | Element | ShadowRoot = document) {
+  return getShadowRoot(root)?.children[0];
+}
+
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
 
@@ -137,7 +144,7 @@ module('Integration | card-basics', function (hooks) {
     });
 
     await renderCard(helloWorld, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Arthur speaks english japanese 5 subscribers is cool true');
+    assert.strictEqual(cleanWhiteSpace(getShadowRoot()?.textContent!), 'First Post by Arthur speaks english japanese 5 subscribers is cool true');
   });
 
   test('render primitive field', async function (assert) {
@@ -161,15 +168,15 @@ module('Integration | card-basics', function (hooks) {
       @field number = contains(StrongInteger);
 
       static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.firstName /><@fields.number /></template>
+        <template><div><@fields.firstName /><@fields.number /></div></template>
       }
     }
 
     let arthur = new Person({ firstName: 'Arthur', number: 10 });
 
     await renderCard(arthur, 'embedded');
-    assert.dom('[data-test="name"]').containsText('Arthur');
-    assert.dom('[data-test="integer"]').containsText('10');
+    assert.dom('[data-test="name"]', getShadowElement()).containsText('Arthur');
+    assert.dom('[data-test="integer"]', getShadowElement()).containsText('10');
   });
 
   test('render cardRef field', async function (assert) {
@@ -186,7 +193,7 @@ module('Integration | card-basics', function (hooks) {
     let driver = new DriverCard({ ref });
 
     await renderCard(driver, 'embedded');
-    assert.dom('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
+    assert.dom('[data-test-ref]', getShadowElement()).containsText(`Module: http://localhost:4201/test/person Name: Person`);
 
     // is this worth an assertion? or is it just obvious?
     assert.strictEqual(driver.ref, ref, 'The deserialized card ref constructor param is strict equal to the deserialized card ref value');
@@ -206,8 +213,8 @@ module('Integration | card-basics', function (hooks) {
     let driver = new DriverCard({ ref });
 
     await renderCard(driver, 'edit');
-    assert.dom('input').doesNotExist('no input fields exist');
-    assert.dom('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
+    assert.dom('input', getShadowElement()).doesNotExist('no input fields exist');
+    assert.dom('[data-test-ref', getShadowElement()).containsText(`Module: http://localhost:4201/test/person Name: Person`);
   });
 
   test('catalog entry isPrimitive indicates if the catalog entry is a primitive field card', async function (assert) {
@@ -261,7 +268,7 @@ module('Integration | card-basics', function (hooks) {
       @field title = contains(StringCard);
       @field number = contains(IntegerCard);
       static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.title/> <@fields.firstName /> <@fields.number /></template>
+        <template><div><@fields.title/> <@fields.firstName /> <@fields.number /></div></template>
       }
     }
 
@@ -289,7 +296,8 @@ module('Integration | card-basics', function (hooks) {
       }
     }, undefined);
     await renderCard(helloWorld, 'isolated');
-    assert.dom('[data-test]').containsText('Mr Arthur 10');
+    let contents = getShadowElement(getShadowElement())?.textContent!;
+    assert.strictEqual(cleanWhiteSpace(contents), 'Mr Arthur 10');
   });
 
   // this will apply to linksTo, but doesn't apply to contains
@@ -351,7 +359,7 @@ module('Integration | card-basics', function (hooks) {
       @field title = contains(TestString);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
-      <template><@fields.author.firstName /><@fields.author.number /></template>
+      <template><div><@fields.author.firstName /><@fields.author.number /></div></template>
       }
     }
     await shimModule(`${testRealmURL}test-cards`, { Post, Person, TestInteger, TestString });
@@ -372,8 +380,8 @@ module('Integration | card-basics', function (hooks) {
     }, undefined);
 
     await renderCard(helloWorld, 'isolated');
-    assert.dom('[data-test="string"]').containsText('Arthur');
-    assert.dom('[data-test="integer"]').containsText('10');
+    assert.dom('[data-test="string"]', getShadowElement()).containsText('Arthur');
+    assert.dom('[data-test="integer"]', getShadowElement()).containsText('10');
   });
 
   test('render default isolated template', async function (assert) {
@@ -383,7 +391,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(firstName);
 
       static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.firstName /></template>
+        <template><span><@fields.firstName /></span></template>
       }
     }
 
@@ -410,9 +418,8 @@ module('Integration | card-basics', function (hooks) {
     }, undefined);
 
     await renderCard(helloWorld, 'isolated');
-
-    assert.dom('[data-test="first-name"]').containsText('Arthur');
-    assert.dom('[data-test="title"]').containsText('First Post');
+    assert.dom('[data-test="first-name"]', getShadowElement(getShadowRoot()!)).containsText('Arthur');
+    assert.dom(getShadowElement()).hasText('First Post');
   });
 
   test('render a containsMany primitive field', async function (assert) {
@@ -432,7 +439,7 @@ module('Integration | card-basics', function (hooks) {
     });
 
     await renderCard(mango, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango speaks english japanese');
+    assert.strictEqual(cleanWhiteSpace(getShadowRoot()?.textContent!), 'Mango speaks english japanese');
   });
 
   test('supports an empty containsMany primitive field', async function (assert) {
@@ -462,7 +469,7 @@ module('Integration | card-basics', function (hooks) {
     class Family extends Card {
       @field people = containsMany(Person);
       static isolated = class Isolated extends Component<typeof this> {
-        <template><@fields.people/></template>
+        <template><div><@fields.people/></div></template>
       }
     }
     await shimModule(`${testRealmURL}test-cards`, { Family, Person });
@@ -501,9 +508,9 @@ module('Integration | card-basics', function (hooks) {
     }
     let child = new Person({ firstName: 'Arthur' });
     await renderCard(child, 'embedded');
-    assert.dom('[data-test="firstName"]').containsText('Arthur');
+    assert.dom(getShadowElement()).containsText('Arthur');
     child.firstName = 'Quint';
-    await waitUntil(() => document.querySelector('[data-test="firstName"]')?.textContent?.trim() === 'Quint');
+    await waitUntil(() => cleanWhiteSpace(getShadowElement()?.textContent!) === 'Quint');
   });
 
 
