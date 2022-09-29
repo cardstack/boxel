@@ -1,14 +1,6 @@
 import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
-import CardContainer from 'https://cardstack.com/base/card-container';
-
-let sharedStyles = `
-  .Person {
-    background-color: #90dbf4;
-    padding: 1rem;
-  }
-`;
 
 export class Person extends Card {
   @field firstName = contains(StringCard);
@@ -18,19 +10,23 @@ export class Person extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer @label={{@model.constructor.name}} @styles={{sharedStyles}}>
-        <h3><@fields.firstName/></h3>
-      </CardContainer>
+      <@fields.firstName/>
     </template>
   }
   
   static isolated = class Isolated extends Component<typeof Person> {
     <template>
-      <CardContainer @label={{@model.constructor.name}} @styles={{sharedStyles}}>
+      <style>
+        .person {
+          background-color: #90dbf4;
+          padding: 1rem;
+        }
+      </style>
+      <div class="person">
         <h1><@fields.firstName/> <@fields.lastName /></h1>
         <div><@fields.isCool/></div>
         <div><@fields.isHuman/></div>
-      </CardContainer>
+      </div>
     </template>
   }
 }

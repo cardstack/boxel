@@ -131,12 +131,16 @@ button {
   position: absolute;
   top: 0;
   right: 0;
+  display: inline-block;
   background-color: #f4f4f4;
   color: darkgray;
   font-size: 0.9rem;
   font-weight: bold;
   font-family: Arial, Helvetica, sans-serif;
   padding: 0.5em 1em;
+}
+.card-container__shadow {
+  display: contents;
 }
 
 

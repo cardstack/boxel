@@ -3,14 +3,6 @@ import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import CardRefCard from 'https://cardstack.com/base/card-ref';
 import { baseCardRef } from "@cardstack/runtime-common";
-import CardContainer from 'https://cardstack.com/base/card-container';
-
-let sharedStyles = `
-  .CatalogEntry {
-    background-color: #cbf3f0;
-    padding: 1rem;
-  }
-`;
 
 export class CatalogEntry extends Card {
   @field title = contains(StringCard);
@@ -35,44 +27,45 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer @label={{@model.constructor.name}} @styles={{sharedStyles}}>
-        <label data-test-field="title">Title
-          <@fields.title/>
-        </label>
-        <label data-test-field="description">Description
-          <@fields.description/>
-        </label>
-        <div class="field" data-test-field="ref">Ref
-          <@fields.ref/>
-        </div>
-        <div class="field" data-test-field="demo">Demo
-          <@fields.demo/>
-        </div>
-      </CardContainer>
+      <label data-test-field="title">Title
+        <@fields.title/>
+      </label>
+      <label data-test-field="description">Description
+        <@fields.description/>
+      </label>
+      <div class="field" data-test-field="ref">Ref
+        <@fields.ref/>
+      </div>
+      <div class="field" data-test-field="demo">Demo
+        <@fields.demo/>
+      </div>
     </template>
   }
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer @label={{@model.constructor.name}} @styles={{sharedStyles}}>
-        <h2><@fields.title/></h2>
-        <div><@fields.ref/></div>
-        {{#if @model.showDemo}}
-          <div data-test-demo-embedded><@fields.demo/></div>
-        {{/if}}
-      </CardContainer>
+      <h2><@fields.title/></h2>
+      <div><@fields.ref/></div>
+      {{#if @model.showDemo}}
+        <div data-test-demo-embedded><@fields.demo/></div>
+      {{/if}}
     </template>
   }
+  
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CardContainer @label={{@model.constructor.name}} @styles={{sharedStyles}}>
-        <h1 data-test-title><@fields.title/></h1>
-        <p data-test-description><em><@fields.description/></em></p>
-        <div><@fields.ref/></div>
-        {{#if @model.showDemo}}
-          <div data-test-demo><@fields.demo/></div>
-        {{/if}}
-      </CardContainer>
+      <style>
+        .CatalogEntry {
+          background-color: #cbf3f0;
+          padding: 1rem;
+        }
+      </style>
+      <h1 data-test-title><@fields.title/></h1>
+      <p data-test-description><em><@fields.description/></em></p>
+      <div><@fields.ref/></div>
+      {{#if @model.showDemo}}
+        <div data-test-demo><@fields.demo/></div>
+      {{/if}}
     </template>
   }
 }
