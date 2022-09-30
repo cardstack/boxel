@@ -15,13 +15,19 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
-import CardAPIService from 'runtime-spike/services/card-api';
 import { Card } from "https://cardstack.com/base/card-api";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 
 class MockLocalRealm extends Service {
   isAvailable = true;
   url = new URL(testRealmURL);
+}
+
+class MockLoaderService extends Service {
+  loader: Loader | undefined;
+  setLoader(loader: Loader) {
+    this.loader = loader
+  }
 }
 
 module('Integration | schema', function (hooks) {
@@ -40,9 +46,8 @@ module('Integration | schema', function (hooks) {
     Loader.addRealmFetchOverride(realm);
     await realm.ready;
     this.owner.register('service:local-realm', MockLocalRealm);
-    this.owner.register('service:card-api', CardAPIService);
-    let cardAPI = this.owner.lookup('service:card-api') as CardAPIService;
-    await cardAPI.loaded;
+    this.owner.register('service:loader-service', MockLoaderService);
+    (this.owner.lookup('service:loader-service') as MockLoaderService).setLoader(Loader.getLoader());
   })
 
   test('renders card schema view', async function (assert) {

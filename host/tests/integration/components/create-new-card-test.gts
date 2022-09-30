@@ -17,6 +17,13 @@ class MockLocalRealm extends Service {
   url = new URL(testRealmURL);
 }
 
+class MockLoaderService extends Service {
+  loader: Loader | undefined;
+  setLoader(loader: Loader) {
+    this.loader = loader
+  }
+}
+
 class MockRouter extends Service {
   assert: Assert | undefined;
   expectedRoute: any | undefined;
@@ -54,6 +61,8 @@ module('Integration | create-new-card', function (hooks) {
 
     realm = TestRealm.createWithAdapter(adapter);
     Loader.addRealmFetchOverride(realm);
+    this.owner.register('service:loader-service', MockLoaderService);
+    (this.owner.lookup('service:loader-service') as MockLoaderService).setLoader(Loader.getLoader());
     await realm.ready;
 
     await realm.write('person.gts', `

@@ -1,9 +1,10 @@
 import { Resource, useResource } from 'ember-resources';
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
-import { Loader } from '@cardstack/runtime-common/loader';
+import LoaderService from '../services/loader-service';
 
 interface Args {
   named: {
@@ -42,6 +43,7 @@ class _FileResource extends Resource<Args> {
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   @tracked content: string | undefined;
   @tracked state: FileResource['state'] = 'ready';
+  @service declare loaderService: LoaderService;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
@@ -77,7 +79,7 @@ class _FileResource extends Resource<Args> {
 
   @restartableTask private async read() {
     let prevState = this.state;
-    let response = await Loader.fetch(this.url, {
+    let response = await this.loaderService.loader.fetch(this.url, {
       headers: {
         Accept: 'application/vnd.card+source',
       },
@@ -115,7 +117,7 @@ class _FileResource extends Resource<Args> {
   }
 
   @restartableTask private async doWrite(content: string) {
-    let response = await Loader.fetch(this.url, {
+    let response = await this.loaderService.loader.fetch(this.url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.card+source',

@@ -1,9 +1,11 @@
 import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
+import { taskFor } from 'ember-concurrency-ts';
+import { task, timeout } from 'ember-concurrency';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 interface Args {
-  named: { url: string };
+  named: { url: string; loader: Loader };
 }
 
 const moduleURLs = new WeakMap<any, string>();
@@ -18,16 +20,17 @@ export class ImportResource extends Resource<Args> {
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    this.load(args.named.url);
+    let { url, loader } = args.named;
+    taskFor(this.load).perform(url, loader);
   }
 
-  private async load(url: string) {
+  @task private async load(url: string, loader: Loader): Promise<void> {
     try {
-      let m = await Loader.import<object>(url);
+      let m = await loader.import<object>(url);
       moduleURLs.set(m, url);
       this.module = m;
     } catch (err) {
-      let errResponse = await Loader.fetch(url, {
+      let errResponse = await loader.fetch(url, {
         headers: { 'content-type': 'text/javascript' },
       });
       if (!errResponse.ok) {
@@ -46,12 +49,27 @@ Check console log for more details`,
       }
     }
   }
+
+  get loaded(): Promise<void> {
+    // TODO probably there is a more elegant way to express this in EC
+    return new Promise(async (res) => {
+      while (taskFor(this.load).isRunning) {
+        await timeout(10);
+      }
+      res();
+    });
+  }
 }
 
-export function importResource(parent: object, url: () => string) {
+export function importResource(
+  parent: object,
+  url: () => string,
+  loader: () => Loader
+) {
   return useResource(parent, ImportResource, () => ({
     named: {
       url: url(),
+      loader: loader(),
     },
   }));
 }

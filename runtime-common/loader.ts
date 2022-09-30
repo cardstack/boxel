@@ -70,7 +70,7 @@ export class Loader {
   static #instance: Loader | undefined;
   static loaders = new WeakMap<Function, Loader>();
 
-  private static getLoader() {
+  static getLoader() {
     if (!Loader.#instance) {
       Loader.#instance = new Loader();
     }

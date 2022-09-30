@@ -1,5 +1,7 @@
 import Component from '@glimmer/component';
 import { importResource } from '../resources/import';
+import { service } from '@ember/service';
+import LoaderService from '../services/loader-service';
 
 export interface Signature { 
   Args: { url: string  };
@@ -10,7 +12,12 @@ export interface Signature {
 }
 
 export default class ImportModule extends Component<Signature> {
-  imported = importResource(this, () => this.args.url);
+  @service declare loaderService: LoaderService;
+  imported = importResource(
+    this,
+    () => this.args.url,
+    () => this.loaderService.loader
+  );
 
   <template>
     {{#if this.imported.module}}

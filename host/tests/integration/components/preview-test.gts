@@ -17,6 +17,13 @@ class MockLocalRealm extends Service {
   url = new URL(testRealmURL);
 }
 
+class MockLoaderService extends Service {
+  loader: Loader | undefined;
+  setLoader(loader: Loader) {
+    this.loader = loader
+  }
+}
+
 const formats: Format[] = ['isolated', 'embedded', 'edit'];
 module('Integration | preview', function (hooks) {
   setupRenderingTest(hooks);
@@ -30,6 +37,8 @@ module('Integration | preview', function (hooks) {
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-realm', MockLocalRealm);
+    this.owner.register('service:loader-service', MockLoaderService);
+    (this.owner.lookup('service:loader-service') as MockLoaderService).setLoader(Loader.getLoader());
   });
 
   test('renders card', async function (assert) {

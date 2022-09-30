@@ -2,15 +2,15 @@ import { Resource, useResource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
-import { CardRef, internalKeyFor } from '@cardstack/runtime-common';
+import { CardRef, internalKeyFor, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { service } from '@ember/service';
-import CardAPI from '../services/card-api';
 import type { Card } from 'https://cardstack.com/base/card-api';
+type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
 interface Args {
   named: {
     card: typeof Card;
+    loader: Loader;
   };
 }
 export interface Type {
@@ -22,22 +22,25 @@ export interface Type {
 
 export class CardType extends Resource<Args> {
   @tracked type: Type | undefined;
-  @service declare cardAPI: CardAPI;
+  loader: Loader;
   typeCache: Map<string, Type> = new Map();
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    let { card } = args.named;
+    let { card, loader } = args.named;
+    this.loader = loader;
     taskFor(this.assembleType).perform(card);
   }
 
   @restartableTask private async assembleType(card: typeof Card) {
-    await this.cardAPI.loaded;
-    this.type = this.toType(card);
+    this.type = await this.toType(card);
   }
 
-  toType(card: typeof Card, context?: { from: CardRef; module: string }): Type {
-    let exportedCardRef = Loader.identify(card);
+  async toType(
+    card: typeof Card,
+    context?: { from: CardRef; module: string }
+  ): Promise<Type> {
+    let exportedCardRef = this.loader.identify(card);
     let ref: CardRef;
     let module: string;
     if (exportedCardRef) {
@@ -55,24 +58,25 @@ export class CardType extends Resource<Args> {
       return cached;
     }
 
-    let fields = this.cardAPI.api.getFields(card);
+    let api = await this.loader.import<CardAPI>(`${baseRealm.url}card-api`);
+    let fields = api.getFields(card);
     let superCard = Reflect.getPrototypeOf(card) as typeof Card | null;
     let superType: Type | undefined;
     if (superCard && card !== superCard) {
-      superType = this.toType(superCard, {
+      superType = await this.toType(superCard, {
         from: { type: 'ancestorOf', card: ref },
         module,
       });
     }
-    let fieldTypes: Type['fields'] = Object.entries(fields).map(
-      ([name, field]) => ({
+    let fieldTypes: Type['fields'] = await Promise.all(
+      Object.entries(fields).map(async ([name, field]) => ({
         name,
         type: field.containsMany ? 'containsMany' : 'contains',
-        card: this.toType(field.card, {
+        card: await this.toType(field.card, {
           from: { type: 'fieldOf', field: name, card: ref },
           module,
         }),
-      })
+      }))
     );
     let type: Type = {
       id,
@@ -85,8 +89,12 @@ export class CardType extends Resource<Args> {
   }
 }
 
-export function getCardType(parent: object, card: () => typeof Card) {
+export function getCardType(
+  parent: object,
+  card: () => typeof Card,
+  loader: () => Loader
+) {
   return useResource(parent, CardType, () => ({
-    named: { card: card() },
+    named: { card: card(), loader: loader() },
   }));
 }

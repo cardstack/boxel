@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { chooseCard, catalogEntryRef, Loader } from '@cardstack/runtime-common';
+import { chooseCard, catalogEntryRef } from '@cardstack/runtime-common';
 import { getCardType } from '../resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -17,7 +17,7 @@ import CatalogEntryEditor from './catalog-entry-editor';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import Modifier from 'ember-modifier';
-import CardAPI from '../services/card-api';
+import LoaderService from '../services/loader-service';
 import config from 'runtime-spike/config/environment';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
@@ -111,14 +111,14 @@ export default class Schema extends Component<Signature> {
   </template>
 
   @service declare localRealm: LocalRealm;
-  @service declare cardAPI: CardAPI;
+  @service declare loaderService: LoaderService;
   @tracked newFieldName: string | undefined;
   @tracked newFieldType: 'contains' | 'containsMany' = 'contains';
   @tracked isUpdatedTestHook = false;
 
   @cached
   get ref() {
-    let ref = Loader.identify(this.args.card);
+    let ref = this.loaderService.loader.identify(this.args.card);
     if (!ref) {
       throw new Error(`bug: unable to identify card ${this.args.card.name}`);
     }
@@ -130,7 +130,7 @@ export default class Schema extends Component<Signature> {
     if (!this.localRealm.isAvailable) {
       throw new Error('Local realm is not available');
     }
-    return new RealmPaths(Loader.reverseResolution(this.localRealm.url.href));
+    return new RealmPaths(this.loaderService.loader.reverseResolution(this.localRealm.url.href));
   }
 
   @cached
@@ -140,7 +140,7 @@ export default class Schema extends Component<Signature> {
     }
     this.args.file.content;
     this.args.moduleSyntax;
-    return getCardType(this, () => this.args.card);
+    return getCardType(this, () => this.args.card, () => this.loaderService.loader);
   }
 
   @cached

@@ -11,19 +11,23 @@ import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import { service } from '@ember/service';
 import RouterService from '@ember/routing/router-service';
-import CardAPI, { RenderedCard } from '../services/card-api';
+import LoaderService from '../services/loader-service';
+import { importResource } from '../resources/import';
 import { eq } from '../helpers/truth-helpers';
 import { cardInstance } from '../resources/card-instance';
-import type { Format } from 'https://cardstack.com/base/card-api';
 import {
   LooseCardDocument,
   isCardSingleResourceDocument,
-  Loader,
+  baseRealm,
   type NewCardArgs,
   type ExistingCardArgs
 } from '@cardstack/runtime-common';
+import type { Format } from 'https://cardstack.com/base/card-api';
 import type LocalRealm from '../services/local-realm';
+import { RenderedCard } from 'https://cardstack.com/base/render-card';
 
+type CardAPI = typeof import('https://cardstack.com/base/card-api');
+type RenderedCardModule = typeof import('https://cardstack.com/base/render-card');
 
 interface Signature {
   Args: {
@@ -75,7 +79,7 @@ export default class Preview extends Component<Signature> {
   </template>
 
   @service declare router: RouterService;
-  @service declare cardAPI: CardAPI;
+  @service declare loaderService: LoaderService;
   @service declare localRealm: LocalRealm;
   @tracked
   format: Format = this.args.card.type === 'new' ? 'edit' : this.args.card.format ?? 'isolated';
@@ -88,6 +92,16 @@ export default class Preview extends Component<Signature> {
   @tracked cardError: string | undefined;
   private declare interval: ReturnType<typeof setInterval>;
   private lastModified: number | undefined;
+  private apiModule = importResource(
+    this,
+    () => `${baseRealm.url}card-api`,
+    () => this.loaderService.loader
+  );
+  private renderCardModule = importResource(
+    this,
+    () => `${baseRealm.url}render-card`,
+    () => this.loaderService.loader
+  );
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -122,12 +136,35 @@ export default class Preview extends Component<Signature> {
           return this.initialCardData.data;
         }
         return;
-      }
+      },
+      () => this.loaderService.loader
     );
   }
 
   get card() {
     return this.cardInstance.instance;
+  }
+  
+  private get api() {
+    if (!this.apiModule.module) {
+      throw new Error(
+        `bug: card API has not loaded yet--make sure to await this.loaded before using the api`
+      );
+    }
+    return this.apiModule.module as CardAPI;
+  }
+
+  private get renderCard() {
+    if (!this.renderCardModule.module) {
+      throw new Error(
+        `bug: card API has not loaded yet--make sure to await this.loaded before using the api`
+      );
+    }
+    return this.renderCardModule.module as RenderedCardModule;
+  }
+
+  private get apiLoaded() {
+    return Promise.all([this.apiModule.loaded, this.renderCardModule.loaded]);
   }
 
   private _currentJSON(includeComputeds: boolean) {
@@ -137,12 +174,12 @@ export default class Preview extends Component<Signature> {
         throw new Error('bug: this should never happen');
       }
       json = {
-        data: this.cardAPI.api.serializeCard(this.card, { includeComputeds })
+        data: this.api.serializeCard(this.card, { includeComputeds })
       };
     } else {
       if (this.card && this.initialCardData) {
         json = {
-          data: this.cardAPI.api.serializeCard(this.card, { includeComputeds })
+          data: this.api.serializeCard(this.card, { includeComputeds })
         };
       } else {
         return undefined;
@@ -205,9 +242,9 @@ export default class Preview extends Component<Signature> {
   }
 
   @task private async prepareNewInstance(): Promise<void> {
-    await this.cardAPI.loaded;
+    await this.apiLoaded;
     if (!this.rendered) {
-      this.rendered = this.cardAPI.render(this, () => this.card, () => this.format);
+      this.rendered = this.renderCard.render(this, () => this.card, () => this.format);
     }
   }
 
@@ -215,9 +252,9 @@ export default class Preview extends Component<Signature> {
     if (!url) {
       return;
     }
-    await this.cardAPI.loaded;
+    await this.apiLoaded;
     if (!this.rendered) {
-      this.rendered = this.cardAPI.render(this, () => this.card, () => this.format);
+      this.rendered = this.renderCard.render(this, () => this.card, () => this.format);
     }
 
     if (this.args.card.type === 'existing' && this.args.card.json) {
@@ -225,7 +262,7 @@ export default class Preview extends Component<Signature> {
       return;
     }
 
-    let response = await Loader.fetch(url, {
+    let response = await this.loaderService.loader.fetch(url, {
       headers: {
         'Accept': 'application/vnd.api+json'
       },
@@ -248,7 +285,7 @@ export default class Preview extends Component<Signature> {
   @restartableTask private async write(): Promise<void> {
     let url = this.args.card.type === 'new' ? this.args.card.realmURL : this.args.card.url;
     let method = this.args.card.type === 'new' ? 'POST' : 'PATCH';
-    let response = await Loader.fetch(url, {
+    let response = await this.loaderService.loader.fetch(url, {
       method,
       headers: {
         'Accept': 'application/vnd.api+json'
@@ -281,7 +318,7 @@ export default class Preview extends Component<Signature> {
   }
 
   private async getComparableCardJson(json: LooseCardDocument): Promise<LooseCardDocument> {
-    let card = await this.cardAPI.api.createFromSerialized(json.data, this.localRealm.url);
-    return { data: this.cardAPI.api.serializeCard(card) };
+    let card = await this.api.createFromSerialized(json.data, this.localRealm.url, { loader: this.loaderService.loader });
+    return { data: this.api.serializeCard(card) };
   }
 }

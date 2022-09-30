@@ -10,11 +10,12 @@ import { taskFor } from 'ember-concurrency-ts';
 import { enqueueTask } from 'ember-concurrency';
 import { service } from '@ember/service';
 import type { Card } from 'https://cardstack.com/base/card-api';
-import { type LooseCardResource, Loader } from '@cardstack/runtime-common';
+import { type LooseCardResource } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import type LocalRealm from '../services/local-realm';
+import type LoaderService from '../services/loader-service';
 import Preview from './preview';
 
 export default class CardCatalogModal extends Component {
@@ -48,6 +49,7 @@ export default class CardCatalogModal extends Component {
   </template>
 
   @service declare localRealm: LocalRealm;
+  @service declare loaderService: LoaderService;
 
   @tracked currentRequest: {
     search: Search;
@@ -68,12 +70,12 @@ export default class CardCatalogModal extends Component {
 
   @enqueueTask private async _chooseCard<T extends Card>(query: Query): Promise<undefined | T> {
     this.currentRequest = {
-      search: getSearchResults(this, () => query),
+      search: getSearchResults(this, () => query, () => this.loaderService.loader),
       deferred: new Deferred(),
     };
     let resource = await this.currentRequest.deferred.promise;
     if (resource) {
-      let api = await Loader.import<typeof import('https://cardstack.com/base/card-api')>('https://cardstack.com/base/card-api');
+      let api = await this.loaderService.loader.import<typeof import('https://cardstack.com/base/card-api')>('https://cardstack.com/base/card-api');
       return await api.createFromSerialized(resource, this.localRealm.url) as T;
     } else {
       return undefined;

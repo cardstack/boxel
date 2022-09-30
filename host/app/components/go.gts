@@ -7,10 +7,10 @@ import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
-import { isCardDocument, Loader, type ExistingCardArgs } from '@cardstack/runtime-common';
+import { isCardDocument, type ExistingCardArgs } from '@cardstack/runtime-common';
 import type { Format } from "https://cardstack.com/base/card-api";
-
 import LocalRealm from '../services/local-realm';
+import LoaderService from '../services/loader-service';
 import type { FileResource } from '../resources/file';
 import Preview from './preview';
 import Module from './module';
@@ -61,6 +61,7 @@ export default class Go extends Component<Signature> {
 
   formats = formats;
   @service declare localRealm: LocalRealm;
+  @service declare loaderService: LoaderService;
   @tracked jsonError: string | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
@@ -126,7 +127,7 @@ export default class Go extends Component<Signature> {
   @restartableTask private async remove(url: string): Promise<void> {
     let headersAccept = this.openFileCardJSON ? 'application/vnd.api+json' : 'application/vnd.card+source';
     url = this.openFileCardJSON ? url.replace(/\.json$/, '') : url;
-    let response = await Loader.fetch(url, { method: 'DELETE', headers: { 'Accept': headersAccept }});
+    let response = await this.loaderService.loader.fetch(url, { method: 'DELETE', headers: { 'Accept': headersAccept }});
     if (!response.ok) {
       throw new Error(`could not delete file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
     }
