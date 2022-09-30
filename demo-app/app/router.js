@@ -20,5 +20,5 @@ Router.map(function () {
   this.route('context-selection');
   this.route('nested-sprites');
   this.route('removed-sprite-interruption');
-  this.route('sequence');
+  this.route('simple-orchestration');
 });

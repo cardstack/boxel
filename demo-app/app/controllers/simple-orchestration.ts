@@ -6,7 +6,7 @@ import { AnimationDefinition } from 'animations-experiment/models/transition-run
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 
-export default class Sequence extends Controller {
+export default class SimpleOrchestration extends Controller {
   @tracked leftPosition = '0px';
 
   @action
@@ -18,7 +18,7 @@ export default class Sequence extends Controller {
     }
   }
 
-  transition(changeset: Changeset): AnimationDefinition {
+  sequence(changeset: Changeset): AnimationDefinition {
     let { keptSprites } = changeset;
 
     return {
@@ -41,7 +41,7 @@ export default class Sequence extends Controller {
             },
             timing: {
               behavior: new LinearBehavior(),
-              duration: 300,
+              duration: 500,
             },
           },
           {
@@ -57,11 +57,55 @@ export default class Sequence extends Controller {
       },
     } as unknown as AnimationDefinition;
   }
+
+  parallel(changeset: Changeset): AnimationDefinition {
+    let { keptSprites } = changeset;
+
+    return {
+      timeline: {
+        parallel: [
+          {
+            sprites: keptSprites,
+            properties: {
+              position: {},
+            },
+            timing: {
+              behavior: new LinearBehavior(),
+              duration: 2400,
+            },
+          },
+          {
+            sequence: [
+              {
+                sprites: keptSprites,
+                properties: {
+                  opacity: { from: 1, to: 0.1 },
+                },
+                timing: {
+                  behavior: new SpringBehavior(),
+                },
+              },
+              {
+                sprites: keptSprites,
+                properties: {
+                  opacity: { to: 1, from: 0.1 },
+                },
+                timing: {
+                  behavior: new LinearBehavior(),
+                  duration: 1200,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    } as unknown as AnimationDefinition;
+  }
 }
 
 // DO NOT DELETE: this is how TypeScript knows how to look up your controllers.
 declare module '@ember/controller' {
   interface Registry {
-    sequence: Sequence;
+    'simple-orchestration': SimpleOrchestration;
   }
 }
