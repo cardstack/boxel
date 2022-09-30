@@ -513,35 +513,38 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Re
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
     <style>
-    .card-edit label,
-    .card-edit .field {
-      display: block;
-      padding: 0.75rem;
-      background-color: #ffffff6e;
-      text-transform: capitalize;
-    }
-
-    .card-edit input[type=text],
-    .card-preview input[type=number] {
-      box-sizing: border-box;
-      width: 100%;
-      margin-top: .5rem;
-      display: block;
-      padding: 0.5rem;
-      font: inherit;
-    }
-
-    .card-edit textarea {
-      box-sizing: border-box;
-      width: 100%;
-      min-height: 5rem;
-      margin-top: .5rem;
-      display: block;
-      padding: 0.5rem;
-      font: inherit;
-    }
+      .default-edit {
+        background-color: white;
+      }
+      .default-edit label,
+      .default-edit .field {
+        display: block;
+        padding: 0.75rem;
+        text-transform: capitalize;
+        border: 1px solid gray;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+      .default-edit input[type=text],
+      .default-edit input[type=number] {
+        box-sizing: border-box;
+        width: 100%;
+        margin-top: .5rem;
+        display: block;
+        padding: 0.5rem;
+        font: inherit;
+      }
+      .default-edit textarea {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 5rem;
+        margin-top: .5rem;
+        display: block;
+        padding: 0.5rem;
+        font: inherit;
+      }
     </style>
-    <div class="card-edit">
+    <div class="default-edit">
       {{#each-in @fields as |key Field|}}
         <label data-test-field={{key}}>
           {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}

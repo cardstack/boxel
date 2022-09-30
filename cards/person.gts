@@ -10,7 +10,17 @@ export class Person extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.firstName/>
+      <style>
+        .person {
+          border: 1px solid gray;
+          border-radius: 10px;
+          background-color: #90dbf4;
+          padding: 1rem;
+        }
+      </style>
+      <div class="person">
+        <@fields.firstName/>
+      </div>
     </template>
   }
   
@@ -18,6 +28,8 @@ export class Person extends Card {
     <template>
       <style>
         .person {
+          border: 1px solid gray;
+          border-radius: 10px;
           background-color: #90dbf4;
           padding: 1rem;
         }

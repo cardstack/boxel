@@ -18,7 +18,6 @@ interface ModifierSignature {
   };
 }
 
-
 export default class ShadowDOM extends Component<Signature> {
   <template>
     <div {{ShadowRootModifier this.setShadow}} ...attributes data-test-shadow-component>

@@ -51,34 +51,6 @@ button {
   padding-left: 4rem;
 }
 
-.card-edit {
-  padding: 2rem 1rem;
-}
-
-.card-edit label,
-.card-edit .field {
-  display: block;
-  padding: 0.75rem;
-  margin: 1rem auto;
-  text-transform: capitalize;
-  border-radius: 5px;
-  background-color: #ffffff6e;
-}
-
-.card-edit input[type=text],
-.card-preview input[type=number] {
-  width: 100%;
-  margin-top: .5rem;
-  display: block;
-}
-
-.card-edit textarea {
-  width: 100%;
-  min-height: 5rem;
-  margin-top: .5rem;
-  display: block;
-}
-
 .schema {
   margin-bottom: 1rem;
   padding: 1rem;
@@ -93,6 +65,10 @@ button {
   grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
   gap: 1rem;
   padding-left: 0;
+}
+
+.card-catalog li > button {
+  margin-top: 1rem;
 }
 
 .dialog-box {
@@ -112,35 +88,12 @@ button {
   background-color: aliceblue;
 }
 
+.catalog-entry-editor > fieldset > * + * {
+  margin-top: 1rem;
+}
+
 .error {
   color: red;
-}
-
-
-/* Card Container */
-.card-container {
-  position: relative;
-  margin-top: 1rem;
-  padding: 1rem;
-  border: 1px solid gray;
-  border-radius: 10px;
-  background-color: white;
-  overflow: auto;
-}
-.card-container__label {
-  position: absolute;
-  top: 0;
-  right: 0;
-  display: inline-block;
-  background-color: #f4f4f4;
-  color: darkgray;
-  font-size: 0.9rem;
-  font-weight: bold;
-  font-family: Arial, Helvetica, sans-serif;
-  padding: 0.5em 1em;
-}
-.card-container__shadow {
-  display: contents;
 }
 
 
@@ -155,10 +108,6 @@ button {
 
 .Post {
   background-color: #ffcad4;
-}
-
-.Pet {
-  background-color: #fdfcdc;
 }
 
 .Employee {

@@ -11,7 +11,15 @@ export class Pet extends Card {
   @field sleepsOnTheCouch = contains(BooleanCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.firstName/>
+      <style>
+        .pet {
+          border: 1px solid gray;
+          border-radius: 10px;
+          background-color: #fdfcdc;
+          padding: 1rem;
+        }
+      </style>
+      <div class="pet"><@fields.firstName/></div>
     </template>
   }
 }

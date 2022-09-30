@@ -27,45 +27,105 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <label data-test-field="title">Title
-        <@fields.title/>
-      </label>
-      <label data-test-field="description">Description
-        <@fields.description/>
-      </label>
-      <div class="field" data-test-field="ref">Ref
-        <@fields.ref/>
-      </div>
-      <div class="field" data-test-field="demo">Demo
-        <@fields.demo/>
+      <style>
+        .catalog-entry-edit {
+          background-color: #cbf3f0;
+          border: 1px solid gray;
+          border-radius: 10px;
+          padding: 1rem;
+        }
+        .catalog-entry-edit label,
+        .catalog-entry-edit .field {
+          display: block;
+          padding: 0.75rem;
+          text-transform: capitalize;
+          background-color: #ffffff6e;
+          border: 1px solid gray;
+          margin-top: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+        .catalog-entry-edit input[type=text],
+        .catalog-entry-edit input[type=number] {
+          box-sizing: border-box;
+          width: 100%;
+          margin-top: .5rem;
+          display: block;
+          padding: 0.5rem;
+          font: inherit;
+        }
+        .catalog-entry-edit textarea {
+          box-sizing: border-box;
+          width: 100%;
+          min-height: 5rem;
+          margin-top: .5rem;
+          display: block;
+          padding: 0.5rem;
+          font: inherit;
+        }
+      </style>
+      <div class="catalog-entry-edit">
+        <label data-test-field="title">Title
+          <@fields.title/>
+        </label>
+        <label data-test-field="description">Description
+          <@fields.description/>
+        </label>
+        <div class="field" data-test-field="ref">Ref
+          <@fields.ref/>
+        </div>
+        <div class="field" data-test-field="demo">Demo
+          <@fields.demo/>
+        </div>
       </div>
     </template>
   }
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <h2><@fields.title/></h2>
-      <div><@fields.ref/></div>
-      {{#if @model.showDemo}}
-        <div data-test-demo-embedded><@fields.demo/></div>
-      {{/if}}
+      <style>
+        .catalog-entry {
+          border: 1px solid gray;
+          border-radius: 10px;
+          background-color: #cbf3f0;
+          padding: 1rem;
+        }
+        .catalog-entry__demo {
+          margin-top: 1rem;
+          margin-bottom: 1rem;
+        }
+      </style>
+      <div class="catalog-entry">
+        <h2><@fields.title/></h2>
+        <div><@fields.ref/></div>
+        {{#if @model.showDemo}}
+          <div class="catalog-entry__demo" data-test-demo-embedded><@fields.demo/></div>
+        {{/if}}
+      </div>
     </template>
   }
   
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <style>
-        .CatalogEntry {
+        .catalog-entry {
+          border: 1px solid gray;
+          border-radius: 10px;
           background-color: #cbf3f0;
           padding: 1rem;
         }
+        .catalog-entry__demo {
+          margin-top: 1rem;
+          margin-bottom: 1rem;
+        }
       </style>
-      <h1 data-test-title><@fields.title/></h1>
-      <p data-test-description><em><@fields.description/></em></p>
-      <div><@fields.ref/></div>
-      {{#if @model.showDemo}}
-        <div data-test-demo><@fields.demo/></div>
-      {{/if}}
+      <div class="catalog-entry">
+        <h1 data-test-title><@fields.title/></h1>
+        <p data-test-description><em><@fields.description/></em></p>
+        <div><@fields.ref/></div>
+        {{#if @model.showDemo}}
+          <div class="catalog-entry__demo" data-test-demo><@fields.demo/></div>
+        {{/if}}
+      </div>
     </template>
   }
 }
