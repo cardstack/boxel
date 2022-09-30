@@ -487,7 +487,7 @@ module('Integration | card-basics', function (hooks) {
 
     await renderCard(abdelRahmans, 'isolated');
     assert.deepEqual(
-      shadowQuerySelectorAll('[data-test-person-firstName]', this.element).map(element => element.textContent?.trim()), 
+      shadowQuerySelectorAll('[data-test-person-firstName]', this.element).map(element => element.textContent?.trim()),
       ['Mango',  'Van Gogh', 'Hassan', 'Mariko',  'Yume',  'Sakura']
     );
   });
@@ -519,10 +519,10 @@ module('Integration | card-basics', function (hooks) {
       }
     }
     let person = new Person({ pets: ['Mango', 'Van Gogh'] });
-    await renderCard(person, 'embedded');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh');
+    let root = await renderCard(person, 'embedded');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
     person.pets = ['Van Gogh', 'Mango', 'Peachy'];
-    await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Van Gogh Mango Peachy');
+    await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Van Gogh Mango Peachy');
   });
 
   test('rerender when a containsMany field is mutated via assignment', async function(assert) {
@@ -535,10 +535,10 @@ module('Integration | card-basics', function (hooks) {
       }
     }
     let person = new Person({ pets: ['Mango', 'Van Gogh'] });
-    await renderCard(person, 'embedded');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh');
+    let root = await renderCard(person, 'embedded');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
     person.pets[1] = 'Peachy';
-    await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Mango Peachy');
+    await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Mango Peachy');
   });
 
 
@@ -552,12 +552,12 @@ module('Integration | card-basics', function (hooks) {
       }
     }
     let person = new Person({ pets: ['Mango', 'Van Gogh'] });
-    await renderCard(person, 'embedded');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh');
+    let root = await renderCard(person, 'embedded');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
     person.pets.push('Peachy');
-    await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Mango Van Gogh Peachy');
+    await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Mango Van Gogh Peachy');
     person.pets.shift();
-    await waitUntil(() => cleanWhiteSpace(this.element.textContent!) === 'Van Gogh Peachy');
+    await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Van Gogh Peachy');
   });
 
   test('supports an empty containsMany composite field', async function (assert) {
@@ -634,15 +634,18 @@ module('Integration | card-basics', function (hooks) {
       }
     }, undefined);
 
-    await renderCard(helloWorld, 'edit');
-    assert.dom('[data-test-field="title"]').containsText('Title');
-    assert.dom('[data-test-field="title"] input').hasValue('My Post');
-    assert.dom('[data-test-field="author"]').containsText('Author Person First Name');
-    assert.dom('[data-test-field="author"] input').hasValue('Arthur');
+    let root = await renderCard(helloWorld, 'edit');
+    assert.shadowDOM('[data-test-field="title"]').hasText('Title');
+    assert.shadowDOM('[data-test-field="title"] input').hasValue('My Post');
+    assert.shadowDOM('[data-test-field="author"] [data-test-field="firstName"]').hasText('First Name');
+    assert.shadowDOM('[data-test-field="author"] input').hasValue('Arthur');
 
-    await fillIn('[data-test-field="title"] input', 'New Post');
-    await fillIn('[data-test-field="author"] input', 'Carl Stack');
-    // Check that outputs have changed
+    let items = shadowQuerySelectorAll('[data-test-field]', root);
+    await fillIn(items[0].children[0], 'New Post');
+    await fillIn(items[2].children[0], 'Carl Stack');
+
+    assert.shadowDOM('[data-test-field="title"] input').hasValue('New Post');
+    assert.shadowDOM('[data-test-field="author"] input').hasValue('Carl Stack');
   });
 
   test('renders field name for boolean default view values', async function (assert) {
@@ -668,8 +671,8 @@ module('Integration | card-basics', function (hooks) {
         }
       }
     }, undefined);
-    await renderCard(mango, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Person Mango isCool: true');
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango isCool: true');
   });
 
   test('renders boolean edit view', async function(assert) {
@@ -700,8 +703,8 @@ module('Integration | card-basics', function (hooks) {
     const TRUE = 0;
     const FALSE = 1;
     await renderCard(mango, 'edit');
-    let isCoolRadios: NodeListOf<HTMLInputElement> = document.querySelectorAll('[data-test-field="isCool"] input');
-    let isHumanRadios: NodeListOf<HTMLInputElement> = document.querySelectorAll('[data-test-field="isHuman"] input');
+    let isCoolRadios: HTMLInputElement[] = [...shadowQuerySelectorAll('[data-test-field="isCool"]')[0].children].map(el => el.children[0] as HTMLInputElement);
+    let isHumanRadios: HTMLInputElement[] = [...shadowQuerySelectorAll('[data-test-field="isHuman"]')[0].children].map(el => el.children[0] as HTMLInputElement);
     assert.strictEqual(isCoolRadios[TRUE].checked, true, 'the isCool true radio has correct state');
     assert.strictEqual(isCoolRadios[FALSE].checked, false, 'the isCool false radio has correct state');
     assert.strictEqual(isHumanRadios[TRUE].checked, false, 'the isHuman true radio has correct state');

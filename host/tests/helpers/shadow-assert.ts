@@ -2,7 +2,7 @@ import type DOMAssertions from 'qunit-dom/dist/assertions';
 
 export function shadowQuerySelectorAll(
   selector: string,
-  root: Document | Element | ShadowRoot = document
+  root: Document | Element | ShadowRoot | DocumentFragment = document
 ): Element[] {
   let results = Array.from(root.querySelectorAll(selector));
   for (let checkRoot of Array.from(
