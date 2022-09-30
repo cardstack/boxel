@@ -9,7 +9,7 @@ import { baseRealm, } from "@cardstack/runtime-common";
 import { Loader } from '@cardstack/runtime-common/loader';
 import type { ExportedCardRef, } from "@cardstack/runtime-common";
 import type { SignatureFor, primitive as primitiveType, queryableValue as queryableValueType } from "https://cardstack.com/base/card-api";
-
+import { shadowQuerySelectorAll } from '../../helpers/shadow-assert';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -22,13 +22,6 @@ let catalogEntry: typeof import ("https://cardstack.com/base/catalog-entry");
 let pickModule: typeof import ("https://cardstack.com/base/pick");
 let primitive: typeof primitiveType;
 let queryableValue: typeof queryableValueType;
-
-function getShadowRoot(root: Document | Element | ShadowRoot = document) {
-  return root.querySelector('[data-test-shadow-component]')?.shadowRoot;
-}
-function getShadowElement(root: Document | Element | ShadowRoot = document) {
-  return getShadowRoot(root)?.children[0];
-}
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -143,8 +136,8 @@ module('Integration | card-basics', function (hooks) {
       }
     });
 
-    await renderCard(helloWorld, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(getShadowRoot()?.textContent!), 'First Post by Arthur speaks english japanese 5 subscribers is cool true');
+    let cardRoot = await renderCard(helloWorld, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(cardRoot.textContent!), 'First Post by Arthur speaks english japanese 5 subscribers is cool true');
   });
 
   test('render primitive field', async function (assert) {
@@ -175,8 +168,8 @@ module('Integration | card-basics', function (hooks) {
     let arthur = new Person({ firstName: 'Arthur', number: 10 });
 
     await renderCard(arthur, 'embedded');
-    assert.dom('[data-test="name"]', getShadowElement()).containsText('Arthur');
-    assert.dom('[data-test="integer"]', getShadowElement()).containsText('10');
+    assert.shadowDOM('[data-test="name"]').containsText('Arthur');
+    assert.shadowDOM('[data-test="integer"]').containsText('10');
   });
 
   test('render cardRef field', async function (assert) {
@@ -193,7 +186,7 @@ module('Integration | card-basics', function (hooks) {
     let driver = new DriverCard({ ref });
 
     await renderCard(driver, 'embedded');
-    assert.dom('[data-test-ref]', getShadowElement()).containsText(`Module: http://localhost:4201/test/person Name: Person`);
+    assert.shadowDOM('[data-test-ref]').containsText(`Module: http://localhost:4201/test/person Name: Person`);
 
     // is this worth an assertion? or is it just obvious?
     assert.strictEqual(driver.ref, ref, 'The deserialized card ref constructor param is strict equal to the deserialized card ref value');
@@ -213,8 +206,8 @@ module('Integration | card-basics', function (hooks) {
     let driver = new DriverCard({ ref });
 
     await renderCard(driver, 'edit');
-    assert.dom('input', getShadowElement()).doesNotExist('no input fields exist');
-    assert.dom('[data-test-ref', getShadowElement()).containsText(`Module: http://localhost:4201/test/person Name: Person`);
+    assert.shadowDOM('input').doesNotExist('no input fields exist');
+    assert.shadowDOM('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
   });
 
   test('catalog entry isPrimitive indicates if the catalog entry is a primitive field card', async function (assert) {
@@ -268,7 +261,7 @@ module('Integration | card-basics', function (hooks) {
       @field title = contains(StringCard);
       @field number = contains(IntegerCard);
       static embedded = class Embedded extends Component<typeof this> {
-        <template><div><@fields.title/> <@fields.firstName /> <@fields.number /></div></template>
+        <template><div data-test-embedded-person><@fields.title/> <@fields.firstName /> <@fields.number /></div></template>
       }
     }
 
@@ -296,8 +289,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }, undefined);
     await renderCard(helloWorld, 'isolated');
-    let contents = getShadowElement(getShadowElement())?.textContent!;
-    assert.strictEqual(cleanWhiteSpace(contents), 'Mr Arthur 10');
+    assert.shadowDOM('[data-test-embedded-person]').containsText('Mr Arthur 10');
   });
 
   // this will apply to linksTo, but doesn't apply to contains
@@ -380,8 +372,8 @@ module('Integration | card-basics', function (hooks) {
     }, undefined);
 
     await renderCard(helloWorld, 'isolated');
-    assert.dom('[data-test="string"]', getShadowElement()).containsText('Arthur');
-    assert.dom('[data-test="integer"]', getShadowElement()).containsText('10');
+    assert.shadowDOM('[data-test="string"]').containsText('Arthur');
+    assert.shadowDOM('[data-test="integer"]').containsText('10');
   });
 
   test('render default isolated template', async function (assert) {
@@ -418,8 +410,8 @@ module('Integration | card-basics', function (hooks) {
     }, undefined);
 
     await renderCard(helloWorld, 'isolated');
-    assert.dom('[data-test="first-name"]', getShadowElement(getShadowRoot()!)).containsText('Arthur');
-    assert.dom(getShadowElement()).hasText('First Post');
+    assert.shadowDOM('[data-test="first-name"]').containsText('Arthur');
+    assert.shadowDOM('[data-test="title"]').containsText('First Post');
   });
 
   test('render a containsMany primitive field', async function (assert) {
@@ -438,8 +430,8 @@ module('Integration | card-basics', function (hooks) {
       languagesSpoken: ['english', 'japanese']
     });
 
-    await renderCard(mango, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(getShadowRoot()?.textContent!), 'Mango speaks english japanese');
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango speaks english japanese');
   });
 
   test('supports an empty containsMany primitive field', async function (assert) {
@@ -462,7 +454,7 @@ module('Integration | card-basics', function (hooks) {
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.firstName/></template>
+        <template><div data-test-person-firstName><@fields.firstName/></div></template>
       }
     }
 
@@ -494,7 +486,10 @@ module('Integration | card-basics', function (hooks) {
     }, undefined);
 
     await renderCard(abdelRahmans, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
+    assert.deepEqual(
+      shadowQuerySelectorAll('[data-test-person-firstName]', this.element).map(element => element.textContent?.trim()), 
+      ['Mango',  'Van Gogh', 'Hassan', 'Mariko',  'Yume',  'Sakura']
+    );
   });
 
   test('rerender when a primitive field changes', async function(assert) {
@@ -507,10 +502,10 @@ module('Integration | card-basics', function (hooks) {
       }
     }
     let child = new Person({ firstName: 'Arthur' });
-    await renderCard(child, 'embedded');
-    assert.dom(getShadowElement()).containsText('Arthur');
+    let root = await renderCard(child, 'embedded');
+    assert.dom(root.children[0]).containsText('Arthur');
     child.firstName = 'Quint';
-    await waitUntil(() => cleanWhiteSpace(getShadowElement()?.textContent!) === 'Quint');
+    await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Quint');
   });
 
 

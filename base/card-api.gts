@@ -9,7 +9,8 @@ import { WatchedArray } from './watched-array';
 import { Deferred, isCardResource, Loader } from '@cardstack/runtime-common';
 import { flatten } from "flat";
 import type { LooseCardResource } from '@cardstack/runtime-common';
-import { CardContainer } from 'https://cardstack.com/base/card-container';
+import ShadowDOM from 'https://cardstack.com/base/shadow-dom';
+
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -580,14 +581,14 @@ function getComponent<CardT extends CardConstructor>(card: CardT, format: Format
   // up our fields on demand.
   let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
   
-  let isCard = typeof model.value === 'object' && model.value !== null && isBaseCard in model.value;
+  let isPrimitive = primitive in card;
   let component: ComponentLike<{ Args: {}, Blocks: {} }> = <template>
-    {{#if isCard}}
-      <CardContainer @name={{card.name}}>
-        <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
-      </CardContainer>
-    {{else}}
+    {{#if isPrimitive}}
       <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
+    {{else}}
+      <ShadowDOM>
+        <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
+      </ShadowDOM>
     {{/if}}
   </template>
 
