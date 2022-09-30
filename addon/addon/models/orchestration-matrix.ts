@@ -150,7 +150,7 @@ export class OrchestrationMatrix {
     let timelineMatrix = OrchestrationMatrix.empty();
     let submatrices = [];
     // maxLength is for anchoring to the end. not using yet
-    let maxLength = 0;
+    // let maxLength = 0;
     for (let item of timeline.parallel) {
       let submatrix: OrchestrationMatrix;
       if ((item as SequentialAnimationTimeline).sequence) {
@@ -167,7 +167,7 @@ export class OrchestrationMatrix {
         );
       }
 
-      maxLength = Math.max(maxLength, submatrix.totalColumns);
+      // maxLength = Math.max(maxLength, submatrix.totalColumns);
       submatrices.push(submatrix);
     }
 
