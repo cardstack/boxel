@@ -30,7 +30,7 @@ export interface ParallelAnimationTimeline {
 export interface MotionDefinition {
   sprites: Set<Sprite>;
   properties: {
-    [k in MotionProperty]: MotionOptions | {};
+    [k in MotionProperty]: MotionOptions | Record<string, never>;
   };
   timing: {
     behavior: Behavior;
