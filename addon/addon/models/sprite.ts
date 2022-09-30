@@ -13,7 +13,7 @@ import { Opacity, OpacityOptions } from 'animations-experiment/motions/opacity';
 import { Move, MoveOptions } from '../motions/move';
 import { Resize, ResizeOptions } from '../motions/resize';
 import { CssMotion, CssMotionOptions } from '../motions/css-motion';
-import { FPS } from 'animations-experiment/behaviors/base';
+import { FPS, Frame } from 'animations-experiment/behaviors/base';
 import { assert } from '@ember/debug';
 import SpringBehavior from 'animations-experiment/behaviors/spring';
 import LinearBehavior from 'animations-experiment/behaviors/linear';
@@ -34,6 +34,11 @@ export class SpriteIdentifier {
     return `id:${this.id};role:${this.role}`;
   }
 }
+
+export type MotionProperty = 'opacity' | 'position' | 'size' | 'style';
+export type MotionOptions = Partial<
+  OpacityOptions | MoveOptions | ResizeOptions | CssMotionOptions
+>;
 
 export default class Sprite {
   element: HTMLElement;
@@ -170,12 +175,7 @@ export default class Sprite {
     this.motions = [];
   }
 
-  setupAnimation(
-    property: string,
-    opts: Partial<
-      OpacityOptions | MoveOptions | ResizeOptions | CssMotionOptions
-    >
-  ): void {
+  setupAnimation(property: MotionProperty, opts: MotionOptions): void {
     // TODO: this applies to any "non-Tween" based behavior, currently only Spring
     assert(
       'Passing a duration is not necessary when using a Spring behavior',
@@ -208,6 +208,44 @@ export default class Sprite {
         // noop
         break;
     }
+  }
+
+  /**
+   * Compiles the current motions setup on the Sprite into a single set of keyframes.
+   */
+  compileCurrentAnimations() {
+    if (!this.motions.length) {
+      return;
+    }
+
+    assert('Hidden sprite cannot be animated', !this.hidden);
+    let keyframes = this.motions.reduce((lastKeyframes, motion) => {
+      motion.applyBehavior(undefined);
+
+      let count = Math.max(lastKeyframes.length, motion.keyframes.length);
+      let result: Keyframe[] = [];
+      for (let i = 0; i < count; i++) {
+        // TODO: this merge algorithm is too naïve, it implies we can have only 1 of each CSS property or it will be overridden
+        // we copy the final frame of a motion if there is another motion that takes longer
+        result.push({
+          ...(lastKeyframes?.[i] ?? lastKeyframes[lastKeyframes.length - 1]),
+          ...(motion.keyframes?.[i] ??
+            motion.keyframes[motion.keyframes.length - 1]),
+        });
+      }
+      return result;
+    }, [] as Keyframe[]);
+
+    // We can clear these as we've compiled them already.
+    this.motions = [];
+
+    // calculate "real" duration based on amount of keyframes at the given FPS
+    let duration = Math.max(0, (keyframes.length - 1) / FPS);
+
+    return {
+      keyframes,
+      duration,
+    };
   }
 
   compileAnimation({
