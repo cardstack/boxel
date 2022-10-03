@@ -18,7 +18,6 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import Modifier from 'ember-modifier';
 import LoaderService from '../services/loader-service';
-import config from 'runtime-spike/config/environment';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
@@ -105,16 +104,12 @@ export default class Schema extends Component<Signature> {
         <CatalogEntryEditor @ref={{this.ref}} />
       </div>
     {{/if}}
-    {{#if this.isUpdatedTestHook}}
-      <div data-test-schema-updated></div>
-    {{/if}}
   </template>
 
   @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
   @tracked newFieldName: string | undefined;
   @tracked newFieldType: 'contains' | 'containsMany' = 'contains';
-  @tracked isUpdatedTestHook = false;
 
   @cached
   get ref() {
@@ -135,11 +130,6 @@ export default class Schema extends Component<Signature> {
 
   @cached
   get cardType() {
-    if (this.args.file.state !== 'ready') {
-      throw new Error(`bug: file not open ${this.args.file.url}`);
-    }
-    this.args.file.content;
-    this.args.moduleSyntax;
     return getCardType(this, () => this.args.card, () => this.loaderService.loader);
   }
 
@@ -169,7 +159,7 @@ export default class Schema extends Component<Signature> {
 
   @action
   isOwnField(fieldName: string): boolean {
-    return this.cardFromSyntax.possibleFields.has(fieldName);
+    return Object.keys(Object.getOwnPropertyDescriptors(this.args.card.prototype)).includes(fieldName);
   }
 
   @action
@@ -230,26 +220,16 @@ export default class Schema extends Component<Signature> {
       this.newFieldType
     );
     await taskFor(this.write).perform(this.args.moduleSyntax.code());
-    this.resetNewField();
-  }
-
-  resetNewField() {
-    this.newFieldName = '';
-    this.newFieldType = 'contains';
   }
 
   @restartableTask private async write(src: string): Promise<void> {
     if (this.args.file.state !== 'ready') {
       throw new Error(`the file ${this.args.file.url} is not open`);
     }
-    await this.args.file.write(src);
-    // TODO this is a stop gap until we have live module loading
-    if (config.environment === 'test') {
-      this.isUpdatedTestHook = true;
-    } else {
-      // we don't want the reload to blow up qunit
-      window.location.reload();
-    }
+    // note that this write will cause the component to rerender, so 
+    // any code after this write will not be executed since the component will 
+    // get torn down before subsequent code can execute
+    await this.args.file.write(src, true);
   }
 }
 

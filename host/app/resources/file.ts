@@ -32,7 +32,7 @@ export type FileResource =
       name: string;
       url: string;
       loading: TaskInstance<void> | null;
-      write(content: string): void;
+      write(content: string, flushLoader?: true): void;
       close(): void;
     };
 
@@ -112,8 +112,11 @@ class _FileResource extends Resource<Args> {
     }
   }
 
-  async write(content: string) {
-    taskFor(this.doWrite).perform(content);
+  async write(content: string, flushLoader?: true) {
+    await taskFor(this.doWrite).perform(content);
+    if (flushLoader) {
+      this.loaderService.reset();
+    }
   }
 
   @restartableTask private async doWrite(content: string) {

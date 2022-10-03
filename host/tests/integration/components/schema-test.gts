@@ -1,21 +1,19 @@
 import { module, test } from 'qunit';
+import { tracked } from '@glimmer/tracking';
 import { TestContext } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
-import { ExportedCardRef } from '@cardstack/runtime-common';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import Schema from 'runtime-spike/components/schema';
+import Module from 'runtime-spike/components/module';
 import { file, FileResource } from 'runtime-spike/resources/file';
-import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import Service from '@ember/service';
 import { waitFor, click, fillIn } from '@ember/test-helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, ExportedCardRef } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
-import { Card } from "https://cardstack.com/base/card-api";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 
 class MockLocalRealm extends Service {
@@ -24,15 +22,32 @@ class MockLocalRealm extends Service {
 }
 
 class MockLoaderService extends Service {
-  loader: Loader | undefined;
-  setLoader(loader: Loader) {
-    this.loader = loader
+  @tracked loader: Loader | undefined;
+  realm: Realm | undefined;
+  initialize(loader: Loader, realm: Realm) {
+    this.loader = loader;
+    this.realm = realm;
+  }
+  async reset() {
+    // emulate our test setup
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
+    if (!this.realm) {
+      throw new Error('forgot to initialize the MockLoaderService with a realm');
+    }
+    Loader.addRealmFetchOverride(this.realm);
+    this.loader = Loader.getLoader();
   }
 }
 
 module('Integration | schema', function (hooks) {
   let realm: Realm;
-  let adapter: TestRealmAdapter
+  let adapter: TestRealmAdapter;
+  let loaderService: MockLoaderService;
+
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function() {
@@ -47,7 +62,8 @@ module('Integration | schema', function (hooks) {
     await realm.ready;
     this.owner.register('service:local-realm', MockLocalRealm);
     this.owner.register('service:loader-service', MockLoaderService);
-    (this.owner.lookup('service:loader-service') as MockLoaderService).setLoader(Loader.getLoader());
+    loaderService = this.owner.lookup('service:loader-service') as MockLoaderService;
+    loaderService.initialize(Loader.getLoader(), realm);
   })
 
   test('renders card schema view', async function (assert) {
@@ -60,11 +76,11 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `);
-    let { card, openFile, moduleSyntax } = await getSchemaArgs(this, adapter, { module: `${testRealmURL}person`, name: 'Person'});
+    let openFile = await getFileResource(this, adapter, { module: `${testRealmURL}person`, name: 'Person'});
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Schema @card={{card}} @file={{openFile}} @moduleSyntax={{moduleSyntax}} />
+          <Module @file={{openFile}}/>
         </template>
       }
     );
@@ -96,11 +112,11 @@ module('Integration | schema', function (hooks) {
         @field author = contains(Person);
       }
     `);
-    let { card, openFile, moduleSyntax } = await getSchemaArgs(this, adapter, { module: `${testRealmURL}post`, name: 'Post'});
+    let openFile = await getFileResource(this, adapter, { module: `${testRealmURL}post`, name: 'Post'});
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Schema @card={{card}} @file={{openFile}} @moduleSyntax={{moduleSyntax}} />
+          <Module @file={{openFile}}/>
         </template>
       }
     );
@@ -121,11 +137,11 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `);
-    let { card, openFile, moduleSyntax } = await getSchemaArgs(this, adapter, { module: `${testRealmURL}person`, name: 'Person'});
+    let openFile = await getFileResource(this, adapter, { module: `${testRealmURL}person`, name: 'Person'});
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Schema @card={{card}} @file={{openFile}} @moduleSyntax={{moduleSyntax}} />
+          <Module @file={{openFile}}/>
         </template>
       }
     );
@@ -163,11 +179,11 @@ module('Integration | schema', function (hooks) {
         @field favoriteColor = contains(StringCard);
       }
     `);
-    let { card, openFile, moduleSyntax } = await getSchemaArgs(this, adapter, { module: `${testRealmURL}fancy-person`, name: 'FancyPerson'});
+    let openFile = await getFileResource(this, adapter, { module: `${testRealmURL}fancy-person`, name: 'FancyPerson'});
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Schema @card={{card}} @file={{openFile}} @moduleSyntax={{moduleSyntax}} />
+          <Module @file={{openFile}}/>
         </template>
       }
     );
@@ -234,11 +250,11 @@ module('Integration | schema', function (hooks) {
         }
       }
     }));
-    let { card, openFile, moduleSyntax } = await getSchemaArgs(this, adapter, { module: `${testRealmURL}post`, name: 'Post'});
+    let openFile = await getFileResource(this, adapter, { module: `${testRealmURL}post`, name: 'Post'});
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Schema @card={{card}} @file={{openFile}} @moduleSyntax={{moduleSyntax}} />
+          <Module @file={{openFile}}/>
           <CardCatalogModal />
         </template>
       }
@@ -264,10 +280,8 @@ module('Integration | schema', function (hooks) {
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`).doesNotExist('own card is not available to choose as a field');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
-    
-    await waitFor('[data-test-schema-updated]')
-    // TODO we don't have live module loading yet so we can only see this when the page is refreshed
-    // assert.dom('[data-test-field="author"]').hasText(`Delete author - contains - field card ID: ${testRealmURL}person/Person`);
+    await waitFor('[data-test-field="author"]');
+    assert.dom('[data-test-field="author"]').hasText(`Delete author - contains - field card ID: ${testRealmURL}person/Person`);
 
     let fileRef = await adapter.openFile('post.gts');
     let src = fileRef?.content as string;
@@ -293,11 +307,11 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `);
-    let { card, openFile, moduleSyntax } = await getSchemaArgs(this, adapter, { module: `${testRealmURL}person`, name: 'Person'});
+    let openFile = await getFileResource(this, adapter, { module: `${testRealmURL}person`, name: 'Person'});
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Schema @card={{card}} @file={{openFile}} @moduleSyntax={{moduleSyntax}} />
+          <Module @file={{openFile}}/>
           <CardCatalogModal />
         </template>
       }
@@ -310,9 +324,8 @@ module('Integration | schema', function (hooks) {
     await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
 
     await click(`[data-test-select="${baseRealm.url}fields/string-field"]`);
-    await waitFor('[data-test-schema-updated]')
-    // TODO we don't have live module loading yet so we can only see this when the page is refreshed
-    // assert.dom('[data-test-field="aliases"]').hasText(`Delete aliases - containsMany - field card ID: ${baseRealm.url}string/default`);
+    await waitFor('[data-test-field="aliases"]');
+    assert.dom('[data-test-field="aliases"]').hasText(`Delete aliases - containsMany - field card ID: ${baseRealm.url}string/default`);
 
     let fileRef = await adapter.openFile('person.gts');
     let src = fileRef?.content as string;
@@ -348,11 +361,11 @@ module('Integration | schema', function (hooks) {
       }
     `);
 
-    let { card, openFile, moduleSyntax } = await getSchemaArgs(this, adapter, { module: `${testRealmURL}employee`, name: 'Employee'});
+    let openFile = await getFileResource(this, adapter, { module: `${testRealmURL}employee`, name: 'Employee'});
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Schema @card={{card}} @file={{openFile}} @moduleSyntax={{moduleSyntax}} />
+          <Module @file={{openFile}}/>
           <CardCatalogModal />
         </template>
       }
@@ -370,26 +383,13 @@ module('Integration | schema', function (hooks) {
   });
 });
 
-
-async function getSchemaArgs(context: TestContext, adapter: TestRealmAdapter, ref: ExportedCardRef): Promise<{
-  openFile: FileResource;
-  moduleSyntax: ModuleSyntax;
-  card: typeof Card
-}> {
+async function getFileResource(context: TestContext, adapter: TestRealmAdapter, ref: ExportedCardRef): Promise<FileResource> {
   let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
   let paths = new RealmPaths(testRealmURL);
   let content = (await adapter.openFile(paths.local(new URL(fileURL))))?.content as string | undefined;
-  let openFile = file(context, () => ({
+  return file(context, () => ({
     url: fileURL,
     lastModified: undefined,
     content
   }));
-  await openFile.loading;
-  if (openFile.state !== "ready") {
-    throw new Error(`could not open file ${openFile.url}`);
-  }
-  let moduleSyntax = new ModuleSyntax(openFile.content);
-  let module = await Loader.import<Record<string, typeof Card>>(ref.module);
-  let card = module[ref.name];
-  return { moduleSyntax, card, openFile };
 }

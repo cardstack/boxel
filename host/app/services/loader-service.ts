@@ -4,15 +4,18 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 
 export default class LoaderService extends Service {
-  @tracked loader: Loader;
+  @tracked loader = this.makeInstance();
 
-  constructor(properties: object) {
-    super(properties);
+  reset() {
+    this.loader = this.makeInstance();
+  }
+
+  private makeInstance() {
     let loader = new Loader();
     loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    this.loader = loader;
+    return loader;
   }
 }

@@ -8,12 +8,6 @@ interface Args {
   named: { url: string; loader: Loader };
 }
 
-const moduleURLs = new WeakMap<any, string>();
-
-export function moduleURL(module: any): string | undefined {
-  return moduleURLs.get(module);
-}
-
 export class ImportResource extends Resource<Args> {
   @tracked module: object | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
@@ -27,7 +21,6 @@ export class ImportResource extends Resource<Args> {
   @task private async load(url: string, loader: Loader): Promise<void> {
     try {
       let m = await loader.import<object>(url);
-      moduleURLs.set(m, url);
       this.module = m;
     } catch (err) {
       let errResponse = await loader.fetch(url, {
