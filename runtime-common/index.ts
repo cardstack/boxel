@@ -113,7 +113,6 @@ export type {
   CardResource,
   CardDocument,
 } from "./search-index";
-export type { CardDefinition } from "./current-run";
 export {
   isCardResource,
   isCardDocument,

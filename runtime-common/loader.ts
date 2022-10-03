@@ -174,7 +174,12 @@ export class Loader {
     if (!module || module.state === "fetching") {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
-        await this.import(moduleIdentifier);
+        let m = await this.import<Record<string, any>>(moduleIdentifier);
+        if (m) {
+          for (let exportName of Object.keys(m)) {
+            m[exportName];
+          }
+        }
       } catch (err: any) {
         console.warn(
           `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`

@@ -7,7 +7,7 @@ import {
 } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, baseCardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 const paths = new RealmPaths(testRealmURL);
@@ -56,528 +56,6 @@ module('Unit | search-index', function (hooks) {
     ]);
   });
 
-  test('full indexing identifies the exported cards in a module', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-        }
-
-        export class FancyPerson extends Person {
-          @field favoriteColor = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    let refs = await indexer.exportedCardsOf('person.gts');
-    assert.deepEqual(refs, [
-      {
-        module: `${testRealmURL}person`,
-        name: 'FancyPerson',
-      },
-    ]);
-  });
-
-  test('full indexing discovers card source where super class card comes from outside local realm', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        export class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-
-    let definition = await indexer.typeOf({
-      type: 'exportedCard',
-      module: 'person.gts',
-      name: 'Person',
-    });
-    assert.deepEqual(definition?.id, {
-      type: 'exportedCard',
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
-    assert.deepEqual(definition?.super, {
-      type: 'exportedCard',
-      module: 'https://cardstack.com/base/card-api',
-      name: 'Card',
-    });
-    assert.deepEqual(definition?.fields.get('firstName'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-    assert.deepEqual(definition?.fields.get('lastName'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-  });
-
-  test('full indexing discovers card source where super class card comes from different module in the local realm', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        export class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-        }
-      `,
-      'fancy-person.gts': `
-        import { contains, field } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-        import { Person } from './person';
-
-        export class FancyPerson extends Person {
-          @field favoriteColor = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    let definition = await indexer.typeOf({
-      type: 'exportedCard',
-      module: 'fancy-person.gts',
-      name: 'FancyPerson',
-    });
-    assert.deepEqual(definition?.id, {
-      type: 'exportedCard',
-      module: `${testRealmURL}fancy-person`,
-      name: 'FancyPerson',
-    });
-    assert.deepEqual(definition?.super, {
-      type: 'exportedCard',
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
-
-    assert.deepEqual(definition?.fields.get('lastName'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-
-    assert.deepEqual(definition?.fields.get('favoriteColor'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-  });
-
-  test('full indexing discovers card source where super class card comes from a reexport with no module scope in the local realm', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        export class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-        }
-      `,
-      'index.gts': `
-        export { Person as PersonCard } from "./person";
-      `,
-      'fancy-person.gts': `
-        import { contains, field } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-        import { PersonCard } from './index';
-
-        export class FancyPerson extends PersonCard {
-          @field favoriteColor = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    let definition = await indexer.typeOf({
-      type: 'exportedCard',
-      module: 'fancy-person.gts',
-      name: 'FancyPerson',
-    });
-    assert.deepEqual(definition?.id, {
-      type: 'exportedCard',
-      module: `${testRealmURL}fancy-person`,
-      name: 'FancyPerson',
-    });
-    assert.deepEqual(definition?.super, {
-      type: 'exportedCard',
-      module: `${testRealmURL}index`,
-      name: 'PersonCard',
-    });
-
-    assert.deepEqual(definition?.fields.get('lastName'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-
-    assert.deepEqual(definition?.fields.get('favoriteColor'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-  });
-
-  test('full indexing discovers card source where super class card comes from a reexport with module scope in the local realm', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        export class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-        }
-      `,
-      'index.gts': `
-        import { Person } from "./person";
-        export { Person as PersonCard };
-      `,
-      'fancy-person.gts': `
-        import { contains, field } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-        import { PersonCard } from './index';
-
-        export class FancyPerson extends PersonCard {
-          @field favoriteColor = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    let definition = await indexer.typeOf({
-      type: 'exportedCard',
-      module: 'fancy-person.gts',
-      name: 'FancyPerson',
-    });
-    assert.deepEqual(definition?.id, {
-      type: 'exportedCard',
-      module: `${testRealmURL}fancy-person`,
-      name: 'FancyPerson',
-    });
-    assert.deepEqual(definition?.super, {
-      type: 'exportedCard',
-      module: `${testRealmURL}index`,
-      name: 'PersonCard',
-    });
-
-    assert.deepEqual(definition?.fields.get('lastName'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-
-    assert.deepEqual(definition?.fields.get('favoriteColor'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-  });
-
-  test('full indexing discovers card source where super class card comes same module', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        export class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-        }
-
-        export class FancyPerson extends Person {
-          @field favoriteColor = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    let definition = await indexer.typeOf({
-      type: 'exportedCard',
-      module: 'person.gts',
-      name: 'FancyPerson',
-    });
-    assert.deepEqual(definition?.id, {
-      type: 'exportedCard',
-      module: `${testRealmURL}person`,
-      name: 'FancyPerson',
-    });
-    // we did not go thru the loader to consume our super class because it's in
-    // the same module, so the loader never stamped it. This results in its
-    // super definitions getting the non-exported style card ref.
-    assert.deepEqual(definition?.super, {
-      type: 'ancestorOf',
-      card: {
-        type: 'exportedCard',
-        module: `${testRealmURL}person`,
-        name: 'FancyPerson',
-      },
-    });
-    assert.deepEqual(definition?.fields.get('lastName'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-    assert.deepEqual(definition?.fields.get('favoriteColor'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-  });
-
-  test('full indexing discovers internal cards that are consumed by an exported card', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-        }
-
-        export class FancyPerson extends Person {
-          @field favoriteColor = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    let definition = await indexer.typeOf({
-      type: 'ancestorOf',
-      card: {
-        type: 'exportedCard',
-        module: 'person.gts',
-        name: 'FancyPerson',
-      },
-    });
-    assert.deepEqual(definition?.id, {
-      type: 'ancestorOf',
-      card: {
-        type: 'exportedCard',
-        module: `${testRealmURL}person`,
-        name: 'FancyPerson',
-      },
-    });
-    assert.deepEqual(definition?.super, {
-      type: 'exportedCard',
-      module: 'https://cardstack.com/base/card-api',
-      name: 'Card',
-    });
-    assert.deepEqual(definition?.fields.get('firstName'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-    assert.strictEqual(
-      definition?.fields.get('favoriteColor'),
-      undefined,
-      'favoriteColor field does not exist on card'
-    );
-  });
-
-  test('full indexing ignores card source where super class in a different module is not actually a card', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        class NotACard {};
-
-        export class Person extends NotACard {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-        }
-      `,
-      'fancy-person.gts': `
-        import { contains, field } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-        import { Person } from './person';
-
-        export class FancyPerson extends Person {
-          @field favoriteColor = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    assert.strictEqual(
-      await indexer.typeOf({
-        type: 'exportedCard',
-        module: 'fancy-person.gts',
-        name: 'FancyPerson',
-      }),
-      undefined,
-      'FancyPerson is not actually a card'
-    );
-  });
-
-  test('full indexing ignores card source where the super class is in the same module and not actually a card', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        class NotACard {}
-
-        export class FancyPerson extends NotACard {
-          @field favoriteColor = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    assert.strictEqual(
-      await indexer.typeOf({
-        type: 'exportedCard',
-        module: 'person.gts',
-        name: 'FancyPerson',
-      }),
-      undefined,
-      'FancyPerson is not actually a card'
-    );
-  });
-
-  test('full indexing ignores cards that are not exported from their module', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    assert.strictEqual(
-      await indexer.typeOf({
-        type: 'exportedCard',
-        module: 'person.gts',
-        name: 'Person',
-      }),
-      undefined,
-      'Person is not actually a card (that is exported)'
-    );
-  });
-
-  test('full indexing discovers internal field cards that are consumed by an exported card', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        class NewFieldCard extends Card {}
-
-        export class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(NewFieldCard);
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    let definition = await indexer.typeOf({
-      type: 'fieldOf',
-      card: {
-        type: 'exportedCard',
-        module: 'person.gts',
-        name: 'Person',
-      },
-      field: 'lastName',
-    });
-    assert.deepEqual(definition?.id, {
-      type: 'fieldOf',
-      card: {
-        type: 'exportedCard',
-        module: `${testRealmURL}person`,
-        name: 'Person',
-      },
-      field: 'lastName',
-    });
-    assert.deepEqual(definition?.super, {
-      type: 'exportedCard',
-      module: 'https://cardstack.com/base/card-api',
-      name: 'Card',
-    });
-    assert.strictEqual(definition?.fields.size, 0);
-
-    let cardDefinition = await indexer.typeOf({
-      type: 'exportedCard',
-      module: 'person.gts',
-      name: 'Person',
-    });
-    assert.deepEqual(cardDefinition?.fields.get('firstName'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'exportedCard',
-        module: 'https://cardstack.com/base/string',
-        name: 'default',
-      },
-    });
-    assert.deepEqual(cardDefinition?.fields.get('lastName'), {
-      fieldType: 'contains',
-      fieldCard: {
-        type: 'fieldOf',
-        card: {
-          type: 'exportedCard',
-          module: `${testRealmURL}person`,
-          name: 'Person',
-        },
-        field: 'lastName',
-      },
-    });
-  });
-
   test("indexing identifies an instance's card references", async function (assert) {
     let realm = TestRealm.create({
       'person-1.json': {
@@ -601,58 +79,46 @@ module('Unit | search-index', function (hooks) {
     assert.deepEqual(
       [...refs!.keys()].sort(),
       [
-        `${testModuleRealm}person/Person`,
-        `${baseRealm.url}card-api/Card`,
-        `${baseRealm.url}integer/default`,
-        `${baseRealm.url}string/default`,
+        'http://localhost:4201/base/card-api',
+        'http://localhost:4201/base/card-container',
+        'http://localhost:4201/base/contains-many',
+        'http://localhost:4201/base/integer',
+        'http://localhost:4201/base/not-ready',
+        'http://localhost:4201/base/pick',
+        'http://localhost:4201/base/string',
+        'http://localhost:4201/base/watched-array',
+        'http://localhost:4201/externals/@cardstack/runtime-common',
+        'http://localhost:4201/externals/@ember/component',
+        'http://localhost:4201/externals/@ember/component/template-only',
+        'http://localhost:4201/externals/@ember/destroyable',
+        'http://localhost:4201/externals/@ember/helper',
+        'http://localhost:4201/externals/@ember/modifier',
+        'http://localhost:4201/externals/@ember/object',
+        'http://localhost:4201/externals/@ember/template-factory',
+        'http://localhost:4201/externals/@glimmer/component',
+        'http://localhost:4201/externals/flat',
+        'http://localhost:4201/externals/lodash',
+        'http://localhost:4201/externals/tracked-built-ins',
+        'http://localhost:4201/test/person',
       ],
       'the card references for the instance are correct'
     );
   });
 
-  test('parses first-class template syntax', async function (assert) {
-    let realm = TestRealm.create({
-      'my-card.gts': `
-        import { contains, field, Card, Component } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
-
-        export class Person extends Card {
-          @field firstName = contains(StringCard);
-
-          static isolated = class Isolated extends Component<typeof this> {
-            <template><div class="hi"><@fields.firstName /></div></template>
-          }
-        }
-      `,
-    });
-    let indexer = realm.searchIndex;
-    await indexer.run();
-    let definition = await indexer.typeOf({
-      type: 'exportedCard',
-      module: 'my-card.gts',
-      name: 'Person',
-    });
-    assert.ok(definition, 'got definition');
-  });
-
   test('search index does not contain entries that match patterns in ignore files', async function (assert) {
-    const cardSource = `
-      import { Card } from 'https://cardstack.com/base/card-api';
-      export class Post extends Card {}
-    `;
-
     let realm = TestRealm.create({
-      'sample-post.json': '',
-      'posts/1.json': '',
-      'posts/nested.gts': cardSource,
-      'posts/ignore-me.gts': cardSource,
-      'posts/2.json': '',
-      'post.gts': cardSource,
-      'dir/card.gts': cardSource,
+      'ignore-me-1.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+      'posts/nested.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+      'posts/please-ignore-me.json': {
+        data: { meta: { adoptsFrom: baseCardRef } },
+      },
+      'posts/ignore-me-2.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+      'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+      'dir/card.json': { data: { meta: { adoptsFrom: baseCardRef } } },
       '.gitignore': `
-*.json
+ignore-me*.json
 dir/
-posts/ignore-me.gts
+posts/please-ignore-me.json
       `,
     });
 
@@ -660,31 +126,9 @@ posts/ignore-me.gts
     await indexer.run();
 
     {
-      let def = await indexer.typeOf({
-        type: 'exportedCard',
-        module: 'posts/ignore-me.gts',
-        name: 'Post',
-      });
-      assert.strictEqual(
-        def,
-        undefined,
-        'definition does not exist because file is ignored'
+      let card = await indexer.card(
+        new URL(`${testRealmURL}posts/please-ignore-me`)
       );
-    }
-    {
-      let def = await indexer.typeOf({
-        type: 'exportedCard',
-        module: 'dir/card.gts',
-        name: 'Post',
-      });
-      assert.strictEqual(
-        def,
-        undefined,
-        'definition does not exist because file is ignored'
-      );
-    }
-    {
-      let card = await indexer.card(new URL(`${testRealmURL}sample-post.json`));
       assert.deepEqual(
         card,
         undefined,
@@ -692,7 +136,7 @@ posts/ignore-me.gts
       );
     }
     {
-      let card = await indexer.card(new URL(`${testRealmURL}cards/2.json`));
+      let card = await indexer.card(new URL(`${testRealmURL}dir/card`));
       assert.deepEqual(
         card,
         undefined,
@@ -700,54 +144,57 @@ posts/ignore-me.gts
       );
     }
     {
-      let def = await indexer.typeOf({
-        type: 'exportedCard',
-        module: 'post.gts',
-        name: 'Post',
-      });
-      assert.ok(def, 'definition exists');
+      let card = await indexer.card(new URL(`${testRealmURL}ignore-me-1`));
+      assert.deepEqual(
+        card,
+        undefined,
+        'instance does not exist because file is ignored'
+      );
     }
     {
-      let def = await indexer.typeOf({
-        type: 'exportedCard',
-        module: 'posts/nested.gts',
-        name: 'Post',
-      });
-      assert.ok(def, 'definition exists');
+      let card = await indexer.card(
+        new URL(`${testRealmURL}posts/ignore-me-2`)
+      );
+      assert.deepEqual(
+        card,
+        undefined,
+        'instance does not exist because file is ignored'
+      );
+    }
+    {
+      let card = await indexer.card(new URL(`${testRealmURL}post`));
+      assert.ok(card, 'instance exists');
+    }
+    {
+      let card = await indexer.card(new URL(`${testRealmURL}posts/nested`));
+      assert.ok(card, 'instance exists');
     }
   });
 
   test("incremental indexing doesn't process ignored files", async function (assert) {
-    const cardSource = `
-      import { Card } from 'https://cardstack.com/base/card-api';
-      export class Post extends Card {}
-    `;
-
     let realm = TestRealm.create({
-      'posts/ignore-me.gts': cardSource,
+      'posts/ignore-me.json': { data: { meta: { adoptsFrom: baseCardRef } } },
       '.gitignore': `
-posts/ignore-me.gts
+posts/ignore-me.json
       `,
     });
 
     let indexer = realm.searchIndex;
     await indexer.run();
-    await indexer.update(new URL(`${testRealmURL}posts/ignore-me.gts`));
+    await indexer.update(new URL(`${testRealmURL}posts/ignore-me.json`));
 
-    let def = await indexer.typeOf({
-      type: 'exportedCard',
-      module: 'posts/ignore-me.gts',
-      name: 'Post',
-    });
-    assert.strictEqual(
-      def,
-      undefined,
-      'definition does not exist because file is ignored'
+    let instance = await indexer.card(
+      new URL(`${testRealmURL}posts/ignore-me`)
     );
     assert.strictEqual(
-      indexer.stats.definitionsBuilt,
+      instance,
+      undefined,
+      'instance does not exist because file is ignored'
+    );
+    assert.strictEqual(
+      indexer.stats.instancesIndexed,
       0,
-      'no definitions were processed'
+      'no instances were processed'
     );
   });
 

@@ -19,7 +19,7 @@ class MockLocalRealm extends Service {
 
 class MockLoaderService extends Service {
   loader: Loader | undefined;
-  setLoader(loader: Loader) {
+  initialize(loader: Loader) {
     this.loader = loader
   }
 }
@@ -62,7 +62,7 @@ module('Integration | create-new-card', function (hooks) {
     realm = TestRealm.createWithAdapter(adapter);
     Loader.addRealmFetchOverride(realm);
     this.owner.register('service:loader-service', MockLoaderService);
-    (this.owner.lookup('service:loader-service') as MockLoaderService).setLoader(Loader.getLoader());
+    (this.owner.lookup('service:loader-service') as MockLoaderService).initialize(Loader.getLoader());
     await realm.ready;
 
     await realm.write('person.gts', `

@@ -536,45 +536,6 @@ module('Unit | realm', function (hooks) {
         response.headers.get('last-modified'),
         'last-modified header exists'
       );
-
-      let definition = await realm.searchIndex.typeOf({
-        type: 'exportedCard',
-        module: `${testRealmURL}dir/person.gts`,
-        name: 'Person',
-      });
-      assert.deepEqual(
-        definition?.id,
-        {
-          type: 'exportedCard',
-          module: `${testRealmURL}dir/person`,
-          name: 'Person',
-        },
-        'the definition id is correct'
-      );
-      assert.deepEqual(
-        definition?.super,
-        {
-          type: 'exportedCard',
-          module: 'https://cardstack.com/base/card-api',
-          name: 'Card',
-        },
-        'super is correct'
-      );
-      let fields = definition?.fields;
-      assert.strictEqual(fields?.size, 1, 'number of fields is correct');
-      let field = fields?.get('firstName');
-      assert.deepEqual(
-        field,
-        {
-          fieldType: 'contains',
-          fieldCard: {
-            type: 'exportedCard',
-            module: 'https://cardstack.com/base/string',
-            name: 'default',
-          },
-        },
-        'the field data is correct'
-      );
     }
     {
       let response = await realm.handle(
@@ -604,14 +565,6 @@ module('Unit | realm', function (hooks) {
     });
     await realm.ready;
 
-    let searchIndex = realm.searchIndex;
-    let card = await searchIndex.typeOf({
-      type: 'exportedCard',
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
-    assert.ok(card, 'found card in index');
-
     let response = await realm.handle(
       new Request(`${testRealmURL}person`, {
         headers: {
@@ -630,13 +583,6 @@ module('Unit | realm', function (hooks) {
       })
     );
     assert.strictEqual(response.status, 204, 'file is deleted');
-
-    card = await searchIndex.typeOf({
-      type: 'exportedCard',
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
-    assert.strictEqual(card, undefined, 'card is deleted from index');
 
     response = await realm.handle(
       new Request(`${testRealmURL}person`, {

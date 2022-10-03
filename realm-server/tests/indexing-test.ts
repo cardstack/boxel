@@ -161,7 +161,6 @@ module("indexing", function (hooks) {
       realm.searchIndex.stats,
       {
         instancesIndexed: 1,
-        definitionsBuilt: 0,
         instanceErrors: 0,
         moduleErrors: 0,
       },
@@ -187,7 +186,6 @@ module("indexing", function (hooks) {
       realm.searchIndex.stats,
       {
         instancesIndexed: 0,
-        definitionsBuilt: 0,
         instanceErrors: 1,
         moduleErrors: 1,
       },
@@ -204,7 +202,6 @@ module("indexing", function (hooks) {
       realm.searchIndex.stats,
       {
         instancesIndexed: 0,
-        definitionsBuilt: 0,
         instanceErrors: 3, // 1 post, 2 persons
         moduleErrors: 3, // post, fancy person, person
       },
@@ -220,9 +217,9 @@ module("indexing", function (hooks) {
     } catch (err: any) {
       assert.ok(
         err.message.match(
-          /filter refers to nonexistent type: import { Person } from "http:\/\/test-realm\/person"/
+          /\/person: Unexpected token.*IntentionallyThrownError.*/s
         ),
-        "person card does not exist"
+        "person card has error"
       );
     }
     await realm.write(
@@ -240,7 +237,6 @@ module("indexing", function (hooks) {
       realm.searchIndex.stats,
       {
         instancesIndexed: 3, // 1 post and 2 persons
-        definitionsBuilt: 3, // person, fancy-person, post
         instanceErrors: 0,
         moduleErrors: 0,
       },
@@ -272,7 +268,6 @@ module("indexing", function (hooks) {
       realm.searchIndex.stats,
       {
         instancesIndexed: 0,
-        definitionsBuilt: 0,
         instanceErrors: 0,
         moduleErrors: 0,
       },
@@ -280,7 +275,7 @@ module("indexing", function (hooks) {
     );
   });
 
-  test("can incrementally index updated card source", async function (assert) {
+  test("can incrementally index instance that depends on updated card source", async function (assert) {
     await realm.write(
       "post.gts",
       `
@@ -311,7 +306,6 @@ module("indexing", function (hooks) {
       realm.searchIndex.stats,
       {
         instancesIndexed: 1,
-        definitionsBuilt: 1,
         instanceErrors: 0,
         moduleErrors: 0,
       },
@@ -319,7 +313,7 @@ module("indexing", function (hooks) {
     );
   });
 
-  test("can incrementally index updated card source consumed by other card sources", async function (assert) {
+  test("can incrementally index instance that depends on updated card source consumed by other card sources", async function (assert) {
     await realm.write(
       "person.gts",
       `
@@ -348,7 +342,6 @@ module("indexing", function (hooks) {
       realm.searchIndex.stats,
       {
         instancesIndexed: 3,
-        definitionsBuilt: 3,
         instanceErrors: 0,
         moduleErrors: 0,
       },
@@ -356,7 +349,7 @@ module("indexing", function (hooks) {
     );
   });
 
-  test("can incrementally index deleted card source", async function (assert) {
+  test("can incrementally index instance that depends on deleted card source", async function (assert) {
     await realm.delete("post.gts");
     try {
       await realm.searchIndex.search({
@@ -386,7 +379,6 @@ module("indexing", function (hooks) {
       realm.searchIndex.stats,
       {
         instancesIndexed: 0,
-        definitionsBuilt: 0,
         instanceErrors: 1,
         moduleErrors: 0,
       },
@@ -423,7 +415,6 @@ module("indexing", function (hooks) {
       realm.searchIndex.stats,
       {
         instancesIndexed: 1,
-        definitionsBuilt: 1,
         instanceErrors: 0,
         moduleErrors: 0,
       },
