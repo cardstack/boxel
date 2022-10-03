@@ -16,6 +16,7 @@ import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
+import { shadowWaitFor } from '../../helpers/shadow-assert';
 
 class MockLocalRealm extends Service {
   isAvailable = true;
@@ -101,7 +102,7 @@ module('Integration | schema', function (hooks) {
     assert.dom('[data-test-field="title"] a').doesNotExist('the title field has no link');
   });
 
-  test('can delete a field from card', async function(assert){ 
+  test('can delete a field from card', async function(assert){
     await realm.write('person.gts', `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -237,7 +238,8 @@ module('Integration | schema', function (hooks) {
     await waitFor('[data-test-card-id]');
     await fillIn('[data-test-new-field-name]', 'author');
     await click('[data-test-add-field]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await shadowWaitFor('[data-test-ref]');
 
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`).exists('local realm composite card displayed');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/boolean-field`).exists('base realm primitive field displayed');
@@ -248,7 +250,7 @@ module('Integration | schema', function (hooks) {
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/integer-field`).exists('base realm primitive field displayed');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`).exists('base realm primitive field displayed');
 
-    assert.dom('[data-test-demo-embedded]').exists({ count: 1 }, 'demo card is not displayed for primitive fields');
+    assert.shadowDOM('[data-test-demo-embedded]').exists({ count: 1 }, 'demo card is not displayed for primitive fields');
 
     // a "contains" field cannot be the same card as it's enclosing card
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`).doesNotExist('own card is not available to choose as a field');
@@ -295,7 +297,8 @@ module('Integration | schema', function (hooks) {
     await fillIn('[data-test-new-field-name]', 'aliases');
     await click('[data-test-new-field-containsMany]');
     await click('[data-test-add-field]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await shadowWaitFor('[data-test-ref]');
 
     await click(`[data-test-select="${baseRealm.url}fields/string-field"]`);
     await waitFor('.schema [data-test-field="aliases"]')

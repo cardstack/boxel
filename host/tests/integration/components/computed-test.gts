@@ -1,12 +1,11 @@
 import { module, test } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from 'ember-qunit';
-import { fillIn } from '@ember/test-helpers';
 import waitUntil from '@ember/test-helpers/wait-until';
-import find from '@ember/test-helpers/dom/find';
 import { cleanWhiteSpace, testRealmURL, shimModule } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
+import { shadowQuerySelector, shadowQuerySelectorAll, shadowFillIn } from '../../helpers/shadow-assert';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -39,8 +38,8 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
-    await renderCard(mango, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), 'Mango Abdel-Rahman');
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(root.textContent!.trim(), 'Mango Abdel-Rahman');
   });
 
   test('can render a synchronous computed field (using a string in `computeVia`)', async function(assert) {
@@ -59,8 +58,8 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
-    await renderCard(mango, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), 'Mango Abdel-Rahman');
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(root.textContent!.trim(), 'Mango Abdel-Rahman');
   });
 
   test('can render a computed that consumes a nested property', async function(assert) {
@@ -92,8 +91,8 @@ module('Integration | computeds', function (hooks) {
         }
       }
     }, undefined);
-    await renderCard(firstPost, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), 'First Post by Mango');
+    let root = await renderCard(firstPost, 'isolated');
+    assert.strictEqual(root.textContent!.trim(), 'First Post by Mango');
   });
 
   test('can render a computed that is a composite type', async function(assert) {
@@ -102,7 +101,7 @@ module('Integration | computeds', function (hooks) {
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.firstName/></template>
+        <template><span data-test="firstName"><@fields.firstName/></span></template>
       }
     }
 
@@ -116,12 +115,13 @@ module('Integration | computeds', function (hooks) {
         }
       });
       static isolated = class Isolated extends Component<typeof this> {
-        <template><@fields.title/> by <@fields.author/></template>
+        <template><div data-test="title"><@fields.title/></div> by <@fields.author/></template>
       }
     }
     let firstPost = new Post({ title: 'First Post' });
     await renderCard(firstPost, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Mango');
+    assert.shadowDOM('[data-test="title"]').hasText('First Post');
+    assert.shadowDOM('[data-test="firstName"]').hasText('Mango');
   });
 
   test('can render an asynchronous computed field', async function(assert) {
@@ -140,8 +140,8 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango' });
-    await renderCard(mango, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), 'Mango');
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(root.textContent!.trim(), 'Mango');
   });
 
   test('can render an asynchronous computed field (using an async function in `computeVia`)', async function(assert) {
@@ -159,8 +159,8 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango'});
-    await renderCard(mango, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), 'Mango');
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(root.textContent!.trim(), 'Mango');
   });
 
   test('can indirectly render an asynchronous computed field', async function(assert) {
@@ -180,8 +180,8 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango' });
-    await renderCard(mango, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), 'Mango');
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(root.textContent!.trim(), 'Mango');
   });
 
   test('can render a nested asynchronous computed field', async function(assert) {
@@ -217,8 +217,8 @@ module('Integration | computeds', function (hooks) {
         }
       }
     }, undefined);
-    await renderCard(firstPost, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Mango');
+    let root = await renderCard(firstPost, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'First Post by Mango');
   });
 
   test('can render an asynchronous computed composite field', async function(assert) {
@@ -227,7 +227,7 @@ module('Integration | computeds', function (hooks) {
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.firstName/></template>
+        <template><span data-test="firstName"><@fields.firstName/></span></template>
       }
     }
 
@@ -241,12 +241,13 @@ module('Integration | computeds', function (hooks) {
         return person;
       }
       static isolated = class Isolated extends Component<typeof this> {
-        <template><@fields.title/> by <@fields.author/></template>
+        <template><div data-test="title"><@fields.title/></div> by <@fields.author/></template>
       }
     }
     let firstPost = new Post({ title: 'First Post' });
     await renderCard(firstPost, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post by Mango');
+    assert.shadowDOM('[data-test="title"]').hasText('First Post');
+    assert.shadowDOM('[data-test="firstName"]').hasText('Mango');
   });
 
   test('can render a containsMany computed primitive field', async function(assert) {
@@ -270,8 +271,8 @@ module('Integration | computeds', function (hooks) {
       languagesSpoken: ['english', 'japanese']
     });
 
-    await renderCard(mango, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango speaks english japanese');
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango speaks english japanese');
   });
 
   test('supports an empty containsMany computed primitive field', async function (assert) {
@@ -301,7 +302,7 @@ module('Integration | computeds', function (hooks) {
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.firstName/></template>
+        <template><div data-test-firstName><@fields.firstName/></div></template>
       }
     }
 
@@ -331,14 +332,17 @@ module('Integration | computeds', function (hooks) {
       },
       meta: {
         adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
+          module: `${testRealmURL}test-cards` ,
           name: 'Family'
         }
       }
     }, undefined);
 
     await renderCard(abdelRahmans, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango Van Gogh Hassan Mariko Yume Sakura');
+    assert.deepEqual(
+      shadowQuerySelectorAll('[data-test-firstName]', this.element).map(element => element.textContent?.trim()),
+      ['Mango',  'Van Gogh', 'Hassan', 'Mariko',  'Yume',  'Sakura']
+    );
   });
 
   test('supports an empty containsMany computed composite field', async function (assert) {
@@ -423,8 +427,8 @@ module('Integration | computeds', function (hooks) {
 
     let person = new Person({ firstName: 'Mango' });
     await renderCard(person, 'edit');
-    assert.dom('[data-test-field=alias]').containsText('Mango');
-    assert.dom('[data-test-field=alias] input').doesNotExist('input field not rendered for computed')
+    assert.shadowDOM('[data-test-field=alias]').containsText('Mango');
+    assert.shadowDOM('[data-test-field=alias] input').doesNotExist('input field not rendered for computed')
   });
 
   test('can maintain data consistency for async computed fields', async function(assert) {
@@ -433,7 +437,7 @@ module('Integration | computeds', function (hooks) {
     class Location extends Card {
       @field city = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.city/></template>
+        <template><span><@fields.city/></span></template>
       }
     }
     class Person extends Card {
@@ -476,20 +480,20 @@ module('Integration | computeds', function (hooks) {
      }, undefined);
 
     await renderCard(person, 'edit');
-    assert.dom('[data-test-field="slowName"]').containsText('Mango');
-    await fillIn('[data-test-field="firstName"] input', 'Van Gogh');
+    assert.shadowDOM('[data-test-field="slowName"]').containsText('Mango');
+    await shadowFillIn('[data-test-field="firstName"] input', 'Van Gogh');
     // We want to ensure data consistency, so that when the template rerenders,
     // the template is always showing consistent field values
     await waitUntil(() =>
-      find('[data-test-dep-field="firstName"]')?.textContent?.includes('Van Gogh')
+      shadowQuerySelector('[data-test-dep-field="firstName"]')?.textContent?.includes('Van Gogh')
     );
-    assert.dom('[data-test-field="slowName"]').containsText('Van Gogh');
+    assert.shadowDOM('[data-test-field="slowName"]').containsText('Van Gogh');
 
-    assert.dom('[data-test-field="slowHomeTown"]').containsText('Bronxville');
-    await fillIn('[data-test-field="homeTown"] input', 'Scarsdale');
+    assert.shadowDOM('[data-test-field="slowHomeTown"] span').containsText('Bronxville');
+    await shadowFillIn('[data-test-field="homeTown"] input', 'Scarsdale');
     await waitUntil(() =>
-      find('[data-test-dep-field="homeTown"]')?.textContent?.includes('Scarsdale')
+      shadowQuerySelector('[data-test-dep-field="homeTown"]')?.textContent?.includes('Scarsdale')
     );
-    assert.dom('[data-test-field="slowHomeTown"]').containsText('Scarsdale');
+    assert.shadowDOM('[data-test-field="slowHomeTown"] span').containsText('Scarsdale');
   });
 });

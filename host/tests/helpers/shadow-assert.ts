@@ -1,18 +1,70 @@
 import type DOMAssertions from 'qunit-dom/dist/assertions';
+import { waitUntil, fillIn, click } from '@ember/test-helpers';
+
+// TODO: it would be more efficient to implement a shadowQuerySelector
+// that stops at the first found element
+export function shadowQuerySelector(
+  selector: string | Element,
+  root: Document | Element | ShadowRoot | DocumentFragment = document
+): Element {
+  return shadowQuerySelectorAll(selector, root)[0];
+}
 
 export function shadowQuerySelectorAll(
-  selector: string,
+  selector: string | Element,
   root: Document | Element | ShadowRoot | DocumentFragment = document
 ): Element[] {
-  let results = Array.from(root.querySelectorAll(selector));
-  for (let checkRoot of Array.from(
-    root.querySelectorAll('[data-test-shadow-component]')
-  )) {
-    results = results.concat(
-      shadowQuerySelectorAll(selector, checkRoot.shadowRoot!)
+  if (typeof selector === 'string') {
+    let results = Array.from(root.querySelectorAll(selector));
+    for (let checkRoot of Array.from(
+      root.querySelectorAll('[data-test-shadow-component]')
+    )) {
+      results = results.concat(
+        shadowQuerySelectorAll(selector, checkRoot.shadowRoot!)
+      );
+    }
+    return results;
+  } else if (selector instanceof Element) {
+    return [selector];
+  } else {
+    throw new TypeError('Unexpected Parameter: ' + selector);
+  }
+}
+
+export async function shadowWaitFor(
+  selector: string | Element,
+  root: Document | Element | ShadowRoot | DocumentFragment = document
+): Promise<Element> {
+  try {
+    return await waitUntil(() => shadowQuerySelector(selector, root));
+  } catch (e) {
+    throw new Error(
+      `shadowWaitFor timed out waiting for selector "${selector}"`
     );
   }
-  return results;
+}
+
+export async function shadowFillIn(
+  selector: string | Element,
+  text: string,
+  root?: Document | Element | ShadowRoot | DocumentFragment
+): Promise<void> {
+  try {
+    return await fillIn(shadowQuerySelector(selector, root), text);
+  } catch (e) {
+    throw new Error(`shadowFillIn failed for selector "${selector}"`);
+  }
+}
+
+export async function shadowClick(
+  selector: string | Element,
+  root?: Document | Element | ShadowRoot | DocumentFragment
+): Promise<void> {
+  try {
+    return await click(shadowQuerySelector(selector, root));
+  } catch (e) {
+    throw new Error(`shadowClick failed for selector "${selector}"`);
+  }
 }
 
 declare global {
@@ -35,26 +87,14 @@ function shadowDOM(
     findElement() {
       if (this.target === null) {
         return null;
-      } else if (typeof this.target === 'string') {
-        // TODO: it would be more efficient to implement a shadowQuerySelector
-        // that stops at the first found element
-        return shadowQuerySelectorAll(this.target, this.rootElement)[0];
-      } else if (this.target instanceof Element) {
-        return this.target;
-      } else {
-        throw new TypeError('Unexpected Parameter: ' + this.target);
       }
+      return shadowQuerySelector(this.target, this.rootElement);
     }
     findElements() {
       if (this.target === null) {
         return null;
-      } else if (typeof this.target === 'string') {
-        return shadowQuerySelectorAll(this.target, this.rootElement);
-      } else if (this.target instanceof Element) {
-        return this.target;
-      } else {
-        throw new TypeError('Unexpected Parameter: ' + this.target);
       }
+      return shadowQuerySelectorAll(this.target, this.rootElement);
     }
   }
   return new ShadowDOMAssertions(
