@@ -2,8 +2,6 @@ import { module, test } from "qunit";
 import { ModuleSyntax } from "@cardstack/runtime-common/module-syntax";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 
-const testURL = new URL("http://test-realm/module");
-
 module("module-syntax", function () {
   test("can get the code for a card", async function (assert) {
     let src = `
@@ -18,7 +16,7 @@ module("module-syntax", function () {
       }
     `;
 
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     assert.codeEqual(mod.code(), src);
   });
 
@@ -35,7 +33,7 @@ module("module-syntax", function () {
       }
     `;
 
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     mod.addField(
       { type: "exportedName", name: "Person" },
       "age",
@@ -131,7 +129,7 @@ module("module-syntax", function () {
         export class Person extends Card { }
       `;
 
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     mod.addField(
       { type: "exportedName", name: "Person" },
       "firstName",
@@ -172,7 +170,7 @@ module("module-syntax", function () {
       }
     `;
 
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     mod.addField(
       { type: "localName", name: "Person" },
       "age",
@@ -218,7 +216,7 @@ module("module-syntax", function () {
       }
     `;
 
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     mod.addField(
       { type: "exportedName", name: "Person" },
       "aliases",
@@ -270,7 +268,7 @@ module("module-syntax", function () {
       }
     `;
 
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     mod.addField(
       { type: "exportedName", name: "Person" },
       "age",
@@ -310,7 +308,7 @@ module("module-syntax", function () {
         @field firstName = contains(StringCard);
       }
     `;
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     try {
       mod.addField(
         { type: "exportedName", name: "Person" },
@@ -340,7 +338,7 @@ module("module-syntax", function () {
         @field lastName = contains(StringCard);
       }
     `;
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     mod.removeField({ type: "exportedName", name: "Person" }, "firstName");
 
     assert.codeEqual(
@@ -370,7 +368,7 @@ module("module-syntax", function () {
       }
     `;
 
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     mod.removeField({ type: "exportedName", name: "Person" }, "firstName");
 
     assert.codeEqual(
@@ -396,7 +394,7 @@ module("module-syntax", function () {
         @field favoriteColor = contains(StringCard);
       }
     `;
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     mod.removeField({ type: "localName", name: "Person" }, "firstName");
 
     assert.codeEqual(
@@ -426,7 +424,7 @@ module("module-syntax", function () {
       }
     `;
 
-    let mod = new ModuleSyntax(src, testURL);
+    let mod = new ModuleSyntax(src);
     try {
       mod.removeField({ type: "exportedName", name: "Person" }, "foo");
       throw new Error("expected error was not thrown");

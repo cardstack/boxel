@@ -111,8 +111,8 @@ export type {
   ExportedCardRef,
   CardResource,
   CardDocument,
-  CardDefinition,
 } from "./search-index";
+export type { CardDefinition } from "./current-run";
 export {
   isCardResource,
   isCardDocument,

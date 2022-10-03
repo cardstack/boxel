@@ -15,6 +15,7 @@ type RegisteredModule = {
   state: "registered";
   dependencyList: string[];
   implementation: Function;
+  consumedModules: Set<string>;
 };
 
 // a module is in this state until its own code *and the code for all its deps*
@@ -39,14 +40,17 @@ type Module =
       state: "preparing";
       implementation: Function;
       moduleInstance: object;
+      consumedModules: Set<string>;
     }
   | {
       state: "evaluated";
       moduleInstance: object;
+      consumedModules: Set<string>;
     }
   | {
       state: "broken";
       exception: any;
+      consumedModules: Set<string>;
     };
 
 type FileLoader = (path: LocalPath) => Promise<string>;
@@ -155,6 +159,38 @@ export class Loader {
       moduleIdentifier,
       this.createModuleProxy(module, moduleIdentifier)
     );
+  }
+
+  async getConsumedModules(
+    moduleIdentifier: string,
+    accumulator = new Set<string>()
+  ): Promise<string[]> {
+    if (accumulator.has(moduleIdentifier)) {
+      return [];
+    }
+
+    let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
+    let module = this.modules.get(resolvedModuleIdentifier.href);
+    if (!module || module.state === "fetching") {
+      // we haven't yet tried importing the module or we are still in the process of importing the module
+      try {
+        await this.import(moduleIdentifier);
+      } catch (err: any) {
+        console.warn(
+          `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`
+        );
+      }
+    }
+    if (module?.state === "fetching") {
+      throw new Error(
+        `bug: could not determine the consumed modules for ${moduleIdentifier} because it is still in "fetching" state`
+      );
+    }
+    for (let consumed of module?.consumedModules ?? []) {
+      await this.getConsumedModules(consumed, accumulator);
+      accumulator.add(consumed);
+    }
+    return [...accumulator];
   }
 
   static identify(
@@ -333,6 +369,7 @@ export class Loader {
       this.modules.set(moduleIdentifier, {
         state: "broken",
         exception,
+        consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
       throw exception;
     }
@@ -372,6 +409,7 @@ export class Loader {
       this.modules.set(moduleIdentifier, {
         state: "broken",
         exception,
+        consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
       throw exception;
     }
@@ -379,7 +417,7 @@ export class Loader {
     await Promise.all(
       dependencyList!.map(async (depId) => {
         if (depId !== "exports" && depId !== "__import_meta__") {
-          return this.fetchModule(new URL(depId) as ResolvedURL, [
+          return await this.fetchModule(new URL(depId) as ResolvedURL, [
             ...stack,
             moduleIdentifier,
           ]);
@@ -392,6 +430,11 @@ export class Loader {
       state: "registered",
       dependencyList: dependencyList!,
       implementation: implementation!,
+      consumedModules: new Set(
+        dependencyList!.filter(
+          (d) => !["exports", "__import_meta__"].includes(d)
+        )
+      ),
     };
 
     this.modules.set(moduleIdentifier, registeredModule);
@@ -433,6 +476,7 @@ export class Loader {
       state: "preparing",
       implementation: module.implementation,
       moduleInstance,
+      consumedModules: module.consumedModules,
     });
 
     try {
@@ -450,12 +494,14 @@ export class Loader {
       this.modules.set(moduleIdentifier, {
         state: "evaluated",
         moduleInstance,
+        consumedModules: module.consumedModules,
       });
       return moduleInstance;
     } catch (exception) {
       this.modules.set(moduleIdentifier, {
         state: "broken",
         exception,
+        consumedModules: module.consumedModules,
       });
       throw exception;
     }

@@ -163,7 +163,6 @@ module("indexing", function (hooks) {
         instancesIndexed: 1,
         definitionsBuilt: 0,
         instanceErrors: 0,
-        definitionErrors: 0,
         moduleErrors: 0,
       },
       "indexed correct number of files"
@@ -190,7 +189,6 @@ module("indexing", function (hooks) {
         instancesIndexed: 0,
         definitionsBuilt: 0,
         instanceErrors: 1,
-        definitionErrors: 1,
         moduleErrors: 1,
       },
       "indexed correct number of files"
@@ -208,7 +206,6 @@ module("indexing", function (hooks) {
         instancesIndexed: 0,
         definitionsBuilt: 0,
         instanceErrors: 3, // 1 post, 2 persons
-        definitionErrors: 2, // post, fancy person (person is not a def error because the syntax failed)
         moduleErrors: 3, // post, fancy person, person
       },
       "indexed correct number of files"
@@ -228,7 +225,6 @@ module("indexing", function (hooks) {
         "person card does not exist"
       );
     }
-
     await realm.write(
       "person.gts",
       `
@@ -246,7 +242,6 @@ module("indexing", function (hooks) {
         instancesIndexed: 3, // 1 post and 2 persons
         definitionsBuilt: 3, // person, fancy-person, post
         instanceErrors: 0,
-        definitionErrors: 0,
         moduleErrors: 0,
       },
       "indexed correct number of files"
@@ -279,7 +274,6 @@ module("indexing", function (hooks) {
         instancesIndexed: 0,
         definitionsBuilt: 0,
         instanceErrors: 0,
-        definitionErrors: 0,
         moduleErrors: 0,
       },
       "index did not touch any files"
@@ -319,7 +313,6 @@ module("indexing", function (hooks) {
         instancesIndexed: 1,
         definitionsBuilt: 1,
         instanceErrors: 0,
-        definitionErrors: 0,
         moduleErrors: 0,
       },
       "indexed correct number of files"
@@ -357,7 +350,6 @@ module("indexing", function (hooks) {
         instancesIndexed: 3,
         definitionsBuilt: 3,
         instanceErrors: 0,
-        definitionErrors: 0,
         moduleErrors: 0,
       },
       "indexed correct number of files"
@@ -385,13 +377,7 @@ module("indexing", function (hooks) {
         type: "error",
         error: {
           message: "CardError 404 (TODO include stack trace)",
-          errorReferences: [
-            {
-              type: "exportedCard",
-              module: "http://test-realm/post",
-              name: "Post",
-            },
-          ],
+          errorReferences: ["http://test-realm/post"],
         },
       },
       "card instance is an error document"
@@ -402,7 +388,6 @@ module("indexing", function (hooks) {
         instancesIndexed: 0,
         definitionsBuilt: 0,
         instanceErrors: 1,
-        definitionErrors: 0,
         moduleErrors: 0,
       },
       "indexed correct number of files"
@@ -440,7 +425,6 @@ module("indexing", function (hooks) {
         instancesIndexed: 1,
         definitionsBuilt: 1,
         instanceErrors: 0,
-        definitionErrors: 0,
         moduleErrors: 0,
       },
       "indexed correct number of files"
