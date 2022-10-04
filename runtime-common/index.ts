@@ -95,7 +95,7 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["ember-resources", ["Resource", "useResource"]],
   ["ember-concurrency", ["task", "restartableTask"]],
   ["ember-concurrency-ts", ["taskFor"]],
-  ["ember-modifier", ["default"]],
+  ["ember-modifier", ["default", "modifier"]],
   ["flat", ["flatten", "unflatten"]],
   ["lodash", ["flatMap", "startCase", "get", "set"]],
   ["tracked-built-ins", ["TrackedWeakMap"]],

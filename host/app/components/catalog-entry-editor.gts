@@ -20,6 +20,8 @@ interface Signature {
   }
 }
 
+const formats = ['isolated', "embedded", "edit"] as ('isolated' | 'embedded' | 'edit')[];
+
 export default class CatalogEntryEditor extends Component<Signature> {
   <template>
     <div class="catalog-entry-editor" data-test-catalog-entry-editor>
@@ -30,7 +32,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
             {{this.entry.id}}
           </LinkTo>
           <Preview
-            @card={{hash type="existing" url=this.entry.id format="edit"}}
+            @formats={{formats}}
+            @card={{hash type="existing" url=this.entry.id format="embedded" }}
           />
         </fieldset>
       {{else}}
