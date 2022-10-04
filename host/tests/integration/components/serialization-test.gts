@@ -1,11 +1,11 @@
 import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { fillIn } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
 import { p, cleanWhiteSpace, shimModule } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
+import { shadowQuerySelectorAll, shadowFillIn } from '../../helpers/shadow-assert';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -62,11 +62,11 @@ module('Integration | serialization', function (hooks) {
         }
       }
     });
-    await renderCard(firstPost, 'isolated');
+    let root = await renderCard(firstPost, 'isolated');
 
     // the template value 'Apr 22, 2022' can only be realized when the card has
     // correctly deserialized it's static data property
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post created Apr 22, 2022 published Apr 27, 2022, 4:02 PM');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'First Post created Apr 22, 2022 published Apr 27, 2022, 4:02 PM');
   });
 
   test('deserialized card ref fields are not strict equal to serialized card ref', async function(assert) {
@@ -129,8 +129,8 @@ module('Integration | serialization', function (hooks) {
 
     // initialize card data as deserialized to force us to serialize instead of using cached data
     let firstPost =  new Post({ title: 'First Post', created: p('2022-04-22'), published: parseISO('2022-04-27T16:30+00:00') });
-    await renderCard(firstPost, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'created 2022-04-22, published 2022-04-27T16:30:00.000Z');
+    let root = await renderCard(firstPost, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'created 2022-04-22, published 2022-04-27T16:30:00.000Z');
   });
 
   test('can deserialize a date field with null value', async function (assert) {
@@ -161,8 +161,8 @@ module('Integration | serialization', function (hooks) {
         }
       }
     });
-    await renderCard(firstPost, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'First Post created [no date] published [no date-time]');
+    let root = await renderCard(firstPost, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'First Post created [no date] published [no date-time]');
   });
 
   test('can serialize a date field with null value', async function(assert) {
@@ -187,8 +187,8 @@ module('Integration | serialization', function (hooks) {
     }
 
     let firstPost =  new Post({ title: 'First Post', created: null, published: null });
-    await renderCard(firstPost, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'created null, published null');
+    let root = await renderCard(firstPost, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'created null, published null');
   });
 
   test('can deserialize a nested field', async function(assert) {
@@ -227,8 +227,8 @@ module('Integration | serialization', function (hooks) {
         }
       }
     });
-    await renderCard(firstPost, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM');
+    let root = await renderCard(firstPost, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM');
   });
 
   test('can deserialize a composite field', async function(assert) {
@@ -241,7 +241,7 @@ module('Integration | serialization', function (hooks) {
       @field birthdate = contains(DateCard);
       @field lastLogin = contains(DatetimeCard);
       static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.firstName/> born on: <@fields.birthdate/> last logged in: <@fields.lastLogin/></template>
+        <template><div data-test><@fields.firstName/> born on: <@fields.birthdate/> last logged in: <@fields.lastLogin/></div></template>
       }
     }
 
@@ -271,7 +271,7 @@ module('Integration | serialization', function (hooks) {
       }
     });
     await renderCard(firstPost, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM');
+    assert.shadowDOM('[data-test]').hasText('Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM');
   });
 
   test('can serialize a composite field', async function(assert) {
@@ -411,7 +411,7 @@ module('Integration | serialization', function (hooks) {
       }
     });
     await renderCard(helloWorld, 'edit');
-    await fillIn('[data-test-field="author"] input', 'Carl Stack');
+    await shadowFillIn('[data-test-field="firstName"] input', 'Carl Stack');
 
     assert.deepEqual(
       serializeCard(helloWorld), {
@@ -449,8 +449,8 @@ module('Integration | serialization', function (hooks) {
     }
 
     let mango =  new Person({ birthdate: p('2019-10-30') });
-    await renderCard(mango, 'isolated');
-    assert.strictEqual(this.element.textContent!.trim(), '2020-10-30');
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(root.textContent!.trim(), '2020-10-30');
   });
 
   test('can deserialize a containsMany field', async function(assert) {
@@ -475,8 +475,8 @@ module('Integration | serialization', function (hooks) {
         }
       }
     });
-    await renderCard(classSchedule, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Apr 1, 2022 Apr 4, 2022');
+    let root = await renderCard(classSchedule, 'isolated');
+    assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Apr 1, 2022 Apr 4, 2022');
   });
 
   test("can deserialize a containsMany's nested field", async function(assert) {
@@ -488,7 +488,7 @@ module('Integration | serialization', function (hooks) {
       @field location = contains(StringCard);
       @field title = contains(StringCard);
       static embedded = class Isolated extends Component<typeof this> {
-        <template><@fields.title/> on <@fields.date/> at <@fields.location/></template>
+        <template><div data-test="appointment"><@fields.title/> on <@fields.date/> at <@fields.location/></div></template>
       }
     }
     class Schedule extends Card {
@@ -514,7 +514,10 @@ module('Integration | serialization', function (hooks) {
       }
     });
     await renderCard(classSchedule, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Biology on Apr 1, 2022 at Room 332 Civics on Apr 4, 2022 at Room 102');
+    assert.deepEqual(
+      shadowQuerySelectorAll('[data-test="appointment"]', this.element).map(element => cleanWhiteSpace(element.textContent!)),
+      ['Biology on Apr 1, 2022 at Room 332',  'Civics on Apr 4, 2022 at Room 102']
+    );
   });
 
   test('can serialize a containsMany field', async function(assert) {
@@ -551,7 +554,7 @@ module('Integration | serialization', function (hooks) {
       new Appointment({ date: p('2022-4-4'), location: 'Room 102', title: 'Civics' }),
     ]});
 
-    assert.deepEqual(serializedGet(classSchedule, 'appointments'), 
+    assert.deepEqual(serializedGet(classSchedule, 'appointments'),
       [{
         type: "card",
         attributes: {
@@ -708,14 +711,14 @@ module('Integration | serialization', function (hooks) {
           },
         },
         meta: {
-          adoptsFrom: { 
-            module: `${realmURL}test-cards`, 
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
             name: 'Post',
           },
           fields: {
             author: {
               adoptsFrom: {
-                module: `${realmURL}test-cards`, 
+                module: `${realmURL}test-cards`,
                 name: 'Employee',
               }
             }
@@ -788,20 +791,20 @@ module('Integration | serialization', function (hooks) {
           },
         },
         meta: {
-          adoptsFrom: { 
-            module: `${realmURL}test-cards`, 
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
             name: 'Post',
           },
           fields: {
             author: {
               adoptsFrom: {
-                module: `${realmURL}test-cards`, 
+                module: `${realmURL}test-cards`,
                 name: 'Employee',
               },
               fields: {
                 loves: {
                   adoptsFrom: {
-                    module: `${realmURL}test-cards`, 
+                    module: `${realmURL}test-cards`,
                     name: 'Pet',
                   },
                 }

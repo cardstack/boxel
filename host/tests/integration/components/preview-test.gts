@@ -1,12 +1,13 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
-import { click, fillIn, waitFor } from '@ember/test-helpers';
+import { click } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { Loader, baseRealm, type ExistingCardArgs } from '@cardstack/runtime-common';
 import Preview  from 'runtime-spike/components/preview';
 import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
 import { testRealmURL, shimModule } from '../../helpers';
+import { shadowWaitFor, shadowFillIn } from '../../helpers/shadow-assert';
 import type { Format } from "https://cardstack.com/base/card-api";
 import type LoaderService from 'runtime-spike/services/loader-service';
 
@@ -60,8 +61,8 @@ module('Integration | preview', function (hooks) {
         </template>
       }
     )
-    await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
-    assert.dom('[data-test-firstName]').hasText('Mango');
+    await shadowWaitFor('[data-test-firstName]'); // we need to wait for the card instance to load
+    assert.shadowDOM('[data-test-firstName]').hasText('Mango');
   });
 
   test('can change card format', async function (assert) {
@@ -101,20 +102,20 @@ module('Integration | preview', function (hooks) {
         </template>
       }
     )
-    await waitFor('[data-test-isolated-firstName]'); // we need to wait for the card instance to load
-    assert.dom('[data-test-isolated-firstName]').hasText('Mango');
-    assert.dom('[data-test-embedded-firstName]').doesNotExist();
-    assert.dom('[data-test-edit-firstName]').doesNotExist();
+    await shadowWaitFor('[data-test-isolated-firstName]'); // we need to wait for the card instance to load
+    assert.shadowDOM('[data-test-isolated-firstName]').hasText('Mango');
+    assert.shadowDOM('[data-test-embedded-firstName]').doesNotExist();
+    assert.shadowDOM('[data-test-edit-firstName]').doesNotExist();
 
     await click('.format-button.embedded')
-    assert.dom('[data-test-isolated-firstName]').doesNotExist();
-    assert.dom('[data-test-embedded-firstName]').hasText('Mango');
-    assert.dom('[data-test-edit-firstName]').doesNotExist();
+    assert.shadowDOM('[data-test-isolated-firstName]').doesNotExist();
+    assert.shadowDOM('[data-test-embedded-firstName]').hasText('Mango');
+    assert.shadowDOM('[data-test-edit-firstName]').doesNotExist();
 
     await click('.format-button.edit')
-    assert.dom('[data-test-isolated-firstName]').doesNotExist();
-    assert.dom('[data-test-embedded-firstName]').doesNotExist();
-    assert.dom('[data-test-edit-firstName] input').hasValue('Mango');
+    assert.shadowDOM('[data-test-isolated-firstName]').doesNotExist();
+    assert.shadowDOM('[data-test-embedded-firstName]').doesNotExist();
+    assert.shadowDOM('[data-test-edit-firstName] input').hasValue('Mango');
   });
 
   test('edited card data in visible in different formats', async function (assert) {
@@ -155,14 +156,14 @@ module('Integration | preview', function (hooks) {
     )
 
     await click('.format-button.edit')
-    await waitFor('[data-test-edit-firstName] input'); // we need to wait for the card instance to load
-    await fillIn('[data-test-edit-firstName] input', 'Van Gogh');
+    await shadowWaitFor('[data-test-edit-firstName] input'); // we need to wait for the card instance to load
+    await shadowFillIn('[data-test-edit-firstName] input', 'Van Gogh');
 
     await click('.format-button.embedded');
-    assert.dom('[data-test-embedded-firstName]').hasText('Van Gogh');
+    assert.shadowDOM('[data-test-embedded-firstName]').hasText('Van Gogh');
 
     await click('.format-button.isolated');
-    assert.dom('[data-test-isolated-firstName]').hasText('Van Gogh');
+    assert.shadowDOM('[data-test-isolated-firstName]').hasText('Van Gogh');
   });
 
   test('can detect when card is dirty', async function(assert) {
@@ -213,29 +214,29 @@ module('Integration | preview', function (hooks) {
     )
 
     await click('.format-button.edit')
-    assert.dom('[data-test-save-card]').doesNotExist();
-    assert.dom('[data-test-reset]').doesNotExist();
+    assert.shadowDOM('[data-test-save-card]').doesNotExist();
+    assert.shadowDOM('[data-test-reset]').doesNotExist();
 
-    await waitFor('[data-test-field="title"] input'); // we need to wait for the card instance to load
-    await fillIn('[data-test-field="title"] input', 'Why I Whine'); // dirty top level field
-    assert.dom('[data-test-field="title"] input').hasValue('Why I Whine');
-    assert.dom('[data-test-save-card]').exists();
-    assert.dom('[data-test-reset]').exists();
-
-    await click('[data-test-reset]');
-    assert.dom('[data-test-save-card]').doesNotExist();
-    assert.dom('[data-test-reset]').doesNotExist();
-    assert.dom('[data-test-field="title"] input').hasValue('We Need to Go to the Dog Park Now!');
-
-
-    await fillIn('[data-test-field="firstName"] input', 'Van Gogh'); // dirty nested field
-    assert.dom('[data-test-field="firstName"] input').hasValue('Van Gogh');
-    assert.dom('[data-test-save-card]').exists();
-    assert.dom('[data-test-reset]').exists();
+    await shadowWaitFor('[data-test-field="title"] input'); // we need to wait for the card instance to load
+    await shadowFillIn('[data-test-field="title"] input', 'Why I Whine'); // dirty top level field
+    assert.shadowDOM('[data-test-field="title"] input').hasValue('Why I Whine');
+    assert.shadowDOM('[data-test-save-card]').exists();
+    assert.shadowDOM('[data-test-reset]').exists();
 
     await click('[data-test-reset]');
-    assert.dom('[data-test-save-card]').doesNotExist();
-    assert.dom('[data-test-reset]').doesNotExist();
-    assert.dom('[data-test-field="firstName"] input').hasValue('Mango');
+    assert.shadowDOM('[data-test-save-card]').doesNotExist();
+    assert.shadowDOM('[data-test-reset]').doesNotExist();
+    assert.shadowDOM('[data-test-field="title"] input').hasValue('We Need to Go to the Dog Park Now!');
+
+
+    await shadowFillIn('[data-test-field="firstName"] input', 'Van Gogh'); // dirty nested field
+    assert.shadowDOM('[data-test-field="firstName"] input').hasValue('Van Gogh');
+    assert.shadowDOM('[data-test-save-card]').exists();
+    assert.shadowDOM('[data-test-reset]').exists();
+
+    await click('[data-test-reset]');
+    assert.shadowDOM('[data-test-save-card]').doesNotExist();
+    assert.shadowDOM('[data-test-reset]').doesNotExist();
+    assert.shadowDOM('[data-test-field="firstName"] input').hasValue('Mango');
   });
 });

@@ -8,8 +8,9 @@ import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import CatalogEntryEditor from 'runtime-spike/components/catalog-entry-editor';
 import Service from '@ember/service';
-import { waitUntil, click, fillIn } from '@ember/test-helpers';
+import { waitUntil, click, waitFor } from '@ember/test-helpers';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
+import { shadowWaitFor, shadowFillIn, shadowClick } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
 
 class MockLocalRealm extends Service {
@@ -100,21 +101,21 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     );
 
-    await waitUntil(() => Boolean(document.querySelector('button[data-test-catalog-entry-publish]')));
+    await waitFor('button[data-test-catalog-entry-publish]');
     await click('[data-test-catalog-entry-publish]');
-    await waitUntil(() => Boolean(document.querySelector('[data-test-ref]')));
+    await shadowWaitFor('[data-test-ref]');
 
-    assert.dom('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
-    assert.dom('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry for Pet card');
-    assert.dom('[data-test-catalog-entry-editor] [data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
-    assert.dom('[data-test-field="demo"] [data-test-field="name"] input').hasText('');
-    assert.dom('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(2) input').isChecked();
+    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
+    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry for Pet card');
+    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
+    assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').hasText('');
+    assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(2) input').isChecked();
 
-    await fillIn('[data-test-catalog-entry-editor] [data-test-field="title"] input', 'Pet test');
-    await fillIn('[data-test-catalog-entry-editor] [data-test-field="description"] input', 'Test description');
-    await fillIn('[data-test-field="demo"] [data-test-field="name"] input', 'Jackie');
-    await click('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(1) input');
-    await fillIn('[data-test-field="owner"] [data-test-field="firstName"] input', 'BN');
+    await shadowFillIn('[data-test-field="title"] input', 'Pet test', document.querySelector('[data-test-catalog-entry-editor]')!);
+    await shadowFillIn('[data-test-field="description"] input', 'Test description');
+    await shadowFillIn('[data-test-field="name"] input', 'Jackie');
+    await shadowClick('[data-test-field="lovesWalks"] label:nth-of-type(1) input');
+    await shadowFillIn('[data-test-field="firstName"] input', 'BN');
     await click('button[data-test-save-card]');
 
     await deferred.promise; // wait for the component to transition on save
@@ -210,30 +211,30 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     );
 
-    await waitUntil(() => Boolean(document.querySelector('[data-test-ref]')));
+    await shadowWaitFor('[data-test-ref]');
 
     assert.dom('[data-test-catalog-entry-id]').hasText(`${testRealmURL}pet-catalog-entry`);
-    assert.dom('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
-    assert.dom('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry');
-    assert.dom('[data-test-catalog-entry-editor] [data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
-    assert.dom('[data-test-field="demo"] [data-test-field="name"] input').hasValue('Jackie');
-    assert.dom('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(1) input').isChecked();
-    assert.dom('[data-test-field="demo"] [data-test-field="owner"] [data-test-field="firstName"] input').hasValue('BN');
+    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
+    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry');
+    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
+    assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').hasValue('Jackie');
+    assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(1) input').isChecked();
+    assert.shadowDOM('[data-test-field="demo"] [data-test-field="owner"] [data-test-field="firstName"] input').hasValue('BN');
 
-    await fillIn('[data-test-catalog-entry-editor] [data-test-field="title"] input', 'test title');
-    await fillIn('[data-test-catalog-entry-editor] [data-test-field="description"] input', 'test description');
-    await fillIn('[data-test-field="demo"] [data-test-field="name"] input', 'Jackie Wackie');
-    await fillIn('[data-test-field="demo"] [data-test-field="owner"] [data-test-field="firstName"] input', 'EA');
+    await shadowFillIn('[data-test-field="title"] input', 'test title');
+    await shadowFillIn('[data-test-field="description"] input', 'test description');
+    await shadowFillIn('[data-test-field="name"] input', 'Jackie Wackie');
+    await shadowFillIn('[data-test-field="firstName"] input', 'EA');
 
     await click('button[data-test-save-card]');
     await waitUntil(() => !(document.querySelector('[data-test-saving]')));
 
     assert.dom('button[data-test-save-card]').doesNotExist();
-    assert.dom('[data-test-title]').exists();
-    assert.dom('[data-test-title]').containsText('test title');
-    assert.dom('[data-test-description]').containsText('test description');
-    assert.dom('[data-test-demo] [data-test-pet-name]').hasText('Jackie Wackie');
-    assert.dom('[data-test-demo] [data-test-pet-owner]').hasText('EA');
+    assert.shadowDOM('[data-test-title]').exists();
+    assert.shadowDOM('[data-test-title]').containsText('test title');
+    assert.shadowDOM('[data-test-description]').containsText('test description');
+    assert.shadowDOM('[data-test-demo] [data-test-pet-name]').hasText('Jackie Wackie');
+    assert.shadowDOM('[data-test-demo] [data-test-pet-owner]').hasText('EA');
 
     let maybeError = await realm.searchIndex.card(new URL(`${testRealmURL}pet-catalog-entry`));
     if (maybeError?.type === 'error') {
@@ -261,11 +262,11 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     );
 
-    await waitUntil(() => Boolean(document.querySelector('button[data-test-catalog-entry-publish]')));
+    await waitFor('button[data-test-catalog-entry-publish]');
     await click('[data-test-catalog-entry-publish]');
-    await waitUntil(() => Boolean(document.querySelector('[data-test-ref]')));
+    await shadowWaitFor('[data-test-ref]');
 
-    await fillIn('[data-test-field="demo"] [data-test-field="name"] input', 'Jackie');
+    await shadowFillIn('[data-test-field="name"] input', 'Jackie');
     await click('button[data-test-save-card]');
 
     await deferred.promise; // wait for the component to transition on save
