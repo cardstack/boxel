@@ -88,6 +88,14 @@ export class Loader {
     return loader;
   }
 
+  static cloneLoader(loader: Loader): Loader {
+    let clone = new Loader();
+    clone.fileLoaders = loader.fileLoaders;
+    clone.urlMappings = loader.urlMappings;
+    clone.realmFetchOverride = loader.realmFetchOverride;
+    return clone;
+  }
+
   static async import<T extends object>(moduleIdentifier: string): Promise<T> {
     let loader = Loader.getLoader();
     return loader.import<T>(moduleIdentifier);
@@ -231,6 +239,9 @@ export class Loader {
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
 
+    if (moduleIdentifier === "http://test-realm/test/test-cards") {
+      debugger;
+    }
     let shimmed = this.moduleShims.get(moduleIdentifier);
     if (shimmed) {
       return shimmed as T;

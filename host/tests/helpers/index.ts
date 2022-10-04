@@ -44,7 +44,13 @@ export async function shimModule(
   module: Record<string, any>,
   loader?: Loader
 ) {
-  (loader ?? Loader).shimModule(moduleURL, module);
+  // this allows the current run's loader to pick up the shimmed value as well
+  // which is seeded from the global loader
+  Loader.shimModule(moduleURL, module);
+
+  if (loader) {
+    loader.shimModule(moduleURL, module);
+  }
   await Promise.all(
     Object.keys(module).map(async (name) => {
       let m = await Loader.import<any>(moduleURL);

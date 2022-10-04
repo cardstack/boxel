@@ -7,7 +7,7 @@ export default class LoaderService extends Service {
   @tracked loader = this.makeInstance();
 
   reset() {
-    this.loader = this.makeInstance();
+    this.loader = Loader.cloneLoader(this.loader);
   }
 
   private makeInstance() {

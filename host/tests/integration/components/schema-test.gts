@@ -1,5 +1,4 @@
 import { module, test } from 'qunit';
-import { tracked } from '@glimmer/tracking';
 import { TestContext } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
@@ -15,55 +14,32 @@ import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
+import type LoaderService from 'runtime-spike/services/loader-service';
 
 class MockLocalRealm extends Service {
   isAvailable = true;
   url = new URL(testRealmURL);
 }
 
-class MockLoaderService extends Service {
-  @tracked loader: Loader | undefined;
-  realm: Realm | undefined;
-  initialize(loader: Loader, realm: Realm) {
-    this.loader = loader;
-    this.realm = realm;
-  }
-  async reset() {
-    // emulate our test setup
-    Loader.destroy();
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    if (!this.realm) {
-      throw new Error('forgot to initialize the MockLoaderService with a realm');
-    }
-    Loader.addRealmFetchOverride(this.realm);
-    this.loader = Loader.getLoader();
-  }
-}
-
 module('Integration | schema', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
-  let loaderService: MockLoaderService;
 
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function() {
-    Loader.destroy();
+    // this seeds the loader used during index which obtains url mappings
+    // from the global loader
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
     adapter = new TestRealmAdapter({});
     realm = TestRealm.createWithAdapter(adapter);
-    Loader.addRealmFetchOverride(realm);
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
+    loader.addRealmFetchOverride(realm);
     await realm.ready;
     this.owner.register('service:local-realm', MockLocalRealm);
-    this.owner.register('service:loader-service', MockLoaderService);
-    loaderService = this.owner.lookup('service:loader-service') as MockLoaderService;
-    loaderService.initialize(Loader.getLoader(), realm);
   })
 
   test('renders card schema view', async function (assert) {
