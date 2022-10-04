@@ -20,6 +20,10 @@ button {
   min-width: 10rem;
 }
 
+.preview > * + * {
+  margin-top: 1rem;
+}
+
 .item.file:hover {
   background-color: cornflowerblue;
   color: white;
@@ -47,30 +51,6 @@ button {
   padding-left: 4rem;
 }
 
-.card-edit > label,
-.card-edit > .field {
-  display: block;
-  padding: 0.75rem;
-  margin: 1rem auto;
-  text-transform: capitalize;
-  border-radius: 5px;
-  background-color: #ffffff6e;
-}
-
-.card-edit input[type=text],
-.card-preview input[type=number] {
-  width: 100%;
-  margin-top: .5rem;
-  display: block;
-}
-
-.card-edit textarea {
-  width: 100%;
-  min-height: 5rem;
-  margin-top: .5rem;
-  display: block;
-}
-
 .schema {
   margin-bottom: 1rem;
   padding: 1rem;
@@ -85,6 +65,10 @@ button {
   grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
   gap: 1rem;
   padding-left: 0;
+}
+
+.card-catalog li > button {
+  margin-top: 1rem;
 }
 
 .dialog-box {
@@ -104,34 +88,14 @@ button {
   background-color: aliceblue;
 }
 
+.catalog-entry-editor > fieldset > * + * {
+  margin-top: 1rem;
+}
+
 .error {
   color: red;
 }
 
-/* Card Container */
-.card {
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-  border: 1px solid gray;
-  border-radius: 10px;
-  padding: 1rem;
-  background-color: white;
-}
-.card-label {
-  margin-bottom: 1em;
-  text-align: right;
-}
-.card-label > span {
-  display: inline-block;
-  background: aliceblue;
-  color: cadetblue;
-  font-size: 0.9rem;
-  font-weight: bold;
-  font-family: Arial, Helvetica, sans-serif;
-  border: 1px solid;
-  border-radius: 10px;
-  padding: 0.5em 1em;
-}
 
 /* Cards */
 .BlogPerson {
@@ -143,19 +107,7 @@ button {
 }
 
 .Post {
-  background: #ffcad4;
-}
-
-.CatalogEntry {
-  background: #cbf3f0;
-}
-
-.Pet {
-  background: #fdfcdc;
-}
-
-.Person {
-  background: #90dbf4;
+  background-color: #ffcad4;
 }
 
 .Employee {

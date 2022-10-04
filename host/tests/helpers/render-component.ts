@@ -1,6 +1,6 @@
 // @ts-ignore
 import { precompileTemplate } from '@ember/template-compilation';
-import { render } from '@ember/test-helpers';
+import { render, getContext } from '@ember/test-helpers';
 import { ComponentLike } from '@glint/template';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -16,8 +16,13 @@ export async function renderComponent(C: ComponentLike) {
   await render(precompileTemplate(`<C/>`, { scope: () => ({ C }) }));
 }
 
-export async function renderCard(card: Card, format: Format): Promise<void> {
+export async function renderCard(
+  card: Card,
+  format: Format
+): Promise<DocumentFragment> {
   let { prepareToRender } = await cardApi();
   let { component } = await prepareToRender(card, format);
   await renderComponent(component);
+  return (getContext() as { element: Element }).element.children[0]!
+    .shadowRoot!;
 }

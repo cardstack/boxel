@@ -9,7 +9,8 @@ import { WatchedArray } from './watched-array';
 import { Deferred, isCardResource, Loader } from '@cardstack/runtime-common';
 import { flatten } from "flat";
 import type { LooseCardResource } from '@cardstack/runtime-common';
-import CardContainer from 'https://cardstack.com/base/card-container';
+import ShadowDOM from 'https://cardstack.com/base/shadow-dom';
+
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -503,17 +504,47 @@ export class Component<CardT extends CardConstructor> extends GlimmerComponent<S
 
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <CardContainer @label={{@model.constructor.name}}>
-      {{#each-in @fields as |_key Field|}}
-        <Field />
-      {{/each-in}}
-    </CardContainer>
+    {{#each-in @fields as |_key Field|}}
+      <Field />
+    {{/each-in}}
   </template>;
 }
 
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <CardContainer @label={{@model.constructor.name}} class="card-edit">
+    <style>
+      .default-edit {
+        background-color: white;
+      }
+      .default-edit label,
+      .default-edit .field {
+        display: block;
+        padding: 0.75rem;
+        text-transform: capitalize;
+        border: 1px solid gray;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+      .default-edit input[type=text],
+      .default-edit input[type=number] {
+        box-sizing: border-box;
+        width: 100%;
+        margin-top: .5rem;
+        display: block;
+        padding: 0.5rem;
+        font: inherit;
+      }
+      .default-edit textarea {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 5rem;
+        margin-top: .5rem;
+        display: block;
+        padding: 0.5rem;
+        font: inherit;
+      }
+    </style>
+    <div class="default-edit">
       {{#each-in @fields as |key Field|}}
         <label data-test-field={{key}}>
           {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
@@ -521,7 +552,7 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
           <Field />
         </label>
       {{/each-in}}
-    </CardContainer>
+    </div>
   </template>;
 }
 
@@ -552,9 +583,16 @@ function getComponent<CardT extends CardConstructor>(card: CardT, format: Format
   // *inside* our own component, @fields is a proxy object that looks
   // up our fields on demand.
   let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
-
+  
+  let isPrimitive = primitive in card;
   let component: ComponentLike<{ Args: {}, Blocks: {} }> = <template>
-    <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
+    {{#if isPrimitive}}
+      <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
+    {{else}}
+      <ShadowDOM>
+        <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
+      </ShadowDOM>
+    {{/if}}
   </template>
 
   // when viewed from *outside*, our component is both an invokable component
