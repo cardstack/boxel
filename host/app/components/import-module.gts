@@ -13,11 +13,7 @@ export interface Signature {
 
 export default class ImportModule extends Component<Signature> {
   @service declare loaderService: LoaderService;
-  imported = importResource(
-    this,
-    () => this.args.url,
-    () => this.loaderService.loader
-  );
+  imported = importResource(this, () => this.args.url);
 
   <template>
     {{#if this.imported.module}}

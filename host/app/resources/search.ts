@@ -12,6 +12,8 @@ import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
 import { stringify } from 'qs';
 import flatMap from 'lodash/flatMap';
+import { getOwner } from '@ember/application';
+import type LoaderService from '../services/loader-service';
 import type { Query } from '@cardstack/runtime-common/query';
 
 interface Args {
@@ -78,12 +80,15 @@ export class Search extends Resource<Args> {
   }
 }
 
-export function getSearchResults(
-  parent: object,
-  query: () => Query,
-  loader: () => Loader
-) {
+export function getSearchResults(parent: object, query: () => Query) {
   return useResource(parent, Search, () => ({
-    named: { query: query(), loader: loader() },
+    named: {
+      query: query(),
+      loader: (
+        (getOwner(parent) as any).lookup(
+          'service:loader-service'
+        ) as LoaderService
+      ).loader,
+    },
   }));
 }

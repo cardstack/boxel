@@ -63,8 +63,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
         on: this.catalogEntryRef,
         eq: { ref: this.args.ref },
       },
-    }),
-    () => this.loaderService.loader
+    })
   );
   @tracked showEditor = false;
 

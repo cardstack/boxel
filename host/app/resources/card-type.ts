@@ -4,6 +4,8 @@ import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { CardRef, internalKeyFor, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { getOwner } from '@ember/application';
+import type LoaderService from '../services/loader-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -89,12 +91,15 @@ export class CardType extends Resource<Args> {
   }
 }
 
-export function getCardType(
-  parent: object,
-  card: () => typeof Card,
-  loader: () => Loader
-) {
+export function getCardType(parent: object, card: () => typeof Card) {
   return useResource(parent, CardType, () => ({
-    named: { card: card(), loader: loader() },
+    named: {
+      card: card(),
+      loader: (
+        (getOwner(parent) as any).lookup(
+          'service:loader-service'
+        ) as LoaderService
+      ).loader,
+    },
   }));
 }

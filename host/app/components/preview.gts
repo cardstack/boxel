@@ -92,16 +92,8 @@ export default class Preview extends Component<Signature> {
   @tracked cardError: string | undefined;
   private declare interval: ReturnType<typeof setInterval>;
   private lastModified: number | undefined;
-  private apiModule = importResource(
-    this,
-    () => `${baseRealm.url}card-api`,
-    () => this.loaderService.loader
-  );
-  private renderCardModule = importResource(
-    this,
-    () => `${baseRealm.url}render-card`,
-    () => this.loaderService.loader
-  );
+  private apiModule = importResource(this, () => `${baseRealm.url}card-api`);
+  private renderCardModule = importResource(this, () => `${baseRealm.url}render-card`);
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -137,7 +129,6 @@ export default class Preview extends Component<Signature> {
         }
         return;
       },
-      () => this.loaderService.loader
     );
   }
 

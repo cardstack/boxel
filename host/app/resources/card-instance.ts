@@ -4,6 +4,8 @@ import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { Loader, type LooseCardResource } from '@cardstack/runtime-common';
+import { getOwner } from '@ember/application';
+import type LoaderService from '../services/loader-service';
 import type LocalRealm from '../services/local-realm';
 import type { Card } from 'https://cardstack.com/base/card-api';
 
@@ -45,10 +47,16 @@ export class CardInstance extends Resource<Args> {
 
 export function cardInstance(
   parent: object,
-  resource: () => LooseCardResource | undefined,
-  loader: () => Loader
+  resource: () => LooseCardResource | undefined
 ) {
   return useResource(parent, CardInstance, () => ({
-    named: { resource: resource(), loader: loader() },
+    named: {
+      resource: resource(),
+      loader: (
+        (getOwner(parent) as any).lookup(
+          'service:loader-service'
+        ) as LoaderService
+      ).loader,
+    },
   }));
 }

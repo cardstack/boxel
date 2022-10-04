@@ -130,7 +130,7 @@ export default class Schema extends Component<Signature> {
 
   @cached
   get cardType() {
-    return getCardType(this, () => this.args.card, () => this.loaderService.loader);
+    return getCardType(this, () => this.args.card);
   }
 
   @cached

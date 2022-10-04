@@ -70,7 +70,7 @@ export default class CardCatalogModal extends Component {
 
   @enqueueTask private async _chooseCard<T extends Card>(query: Query): Promise<undefined | T> {
     this.currentRequest = {
-      search: getSearchResults(this, () => query, () => this.loaderService.loader),
+      search: getSearchResults(this, () => query),
       deferred: new Deferred(),
     };
     let resource = await this.currentRequest.deferred.promise;
