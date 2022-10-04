@@ -124,7 +124,7 @@ export class CurrentRun {
   #instances: URLMap<SearchEntryWithErrors>;
   #modules = new Map<string, ModuleWithErrors>();
   #moduleWorkingCache = new Map<string, Promise<Module>>();
-  #typesCache = new Map<string, Promise<TypesWithErrors>>();
+  #typesCache = new WeakMap<typeof Card, Promise<TypesWithErrors>>();
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
@@ -345,11 +345,13 @@ export class CurrentRun {
     let uncaughtError: Error | undefined;
     let doc: CardSingleResourceDocument | undefined;
     let searchData: any;
+    let cardType: typeof Card | undefined;
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
       let card = await api.createFromSerialized(resource, moduleURL, {
         loader: this.#loader,
       });
+      cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
       await api.recompute(card);
       let data = api.serializeCard(card, { includeComputeds: true });
       let maybeDoc = {
@@ -369,8 +371,8 @@ export class CurrentRun {
       uncaughtError = err;
     }
     // if we already encountered an uncaught error then no need to deal with this
-    if (!uncaughtError) {
-      typesMaybeError = await this.getTypes(cardRef);
+    if (!uncaughtError && cardType) {
+      typesMaybeError = await this.getTypes(cardType);
     }
     if (doc && typesMaybeError?.type === "types") {
       this.stats.instancesIndexed++;
@@ -451,25 +453,19 @@ export class CurrentRun {
     deferred.fulfill(module);
   }
 
-  private async getTypes(
-    ref: ExportedCardRef,
-    relativeTo = new URL(ref.module)
-  ): Promise<TypesWithErrors> {
-    let module = new URL(ref.module, relativeTo).href;
-    let fullRef: CardRef | undefined = {
-      type: "exportedCard",
-      module,
-      name: ref.name,
-    };
-    let key = internalKeyFor(fullRef, undefined);
-    let cached = this.#typesCache.get(key);
+  private async getTypes(card: typeof Card): Promise<TypesWithErrors> {
+    let cached = this.#typesCache.get(card);
     if (cached) {
       return await cached;
     }
-
+    let ref = this.#loader.identify(card);
+    if (!ref) {
+      throw new Error(`could not identify card ${card.name}`);
+    }
     let deferred = new Deferred<TypesWithErrors>();
-    this.#typesCache.set(key, deferred.promise);
+    this.#typesCache.set(card, deferred.promise);
     let types: string[] = [];
+    let fullRef: CardRef = { type: "exportedCard", ...ref };
     while (fullRef) {
       let loadedCard = (await this.loadCard(fullRef)) as
         | {
