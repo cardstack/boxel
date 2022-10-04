@@ -1,11 +1,6 @@
-import { trimExecutableExtension, baseRealm } from ".";
+import { baseRealm, internalKeyFor } from ".";
 import { Kind, Realm } from "./realm";
-import {
-  CurrentRun,
-  SearchEntry,
-  SearchEntryWithErrors,
-  CardDefinition,
-} from "./current-run";
+import { CurrentRun, SearchEntry, SearchEntryWithErrors } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import flatMap from "lodash/flatMap";
@@ -266,28 +261,6 @@ export class SearchIndex {
     return this.#currentRun.isIgnored(url);
   }
 
-  async typeOf(
-    ref: CardRef,
-    relativeTo = new URL(this.realm.url)
-  ): Promise<CardDefinition | undefined> {
-    let result = await this.#currentRun.definitions.get(
-      internalKeyFor(ref, relativeTo)
-    );
-    if (result && result.type !== "error") {
-      return result.def;
-    }
-    return undefined;
-  }
-
-  async exportedCardsOf(module: string): Promise<ExportedCardRef[]> {
-    let url = trimExecutableExtension(new URL(module, this.realm.url));
-    let refsMap = this.#currentRun.exportedCardRefs.get(url);
-    if (!refsMap) {
-      return [];
-    }
-    return [...refsMap.values()];
-  }
-
   async card(url: URL): Promise<SearchEntryWithErrors | undefined> {
     return this.#currentRun.instances.get(url);
   }
@@ -403,7 +376,7 @@ export class SearchIndex {
 
     if ("type" in filter) {
       let ref: CardRef = { type: "exportedCard", ...filter.type };
-      await this.strictTypeOf(ref);
+      await this.assertTypeExists(ref);
       return (entry) => this.cardHasType(entry, ref);
     }
 
@@ -533,34 +506,31 @@ export class SearchIndex {
     throw new Error("Unknown filter");
   }
 
-  private async strictTypeOf(ref: CardRef): Promise<CardDefinition> {
-    let def = await this.typeOf(ref);
-    let { module, name } = ref as ExportedCardRef;
-    if (!def) {
-      throw new Error(
-        `Your filter refers to nonexistent type: import ${
-          name === "default" ? "default" : `{ ${name} }`
-        } from "${module}"`
+  private async assertTypeExists(ref: ExportedCardRef): Promise<void> {
+    let module: Record<string, typeof Card> | undefined;
+    try {
+      module = await this.loader.import<Record<string, typeof Card>>(
+        ref.module
       );
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        throw new Error(
+          `Your filter refers to nonexistent type: import ${
+            ref.name === "default" ? "default" : `{ ${ref.name} }`
+          } from "${ref.module}"`
+        );
+      }
+      throw err;
     }
-    return def;
-  }
-}
-
-export function internalKeyFor(
-  ref: CardRef,
-  relativeTo: URL | undefined
-): string {
-  switch (ref.type) {
-    case "exportedCard":
-      let module = trimExecutableExtension(
-        new URL(ref.module, relativeTo)
-      ).href;
-      return `${module}/${ref.name}`;
-    case "ancestorOf":
-      return `${internalKeyFor(ref.card, relativeTo)}/ancestor`;
-    case "fieldOf":
-      return `${internalKeyFor(ref.card, relativeTo)}/fields/${ref.field}`;
+    let maybeCard = module[ref.name];
+    if ("baseCard" in maybeCard) {
+      return;
+    }
+    throw new Error(
+      `Your filter refers to an export of a module that is not a card: import ${
+        ref.name === "default" ? "default" : `{ ${ref.name} }`
+      } from "${ref.module}"`
+    );
   }
 }
 

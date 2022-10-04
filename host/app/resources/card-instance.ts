@@ -4,12 +4,15 @@ import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { Loader, type LooseCardResource } from '@cardstack/runtime-common';
+import { getOwner } from '@ember/application';
+import type LoaderService from '../services/loader-service';
 import type LocalRealm from '../services/local-realm';
 import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {
     resource: LooseCardResource | undefined;
+    loader: Loader;
   };
 }
 
@@ -20,19 +23,23 @@ export class CardInstance extends Resource<Args> {
   constructor(owner: unknown, args: Args) {
     super(owner, args);
 
-    let { resource } = args.named;
+    let { resource, loader } = args.named;
     if (resource) {
-      taskFor(this.createCard).perform(resource);
+      taskFor(this.createCard).perform(resource, loader);
     }
   }
 
-  @restartableTask private async createCard(resource: LooseCardResource) {
-    let api = await Loader.import<
+  @restartableTask private async createCard(
+    resource: LooseCardResource,
+    loader: Loader
+  ) {
+    let api = await loader.import<
       typeof import('https://cardstack.com/base/card-api')
     >('https://cardstack.com/base/card-api');
     let instance = await api.createFromSerialized(
       resource,
-      this.localRealm.url
+      this.localRealm.url,
+      { loader }
     );
     this.instance = instance;
   }
@@ -43,6 +50,13 @@ export function cardInstance(
   resource: () => LooseCardResource | undefined
 ) {
   return useResource(parent, CardInstance, () => ({
-    named: { resource: resource() },
+    named: {
+      resource: resource(),
+      loader: (
+        (getOwner(parent) as any).lookup(
+          'service:loader-service'
+        ) as LoaderService
+      ).loader,
+    },
   }));
 }

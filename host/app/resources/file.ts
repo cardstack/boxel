@@ -1,9 +1,10 @@
 import { Resource, useResource } from 'ember-resources';
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
-import { Loader } from '@cardstack/runtime-common/loader';
+import LoaderService from '../services/loader-service';
 
 interface Args {
   named: {
@@ -31,7 +32,7 @@ export type FileResource =
       name: string;
       url: string;
       loading: TaskInstance<void> | null;
-      write(content: string): void;
+      write(content: string, flushLoader?: true): void;
       close(): void;
     };
 
@@ -42,6 +43,7 @@ class _FileResource extends Resource<Args> {
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   @tracked content: string | undefined;
   @tracked state: FileResource['state'] = 'ready';
+  @service declare loaderService: LoaderService;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
@@ -77,7 +79,7 @@ class _FileResource extends Resource<Args> {
 
   @restartableTask private async read() {
     let prevState = this.state;
-    let response = await Loader.fetch(this.url, {
+    let response = await this.loaderService.loader.fetch(this.url, {
       headers: {
         Accept: 'application/vnd.card+source',
       },
@@ -110,12 +112,15 @@ class _FileResource extends Resource<Args> {
     }
   }
 
-  async write(content: string) {
-    taskFor(this.doWrite).perform(content);
+  async write(content: string, flushLoader?: true) {
+    await taskFor(this.doWrite).perform(content);
+    if (flushLoader) {
+      this.loaderService.reset();
+    }
   }
 
   @restartableTask private async doWrite(content: string) {
-    let response = await Loader.fetch(this.url, {
+    let response = await this.loaderService.loader.fetch(this.url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.card+source',

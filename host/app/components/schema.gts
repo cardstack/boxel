@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { type ExportedCardRef, chooseCard, catalogEntryRef } from '@cardstack/runtime-common';
+import { chooseCard, catalogEntryRef } from '@cardstack/runtime-common';
 import { getCardType } from '../resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -8,7 +8,6 @@ import { on } from '@ember/modifier';
 import LocalRealm from '../services/local-realm';
 import { eq } from '../helpers/truth-helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { Loader } from '@cardstack/runtime-common/loader';
 //@ts-ignore cached not available yet in definitely typed
 import { cached, tracked } from '@glimmer/tracking';
 import { LinkTo } from '@ember/routing';
@@ -18,13 +17,15 @@ import CatalogEntryEditor from './catalog-entry-editor';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import Modifier from 'ember-modifier';
+import LoaderService from '../services/loader-service';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
-    ref: ExportedCardRef;
+    card: typeof Card;
     file: FileResource;
     moduleSyntax: ModuleSyntax;
   }
@@ -44,10 +45,10 @@ export default class Schema extends Component<Signature> {
                 <button type="button" {{on "click" (fn this.deleteField field.name)}} data-test-delete>Delete</button>
               {{/if}}
               {{field.name}} - {{field.type}} - field card ID:
-              {{#if (this.inRealm field.card.exportedCardContext.module)}}
+              {{#if (this.inRealm field.card.module)}}
                 <LinkTo
                   @route="application"
-                  @query={{hash path=(this.modulePath field.card.exportedCardContext.module)}}
+                  @query={{hash path=(this.modulePath field.card.module)}}
                 >
                   {{field.card.id}}
                 </LinkTo>
@@ -100,37 +101,43 @@ export default class Schema extends Component<Signature> {
             </button>
           </p>
         </ul>
-        <CatalogEntryEditor @ref={{@ref}} />
+        <CatalogEntryEditor @ref={{this.ref}} />
       </div>
     {{/if}}
   </template>
 
   @service declare localRealm: LocalRealm;
+  @service declare loaderService: LoaderService;
   @tracked newFieldName: string | undefined;
   @tracked newFieldType: 'contains' | 'containsMany' = 'contains';
+
+  @cached
+  get ref() {
+    let ref = this.loaderService.loader.identify(this.args.card);
+    if (!ref) {
+      throw new Error(`bug: unable to identify card ${this.args.card.name}`);
+    }
+    return ref;
+  }
 
   @cached
   get realmPath() {
     if (!this.localRealm.isAvailable) {
       throw new Error('Local realm is not available');
     }
-    return new RealmPaths(Loader.reverseResolution(this.localRealm.url.href));
+    return new RealmPaths(this.loaderService.loader.reverseResolution(this.localRealm.url.href));
   }
 
   @cached
   get cardType() {
-    if (this.args.file.state !== 'ready') {
-      throw new Error(`bug: file not open ${this.args.file.url}`);
-    }
-    this.args.file.content;
-    this.args.moduleSyntax;
-    return getCardType(this, () => this.args.ref);
+    return getCardType(this, () => this.args.card);
   }
 
-  get card() {
-    let card = this.args.moduleSyntax.possibleCards.find(c => c.exportedAs === this.args.ref.name);
+  @cached
+  get cardFromSyntax() {
+    let card = this.args.moduleSyntax.possibleCards.find(c => c.exportedAs === this.ref.name);
     if (!card) {
-      throw new Error(`cannot find card in module syntax for ref ${JSON.stringify(this.args.ref)}`);
+      throw new Error(`cannot find card in module syntax for ref ${JSON.stringify(this.ref)}`);
     }
     return card;
   }
@@ -152,7 +159,7 @@ export default class Schema extends Component<Signature> {
 
   @action
   isOwnField(fieldName: string): boolean {
-    return this.card.possibleFields.has(fieldName);
+    return Object.keys(Object.getOwnPropertyDescriptors(this.args.card.prototype)).includes(fieldName);
   }
 
   @action
@@ -173,7 +180,7 @@ export default class Schema extends Component<Signature> {
   @action
   deleteField(fieldName: string) {
     this.args.moduleSyntax.removeField(
-      { type: 'exportedName', name: this.args.ref.name },
+      { type: 'exportedName', name: this.ref.name },
       fieldName
     );
     taskFor(this.write).perform(this.args.moduleSyntax.code());
@@ -195,7 +202,7 @@ export default class Schema extends Component<Signature> {
         on: catalogEntryRef,
         // a "contains" field cannot be the same card as it's enclosing card (but it can for a linksTo)
         not: {
-          eq: { ref: this.args.ref }
+          eq: { ref: this.ref }
         }
       }
     });
@@ -207,25 +214,22 @@ export default class Schema extends Component<Signature> {
       throw new Error('bug: new field name is not specified');
     }
     this.args.moduleSyntax.addField(
-      { type: 'exportedName', name: this.args.ref.name},
+      { type: 'exportedName', name: this.ref.name},
       this.newFieldName,
       fieldEntry.ref,
       this.newFieldType
     );
     await taskFor(this.write).perform(this.args.moduleSyntax.code());
-    this.resetNewField();
-  }
-
-  resetNewField() {
-    this.newFieldName = '';
-    this.newFieldType = 'contains';
   }
 
   @restartableTask private async write(src: string): Promise<void> {
     if (this.args.file.state !== 'ready') {
       throw new Error(`the file ${this.args.file.url} is not open`);
     }
-    await this.args.file.write(src);
+    // note that this write will cause the component to rerender, so 
+    // any code after this write will not be executed since the component will 
+    // get torn down before subsequent code can execute
+    await this.args.file.write(src, true);
   }
 }
 

@@ -106,13 +106,13 @@ export { Realm } from "./realm";
 export { Loader } from "./loader";
 export type { Kind, RealmAdapter, FileRef } from "./realm";
 
+import type { CardRef } from "./search-index";
+export type { CardRef };
 export type {
-  CardRef,
   ExportedCardRef,
   CardResource,
   CardDocument,
 } from "./search-index";
-export type { CardDefinition } from "./current-run";
 export {
   isCardResource,
   isCardDocument,
@@ -160,4 +160,21 @@ export function trimExecutableExtension(url: URL): URL {
     }
   }
   return url;
+}
+
+export function internalKeyFor(
+  ref: CardRef,
+  relativeTo: URL | undefined
+): string {
+  switch (ref.type) {
+    case "exportedCard":
+      let module = trimExecutableExtension(
+        new URL(ref.module, relativeTo)
+      ).href;
+      return `${module}/${ref.name}`;
+    case "ancestorOf":
+      return `${internalKeyFor(ref.card, relativeTo)}/ancestor`;
+    case "fieldOf":
+      return `${internalKeyFor(ref.card, relativeTo)}/fields/${ref.field}`;
+  }
 }

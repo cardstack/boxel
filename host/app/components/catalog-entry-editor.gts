@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import { LinkTo } from '@ember/routing';
 import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
+import LoaderService from '../services/loader-service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
@@ -53,14 +54,17 @@ export default class CatalogEntryEditor extends Component<Signature> {
   </template>
 
   @service declare localRealm: LocalRealm;
+  @service declare loaderService: LoaderService;
   @service declare router: RouterService;
   catalogEntryRef = catalogEntryRef;
-  catalogEntry = getSearchResults(this, () => ({
-    filter: {
-      on: this.catalogEntryRef,
-      eq: { ref: this.args.ref },
-    },
-  }));
+  catalogEntry = getSearchResults(this,
+    () => ({
+      filter: {
+        on: this.catalogEntryRef,
+        eq: { ref: this.args.ref },
+      },
+    })
+  );
   @tracked showEditor = false;
 
   get entry() {

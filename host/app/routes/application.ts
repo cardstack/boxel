@@ -2,9 +2,10 @@ import Route from '@ember/routing/route';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
 import { file, FileResource } from '../resources/file';
+import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import LocalRealm from '../services/local-realm';
-import { RealmPaths, Loader } from '@cardstack/runtime-common';
+import { RealmPaths } from '@cardstack/runtime-common';
 
 interface Model {
   path: string | undefined;
@@ -18,6 +19,7 @@ export default class Application extends Route<Model> {
   };
 
   @service declare router: RouterService;
+  @service declare loaderService: LoaderService;
   @service declare localRealm: LocalRealm;
 
   async model(args: { path: string | undefined }): Promise<Model> {
@@ -35,7 +37,7 @@ export default class Application extends Route<Model> {
 
     let realmPath = new RealmPaths(this.localRealm.url);
     let url = realmPath.fileURL(path).href;
-    let response = await Loader.fetch(url, {
+    let response = await this.loaderService.loader.fetch(url, {
       headers: {
         Accept: 'application/vnd.card+source',
       },

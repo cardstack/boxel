@@ -10,7 +10,6 @@ import {
   compiledCard,
 } from "@cardstack/runtime-common/etc/test-fixtures";
 import {
-  CardRef,
   isCardSingleResourceDocument,
   Realm,
   Loader,
@@ -323,95 +322,6 @@ module("Realm Server", function (hooks) {
         },
       },
       "the directory response is correct"
-    );
-  });
-
-  test("serves a /_cardsOf GET request", async function (assert) {
-    let response = await request
-      .get(`/_cardsOf?${stringify({ module: `${testRealmHref}person` })}`)
-      .set("Accept", "application/vnd.api+json");
-
-    assert.strictEqual(response.status, 200, "HTTP 200 status");
-    let json = response.body;
-    assert.deepEqual(
-      json,
-      {
-        data: {
-          type: "module",
-          id: `${testRealmHref}person`,
-          attributes: {
-            cardExports: [
-              {
-                module: `${testRealmHref}person`,
-                name: "Person",
-              },
-            ],
-          },
-        },
-      },
-      "cardsOf response is correct"
-    );
-  });
-
-  test("serves a /_typeOf GET request", async function (assert) {
-    let response = await request
-      .get(
-        `/_typeOf?${stringify({
-          type: "exportedCard",
-          module: `${testRealmHref}person`,
-          name: "Person",
-        } as CardRef)}`
-      )
-      .set("Accept", "application/vnd.api+json");
-
-    assert.strictEqual(response.status, 200, "HTTP 200 status");
-    let json = response.body;
-    assert.deepEqual(
-      json,
-      {
-        data: {
-          id: `${testRealmHref}person/Person`,
-          type: "card-definition",
-          attributes: {
-            cardRef: {
-              type: "exportedCard",
-              module: `${testRealmHref}person`,
-              name: "Person",
-            },
-          },
-          relationships: {
-            _super: {
-              links: {
-                related:
-                  "https://cardstack.com/base/_typeOf?type=exportedCard&module=https%3A%2F%2Fcardstack.com%2Fbase%2Fcard-api&name=Card",
-              },
-              meta: {
-                type: "super",
-                ref: {
-                  type: "exportedCard",
-                  module: "https://cardstack.com/base/card-api",
-                  name: "Card",
-                },
-              },
-            },
-            firstName: {
-              links: {
-                related:
-                  "https://cardstack.com/base/_typeOf?type=exportedCard&module=https%3A%2F%2Fcardstack.com%2Fbase%2Fstring&name=default",
-              },
-              meta: {
-                type: "contains",
-                ref: {
-                  type: "exportedCard",
-                  module: "https://cardstack.com/base/string",
-                  name: "default",
-                },
-              },
-            },
-          },
-        },
-      },
-      "typeOf response is correct"
     );
   });
 

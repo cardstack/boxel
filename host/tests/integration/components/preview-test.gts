@@ -7,8 +7,9 @@ import Preview  from 'runtime-spike/components/preview';
 import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
 import { testRealmURL, shimModule } from '../../helpers';
-import type { Format } from "https://cardstack.com/base/card-api";
 import { shadowWaitFor, shadowFillIn } from '../../helpers/shadow-assert';
+import type { Format } from "https://cardstack.com/base/card-api";
+import type LoaderService from 'runtime-spike/services/loader-service';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -20,16 +21,13 @@ class MockLocalRealm extends Service {
 
 const formats: Format[] = ['isolated', 'embedded', 'edit'];
 module('Integration | preview', function (hooks) {
+  let loader: Loader;
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function () {
-    Loader.destroy();
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    cardApi = await Loader.import(`${baseRealm.url}card-api`);
-    string = await Loader.import(`${baseRealm.url}string`);
+    loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-realm', MockLocalRealm);
   });
 
@@ -42,7 +40,7 @@ module('Integration | preview', function (hooks) {
         <template> <div data-test-firstName><@fields.firstName/></div> </template>
       }
     }
-    await shimModule(`${testRealmURL}test-cards`, { TestCard });
+    await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let json = {
       data: {
         attributes: { firstName: 'Mango' },
@@ -82,7 +80,7 @@ module('Integration | preview', function (hooks) {
         <template> <div data-test-edit-firstName><@fields.firstName/></div> </template>
       }
     }
-    await shimModule(`${testRealmURL}test-cards`, { TestCard });
+    await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
 
     let json = {
       data: {
@@ -135,7 +133,7 @@ module('Integration | preview', function (hooks) {
         <template> <div data-test-edit-firstName><@fields.firstName/></div> </template>
       }
     }
-    await shimModule(`${testRealmURL}test-cards`, { TestCard });
+    await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let json = {
       data: {
         attributes: { firstName: 'Mango' },
@@ -187,7 +185,7 @@ module('Integration | preview', function (hooks) {
         }
       });
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person, Post });
+    await shimModule(`${testRealmURL}test-cards`, { Person, Post }, loader);
 
     let json = {
       data: {

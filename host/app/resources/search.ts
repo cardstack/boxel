@@ -12,11 +12,14 @@ import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
 import { stringify } from 'qs';
 import flatMap from 'lodash/flatMap';
+import { getOwner } from '@ember/application';
+import type LoaderService from '../services/loader-service';
 import type { Query } from '@cardstack/runtime-common/query';
 
 interface Args {
   named: {
     query: Query;
+    loader: Loader;
   };
 }
 
@@ -31,18 +34,18 @@ export class Search extends Resource<Args> {
       throw new Error('Local realm is not available');
     }
     this.localRealmURL = this.localRealm.url;
-    let { query } = args.named;
-    taskFor(this.search).perform(query);
+    let { query, loader } = args.named;
+    taskFor(this.search).perform(query, loader);
   }
 
-  @restartableTask private async search(query: Query) {
+  @restartableTask private async search(query: Query, loader: Loader) {
     // until we have realm index rollup, search all the realms as separate
     // queries that we merge together
     this.instances = flatMap(
       await Promise.all(
-        [this.localRealmURL.href, Loader.resolve(baseRealm.url)].map(
+        [this.localRealmURL.href, loader.resolve(baseRealm.url)].map(
           async (realm) => {
-            let response = await Loader.fetch(
+            let response = await loader.fetch(
               `${realm}_search?${stringify(query)}`,
               {
                 headers: { Accept: 'application/vnd.api+json' },
@@ -79,6 +82,13 @@ export class Search extends Resource<Args> {
 
 export function getSearchResults(parent: object, query: () => Query) {
   return useResource(parent, Search, () => ({
-    named: { query: query() },
+    named: {
+      query: query(),
+      loader: (
+        (getOwner(parent) as any).lookup(
+          'service:loader-service'
+        ) as LoaderService
+      ).loader,
+    },
   }));
 }
