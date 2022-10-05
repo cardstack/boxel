@@ -233,7 +233,6 @@ export class ChangesetBuilder {
   ) {
     let classifiedInsertedSpriteModifiers = new Set([...freshlyAdded]);
     let classifiedRemovedSpriteModifiers = new Set([...freshlyRemoved]);
-    let classifiedKeptSpriteModifiers = new Set([...naturalKept]);
 
     let spriteModifiers: Set<ISpriteModifier> = new Set();
     let spriteModifierToSpriteMap = new WeakMap<ISpriteModifier, Sprite>();
@@ -285,7 +284,6 @@ export class ChangesetBuilder {
       let counterpartSpriteModifier =
         intermediateSprite?.modifier ?? removedSpriteModifier;
       if (counterpartSpriteModifier) {
-        classifiedKeptSpriteModifiers.add(insertedSpriteModifier);
         classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
 
         // Find a stable shared ancestor ContextModel
