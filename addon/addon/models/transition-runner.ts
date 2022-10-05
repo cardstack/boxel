@@ -91,6 +91,10 @@ export default class TransitionRunner {
 
     if (animationContext.shouldAnimate()) {
       this.logChangeset(changeset, animationContext); // For debugging
+      // Note: some use() calls are async and return a Promise.
+      // yielding this is currently incorrect (I think), because we probably don't want to
+      // allow delaying animations by deferring the returning of an AnimationDefinition
+      // TODO: Convert all current demos to use AnimationDefinition
       let animationDefinition = animationContext.args.use?.(changeset) as
         | AnimationDefinition
         | undefined;
