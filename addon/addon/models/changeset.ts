@@ -394,19 +394,10 @@ export class ChangesetBuilder {
       context.lastBounds && context.currentBounds && context.isStable
     );
 
-    sprite.initialBounds = sprite.initialBounds?.within({
-      parent: parent.lastBounds,
-      contextElement: context.lastBounds,
+    sprite.within({
+      parent: parent,
+      contextElement: context,
     });
-    sprite.finalBounds = sprite.finalBounds?.within({
-      parent: parent.currentBounds,
-      contextElement: context.currentBounds,
-    });
-
-    if (sprite.counterpart) {
-      sprite.counterpart.initialBounds = sprite.initialBounds;
-      sprite.counterpart.finalBounds = sprite.finalBounds;
-    }
   }
 
   addSpriteTo(changeset: Changeset, sprite: Sprite) {
