@@ -69,6 +69,63 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'First Post created Apr 22, 2022 published Apr 27, 2022, 4:02 PM');
   });
 
+  test('can deserialize a card that has an ID', async function(assert) {
+    let { field, contains, Card, createFromSerialized, isSaved } = cardApi;
+    let { default: StringCard} = string;
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+    await shimModule(`${realmURL}test-cards`, { Person });
+
+    // deserialize a card with an ID to mark it as "saved"
+    let savedCard = await createFromSerialized({
+      id: `${realmURL}Person/mango`,
+      attributes: {
+        firstName: 'Mango'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Person'
+        }
+      }
+    }, undefined);
+
+    assert.strictEqual(savedCard.id, `${realmURL}Person/mango`, 'instance id is set');
+    assert.strictEqual(isSaved(savedCard), true, 'API recognizes card as saved');
+
+    let unsavedCard = new Person();
+    assert.strictEqual(isSaved(unsavedCard), false, 'API recognizes card as unsaved');
+  });
+  
+  test('can serialize a card that has an ID', async function(assert) {
+    let { field, contains, Card, serializeCard } = cardApi;
+    let { default: StringCard} = string;
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+    await shimModule(`${realmURL}test-cards`, { Person });
+
+    let mango = new Person({
+      id: `${realmURL}Person/mango`,
+      firstName: 'Mango'
+    });
+
+    assert.deepEqual(serializeCard(mango), {
+      id: `${realmURL}Person/mango`,
+      type: 'card',
+      attributes: {
+        firstName: 'Mango'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Person'
+        }
+      }
+    });
+  });
+
   test('deserialized card ref fields are not strict equal to serialized card ref', async function(assert) {
     let {field, contains, Card, Component, createFromSerialized } = cardApi;
     let { default: CardRefCard } = cardRef;

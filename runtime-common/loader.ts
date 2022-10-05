@@ -239,9 +239,6 @@ export class Loader {
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
 
-    if (moduleIdentifier === "http://test-realm/test/test-cards") {
-      debugger;
-    }
     let shimmed = this.moduleShims.get(moduleIdentifier);
     if (shimmed) {
       return shimmed as T;
