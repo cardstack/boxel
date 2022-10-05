@@ -205,8 +205,7 @@ export class ChangesetBuilder {
           let parentNode = spriteNode!.parent;
           let parent = parentNode.contextModel ?? parentNode.spriteModel!;
 
-          this.addSpriteTo(
-            changeset,
+          this.setSpriteBounds(
             sprite,
             spriteModifier,
             context,
@@ -214,6 +213,7 @@ export class ChangesetBuilder {
             counterpartModifier,
             intermediateSprite
           );
+          this.addSpriteTo(changeset, sprite);
         }
 
         this.contextToChangeset.set(context, changeset);
@@ -381,15 +381,26 @@ export class ChangesetBuilder {
     };
   }
 
-  addSpriteTo(
-    node: Changeset,
+  addSpriteTo(changeset: Changeset, sprite: Sprite) {
+    if (sprite.type === SpriteType.Kept) {
+      changeset.keptSprites.add(sprite);
+    } else if (sprite.type === SpriteType.Inserted) {
+      changeset.insertedSprites.add(sprite);
+    } else if (sprite.type === SpriteType.Removed) {
+      changeset.removedSprites.add(sprite);
+    } else {
+      throw new Error('Unexpected sprite type received in changeset');
+    }
+  }
+
+  setSpriteBounds(
     sprite: Sprite,
     spriteModifier: ISpriteModifier,
     context: IContext,
     parent: IContext | ISpriteModifier,
     counterpartModifier?: ISpriteModifier,
     intermediateSprite?: IntermediateSprite
-  ) {
+  ): void {
     if (sprite.type === SpriteType.Kept) {
       assert(
         'kept sprite should have lastBounds and currentBounds',
@@ -457,8 +468,6 @@ export class ChangesetBuilder {
           sprite.counterpart.finalComputedStyle = sprite.finalComputedStyle;
         }
       }
-
-      node.keptSprites.add(sprite);
     } else if (sprite.type === SpriteType.Inserted) {
       assert(
         'inserted sprite should have currentBounds',
@@ -475,8 +484,6 @@ export class ChangesetBuilder {
         parent: parent.currentBounds,
       });
       sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
-
-      node.insertedSprites.add(sprite);
     } else if (sprite.type === SpriteType.Removed) {
       assert(
         'removed sprite should have currentBounds',
@@ -498,8 +505,6 @@ export class ChangesetBuilder {
         });
         sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
       }
-
-      node.removedSprites.add(sprite);
     }
   }
 }
