@@ -406,6 +406,10 @@ export default class SpriteTree {
       this.nodesByElement.delete(spriteModifier.element);
     }
   }
+  lookupRemovedNode(modifier: ISpriteModifier) {
+    return this.freshlyRemovedToNode.get(modifier);
+  }
+
   lookupNodeByElement(element: Element): SpriteTreeNode | undefined {
     return this.nodesByElement.get(element);
   }
@@ -471,19 +475,6 @@ export default class SpriteTree {
       element = element.parentElement;
     }
     return null;
-  }
-
-  findStableSharedAncestor(spriteA: ISpriteModifier, spriteB: ISpriteModifier) {
-    let ancestorsOfKeptSprite = this.nodesByElement
-      .get(spriteA.element)
-      ?.ancestors.filter((v) => v.contextModel?.isStable);
-    let ancestorsOfCounterpartSprite = this.freshlyRemovedToNode
-      .get(spriteB)
-      ?.ancestors.filter((v) => v.contextModel?.isStable);
-
-    return ancestorsOfKeptSprite?.find((v) =>
-      ancestorsOfCounterpartSprite?.includes(v)
-    )?.contextModel;
   }
 
   log() {
