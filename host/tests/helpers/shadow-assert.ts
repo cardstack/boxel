@@ -1,5 +1,10 @@
 import type DOMAssertions from 'qunit-dom/dist/assertions';
-import { waitUntil, fillIn, click } from '@ember/test-helpers';
+import {
+  waitUntil,
+  waitFor as waitForHelper,
+  fillIn as fillInHelper,
+  click as clickHelper,
+} from '@ember/test-helpers';
 
 // TODO: it would be more efficient to implement a shadowQuerySelector
 // that stops at the first found element
@@ -31,40 +36,30 @@ export function shadowQuerySelectorAll(
   }
 }
 
-export async function shadowWaitFor(
-  selector: string | Element,
-  root: Document | Element | ShadowRoot | DocumentFragment = document
-): Promise<Element> {
+export async function waitFor(selector: string): Promise<Element | Element[]> {
   try {
-    return await waitUntil(() => shadowQuerySelector(selector, root));
+    let el: Element | undefined = undefined;
+    for (let s of selector.split(' ')) {
+      el = await waitUntil(() => shadowQuerySelector(s, el));
+    }
+    return el!;
   } catch (e) {
-    throw new Error(
-      `shadowWaitFor timed out waiting for selector "${selector}"`
-    );
+    return await waitForHelper(selector);
   }
 }
 
-export async function shadowFillIn(
+export async function fillIn(
   selector: string | Element,
-  text: string,
-  root?: Document | Element | ShadowRoot | DocumentFragment
+  text: string
 ): Promise<void> {
-  try {
-    return await fillIn(shadowQuerySelector(selector, root), text);
-  } catch (e) {
-    throw new Error(`shadowFillIn failed for selector "${selector}"`);
-  }
+  return fillInHelper(shadowQuerySelector(selector) ?? selector, text);
 }
 
-export async function shadowClick(
+export async function click(
   selector: string | Element,
-  root?: Document | Element | ShadowRoot | DocumentFragment
+  options?: MouseEventInit | undefined
 ): Promise<void> {
-  try {
-    return await click(shadowQuerySelector(selector, root));
-  } catch (e) {
-    throw new Error(`shadowClick failed for selector "${selector}"`);
-  }
+  await clickHelper(shadowQuerySelector(selector) ?? selector, options);
 }
 
 declare global {

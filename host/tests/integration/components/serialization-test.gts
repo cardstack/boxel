@@ -5,7 +5,7 @@ import parseISO from 'date-fns/parseISO';
 import { p, cleanWhiteSpace, shimModule } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
-import { shadowQuerySelectorAll, shadowFillIn } from '../../helpers/shadow-assert';
+import { shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -411,7 +411,7 @@ module('Integration | serialization', function (hooks) {
       }
     });
     await renderCard(helloWorld, 'edit');
-    await shadowFillIn('[data-test-field="firstName"] input', 'Carl Stack');
+    await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
 
     assert.deepEqual(
       serializeCard(helloWorld), {

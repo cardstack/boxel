@@ -7,11 +7,10 @@ import { Deferred } from "@cardstack/runtime-common/deferred";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import Service from '@ember/service';
-import { waitFor, click } from '@ember/test-helpers';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import CreateNewCard from 'runtime-spike/components/create-new-card';
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
-import { shadowWaitFor, shadowFillIn } from '../../helpers/shadow-assert';
+import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
 
 class MockLocalRealm extends Service {
@@ -145,8 +144,7 @@ module('Integration | create-new-card', function (hooks) {
     );
 
     await click('[data-test-create-new-card-button]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await shadowWaitFor('[data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
 
     assert.dom('[data-test-card-catalog] li').exists({ count: 2 }, 'number of catalog items is correct');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`).exists('first item is correct');
@@ -155,9 +153,9 @@ module('Integration | create-new-card', function (hooks) {
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
     await waitFor(`[data-test-create-new-card="Person"]`);
-    await shadowWaitFor(`[data-test-field="firstName"] input`);
+    await waitFor(`[data-test-field="firstName"] input`);
 
-    await shadowFillIn('[data-test-field="firstName"] input', 'Jackie');
+    await fillIn('[data-test-field="firstName"] input', 'Jackie');
     await click('[data-test-save-card]');
 
     await deferred.promise; // wait for the component to transition on save
