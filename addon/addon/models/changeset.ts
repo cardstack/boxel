@@ -36,22 +36,6 @@ function union<T>(...sets: Set<T>[]): Set<T> {
   }
 }
 
-// DESCENDANT ACCESS: exclusively used to get descendants to filter for descendants that should be included in a changeset
-export function filterToContext(
-  spriteTree: SpriteTree,
-  animationContext: IContext,
-  spriteModifiers: Set<ISpriteModifier>
-): Set<ISpriteModifier> {
-  let node = spriteTree.lookupNodeByElement(animationContext.element);
-  let contextDescendants = node!
-    .getSpriteDescendants({ deep: true })
-    .map((v) => v.spriteModifier);
-
-  return new Set(
-    [...spriteModifiers].filter((m) => contextDescendants.includes(m))
-  );
-}
-
 export class Changeset {
   context: IContext;
   intent: string | undefined;
@@ -165,7 +149,6 @@ export class ChangesetBuilder {
       spriteModifiers,
       spriteModifierToSpriteMap,
       spriteModifierToCounterpartModifierMap,
-      contextToKeptSpriteModifierMap,
     } = this.classifySprites(
       freshlyAdded,
       freshlyRemoved,
@@ -173,39 +156,88 @@ export class ChangesetBuilder {
       intermediateSprites
     );
 
+    let unallocatedItems: {
+      sprite: Sprite;
+      highestLevelModifier: ISpriteModifier;
+    }[] = [];
+    for (let spriteModifier of spriteModifiers) {
+      let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
+      let counterpartModifier =
+        spriteModifierToCounterpartModifierMap.get(spriteModifier);
+      let intermediateSprite = intermediateSprites.get(
+        sprite.identifier.toString()
+      );
+
+      this.setSpriteOwnBounds(
+        sprite,
+        spriteModifier,
+        counterpartModifier,
+        intermediateSprite
+      );
+
+      let highestLevelModifier = spriteModifier;
+      if (counterpartModifier) {
+        let ancestorsOfKeptSprite = this.spriteTree.lookupNodeByElement(
+          spriteModifier.element
+        )!.ancestors;
+        let stableAncestorsOfKeptSprite = ancestorsOfKeptSprite.filter(
+          (v) => v.contextModel?.isStable
+        );
+        let ancestorsOfCounterpartSprite =
+          this.spriteTree.lookupRemovedNode(counterpartModifier)!.ancestors;
+        let stableAncestorsOfCounterpartSprite =
+          ancestorsOfCounterpartSprite?.filter((v) => v.contextModel?.isStable);
+
+        let sharedContextNode = stableAncestorsOfKeptSprite?.find((v) =>
+          stableAncestorsOfCounterpartSprite?.includes(v)
+        );
+
+        if (!sharedContextNode) {
+          console.warn(
+            `Non-natural kept sprite with id ${spriteModifier.id} will not animate because there is no shared animation context that encloses both it and its counterpart`
+          );
+          continue;
+        }
+
+        if (
+          ancestorsOfCounterpartSprite?.length < ancestorsOfKeptSprite?.length
+        ) {
+          highestLevelModifier = counterpartModifier;
+        }
+      }
+
+      unallocatedItems.push({ sprite, highestLevelModifier });
+    }
+
     for (let context of contexts) {
       if (context.isStable) {
         let changeset = new Changeset(context);
 
-        let spriteModifiersForContext = filterToContext(
-          this.spriteTree,
-          context,
-          spriteModifiers
-        );
+        let node = spriteTree.lookupNodeByElement(context.element);
+        let contextDescendants = node!
+          .getSpriteDescendants({ deep: true })
+          .map((v) => v.spriteModifier);
 
-        // add the sprites with counterparts here, if necessary
-        if (contextToKeptSpriteModifierMap.has(context)) {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          for (let modifier of contextToKeptSpriteModifierMap.get(context)!) {
-            spriteModifiersForContext.add(modifier);
+        let _next = [];
+        let itemsForContext: {
+          sprite: Sprite;
+          highestLevelModifier: ISpriteModifier;
+        }[] = [];
+        for (let item of unallocatedItems) {
+          if (contextDescendants.includes(item.highestLevelModifier)) {
+            itemsForContext.push(item);
+          } else {
+            _next.push(item);
           }
         }
+        unallocatedItems = _next;
 
-        for (let spriteModifier of spriteModifiersForContext) {
-          let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
-          let counterpartModifier =
-            spriteModifierToCounterpartModifierMap.get(spriteModifier);
-          let intermediateSprite = intermediateSprites.get(
-            sprite.identifier.toString()
-          );
-
-          this.setSpriteOwnBounds(
+        for (let { highestLevelModifier, sprite } of itemsForContext) {
+          this.setSpriteEnvironmentBounds(
             sprite,
-            spriteModifier,
-            counterpartModifier,
-            intermediateSprite
+            highestLevelModifier,
+            context
           );
-          this.setSpriteEnvironmentBounds(sprite, spriteModifier, context);
           this.addSpriteTo(changeset, sprite);
         }
 
@@ -232,11 +264,6 @@ export class ChangesetBuilder {
     let spriteModifierToCounterpartModifierMap = new Map<
       ISpriteModifier,
       ISpriteModifier
-    >();
-    // non-natural kept sprites only
-    let contextToKeptSpriteModifierMap = new WeakMap<
-      IContext,
-      Set<ISpriteModifier>
     >();
 
     // Classify non-natural KeptSprites
@@ -279,19 +306,6 @@ export class ChangesetBuilder {
       if (counterpartSpriteModifier) {
         classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
 
-        // Find a stable shared ancestor ContextModel
-        let sharedContext = this.spriteTree.findStableSharedAncestor(
-          insertedSpriteModifier,
-          counterpartSpriteModifier
-        );
-
-        if (!sharedContext) {
-          console.warn(
-            `Non-natural kept sprite with id ${insertedSpriteModifier.id} will not animate because there is no shared animation context that encloses both it and its counterpart`
-          );
-          continue;
-        }
-
         let keptSprite = new Sprite(
           insertedSpriteModifier.element as HTMLElement,
           insertedSpriteModifier.id,
@@ -310,16 +324,7 @@ export class ChangesetBuilder {
           insertedSpriteModifier,
           counterpartSpriteModifier
         );
-        if (contextToKeptSpriteModifierMap.has(sharedContext)) {
-          contextToKeptSpriteModifierMap
-            .get(sharedContext)
-            ?.add(insertedSpriteModifier);
-        } else {
-          contextToKeptSpriteModifierMap.set(
-            sharedContext,
-            new Set([insertedSpriteModifier])
-          );
-        }
+        spriteModifiers.add(insertedSpriteModifier);
       }
     }
 
@@ -370,7 +375,6 @@ export class ChangesetBuilder {
       spriteModifiers,
       spriteModifierToSpriteMap,
       spriteModifierToCounterpartModifierMap,
-      contextToKeptSpriteModifierMap,
     };
   }
 

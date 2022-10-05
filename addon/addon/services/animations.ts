@@ -23,10 +23,7 @@ import {
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
-import {
-  filterToContext,
-  ChangesetBuilder,
-} from 'animations-experiment/models/changeset';
+import { ChangesetBuilder } from 'animations-experiment/models/changeset';
 
 export type AnimateFunction = (
   sprite: Sprite,
