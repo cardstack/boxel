@@ -2,7 +2,7 @@ import { BoundsVelocity } from '../utils/measurement';
 
 type ContextAwareBoundsConstructorArgs = {
   element: DOMRect;
-  contextElement: DOMRect;
+  contextElement?: DOMRect;
   parent?: DOMRect;
 };
 
@@ -24,9 +24,9 @@ export type BoundsDelta = {
 };
 
 export default class ContextAwareBounds {
-  element: DOMRect;
-  context: DOMRect;
-  parent: DOMRect | undefined;
+  element: DOMRectReadOnly;
+  context: DOMRectReadOnly | undefined;
+  parent: DOMRectReadOnly | undefined;
   velocity: BoundsVelocity = {
     x: 0,
     y: 0,
@@ -39,12 +39,25 @@ export default class ContextAwareBounds {
     contextElement,
     parent,
   }: ContextAwareBoundsConstructorArgs) {
-    this.element = element;
-    this.context = contextElement;
-    this.parent = parent;
+    this.element = DOMRectReadOnly.fromRect(element);
+    if (contextElement) this.context = DOMRectReadOnly.fromRect(contextElement);
+    if (parent) this.parent = DOMRectReadOnly.fromRect(parent);
+  }
+
+  within({
+    parent,
+    contextElement,
+  }: Pick<ContextAwareBoundsConstructorArgs, 'contextElement' | 'parent'>) {
+    return new ContextAwareBounds({
+      element: this.element,
+      parent,
+      contextElement,
+    });
   }
 
   get relativeToContext(): DOMRect {
+    if (!this.context)
+      throw new Error('context not yet set on ContextAwareBounds');
     let { element, context } = this;
     return new DOMRect(
       element.left - context.left,
