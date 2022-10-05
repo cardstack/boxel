@@ -2,7 +2,7 @@ import { contains, field, Card, Component } from 'https://cardstack.com/base/car
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import BooleanCard from 'https://cardstack.com/base/boolean';
-import { attachStyles } from '@cardstack/runtime-common';
+import { attachStyles } from 'https://cardstack.com/base/attach-styles';
 
 let sheet: CSSStyleSheet | undefined;
 if (typeof CSSStyleSheet !== 'undefined') {
