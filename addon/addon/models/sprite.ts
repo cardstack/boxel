@@ -65,6 +65,32 @@ export default class Sprite {
     this.time = new Date().getTime();
   }
 
+  within(options: {
+    parent: {
+      currentBounds?: DOMRect;
+      lastBounds?: DOMRect;
+    };
+    contextElement: {
+      currentBounds?: DOMRect;
+      lastBounds?: DOMRect;
+    };
+  }) {
+    this.initialBounds = this.initialBounds?.within({
+      parent: options.parent.lastBounds,
+      contextElement: options.contextElement.lastBounds,
+    });
+
+    this.finalBounds = this.finalBounds?.within({
+      parent: options.parent.currentBounds,
+      contextElement: options.contextElement.currentBounds,
+    });
+
+    if (this.counterpart) {
+      this.counterpart.initialBounds = this.initialBounds;
+      this.counterpart.finalBounds = this.finalBounds;
+    }
+  }
+
   get id(): string | null {
     return this.identifier.id;
   }
