@@ -116,16 +116,17 @@ export class ChangesetBuilder {
 
   constructor(
     spriteTree: SpriteTree,
-    contexts: Set<IContext>,
+    contextSet: Set<IContext>,
     freshlyAdded: Set<ISpriteModifier>,
     freshlyRemoved: Set<ISpriteModifier>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
+    let contextArray = [...contextSet];
     this.spriteTree = spriteTree;
 
     // Capture snapshots & lookup natural KeptSprites
     let naturalKept: Set<ISpriteModifier> = new Set();
-    for (let context of contexts) {
+    for (let context of contextArray) {
       context.captureSnapshot();
       let contextNode = this.spriteTree.lookupNodeByElement(context.element);
       let contextChildren: ISpriteModifier[] = contextNode!
@@ -158,7 +159,9 @@ export class ChangesetBuilder {
 
     let unallocatedItems: {
       sprite: Sprite;
-      highestLevelModifier: ISpriteModifier;
+      nodes: SpriteTreeNode[];
+      mainNode: SpriteTreeNode;
+      highestNode: SpriteTreeNode;
     }[] = [];
     for (let spriteModifier of spriteModifiers) {
       let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
@@ -175,16 +178,20 @@ export class ChangesetBuilder {
         intermediateSprite
       );
 
-      let highestLevelModifier = spriteModifier;
+      let mainNode =
+        sprite.type === SpriteType.Removed
+          ? this.spriteTree.lookupRemovedNode(spriteModifier)!
+          : this.spriteTree.lookupNodeByElement(spriteModifier.element)!;
+      let highestNode = mainNode;
+      let nodes = [mainNode];
       if (counterpartModifier) {
-        let ancestorsOfKeptSprite = this.spriteTree.lookupNodeByElement(
-          spriteModifier.element
-        )!.ancestors;
+        let ancestorsOfKeptSprite = mainNode.ancestors;
         let stableAncestorsOfKeptSprite = ancestorsOfKeptSprite.filter(
           (v) => v.contextModel?.isStable
         );
-        let ancestorsOfCounterpartSprite =
-          this.spriteTree.lookupRemovedNode(counterpartModifier)!.ancestors;
+        let counterpartNode =
+          this.spriteTree.lookupRemovedNode(counterpartModifier)!;
+        let ancestorsOfCounterpartSprite = counterpartNode.ancestors;
         let stableAncestorsOfCounterpartSprite =
           ancestorsOfCounterpartSprite?.filter((v) => v.contextModel?.isStable);
 
@@ -202,51 +209,79 @@ export class ChangesetBuilder {
         if (
           ancestorsOfCounterpartSprite?.length < ancestorsOfKeptSprite?.length
         ) {
-          highestLevelModifier = counterpartModifier;
+          nodes = [counterpartNode, mainNode];
+          highestNode = counterpartNode;
         }
+        nodes = [mainNode, counterpartNode];
       }
 
-      unallocatedItems.push({ sprite, highestLevelModifier });
+      unallocatedItems.push({ sprite, nodes, mainNode, highestNode });
     }
 
-    for (let context of contexts) {
+    // Sort top to bottom
+    contextArray.sort((a, b) => {
+      let bitmask = a.element.compareDocumentPosition(b.element);
+
+      assert(
+        'Sorting contexts - Document position of two compared contexts is implementation-specific or disconnected',
+        !(
+          bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
+          bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
+        )
+      );
+
+      return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
+
+    let stableContexts: IContext[] = [];
+    for (let context of contextArray) {
       if (context.isStable) {
-        let changeset = new Changeset(context);
-
-        let node = spriteTree.lookupNodeByElement(context.element);
-        let contextDescendants = node!
-          .getSpriteDescendants({ deep: true })
-          .map((v) => v.spriteModifier);
-
-        let _next = [];
-        let itemsForContext: {
-          sprite: Sprite;
-          highestLevelModifier: ISpriteModifier;
-        }[] = [];
-        for (let item of unallocatedItems) {
-          if (contextDescendants.includes(item.highestLevelModifier)) {
-            itemsForContext.push(item);
-          } else {
-            _next.push(item);
-          }
-        }
-        unallocatedItems = _next;
-
-        for (let { highestLevelModifier, sprite } of itemsForContext) {
-          this.setSpriteEnvironmentBounds(
-            sprite,
-            highestLevelModifier,
-            context
-          );
-          this.addSpriteTo(changeset, sprite);
-        }
-
-        this.contextToChangeset.set(context, changeset);
+        // apply rules
+        // let { claimed, remaining } = context.claim(unallocatedItems);
+        // If a sprite is matched by a rule, remove it from the unallocatedItems array
+        // unallocatedItems = remaining;
+        stableContexts.push(context);
       } else {
         // We already decided what contexts we're going to use for this render,
         // so we can mark new contexts for the next run.
         context.isInitialRenderCompleted = true;
       }
+    }
+
+    for (let context of stableContexts) {
+      let changeset = new Changeset(context);
+
+      let node = spriteTree.lookupNodeByElement(context.element);
+      let contextDescendants = node!
+        .getSpriteDescendants({ deep: true })
+        .map((v) => v.spriteModifier);
+
+      let _next = [];
+      let itemsForContext: {
+        sprite: Sprite;
+        nodes: SpriteTreeNode[];
+        mainNode: SpriteTreeNode;
+        highestNode: SpriteTreeNode;
+      }[] = [];
+      for (let item of unallocatedItems) {
+        if (contextDescendants.includes(item.highestNode.spriteModel!)) {
+          itemsForContext.push(item);
+        } else {
+          _next.push(item);
+        }
+      }
+      unallocatedItems = _next;
+
+      for (let { mainNode, sprite } of itemsForContext) {
+        // TODO: I don't think we can get this one right for sprites with counterparts
+        // until we can tell that someone wants to use a counterpart/clone
+        // and in that case, setting the parent of the node should happen only when
+        // running the AnimationDefinition/transition function
+        this.setSpriteEnvironmentBounds(sprite, mainNode, context);
+        this.addSpriteTo(changeset, sprite);
+      }
+
+      this.contextToChangeset.set(context, changeset);
     }
   }
 
@@ -380,12 +415,9 @@ export class ChangesetBuilder {
 
   setSpriteEnvironmentBounds(
     sprite: Sprite,
-    spriteModifier: ISpriteModifier,
+    spriteNode: SpriteTreeNode,
     context: IContext
   ) {
-    let spriteNode =
-      this.spriteTree.lookupNodeByElement(sprite.element) ??
-      this.spriteTree.freshlyRemovedToNode.get(spriteModifier);
     let parentNode = spriteNode!.parent;
     let parent = parentNode.contextModel ?? parentNode.spriteModel!;
 
