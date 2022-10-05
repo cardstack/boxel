@@ -1,10 +1,11 @@
 import Component from '@glimmer/component';
-import { getCardRefsForModule } from '../resources/card-refs';
 import Schema from './schema';
+import ImportModule from './import-module';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -14,13 +15,19 @@ interface Signature {
 
 export default class Module extends Component<Signature> {
   <template>
-    {{#each this.cardRefs.refs as |ref|}}
-      <Schema @ref={{ref}} @file={{this.args.file}} @moduleSyntax={{this.moduleSyntax}} />
-    {{/each}}
+    <ImportModule @url={{this.args.file.url}}>
+      <:ready as |module|>
+        {{#each (cardsFromModule module) as |card|}}
+          <Schema @card={{card}} @file={{this.args.file}} @moduleSyntax={{this.moduleSyntax}}/>
+        {{/each}}
+      </:ready>
+      <:error as |error|>
+        <h2>Encountered {{error.type}} error</h2>
+        <pre>{{error.message}}</pre>
+      </:error>
+    </ImportModule>
   </template>
 
-  cardRefs = getCardRefsForModule(this, () => this.args.file.url);
-  
   @cached
   get moduleSyntax() {
     if (this.args.file.state !== 'ready') {
@@ -28,4 +35,9 @@ export default class Module extends Component<Signature> {
     }
     return new ModuleSyntax(this.args.file.content);
   }
+}
+
+function cardsFromModule(module: Record<string, any>): (typeof Card)[] {
+  return Object.values(module).filter((maybeCard) =>
+    typeof maybeCard === "function" && "baseCard" in maybeCard);
 }

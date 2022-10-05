@@ -5,7 +5,7 @@ import waitUntil from '@ember/test-helpers/wait-until';
 import { cleanWhiteSpace, testRealmURL, shimModule } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
-import { shadowQuerySelector, shadowQuerySelectorAll, shadowFillIn } from '../../helpers/shadow-assert';
+import { shadowQuerySelector, shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -481,7 +481,7 @@ module('Integration | computeds', function (hooks) {
 
     await renderCard(person, 'edit');
     assert.shadowDOM('[data-test-field="slowName"]').containsText('Mango');
-    await shadowFillIn('[data-test-field="firstName"] input', 'Van Gogh');
+    await fillIn('[data-test-field="firstName"] input', 'Van Gogh');
     // We want to ensure data consistency, so that when the template rerenders,
     // the template is always showing consistent field values
     await waitUntil(() =>
@@ -490,7 +490,7 @@ module('Integration | computeds', function (hooks) {
     assert.shadowDOM('[data-test-field="slowName"]').containsText('Van Gogh');
 
     assert.shadowDOM('[data-test-field="slowHomeTown"] span').containsText('Bronxville');
-    await shadowFillIn('[data-test-field="homeTown"] input', 'Scarsdale');
+    await fillIn('[data-test-field="homeTown"] input', 'Scarsdale');
     await waitUntil(() =>
       shadowQuerySelector('[data-test-dep-field="homeTown"]')?.textContent?.includes('Scarsdale')
     );

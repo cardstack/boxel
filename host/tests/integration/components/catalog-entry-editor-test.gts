@@ -8,9 +8,10 @@ import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import CatalogEntryEditor from 'runtime-spike/components/catalog-entry-editor';
 import Service from '@ember/service';
-import { waitUntil, click, waitFor } from '@ember/test-helpers';
+import waitUntil from '@ember/test-helpers/wait-until';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
-import { shadowWaitFor, shadowFillIn, shadowClick } from '../../helpers/shadow-assert';
+import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
+import type LoaderService from 'runtime-spike/services/loader-service';
 
 class MockLocalRealm extends Service {
   isAvailable = true;
@@ -38,22 +39,16 @@ module('Integration | catalog-entry-editor', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function() {
-    Loader.destroy();
+    // this seeds the loader used during index which obtains url mappings
+    // from the global loader
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-
-    // We have a bit of a chicken and egg problem here in that in order for us
-    // to short circuit the fetch we need a Realm instance, however, we can't
-    // create a realm instance without first doing a full index which will load
-    //  cards for any instances it find which results in a fetch. so we create
-    // an empty index, and then just use realm.write() to incrementally add
-    // items into our index.
     adapter = new TestRealmAdapter({});
-
     realm = TestRealm.createWithAdapter(adapter);
-    Loader.addRealmFetchOverride(realm);
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
+    loader.addRealmFetchOverride(realm);
     await realm.ready;
 
     await realm.write('person.gts', `
@@ -108,7 +103,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await waitFor('button[data-test-catalog-entry-publish]');
     await click('[data-test-catalog-entry-publish]');
-    await shadowWaitFor('[data-test-ref]');
+    await waitFor('[data-test-ref]');
 
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry for Pet card');
@@ -116,11 +111,11 @@ module('Integration | catalog-entry-editor', function (hooks) {
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').hasText('');
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(2) input').isChecked();
 
-    await shadowFillIn('[data-test-field="title"] input', 'Pet test', document.querySelector('[data-test-catalog-entry-editor]')!);
-    await shadowFillIn('[data-test-field="description"] input', 'Test description');
-    await shadowFillIn('[data-test-field="name"] input', 'Jackie');
-    await shadowClick('[data-test-field="lovesWalks"] label:nth-of-type(1) input');
-    await shadowFillIn('[data-test-field="firstName"] input', 'BN');
+    await fillIn('[data-test-field="title"] input', 'Pet test');
+    await fillIn('[data-test-field="description"] input', 'Test description');
+    await fillIn('[data-test-field="name"] input', 'Jackie');
+    await click('[data-test-field="lovesWalks"] label:nth-of-type(1) input');
+    await fillIn('[data-test-field="firstName"] input', 'BN');
     await click('button[data-test-save-card]');
 
     await deferred.promise; // wait for the component to transition on save
@@ -216,7 +211,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     );
 
-    await shadowWaitFor('[data-test-ref]');
+    await waitFor('[data-test-ref]');
 
     assert.dom('[data-test-catalog-entry-id]').hasText(`${testRealmURL}pet-catalog-entry`);
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
@@ -226,10 +221,10 @@ module('Integration | catalog-entry-editor', function (hooks) {
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(1) input').isChecked();
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="owner"] [data-test-field="firstName"] input').hasValue('BN');
 
-    await shadowFillIn('[data-test-field="title"] input', 'test title');
-    await shadowFillIn('[data-test-field="description"] input', 'test description');
-    await shadowFillIn('[data-test-field="name"] input', 'Jackie Wackie');
-    await shadowFillIn('[data-test-field="firstName"] input', 'EA');
+    await fillIn('[data-test-field="title"] input', 'test title');
+    await fillIn('[data-test-field="description"] input', 'test description');
+    await fillIn('[data-test-field="name"] input', 'Jackie Wackie');
+    await fillIn('[data-test-field="firstName"] input', 'EA');
 
     await click('button[data-test-save-card]');
     await waitUntil(() => !(document.querySelector('[data-test-saving]')));
@@ -269,9 +264,9 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await waitFor('button[data-test-catalog-entry-publish]');
     await click('[data-test-catalog-entry-publish]');
-    await shadowWaitFor('[data-test-ref]');
+    await waitFor('[data-test-ref]');
 
-    await shadowFillIn('[data-test-field="name"] input', 'Jackie');
+    await fillIn('[data-test-field="name"] input', 'Jackie');
     await click('button[data-test-save-card]');
 
     await deferred.promise; // wait for the component to transition on save

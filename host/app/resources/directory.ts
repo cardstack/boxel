@@ -7,7 +7,7 @@ import { taskFor } from 'ember-concurrency-ts';
 import flatMap from 'lodash/flatMap';
 import { DirectoryEntryRelationship } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { Loader } from '@cardstack/runtime-common/loader';
+import LoaderService from '../services/loader-service';
 import LocalRealm from '../services/local-realm';
 
 interface Args {
@@ -28,6 +28,7 @@ export class DirectoryResource extends Resource<Args> {
   private realmPath: RealmPaths;
 
   @service declare localRealm: LocalRealm;
+  @service declare loaderService: LoaderService;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
@@ -52,7 +53,7 @@ export class DirectoryResource extends Resource<Args> {
     if (!this.url) {
       return;
     }
-    let entries = await getEntries(this.realmPath, this.url);
+    let entries = await this.getEntries(this.realmPath, this.url);
     entries.sort((a, b) => {
       // need to re-insert the leading and trailing /'s in order to get a sort
       // that can organize the paths correctly
@@ -62,54 +63,54 @@ export class DirectoryResource extends Resource<Args> {
     });
     this.entries = entries;
   }
+
+  // TODO when we want to include actual real file-tree behavior, let's stop
+  // recursing blindly into directories
+  private async getEntries(
+    realmPath: RealmPaths,
+    url: string
+  ): Promise<Entry[]> {
+    let response: Response | undefined;
+    response = await this.loaderService.loader.fetch(url, {
+      headers: { Accept: 'application/vnd.api+json' },
+    });
+    if (!response.ok) {
+      // the server takes a moment to become ready do be tolerant of errors at boot
+      console.log(
+        `Could not get directory listing ${url}, status ${response.status}: ${
+          response.statusText
+        } - ${await response.text()}`
+      );
+      return [];
+    }
+    let {
+      data: { relationships },
+    } = await response.json();
+
+    let newEntries: Entry[] = Object.entries(relationships).map(
+      ([name, info]: [string, DirectoryEntryRelationship]) => ({
+        name,
+        kind: info.meta.kind,
+        path: realmPath.local(new URL(info.links.related)),
+        indent:
+          new URL(info.links.related).pathname.replace(/\/$/, '').split('/')
+            .length - 1,
+      })
+    );
+    let nestedDirs = flatMap(
+      Object.values(relationships) as DirectoryEntryRelationship[],
+      (rel) => (rel.meta.kind === 'directory' ? [rel.links.related] : [])
+    );
+    let nestedEntries: Entry[] = [];
+    for (let dir of nestedDirs) {
+      nestedEntries.push(...(await this.getEntries(realmPath, dir)));
+    }
+    return [...newEntries, ...nestedEntries];
+  }
 }
 
 export function directory(parent: object, url: () => string | undefined) {
   return useResource(parent, DirectoryResource, () => ({
     named: { url: url() },
   }));
-}
-
-// TODO when we want to include actual real file-tree behavior, let's stop
-// recursing blindly into directories
-async function getEntries(
-  realmPath: RealmPaths,
-  url: string
-): Promise<Entry[]> {
-  let response: Response | undefined;
-  response = await Loader.fetch(url, {
-    headers: { Accept: 'application/vnd.api+json' },
-  });
-  if (!response.ok) {
-    // the server takes a moment to become ready do be tolerant of errors at boot
-    console.log(
-      `Could not get directory listing ${url}, status ${response.status}: ${
-        response.statusText
-      } - ${await response.text()}`
-    );
-    return [];
-  }
-  let {
-    data: { relationships },
-  } = await response.json();
-
-  let newEntries: Entry[] = Object.entries(relationships).map(
-    ([name, info]: [string, DirectoryEntryRelationship]) => ({
-      name,
-      kind: info.meta.kind,
-      path: realmPath.local(new URL(info.links.related)),
-      indent:
-        new URL(info.links.related).pathname.replace(/\/$/, '').split('/')
-          .length - 1,
-    })
-  );
-  let nestedDirs = flatMap(
-    Object.values(relationships) as DirectoryEntryRelationship[],
-    (rel) => (rel.meta.kind === 'directory' ? [rel.links.related] : [])
-  );
-  let nestedEntries: Entry[] = [];
-  for (let dir of nestedDirs) {
-    nestedEntries.push(...(await getEntries(realmPath, dir)));
-  }
-  return [...newEntries, ...nestedEntries];
 }

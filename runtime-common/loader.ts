@@ -70,7 +70,7 @@ export class Loader {
   static #instance: Loader | undefined;
   static loaders = new WeakMap<Function, Loader>();
 
-  private static getLoader() {
+  static getLoader() {
     if (!Loader.#instance) {
       Loader.#instance = new Loader();
     }
@@ -86,6 +86,14 @@ export class Loader {
     loader.urlMappings = globalLoader.urlMappings;
     loader.realmFetchOverride = globalLoader.realmFetchOverride;
     return loader;
+  }
+
+  static cloneLoader(loader: Loader): Loader {
+    let clone = new Loader();
+    clone.fileLoaders = loader.fileLoaders;
+    clone.urlMappings = loader.urlMappings;
+    clone.realmFetchOverride = loader.realmFetchOverride;
+    return clone;
   }
 
   static async import<T extends object>(moduleIdentifier: string): Promise<T> {
@@ -174,7 +182,12 @@ export class Loader {
     if (!module || module.state === "fetching") {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
-        await this.import(moduleIdentifier);
+        let m = await this.import<Record<string, any>>(moduleIdentifier);
+        if (m) {
+          for (let exportName of Object.keys(m)) {
+            m[exportName];
+          }
+        }
       } catch (err: any) {
         console.warn(
           `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`
@@ -226,6 +239,9 @@ export class Loader {
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
 
+    if (moduleIdentifier === "http://test-realm/test/test-cards") {
+      debugger;
+    }
     let shimmed = this.moduleShims.get(moduleIdentifier);
     if (shimmed) {
       return shimmed as T;

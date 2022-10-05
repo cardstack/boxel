@@ -7,11 +7,11 @@ import { Deferred } from "@cardstack/runtime-common/deferred";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import Service from '@ember/service';
-import { waitFor, click } from '@ember/test-helpers';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import CreateNewCard from 'runtime-spike/components/create-new-card';
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
-import { shadowWaitFor, shadowFillIn } from '../../helpers/shadow-assert';
+import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
+import type LoaderService from 'runtime-spike/services/loader-service';
 
 class MockLocalRealm extends Service {
   isAvailable = true;
@@ -39,22 +39,16 @@ module('Integration | create-new-card', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function() {
-    Loader.destroy();
+    // this seeds the loader used during index which obtains url mappings
+    // from the global loader
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-
-    // We have a bit of a chicken and egg problem here in that in order for us
-    // to short circuit the fetch we need a Realm instance, however, we can't
-    // create a realm instance without first doing a full index which will load
-    //  cards for any instances it find which results in a fetch. so we create
-    // an empty index, and then just use realm.write() to incrementally add
-    // items into our index.
     adapter = new TestRealmAdapter({});
-
     realm = TestRealm.createWithAdapter(adapter);
-    Loader.addRealmFetchOverride(realm);
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
+    loader.addRealmFetchOverride(realm);
     await realm.ready;
 
     await realm.write('person.gts', `
@@ -150,8 +144,7 @@ module('Integration | create-new-card', function (hooks) {
     );
 
     await click('[data-test-create-new-card-button]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await shadowWaitFor('[data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
 
     assert.dom('[data-test-card-catalog] li').exists({ count: 2 }, 'number of catalog items is correct');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`).exists('first item is correct');
@@ -160,9 +153,9 @@ module('Integration | create-new-card', function (hooks) {
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
     await waitFor(`[data-test-create-new-card="Person"]`);
-    await shadowWaitFor(`[data-test-field="firstName"] input`);
+    await waitFor(`[data-test-field="firstName"] input`);
 
-    await shadowFillIn('[data-test-field="firstName"] input', 'Jackie');
+    await fillIn('[data-test-field="firstName"] input', 'Jackie');
     await click('[data-test-save-card]');
 
     await deferred.promise; // wait for the component to transition on save
