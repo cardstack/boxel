@@ -11,7 +11,7 @@ export const attachStyles = modifier<{
       return;
     }
 
-    for (let rule of Array.from(sheet.cssRules)) {
+    for (let rule of Array.from(sheet.cssRules) as CSSStyleRule[]) {
       if (rule.selectorText === "this") {
         let className = sheetScopes.get(sheet);
         if (className == null) {

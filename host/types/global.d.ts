@@ -12,6 +12,11 @@ declare module 'runtime-spike/templates/*' {
 
 declare global {
   function showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
+
+  interface CSSStyleSheet {
+    replace(cssText: string): Promise<void>;
+    replaceSync(cssText: string): void;
+  }
 }
 
 declare module '@ember/component' {
