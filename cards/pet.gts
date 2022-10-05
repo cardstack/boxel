@@ -2,26 +2,15 @@ import { contains, field, Card, Component } from 'https://cardstack.com/base/car
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import BooleanCard from 'https://cardstack.com/base/boolean';
-import { attachStyles } from 'https://cardstack.com/base/attach-styles';
+import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
-let sheet: CSSStyleSheet | undefined;
-if (typeof CSSStyleSheet !== 'undefined') {
-  sheet = new CSSStyleSheet();
-  sheet.replaceSync(`
-    this {
-      border: 1px solid gray;
-      border-radius: 10px;
-      background-color: #fdfcdc;
-      padding: 1rem;
-    }
-  `);
-}
-
-class Embedded extends Component<typeof Pet> {
-  <template>
-    <div {{attachStyles sheet}}><@fields.firstName/></div>
-  </template>
-}
+let css =`
+this {
+  border: 1px solid gray;
+  border-radius: 10px;
+  background-color: #fdfcdc;
+  padding: 1rem;
+}`;
 
 export class Pet extends Card {
   @field firstName = contains(StringCard);
@@ -29,5 +18,17 @@ export class Pet extends Card {
   @field favoriteTreat = contains(StringCard);
   @field cutenessRating = contains(IntegerCard);
   @field sleepsOnTheCouch = contains(BooleanCard);
-  static embedded = Embedded;
+  
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <div {{attachStyles @model.styleSheet}}><@fields.firstName/></div>
+    </template>
+  };
+
+  sheet = initStyleSheet(css);
+
+  get styleSheet() {
+    this.sheet?.replaceSync(css);
+    return this.sheet;
+  }
 }

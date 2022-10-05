@@ -87,7 +87,7 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["@ember/component", ["setComponentTemplate", "default"]],
   ["@ember/component/template-only", ["default"]],
   ["@ember/template-factory", ["createTemplateFactory"]],
-  ["@glimmer/tracking", ["tracked"]],
+  ["@glimmer/tracking", ["tracked", "cached"]],
   ["@ember/object", ["action", "get"]],
   ["@ember/helper", ["get", "fn"]],
   ["@ember/modifier", ["on"]],

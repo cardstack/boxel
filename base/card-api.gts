@@ -10,7 +10,7 @@ import { Deferred, isCardResource, Loader } from '@cardstack/runtime-common';
 import { flatten } from "flat";
 import type { LooseCardResource } from '@cardstack/runtime-common';
 import ShadowDOM from 'https://cardstack.com/base/shadow-dom';
-
+import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -511,40 +511,42 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Re
 }
 
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
+  css = `
+    .default-edit {
+      background-color: white;
+    }
+    .default-edit label,
+    .default-edit .field {
+      display: block;
+      padding: 0.75rem;
+      text-transform: capitalize;
+      border: 1px solid gray;
+      margin-top: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .default-edit input[type=text],
+    .default-edit input[type=number] {
+      box-sizing: border-box;
+      width: 100%;
+      margin-top: .5rem;
+      display: block;
+      padding: 0.5rem;
+      font: inherit;
+    }
+    .default-edit textarea {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 5rem;
+      margin-top: .5rem;
+      display: block;
+      padding: 0.5rem;
+      font: inherit;
+    }
+  `;
+  styleSheet = initStyleSheet(this.css);
+
   <template>
-    <style>
-      .default-edit {
-        background-color: white;
-      }
-      .default-edit label,
-      .default-edit .field {
-        display: block;
-        padding: 0.75rem;
-        text-transform: capitalize;
-        border: 1px solid gray;
-        margin-top: 0.5rem;
-        margin-bottom: 0.5rem;
-      }
-      .default-edit input[type=text],
-      .default-edit input[type=number] {
-        box-sizing: border-box;
-        width: 100%;
-        margin-top: .5rem;
-        display: block;
-        padding: 0.5rem;
-        font: inherit;
-      }
-      .default-edit textarea {
-        box-sizing: border-box;
-        width: 100%;
-        min-height: 5rem;
-        margin-top: .5rem;
-        display: block;
-        padding: 0.5rem;
-        font: inherit;
-      }
-    </style>
-    <div class="default-edit">
+    <div {{attachStyles this.styles}} class="default-edit">
       {{#each-in @fields as |key Field|}}
         <label data-test-field={{key}}>
           {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
@@ -554,6 +556,11 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
       {{/each-in}}
     </div>
   </template>;
+
+  get styles() {
+    this.styleSheet?.replaceSync(this.css);
+    return this.styleSheet;
+  }
 }
 
 const defaultComponent = {

@@ -3,6 +3,15 @@ import { modifier } from "ember-modifier";
 const sheetScopes = new WeakMap();
 let scopeCounter = 0;
 
+export function initStyleSheet(cssText: string) {
+  let sheet: CSSStyleSheet | undefined;
+  if (typeof CSSStyleSheet !== "undefined") {
+    sheet = new CSSStyleSheet();
+    sheet.replaceSync(cssText);
+  }
+  return sheet;
+}
+
 export const attachStyles = modifier<{
   Args: { Positional: [CSSStyleSheet | undefined] };
 }>(
