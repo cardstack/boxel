@@ -1,4 +1,5 @@
 import { CardResource } from "./search-index";
+export { attachStyles } from "./attach-styles";
 
 // a card resource but with optional "id" and "type" props
 export type LooseCardResource = Omit<CardResource, "id" | "type"> & {
@@ -81,7 +82,14 @@ export const isNode =
 export const externalsMap: Map<string, string[]> = new Map([
   [
     "@cardstack/runtime-common",
-    ["Loader", "Deferred", "isCardResource", "chooseCard", "baseCardRef"],
+    [
+      "Loader",
+      "Deferred",
+      "isCardResource",
+      "chooseCard",
+      "baseCardRef",
+      "attachStyles",
+    ],
   ],
   ["@glimmer/component", ["default"]],
   ["@ember/component", ["setComponentTemplate", "default"]],
