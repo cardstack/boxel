@@ -506,38 +506,39 @@ let cardCSS = `
   this {
     border: 1px solid gray;
     border-radius: 10px;
-    background-color: var(--background-color, white);
+    background-color: var(--background-color, #e9e7e7);
     padding: 1rem;
   }
 `;
 let editCSS = `
-  * + * {
-    margin-top: 0.5rem;
-  }
-  label,
-  .field {
+  .edit-field {
     display: block;
     padding: 0.75rem;
     text-transform: capitalize;
+    background-color: #ffffff6e;
     border: 1px solid gray;
   }
   input[type=text],
   input[type=number] {
     box-sizing: border-box;
+    background-color: transparent;
     width: 100%;
     margin-top: .5rem;
     display: block;
     padding: 0.5rem;
     font: inherit;
+    border: inherit;
   }
   textarea {
     box-sizing: border-box;
+    background-color: transparent;
     width: 100%;
     min-height: 5rem;
     margin-top: .5rem;
     display: block;
     padding: 0.5rem;
     font: inherit;
+    border: inherit;
   }
 `;
  
@@ -556,7 +557,7 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
   <template>
     <div {{attachStyles editStyles}}>
       {{#each-in @fields as |key Field|}}
-        <label data-test-field={{key}}>
+        <label class="edit-field" data-test-field={{key}}>
           {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
           {{startCase key}}
           <Field />

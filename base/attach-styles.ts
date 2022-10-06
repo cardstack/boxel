@@ -21,7 +21,6 @@ export const attachStyles = modifier<{
     }
 
     let className = sheetScopes.get(sheet);
-
     for (let rule of Array.from(sheet.cssRules) as CSSStyleRule[]) {
       if (rule.selectorText === "this") {
         if (className == null) {
@@ -40,10 +39,10 @@ export const attachStyles = modifier<{
     while (current) {
       if ("adoptedStyleSheets" in current) {
         let root = current;
-        root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+        root.adoptedStyleSheets = [...root.adoptedStyleSheets!, sheet];
         return () => {
-          let newSheets = [...root.adoptedStyleSheets];
-          newSheets.splice(root.adoptedStyleSheets.indexOf(sheet), 1);
+          let newSheets = [...root.adoptedStyleSheets!];
+          newSheets.splice(root.adoptedStyleSheets!.indexOf(sheet), 1);
           root.adoptedStyleSheets = newSheets;
         };
       }

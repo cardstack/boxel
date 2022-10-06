@@ -12,27 +12,39 @@ let css = `
   this {
     display: contents;
   }
-  * + * {
+  .demo {
     margin-top: 1rem;
   }
-  label,
-  .field {
+`;
+
+let editCSS = `
+  :host {
+    --background-color: #cbf3f0;
+  }
+  this {
+    display: contents;
+  }
+  .edit-field {
     display: block;
     padding: 0.75rem;
     text-transform: capitalize;
     background-color: #ffffff6e;
     border: 1px solid gray;
   }
-  input[type=text]{
+  input[type=text] {
     box-sizing: border-box;
+    background-color: transparent;
     width: 100%;
+    margin-top: .5rem;
     display: block;
     padding: 0.5rem;
     font: inherit;
+    border: inherit;
   }
 `;
 
-let styleSheet = initStyleSheet(css);
+let styles = initStyleSheet(css);
+let editStyles = initStyleSheet(editCSS);
 
 export class CatalogEntry extends Card {
   @field title = contains(StringCard);
@@ -57,17 +69,17 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div {{attachStyles styleSheet}}>
-        <label data-test-field="title">Title
+      <div {{attachStyles editStyles}}>
+        <label class="edit-field" data-test-field="title">Title
           <@fields.title/>
         </label>
-        <label data-test-field="description">Description
+        <label class="edit-field" data-test-field="description">Description
           <@fields.description/>
         </label>
-        <div class="field" data-test-field="ref">Ref
+        <div class="edit-field" data-test-field="ref">Ref
           <@fields.ref/>
         </div>
-        <div class="field" data-test-field="demo">Demo
+        <div class="edit-field" data-test-field="demo">Demo
           <@fields.demo/>
         </div>
       </div>
@@ -76,7 +88,7 @@ export class CatalogEntry extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div {{attachStyles styleSheet}}>
+      <div {{attachStyles styles}}>
         <h2><@fields.title/></h2>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
@@ -88,7 +100,7 @@ export class CatalogEntry extends Card {
   
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div {{attachStyles styleSheet}}>
+      <div {{attachStyles styles}}>
         <h1 data-test-title><@fields.title/></h1>
         <p data-test-description><em><@fields.description/></em></p>
         <div><@fields.ref/></div>

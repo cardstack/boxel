@@ -17,7 +17,7 @@ declare global {
     replaceSync(cssText: string): void;
   }
   interface Node {
-    adoptedStyleSheets: CSSStyleSheet[];
+    adoptedStyleSheets?: CSSStyleSheet[];
   }
 }
 
