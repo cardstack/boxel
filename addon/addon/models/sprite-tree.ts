@@ -154,22 +154,18 @@ export class SpriteTreeNode {
           isRemoved: false,
           spriteModifier: child.spriteModel,
         });
+      }
 
-        if (!child.isContext()) {
-          child
-            .getSpriteDescendants({ deep: opts.deep })
-            .forEach((c) => result.push(c));
-        }
-      } else if (child.isContext()) {
+      if (child.isContext()) {
         if (opts.deep && !child.contextModel.isStable) {
           child
             .getSpriteDescendants({ deep: opts.deep })
             .forEach((c) => result.push(c));
         }
       } else {
-        throw new Error(
-          'Sprite tree node that is not child or context encountered'
-        );
+        child
+          .getSpriteDescendants({ deep: opts.deep })
+          .forEach((c) => result.push(c));
       }
     }
 
@@ -180,22 +176,18 @@ export class SpriteTreeNode {
           isRemoved: true,
           spriteModifier: child.spriteModel,
         });
+      }
 
-        if (!child.isContext()) {
-          child
-            .getSpriteDescendants({ deep: opts.deep })
-            .forEach((c) => result.push(c));
-        }
-      } else if (child.isContext()) {
+      if (child.isContext()) {
         if (opts.deep && !child.contextModel.isStable) {
           child
             .getSpriteDescendants({ deep: opts.deep })
             .forEach((c) => result.push(c));
         }
       } else {
-        throw new Error(
-          'Sprite tree node that is not child or context encountered'
-        );
+        child
+          .getSpriteDescendants({ deep: opts.deep })
+          .forEach((c) => result.push(c));
       }
     }
 
