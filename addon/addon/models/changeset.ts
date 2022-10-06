@@ -188,7 +188,6 @@ export class ChangesetBuilder {
           ? this.spriteTree.lookupRemovedNode(spriteModifier)!
           : this.spriteTree.lookupNodeByElement(spriteModifier.element)!;
       let highestNode = mainNode;
-      let nodes = [mainNode];
       let parentNode = mainNode.parent as SpriteTreeNode;
 
       // If this ever is the root of the sprite tree, then something's gone wrong
@@ -223,10 +222,8 @@ export class ChangesetBuilder {
         if (
           ancestorsOfCounterpartSprite?.length < ancestorsOfKeptSprite?.length
         ) {
-          nodes = [counterpartNode, mainNode];
           highestNode = counterpartNode;
         }
-        nodes = [mainNode, counterpartNode];
       }
 
       unallocatedItems.push({
