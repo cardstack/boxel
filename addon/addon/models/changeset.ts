@@ -260,18 +260,35 @@ export class ChangesetBuilder {
         } else if (context.args.use instanceof Function) {
           animationDefinitionsPerContext.set(context, []);
         } else {
-          unallocatedItems.forEach(({ sprite, parentNode }) =>
+          let contextNode = this.spriteTree.lookupNodeByElement(
+            context.element
+          )!;
+          let descendants = contextNode.getDescendantNodes({
+            includeFreshlyRemoved: true,
+            filter: (_childNode: SpriteTreeNode) => true,
+          });
+          let setAside: UnallocatedItems[] = [];
+          let itemsForContext: UnallocatedItems[] = [];
+          unallocatedItems.forEach((item) => {
+            let { sprite, parentNode, highestNode } = item;
             sprite.within({
               parent: parentNode!.contextModel! ?? parentNode!.spriteModel!,
               contextElement: context,
-            })
-          );
+            });
+
+            if (descendants.includes(highestNode)) {
+              itemsForContext.push(item);
+            } else {
+              setAside.push(item);
+            }
+          });
           let animationDefinitions: AnimationDefinition[] = [];
           for (let rule of context.args.use.rules) {
-            let { claimed, remaining } = rule.match(unallocatedItems);
+            let { claimed, remaining } = rule.match(itemsForContext);
             animationDefinitions = animationDefinitions.concat(claimed);
-            unallocatedItems = remaining;
+            itemsForContext = remaining;
           }
+          unallocatedItems = itemsForContext.concat(setAside);
           animationDefinitionsPerContext.set(context, animationDefinitions);
         }
       } else {
