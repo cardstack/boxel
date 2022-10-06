@@ -36,6 +36,9 @@ export default class RoutesController extends Controller {
           removedSprite.initialBounds
         );
 
+        if (context.hasOrphan(removedSprite)) {
+          context.removeOrphan(removedSprite);
+        }
         context.appendOrphan(removedSprite);
         // TODO: either don't compensate for the animation in lockStyles
         //  or take it into account when calculating the animation.
@@ -87,6 +90,9 @@ export default class RoutesController extends Controller {
         removedSprite?.initialWidth && insertedSprite?.finalWidth
       );
 
+      if (context.hasOrphan(removedSprite)) {
+        context.removeOrphan(removedSprite);
+      }
       context.appendOrphan(removedSprite);
       removedSprite.lockStyles();
 
