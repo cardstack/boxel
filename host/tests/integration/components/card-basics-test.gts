@@ -189,7 +189,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('throws when setting the ID for a saved card', async function (assert) {
-    let { field, contains, Card, setSaved, isSaved } = cardApi;
+    let { field, contains, Card, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
 
     class Person extends Card {
@@ -197,17 +197,22 @@ module('Integration | card-basics', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { Person });
 
-    let mango = new Person({
+    // deserialize a card with an ID to mark it as "saved"
+    let savedCard = await createFromSerialized({
       id: `${testRealmURL}Person/mango`,
-      firstName: 'Mango'
-    });
-
-    assert.strictEqual(isSaved(mango), false, 'instance is not saved');
-    setSaved(mango);
-    assert.strictEqual(isSaved(mango), true, 'instance is saved');
+      attributes: {
+        firstName: 'Mango'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'Person'
+        }
+      }
+    }, undefined);
 
     try {
-      mango.id = 'boom';
+      savedCard.id = 'boom';
       throw new Error(`expected exception not thrown`);
     } catch (err: any) {
       assert.ok(err.message.match(/cannot assign a value to the field 'id' on the saved card/), 'exception thrown when setting ID of saved card');

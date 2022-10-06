@@ -126,6 +126,81 @@ module('Integration | serialization', function (hooks) {
     });
   });
 
+  test('can update an instance from serialized data', async function(assert) {
+    let { field, contains, Card, updateFromSerialized, isSaved } = cardApi;
+    let { default: StringCard} = string;
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+    await shimModule(`${realmURL}test-cards`, { Person });
+
+    let card = new Person({
+      id: `${realmURL}Person/mango`,
+      firstName: 'Mango'
+    });
+
+    assert.strictEqual(isSaved(card), false, 'card is not saved');
+
+    let result = await updateFromSerialized(card, {
+      id: `${realmURL}Person/vanGogh`,
+      attributes: {
+        firstName: 'Van Gogh',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Person'
+        }
+      }
+    });
+
+    assert.strictEqual(isSaved(card), true, 'card is saved');
+    assert.strictEqual(result, card, 'returns the same instance provided');
+    assert.strictEqual(card.id, `${realmURL}Person/vanGogh`, 'ID can be updated for unsaved instance');
+    assert.strictEqual(card.firstName, 'Van Gogh', 'the field can be updated');
+  });
+
+  test('throws when updating the id of a saved instance from serialized data', async function(assert) {
+    let { field, contains, Card, updateFromSerialized, createFromSerialized } = cardApi;
+    let { default: StringCard} = string;
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+    await shimModule(`${realmURL}test-cards`, { Person });
+
+    // deserialize a card with an ID to mark it as "saved"
+    let savedCard = await createFromSerialized({
+      id: `${realmURL}Person/mango`,
+      attributes: {
+        firstName: 'Mango'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Person'
+        }
+      }
+    }, undefined);
+
+    try {
+      await updateFromSerialized(savedCard, {
+        id: `${realmURL}Person/vanGogh`,
+        attributes: {
+          firstName: 'Van Gogh',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      });
+      throw new Error('expected error not thrown');
+    } catch (err: any) {
+      assert.ok(err.message.match(/cannot change the id for saved instance/), 'exception thrown when updating the ID of a saved card')
+    }
+  });
+
   test('deserialized card ref fields are not strict equal to serialized card ref', async function(assert) {
     let {field, contains, Card, Component, createFromSerialized } = cardApi;
     let { default: CardRefCard } = cardRef;

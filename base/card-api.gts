@@ -286,13 +286,6 @@ export function isSaved(instance: Card): boolean {
   return instance[isSavedInstance] === true;
 }
 
-// unsure if we want this... perhaps might aid in making new cards. although, in that 
-// case you might still want to deserialize responses from the server, in which case we
-// can use that as a trigger to set the saved state instead of an explicit function
-export function setSaved(instance: Card) {
-  instance[isSavedInstance] = true;
-}
-
 export function getQueryableValue(fieldCard: typeof Card, value: any): any {
   if ((primitive in fieldCard)) {
     let result = (fieldCard as any)[queryableValue](value);
@@ -388,30 +381,33 @@ export async function createFromSerialized<T extends CardConstructor>(CardClass:
 export async function createFromSerialized<T extends CardConstructor>(resource: LooseCardResource, relativeTo: URL | undefined, opts?: { loader?: Loader}): Promise<CardInstanceType<T>>;
 export async function createFromSerialized<T extends CardConstructor>(CardClassOrResource: T | LooseCardResource, dataOrRelativeTo?: any | URL, opts?: { loader?: Loader }): Promise<CardInstanceType<T>> {
   let CardClass: T;
-  let data: any;
+  let resource: any;
   let loader = opts?.loader ?? Loader;
   if (isCardResource(CardClassOrResource)){
     let relativeTo = dataOrRelativeTo instanceof URL ? dataOrRelativeTo : undefined;
     let { meta: { adoptsFrom } } = CardClassOrResource;
     let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);
     CardClass = module[adoptsFrom.name];
-    data = CardClassOrResource;
+    resource = CardClassOrResource;
   } else if ("baseCard" in CardClassOrResource) {
     CardClass = CardClassOrResource;
-    data = dataOrRelativeTo;
+    resource = dataOrRelativeTo;
   } else {
     throw new Error(`don't know how to serialize ${JSON.stringify(CardClassOrResource, null, 2)}`);
   }
 
   if (primitive in CardClass) {
-    return CardClass[deserialize](data);
+    return CardClass[deserialize](resource);
   }
-  if (!isCardResource(data)) {
-    throw new Error(`the provided serialized data is not a card resource: ${JSON.stringify(data)}`);
+  if (!isCardResource(resource)) {
+    throw new Error(`the provided serialized data is not a card resource: ${JSON.stringify(resource)}`);
   }
-  let resource = data;
+  return await updateFromSerialized(new CardClass() as CardInstanceType<T>, resource);
+}
 
+export async function updateFromSerialized<T extends CardConstructor>(instance: CardInstanceType<T>, resource: LooseCardResource): Promise<CardInstanceType<T>> {
   let deferred = new Deferred<Card>();
+  let CardClass = Reflect.getPrototypeOf(instance)!.constructor as T;
   let values = await Promise.all(
     Object.entries({
       ...resource.attributes,
@@ -434,19 +430,29 @@ export async function createFromSerialized<T extends CardConstructor>(CardClassO
         ];
       }
     )
-  ) as [keyof InstanceType<T>, any][];
-  let model = new CardClass() as InstanceType<T>;
-  for (let [fieldName, value] of values) {
-    model[fieldName] = value;
+  ) as [keyof CardInstanceType<T>, any][];
+  
+  // this block needs to be synchronous
+  {
+    let wasSaved = instance[isSavedInstance];
+    let originalId = instance.id;
+    instance[isSavedInstance] = false;
+    for (let [fieldName, value] of values) {
+      if (fieldName === 'id' && wasSaved && originalId !== value) {
+        throw new Error(`cannot change the id for saved instance ${originalId}`);
+      }
+      instance[fieldName] = value;
+    }
+    if (resource.id != null) {
+      // importantly, we place this synchronously after the assignment of the model's
+      // fields, such that subsequent assignment of the id field when the model is
+      // saved will throw
+      instance[isSavedInstance] = true;
+    }
   }
-  if (resource.id != null) {
-    // importantly, we place this synchronously after the assignment of the model's
-    // fields, such that subsequent assignment of the id field when the model is
-    // saved will throw
-    model[isSavedInstance] = true;
-  }
-  deferred.fulfill(model);
-  return model as CardInstanceType<T>;
+
+  deferred.fulfill(instance);
+  return instance;
 }
 
 export async function searchDoc<CardT extends CardConstructor>(model: InstanceType<CardT>): Promise<Record<string, any>> {
