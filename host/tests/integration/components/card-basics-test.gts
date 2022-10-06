@@ -172,6 +172,53 @@ module('Integration | card-basics', function (hooks) {
     assert.shadowDOM('[data-test="integer"]').containsText('10');
   });
 
+  test('can set the ID for an unsaved card', async function(assert) {
+    let { field, contains, Card } = cardApi;
+    let { default: StringCard} = string;
+    
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    let mango = new Person();
+    mango.id = `${testRealmURL}Person/mango`;
+    assert.strictEqual(mango.id, `${testRealmURL}Person/mango`);
+
+    let vanGogh = new Person({id: `${testRealmURL}Person/vanGogh`})
+    assert.strictEqual(vanGogh.id, `${testRealmURL}Person/vanGogh`);
+  });
+
+  test('throws when setting the ID for a saved card', async function (assert) {
+    let { field, contains, Card, createFromSerialized } = cardApi;
+    let { default: StringCard} = string;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person });
+
+    // deserialize a card with an ID to mark it as "saved"
+    let savedCard = await createFromSerialized({
+      id: `${testRealmURL}Person/mango`,
+      attributes: {
+        firstName: 'Mango'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'Person'
+        }
+      }
+    }, undefined);
+
+    try {
+      savedCard.id = 'boom';
+      throw new Error(`expected exception not thrown`);
+    } catch (err: any) {
+      assert.ok(err.message.match(/cannot assign a value to the field 'id' on the saved card/), 'exception thrown when setting ID of saved card');
+    }
+  });
+
   test('render cardRef field', async function (assert) {
     let {field, contains, Card, Component } = cardApi;
     let { default: CardRefCard } = cardRef;
