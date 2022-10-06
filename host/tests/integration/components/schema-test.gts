@@ -13,7 +13,7 @@ import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
-import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
+import { waitFor, fillIn, click, shadowQuerySelector } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
 
 class MockLocalRealm extends Service {
@@ -250,7 +250,7 @@ module('Integration | schema', function (hooks) {
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/integer-field`).exists('base realm primitive field displayed');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`).exists('base realm primitive field displayed');
 
-    assert.shadowDOM('[data-test-demo-embedded]').exists({ count: 1 }, 'demo card is not displayed for primitive fields');
+    assert.shadowDOM(`[data-test-demo-embedded]`, shadowQuerySelector('[data-test-card-catalog]')).exists({ count: 1 }, 'demo card is not displayed for primitive fields');
 
     // a "contains" field cannot be the same card as it's enclosing card
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`).doesNotExist('own card is not available to choose as a field');
