@@ -6,7 +6,7 @@ import Sprite, {
   SpriteType,
 } from '../models/sprite';
 import { assert } from '@ember/debug';
-import { IContext } from './sprite-tree';
+import { IContext, UseWithRules } from './sprite-tree';
 import { SpriteAnimation } from 'animations-experiment/models/sprite-animation';
 import Behavior, { FPS } from 'animations-experiment/behaviors/base';
 import { OrchestrationMatrix } from './orchestration-matrix';
@@ -47,16 +47,21 @@ export default class TransitionRunner {
     this.animationContext = animationContext;
   }
 
-  setupAnimations(definition: AnimationDefinition): SpriteAnimation[] {
-    let timeline = definition.timeline;
-    assert('No timeline present in AnimationDefinition', Boolean(timeline));
-    assert(
-      'Timeline can have either a sequence or a parallel definition, not both',
-      !(timeline.sequence && timeline.parallel)
-    );
-
-    let orchestrationMatrix = OrchestrationMatrix.fromTimeline(timeline);
+  setupAnimations(definitions: AnimationDefinition[]): SpriteAnimation[] {
     let result: SpriteAnimation[] = [];
+
+    let orchestrationMatrix = new OrchestrationMatrix();
+    for (let definition of definitions) {
+      let timeline = definition.timeline;
+      assert('No timeline present in AnimationDefinition', Boolean(timeline));
+      assert(
+        'Timeline can have either a sequence or a parallel definition, not both',
+        !(timeline.sequence && timeline.parallel)
+      );
+
+      orchestrationMatrix.add(0, OrchestrationMatrix.fromTimeline(timeline));
+    }
+
     for (let [sprite, keyframes] of orchestrationMatrix
       .getKeyframes((prev, incoming) => {
         return Object.assign({}, prev, ...incoming);
@@ -76,6 +81,7 @@ export default class TransitionRunner {
 
       result.push(animation);
     }
+
     return result;
   }
 
@@ -90,20 +96,44 @@ export default class TransitionRunner {
     //playUnrelatedAnimations();
 
     if (animationContext.shouldAnimate()) {
-      this.logChangeset(changeset, animationContext); // For debugging
-      // Note: some use() calls are async and return a Promise.
-      // yielding this is currently incorrect (I think), because we probably don't want to
-      // allow delaying animations by deferring the returning of an AnimationDefinition
-      // TODO: Convert all current demos to use AnimationDefinition
-      let animationDefinition = animationContext.args.use?.(changeset) as
-        | AnimationDefinition
-        | undefined;
+      if (animationContext.args.use instanceof Function) {
+        // this.logChangeset(changeset, animationContext); // For debugging
+        // Note: some use() calls are async and return a Promise.
+        // yielding this is currently incorrect (I think), because we probably don't want to
+        // allow delaying animations by deferring the returning of an AnimationDefinition
+        // TODO: Convert all current demos to use AnimationDefinition
+        let animationDefinition: AnimationDefinition | undefined =
+          (yield animationContext.args.use?.(changeset)) as
+            | AnimationDefinition
+            | undefined;
 
-      if (animationDefinition) {
-        // TODO: compile animation
-        let animations = this.setupAnimations(animationDefinition);
+        if (animationDefinition) {
+          // TODO: compile animation
+          let animations = this.setupAnimations([animationDefinition]);
+          let promises = animations.map((animation) => animation.finished);
+
+          animations.forEach((a) => {
+            a.play();
+          });
+
+          try {
+            yield Promise.resolve(Promise.all(promises));
+          } catch (error) {
+            console.error(error);
+            throw error;
+          }
+        }
+      } else {
+        let additionalDefinitions = [
+          (changeset.context.args.use as UseWithRules).handleRemainder!(
+            changeset
+          ),
+        ];
+        let animations = this.setupAnimations([
+          ...changeset.animationDefinitions,
+          ...additionalDefinitions,
+        ]);
         let promises = animations.map((animation) => animation.finished);
-
         animations.forEach((a) => {
           a.play();
         });

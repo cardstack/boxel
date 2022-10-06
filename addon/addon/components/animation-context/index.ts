@@ -9,7 +9,11 @@ import { action } from '@ember/object';
 import AnimationsService from 'animations-experiment/services/animations';
 import { assert } from '@ember/debug';
 import { getDocumentPosition } from 'animations-experiment/utils/measurement';
-import { IContext } from 'animations-experiment/models/sprite-tree';
+import {
+  IContext,
+  UseWithRules,
+} from 'animations-experiment/models/sprite-tree';
+import { AnimationDefinition } from 'animations-experiment/models/transition-runner';
 
 const { VOLATILE_TAG, consumeTag } =
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -18,7 +22,10 @@ const { VOLATILE_TAG, consumeTag } =
 
 interface AnimationContextArgs {
   id: string | undefined;
-  use: ((changeset: Changeset) => Promise<void>) | undefined;
+  use:
+    | ((changeset: Changeset) => Promise<void | AnimationDefinition>)
+    | UseWithRules
+    | undefined;
 }
 
 export default class AnimationContextComponent

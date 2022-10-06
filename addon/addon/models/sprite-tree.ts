@@ -2,7 +2,19 @@ import { assert } from '@ember/debug';
 import { CopiedCSS } from '../utils/measurement';
 import { formatTreeString, TreeNode } from '../utils/format-tree';
 import Sprite, { SpriteIdentifier } from './sprite';
-import { Changeset } from './changeset';
+import { Changeset, UnallocatedItems } from './changeset';
+import { AnimationDefinition } from 'animations-experiment/models/transition-runner';
+
+export interface UseWithRules {
+  rules: Rule[];
+  handleRemainder: ((changeset: Changeset) => AnimationDefinition) | undefined;
+}
+interface Rule {
+  match(unallocatedItems: UnallocatedItems[]): {
+    remaining: UnallocatedItems[];
+    claimed: AnimationDefinition[];
+  };
+}
 
 export interface IContext {
   id: string | undefined;
@@ -22,7 +34,10 @@ export interface IContext {
   appendOrphan(spriteOrElement: Sprite): void;
   clearOrphans(): void;
   args: {
-    use?(changeset: Changeset): Promise<void>;
+    use:
+      | ((changeset: Changeset) => Promise<void | AnimationDefinition>)
+      | UseWithRules
+      | undefined;
     id?: string;
   };
 }
