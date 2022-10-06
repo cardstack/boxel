@@ -837,6 +837,7 @@ module('Integration | card-basics', function (hooks) {
     assert.shadowDOM('[data-test-field="title"] input').hasValue('First Post');
     assert.shadowDOM('[data-test-field="reviews"] input').hasValue('1');
     assert.shadowDOM('[data-test-field="firstName"] input').hasValue('Arthur');
+    assert.shadowDOM('[data-test-field="id"] input').doesNotExist('contained card does not have an id input field');
 
     await fillIn('[data-test-field="title"] input', 'New Title');
     await fillIn('[data-test-field="reviews"] input', '5');
