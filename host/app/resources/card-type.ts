@@ -61,7 +61,7 @@ export class CardType extends Resource<Args> {
     }
 
     let api = await this.loader.import<CardAPI>(`${baseRealm.url}card-api`);
-    let fields = api.getFields(card);
+    let { id: remove, ...fields } = api.getFields(card);
     let superCard = Reflect.getPrototypeOf(card) as typeof Card | null;
     let superType: Type | undefined;
     if (superCard && card !== superCard) {
