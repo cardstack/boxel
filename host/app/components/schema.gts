@@ -21,7 +21,7 @@ import LoaderService from '../services/loader-service';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -109,7 +109,7 @@ export default class Schema extends Component<Signature> {
   @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
   @tracked newFieldName: string | undefined;
-  @tracked newFieldType: 'contains' | 'containsMany' = 'contains';
+  @tracked newFieldType: FieldType = 'contains';
 
   @cached
   get ref() {
@@ -192,7 +192,7 @@ export default class Schema extends Component<Signature> {
   }
 
   @action
-  setNewFieldType(fieldType: "contains" | "containsMany") {
+  setNewFieldType(fieldType: FieldType) {
     this.newFieldType = fieldType;
   }
 

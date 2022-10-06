@@ -4,7 +4,6 @@ import { NotReady, isNotReadyError} from './not-ready';
 import { flatMap, startCase, set, get } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
-import ContainsManyEditor from './contains-many';
 import { WatchedArray } from './watched-array';
 import { Deferred, isCardResource, Loader } from '@cardstack/runtime-common';
 import { flatten } from "flat";
@@ -37,6 +36,13 @@ type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => voi
 
 
 export type Format = 'isolated' | 'embedded' | 'edit';
+export type FieldType = 'contains' | 'containsMany'; // TODO add linksTo
+export function isFieldType(type: any): type is FieldType {
+  if (typeof type !== 'string') {
+    return false;
+  }
+  return ['contains', 'containsMany'].includes(type);
+}
 
 interface Options {
   computeVia?: string | (() => unknown);
@@ -55,26 +61,18 @@ const isBaseCard = Symbol('isBaseCard');
 interface Field<CardT extends CardConstructor> {
   card: CardT;
   name: string;
+  fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
-  // TODO once we add linksTo, we'll probably want a better property here, maybe:
-  // fieldType: "contains" | "containsMany" | "linksTo" | "linksToMany"
-  containsMany: boolean;
   serialize(value: any): any;
   deserialize(value: any, fromResource: LooseCardResource | undefined, instancePromise: Promise<Card>): Promise<any>;
   emptyValue(instance: Card): any;
   prepareSet(instance: Card, value: any): void;
+  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
 }
 
-export type FieldType = 'contains' | 'contains-many';
-
-export function isFieldType(type: any): type is FieldType {
-  if (typeof type !== 'string') {
-    return false;
-  }
-  return ['contains', 'contains-many'].includes(type);
-}
 
 class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
+  readonly fieldType = 'containsMany';
   constructor(
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
@@ -104,8 +102,6 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     );
   }
 
-  containsMany = true;
-
   emptyValue(instance: Card) { return new WatchedArray(() => recompute(instance)) }
 
   prepareSet(instance: Card, value: any) {
@@ -114,9 +110,43 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     }
     return new WatchedArray(() => recompute(instance), value);
   }
+
+  component(model: Box<Card>, format: Format) {
+    let fieldName = this.name as keyof Card;
+    let field = this;
+    let arrayField = model.field(fieldName, useIndexBasedKey in this.card) as unknown as Box<Card[]>;
+    // TODO I'd like to construct an array of cards to use to render each item in the field (since 
+    // they can be polymorphic), however, i'm seeing that when I get the box's field value (the array 
+    // in question), that interferes with the component stability for the components that we construct
+    // for each item of the array. For example, just having model.value[fieldName] causes out component 
+    // stability test to fail. Perhaps there is a glimmer consideration we need to take into account here.
+    if (format === 'edit') {
+      return class ContainsManyEditorTemplate extends GlimmerComponent {
+        <template>
+          <ContainsManyEditor
+            @model={{model}}
+            @fieldName={{fieldName}}
+            @arrayField={{arrayField}}
+            @field={{field}}
+            @format={{format}}
+          />
+        </template>
+      };
+    }
+    return class ContainsMany extends GlimmerComponent {
+      <template>
+        {{#each arrayField.children as |boxedElement|}}
+          {{#let (getComponent field.card format boxedElement) as |Item|}}
+            <Item/>
+          {{/let}}
+        {{/each}}
+      </template>
+    };
+  }
 }
 
 class Contains<CardT extends CardConstructor> implements Field<CardT> {
+  readonly fieldType = 'contains';
   constructor(private cardThunk: () => CardT, readonly computeVia: undefined | string | (() => unknown), readonly name: string) {
   }
 
@@ -139,8 +169,6 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     return (await cardClassFromData(value, this.card))[deserialize](value);
   }
 
-  containsMany = false;
-
   emptyValue(_instance: Card) {
     if (primitive in this.card) {
       return undefined;
@@ -158,6 +186,18 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
       }
     }
     return value;
+  }
+
+  component(model: Box<Card>, format: Format) {
+    let fieldName = this.name as keyof Card;
+    let card: typeof Card;
+    if (primitive in this.card) {
+      card = this.card;
+    } else {
+      card = model.value[fieldName].constructor as typeof Card;
+    }
+    let innerModel = model.field(fieldName) as unknown as Box<Card>;
+    return getComponent(card, format, innerModel);
   }
 }
 
@@ -335,7 +375,7 @@ export function serializeCard<CardT extends CardConstructor>(
       attributes[fieldName] = serializedGet(model, fieldName);
     } else {
       let nestedCard = serializedGet(model, fieldName);
-      if (field.containsMany && Array.isArray(nestedCard)) {
+      if (field.fieldType === 'containsMany' && Array.isArray(nestedCard)) {
         // TODO need to work thru how to represent a polymorphic contains many field's card refs.
         // for now we are assuming that all cards in the containsMany field are the same card type
         attributes[fieldName] = nestedCard.map(resource => resource.attributes);
@@ -343,7 +383,7 @@ export function serializeCard<CardT extends CardConstructor>(
           continue;
         }
         nestedCard = nestedCard[0];
-      } else if (!field.containsMany) {
+      } else if (field.fieldType !== 'containsMany') {
         attributes[fieldName] = nestedCard.attributes;
       }
       if (!isCardResource(nestedCard)) {
@@ -597,11 +637,13 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
     </style>
     <div class="default-edit">
       {{#each-in @fields as |key Field|}}
-        <label data-test-field={{key}}>
-          {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
-          {{startCase key}}
-          <Field />
-        </label>
+        {{#unless (eq key 'id')}}
+          <label data-test-field={{key}}>
+            {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
+            {{startCase key}}
+            <Field />
+          </label>
+        {{/unless}}
       {{/each-in}}
     </div>
   </template>;
@@ -796,57 +838,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       }
       let field = maybeField;
       defaultFormat = getField(modelValue.constructor, property)?.computeVia ? 'embedded' : defaultFormat;
-      let fieldValueCard: typeof Card | undefined = undefined;
-      if (getField(modelValue.constructor, property)?.containsMany) {
-        if (primitive in field.card) {
-          fieldValueCard = field.card;
-        } else {
-          let fieldValue = modelValue[property as keyof T];
-          if (fieldValue == null) {
-            fieldValueCard = field.card;
-          } else if (!Array.isArray(fieldValue)) {
-            throw new Error(`field ${property} should be an array`);
-          } else if (fieldValue.length > 0) {
-            // we don't know how to support polymorphic containsMany fields yet, so instead we're picking the card of the first value
-            fieldValueCard = fieldValue[0].constructor as typeof Card;
-          }
-        }
-        if (defaultFormat === 'edit') {
-          let fieldName = property as keyof Card; // to get around linting error
-          let arrayField = model.field(property as keyof T, useIndexBasedKey in field.card) as unknown as Box<Card[]>;
-          return class ContainsManyEditorTemplate extends GlimmerComponent {
-            <template>
-              <ContainsManyEditor
-                @model={{model}}
-                @fieldName={{fieldName}}
-                @arrayField={{arrayField}}
-                @field={{field}}
-                @format={{defaultFormat}}
-                @getComponent={{getComponent}}
-              />
-            </template>
-          };
-        }
-        let arrayField = model.field(property as keyof T, useIndexBasedKey in field.card) as unknown as Box<Card[]>;
-        return class ContainsMany extends GlimmerComponent {
-          <template>
-            {{#each arrayField.children as |boxedElement|}}
-              {{#let (getComponent field.card defaultFormat boxedElement) as |Item|}}
-                <Item/>
-              {{/let}}
-            {{/each}}
-          </template>
-        };
-      } else {
-        if (primitive in field.card) {
-          fieldValueCard = field.card;
-        } else {
-          let modelValueCard = modelValue[property as keyof T] as unknown as Card;
-          fieldValueCard = modelValueCard.constructor;
-        }
-      }
-      let innerModel = model.field(property as keyof T) as unknown as Box<Card>; // casts are safe because we know the field is present
-      return getComponent(fieldValueCard, defaultFormat, innerModel);
+      return field.component(model, defaultFormat);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
@@ -993,3 +985,56 @@ export class Box<T> {
 }
 
 type ElementType<T> = T extends (infer V)[] ? V : never;
+
+function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
+  return a === b;
+}
+
+import { action } from '@ember/object';
+import { fn } from '@ember/helper';
+
+interface ContainsManySignature {
+  Args: {
+    model: Box<Card>,
+    fieldName: keyof Card,
+    arrayField: Box<Card[]>,
+    format: Format;
+    field: Field<typeof Card>;
+  };
+}
+
+class ContainsManyEditor extends GlimmerComponent<ContainsManySignature> {
+  <template>
+    <section data-test-contains-many={{this.safeFieldName}}>
+      <header>{{this.safeFieldName}}</header>
+      <ul>
+        {{#each @arrayField.children as |boxedElement i|}}
+          <li data-test-item={{i}}>
+            {{#let (getComponent @field.card @format boxedElement) as |Item|}}
+              <Item />
+            {{/let}}
+            <button {{on "click" (fn this.remove i)}} type="button" data-test-remove={{i}}>Remove</button>
+          </li>
+        {{/each}}
+      </ul>
+      <button {{on "click" this.add}} type="button" data-test-add-new>Add New</button>
+    </section>
+  </template>
+
+  get safeFieldName() {
+    if (typeof this.args.fieldName !== 'string') {
+      throw new Error(`ContainsManyEditor expects a string fieldName`);
+    }
+    return this.args.fieldName;
+  }
+
+  @action add() {
+    // TODO probably each field card should have the ability to say what a new item should be
+    let newValue = primitive in this.args.field.card ? null : new this.args.field.card();
+    (this.args.model.value as any)[this.safeFieldName].push(newValue);
+  }
+
+  @action remove(index: number) {
+    (this.args.model.value as any)[this.safeFieldName].splice(index, 1);
+  }
+}

@@ -6,7 +6,7 @@ import { CardRef, internalKeyFor, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
 interface Args {
@@ -19,7 +19,7 @@ export interface Type {
   id: string;
   module: string;
   super: Type | undefined;
-  fields: { name: string; card: Type; type: 'contains' | 'containsMany' }[];
+  fields: { name: string; card: Type; type: FieldType }[];
 }
 
 export class CardType extends Resource<Args> {
@@ -73,7 +73,7 @@ export class CardType extends Resource<Args> {
     let fieldTypes: Type['fields'] = await Promise.all(
       Object.entries(fields).map(async ([name, field]) => ({
         name,
-        type: field.containsMany ? 'containsMany' : 'contains',
+        type: field.fieldType,
         card: await this.toType(field.card, {
           from: { type: 'fieldOf', field: name, card: ref },
           module,
