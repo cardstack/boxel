@@ -286,6 +286,9 @@ export function isSaved(instance: Card): boolean {
   return instance[isSavedInstance] === true;
 }
 
+// unsure if we want this... perhaps might aid in making new cards. although, in that 
+// case you might still want to deserialize responses from the server, in which case we
+// can use that as a trigger to set the saved state instead of an explicit function
 export function setSaved(instance: Card) {
   instance[isSavedInstance] = true;
 }
