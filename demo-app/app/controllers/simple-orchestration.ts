@@ -9,7 +9,6 @@ import { AnimationDefinition } from 'animations-experiment/models/transition-run
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import Sprite from 'animations-experiment/models/sprite';
-import { UseWithRules } from 'animations-experiment/addon/models/sprite-tree';
 
 export default class SimpleOrchestration extends Controller {
   @tracked leftPosition = '0px';
@@ -23,52 +22,51 @@ export default class SimpleOrchestration extends Controller {
     }
   }
 
-  use: UseWithRules = {
-    rules: [
-      {
-        match: (unallocatedItems: UnallocatedItems[]) => {
-          let remaining: UnallocatedItems[] = [];
-          let claimed: AnimationDefinition[] = [];
-          for (let item of unallocatedItems) {
-            let { sprite } = item;
-            if (sprite.id === 'foo11') {
-              claimed.push(this.sequence(new Set([sprite])));
-            } else {
-              remaining.push(item);
-            }
+  rules = [
+    {
+      match: (unallocatedItems: UnallocatedItems[]) => {
+        let remaining: UnallocatedItems[] = [];
+        let claimed: AnimationDefinition[] = [];
+        for (let item of unallocatedItems) {
+          let { sprite } = item;
+          if (sprite.id === 'foo11') {
+            claimed.push(this.sequence(new Set([sprite])));
+          } else {
+            remaining.push(item);
           }
+        }
 
-          return {
-            remaining,
-            claimed,
-          };
-        },
+        return {
+          remaining,
+          claimed,
+        };
       },
-      {
-        match: (unallocatedItems: UnallocatedItems[]) => {
-          let remaining: UnallocatedItems[] = [];
-          let claimed: AnimationDefinition[] = [];
-          for (let item of unallocatedItems) {
-            let { sprite } = item;
-            if (sprite.id === 'foo12') {
-              claimed.push(this.parallel(new Set([sprite])));
-            } else {
-              remaining.push(item);
-            }
-          }
-
-          return {
-            remaining,
-            claimed,
-          };
-        },
-      },
-    ],
-    handleRemainder: (changeset: Changeset) => {
-      let { keptSprites } = changeset;
-      return this.sequence(keptSprites);
     },
-  };
+    {
+      match: (unallocatedItems: UnallocatedItems[]) => {
+        let remaining: UnallocatedItems[] = [];
+        let claimed: AnimationDefinition[] = [];
+        for (let item of unallocatedItems) {
+          let { sprite } = item;
+          if (sprite.id === 'foo2') {
+            claimed.push(this.parallel(new Set([sprite])));
+          } else {
+            remaining.push(item);
+          }
+        }
+
+        return {
+          remaining,
+          claimed,
+        };
+      },
+    },
+  ];
+
+  @action use(changeset: Changeset) {
+    let { keptSprites } = changeset;
+    return this.sequence(keptSprites);
+  }
 
   sequence(sprites: Set<Sprite>): AnimationDefinition {
     return {

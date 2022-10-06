@@ -9,10 +9,7 @@ import { action } from '@ember/object';
 import AnimationsService from 'animations-experiment/services/animations';
 import { assert } from '@ember/debug';
 import { getDocumentPosition } from 'animations-experiment/utils/measurement';
-import {
-  IContext,
-  UseWithRules,
-} from 'animations-experiment/models/sprite-tree';
+import { IContext, Rule } from 'animations-experiment/models/sprite-tree';
 import { AnimationDefinition } from 'animations-experiment/models/transition-runner';
 
 const { VOLATILE_TAG, consumeTag } =
@@ -24,8 +21,8 @@ interface AnimationContextArgs {
   id: string | undefined;
   use:
     | ((changeset: Changeset) => Promise<void | AnimationDefinition>)
-    | UseWithRules
     | undefined;
+  rules: Rule[] | undefined;
 }
 
 export default class AnimationContextComponent
@@ -84,7 +81,7 @@ export default class AnimationContextComponent
   }
 
   shouldAnimate(): boolean {
-    return Boolean(this.args.use && this.isStable);
+    return Boolean((this.args.use || this.args.rules) && this.isStable);
   }
 
   hasOrphan(sprite: Sprite): boolean {

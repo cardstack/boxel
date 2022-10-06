@@ -5,11 +5,7 @@ import Sprite, { SpriteIdentifier } from './sprite';
 import { Changeset, UnallocatedItems } from './changeset';
 import { AnimationDefinition } from 'animations-experiment/models/transition-runner';
 
-export interface UseWithRules {
-  rules: Rule[];
-  handleRemainder: ((changeset: Changeset) => AnimationDefinition) | undefined;
-}
-interface Rule {
+export interface Rule {
   match(unallocatedItems: UnallocatedItems[]): {
     remaining: UnallocatedItems[];
     claimed: AnimationDefinition[];
@@ -36,9 +32,9 @@ export interface IContext {
   args: {
     use:
       | ((changeset: Changeset) => Promise<void | AnimationDefinition>)
-      | UseWithRules
       | undefined;
     id?: string;
+    rules: Rule[] | undefined;
   };
 }
 

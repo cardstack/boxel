@@ -255,9 +255,7 @@ export class ChangesetBuilder {
     >();
     for (let context of contextArray) {
       if (context.isStable) {
-        if (!context.args.use) {
-          // nothing to do here
-        } else if (context.args.use instanceof Function) {
+        if (!context.args.rules) {
           animationDefinitionsPerContext.set(context, []);
         } else {
           let contextNode = this.spriteTree.lookupNodeByElement(
@@ -283,7 +281,7 @@ export class ChangesetBuilder {
             }
           });
           let animationDefinitions: AnimationDefinition[] = [];
-          for (let rule of context.args.use.rules) {
+          for (let rule of context.args.rules) {
             let { claimed, remaining } = rule.match(itemsForContext);
             animationDefinitions = animationDefinitions.concat(claimed);
             itemsForContext = remaining;
