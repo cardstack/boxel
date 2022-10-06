@@ -28,7 +28,6 @@ export class Post extends Card {
     <template>
       <div {{attachStyles styles}}>
         <em><@fields.title/></em> by <@fields.author.firstName/> <@fields.author.lastName/>
-        <@fields.author/>
       </div>
     </template>
   }
