@@ -286,6 +286,10 @@ export function isSaved(instance: Card): boolean {
   return instance[isSavedInstance] === true;
 }
 
+export function setSaved(instance: Card) {
+  instance[isSavedInstance] = true;
+}
+
 export function getQueryableValue(fieldCard: typeof Card, value: any): any {
   if ((primitive in fieldCard)) {
     let result = (fieldCard as any)[queryableValue](value);
