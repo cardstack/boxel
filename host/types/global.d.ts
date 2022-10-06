@@ -14,8 +14,10 @@ declare global {
   function showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
 
   interface CSSStyleSheet {
-    replace(cssText: string): Promise<void>;
     replaceSync(cssText: string): void;
+  }
+  interface Node {
+    adoptedStyleSheets: CSSStyleSheet[];
   }
 }
 

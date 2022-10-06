@@ -20,22 +20,26 @@ export const attachStyles = modifier<{
       return;
     }
 
+    let className = sheetScopes.get(sheet);
+
     for (let rule of Array.from(sheet.cssRules) as CSSStyleRule[]) {
       if (rule.selectorText === "this") {
-        let className = sheetScopes.get(sheet);
         if (className == null) {
           className = "i" + scopeCounter++;
           sheetScopes.set(sheet, className);
         }
         rule.selectorText = "." + className;
-        element.classList.add(className);
       }
+    }
+
+    if (className) {
+      element.classList.add(className);
     }
 
     let current: Node | null = element;
     while (current) {
       if ("adoptedStyleSheets" in current) {
-        let root = current as any;
+        let root = current;
         root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
         return () => {
           let newSheets = [...root.adoptedStyleSheets];
@@ -43,7 +47,7 @@ export const attachStyles = modifier<{
           root.adoptedStyleSheets = newSheets;
         };
       }
-      current = current.parentNode;
+      current = (current as Node).parentNode;
     }
     throw new Error(`bug: found no root to append styles into`);
   },

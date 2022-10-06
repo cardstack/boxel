@@ -5,12 +5,15 @@ import BooleanCard from 'https://cardstack.com/base/boolean';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
 let css =`
-this {
-  border: 1px solid gray;
-  border-radius: 10px;
-  background-color: #fdfcdc;
-  padding: 1rem;
-}`;
+  :host {
+    --background-color: #fdfcdc;
+  }
+  this {
+    display: contents;
+  }
+`;
+
+let styleSheet = initStyleSheet(css);
 
 export class Pet extends Card {
   @field firstName = contains(StringCard);
@@ -21,14 +24,7 @@ export class Pet extends Card {
   
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div {{attachStyles @model.styleSheet}}><@fields.firstName/></div>
+      <div {{attachStyles styleSheet}}><@fields.firstName/></div>
     </template>
   };
-
-  sheet = initStyleSheet(css);
-
-  get styleSheet() {
-    this.sheet?.replaceSync(css);
-    return this.sheet;
-  }
 }

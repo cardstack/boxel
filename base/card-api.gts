@@ -502,6 +502,48 @@ export class Component<CardT extends CardConstructor> extends GlimmerComponent<S
 
 }
 
+let cardCSS = `
+  this {
+    border: 1px solid gray;
+    border-radius: 10px;
+    background-color: var(--background-color, white);
+    padding: 1rem;
+  }
+`;
+let editCSS = `
+  * + * {
+    margin-top: 0.5rem;
+  }
+  label,
+  .field {
+    display: block;
+    padding: 0.75rem;
+    text-transform: capitalize;
+    border: 1px solid gray;
+  }
+  input[type=text],
+  input[type=number] {
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: .5rem;
+    display: block;
+    padding: 0.5rem;
+    font: inherit;
+  }
+  textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 5rem;
+    margin-top: .5rem;
+    display: block;
+    padding: 0.5rem;
+    font: inherit;
+  }
+`;
+ 
+let defaultStyles = initStyleSheet(cardCSS);
+let editStyles = initStyleSheet(editCSS);
+
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
     {{#each-in @fields as |_key Field|}}
@@ -511,42 +553,8 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Re
 }
 
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
-  css = `
-    .default-edit {
-      background-color: white;
-    }
-    .default-edit label,
-    .default-edit .field {
-      display: block;
-      padding: 0.75rem;
-      text-transform: capitalize;
-      border: 1px solid gray;
-      margin-top: 0.5rem;
-      margin-bottom: 0.5rem;
-    }
-    .default-edit input[type=text],
-    .default-edit input[type=number] {
-      box-sizing: border-box;
-      width: 100%;
-      margin-top: .5rem;
-      display: block;
-      padding: 0.5rem;
-      font: inherit;
-    }
-    .default-edit textarea {
-      box-sizing: border-box;
-      width: 100%;
-      min-height: 5rem;
-      margin-top: .5rem;
-      display: block;
-      padding: 0.5rem;
-      font: inherit;
-    }
-  `;
-  styleSheet = initStyleSheet(this.css);
-
   <template>
-    <div {{attachStyles this.styles}} class="default-edit">
+    <div {{attachStyles editStyles}}>
       {{#each-in @fields as |key Field|}}
         <label data-test-field={{key}}>
           {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
@@ -556,11 +564,6 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
       {{/each-in}}
     </div>
   </template>;
-
-  get styles() {
-    this.styleSheet?.replaceSync(this.css);
-    return this.styleSheet;
-  }
 }
 
 const defaultComponent = {
@@ -596,7 +599,7 @@ function getComponent<CardT extends CardConstructor>(card: CardT, format: Format
     {{#if isPrimitive}}
       <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
     {{else}}
-      <ShadowDOM>
+      <ShadowDOM {{attachStyles defaultStyles}}>
         <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
       </ShadowDOM>
     {{/if}}
@@ -948,4 +951,4 @@ export class Box<T> {
 
 }
 
-type ElementType<T> = T extends (infer V)[] ? V : never;
+type ElementType<T> = T extends (infer V)[] ? V : never;  

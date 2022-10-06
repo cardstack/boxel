@@ -6,41 +6,33 @@ import { baseCardRef } from "@cardstack/runtime-common";
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
 let css = `
-  .catalog-entry-edit {
-    background-color: #cbf3f0;
-    border: 1px solid gray;
-    border-radius: 10px;
-    padding: 1rem;
+  :host {
+    --background-color: #cbf3f0;
   }
-  .catalog-entry-edit label,
-  .catalog-entry-edit .field {
+  this {
+    display: contents;
+  }
+  * + * {
+    margin-top: 1rem;
+  }
+  label,
+  .field {
     display: block;
     padding: 0.75rem;
     text-transform: capitalize;
     background-color: #ffffff6e;
     border: 1px solid gray;
-    margin-top: 0.5rem;
-    margin-bottom: 0.5rem;
   }
-  .catalog-entry-edit input[type=text],
-  .catalog-entry-edit input[type=number] {
+  input[type=text]{
     box-sizing: border-box;
     width: 100%;
-    margin-top: .5rem;
-    display: block;
-    padding: 0.5rem;
-    font: inherit;
-  }
-  .catalog-entry-edit textarea {
-    box-sizing: border-box;
-    width: 100%;
-    min-height: 5rem;
-    margin-top: .5rem;
     display: block;
     padding: 0.5rem;
     font: inherit;
   }
 `;
+
+let styleSheet = initStyleSheet(css);
 
 export class CatalogEntry extends Card {
   @field title = contains(StringCard);
@@ -60,18 +52,12 @@ export class CatalogEntry extends Card {
     return !this.isPrimitive;
   }
 
-  get styles() {
-    let sheet = initStyleSheet(css);
-    sheet?.replaceSync(css);
-    return sheet;
-  }
-
   // An explicit edit template is provided since computed isPrimitive bool
   // field (which renders in the embedded format) looks a little wonky
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div {{attachStyles @model.styles}} class="catalog-entry-edit">
+      <div {{attachStyles styleSheet}}>
         <label data-test-field="title">Title
           <@fields.title/>
         </label>
@@ -90,23 +76,11 @@ export class CatalogEntry extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <style>
-        .catalog-entry {
-          border: 1px solid gray;
-          border-radius: 10px;
-          background-color: #cbf3f0;
-          padding: 1rem;
-        }
-        .catalog-entry__demo {
-          margin-top: 1rem;
-          margin-bottom: 1rem;
-        }
-      </style>
-      <div class="catalog-entry">
+      <div {{attachStyles styleSheet}}>
         <h2><@fields.title/></h2>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
-          <div class="catalog-entry__demo" data-test-demo-embedded><@fields.demo/></div>
+          <div class="demo" data-test-demo-embedded><@fields.demo/></div>
         {{/if}}
       </div>
     </template>
@@ -114,24 +88,12 @@ export class CatalogEntry extends Card {
   
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <style>
-        .catalog-entry {
-          border: 1px solid gray;
-          border-radius: 10px;
-          background-color: #cbf3f0;
-          padding: 1rem;
-        }
-        .catalog-entry__demo {
-          margin-top: 1rem;
-          margin-bottom: 1rem;
-        }
-      </style>
-      <div class="catalog-entry">
+      <div {{attachStyles styleSheet}}>
         <h1 data-test-title><@fields.title/></h1>
         <p data-test-description><em><@fields.description/></em></p>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
-          <div class="catalog-entry__demo" data-test-demo><@fields.demo/></div>
+          <div class="demo" data-test-demo><@fields.demo/></div>
         {{/if}}
       </div>
     </template>
