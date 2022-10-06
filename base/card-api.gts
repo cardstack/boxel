@@ -115,10 +115,10 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     let fieldName = this.name as keyof Card;
     let field = this;
     let arrayField = model.field(fieldName, useIndexBasedKey in this.card) as unknown as Box<Card[]>;
-    // TODO I'd like to construct an array of cards to use to render each item in the field (since 
+    // TODO I'd like to construct an array of field cards to use to render each item in the field (since 
     // they can be polymorphic), however, i'm seeing that when I get the box's field value (the array 
     // in question), that interferes with the component stability for the components that we construct
-    // for each item of the array. For example, just having model.value[fieldName] causes out component 
+    // for each item of the array. For example, just having `model.value[fieldName]` causes our component 
     // stability test to fail. Perhaps there is a glimmer consideration we need to take into account here.
     if (format === 'edit') {
       return class ContainsManyEditorTemplate extends GlimmerComponent {
