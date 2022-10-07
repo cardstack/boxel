@@ -113,6 +113,13 @@ export class Changeset {
 export class ChangesetBuilder {
   contextToChangeset: WeakMap<IContext, Changeset> = new WeakMap();
   spriteTree: SpriteTree;
+  private nodesForSprite = new Map<
+    Sprite,
+    {
+      own: SpriteTreeNode;
+      highest: SpriteTreeNode;
+    }
+  >();
 
   constructor(
     spriteTree: SpriteTree,
@@ -145,10 +152,7 @@ export class ChangesetBuilder {
       }
     }
 
-    let unallocatedItems: {
-      sprite: Sprite;
-      highestLevelModifier: ISpriteModifier;
-    }[] = this.createSprites(
+    let sprites = this.createSprites(
       freshlyAdded,
       freshlyRemoved,
       naturalKept,
@@ -162,28 +166,36 @@ export class ChangesetBuilder {
         let node = spriteTree.lookupNodeByElement(context.element);
         let contextDescendants = node!
           .getSpriteDescendants({ deep: true })
-          .map((v) => v.spriteModifier);
+          .map((v) => v.node);
 
         let _next = [];
-        let itemsForContext: {
-          sprite: Sprite;
-          highestLevelModifier: ISpriteModifier;
-        }[] = [];
-        for (let item of unallocatedItems) {
-          if (contextDescendants.includes(item.highestLevelModifier)) {
-            itemsForContext.push(item);
+        let spritesForContext: Sprite[] = [];
+        for (let sprite of sprites) {
+          if (
+            contextDescendants.includes(
+              this.nodesForSprite.get(sprite)!.highest
+            )
+          ) {
+            spritesForContext.push(sprite);
           } else {
-            _next.push(item);
+            _next.push(sprite);
           }
         }
-        unallocatedItems = _next;
+        sprites = _next;
 
-        for (let { highestLevelModifier, sprite } of itemsForContext) {
-          this.setSpriteEnvironmentBounds(
-            sprite,
-            highestLevelModifier,
-            context
+        for (let sprite of spritesForContext) {
+          let parentNode = this.nodesForSprite.get(sprite)!.own.parent;
+          let parent = parentNode.contextModel ?? parentNode.spriteModel!;
+
+          assert(
+            'Contexts should always be stable and have last and current bounds',
+            context.lastBounds && context.currentBounds && context.isStable
           );
+
+          sprite.within({
+            parent: parent,
+            contextElement: context,
+          });
           this.addSpriteTo(changeset, sprite);
         }
 
@@ -213,10 +225,7 @@ export class ChangesetBuilder {
       intermediateSprites
     );
 
-    let unallocatedItems: {
-      sprite: Sprite;
-      highestLevelModifier: ISpriteModifier;
-    }[] = [];
+    let unallocatedItems: Sprite[] = [];
     for (let spriteModifier of spriteModifiers) {
       let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
       let counterpartModifier =
@@ -232,38 +241,7 @@ export class ChangesetBuilder {
         intermediateSprite
       );
 
-      let highestLevelModifier = spriteModifier;
-      if (counterpartModifier) {
-        let ancestorsOfKeptSprite = this.spriteTree.lookupNodeByElement(
-          spriteModifier.element
-        )!.ancestors;
-        let stableAncestorsOfKeptSprite = ancestorsOfKeptSprite.filter(
-          (v) => v.contextModel?.isStable
-        );
-        let ancestorsOfCounterpartSprite =
-          this.spriteTree.lookupRemovedNode(counterpartModifier)!.ancestors;
-        let stableAncestorsOfCounterpartSprite =
-          ancestorsOfCounterpartSprite?.filter((v) => v.contextModel?.isStable);
-
-        let sharedContextNode = stableAncestorsOfKeptSprite?.find((v) =>
-          stableAncestorsOfCounterpartSprite?.includes(v)
-        );
-
-        if (!sharedContextNode) {
-          console.warn(
-            `Non-natural kept sprite with id ${spriteModifier.id} will not animate because there is no shared animation context that encloses both it and its counterpart`
-          );
-          continue;
-        }
-
-        if (
-          ancestorsOfCounterpartSprite?.length < ancestorsOfKeptSprite?.length
-        ) {
-          highestLevelModifier = counterpartModifier;
-        }
-      }
-
-      unallocatedItems.push({ sprite, highestLevelModifier });
+      unallocatedItems.push(sprite);
     }
 
     return unallocatedItems;
@@ -337,6 +315,43 @@ export class ChangesetBuilder {
           counterpartSpriteModifier.role,
           SpriteType.Removed
         );
+        let keptSpriteNode = this.spriteTree.lookupNodeByElement(
+          insertedSpriteModifier.element
+        )!;
+        let counterpartNode = this.spriteTree.lookupRemovedNode(
+          counterpartSpriteModifier
+        )!;
+
+        let ancestorsOfKeptSprite = keptSpriteNode.ancestors;
+        let stableAncestorsOfKeptSprite = ancestorsOfKeptSprite.filter(
+          (v) => v.contextModel?.isStable
+        );
+        let ancestorsOfCounterpartSprite = counterpartNode.ancestors;
+        let stableAncestorsOfCounterpartSprite =
+          ancestorsOfCounterpartSprite?.filter((v) => v.contextModel?.isStable);
+
+        let sharedContextNode = stableAncestorsOfKeptSprite?.find((v) =>
+          stableAncestorsOfCounterpartSprite?.includes(v)
+        );
+
+        if (!sharedContextNode) {
+          console.warn(
+            `Non-natural kept sprite with id ${insertedSpriteModifier.id} will not animate because there is no shared animation context that encloses both it and its counterpart`
+          );
+        }
+
+        let highestNode =
+          ancestorsOfCounterpartSprite?.length < ancestorsOfKeptSprite?.length
+            ? counterpartNode
+            : keptSpriteNode;
+        this.nodesForSprite.set(keptSprite, {
+          own: keptSpriteNode,
+          highest: highestNode,
+        });
+        this.nodesForSprite.set(keptSprite.counterpart, {
+          own: counterpartNode,
+          highest: highestNode,
+        });
 
         spriteModifierToSpriteMap.set(insertedSpriteModifier, keptSprite);
         spriteModifierToCounterpartModifierMap.set(
@@ -349,28 +364,38 @@ export class ChangesetBuilder {
 
     for (let insertedSpriteModifier of classifiedInsertedSpriteModifiers) {
       spriteModifiers.add(insertedSpriteModifier);
-      spriteModifierToSpriteMap.set(
-        insertedSpriteModifier,
-        new Sprite(
-          insertedSpriteModifier.element as HTMLElement,
-          insertedSpriteModifier.id,
-          insertedSpriteModifier.role,
-          SpriteType.Inserted
-        )
+      let insertedSprite = new Sprite(
+        insertedSpriteModifier.element as HTMLElement,
+        insertedSpriteModifier.id,
+        insertedSpriteModifier.role,
+        SpriteType.Inserted
       );
+      let insertedSpriteNode = this.spriteTree.lookupNodeByElement(
+        insertedSpriteModifier.element
+      )!;
+      spriteModifierToSpriteMap.set(insertedSpriteModifier, insertedSprite);
+      this.nodesForSprite.set(insertedSprite, {
+        own: insertedSpriteNode,
+        highest: insertedSpriteNode,
+      });
     }
 
     for (let removedSpriteModifier of classifiedRemovedSpriteModifiers) {
       spriteModifiers.add(removedSpriteModifier);
-      spriteModifierToSpriteMap.set(
-        removedSpriteModifier,
-        new Sprite(
-          removedSpriteModifier.element as HTMLElement,
-          removedSpriteModifier.id,
-          removedSpriteModifier.role,
-          SpriteType.Removed
-        )
+      let removedSprite = new Sprite(
+        removedSpriteModifier.element as HTMLElement,
+        removedSpriteModifier.id,
+        removedSpriteModifier.role,
+        SpriteType.Removed
       );
+      let removedSpriteNode = this.spriteTree.lookupRemovedNode(
+        removedSpriteModifier
+      )!;
+      spriteModifierToSpriteMap.set(removedSpriteModifier, removedSprite);
+      this.nodesForSprite.set(removedSprite, {
+        own: removedSpriteNode,
+        highest: removedSpriteNode,
+      });
     }
 
     for (let keptSpriteModifier of naturalKept) {
@@ -379,15 +404,20 @@ export class ChangesetBuilder {
         !spriteModifierToCounterpartModifierMap.has(keptSpriteModifier)
       );
       spriteModifiers.add(keptSpriteModifier);
-      spriteModifierToSpriteMap.set(
-        keptSpriteModifier,
-        new Sprite(
-          keptSpriteModifier.element as HTMLElement,
-          keptSpriteModifier.id,
-          keptSpriteModifier.role,
-          SpriteType.Kept
-        )
+      let keptSprite = new Sprite(
+        keptSpriteModifier.element as HTMLElement,
+        keptSpriteModifier.id,
+        keptSpriteModifier.role,
+        SpriteType.Kept
       );
+      let keptSpriteNode = this.spriteTree.lookupNodeByElement(
+        keptSpriteModifier.element
+      )!;
+      spriteModifierToSpriteMap.set(keptSpriteModifier, keptSprite);
+      this.nodesForSprite.set(keptSprite, {
+        own: keptSpriteNode,
+        highest: keptSpriteNode,
+      });
     }
 
     return {
@@ -395,28 +425,6 @@ export class ChangesetBuilder {
       spriteModifierToSpriteMap,
       spriteModifierToCounterpartModifierMap,
     };
-  }
-
-  setSpriteEnvironmentBounds(
-    sprite: Sprite,
-    spriteModifier: ISpriteModifier,
-    context: IContext
-  ) {
-    let spriteNode =
-      this.spriteTree.lookupNodeByElement(sprite.element) ??
-      this.spriteTree.freshlyRemovedToNode.get(spriteModifier);
-    let parentNode = spriteNode!.parent;
-    let parent = parentNode.contextModel ?? parentNode.spriteModel!;
-
-    assert(
-      'Contexts should always be stable and have last and current bounds',
-      context.lastBounds && context.currentBounds && context.isStable
-    );
-
-    sprite.within({
-      parent: parent,
-      contextElement: context,
-    });
   }
 
   addSpriteTo(changeset: Changeset, sprite: Sprite) {
