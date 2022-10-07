@@ -33,7 +33,6 @@ import * as runtime from "@cardstack/runtime-common";
 // import * as glimmerTracking from "@glimmer/tracking";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@glimmer/tracking", {
   tracked() {},
-  cached() {},
 });
 // import * as emberObject from "ember-source/dist/packages/@ember/object";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@ember/object", {
