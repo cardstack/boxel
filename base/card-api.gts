@@ -593,9 +593,11 @@ let editStyles = initStyleSheet(`
 
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    {{#each-in @fields as |_key Field|}}
-      <Field />
-    {{/each-in}}
+    <div {{attachStyles defaultStyles}}>
+      {{#each-in @fields as |_key Field|}}
+        <Field />
+      {{/each-in}}
+    </div>
   </template>;
 }
 
@@ -646,7 +648,7 @@ function getComponent<CardT extends CardConstructor>(card: CardT, format: Format
     {{#if isPrimitive}}
       <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
     {{else}}
-      <ShadowDOM {{attachStyles defaultStyles}}>
+      <ShadowDOM>
         <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
       </ShadowDOM>
     {{/if}}
