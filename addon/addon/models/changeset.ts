@@ -145,6 +145,63 @@ export class ChangesetBuilder {
       }
     }
 
+    let unallocatedItems: {
+      sprite: Sprite;
+      highestLevelModifier: ISpriteModifier;
+    }[] = this.createSprites(
+      freshlyAdded,
+      freshlyRemoved,
+      naturalKept,
+      intermediateSprites
+    );
+
+    for (let context of contexts) {
+      if (context.isStable) {
+        let changeset = new Changeset(context);
+
+        let node = spriteTree.lookupNodeByElement(context.element);
+        let contextDescendants = node!
+          .getSpriteDescendants({ deep: true })
+          .map((v) => v.spriteModifier);
+
+        let _next = [];
+        let itemsForContext: {
+          sprite: Sprite;
+          highestLevelModifier: ISpriteModifier;
+        }[] = [];
+        for (let item of unallocatedItems) {
+          if (contextDescendants.includes(item.highestLevelModifier)) {
+            itemsForContext.push(item);
+          } else {
+            _next.push(item);
+          }
+        }
+        unallocatedItems = _next;
+
+        for (let { highestLevelModifier, sprite } of itemsForContext) {
+          this.setSpriteEnvironmentBounds(
+            sprite,
+            highestLevelModifier,
+            context
+          );
+          this.addSpriteTo(changeset, sprite);
+        }
+
+        this.contextToChangeset.set(context, changeset);
+      } else {
+        // We already decided what contexts we're going to use for this render,
+        // so we can mark new contexts for the next run.
+        context.isInitialRenderCompleted = true;
+      }
+    }
+  }
+
+  createSprites(
+    freshlyAdded: Set<ISpriteModifier>,
+    freshlyRemoved: Set<ISpriteModifier>,
+    naturalKept: Set<ISpriteModifier>,
+    intermediateSprites: Map<string, IntermediateSprite>
+  ) {
     let {
       spriteModifiers,
       spriteModifierToSpriteMap,
@@ -209,45 +266,7 @@ export class ChangesetBuilder {
       unallocatedItems.push({ sprite, highestLevelModifier });
     }
 
-    for (let context of contexts) {
-      if (context.isStable) {
-        let changeset = new Changeset(context);
-
-        let node = spriteTree.lookupNodeByElement(context.element);
-        let contextDescendants = node!
-          .getSpriteDescendants({ deep: true })
-          .map((v) => v.spriteModifier);
-
-        let _next = [];
-        let itemsForContext: {
-          sprite: Sprite;
-          highestLevelModifier: ISpriteModifier;
-        }[] = [];
-        for (let item of unallocatedItems) {
-          if (contextDescendants.includes(item.highestLevelModifier)) {
-            itemsForContext.push(item);
-          } else {
-            _next.push(item);
-          }
-        }
-        unallocatedItems = _next;
-
-        for (let { highestLevelModifier, sprite } of itemsForContext) {
-          this.setSpriteEnvironmentBounds(
-            sprite,
-            highestLevelModifier,
-            context
-          );
-          this.addSpriteTo(changeset, sprite);
-        }
-
-        this.contextToChangeset.set(context, changeset);
-      } else {
-        // We already decided what contexts we're going to use for this render,
-        // so we can mark new contexts for the next run.
-        context.isInitialRenderCompleted = true;
-      }
-    }
+    return unallocatedItems;
   }
 
   classifySprites(
