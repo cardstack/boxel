@@ -30,11 +30,11 @@ export interface IContext {
   appendOrphan(spriteOrElement: Sprite): void;
   clearOrphans(): void;
   args: {
-    use:
+    use?:
       | ((changeset: Changeset) => Promise<void | AnimationDefinition>)
       | undefined;
     id?: string;
-    rules: Rule[] | undefined;
+    rules?: Rule[] | undefined;
   };
 }
 
