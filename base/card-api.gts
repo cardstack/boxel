@@ -115,11 +115,6 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     let fieldName = this.name as keyof Card;
     let field = this;
     let arrayField = model.field(fieldName, useIndexBasedKey in this.card) as unknown as Box<Card[]>;
-    // TODO I'd like to construct an array of field cards to use to render each item in the field (since 
-    // they can be polymorphic), however, i'm seeing that when I get the box's field value (the array 
-    // in question), that interferes with the component stability for the components that we construct
-    // for each item of the array. For example, just having `model.value[fieldName]` causes our component 
-    // stability test to fail. Perhaps there is a glimmer consideration we need to take into account here.
     if (format === 'edit') {
       return class ContainsManyEditorTemplate extends GlimmerComponent {
         <template>
@@ -136,7 +131,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return class ContainsMany extends GlimmerComponent {
       <template>
         {{#each arrayField.children as |boxedElement|}}
-          {{#let (getComponent field.card format boxedElement) as |Item|}}
+          {{#let (getComponent (nullishCoalesce boxedElement.card field.card) format boxedElement) as |Item|}}
             <Item/>
           {{/let}}
         {{/each}}
@@ -589,8 +584,6 @@ function cardThunk<CardT extends CardConstructor>(cardOrThunk: CardT | (() => Ca
   return ("baseCard" in cardOrThunk ? () => cardOrThunk : cardOrThunk) as () => CardT;
 }
 
-
-
 export type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; fieldName: string | undefined } }
 
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
@@ -982,12 +975,26 @@ export class Box<T> {
     return newChildren;
   }
 
+  // trying to determine the card from the outside of the box destabilizes otherwise stable
+  // arrays due to glimmer invalidation in our field getters. I'm breaking the rule where
+  // boxes aren't cognizant of cards to work around this situation
+  get card() {
+    if (this.state.type === 'root') {
+      throw new Error('tried to call card() on root box');
+    }
+    return typeof this.value === 'object' && this.value != null && isBaseCard in this.value
+      ? Reflect.getPrototypeOf(this.value as unknown as Card)!.constructor as typeof Card 
+      : undefined;
+  }
 }
 
 type ElementType<T> = T extends (infer V)[] ? V : never;
 
 function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
   return a === b;
+}
+function nullishCoalesce<S,T>(a: S, b: T, _namedArgs: unknown): S | T {
+  return a ?? b;
 }
 
 import { action } from '@ember/object';
@@ -1010,7 +1017,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManySignature> {
       <ul>
         {{#each @arrayField.children as |boxedElement i|}}
           <li data-test-item={{i}}>
-            {{#let (getComponent @field.card @format boxedElement) as |Item|}}
+            {{#let (getComponent (nullishCoalesce boxedElement.card @field.card) @format boxedElement) as |Item|}}
               <Item />
             {{/let}}
             <button {{on "click" (fn this.remove i)}} type="button" data-test-remove={{i}}>Remove</button>
