@@ -11,6 +11,7 @@ import SpriteTree, {
 } from 'animations-experiment/models/sprite-tree';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
 import { IntermediateSprite } from 'animations-experiment/services/animations';
+import { AnimationDefinition } from './transition-runner';
 
 export type SpritesForArgs = {
   type?: SpriteType | undefined;
@@ -61,6 +62,7 @@ export class Changeset {
   insertedSprites: Set<Sprite> = new Set();
   removedSprites: Set<Sprite> = new Set();
   keptSprites: Set<Sprite> = new Set();
+  animationDefinitions: Set<AnimationDefinition> = new Set();
 
   constructor(context: IContext) {
     this.context = context;
@@ -70,7 +72,8 @@ export class Changeset {
     return (
       this.insertedSprites.size ||
       this.removedSprites.size ||
-      this.keptSprites.size
+      this.keptSprites.size ||
+      this.animationDefinitions.size
     );
   }
 
@@ -140,6 +143,7 @@ export class ChangesetBuilder {
     freshlyRemoved: Set<ISpriteModifier>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
+    let contextArray = [...contexts];
     this.spriteTree = spriteTree;
 
     // Capture snapshots & lookup natural KeptSprites
@@ -171,48 +175,108 @@ export class ChangesetBuilder {
       intermediateSprites
     );
 
-    for (let context of contexts) {
+    // Sort top to bottom
+    contextArray.sort((a, b) => {
+      let bitmask = a.element.compareDocumentPosition(b.element);
+
+      assert(
+        'Sorting contexts - Document position of two compared contexts is implementation-specific or disconnected',
+        !(
+          bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
+          bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
+        )
+      );
+
+      return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
+
+    let animationDefinitionsPerContext = new Map<
+      IContext,
+      AnimationDefinition[]
+    >();
+    for (let context of contextArray) {
       if (context.isStable) {
-        let changeset = new Changeset(context);
-
-        let node = spriteTree.lookupNode(context.element);
-        let contextDescendants = node!
-          .getSpriteDescendants({ deep: true })
-          .map((v) => v.node);
-
-        let _next = [];
-        let spritesForContext: Sprite[] = [];
-        for (let sprite of sprites) {
-          if (contextDescendants.includes(getHighestNode(spriteTree, sprite))) {
-            spritesForContext.push(sprite);
-          } else {
-            _next.push(sprite);
-          }
-        }
-        sprites = _next;
-
-        for (let sprite of spritesForContext) {
-          let parentNode = getOwnNode(spriteTree, sprite).parent;
-          let parent = parentNode.contextModel ?? parentNode.spriteModel!;
-
-          assert(
-            'Contexts should always be stable and have last and current bounds',
-            context.lastBounds && context.currentBounds && context.isStable
-          );
-
-          sprite.within({
-            parent: parent,
-            contextElement: context,
+        if (!context.args.rules) {
+          animationDefinitionsPerContext.set(context, []);
+        } else {
+          let contextNode = this.spriteTree.lookupNode(context.element)!;
+          let descendants = contextNode.getDescendantNodes({
+            includeFreshlyRemoved: true,
+            filter: (_childNode: SpriteTreeNode) => true,
           });
-          this.addSpriteTo(changeset, sprite);
-        }
+          let spritesForContext: Sprite[] = [];
+          let setAside: Sprite[] = [];
+          sprites.forEach((sprite) => {
+            let parentNode = getOwnNode(spriteTree, sprite).parent;
+            let parent = parentNode.contextModel ?? parentNode.spriteModel!;
+            sprite.within({
+              parent,
+              contextElement: context,
+            });
 
-        this.contextToChangeset.set(context, changeset);
+            if (descendants.includes(getHighestNode(spriteTree, sprite))) {
+              spritesForContext.push(sprite);
+            } else {
+              setAside.push(sprite);
+            }
+          });
+
+          let animationDefinitions: AnimationDefinition[] = [];
+          for (let rule of context.args.rules) {
+            let { claimed, remaining } = rule.match(spritesForContext);
+            animationDefinitions = animationDefinitions.concat(claimed);
+            spritesForContext = remaining;
+          }
+          sprites = spritesForContext.concat(setAside);
+          animationDefinitionsPerContext.set(context, animationDefinitions);
+        }
       } else {
         // We already decided what contexts we're going to use for this render,
         // so we can mark new contexts for the next run.
         context.isInitialRenderCompleted = true;
       }
+    }
+
+    for (let [context, claimed] of animationDefinitionsPerContext) {
+      let changeset = new Changeset(context);
+
+      for (let animationDefinition of claimed) {
+        this.addAnimationDefinitionTo(changeset, animationDefinition);
+      }
+
+      let node = spriteTree.lookupNode(context.element);
+      let contextDescendants = node!
+        .getSpriteDescendants({ deep: true })
+        .map((v) => v.node);
+
+      let _next = [];
+      let itemsForContext: Sprite[] = [];
+      for (let sprite of sprites) {
+        if (contextDescendants.includes(getHighestNode(spriteTree, sprite))) {
+          itemsForContext.push(sprite);
+        } else {
+          _next.push(sprite);
+        }
+      }
+      sprites = _next;
+
+      for (let sprite of itemsForContext) {
+        let parentNode = getOwnNode(spriteTree, sprite).parent;
+        let parent = parentNode.contextModel ?? parentNode.spriteModel!;
+
+        assert(
+          'Contexts should always be stable and have last and current bounds',
+          context.lastBounds && context.currentBounds && context.isStable
+        );
+
+        sprite.within({
+          parent: parent,
+          contextElement: context,
+        });
+        this.addSpriteTo(changeset, sprite);
+      }
+
+      this.contextToChangeset.set(context, changeset);
     }
   }
 
@@ -253,6 +317,13 @@ export class ChangesetBuilder {
     }
 
     return sprites;
+  }
+
+  addAnimationDefinitionTo(
+    changeset: Changeset,
+    animationDefinition: AnimationDefinition
+  ) {
+    changeset.animationDefinitions.add(animationDefinition);
   }
 
   classifySprites(
