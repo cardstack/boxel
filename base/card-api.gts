@@ -555,17 +555,24 @@ let defaultStyles = initStyleSheet(`
   this {
     border: 1px solid gray;
     border-radius: 10px;
-    background-color: var(--background-color, #e9e7e7);
+    background-color: #e9e7e7;
     padding: 1rem;
   }
 `);
 let editStyles = initStyleSheet(`
+  this {
+    border: 1px solid gray;
+    border-radius: 10px;
+    background-color: #e9e7e7;
+    padding: 1rem;
+  }
   .edit-field {
     display: block;
     padding: 0.75rem;
     text-transform: capitalize;
     background-color: #ffffff6e;
     border: 1px solid gray;
+    margin: 0.5rem 0;
   }
   input[type=text],
   input[type=number] {

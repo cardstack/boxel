@@ -9,7 +9,7 @@ let imageURL = new URL('./logo.png', import.meta.url).href;
 let test = lodash.isObject({});
 console.log(`{} is object? ${test}`);
 
-let styles = initStyleSheet(`:host { --background-color: #ffcad4; } this { display: contents; }`);
+let styles = initStyleSheet(`this { background-color: #ffcad4; border: 1px solid gray; border-radius: 10px; padding: 1rem; }`);
 
 export class Post extends Card {
   @field author = contains(Person);

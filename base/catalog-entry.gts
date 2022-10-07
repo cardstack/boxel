@@ -6,11 +6,11 @@ import { baseCardRef } from "@cardstack/runtime-common";
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
 let css = `
-  :host {
-    --background-color: #cbf3f0;
-  }
   this {
-    display: contents;
+    background-color: #cbf3f0;
+    border: 1px solid gray; 
+    border-radius: 10px; 
+    padding: 1rem;
   }
   .demo {
     margin-top: 1rem;
@@ -18,11 +18,11 @@ let css = `
 `;
 
 let editCSS = `
-  :host {
-    --background-color: #cbf3f0;
-  }
   this {
-    display: contents;
+    background-color: #cbf3f0;
+    border: 1px solid gray; 
+    border-radius: 10px; 
+    padding: 1rem;
   }
   .edit-field {
     display: block;
@@ -30,6 +30,7 @@ let editCSS = `
     text-transform: capitalize;
     background-color: #ffffff6e;
     border: 1px solid gray;
+    margin: 0.5rem 0;
   }
   input[type=text] {
     box-sizing: border-box;

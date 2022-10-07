@@ -4,7 +4,7 @@ import IntegerCard from 'https://cardstack.com/base/integer';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
-let css =`:host { --background-color: #fdfcdc; } this { display: contents; }`;
+let css =`this { background-color: #fdfcdc; border: 1px solid gray; border-radius: 10px; padding: 1rem; }`;
 
 let styleSheet = initStyleSheet(css);
 

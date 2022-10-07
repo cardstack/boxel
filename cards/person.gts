@@ -3,7 +3,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
-let styles = initStyleSheet(`:host { --background-color: #90dbf4; } this { display: contents; }`);
+let styles = initStyleSheet(`this { background-color: #90dbf4; border: 1px solid gray; border-radius: 10px; padding: 1rem; }`);
 
 export class Person extends Card {
   @field firstName = contains(StringCard);
