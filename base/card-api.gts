@@ -979,9 +979,6 @@ export class Box<T> {
   // arrays due to glimmer invalidation in our field getters. I'm breaking the rule where
   // boxes aren't cognizant of cards to work around this situation
   get card() {
-    if (this.state.type === 'root') {
-      throw new Error('tried to call card() on root box');
-    }
     return typeof this.value === 'object' && this.value != null && isBaseCard in this.value
       ? Reflect.getPrototypeOf(this.value as unknown as Card)!.constructor as typeof Card 
       : undefined;
