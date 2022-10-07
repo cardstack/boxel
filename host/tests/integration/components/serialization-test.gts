@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
@@ -664,9 +664,6 @@ module('Integration | serialization', function (hooks) {
     assert.deepEqual(serializedGet(classSchedule, 'dates'), ["2022-04-01","2022-04-04"]);
   });
 
-  skip('can serialize a polymorphic containsMany field');
-  // need to work thru how to describe the card ref for each item in the containsMany field
-
   test("can serialize a containsMany's nested field", async function(assert) {
     let { field, contains, containsMany, serializedGet, Card } = cardApi;
     let { default: StringCard } = string;
@@ -965,6 +962,200 @@ module('Integration | serialization', function (hooks) {
     }
   });
 
+  test('can serialize a polymorphic containsMany field', async function (assert) {
+    let { field, contains, containsMany, serializeCard, Card, createFromSerialized } = cardApi;
+    let { default: StringCard } = string;
+    let { default: IntegerCard } = integer;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    class Employee extends Person {
+      @field department = contains(StringCard);
+    }
+
+    class Customer extends Person {
+      @field billAmount = contains(IntegerCard);
+    }
+
+    class Group extends Card {
+      @field people = containsMany(Person);
+    }
+
+    await shimModule(`${realmURL}test-cards`, { Person, Employee, Customer, Group });
+
+    let group = new Group({
+      people: [
+        new Employee({
+          firstName: 'Mango',
+          department: 'begging'
+        }),
+        new Customer({
+          firstName: 'Van Gogh',
+          billAmount: 100
+        })
+      ]
+    });
+
+    let payload = serializeCard(group);
+    assert.deepEqual(payload, {
+      type: 'card',
+      attributes: {
+        people: [{
+          firstName: 'Mango',
+          department: 'begging'
+        },{
+          firstName: 'Van Gogh',
+          billAmount: 100
+        }]
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Group'
+        },
+        fields: {
+          people: [{
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Employee'
+            },
+          },{
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Customer'
+            },
+          }]
+        }
+      }
+    });
+
+    let group2 = await createFromSerialized<any>(payload, new URL(realmURL));
+    let { people } = group2;
+    assert.ok(Array.isArray(people), 'people is an array');
+    assert.strictEqual(people.length, 2, 'array length is correct');
+    assert.strictEqual(people[0].firstName, 'Mango');
+    assert.strictEqual(people[1].firstName, 'Van Gogh');
+
+    let [first, second] = people;
+    if (first instanceof Employee) {
+      assert.strictEqual(first.department, 'begging');
+    } else {
+      assert.ok(false, 'Not an employee');
+    }
+    if (second instanceof Customer) {
+      assert.strictEqual(second.billAmount, 100);
+    } else {
+      assert.ok(false, 'Not a customer');
+    }
+  });
+
+  test('can deserialize polymorphic containsMany with nested polymorphic values', async function(assert) {
+    let { field, contains, containsMany, serializeCard, Card, createFromSerialized } = cardApi;
+    let { default: StringCard } = string;
+    let { default: IntegerCard } = integer;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    class Role extends Card {
+      @field roleName = contains(StringCard);
+    }
+
+    class DogWalker extends Role {
+      @field poopBagCount = contains(IntegerCard);
+    }
+
+    class Employee extends Person {
+      @field roles = containsMany(Role);
+    }
+
+    class Group extends Card {
+      @field people = containsMany(Person);
+    }
+
+    await shimModule(`${realmURL}test-cards`, { Person, Role, DogWalker, Employee, Group });
+
+    let group = new Group({
+      people: [
+        new Employee({
+          firstName: 'Mango',
+          roles: [
+            new Role({ roleName: 'treat eater' }),
+            new DogWalker({ roleName: 'dog walker', poopBagCount: 4 })
+          ]
+        }),
+      ]
+    });
+
+    let payload = serializeCard(group);
+    assert.deepEqual(payload, {
+      type: 'card',
+      attributes: {
+        people: [{
+          firstName: 'Mango',
+          roles: [{
+            roleName: 'treat eater'
+          },{
+            roleName: 'dog walker',
+            poopBagCount: 4
+          }]
+        }]
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Group'
+        },
+        fields: {
+          people: [{
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Employee',
+            },
+            fields: {
+              roles: [{
+                adoptsFrom: {
+                  module: `${realmURL}test-cards`,
+                  name: 'Role',
+                }
+              },{
+                adoptsFrom: {
+                  module: `${realmURL}test-cards`,
+                  name: 'DogWalker',
+                }
+              }]
+            }
+          }]
+        }
+      }
+    });
+
+    let group2 = await createFromSerialized<any>(payload, new URL(realmURL));
+    let { people } = group2;
+    assert.ok(Array.isArray(people), 'people is an array');
+    assert.strictEqual(people.length, 1, 'array length is correct');
+    assert.strictEqual(people[0].firstName, 'Mango');
+
+    let [first] = people;
+    assert.ok(first instanceof Employee, 'Employee instance is correct');
+
+    let { roles } = first;
+    assert.ok(Array.isArray(roles), 'roles is an array');
+    assert.strictEqual(roles.length, 2, 'array length is correct');
+    assert.strictEqual(roles[0].roleName, 'treat eater');
+    assert.strictEqual(roles[1].roleName, 'dog walker');
+
+    let [role1, role2] = roles;
+    assert.ok(role1 instanceof Role, 'Role instance is correct');
+    if (role2 instanceof DogWalker) {
+      assert.strictEqual(role2.poopBagCount, 4);
+    } else {
+      assert.ok(false, 'Not a DogWalker');
+    }
+  });
 
   test('can deserialize a card from a resource object', async function(assert) {
     let { field, contains, serializeCard, Card, createFromSerialized } = cardApi;

@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
-import { flatMap, startCase, set, get } from 'lodash';
+import { flatMap, startCase, set, get, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
 import { WatchedArray } from './watched-array';
@@ -9,7 +9,11 @@ import { Deferred, isCardResource, Loader } from '@cardstack/runtime-common';
 import { flatten } from "flat";
 import { on } from '@ember/modifier';
 import { pick } from './pick';
-import type { LooseCardResource } from '@cardstack/runtime-common';
+import {
+  type LooseCardResource,
+  type MetaFieldItem,
+  isMetaFieldItem
+} from '@cardstack/runtime-common';
 import ShadowDOM from 'https://cardstack.com/base/shadow-dom';
 
 
@@ -352,8 +356,8 @@ async function getDeserializedValues<CardT extends CardConstructor>(card: CardT,
   return await field.deserialize(value, fromResource, modelPromise);
 }
 
-export function serializeCard<CardT extends CardConstructor>(
-  model: InstanceType<CardT>,
+export function serializeCard(
+  model: Card,
   opts?: {
     includeComputeds?: boolean
   }
@@ -369,36 +373,36 @@ export function serializeCard<CardT extends CardConstructor>(
     if (primitive in field.card) {
       attributes[fieldName] = serializedGet(model, fieldName);
     } else {
-      let nestedCard = serializedGet(model, fieldName);
-      if (field.fieldType === 'containsMany' && Array.isArray(nestedCard)) {
-        // TODO need to work thru how to represent a polymorphic contains many field's card refs.
-        // for now we are assuming that all cards in the containsMany field are the same card type
-        attributes[fieldName] = nestedCard.map(resource => resource.attributes);
-        if (nestedCard.length === 0) {
-          continue;
+      if (field.fieldType === 'containsMany') {
+        let collection = model[fieldName as keyof Card];
+        if (!Array.isArray(collection)) {
+          throw new Error(`expected containsMany field '${fieldName}' value in card '${model.constructor.name}' to be an array`);
         }
-        nestedCard = nestedCard[0];
-      } else if (field.fieldType !== 'containsMany') {
-        attributes[fieldName] = nestedCard.attributes;
-      }
-      if (!isCardResource(nestedCard)) {
-        throw new Error(`bug: expected serialized card for field '${fieldName}' of card '${model.constructor.name}' to be a card resource but it wasn't: ${JSON.stringify(nestedCard)}`);
-      }
-
-      let fieldCardRef = Loader.identify(field.card);
-      if (!fieldCardRef) {
-         throw new Error(`bug: encountered a card that has no Loader identity '${field.card.name}' when trying to load field '${fieldName}' in card ${JSON.stringify(adoptsFrom)}`);
-      }
-      if (fieldCardRef.module !== nestedCard.meta.adoptsFrom.module || fieldCardRef.name !== nestedCard.meta.adoptsFrom.name) {
-        // Only write out the field meta when the field value is a different card than the field card
-        fields[fieldName] = {
-          adoptsFrom: nestedCard.meta.adoptsFrom
-        };
-      }
-      for (let [nestedFieldName, nestedField] of Object.entries(nestedCard.meta.fields ?? {})) {
-        set(fields, `${fieldName}.fields.${nestedFieldName}`, {
-          adoptsFrom: nestedField.adoptsFrom
-        });
+        let fieldValue: any[] = [];
+        let metaFieldItems: MetaFieldItem[] = [];
+        let fieldIdentity = Loader.identify(field.card);
+        if (!fieldIdentity) {
+          throw new Error(`bug: encountered a card that has no Loader identity: ${field.card.name}`);
+        }
+        for (let index of collection.keys()) {
+          let { value, metaFieldItem } = resourcePartsFor(model, fieldName, index);
+          fieldValue.push(value);
+          if (metaFieldItem) {
+            metaFieldItems.push(metaFieldItem);
+          } else {
+            metaFieldItems.push({ adoptsFrom: fieldIdentity });
+          }
+        }
+        attributes[fieldName] = fieldValue;
+        if (metaFieldItems.length > 0 && metaFieldItems.some(i => !isEqual(i, { adoptsFrom: fieldIdentity }))) {
+          fields = { ...fields, ...{ [fieldName]: metaFieldItems } };
+        }
+      } else if (field.fieldType === 'contains') {
+        let { value, metaFieldItem } = resourcePartsFor(model, fieldName);
+        attributes[fieldName] = value;
+        if (metaFieldItem) {
+          fields = { ...fields, ...{ [fieldName]: metaFieldItem } };
+        }
       }
     }
   }
@@ -410,6 +414,41 @@ export function serializeCard<CardT extends CardConstructor>(
   let id = attributes.id;
   delete attributes.id;
   return { ...(id !== undefined ? { id } : {}), attributes, meta, type: "card" } as LooseCardResource;
+}
+
+function resourcePartsFor(model: Card, fieldName: string, index?: number): {
+  value: any;
+  metaFieldItem: MetaFieldItem | undefined
+} {
+  let metaFieldItem: Partial<MetaFieldItem> = {};
+  let field = getField(Reflect.getPrototypeOf(model)!.constructor as typeof Card, fieldName);
+  if (!field) {
+    throw new Error(`bug: field '${fieldName}' does not exist in card '${model.constructor.name}'`);
+  }
+  let fieldResource = serializedGet(model, fieldName);
+  if (index != null && Array.isArray(fieldResource)) {
+    fieldResource = fieldResource[index];
+  }
+  let value = fieldResource.attributes;
+  if (!isCardResource(fieldResource)) {
+    throw new Error(`bug: expected serialized card for field '${fieldName}' of card '${model.constructor.name}' to be a card resource but it wasn't: ${JSON.stringify(fieldResource)}`);
+  }
+
+  let fieldCardRef = Loader.identify(field.card);
+  if (!fieldCardRef) {
+    throw new Error(`bug: encountered a card that has no Loader identity '${field.card.name}' when trying to load field '${fieldName}' in card '${model.constructor.name}'`);
+  }
+  if (fieldCardRef.module !== fieldResource.meta.adoptsFrom.module || fieldCardRef.name !== fieldResource.meta.adoptsFrom.name) {
+    // Only write out the field meta when the field value is a different card than the field card
+    metaFieldItem.adoptsFrom = fieldResource.meta.adoptsFrom
+  }
+  for (let [nestedFieldName, nestedField] of Object.entries(fieldResource.meta.fields ?? {})) {
+    set(metaFieldItem, `fields.${nestedFieldName}`, nestedField);
+  }
+  if (!isMetaFieldItem(metaFieldItem)) {
+    return { value, metaFieldItem: undefined };
+  }
+  return { value, metaFieldItem };
 }
 
 export async function createFromSerialized<T extends CardConstructor>(CardClass: T, data: T extends { [primitive]: infer P } ? P : LooseCardResource, opts?: { loader?: Loader }): Promise<CardInstanceType<T>>;
@@ -497,13 +536,12 @@ export async function searchDoc<CardT extends CardConstructor>(model: InstanceTy
 
 
 function hydrateField(resource: LooseCardResource, fieldName: string, fallback: typeof Card): LooseCardResource {
-  let realField = fieldName.split('.').shift()!;
-  let adoptsFrom = resource.meta.fields?.[realField].adoptsFrom ?? Loader.identify(fallback);
+  let adoptsFrom = get(resource, `meta.fields.${fieldName}.adoptsFrom`) ?? Loader.identify(fallback);
   if (!adoptsFrom) {
-    throw new Error(`bug: cannot determine identity for field '${realField}'`);
+    throw new Error(`bug: cannot determine identity for field '${fieldName}'`);
   }
-  let fields: LooseCardResource["meta"]["fields"] = {
-    ...(resource.meta.fields?.[realField]?.fields ?? {})
+  let fields: NonNullable<LooseCardResource["meta"]["fields"]> = {
+    ...(get(resource, `meta.fields.${fieldName}.fields`) ?? {})
   };
   return {
     attributes: get(resource, `attributes.${fieldName}`) ?? {},

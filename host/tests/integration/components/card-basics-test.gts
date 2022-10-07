@@ -539,6 +539,64 @@ module('Integration | card-basics', function (hooks) {
     );
   });
 
+  // note that polymorphic "contains" field rendering is inherently tested via the catalog entry tests
+  test('renders a card with a polymorphic "containsMany" field', async function (assert) {
+    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    let { default: IntegerCard } = integer;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    class Employee extends Person {
+      @field department = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-employee-firstName><@fields.firstName/></div>
+          <div data-test-employee-department><@fields.department/></div>
+        </template>
+      }
+    }
+
+    class Customer extends Person {
+      @field billAmount = contains(IntegerCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-customer-firstName><@fields.firstName/></div>
+          <div data-test-customer-billAmount><@fields.billAmount/></div>
+        </template>
+      }
+    }
+
+    class Group extends Card {
+      @field people = containsMany(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><div><@fields.people/></div></template>
+      }
+    }
+
+    await shimModule(`${testRealmURL}test-cards`, { Person, Employee, Customer, Group });
+
+    let group = new Group({
+      people: [
+        new Employee({
+          firstName: 'Mango',
+          department: 'begging'
+        }),
+        new Customer({
+          firstName: 'Van Gogh',
+          billAmount: 100
+        })
+      ]
+    });
+    await renderCard(group, 'isolated');
+    assert.shadowDOM('[data-test-employee-firstName]').containsText('Mango');
+    assert.shadowDOM('[data-test-employee-department]').containsText('begging');
+    assert.shadowDOM('[data-test-customer-firstName]').containsText('Van Gogh');
+    assert.shadowDOM('[data-test-customer-billAmount]').containsText('100');
+  });
+
   test('rerender when a primitive field changes', async function(assert) {
     let {field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
