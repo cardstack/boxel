@@ -5,6 +5,7 @@ import SpringBehavior from 'animations-experiment/behaviors/spring';
 import { AnimationDefinition } from 'animations-experiment/models/transition-runner';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import Sprite from 'animations-experiment/models/sprite';
 
 export default class SimpleOrchestration extends Controller {
   @tracked leftPosition = '0px';
@@ -18,14 +19,56 @@ export default class SimpleOrchestration extends Controller {
     }
   }
 
-  sequence(changeset: Changeset): AnimationDefinition {
-    let { keptSprites } = changeset;
+  rules = [
+    {
+      match: (sprites: Sprite[]) => {
+        let remaining: Sprite[] = [];
+        let claimed: AnimationDefinition[] = [];
+        for (let sprite of sprites) {
+          if (sprite.id === 'foo1') {
+            claimed.push(this.sequence(new Set([sprite])));
+          } else {
+            remaining.push(sprite);
+          }
+        }
 
+        return {
+          remaining,
+          claimed,
+        };
+      },
+    },
+    {
+      match: (sprites: Sprite[]) => {
+        let remaining: Sprite[] = [];
+        let claimed: AnimationDefinition[] = [];
+        for (let sprite of sprites) {
+          if (sprite.id === 'foo2') {
+            claimed.push(this.parallel(new Set([sprite])));
+          } else {
+            remaining.push(sprite);
+          }
+        }
+
+        return {
+          remaining,
+          claimed,
+        };
+      },
+    },
+  ];
+
+  @action use(changeset: Changeset) {
+    let { keptSprites } = changeset;
+    return this.sequence(keptSprites);
+  }
+
+  sequence(sprites: Set<Sprite>): AnimationDefinition {
     return {
       timeline: {
         sequence: [
           {
-            sprites: keptSprites,
+            sprites,
             properties: {
               opacity: { to: 0 },
             },
@@ -35,7 +78,7 @@ export default class SimpleOrchestration extends Controller {
             },
           },
           {
-            sprites: keptSprites,
+            sprites,
             properties: {
               opacity: { from: 0, to: 1 },
             },
@@ -45,7 +88,7 @@ export default class SimpleOrchestration extends Controller {
             },
           },
           {
-            sprites: keptSprites,
+            sprites,
             properties: {
               position: {},
             },
@@ -58,14 +101,12 @@ export default class SimpleOrchestration extends Controller {
     } as unknown as AnimationDefinition;
   }
 
-  parallel(changeset: Changeset): AnimationDefinition {
-    let { keptSprites } = changeset;
-
+  parallel(sprites: Set<Sprite>): AnimationDefinition {
     return {
       timeline: {
         parallel: [
           {
-            sprites: keptSprites,
+            sprites: sprites,
             properties: {
               position: {},
             },
@@ -77,7 +118,7 @@ export default class SimpleOrchestration extends Controller {
           {
             sequence: [
               {
-                sprites: keptSprites,
+                sprites: sprites,
                 properties: {
                   opacity: { from: 1, to: 0.1 },
                 },
@@ -86,7 +127,7 @@ export default class SimpleOrchestration extends Controller {
                 },
               },
               {
-                sprites: keptSprites,
+                sprites: sprites,
                 properties: {
                   opacity: { to: 1, from: 0.1 },
                 },
