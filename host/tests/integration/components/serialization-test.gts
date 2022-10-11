@@ -1252,7 +1252,7 @@ module('Integration | serialization', function (hooks) {
       meta: {
         adoptsFrom: {
           module: "./blog",
-          name: "Blog",
+          name: "Blog"
         }
       }
     }, new URL(realmURL)) as Blog;
@@ -1281,7 +1281,7 @@ module('Integration | serialization', function (hooks) {
       meta: {
         adoptsFrom: {
           module: `${realmURL}blog`,
-          name: "Blog",
+          name: "Blog"
         }
       }
     }, 'card serialization is correct')
