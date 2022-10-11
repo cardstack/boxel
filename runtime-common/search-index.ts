@@ -61,21 +61,19 @@ export function isCardRef(ref: any): ref is CardRef {
 
 export type Saved = string;
 export type Unsaved = string | undefined;
-export interface MetaFieldItem {
+export interface Meta {
   adoptsFrom: ExportedCardRef;
   fields?: CardFields;
 }
 interface CardFields {
-  [fieldName: string]: MetaFieldItem | MetaFieldItem[];
+  [fieldName: string]: Meta | Meta[];
 }
 export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
   type: "card";
   attributes?: Record<string, any>;
   // TODO add relationships
-  meta: {
-    adoptsFrom: ExportedCardRef;
-    fields?: CardFields;
+  meta: Meta & {
     lastModified?: number;
   };
   links?: {
@@ -138,22 +136,22 @@ export function isCardFields(fields: any): fields is CardFields {
       return false;
     }
     if (Array.isArray(fieldItem)) {
-      if (fieldItem.some((f) => !isMetaFieldItem(f))) {
+      if (fieldItem.some((f) => !isMeta(f))) {
         return false;
       }
-    } else if (!isMetaFieldItem(fieldItem)) {
+    } else if (!isMeta(fieldItem)) {
       return false;
     }
   }
   return true;
 }
 
-export function isMetaFieldItem(fieldItem: any): fieldItem is MetaFieldItem {
-  if (typeof fieldItem !== "object" || fieldItem == null) {
+export function isMeta(meta: any): meta is Meta {
+  if (typeof meta !== "object" || meta == null) {
     return false;
   }
-  if ("adoptsFrom" in fieldItem) {
-    let { adoptsFrom } = fieldItem;
+  if ("adoptsFrom" in meta) {
+    let { adoptsFrom } = meta;
     if (
       !("module" in adoptsFrom) ||
       typeof adoptsFrom.module !== "string" ||
@@ -165,8 +163,8 @@ export function isMetaFieldItem(fieldItem: any): fieldItem is MetaFieldItem {
   } else {
     return false;
   }
-  if ("fields" in fieldItem) {
-    if (!isCardFields(fieldItem.fields)) {
+  if ("fields" in meta) {
+    if (!isCardFields(meta.fields)) {
       return false;
     }
   }

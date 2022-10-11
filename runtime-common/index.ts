@@ -119,10 +119,10 @@ export type {
   ExportedCardRef,
   CardResource,
   CardDocument,
-  MetaFieldItem,
+  Meta,
 } from "./search-index";
 export {
-  isMetaFieldItem,
+  isMeta,
   isCardResource,
   isCardDocument,
   isCardCollectionDocument,

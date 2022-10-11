@@ -5,6 +5,7 @@ import parseISO from 'date-fns/parseISO';
 import { p, cleanWhiteSpace, shimModule } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
+import get from 'lodash/get';
 import { shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -240,7 +241,7 @@ module('Integration | serialization', function (hooks) {
 
     let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
-    let serializedRef = serializedGet(driver, 'ref');
+    let { serialized: serializedRef } = serializedGet(driver, 'ref');
     assert.ok(serializedRef !== ref, 'the card ref value is not strict equals to its serialized counter part');
     assert.deepEqual(serializedRef, ref, 'the card ref value is deep equal to its serialized counter part')
   });
@@ -255,7 +256,7 @@ module('Integration | serialization', function (hooks) {
       @field created = contains(DateCard);
       @field published = contains(DatetimeCard);
       static isolated = class Isolated extends Component<typeof this> {
-        <template>created {{serializedGet @model 'created'}}, published {{serializedGet @model 'published'}}</template>
+        <template>created {{get (serializedGet @model 'created') 'serialized'}}, published {{get (serializedGet @model 'published') 'serialized'}}</template>
       }
     }
 
@@ -312,8 +313,8 @@ module('Integration | serialization', function (hooks) {
       @field published = contains(DatetimeCard);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          created {{asString (serializedGet @model 'created')}},
-          published {{asString (serializedGet @model 'published')}}
+          created {{asString (get (serializedGet @model 'created') 'serialized')}},
+          published {{asString (get (serializedGet @model 'published') 'serialized')}}
         </template>
       }
     }
@@ -431,20 +432,13 @@ module('Integration | serialization', function (hooks) {
       })
     });
 
-    assert.deepEqual(serializedGet(firstPost, 'author'), {
-      type: "card",
-      attributes: {
-        birthdate: "2019-10-30",
-        firstName:"Mango",
-        lastLogin:"2022-04-27T16:30:00.000Z",
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Person'
-        }
-      }
+    let { serialized, meta } = serializedGet(firstPost, 'author');
+    assert.deepEqual(serialized, {
+      birthdate: "2019-10-30",
+      firstName:"Mango",
+      lastLogin:"2022-04-27T16:30:00.000Z",
     });
+    assert.deepEqual(meta, undefined); // this means the field card for the value is the same as the field's card
   });
 
 
@@ -479,20 +473,18 @@ module('Integration | serialization', function (hooks) {
       })
     });
 
-    assert.deepEqual(serializedGet(firstPost, 'author'), {
-      type: "card",
-      attributes: {
-        birthdate: "2019-10-30",
-        firstName:"Mango",
-        lastLogin:"2022-04-27T16:30:00.000Z",
-        department: 'wagging'
+    let { serialized, meta } = serializedGet(firstPost, 'author');
+    assert.deepEqual(serialized, {
+      birthdate: "2019-10-30",
+      firstName:"Mango",
+      lastLogin:"2022-04-27T16:30:00.000Z",
+      department: 'wagging'
+    });
+    assert.deepEqual(meta, {
+      adoptsFrom: {
+        module: `${realmURL}test-cards`,
+        name: 'Employee',
       },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Employee',
-        },
-      }
     });
   });
 
@@ -576,7 +568,7 @@ module('Integration | serialization', function (hooks) {
         }
       });
       static isolated = class Isolated extends Component<typeof this> {
-        <template>{{serializedGet @model 'firstBirthday'}}</template>
+        <template>{{get (serializedGet @model 'firstBirthday') 'serialized'}}</template>
       }
     }
 
@@ -661,7 +653,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Schedule });
 
     let classSchedule = new Schedule({ dates: [p('2022-4-1'), p('2022-4-4')] });
-    assert.deepEqual(serializedGet(classSchedule, 'dates'), ["2022-04-01","2022-04-04"]);
+    assert.deepEqual(serializedGet(classSchedule, 'dates').serialized, ["2022-04-01","2022-04-04"]);
   });
 
   test("can serialize a containsMany's nested field", async function(assert) {
@@ -683,35 +675,27 @@ module('Integration | serialization', function (hooks) {
       new Appointment({ date: p('2022-4-4'), location: 'Room 102', title: 'Civics' }),
     ]});
 
-    assert.deepEqual(serializedGet(classSchedule, 'appointments'),
-      [{
-        type: "card",
-        attributes: {
-          date:"2022-04-01",
-          location:"Room 332",
-          title:"Biology"
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Appointment'
-          }
-        }
-      },{
-        type: "card",
-        attributes: {
-          date:"2022-04-04",
-          location:"Room 102",
-          title:"Civics"
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Appointment'
-          }
-        }
-      }]
-    )
+    let { serialized, meta } = serializedGet(classSchedule, 'appointments');
+    assert.deepEqual(serialized, [{
+      date:"2022-04-01",
+      location:"Room 332",
+      title:"Biology"
+    },{
+      date:"2022-04-04",
+      location:"Room 102",
+      title:"Civics"
+    }]);
+    assert.deepEqual(meta, [{
+      adoptsFrom: {
+        module: `${realmURL}test-cards`,
+        name: 'Appointment'
+      }
+    },{
+      adoptsFrom: {
+        module: `${realmURL}test-cards`,
+        name: 'Appointment'
+      }
+    }]);
   });
 
   test('can serialize a card with primitive fields', async function (assert) {
@@ -1278,7 +1262,20 @@ module('Integration | serialization', function (hooks) {
       meta: {
         adoptsFrom: {
           module: "./blog",
-          name: "Blog"
+          name: "Blog",
+        },
+        fields: {
+          posts: [{
+            adoptsFrom: {
+              module: `${realmURL}post`,
+              name: 'Post'
+            }
+          },{
+            adoptsFrom: {
+              module: `${realmURL}post`,
+              name: 'Post'
+            }
+          }]
         }
       }
     }, new URL(realmURL)) as Blog;
@@ -1307,7 +1304,20 @@ module('Integration | serialization', function (hooks) {
       meta: {
         adoptsFrom: {
           module: `${realmURL}blog`,
-          name: "Blog"
+          name: "Blog",
+        },
+        fields: {
+          posts: [{
+            adoptsFrom: {
+              module: `${realmURL}post`,
+              name: 'Post'
+            }
+          },{
+            adoptsFrom: {
+              module: `${realmURL}post`,
+              name: 'Post'
+            }
+          }]
         }
       }
     }, 'card serialization is correct')
