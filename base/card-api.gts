@@ -12,7 +12,7 @@ import { on } from '@ember/modifier';
 import { pick } from './pick';
 import type { LooseCardResource } from '@cardstack/runtime-common';
 import ShadowDOM from 'https://cardstack.com/base/shadow-dom';
-
+import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -549,55 +549,70 @@ function cardThunk<CardT extends CardConstructor>(cardOrThunk: CardT | (() => Ca
   return ("baseCard" in cardOrThunk ? () => cardOrThunk : cardOrThunk) as () => CardT;
 }
 
-
-
 export type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; fieldName: string | undefined } }
+ 
+let defaultStyles = initStyleSheet(`
+  this {
+    border: 1px solid gray;
+    border-radius: 10px;
+    background-color: #e9e7e7;
+    padding: 1rem;
+  }
+`);
+let editStyles = initStyleSheet(`
+  this {
+    border: 1px solid gray;
+    border-radius: 10px;
+    background-color: #e9e7e7;
+    padding: 1rem;
+  }
+  .edit-field {
+    display: block;
+    padding: 0.75rem;
+    text-transform: capitalize;
+    background-color: #ffffff6e;
+    border: 1px solid gray;
+    margin: 0.5rem 0;
+  }
+  input[type=text],
+  input[type=number] {
+    box-sizing: border-box;
+    background-color: transparent;
+    width: 100%;
+    margin-top: .5rem;
+    display: block;
+    padding: 0.5rem;
+    font: inherit;
+    border: inherit;
+  }
+  textarea {
+    box-sizing: border-box;
+    background-color: transparent;
+    width: 100%;
+    min-height: 5rem;
+    margin-top: .5rem;
+    display: block;
+    padding: 0.5rem;
+    font: inherit;
+    border: inherit;
+  }
+`);
 
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    {{#each-in @fields as |_key Field|}}
-      <Field />
-    {{/each-in}}
+    <div {{attachStyles defaultStyles}}>
+      {{#each-in @fields as |_key Field|}}
+        <Field />
+      {{/each-in}}
+    </div>
   </template>;
 }
 
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <style>
-      .default-edit {
-        background-color: white;
-      }
-      .default-edit label,
-      .default-edit .field {
-        display: block;
-        padding: 0.75rem;
-        text-transform: capitalize;
-        border: 1px solid gray;
-        margin-top: 0.5rem;
-        margin-bottom: 0.5rem;
-      }
-      .default-edit input[type=text],
-      .default-edit input[type=number] {
-        box-sizing: border-box;
-        width: 100%;
-        margin-top: .5rem;
-        display: block;
-        padding: 0.5rem;
-        font: inherit;
-      }
-      .default-edit textarea {
-        box-sizing: border-box;
-        width: 100%;
-        min-height: 5rem;
-        margin-top: .5rem;
-        display: block;
-        padding: 0.5rem;
-        font: inherit;
-      }
-    </style>
-    <div class="default-edit">
+    <div {{attachStyles editStyles}}>
       {{#each-in @fields as |key Field|}}
-        <label data-test-field={{key}}>
+        <label class="edit-field" data-test-field={{key}}>
           {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
           {{startCase key}}
           <Field />
@@ -992,4 +1007,4 @@ export class Box<T> {
 
 }
 
-type ElementType<T> = T extends (infer V)[] ? V : never;
+type ElementType<T> = T extends (infer V)[] ? V : never;  
