@@ -61,26 +61,19 @@ export function isCardRef(ref: any): ref is CardRef {
 
 export type Saved = string;
 export type Unsaved = string | undefined;
+export interface Meta {
+  adoptsFrom: ExportedCardRef;
+  fields?: CardFields;
+}
 interface CardFields {
-  [fieldName: string]: {
-    adoptsFrom: {
-      module: string;
-      name: string;
-    };
-    fields?: CardFields;
-  };
+  [fieldName: string]: Meta | Meta[];
 }
 export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
   type: "card";
   attributes?: Record<string, any>;
   // TODO add relationships
-  meta: {
-    adoptsFrom: {
-      module: string;
-      name: string;
-    };
-    fields?: CardFields;
+  meta: Meta & {
     lastModified?: number;
   };
   links?: {
@@ -136,33 +129,43 @@ export function isCardFields(fields: any): fields is CardFields {
   if (typeof fields !== "object") {
     return false;
   }
-  for (let [fieldName, field] of Object.entries(
+  for (let [fieldName, fieldItem] of Object.entries(
     fields as { [fieldName: string | symbol]: any }
   )) {
+    if (typeof fieldName !== "string") {
+      return false;
+    }
+    if (Array.isArray(fieldItem)) {
+      if (fieldItem.some((f) => !isMeta(f))) {
+        return false;
+      }
+    } else if (!isMeta(fieldItem)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function isMeta(meta: any): meta is Meta {
+  if (typeof meta !== "object" || meta == null) {
+    return false;
+  }
+  if ("adoptsFrom" in meta) {
+    let { adoptsFrom } = meta;
     if (
-      typeof fieldName !== "string" ||
-      typeof field !== "object" ||
-      field == null
+      !("module" in adoptsFrom) ||
+      typeof adoptsFrom.module !== "string" ||
+      !("name" in adoptsFrom) ||
+      typeof adoptsFrom.name !== "string"
     ) {
       return false;
     }
-    if ("adoptsFrom" in field) {
-      let { adoptsFrom } = field;
-      if (
-        !("module" in adoptsFrom) ||
-        typeof adoptsFrom.module !== "string" ||
-        !("name" in adoptsFrom) ||
-        typeof adoptsFrom.name !== "string"
-      ) {
-        return false;
-      }
-    } else {
+  } else {
+    return false;
+  }
+  if ("fields" in meta) {
+    if (!isCardFields(meta.fields)) {
       return false;
-    }
-    if ("fields" in field) {
-      if (!isCardFields(field.fields)) {
-        return false;
-      }
     }
   }
   return true;

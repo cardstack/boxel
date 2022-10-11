@@ -81,7 +81,14 @@ export const isNode =
 export const externalsMap: Map<string, string[]> = new Map([
   [
     "@cardstack/runtime-common",
-    ["Loader", "Deferred", "isCardResource", "chooseCard", "baseCardRef"],
+    [
+      "Loader",
+      "Deferred",
+      "isCardResource",
+      "chooseCard",
+      "baseCardRef",
+      "isMetaFieldItem",
+    ],
   ],
   ["@glimmer/component", ["default"]],
   ["@ember/component", ["setComponentTemplate", "default"]],
@@ -97,7 +104,7 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["ember-concurrency-ts", ["taskFor"]],
   ["ember-modifier", ["default", "modifier"]],
   ["flat", ["flatten", "unflatten"]],
-  ["lodash", ["flatMap", "startCase", "get", "set"]],
+  ["lodash", ["flatMap", "startCase", "get", "set", "isEqual"]],
   ["tracked-built-ins", ["TrackedWeakMap"]],
   ["date-fns", ["parseISO", "format", "parse"]],
 ]);
@@ -112,8 +119,10 @@ export type {
   ExportedCardRef,
   CardResource,
   CardDocument,
+  Meta,
 } from "./search-index";
 export {
+  isMeta,
   isCardResource,
   isCardDocument,
   isCardCollectionDocument,

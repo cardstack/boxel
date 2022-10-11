@@ -81,7 +81,6 @@ module('Unit | search-index', function (hooks) {
       [
         'http://localhost:4201/base/attach-styles',
         'http://localhost:4201/base/card-api',
-        'http://localhost:4201/base/contains-many',
         'http://localhost:4201/base/integer',
         'http://localhost:4201/base/not-ready',
         'http://localhost:4201/base/pick',

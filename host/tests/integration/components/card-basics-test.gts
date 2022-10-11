@@ -539,6 +539,64 @@ module('Integration | card-basics', function (hooks) {
     );
   });
 
+  // note that polymorphic "contains" field rendering is inherently tested via the catalog entry tests
+  test('renders a card with a polymorphic "containsMany" field', async function (assert) {
+    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    let { default: IntegerCard } = integer;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    class Employee extends Person {
+      @field department = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-employee-firstName><@fields.firstName/></div>
+          <div data-test-employee-department><@fields.department/></div>
+        </template>
+      }
+    }
+
+    class Customer extends Person {
+      @field billAmount = contains(IntegerCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-customer-firstName><@fields.firstName/></div>
+          <div data-test-customer-billAmount><@fields.billAmount/></div>
+        </template>
+      }
+    }
+
+    class Group extends Card {
+      @field people = containsMany(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><div><@fields.people/></div></template>
+      }
+    }
+
+    await shimModule(`${testRealmURL}test-cards`, { Person, Employee, Customer, Group });
+
+    let group = new Group({
+      people: [
+        new Employee({
+          firstName: 'Mango',
+          department: 'begging'
+        }),
+        new Customer({
+          firstName: 'Van Gogh',
+          billAmount: 100
+        })
+      ]
+    });
+    await renderCard(group, 'isolated');
+    assert.shadowDOM('[data-test-employee-firstName]').containsText('Mango');
+    assert.shadowDOM('[data-test-employee-department]').containsText('begging');
+    assert.shadowDOM('[data-test-customer-firstName]').containsText('Van Gogh');
+    assert.shadowDOM('[data-test-customer-billAmount]').containsText('100');
+  });
+
   test('rerender when a primitive field changes', async function(assert) {
     let {field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
@@ -837,6 +895,7 @@ module('Integration | card-basics', function (hooks) {
     assert.shadowDOM('[data-test-field="title"] input').hasValue('First Post');
     assert.shadowDOM('[data-test-field="reviews"] input').hasValue('1');
     assert.shadowDOM('[data-test-field="firstName"] input').hasValue('Arthur');
+    assert.shadowDOM('[data-test-field="id"] input').doesNotExist('contained card does not have an id input field');
 
     await fillIn('[data-test-field="title"] input', 'New Title');
     await fillIn('[data-test-field="reviews"] input', '5');
@@ -903,31 +962,74 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let card = new Person({
-      languagesSpoken: ['english', 'japanese'],
-    });
+    let card = new Person();
 
     await renderCard(card, 'edit');
+    assert.shadowDOM('[data-test-item]').doesNotExist();
+
+    // add english
+    await click('[data-test-add-new]');
+    await fillIn('[data-test-item="0"] input', 'english');
+    assert.shadowDOM('[data-test-item]').exists({ count: 1 });
+    assert.shadowDOM('[data-test-output]').hasText('english');
+
+    // add japanese
+    await click('[data-test-add-new]');
+    await fillIn('[data-test-item="1"] input', 'japanese');
     assert.shadowDOM('[data-test-item]').exists({ count: 2 });
-    assert.shadowDOM('[data-test-item="0"] input').hasValue('english');
     assert.shadowDOM('[data-test-output]').hasText('english japanese');
 
+    // change japanese to italian
     await fillIn('[data-test-item="1"] input', 'italian');
     assert.shadowDOM('[data-test-output]').hasText('english italian');
 
+    // remove english
+    await click('[data-test-remove="0"]');
+    assert.shadowDOM('[data-test-item]').exists({ count: 1 });
+    assert.shadowDOM('[data-test-output]').hasText('italian');
+  });
+
+  test('add, remove and edit items in containsMany composite field', async function (assert) {
+    let {field, containsMany, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
+    class Post extends Card {
+      @field title = contains(StringCard);
+    }
+
+    class Blog extends Card {
+      @field posts = containsMany(Post);
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <@fields.posts />
+          <ul data-test-output>
+            {{#each @model.posts as |post|}}
+              <li>{{post.title}}</li>
+            {{/each}}
+          </ul>
+        </template>
+      }
+    }
+
+    let card = new Blog();
+
+    await renderCard(card, 'edit');
+    assert.shadowDOM('[data-test-item]').doesNotExist();
+    
     await click('[data-test-add-new]');
-    await fillIn('[data-test-item="2"] input', 'french');
-    assert.shadowDOM('[data-test-item]').exists({ count: 3 });
-    assert.shadowDOM('[data-test-output]').hasText('english italian french');
+    await fillIn('[data-test-field="title"] input', "Tail Wagging Basics");
+    assert.shadowDOM('[data-test-item]').exists({ count: 1 });
+    assert.shadowDOM('[data-test-output]').hasText('Tail Wagging Basics');
 
     await click('[data-test-add-new]');
-    await fillIn('[data-test-item="3"] input', 'spanish');
-    assert.shadowDOM('[data-test-item]').exists({ count: 4 });
-    assert.shadowDOM('[data-test-output]').hasText('english italian french spanish');
+    assert.shadowDOM('[data-test-item]').exists({ count: 2 });
 
     await click('[data-test-remove="0"]');
-    assert.shadowDOM('[data-test-item]').exists({ count: 3 });
-    assert.shadowDOM('[data-test-output]').hasText('italian french spanish');
+    assert.shadowDOM('[data-test-item]').exists({ count: 1 });
+    assert.shadowDOM('[data-test-output]').hasText('');
+
+    await fillIn('[data-test-field="title"] input', "Begging for Beginners");
+    assert.shadowDOM('[data-test-item]').exists({ count: 1 });
+    assert.shadowDOM('[data-test-output]').hasText('Begging for Beginners');
   });
 
   test('add, remove and edit items in containsMany date and datetime fields', async function (assert) {

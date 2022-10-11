@@ -4,13 +4,15 @@ import { NotReady, isNotReadyError} from './not-ready';
 import { flatMap, startCase, set, get } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
-import ContainsManyEditor from './contains-many';
 import { WatchedArray } from './watched-array';
 import { Deferred, isCardResource, Loader } from '@cardstack/runtime-common';
 import { flatten } from "flat";
 import { on } from '@ember/modifier';
 import { pick } from './pick';
-import type { LooseCardResource } from '@cardstack/runtime-common';
+import {
+  type LooseCardResource,
+  type Meta,
+} from '@cardstack/runtime-common';
 import ShadowDOM from 'https://cardstack.com/base/shadow-dom';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
@@ -37,6 +39,13 @@ type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => voi
 
 
 export type Format = 'isolated' | 'embedded' | 'edit';
+export type FieldType = 'contains' | 'containsMany'; // TODO add linksTo
+export function isFieldType(type: any): type is FieldType {
+  if (typeof type !== 'string') {
+    return false;
+  }
+  return ['contains', 'containsMany'].includes(type);
+}
 
 interface Options {
   computeVia?: string | (() => unknown);
@@ -55,26 +64,18 @@ const isBaseCard = Symbol('isBaseCard');
 interface Field<CardT extends CardConstructor> {
   card: CardT;
   name: string;
+  fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
-  // TODO once we add linksTo, we'll probably want a better property here, maybe:
-  // fieldType: "contains" | "containsMany" | "linksTo" | "linksToMany"
-  containsMany: boolean;
-  serialize(value: any): any;
+  serialize(value: any): { serialized: any | any[]; meta: Meta | Meta[] | undefined } // meta may be undefined when serializing primitive field
   deserialize(value: any, fromResource: LooseCardResource | undefined, instancePromise: Promise<Card>): Promise<any>;
   emptyValue(instance: Card): any;
   prepareSet(instance: Card, value: any): void;
+  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
 }
 
-export type FieldType = 'contains' | 'contains-many';
-
-export function isFieldType(type: any): type is FieldType {
-  if (typeof type !== 'string') {
-    return false;
-  }
-  return ['contains', 'contains-many'].includes(type);
-}
 
 class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
+  readonly fieldType = 'containsMany';
   constructor(
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
@@ -85,8 +86,26 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return this.cardThunk();
   }
 
-  serialize(value: CardInstanceType<FieldT>[]): any[] {
-    return value.map(entry => this.card[serialize](entry))
+  serialize(value: CardInstanceType<FieldT>[]): { serialized: any[]; meta: Meta[] | undefined } {
+    let serialized = value.map(entry => this.card[serialize](entry))
+    let meta: Meta[] | undefined;
+    let usesDefaultCard = true;
+    if (!(primitive in this.card)) {
+      let adoptsFrom = Loader.identify(this.card);
+      if (!adoptsFrom) {
+        throw new Error(`bug: encountered a card that has no Loader identity '${this.card.name}'`);
+      }
+      meta = value.map((entry, i) => getMeta(this, entry, serialized[i]))
+        .map(metaItem => {
+          if (metaItem) {
+            usesDefaultCard = false; // warning side effect in map
+            return metaItem;
+          }
+          return { adoptsFrom};
+        }) as Meta[];
+      serialized = serialized.map(resource => resource ? resource.attributes : resource);
+    }
+    return { serialized, meta: usesDefaultCard ? undefined : meta };
   }
 
   async deserialize(value: any[], fromResource: LooseCardResource | undefined, instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
@@ -104,8 +123,6 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     );
   }
 
-  containsMany = true;
-
   emptyValue(instance: Card) { return new WatchedArray(() => recompute(instance)) }
 
   prepareSet(instance: Card, value: any) {
@@ -114,9 +131,46 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     }
     return new WatchedArray(() => recompute(instance), value);
   }
+
+
+  component(model: Box<Card>, format: Format) {
+    let fieldName = this.name as keyof Card;
+    let field = this;
+    let arrayField = model.field(fieldName, useIndexBasedKey in this.card) as unknown as Box<Card[]>;
+    if (format === 'edit') {
+      return class ContainsManyEditorTemplate extends GlimmerComponent {
+        <template>
+          <ContainsManyEditor
+            @model={{model}}
+            @fieldName={{fieldName}}
+            @arrayField={{arrayField}}
+            @field={{field}}
+            @format={{format}}
+          />
+        </template>
+      };
+    }
+    return class ContainsMany extends GlimmerComponent {
+      <template>
+        {{#each arrayField.children as |boxedElement|}}
+          {{#let (getComponent (cardTypeFor field boxedElement) format boxedElement) as |Item|}}
+            <Item/>
+          {{/let}}
+        {{/each}}
+      </template>
+    };
+  }
+}
+
+function cardTypeFor(field: Field<typeof Card>, boxedElement: Box<Card>): typeof Card {
+  if (primitive in field.card) {
+      return field.card;
+  }
+  return Reflect.getPrototypeOf(boxedElement.value)!.constructor as typeof Card;
 }
 
 class Contains<CardT extends CardConstructor> implements Field<CardT> {
+  readonly fieldType = 'contains';
   constructor(private cardThunk: () => CardT, readonly computeVia: undefined | string | (() => unknown), readonly name: string) {
   }
 
@@ -124,12 +178,17 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
-  serialize(value: InstanceType<CardT>): any {
+  serialize(value: InstanceType<CardT>): { serialized: any; meta: Meta | undefined } {
+    let serialized: any;
+    let meta: Meta | undefined;
     if (value != null) {
-      return this.card[serialize](value);
+      let rawSerialized = this.card[serialize](value);
+      meta = getMeta(this, value, rawSerialized);
+      serialized = primitive in this.card ? rawSerialized : rawSerialized.attributes;
     } else {
-      return value;
+      serialized = value;
     }
+    return { serialized, meta };
   }
 
   async deserialize(value: any, fromResource: LooseCardResource | undefined): Promise<CardInstanceType<CardT>> {
@@ -138,8 +197,6 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     }
     return (await cardClassFromData(value, this.card))[deserialize](value);
   }
-
-  containsMany = false;
 
   emptyValue(_instance: Card) {
     if (primitive in this.card) {
@@ -159,6 +216,45 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     }
     return value;
   }
+
+  component(model: Box<Card>, format: Format) {
+    let fieldName = this.name as keyof Card;
+    let card: typeof Card;
+    if (primitive in this.card) {
+      card = this.card;
+    } else {
+      card = model.value[fieldName].constructor as typeof Card;
+    }
+    let innerModel = model.field(fieldName) as unknown as Box<Card>;
+    return getComponent(card, format, innerModel);
+  }
+}
+
+function getMeta(field: Field<typeof Card>, deserializedVal: any, serializedVal: any): Meta | undefined {
+  if (primitive in field.card) {
+    return undefined;
+  }
+  if (typeof deserializedVal === 'object' && deserializedVal != null && isBaseCard in deserializedVal) {
+    if (!isCardResource(serializedVal)) {
+      throw new Error(`bug: expected serialized card for field '${field.name}' of card '${deserializedVal.constructor.name}' to be a card resource but it wasn't: ${JSON.stringify(serializedVal)}`);
+    }
+    let instance = deserializedVal as Card;
+    let fieldCard = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
+    if (field.card === fieldCard) {
+      // Only write out the field meta when the field value is a different card than the field card
+      return undefined;
+    }
+    let fieldCardRef = Loader.identify(fieldCard);
+    if (!fieldCardRef) {
+      throw new Error(`bug: encountered a card that has no Loader identity '${fieldCard.name}'`);
+    }
+    let meta = { adoptsFrom: fieldCardRef };
+    for (let [nestedFieldName, nestedField] of Object.entries(serializedVal.meta.fields ?? {})) {
+      set(meta, `fields.${nestedFieldName}`, nestedField);
+    }
+    return meta;
+  }
+  throw new Error(`bug: don't know how to build meta for field '${field.name}' from deserialized value: ${JSON.stringify(deserializedVal)}`);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -317,8 +413,8 @@ async function getDeserializedValues<CardT extends CardConstructor>(card: CardT,
   return await field.deserialize(value, fromResource, modelPromise);
 }
 
-export function serializeCard<CardT extends CardConstructor>(
-  model: InstanceType<CardT>,
+export function serializeCard(
+  model: Card,
   opts?: {
     includeComputeds?: boolean
   }
@@ -330,41 +426,11 @@ export function serializeCard<CardT extends CardConstructor>(
     throw new Error(`bug: encountered a card that has no Loader identity: ${model.constructor.name}`);
   }
 
-  for (let [fieldName, field] of Object.entries(getFields(model, opts))) {
-    if (primitive in field.card) {
-      attributes[fieldName] = serializedGet(model, fieldName);
-    } else {
-      let nestedCard = serializedGet(model, fieldName);
-      if (field.containsMany && Array.isArray(nestedCard)) {
-        // TODO need to work thru how to represent a polymorphic contains many field's card refs.
-        // for now we are assuming that all cards in the containsMany field are the same card type
-        attributes[fieldName] = nestedCard.map(resource => resource.attributes);
-        if (nestedCard.length === 0) {
-          continue;
-        }
-        nestedCard = nestedCard[0];
-      } else if (!field.containsMany) {
-        attributes[fieldName] = nestedCard.attributes;
-      }
-      if (!isCardResource(nestedCard)) {
-        throw new Error(`bug: expected serialized card for field '${fieldName}' of card '${model.constructor.name}' to be a card resource but it wasn't: ${JSON.stringify(nestedCard)}`);
-      }
-
-      let fieldCardRef = Loader.identify(field.card);
-      if (!fieldCardRef) {
-         throw new Error(`bug: encountered a card that has no Loader identity '${field.card.name}' when trying to load field '${fieldName}' in card ${JSON.stringify(adoptsFrom)}`);
-      }
-      if (fieldCardRef.module !== nestedCard.meta.adoptsFrom.module || fieldCardRef.name !== nestedCard.meta.adoptsFrom.name) {
-        // Only write out the field meta when the field value is a different card than the field card
-        fields[fieldName] = {
-          adoptsFrom: nestedCard.meta.adoptsFrom
-        };
-      }
-      for (let [nestedFieldName, nestedField] of Object.entries(nestedCard.meta.fields ?? {})) {
-        set(fields, `${fieldName}.fields.${nestedFieldName}`, {
-          adoptsFrom: nestedField.adoptsFrom
-        });
-      }
+  for (let fieldName of Object.keys(getFields(model, opts))) {
+    let { serialized, meta: fieldMeta } = serializedGet(model, fieldName);
+    attributes[fieldName] = serialized;
+    if (fieldMeta) {
+      fields = { ...fields, ...{ [fieldName]: fieldMeta } };
     }
   }
   let meta = {
@@ -462,13 +528,12 @@ export async function searchDoc<CardT extends CardConstructor>(model: InstanceTy
 
 
 function hydrateField(resource: LooseCardResource, fieldName: string, fallback: typeof Card): LooseCardResource {
-  let realField = fieldName.split('.').shift()!;
-  let adoptsFrom = resource.meta.fields?.[realField].adoptsFrom ?? Loader.identify(fallback);
+  let adoptsFrom = get(resource, `meta.fields.${fieldName}.adoptsFrom`) ?? Loader.identify(fallback);
   if (!adoptsFrom) {
-    throw new Error(`bug: cannot determine identity for field '${realField}'`);
+    throw new Error(`bug: cannot determine identity for field '${fieldName}'`);
   }
-  let fields: LooseCardResource["meta"]["fields"] = {
-    ...(resource.meta.fields?.[realField]?.fields ?? {})
+  let fields: NonNullable<LooseCardResource["meta"]["fields"]> = {
+    ...(get(resource, `meta.fields.${fieldName}.fields`) ?? {})
   };
   return {
     attributes: get(resource, `attributes.${fieldName}`) ?? {},
@@ -612,11 +677,13 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
   <template>
     <div {{attachStyles editStyles}}>
       {{#each-in @fields as |key Field|}}
-        <label class="edit-field" data-test-field={{key}}>
-          {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
-          {{startCase key}}
-          <Field />
-        </label>
+        {{#unless (eq key 'id')}}
+          <label class="edit-field" data-test-field={{key}}>
+            {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
+            {{startCase key}}
+            <Field />
+          </label>
+        {{/unless}}
       {{/each-in}}
     </div>
   </template>;
@@ -811,57 +878,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       }
       let field = maybeField;
       defaultFormat = getField(modelValue.constructor, property)?.computeVia ? 'embedded' : defaultFormat;
-      let fieldValueCard: typeof Card | undefined = undefined;
-      if (getField(modelValue.constructor, property)?.containsMany) {
-        if (primitive in field.card) {
-          fieldValueCard = field.card;
-        } else {
-          let fieldValue = modelValue[property as keyof T];
-          if (fieldValue == null) {
-            fieldValueCard = field.card;
-          } else if (!Array.isArray(fieldValue)) {
-            throw new Error(`field ${property} should be an array`);
-          } else if (fieldValue.length > 0) {
-            // we don't know how to support polymorphic containsMany fields yet, so instead we're picking the card of the first value
-            fieldValueCard = fieldValue[0].constructor as typeof Card;
-          }
-        }
-        if (defaultFormat === 'edit') {
-          let fieldName = property as keyof Card; // to get around linting error
-          let arrayField = model.field(property as keyof T, useIndexBasedKey in field.card) as unknown as Box<Card[]>;
-          return class ContainsManyEditorTemplate extends GlimmerComponent {
-            <template>
-              <ContainsManyEditor
-                @model={{model}}
-                @fieldName={{fieldName}}
-                @arrayField={{arrayField}}
-                @field={{field}}
-                @format={{defaultFormat}}
-                @getComponent={{getComponent}}
-              />
-            </template>
-          };
-        }
-        let arrayField = model.field(property as keyof T, useIndexBasedKey in field.card) as unknown as Box<Card[]>;
-        return class ContainsMany extends GlimmerComponent {
-          <template>
-            {{#each arrayField.children as |boxedElement|}}
-              {{#let (getComponent field.card defaultFormat boxedElement) as |Item|}}
-                <Item/>
-              {{/let}}
-            {{/each}}
-          </template>
-        };
-      } else {
-        if (primitive in field.card) {
-          fieldValueCard = field.card;
-        } else {
-          let modelValueCard = modelValue[property as keyof T] as unknown as Card;
-          fieldValueCard = modelValueCard.constructor;
-        }
-      }
-      let innerModel = model.field(property as keyof T) as unknown as Box<Card>; // casts are safe because we know the field is present
-      return getComponent(fieldValueCard, defaultFormat, innerModel);
+      return field.component(model, defaultFormat);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
@@ -1004,7 +1021,59 @@ export class Box<T> {
     this.prevChildren = newChildren;
     return newChildren;
   }
-
 }
 
 type ElementType<T> = T extends (infer V)[] ? V : never;  
+
+function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
+  return a === b;
+}
+
+import { action } from '@ember/object';
+import { fn } from '@ember/helper';
+
+interface ContainsManySignature {
+  Args: {
+    model: Box<Card>,
+    fieldName: keyof Card,
+    arrayField: Box<Card[]>,
+    format: Format;
+    field: Field<typeof Card>;
+  };
+}
+
+class ContainsManyEditor extends GlimmerComponent<ContainsManySignature> {
+  <template>
+    <section data-test-contains-many={{this.safeFieldName}}>
+      <header>{{this.safeFieldName}}</header>
+      <ul>
+        {{#each @arrayField.children as |boxedElement i|}}
+          <li data-test-item={{i}}>
+            {{#let (getComponent (cardTypeFor @field boxedElement) @format boxedElement) as |Item|}}
+              <Item />
+            {{/let}}
+            <button {{on "click" (fn this.remove i)}} type="button" data-test-remove={{i}}>Remove</button>
+          </li>
+        {{/each}}
+      </ul>
+      <button {{on "click" this.add}} type="button" data-test-add-new>Add New</button>
+    </section>
+  </template>
+
+  get safeFieldName() {
+    if (typeof this.args.fieldName !== 'string') {
+      throw new Error(`ContainsManyEditor expects a string fieldName`);
+    }
+    return this.args.fieldName;
+  }
+
+  @action add() {
+    // TODO probably each field card should have the ability to say what a new item should be
+    let newValue = primitive in this.args.field.card ? null : new this.args.field.card();
+    (this.args.model.value as any)[this.safeFieldName].push(newValue);
+  }
+
+  @action remove(index: number) {
+    (this.args.model.value as any)[this.safeFieldName].splice(index, 1);
+  }
+}
