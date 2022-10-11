@@ -50,7 +50,9 @@ export default class Preview extends Component<Signature> {
             {{!-- template-lint-disable require-button-type --}}
             <button {{on "click" (fn this.setFormat format)}}
               class="format-button {{format}} {{if (eq this.format format) 'selected'}}"
-              disabled={{if (eq this.format format) true false}}>
+              disabled={{if (eq this.format format) true false}}
+              data-test-format-button={{format}}
+            >
               {{format}}
             </button>
           {{/each}}
@@ -135,7 +137,7 @@ export default class Preview extends Component<Signature> {
   get card() {
     return this.cardInstance.instance;
   }
-  
+
   private get api() {
     if (!this.apiModule.module) {
       throw new Error(

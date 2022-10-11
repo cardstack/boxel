@@ -69,6 +69,7 @@ import * as runtime from "@cardstack/runtime-common";
 // import * as emberConcurrency from 'ember-concurrency';
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("ember-modifier", {
   default: class {},
+  modifier: () => {},
 });
 import * as flat from "flat";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("flat", flat);
