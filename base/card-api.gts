@@ -169,8 +169,6 @@ function cardTypeFor(field: Field<typeof Card>, boxedElement: Box<Card>): typeof
   return Reflect.getPrototypeOf(boxedElement.value)!.constructor as typeof Card;
 }
 
-
-
 class Contains<CardT extends CardConstructor> implements Field<CardT> {
   readonly fieldType = 'contains';
   constructor(private cardThunk: () => CardT, readonly computeVia: undefined | string | (() => unknown), readonly name: string) {
