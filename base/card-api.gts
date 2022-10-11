@@ -89,19 +89,23 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
   serialize(value: CardInstanceType<FieldT>[]): { serialized: any[]; meta: Meta[] | undefined } {
     let serialized = value.map(entry => this.card[serialize](entry))
     let meta: Meta[] | undefined;
+    let usesDefaultCard = true;
     if (!(primitive in this.card)) {
       let adoptsFrom = Loader.identify(this.card);
       if (!adoptsFrom) {
         throw new Error(`bug: encountered a card that has no Loader identity '${this.card.name}'`);
       }
       meta = value.map((entry, i) => getMeta(this, entry, serialized[i]))
-        // TODO how should we represent the field card for a value that is not different than
-        // the field's default card? empty object? right now we just echo back the field's default
-        // card below, but that's probably quite verbose...
-        .map(m => !m ? ({ adoptsFrom}) : (m)) as Meta[];
+        .map(metaItem => {
+          if (metaItem) {
+            usesDefaultCard = false; // warning side effect in map
+            return metaItem;
+          }
+          return { adoptsFrom};
+        }) as Meta[];
       serialized = serialized.map(resource => resource ? resource.attributes : resource);
     }
-    return { serialized, meta };
+    return { serialized, meta: usesDefaultCard ? undefined : meta };
   }
 
   async deserialize(value: any[], fromResource: LooseCardResource | undefined, instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {

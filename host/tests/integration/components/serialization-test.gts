@@ -685,17 +685,7 @@ module('Integration | serialization', function (hooks) {
       location:"Room 102",
       title:"Civics"
     }]);
-    assert.deepEqual(meta, [{
-      adoptsFrom: {
-        module: `${realmURL}test-cards`,
-        name: 'Appointment'
-      }
-    },{
-      adoptsFrom: {
-        module: `${realmURL}test-cards`,
-        name: 'Appointment'
-      }
-    }]);
+    assert.deepEqual(meta, undefined); // this means the field card for the value is the same as the field's card
   });
 
   test('can serialize a card with primitive fields', async function (assert) {
@@ -1263,19 +1253,6 @@ module('Integration | serialization', function (hooks) {
         adoptsFrom: {
           module: "./blog",
           name: "Blog",
-        },
-        fields: {
-          posts: [{
-            adoptsFrom: {
-              module: `${realmURL}post`,
-              name: 'Post'
-            }
-          },{
-            adoptsFrom: {
-              module: `${realmURL}post`,
-              name: 'Post'
-            }
-          }]
         }
       }
     }, new URL(realmURL)) as Blog;
@@ -1305,19 +1282,6 @@ module('Integration | serialization', function (hooks) {
         adoptsFrom: {
           module: `${realmURL}blog`,
           name: "Blog",
-        },
-        fields: {
-          posts: [{
-            adoptsFrom: {
-              module: `${realmURL}post`,
-              name: 'Post'
-            }
-          },{
-            adoptsFrom: {
-              module: `${realmURL}post`,
-              name: 'Post'
-            }
-          }]
         }
       }
     }, 'card serialization is correct')
