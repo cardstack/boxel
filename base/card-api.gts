@@ -115,6 +115,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return new WatchedArray(() => recompute(instance), value);
   }
 
+
   component(model: Box<Card>, format: Format) {
     let fieldName = this.name as keyof Card;
     let field = this;
@@ -135,7 +136,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return class ContainsMany extends GlimmerComponent {
       <template>
         {{#each arrayField.children as |boxedElement|}}
-          {{#let (getComponent (nullishCoalesce boxedElement.card field.card) format boxedElement) as |Item|}}
+          {{#let (getComponent (cardTypeFor field boxedElement) format boxedElement) as |Item|}}
             <Item/>
           {{/let}}
         {{/each}}
@@ -143,6 +144,15 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     };
   }
 }
+
+function cardTypeFor(field: Field<typeof Card>, boxedElement: Box<Card>): typeof Card {
+  if (primitive in field.card) {
+      return field.card;
+  }
+  return Reflect.getPrototypeOf(boxedElement.value)!.constructor as typeof Card;
+}
+
+
 
 class Contains<CardT extends CardConstructor> implements Field<CardT> {
   readonly fieldType = 'contains';
@@ -1012,24 +1022,12 @@ export class Box<T> {
     this.prevChildren = newChildren;
     return newChildren;
   }
-
-  // trying to determine the card from the outside of the box destabilizes otherwise stable
-  // arrays due to glimmer invalidation in our field getters. I'm breaking the rule where
-  // boxes aren't cognizant of cards to work around this situation
-  get card() {
-    return typeof this.value === 'object' && this.value != null && isBaseCard in this.value
-      ? Reflect.getPrototypeOf(this.value as unknown as Card)!.constructor as typeof Card 
-      : undefined;
-  }
 }
 
 type ElementType<T> = T extends (infer V)[] ? V : never;
 
 function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
   return a === b;
-}
-function nullishCoalesce<S,T>(a: S, b: T, _namedArgs: unknown): S | T {
-  return a ?? b;
 }
 
 import { action } from '@ember/object';
@@ -1052,7 +1050,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManySignature> {
       <ul>
         {{#each @arrayField.children as |boxedElement i|}}
           <li data-test-item={{i}}>
-            {{#let (getComponent (nullishCoalesce boxedElement.card @field.card) @format boxedElement) as |Item|}}
+            {{#let (getComponent (cardTypeFor @field boxedElement) @format boxedElement) as |Item|}}
               <Item />
             {{/let}}
             <button {{on "click" (fn this.remove i)}} type="button" data-test-remove={{i}}>Remove</button>
