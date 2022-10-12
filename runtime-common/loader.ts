@@ -202,7 +202,6 @@ export class Loader {
     }
     for (let consumed of module?.consumedModules ?? []) {
       await this.getConsumedModules(consumed, accumulator);
-      accumulator.add(consumed);
     }
     return [...accumulator];
   }
