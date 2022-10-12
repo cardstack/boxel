@@ -8,10 +8,13 @@ import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import Service from '@ember/service';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
-import CreateNewCard from 'runtime-spike/components/create-new-card';
+import CreateCardModal from 'runtime-spike/components/create-card-modal';
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
+import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import { on } from '@ember/modifier';
+import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
 
 class MockLocalRealm extends Service {
   isAvailable = true;
@@ -131,19 +134,30 @@ module('Integration | create-new-card', function (hooks) {
     let router = this.owner.lookup('service:router') as MockRouter;
     let deferred = new Deferred<void>();
     router.initialize(assert, { queryParams: { path: `${testRealmURL}Person/1.json` }}, deferred);
-    let onSave = function(path: string) {
-      router.transitionTo({ queryParams: { path }});
+    async function createNew() {
+      let card = await chooseCard<CatalogEntry>({
+        filter: {
+          on: catalogEntryRef,
+          eq: { isPrimitive: false },
+        }
+      });
+      if (!card) {
+        return;
+      }
+      return await createNewCard(card.ref);
     }
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CreateNewCard @realmURL={{testRealmURL}} @onSave={{onSave}} />
+          <button {{on "click" createNew}} type="button" data-test-create-button>
+            Create New Card
+          </button>
+          <CreateCardModal />
           <CardCatalogModal />
         </template>
       }
     );
-
-    await click('[data-test-create-new-card-button]');
+    await click('[data-test-create-button]');
     await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
 
     assert.dom('[data-test-card-catalog] li').exists({ count: 2 }, 'number of catalog items is correct');

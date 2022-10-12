@@ -88,6 +88,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "chooseCard",
       "baseCardRef",
       "isMetaFieldItem",
+      "createNewCard",
     ],
   ],
   ["@glimmer/component", ["default"]],
@@ -151,6 +152,24 @@ export async function chooseCard<T extends Card>(
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
 
   return await chooser.chooseCard<T>(query);
+}
+
+export interface CardCreator {
+  create<T extends Card>(ref: ExportedCardRef): Promise<undefined | T>;
+}
+
+export async function createNewCard<T extends Card>(
+  ref: ExportedCardRef
+): Promise<undefined | T> {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_CREATE_NEW_CARD) {
+    throw new Error(
+      `no cardstack card creator is available in this environment`
+    );
+  }
+  let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
+
+  return await cardCreator.create<T>(ref);
 }
 
 export function hasExecutableExtension(path: string): boolean {
