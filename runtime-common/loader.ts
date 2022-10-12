@@ -176,6 +176,7 @@ export class Loader {
     if (accumulator.has(moduleIdentifier)) {
       return [];
     }
+    accumulator.add(moduleIdentifier);
 
     let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
     let module = this.modules.get(resolvedModuleIdentifier.href);

@@ -43,8 +43,9 @@ module("loader", function () {
     let loader = new Loader();
     await loader.import<{ a(): string }>(`${testRealm}a`);
     assert.deepEqual(await loader.getConsumedModules(`${testRealm}a`), [
-      `${testRealm}c`,
+      `${testRealm}a`,
       `${testRealm}b`,
+      `${testRealm}c`,
     ]);
   });
 
@@ -56,12 +57,23 @@ module("loader", function () {
     } catch (e) {
       assert.strictEqual(e.message, "intentional error thrown");
       assert.deepEqual(await loader.getConsumedModules(`${testRealm}d`), [
-        `${testRealm}c`,
-        `${testRealm}b`,
+        `${testRealm}d`,
         `${testRealm}a`,
+        `${testRealm}b`,
+        `${testRealm}c`,
         `${testRealm}e`,
       ]);
     }
+  });
+
+  test("can get consumed modules within a cycle", async function (assert) {
+    let loader = new Loader();
+    await loader.import<{ three(): number }>(`${testRealm}cycle-two`);
+    let modules = await loader.getConsumedModules(`${testRealm}cycle-two`);
+    assert.deepEqual(modules, [
+      `${testRealm}cycle-two`,
+      `${testRealm}cycle-one`,
+    ]);
   });
 
   test("supports identify API", async function (assert) {

@@ -303,7 +303,9 @@ export class CurrentRun {
           `encountered error loading module "${url.href}": ${err.message}`
         );
       }
-      let errorReferences = await this.loader.getConsumedModules(url.href);
+      let errorReferences = await (
+        await this.loader.getConsumedModules(url.href)
+      ).filter((u) => u !== url.href);
       this.#modules.set(url.href, {
         type: "error",
         moduleURL: url.href,
@@ -383,7 +385,9 @@ export class CurrentRun {
           searchData,
           types: typesMaybeError.types,
           deps: new Set([
-            ...(await this.loader.getConsumedModules(moduleURL.href)),
+            ...(await this.loader.getConsumedModules(moduleURL.href)).filter(
+              (u) => u !== moduleURL.href
+            ),
             moduleURL.href,
           ]),
         },
@@ -444,7 +448,9 @@ export class CurrentRun {
         m[exportName];
       }
     }
-    let consumes = await this.loader.getConsumedModules(url);
+    let consumes = await (
+      await this.loader.getConsumedModules(url)
+    ).filter((u) => u !== url);
     let module: Module = {
       url,
       consumes,
