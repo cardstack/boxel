@@ -171,12 +171,12 @@ export class Loader {
 
   async getConsumedModules(
     moduleIdentifier: string,
-    accumulator = new Set<string>()
+    consumed = new Set<string>()
   ): Promise<string[]> {
-    if (accumulator.has(moduleIdentifier)) {
+    if (consumed.has(moduleIdentifier)) {
       return [];
     }
-    accumulator.add(moduleIdentifier);
+    consumed.add(moduleIdentifier);
 
     let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
     let module = this.modules.get(resolvedModuleIdentifier.href);
@@ -200,10 +200,10 @@ export class Loader {
         `bug: could not determine the consumed modules for ${moduleIdentifier} because it is still in "fetching" state`
       );
     }
-    for (let consumed of module?.consumedModules ?? []) {
-      await this.getConsumedModules(consumed, accumulator);
+    for (let consumedModule of module?.consumedModules ?? []) {
+      await this.getConsumedModules(consumedModule, consumed);
     }
-    return [...accumulator];
+    return [...consumed];
   }
 
   static identify(
