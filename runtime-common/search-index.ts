@@ -379,7 +379,6 @@ export class SearchIndex {
 
     if ("type" in filter) {
       let ref: CardRef = { type: "exportedCard", ...filter.type };
-      await this.assertTypeExists(ref);
       return (entry) => this.cardHasType(entry, ref);
     }
 
@@ -507,33 +506,6 @@ export class SearchIndex {
     }
 
     throw new Error("Unknown filter");
-  }
-
-  private async assertTypeExists(ref: ExportedCardRef): Promise<void> {
-    let module: Record<string, typeof Card> | undefined;
-    try {
-      module = await this.loader.import<Record<string, typeof Card>>(
-        ref.module
-      );
-    } catch (err: any) {
-      if (err.response?.status === 404) {
-        throw new Error(
-          `Your filter refers to nonexistent type: import ${
-            ref.name === "default" ? "default" : `{ ${ref.name} }`
-          } from "${ref.module}"`
-        );
-      }
-      throw err;
-    }
-    let maybeCard = module[ref.name];
-    if ("baseCard" in maybeCard) {
-      return;
-    }
-    throw new Error(
-      `Your filter refers to an export of a module that is not a card: import ${
-        ref.name === "default" ? "default" : `{ ${ref.name} }`
-      } from "${ref.module}"`
-    );
   }
 }
 

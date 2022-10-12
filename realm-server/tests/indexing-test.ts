@@ -207,21 +207,16 @@ module("indexing", function (hooks) {
       },
       "indexed correct number of files"
     );
-    try {
-      await realm.searchIndex.search({
-        filter: {
-          type: { module: `${testRealm}person`, name: "Person" },
-        },
-      });
-      throw new Error("expected error was not thrown");
-    } catch (err: any) {
-      assert.ok(
-        err.message.match(
-          /\/person: Unexpected token.*IntentionallyThrownError.*/s
-        ),
-        "person card has error"
-      );
-    }
+    let result = await realm.searchIndex.search({
+      filter: {
+        type: { module: `${testRealm}person`, name: "Person" },
+      },
+    });
+    assert.deepEqual(
+      result,
+      [],
+      "the broken type results in no instance results"
+    );
     await realm.write(
       "person.gts",
       `
@@ -242,7 +237,7 @@ module("indexing", function (hooks) {
       },
       "indexed correct number of files"
     );
-    let result = await realm.searchIndex.search({
+    result = await realm.searchIndex.search({
       filter: {
         type: { module: `${testRealm}person`, name: "Person" },
       },
@@ -351,17 +346,16 @@ module("indexing", function (hooks) {
 
   test("can incrementally index instance that depends on deleted card source", async function (assert) {
     await realm.delete("post.gts");
-    try {
-      await realm.searchIndex.search({
+    {
+      let result = await realm.searchIndex.search({
         filter: {
           type: { module: `${testRealm}post`, name: "Post" },
         },
       });
-      throw new Error(`failed to throw expected exception`);
-    } catch (err: any) {
-      assert.strictEqual(
-        err.message,
-        `Your filter refers to nonexistent type: import { Post } from "http://test-realm/post"`
+      assert.deepEqual(
+        result,
+        [],
+        "the deleted type results in no card instance results"
       );
     }
     assert.deepEqual(
@@ -404,13 +398,15 @@ module("indexing", function (hooks) {
         }
       `
     );
-    let result = await realm.searchIndex.search({
-      filter: {
-        on: { module: `${testRealm}post`, name: "Post" },
-        eq: { nickName: "Van Gogh-poo" },
-      },
-    });
-    assert.strictEqual(result.length, 1, "found the post instance");
+    {
+      let result = await realm.searchIndex.search({
+        filter: {
+          on: { module: `${testRealm}post`, name: "Post" },
+          eq: { nickName: "Van Gogh-poo" },
+        },
+      });
+      assert.strictEqual(result.length, 1, "found the post instance");
+    }
     assert.deepEqual(
       realm.searchIndex.stats,
       {
