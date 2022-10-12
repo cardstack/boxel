@@ -207,18 +207,16 @@ module("indexing", function (hooks) {
       },
       "indexed correct number of files"
     );
-    {
-      let result = await realm.searchIndex.search({
-        filter: {
-          type: { module: `${testRealm}person`, name: "Person" },
-        },
-      });
-      assert.deepEqual(
-        result,
-        [],
-        "the broken type results in no instance results"
-      );
-    }
+    let result = await realm.searchIndex.search({
+      filter: {
+        type: { module: `${testRealm}person`, name: "Person" },
+      },
+    });
+    assert.deepEqual(
+      result,
+      [],
+      "the broken type results in no instance results"
+    );
     await realm.write(
       "person.gts",
       `
@@ -239,18 +237,16 @@ module("indexing", function (hooks) {
       },
       "indexed correct number of files"
     );
-    {
-      let result = await realm.searchIndex.search({
-        filter: {
-          type: { module: `${testRealm}person`, name: "Person" },
-        },
-      });
-      assert.strictEqual(
-        result.length,
-        2,
-        "correct number of instances returned"
-      );
-    }
+    result = await realm.searchIndex.search({
+      filter: {
+        type: { module: `${testRealm}person`, name: "Person" },
+      },
+    });
+    assert.strictEqual(
+      result.length,
+      2,
+      "correct number of instances returned"
+    );
   });
 
   test("can incrementally index deleted instance", async function (assert) {
