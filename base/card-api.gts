@@ -444,7 +444,9 @@ export function serializeCard(
     throw new Error(`bug: encountered a card that has no Loader identity: ${model.constructor.name}`);
   }
   let { id: removedIdField, ...fields } = getFields(model, opts);
-  let fieldResources = Object.keys(fields).map(fieldName => serializedGet(model, fieldName));
+  let fieldResources = Object.keys(fields)
+    .filter(fieldName => model[fieldName as keyof typeof model] !== undefined) // skip over missing fields
+    .map(fieldName => serializedGet(model, fieldName));
   return merge({}, ...fieldResources, {
     type: 'card',
     meta: { adoptsFrom }
