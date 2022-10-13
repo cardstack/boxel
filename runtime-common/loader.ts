@@ -64,7 +64,7 @@ export class Loader {
     Function,
     { module: string; name: string }
   >();
-  private consumptionCache = new Map<string, string[]>();
+  private consumptionCache = new WeakMap<object, string[]>();
 
   constructor() {}
 
@@ -174,11 +174,6 @@ export class Loader {
     moduleIdentifier: string,
     consumed = new Set<string>()
   ): Promise<string[]> {
-    let cached = this.consumptionCache.get(moduleIdentifier);
-    if (cached) {
-      return cached;
-    }
-
     if (consumed.has(moduleIdentifier)) {
       return [];
     }
@@ -206,12 +201,19 @@ export class Loader {
         `bug: could not determine the consumed modules for ${moduleIdentifier} because it is still in "fetching" state`
       );
     }
-    for (let consumedModule of module?.consumedModules ?? []) {
-      await this.getConsumedModules(consumedModule, consumed);
+    if (module) {
+      let cached = this.consumptionCache.get(module);
+      if (cached) {
+        return cached;
+      }
+      for (let consumedModule of module?.consumedModules ?? []) {
+        await this.getConsumedModules(consumedModule, consumed);
+      }
+      cached = [...consumed];
+      this.consumptionCache.set(module, cached);
+      return cached;
     }
-    let result = [...consumed];
-    this.consumptionCache.set(moduleIdentifier, result);
-    return result;
+    return [];
   }
 
   static identify(
