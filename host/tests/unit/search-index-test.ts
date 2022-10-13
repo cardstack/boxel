@@ -26,7 +26,6 @@ module('Unit | search-index', function (hooks) {
     let adapter = new TestRealmAdapter({
       'empty.json': {
         data: {
-          attributes: {},
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',
@@ -44,7 +43,6 @@ module('Unit | search-index', function (hooks) {
       {
         id: `${testRealmURL}empty`,
         type: 'card',
-        attributes: {},
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/card-api',

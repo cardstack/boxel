@@ -19,10 +19,7 @@ const datetimeFormat = `yyyy-MM-dd'T'HH:mm`;
 
 export default class DatetimeCard extends Card {
   static [primitive]: Date;
-  static [serialize](date: string | Date) {
-    if (typeof date === 'string') {
-      return date;
-    }
+  static [serialize](date: Date) {
     return date.toISOString();
   }
 

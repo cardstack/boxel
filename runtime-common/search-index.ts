@@ -66,7 +66,7 @@ export interface Meta {
   fields?: CardFields;
 }
 interface CardFields {
-  [fieldName: string]: Meta | Meta[];
+  [fieldName: string]: Partial<Meta> | Partial<Meta>[];
 }
 export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
@@ -136,17 +136,19 @@ export function isCardFields(fields: any): fields is CardFields {
       return false;
     }
     if (Array.isArray(fieldItem)) {
-      if (fieldItem.some((f) => !isMeta(f))) {
+      if (fieldItem.some((f) => !isMeta(f, true))) {
         return false;
       }
-    } else if (!isMeta(fieldItem)) {
+    } else if (!isMeta(fieldItem, true)) {
       return false;
     }
   }
   return true;
 }
 
-export function isMeta(meta: any): meta is Meta {
+export function isMeta(meta: any, allowPartial: true): meta is Partial<Meta>;
+export function isMeta(meta: any): meta is Meta;
+export function isMeta(meta: any, allowPartial = false) {
   if (typeof meta !== "object" || meta == null) {
     return false;
   }
@@ -161,7 +163,9 @@ export function isMeta(meta: any): meta is Meta {
       return false;
     }
   } else {
-    return false;
+    if (!allowPartial) {
+      return false;
+    }
   }
   if ("fields" in meta) {
     if (!isCardFields(meta.fields)) {
