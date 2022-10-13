@@ -158,6 +158,8 @@ export default class AnimationsService extends Service {
     for (let { spriteModifier } of contextNode.getSpriteDescendants()) {
       let animations = spriteModifier.element.getAnimations() ?? [];
       animationsToCancel = animationsToCancel.concat(animations);
+
+      // we need to check the animation state because safari doesn't remove finished animations
       if (
         animations?.length &&
         animations.some((v) => v.playState === 'running')
