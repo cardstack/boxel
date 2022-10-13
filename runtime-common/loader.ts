@@ -64,6 +64,7 @@ export class Loader {
     Function,
     { module: string; name: string }
   >();
+  private consumptionCache = new Map<string, string[]>();
 
   constructor() {}
 
@@ -173,6 +174,11 @@ export class Loader {
     moduleIdentifier: string,
     consumed = new Set<string>()
   ): Promise<string[]> {
+    let cached = this.consumptionCache.get(moduleIdentifier);
+    if (cached) {
+      return cached;
+    }
+
     if (consumed.has(moduleIdentifier)) {
       return [];
     }
@@ -203,6 +209,7 @@ export class Loader {
     for (let consumedModule of module?.consumedModules ?? []) {
       await this.getConsumedModules(consumedModule, consumed);
     }
+    this.consumptionCache.set(moduleIdentifier, [...consumed]);
     return [...consumed];
   }
 
