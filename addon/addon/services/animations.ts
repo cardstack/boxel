@@ -158,7 +158,10 @@ export default class AnimationsService extends Service {
     for (let { spriteModifier } of contextNode.getSpriteDescendants()) {
       let animations = spriteModifier.element.getAnimations() ?? [];
       animationsToCancel = animationsToCancel.concat(animations);
-      if (animations?.length) {
+      if (
+        animations?.length &&
+        animations.some((v) => v.playState === 'running')
+      ) {
         spriteModifier.captureSnapshot({
           withAnimations: true,
           playAnimations: false,
