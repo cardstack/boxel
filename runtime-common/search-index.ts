@@ -68,11 +68,29 @@ export interface Meta {
 interface CardFields {
   [fieldName: string]: Partial<Meta> | Partial<Meta>[];
 }
+
+interface ResourceID {
+  type: string;
+  id: string;
+}
+
+type Relationship =
+  | {
+      links: {
+        // there are other valid items for links in the spec, but we don't
+        // anticipate using them
+        self: string | null;
+      };
+    }
+  | { data: ResourceID | ResourceID[] | null };
+
 export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
   type: "card";
   attributes?: Record<string, any>;
-  // TODO add relationships
+  relationships?: {
+    [fieldName: string]: Relationship;
+  };
   meta: Meta & {
     lastModified?: number;
   };
@@ -101,6 +119,20 @@ export function isCardResource(resource: any): resource is CardResource {
   }
   if ("attributes" in resource && typeof resource.attributes !== "object") {
     return false;
+  }
+  if ("relationships" in resource) {
+    let { relationship } = resource;
+    if (typeof relationship !== "object" || relationship == null) {
+      return false;
+    }
+    for (let [fieldName, maybeRelationship] of Object.entries(relationship)) {
+      if (typeof fieldName !== "string") {
+        return false;
+      }
+      if (!isRelationship(maybeRelationship)) {
+        return false;
+      }
+    }
   }
   if (!("meta" in resource) || typeof resource.meta !== "object") {
     return false;
@@ -171,6 +203,35 @@ export function isMeta(meta: any, allowPartial = false) {
     if (!isCardFields(meta.fields)) {
       return false;
     }
+  }
+  return true;
+}
+
+function isRelationship(relationship: any): relationship is Relationship {
+  if (typeof relationship !== "object" || relationship == null) {
+    return false;
+  }
+  if ("links" in relationship) {
+    let { links } = relationship;
+    if (typeof links !== "object") {
+      return false;
+    }
+    if (links !== null && typeof links !== "string") {
+      return false;
+    }
+  } else if ("data" in relationship) {
+    let { data } = relationship;
+    if (typeof data !== "object") {
+      return false;
+    }
+    if (data !== null && "type" in data && "id" in data) {
+      let { type, id } = data;
+      if (typeof type !== "string" || typeof id !== "string") {
+        return false;
+      }
+    }
+  } else {
+    return false;
   }
   return true;
 }

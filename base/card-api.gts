@@ -39,13 +39,7 @@ type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => voi
 
 
 export type Format = 'isolated' | 'embedded' | 'edit';
-export type FieldType = 'contains' | 'containsMany'; // TODO add linksTo
-export function isFieldType(type: any): type is FieldType {
-  if (typeof type !== 'string') {
-    return false;
-  }
-  return ['contains', 'containsMany'].includes(type);
-}
+export type FieldType = 'contains' | 'containsMany' | 'linksTo'; 
 
 interface Options {
   computeVia?: string | (() => unknown);
@@ -73,7 +67,6 @@ type JSONAPIResource =
   meta?: Record<string, any>;
 }
 
-
 interface Field<CardT extends CardConstructor> {
   card: CardT;
   name: string;
@@ -85,7 +78,6 @@ interface Field<CardT extends CardConstructor> {
   validate(instance: Card, value: any): void;
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
 }
-
 
 function callSerializeHook(card: typeof Card, value: any) {
   if (value !== null) {
@@ -165,7 +157,6 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     }
     return new WatchedArray(() => recompute(instance), value);
   }
-
 
   component(model: Box<Card>, format: Format) {
     let fieldName = this.name as keyof Card;
@@ -277,6 +268,46 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
   }
 }
 
+class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
+  readonly fieldType = 'linksTo';
+  constructor(private cardThunk: () => CardT, readonly computeVia: undefined | string | (() => unknown), readonly name: string) {
+  }
+
+  get card(): CardT {
+    return this.cardThunk();
+  }
+
+  serialize(value: InstanceType<CardT>) {
+    if (primitive in this.card) {
+      throw new Error(`the linksTo field '${this.name}' contains a primitive card '${this.card.name}'`);
+    }
+    let resource: JSONAPIResource = { 
+      relationships: { 
+        [this.name]: {
+          data: { id: value.id, type: 'card' }
+        }
+      }
+    };
+    return resource;
+  }
+
+  async deserialize(_value: any, _fromResource: LooseCardResource | undefined): Promise<CardInstanceType<CardT>> {
+    throw new Error('not implemented');
+  }
+
+  emptyValue(_instance: Card) {
+    throw new Error('not implemented');
+  }
+
+  validate(_instance: Card, _value: any) {
+    throw new Error('not implemented');
+  }
+
+  component(_model: Box<Card>, _format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
+    throw new Error('not implemented');
+  }
+}
+
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
 export const field = function(_target: CardConstructor, key: string | symbol, { initializer }: { initializer(): any }) {
@@ -301,6 +332,15 @@ export function contains<CardT extends CardConstructor>(cardOrThunk: CardT | (()
   } as any
 }
 contains[fieldType] = 'contains' as FieldType;
+
+export function linksTo<CardT extends CardConstructor>(cardOrThunk: CardT | (() => CardT), options?: Options): CardInstanceType<CardT> {
+  return {
+    setupField(fieldName: string) {
+      return makeDescriptor(new LinksTo(cardThunk(cardOrThunk), options?.computeVia, fieldName));
+    }
+  } as any
+}
+linksTo[fieldType] = 'linksTo' as FieldType;
 
 export class Card {
   // this is here because Card has no public instance methods, so without it

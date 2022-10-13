@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
@@ -294,6 +294,71 @@ module('Integration | serialization', function (hooks) {
     let root = await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'First Post created [no date] published [no date-time]');
   });
+
+  test('can serialize a linksTo relationship', async function(assert) {
+    let { field, contains, linksTo, Card, createFromSerialized, serializeCard } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+
+    // createFromSerialized with an ID creates a "saved" card
+    let mango = await createFromSerialized({
+      id: `${realmURL}Pets/mango`,
+      type: 'card',
+      attributes: {
+        firstName: 'Mango'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Pet'
+        }
+      }
+    }, undefined);
+
+    let hassan = new Person({
+      firstName: "Hassan",
+      pet: mango
+    });
+
+    let serialized = serializeCard(hassan);
+    assert.deepEqual(serialized, {
+      type: 'card',
+      attributes: {
+        firstName: 'Hassan'
+      },
+      relationships: {
+        pet: {
+          data: {
+            id: `${realmURL}Pets/mango`,
+            type: 'card'
+          }
+        }
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Person'
+        }
+      }
+    });
+  });
+
+  skip('throws when linksTo specifies primitive card');
+  skip('throws serializing linksTo field that points to unsaved card');
+  skip('can include linksTo resource when serializing card');
+  skip('can deserialize a linksTo relationship');
+  skip('can serialize an empty linksTo relationship');
+  skip('can deserialize an empty linksTo relationship');
+  skip('can serialize a linksTo relationship that points to own card class');
+  skip('can deserialize a linksTo relationship that points to own card class');
 
   test('can serialize a date field with null value', async function(assert) {
     let { field, contains, Card, serializeCard } = cardApi;
