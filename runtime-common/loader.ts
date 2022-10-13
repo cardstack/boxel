@@ -64,6 +64,7 @@ export class Loader {
     Function,
     { module: string; name: string }
   >();
+  private consumptionCache = new WeakMap<object, string[]>();
 
   constructor() {}
 
@@ -200,10 +201,19 @@ export class Loader {
         `bug: could not determine the consumed modules for ${moduleIdentifier} because it is still in "fetching" state`
       );
     }
-    for (let consumedModule of module?.consumedModules ?? []) {
-      await this.getConsumedModules(consumedModule, consumed);
+    if (module) {
+      let cached = this.consumptionCache.get(module);
+      if (cached) {
+        return cached;
+      }
+      for (let consumedModule of module?.consumedModules ?? []) {
+        await this.getConsumedModules(consumedModule, consumed);
+      }
+      cached = [...consumed];
+      this.consumptionCache.set(module, cached);
+      return cached;
     }
-    return [...consumed];
+    return [];
   }
 
   static identify(
