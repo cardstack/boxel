@@ -257,6 +257,11 @@ module('Integration | card-basics', function (hooks) {
     assert.shadowDOM('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
   });
 
+  skip('can assign a linksTo field to a saved card');
+  skip('throws when defining card that that has a linksTo of a primitive card');
+  skip('throws assigning linksTo field to an unsaved card');
+  skip('throws assigning linksTo field to a card that is not an instance of the field card');
+
   test('catalog entry isPrimitive indicates if the catalog entry is a primitive field card', async function (assert) {
     let { createFromSerialized } = cardApi;
     let { CatalogEntry } = catalogEntry;

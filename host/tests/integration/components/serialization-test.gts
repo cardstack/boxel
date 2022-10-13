@@ -351,8 +351,6 @@ module('Integration | serialization', function (hooks) {
     });
   });
 
-  skip('throws when linksTo specifies primitive card');
-  skip('throws serializing linksTo field that points to unsaved card');
   skip('can include linksTo resource when serializing card');
   skip('can deserialize a linksTo relationship');
   skip('can serialize an empty linksTo relationship');

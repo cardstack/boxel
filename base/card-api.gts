@@ -296,11 +296,19 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   }
 
   emptyValue(_instance: Card) {
-    throw new Error('not implemented');
+    return null;
   }
 
-  validate(_instance: Card, _value: any) {
-    throw new Error('not implemented');
+  validate(_instance: Card, value: any) {
+    if (value) {
+      if (!(value instanceof this.card)) {
+        throw new Error(`tried set ${value} as field '${this.name}' but it is not an instance of ${this.card.name}`);
+      }
+      if (!value[isSavedInstance]) {
+        throw new Error(`the linksTo field '${this.name}' cannot be set with an unsaved card`);
+      }
+    }
+    return value;
   }
 
   component(_model: Box<Card>, _format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
