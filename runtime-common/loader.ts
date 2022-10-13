@@ -209,8 +209,9 @@ export class Loader {
     for (let consumedModule of module?.consumedModules ?? []) {
       await this.getConsumedModules(consumedModule, consumed);
     }
-    this.consumptionCache.set(moduleIdentifier, [...consumed]);
-    return [...consumed];
+    let result = [...consumed];
+    this.consumptionCache.set(moduleIdentifier, result);
+    return result;
   }
 
   static identify(
