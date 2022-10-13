@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
-import { flatMap, startCase, set, get, merge } from 'lodash';
+import { flatMap, startCase, get, merge } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
 import { WatchedArray } from './watched-array';
@@ -29,6 +29,7 @@ const isSavedInstance = Symbol('cardstack-is-saved-instance');
 const isField = Symbol('cardstack-field');
 
 export type CardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
+export type PartialCardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P | null : Partial<InstanceType<T>>;
 
 type FieldsTypeFor<T extends Card> = {
   [Field in keyof T]: (new() => GlimmerComponent<{ Args: {}, Blocks: {} }>) & (T[Field] extends Card ? FieldsTypeFor<T[Field]> : unknown);
@@ -86,6 +87,14 @@ interface Field<CardT extends CardConstructor> {
 }
 
 
+function callSerializeHook(card: typeof Card, value: any) {
+  if (value !== null) {
+    return card[serialize](value);
+  } else {
+    return null;
+  }
+}
+
 class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
   readonly fieldType = 'containsMany';
   constructor(
@@ -100,10 +109,10 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
 
   serialize(values: CardInstanceType<FieldT>[]){
     if (primitive in this.card) {
-      return { attributes: { [this.name]:  values.map(value => this.card[serialize](value)) } };
+      return { attributes: { [this.name]:  values.map(value => callSerializeHook(this.card, value)) } };
     } else {
       let serialized = values.map(value => {
-        let resource: JSONAPIResource = this.card[serialize](value);
+        let resource: JSONAPIResource = callSerializeHook(this.card, value);
         if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
           // when our implementation matches the default we don't need to include
           // meta.adoptsFrom
@@ -204,7 +213,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
   }
 
   serialize(value: InstanceType<CardT>) {
-    let serialized = this.card[serialize](value);
+    let serialized = callSerializeHook(this.card, value);
     if (primitive in this.card) {
       return { attributes: { [this.name]: serialized } }
     } else {
@@ -613,7 +622,7 @@ function cardThunk<CardT extends CardConstructor>(cardOrThunk: CardT | (() => Ca
   return ("baseCard" in cardOrThunk ? () => cardOrThunk : cardOrThunk) as () => CardT;
 }
 
-export type SignatureFor<CardT extends CardConstructor> = { Args: { model: CardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; fieldName: string | undefined } }
+export type SignatureFor<CardT extends CardConstructor> = { Args: { model: PartialCardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; fieldName: string | undefined } }
  
 let defaultStyles = initStyleSheet(`
   this {

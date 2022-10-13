@@ -78,7 +78,7 @@ function not(val: boolean) {
 interface Signature {
   element: HTMLInputElement;
   Args: {
-    Positional: [model: boolean, inputType: boolean];
+    Positional: [model: boolean | null, inputType: boolean];
   }
 }
 

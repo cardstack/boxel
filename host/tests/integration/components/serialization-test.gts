@@ -5,7 +5,6 @@ import parseISO from 'date-fns/parseISO';
 import { p, cleanWhiteSpace, shimModule } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
-import get from 'lodash/get';
 import { shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
