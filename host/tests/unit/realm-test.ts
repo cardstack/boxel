@@ -25,7 +25,6 @@ module('Unit | realm', function (hooks) {
     let adapter = new TestRealmAdapter({
       'dir/empty.json': {
         data: {
-          attributes: {},
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',
@@ -52,7 +51,6 @@ module('Unit | realm', function (hooks) {
       data: {
         type: 'card',
         id: `${testRealmURL}dir/empty`,
-        attributes: {},
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/card-api',
@@ -75,7 +73,6 @@ module('Unit | realm', function (hooks) {
       {
         'dir/empty.json': {
           data: {
-            attributes: {},
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
@@ -141,7 +138,6 @@ module('Unit | realm', function (hooks) {
             {
               data: {
                 type: 'card',
-                attributes: {},
                 meta: {
                   adoptsFrom: {
                     module: 'https://cardstack.com/base/card-api',
@@ -173,7 +169,6 @@ module('Unit | realm', function (hooks) {
           {
             data: {
               type: 'card',
-              attributes: {},
               meta: {
                 adoptsFrom: {
                   module: 'https://cardstack.com/base/card-api',
@@ -214,7 +209,6 @@ module('Unit | realm', function (hooks) {
             {
               data: {
                 type: 'card',
-                attributes: {},
                 meta: {
                   adoptsFrom: {
                     module: 'https://cardstack.com/base/card-api',
@@ -391,7 +385,6 @@ module('Unit | realm', function (hooks) {
     let adapter = new TestRealmAdapter({
       'cards/1.json': {
         data: {
-          attributes: {},
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',
@@ -402,7 +395,6 @@ module('Unit | realm', function (hooks) {
       },
       'cards/2.json': {
         data: {
-          attributes: {},
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',

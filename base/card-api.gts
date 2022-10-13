@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
-import { flatMap, startCase, set, get } from 'lodash';
+import { flatMap, startCase, set, get, merge } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
 import { WatchedArray } from './watched-array';
@@ -11,7 +11,6 @@ import { on } from '@ember/modifier';
 import { pick } from './pick';
 import {
   type LooseCardResource,
-  type Meta,
 } from '@cardstack/runtime-common';
 import ShadowDOM from 'https://cardstack.com/base/shadow-dom';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
@@ -61,15 +60,28 @@ const cardTracking = new TrackedWeakMap<object, any>();
 
 const isBaseCard = Symbol('isBaseCard');
 
+type JSONAPIResource = 
+{ 
+  attributes: Record<string, any>;
+  relationships?: Record<string, any>;
+  meta?: Record<string, any>;
+} | 
+{ 
+  attributes?: Record<string, any>;
+  relationships: Record<string, any>;
+  meta?: Record<string, any>;
+}
+
+
 interface Field<CardT extends CardConstructor> {
   card: CardT;
   name: string;
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
-  serialize(value: any): { serialized: any | any[]; meta: Meta | Meta[] | undefined } // meta may be undefined when serializing primitive field
+  serialize(value: any): JSONAPIResource;
   deserialize(value: any, fromResource: LooseCardResource | undefined, instancePromise: Promise<Card>): Promise<any>;
   emptyValue(instance: Card): any;
-  prepareSet(instance: Card, value: any): void;
+  validate(instance: Card, value: any): void;
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
 }
 
@@ -86,26 +98,39 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return this.cardThunk();
   }
 
-  serialize(value: CardInstanceType<FieldT>[]): { serialized: any[]; meta: Meta[] | undefined } {
-    let serialized = value.map(entry => this.card[serialize](entry))
-    let meta: Meta[] | undefined;
-    let usesDefaultCard = true;
-    if (!(primitive in this.card)) {
-      let adoptsFrom = Loader.identify(this.card);
-      if (!adoptsFrom) {
-        throw new Error(`bug: encountered a card that has no Loader identity '${this.card.name}'`);
-      }
-      meta = value.map((entry, i) => getMeta(this, entry, serialized[i]))
-        .map(metaItem => {
-          if (metaItem) {
-            usesDefaultCard = false; // warning side effect in map
-            return metaItem;
+  serialize(values: CardInstanceType<FieldT>[]){
+    if (primitive in this.card) {
+      return { attributes: { [this.name]:  values.map(value => this.card[serialize](value)) } };
+    } else {
+      let serialized = values.map(value => {
+        let resource: JSONAPIResource = this.card[serialize](value);
+        if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
+          // when our implementation matches the default we don't need to include
+          // meta.adoptsFrom
+          delete resource.meta?.adoptsFrom;  
+        }
+        if (resource.meta && Object.keys(resource.meta).length === 0) {
+          delete resource.meta;
+        }
+        return resource;
+      });
+
+      let result: JSONAPIResource = { 
+        attributes: { 
+          [this.name]: serialized.map(resource => resource.attributes )
+        }
+      };
+
+      if (serialized.some(resource => resource.meta)) {
+        result.meta = {
+          fields: {
+            [this.name]: serialized.map(resource => resource.meta ?? {})
           }
-          return { adoptsFrom};
-        }) as Meta[];
-      serialized = serialized.map(resource => resource ? resource.attributes : resource);
+        }
+      }        
+
+      return result;
     }
-    return { serialized, meta: usesDefaultCard ? undefined : meta };
   }
 
   async deserialize(value: any[], fromResource: LooseCardResource | undefined, instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
@@ -125,7 +150,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
 
   emptyValue(instance: Card) { return new WatchedArray(() => recompute(instance)) }
 
-  prepareSet(instance: Card, value: any) {
+  validate(instance: Card, value: any) {
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
@@ -178,17 +203,30 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
-  serialize(value: InstanceType<CardT>): { serialized: any; meta: Meta | undefined } {
-    let serialized: any;
-    let meta: Meta | undefined;
-    if (value != null) {
-      let rawSerialized = this.card[serialize](value);
-      meta = getMeta(this, value, rawSerialized);
-      serialized = primitive in this.card ? rawSerialized : rawSerialized.attributes;
+  serialize(value: InstanceType<CardT>) {
+    let serialized = this.card[serialize](value);
+    if (primitive in this.card) {
+      return { attributes: { [this.name]: serialized } }
     } else {
-      serialized = value;
+      let resource: JSONAPIResource = { 
+        attributes: { 
+          [this.name]: serialized.attributes 
+        }
+      };
+
+      if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
+        // when our implementation matches the default we don't need to include
+        // meta.adoptsFrom
+        delete serialized.meta.adoptsFrom;  
+      }
+
+      if (Object.keys(serialized.meta).length > 0) {
+        resource.meta = {
+          fields:{ [this.name]: serialized.meta }
+        }
+      }
+      return resource;
     }
-    return { serialized, meta };
   }
 
   async deserialize(value: any, fromResource: LooseCardResource | undefined): Promise<CardInstanceType<CardT>> {
@@ -206,7 +244,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     }
   }
 
-  prepareSet(_instance: Card, value: any) {
+  validate(_instance: Card, value: any) {
     if (primitive in this.card) {
       // todo: primitives could implement a validation symbol
     } else {
@@ -228,33 +266,6 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     let innerModel = model.field(fieldName) as unknown as Box<Card>;
     return getComponent(card, format, innerModel);
   }
-}
-
-function getMeta(field: Field<typeof Card>, deserializedVal: any, serializedVal: any): Meta | undefined {
-  if (primitive in field.card) {
-    return undefined;
-  }
-  if (typeof deserializedVal === 'object' && deserializedVal != null && isBaseCard in deserializedVal) {
-    if (!isCardResource(serializedVal)) {
-      throw new Error(`bug: expected serialized card for field '${field.name}' of card '${deserializedVal.constructor.name}' to be a card resource but it wasn't: ${JSON.stringify(serializedVal)}`);
-    }
-    let instance = deserializedVal as Card;
-    let fieldCard = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
-    if (field.card === fieldCard) {
-      // Only write out the field meta when the field value is a different card than the field card
-      return undefined;
-    }
-    let fieldCardRef = Loader.identify(fieldCard);
-    if (!fieldCardRef) {
-      throw new Error(`bug: encountered a card that has no Loader identity '${fieldCard.name}'`);
-    }
-    let meta = { adoptsFrom: fieldCardRef };
-    for (let [nestedFieldName, nestedField] of Object.entries(serializedVal.meta.fields ?? {})) {
-      set(meta, `fields.${nestedFieldName}`, nestedField);
-    }
-    return meta;
-  }
-  throw new Error(`bug: don't know how to build meta for field '${field.name}' from deserialized value: ${JSON.stringify(deserializedVal)}`);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -394,10 +405,10 @@ export function getQueryableValue(fieldCard: typeof Card, value: any): any {
   return flatten((fieldCard as any)[queryableValue](value), { safe: true });
 }
 
-export function serializedGet<CardT extends CardConstructor>(
+function serializedGet<CardT extends CardConstructor>(
   model: InstanceType<CardT>,
   fieldName: string,
-) {
+): JSONAPIResource {
   let field = getField(model.constructor, fieldName);
   if (!field) {
     throw new Error(`tried to serializedGet field ${fieldName} which does not exist in card ${model.constructor.name}`);
@@ -419,28 +430,16 @@ export function serializeCard(
     includeComputeds?: boolean
   }
 ): LooseCardResource {
-  let attributes: Record<string, any> = {};
-  let fields: LooseCardResource["meta"]["fields"] = {};
   let adoptsFrom = Loader.identify(model.constructor);
   if (!adoptsFrom) {
     throw new Error(`bug: encountered a card that has no Loader identity: ${model.constructor.name}`);
   }
-
-  for (let fieldName of Object.keys(getFields(model, opts))) {
-    let { serialized, meta: fieldMeta } = serializedGet(model, fieldName);
-    attributes[fieldName] = serialized;
-    if (fieldMeta) {
-      fields = { ...fields, ...{ [fieldName]: fieldMeta } };
-    }
-  }
-  let meta = {
-    adoptsFrom,
-    ...(Object.keys(fields).length > 0 ? { fields } : {})
-  };
-
-  let id = attributes.id;
-  delete attributes.id;
-  return { ...(id !== undefined ? { id } : {}), attributes, meta, type: "card" } as LooseCardResource;
+  let { id: removedIdField, ...fields } = getFields(model, opts);
+  let fieldResources = Object.keys(fields).map(fieldName => serializedGet(model, fieldName));
+  return merge({}, ...fieldResources, {
+    type: 'card',
+    meta: { adoptsFrom }
+  }, model.id ? { id: model.id } : undefined);
 }
 
 export async function createFromSerialized<T extends CardConstructor>(CardClass: T, data: T extends { [primitive]: infer P } ? P : LooseCardResource, opts?: { loader?: Loader }): Promise<CardInstanceType<T>>;
@@ -596,7 +595,7 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
       if (field.card as typeof Card === IDCard && this[isSavedInstance]) {
         throw new Error(`cannot assign a value to the field '${field.name}' on the saved card '${(this as any)[field.name]}' because it is the card's identifier`);
       }
-      value = field.prepareSet(this, value);
+      value = field.validate(this, value);
       let deserialized = getDataBucket(this);
       deserialized.set(field.name, value);
       // invalidate all computed fields because we don't know which ones depend on this one
