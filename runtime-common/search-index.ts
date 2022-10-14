@@ -74,15 +74,14 @@ interface ResourceID {
   id: string;
 }
 
-type Relationship =
-  | {
-      links: {
-        // there are other valid items for links in the spec, but we don't
-        // anticipate using them
-        self: string | null;
-      };
-    }
-  | { data: ResourceID | ResourceID[] | null };
+export type Relationship = {
+  links: {
+    // there are other valid items for links in the spec, but we don't
+    // anticipate using them
+    self: string | null;
+  };
+  data?: ResourceID | ResourceID[] | null;
+};
 
 export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
@@ -98,14 +97,16 @@ export interface CardResource<Identity extends Unsaved = Saved> {
     self?: string;
   };
 }
-export interface CardSingleResourceDocument<Identity extends Unsaved = Saved> {
+export interface SingleCardDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>;
+  included?: CardResource<Saved>[];
 }
 export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>[];
+  included?: CardResource<Saved>[];
 }
 
-export type CardDocument = CardSingleResourceDocument | CardCollectionDocument;
+export type CardDocument = SingleCardDocument | CardCollectionDocument;
 
 export function isCardResource(resource: any): resource is CardResource {
   if (typeof resource !== "object" || resource == null) {
@@ -121,15 +122,15 @@ export function isCardResource(resource: any): resource is CardResource {
     return false;
   }
   if ("relationships" in resource) {
-    let { relationship } = resource;
-    if (typeof relationship !== "object" || relationship == null) {
+    let { relationships } = resource;
+    if (typeof relationships !== "object" || relationships == null) {
       return false;
     }
-    for (let [fieldName, maybeRelationship] of Object.entries(relationship)) {
+    for (let [fieldName, relationship] of Object.entries(relationships)) {
       if (typeof fieldName !== "string") {
         return false;
       }
-      if (!isRelationship(maybeRelationship)) {
+      if (!isRelationship(relationship)) {
         return false;
       }
     }
@@ -213,10 +214,14 @@ function isRelationship(relationship: any): relationship is Relationship {
   }
   if ("links" in relationship) {
     let { links } = relationship;
-    if (typeof links !== "object") {
+    if (typeof links !== "object" || links == null) {
       return false;
     }
-    if (links !== null && typeof links !== "string") {
+    if (!("self" in links)) {
+      return false;
+    }
+    let { self } = links;
+    if (typeof self !== "string" && self !== null) {
       return false;
     }
   } else if ("data" in relationship) {
@@ -237,12 +242,10 @@ function isRelationship(relationship: any): relationship is Relationship {
 }
 
 export function isCardDocument(doc: any): doc is CardDocument {
-  return isCardSingleResourceDocument(doc) || isCardCollectionDocument(doc);
+  return isSingleCardDocument(doc) || isCardCollectionDocument(doc);
 }
 
-export function isCardSingleResourceDocument(
-  doc: any
-): doc is CardSingleResourceDocument {
+export function isSingleCardDocument(doc: any): doc is SingleCardDocument {
   if (typeof doc !== "object") {
     return false;
   }
@@ -252,6 +255,12 @@ export function isCardSingleResourceDocument(
   let { data } = doc;
   if (Array.isArray(data)) {
     return false;
+  }
+  if ("included" in doc) {
+    let { included } = doc;
+    if (!isIncluded(included)) {
+      return false;
+    }
   }
   return isCardResource(data);
 }
@@ -269,7 +278,31 @@ export function isCardCollectionDocument(
   if (!Array.isArray(data)) {
     return false;
   }
+  if ("included" in doc) {
+    let { included } = doc;
+    if (!isIncluded(included)) {
+      return false;
+    }
+  }
   return data.every((resource) => isCardResource(resource));
+}
+
+function isIncluded(included: any): included is CardResource<Saved>[] {
+  if (!Array.isArray(included)) {
+    return false;
+  }
+  for (let resource of included) {
+    if (typeof resource !== "object" || !resource) {
+      return false;
+    }
+    if (!("id" in resource) || typeof resource.id !== "string") {
+      return false;
+    }
+    if (!isCardResource(resource)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export class SearchIndex {

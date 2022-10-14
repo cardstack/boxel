@@ -4,7 +4,7 @@ import {
   Kind,
   RealmAdapter,
   FileRef,
-  LooseCardDocument,
+  LooseSingleCardDocument,
   Loader,
 } from '@cardstack/runtime-common';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
@@ -24,12 +24,12 @@ export interface Dir {
 export const testRealmURL = 'http://test-realm/test/';
 
 export interface CardDocFiles {
-  [filename: string]: LooseCardDocument;
+  [filename: string]: LooseSingleCardDocument;
 }
 
 export const TestRealm = {
   create(
-    flatFiles: Record<string, string | LooseCardDocument | CardDocFiles>,
+    flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
     realmURL?: string
   ): Realm {
     return new Realm(realmURL ?? testRealmURL, new TestRealmAdapter(flatFiles));
@@ -65,7 +65,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #paths: RealmPaths;
 
   constructor(
-    flatFiles: Record<string, string | LooseCardDocument | CardDocFiles>,
+    flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
     realmURL = new URL(testRealmURL)
   ) {
     this.#paths = new RealmPaths(realmURL);

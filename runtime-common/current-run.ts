@@ -17,11 +17,12 @@ import isEqual from "lodash/isEqual";
 import { Deferred } from "./deferred";
 import flatMap from "lodash/flatMap";
 import merge from "lodash/merge";
-import {
-  isCardSingleResourceDocument,
-  CardSingleResourceDocument,
+import type {
+  ExportedCardRef,
+  CardRef,
+  CardResource,
+  SingleCardDocument,
 } from "./search-index";
-import type { ExportedCardRef, CardRef, CardResource } from "./search-index";
 
 // Forces callers to use URL (which avoids accidentally using relative url
 // strings without a base)
@@ -345,7 +346,7 @@ export class CurrentRun {
     let cardRef = { module: moduleURL.href, name };
     let typesMaybeError: TypesWithErrors | undefined;
     let uncaughtError: Error | undefined;
-    let doc: CardSingleResourceDocument | undefined;
+    let doc: SingleCardDocument | undefined;
     let searchData: any;
     let cardType: typeof Card | undefined;
     try {
@@ -355,18 +356,15 @@ export class CurrentRun {
       });
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
       await api.recompute(card);
-      let data = api.serializeCard(card, { includeComputeds: true });
-      let maybeDoc = {
-        data: merge(data, {
+      let data: SingleCardDocument = api.serializeCard(card, {
+        includeComputeds: true,
+      });
+      let maybeDoc = merge(data, {
+        data: {
           id: instanceURL.href,
           meta: { lastModified: lastModified },
-        }),
-      };
-      if (!isCardSingleResourceDocument(maybeDoc)) {
-        throw new Error(
-          `bug: card serialization produced non-card document for ${instanceURL.href}`
-        );
-      }
+        },
+      });
       doc = maybeDoc;
       searchData = await api.searchDoc(card);
     } catch (err: any) {

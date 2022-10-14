@@ -258,8 +258,9 @@ module('Integration | card-basics', function (hooks) {
   });
 
   skip('can assign a linksTo field to a saved card');
+  // only throws when serializing linksTo with unsaved card
+  skip('can assign a linksTo field to a unsaved card');
   skip('throws when defining card that that has a linksTo of a primitive card');
-  skip('throws assigning linksTo field to an unsaved card');
   skip('throws assigning linksTo field to a card that is not an instance of the field card');
 
   test('catalog entry isPrimitive indicates if the catalog entry is a primitive field card', async function (assert) {

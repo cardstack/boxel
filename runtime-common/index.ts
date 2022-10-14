@@ -6,8 +6,9 @@ export type LooseCardResource = Omit<CardResource, "id" | "type"> & {
   id?: string;
 };
 
-export interface LooseCardDocument {
+export interface LooseSingleCardDocument {
   data: LooseCardResource;
+  included?: CardResource<Saved>[];
 }
 
 export { Deferred } from "./deferred";
@@ -61,7 +62,7 @@ export interface ExistingCardArgs {
   // this is just used for test fixture data. as soon as we
   // have an actual ember service for the API we should just
   //  mock that instead
-  json?: LooseCardDocument;
+  json?: LooseSingleCardDocument;
   format?: Format;
 }
 
@@ -85,6 +86,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "Loader",
       "Deferred",
       "isCardResource",
+      "isSingleCardDocument",
       "chooseCard",
       "baseCardRef",
       "isMetaFieldItem",
@@ -114,12 +116,14 @@ export { Realm } from "./realm";
 export { Loader } from "./loader";
 export type { Kind, RealmAdapter, FileRef } from "./realm";
 
-import type { CardRef } from "./search-index";
+import type { CardRef, Saved } from "./search-index";
 export type { CardRef };
 export type {
   ExportedCardRef,
   CardResource,
   CardDocument,
+  SingleCardDocument,
+  Relationship,
   Meta,
 } from "./search-index";
 export {
@@ -127,7 +131,7 @@ export {
   isCardResource,
   isCardDocument,
   isCardCollectionDocument,
-  isCardSingleResourceDocument,
+  isSingleCardDocument,
 } from "./search-index";
 
 // @ts-ignore tsc doesn't understand .gts files
