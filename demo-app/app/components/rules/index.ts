@@ -121,18 +121,14 @@ export default class RulesComponent extends Component {
             entering.push({
               sequence: [
                 {
-                  parallel: [
-                    {
-                      sprites: new Set([cardSprite]),
-                      properties: {
-                        opacity: { from: 0, to: 1 },
-                      },
-                      timing: {
-                        behavior: new LinearBehavior(),
-                        duration: DURATIONS.BLIP,
-                      },
-                    },
-                  ],
+                  sprites: new Set([cardSprite]),
+                  properties: {
+                    opacity: { from: 0, to: 1 },
+                  },
+                  timing: {
+                    behavior: new LinearBehavior(),
+                    duration: DURATIONS.BLIP,
+                  },
                 },
                 {
                   parallel: [
@@ -183,7 +179,7 @@ export default class RulesComponent extends Component {
                     (cardSprite.initialBounds!.relativeToContext![
                       k
                     ] as number) -
-                      (cardSprite.finalBounds!.relativeToContext![k] as number)
+                    (cardSprite.finalBounds!.relativeToContext![k] as number)
                   ) < 0.5
               )
             ) {
