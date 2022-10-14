@@ -127,6 +127,8 @@ Plain language, WITHOUT having to account for interruptions:
 # How would the BreadcrumbBar.enter know which LargeModal to synchronize with in a staggered entry?
 # What kind of "grouping" metadata would need to be provided, and how?
 # What can we derive from the DOM?
+# Stagger is a specific implementation that we need
+# "Current focus" is another thing the UI needs to express
 
 - BreadcrumbBar.enter: Slide in from the top of the screen
   - Conditional:
