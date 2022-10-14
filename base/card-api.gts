@@ -281,9 +281,6 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
 class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   constructor(private cardThunk: () => CardT, readonly computeVia: undefined | string | (() => unknown), readonly name: string) {
-    if (primitive in this.card) {
-      throw new Error(`the linksTo field '${this.name}' contains a primitive card '${this.card.name}'`);
-    }
   }
 
   get card(): CardT {
@@ -328,6 +325,11 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   }
 
   validate(_instance: Card, value: any) {
+    // we can't actually place this in the constructor since that would break cards whose field type is themselves
+    // so the next opportunity we have to test this scenario is during field assignment
+    if (primitive in this.card) {
+      throw new Error(`the linksTo field '${this.name}' contains a primitive card '${this.card.name}'`);
+    }
     if (value) {
       if (!(value instanceof this.card)) {
         throw new Error(`tried set ${value} as field '${this.name}' but it is not an instance of ${this.card.name}`);

@@ -404,11 +404,156 @@ module('Integration | serialization', function (hooks) {
     });
   });
 
-  skip('throws when serializing a linksTo relationship to an unsaved card');
+  test('can serialize an empty linksTo relationship', async function(assert) {
+    let { field, contains, linksTo, Card, serializeCard } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+
+    let hassan = new Person({ firstName: "Hassan" });
+    
+    let serialized = serializeCard(hassan);
+    assert.deepEqual(serialized, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: null
+            },
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }
+    });
+
+    let mango = new Person({ firstName: "Mango", pet: null });
+    serialized = serializeCard(mango);
+    assert.deepEqual(serialized, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Mango'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: null
+            },
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }
+    });
+  });
+
+  test('can serialize a linksTo relationship that points to own card class', async function(assert) {
+    let { field, contains, linksTo, Card, serializeCard } = cardApi;
+    let { default: StringCard } = string;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field friend = linksTo(() => Person)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person });
+
+    let mango = new Person({ firstName: "Mango" });
+    let hassan = new Person({ firstName: "Hassan", friend: mango });
+    await saveCard(mango, `${realmURL}Person/mango`);
+    let serialized = serializeCard(hassan);
+    assert.deepEqual(serialized, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          friend: {
+            links: {
+              self: `${realmURL}Person/mango`,
+            },
+            data: {
+              id: `${realmURL}Person/mango`,
+              type: 'card'
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      },
+      included: [{
+        id: `${realmURL}Person/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango'
+        },
+        relationships: {
+          friend: {
+            links: {
+              self: null
+            },
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }]
+    });
+  });
+
+  test('throws when serializing a linksTo relationship to an unsaved card', async function(assert) {
+    let { field, contains, linksTo, Card, serializeCard } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+
+    let mango = new Pet({ firstName: "Mango" });
+    let hassan = new Person({ firstName: "Hassan", pet: mango });
+
+    try {
+      serializeCard(hassan);
+      throw new Error(`expected error not thrown`);
+    } catch (err) {
+      assert.ok(err.message.match(/field 'pet' cannot be serialized with an unsaved card/), 'cannot serialize a linksTo relationship to an unsaved card');
+    }
+  });
+
   skip('can deserialize a linksTo relationship');
-  skip('can serialize an empty linksTo relationship');
   skip('can deserialize an empty linksTo relationship');
-  skip('can serialize a linksTo relationship that points to own card class');
   skip('can deserialize a linksTo relationship that points to own card class');
 
   test('can serialize a date field with null value', async function(assert) {

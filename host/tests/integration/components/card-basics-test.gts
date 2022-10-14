@@ -44,7 +44,7 @@ module('Integration | card-basics', function (hooks) {
     catalogEntry = await Loader.import(`${baseRealm.url}catalog-entry`);
     pickModule = await Loader.import(`${baseRealm.url}pick`);
   });
-
+  
   test('primitive field type checking', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
@@ -257,11 +257,66 @@ module('Integration | card-basics', function (hooks) {
     assert.shadowDOM('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
   });
 
-  skip('can assign a linksTo field to a saved card');
-  // only throws when serializing linksTo with unsaved card
-  skip('can assign a linksTo field to a unsaved card');
-  skip('throws when defining card that that has a linksTo of a primitive card');
-  skip('throws assigning linksTo field to a card that is not an instance of the field card');
+  test('throws when assigning a value to a linksTo field with a primitive card', async function (assert) {
+    let { field, contains, linksTo, Card } = cardApi;
+    let { default: StringCard } = string;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(StringCard)
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person });
+
+    try {
+      new Person({ firstName: 'Hassan', pet: 'Mango' });
+      throw new Error('expected error was not thrown');
+    } catch (err) {
+      assert.ok(err.message.match(/linksTo field 'pet' contains a primitive card/), 'cannot have a linkTo field that uses a primitive card');
+    }
+
+    let hassan = new Person({ firstName: 'Hassan'});
+    try {
+      hassan.pet = 'Mango';
+      throw new Error('expected error was not thrown');
+    } catch (err) {
+      assert.ok(err.message.match(/linksTo field 'pet' contains a primitive card/), 'cannot have a linkTo field that uses a primitive card');
+    }
+  });
+
+  test('throws assigning linksTo field to a card that is not an instance of the field card', async function (assert) {
+    let { field, contains, linksTo, Card } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class NotAPet extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person, Pet, NotAPet });
+
+    let door = new NotAPet({ firstName: "door" });
+    try {
+      new Person({ firstName: "Hassan", pet: door });
+      throw new Error('expected error was not thrown');
+    } catch (err) {
+      assert.ok(err.message.match(/it is not an instance of Pet/), 'cannot assign a linksTo field to a value that is not instance of the field card');
+    }
+
+    let hassan = new Person({ firstName: 'Hassan'});
+    try {
+      hassan.pet = door
+      throw new Error('expected error was not thrown');
+    } catch (err) {
+      assert.ok(err.message.match(/it is not an instance of Pet/), 'cannot assign a linksTo field to a value that is not instance of the field card');
+    }
+  });
+
+  skip('can render a linksTo field');
 
   test('catalog entry isPrimitive indicates if the catalog entry is a primitive field card', async function (assert) {
     let { createFromSerialized } = cardApi;
