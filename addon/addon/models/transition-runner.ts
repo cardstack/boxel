@@ -1,6 +1,6 @@
 import { task } from 'ember-concurrency';
 import { Changeset } from '../models/changeset';
-import Sprite, { MotionOptions, MotionProperty } from '../models/sprite';
+import Sprite, { MotionOptions, MotionProperty, SpriteType } from '../models/sprite';
 import { assert } from '@ember/debug';
 import { IContext } from './sprite-tree';
 import { SpriteAnimation } from 'animations-experiment/models/sprite-animation';
@@ -16,17 +16,17 @@ export type AnimationTimeline =
   | ParallelAnimationTimeline;
 export interface SequentialAnimationTimeline {
   sequence: (MotionDefinition | AnimationTimeline)[];
-  parallel: never;
+  parallel?: never;
 }
 export interface ParallelAnimationTimeline {
   parallel: (MotionDefinition | AnimationTimeline)[];
-  sequence: never;
+  sequence?: never;
 }
 
 export interface MotionDefinition {
   sprites: Set<Sprite>;
   properties: {
-    [k in MotionProperty]: MotionOptions | Record<string, never>;
+    [k in MotionProperty]?: MotionOptions | Record<string, never>;
   };
   timing: {
     behavior: Behavior;
@@ -119,6 +119,13 @@ export default class TransitionRunner {
           let promises = animations.map((animation) => animation.finished);
 
           animations.forEach((a) => {
+            if (this.animationContext.hasOrphan(a.sprite)) {
+              this.animationContext.removeOrphan(a.sprite);
+            }
+            if (a.sprite.type === SpriteType.Removed) {
+              this.animationContext.appendOrphan(a.sprite);
+              a.sprite.lockStyles();
+            }
             a.play();
           });
 

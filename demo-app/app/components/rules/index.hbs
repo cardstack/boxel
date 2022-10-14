@@ -1,0 +1,65 @@
+<button local-class="button" {{on "click" this.toggleLevelOne}}>
+    Toggle Level One
+</button>
+
+<AnimationContext @rules={{this.rules}}>
+    {{#if this.showLevelOne}}
+    <Rules::ModalCard::Large @id={{this.levelOneId}} @close={{this.toggleLevelOne}} @state={{this.states.levelOne}}
+        local-class="vertical-stack">
+        <button local-class="button" {{on "click" this.editLevelOne}}>
+            Edit level one
+        </button>
+        <div style="border-bottom: 1px solid black; width: 100%;">
+        </div>
+        {{#if this.editingLevelOne}}
+            <div local-class="padded-container">
+                <Rules::Field::Input @id="field-123" @role={{this.fieldRole}} />
+            </div>
+            <div style="border-bottom: 1px solid black; width: 100%;">
+            </div>
+            <div>
+                <div local-class="padded-container">
+                    {{#if this.showCard}}
+                    <Rules::BasicCard @size="regular" @id="option-card" @role={{this.optionCardRole}} />
+                    {{else}}
+                    <div>
+                        Placeholder
+                    </div>
+                    {{/if}}
+                </div>
+                <button local-class="button" {{on "click" this.toggleSmall}}>
+                    Toggle Small
+                </button>
+            </div>
+            <div style="border-bottom: 1px solid black; width: 100%;">
+            </div>
+            <button local-class="button" {{on "click" this.toggleLevelTwo}}>
+                Toggle Level Two
+            </button>
+        {{else}}
+            <Rules::Field::Text @id="field-123" @role={{this.fieldRole}}>
+                Hello!
+            </Rules::Field::Text>
+        {{/if}}
+    </Rules::ModalCard::Large>
+    {{#if this.showLevelTwo}}
+        <div {{sprite id="breadcrumb-bar" role=this.breadcrumbBarRole}} local-class="breadcrumb-bar">
+            Breadcrumb bar
+        </div>
+        <Rules::ModalCard::Large @id={{this.levelTwoId}} @close={{this.toggleLevelTwo}} @state={{this.states.levelTwo}}>
+            Large modal card Two
+        </Rules::ModalCard::Large>
+    {{/if}}
+
+    {{#if this.showSmall}}
+        <Rules::ModalCard::Small @id={{this.smallId}} @close={{this.toggleSmall}} @state={{this.states.small}}>
+            Small modal card
+            <button local-class="button" {{on "click" this.toggleShowLevelTwoCard}}>Show Options</button>
+            {{#if this.showLevelTwoCard}}
+                <Rules::BasicCard @size="small" @id="option-card" @role={{this.optionCardRole}} {{on "click"
+                this.toggleShowCard}} />
+            {{/if}}
+        </Rules::ModalCard::Small>
+    {{/if}}
+    {{/if}}
+</AnimationContext>

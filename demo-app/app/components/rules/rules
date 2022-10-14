@@ -1,0 +1,151 @@
+- modal-card-large-enter:
+  scenario: large modal card is entering
+  sequence:
+    - quickly fade in the overlay
+    - slide modal card up from bottom of screen
+  notes:
+    - don't animate its contents
+
+- modal-card-large-exit:
+  scenario: large modal card is exiting
+  parallel:
+    - slide modal card down to bottom of screen
+    - fade out the overlay
+  notes:
+    - don't animate its contents
+
+- modal-card-large-scale-down:
+  scenario: large modal card scales down as user drills down
+  sequence:
+    - scale down the large modal card
+  notes:
+    - should run slightly before modal-card-large-enter. there can be some overlap between the two
+
+- modal-card-large-scale-up:
+  scenario: large modal card scales up as user exits a drill down to a higher level
+  sequence:
+    - scale up the large modal card
+  notes:
+    - should run slightly after modal-card-large-exit. there can be some overlap between the two
+
+
+- modal-card-small-enter:
+  scenario: small modal card is entering
+  sequence:
+    - quickly fade in the overlay
+    - scale it from large to normal size
+  notes:
+    - don't animate its contents
+
+- modal-card-small-exit:
+  scenario: small modal card is exiting
+  sequence:
+    - fade out the overlay and the small modal card at the same time
+  notes:
+    - some layer interactions with card-to-slot
+
+- modal-card-small-resize:
+  scenario: small modal card increases in size
+  sequence:
+    - increase the height, while anchoring to center of screen
+
+
+
+- breadcrumb-bar-enter:
+  scenario: breadcrumb bar is entering
+  sequence:
+    - slide the breadcrumb bar down
+  notes:
+    - should happen after modal-card-large-enter
+
+- breadcrumb-bar-exit:
+  scenario: breadcrumb bar is exiting
+  sequence:
+    - slide the breadcrumb bar up
+  notes:
+    - should happen simultaneously with modal-card-large-exit
+
+
+
+- highlight-selected-card:
+  scenario: a card needs to be highlighted to differentiate it from other cards
+  sequence:
+    - add a box shadow that gradually darkens (give appearance of lifting card up)
+  notes:
+    - this should run before modal-card-small-enter (how are these associated? should these be one rule?)
+    - should this even be animated? (probably)
+
+- field-move-and-resize:
+  scenario: transforming cards to edit mode
+  sequence:
+    - introduce the new edit mode placeholders and inputs where content previously was
+    - move it to the new spot
+
+- card-to-slot:
+  scenario: selected a card in the card picker
+  sequence:
+    - scale up a small card to fit a larger space, while fading out content gradually (title remains visible for most of it)
+    - fade in the new content
+  notes:
+    - this is a card shared element transition that is different from the field-move-and-resize
+    - how would we distinguish when this should happen?
+
+
+### Problems
+# - DOM structure may not reliably place related sprites under an ancestor, 
+#   because of things like in-element. This is a problem for modals, which cards seem to 
+#   use for many things. We might require a way to group things by metadata.
+# - If modals are using in-element, we need AnimationContexts to be able to work well with in-element
+# - matching, claiming, releasing
+# - easy way to check if has changed
+# - very verbose. we probably need a higher level api than just match()
+# - difficult to express relationships between rules, and relationships between sprites:
+#   - some animations should run after others, but how should we express timing?
+#   - how do we identify relationships between different elements? how do we express "sibling" and "ancestor/descendant"?
+# - scale support is probably relevant
+# - important to be able to distinguish changed from not
+# - are there things that need styles attached to element? or can everything we need be animated?
+
+
+- below means we need to somehow reconcile kept and inserted sprites
+
+Plain language, WITHOUT having to account for interruptions:
+- LargeModal.enter: If a large modal card is entering the screen, it should slide in from the bottom. Its overlay should fade in gradually.
+  - Conditional: 
+    - LargeModal.toBack: wait for LargeModal.toBack and start halfway through that transition
+  - SideEffects:
+    - Prevent children from animating in
+- LargeModal.exit: If a large modal card is exiting the screen, it should slide out from the bottom. Its overlay should fade out gradually.
+  - SideEffects:
+    - Prevent children from animating out
+- LargeModal.toBack: If a large modal card is moving to the back of the screen, it should have its scale reduce gradually. 
+- LargeModal.toFront: If a large modal card is moving to the front of the screen from the back, it should have its scale increase gradually
+  - Conditional:  
+    - LargeModal.exit: wait for LargeModal.exit and start halfway through that transition
+
+# consider - if these large modals were in a list, how would the language differ? 
+# How would the BreadcrumbBar.enter know which LargeModal to synchronize with in a staggered entry?
+# What kind of "grouping" metadata would need to be provided, and how?
+# What can we derive from the DOM?
+
+- BreadcrumbBar.enter: Slide in from the top of the screen
+  - Conditional:
+    - LargeModal.enter: Synchronize with this transition (unsure of specifics, whether start or end etc)
+- BreadcrumbBar.exit: Slide out towards the top of the screen
+  - Conditional:
+    - LargeModal.exit: Synchronize with this transition (unsure of specifics, whether start or end etc)
+
+- VendorCard.highlight: Increase shadow darkness. (Fade in overlay?)
+- VendorCard.enterField: Move card from original spot to new spot. While moving, use the old, smaller card UI that scales up while fading out. After reaching the final spot, fade in the new card UI
+  - Conditional:
+    - SmallModal.exit: Start slightly after SmallModal.exit
+
+- SmallModal.enter: Small modal starts slightly scaled up. Scale down towards rest size + fade in overlay.
+  - Conditional:
+    - VendorCard.highlight: wait for VendorCard.highlight to complete, then start
+- SmallModal.exit: Fade out all content
+- SmallModal.resize: Keep the small modal centered on the screen, increase the height
+
+- Field.move: Move the field to its new spot
+  - Conditional:
+    - Field.move: Synchronize all fields' movements.

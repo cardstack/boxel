@@ -1,0 +1,9 @@
+<Rules::ModalCard::Overlay
+  @id={{concat @id "-overlay"}}
+  @role={{this.overlayRole}}
+  @close={{@close}}
+>
+    <div local-class={{concat "large-modal-card " @state}}  {{sprite id=(concat @id "-card") role=this.cardRole}} ...attributes>
+        {{yield}}
+    </div>
+</Rules::ModalCard::Overlay>

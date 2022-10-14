@@ -1,0 +1,15 @@
+.small-modal-card {
+    position: relative;
+    top: 30vh;
+    width: 200px;
+    height: 90px;
+    margin: auto;
+    background: white;
+    transform-origin: center;
+    border: 1px solid black;
+    border-radius: 8px;
+}
+
+.small-modal-card.none {
+    display: none;
+}
