@@ -6,6 +6,7 @@ import { p, cleanWhiteSpace, shimModule } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 import { shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
+import { Card } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -13,6 +14,9 @@ let integer: typeof import ("https://cardstack.com/base/integer");
 let date: typeof import ("https://cardstack.com/base/date");
 let datetime: typeof import ("https://cardstack.com/base/datetime");
 let cardRef: typeof import ("https://cardstack.com/base/card-ref");
+let updateFromSerialized: typeof cardApi["updateFromSerialized"];
+let serializeCard: typeof cardApi["serializeCard"];
+
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
@@ -31,7 +35,16 @@ module('Integration | serialization', function (hooks) {
     date = await Loader.import(`${baseRealm.url}date`);
     datetime = await Loader.import(`${baseRealm.url}datetime`);
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
+    updateFromSerialized = cardApi.updateFromSerialized;
+    serializeCard = cardApi.serializeCard;
   });
+
+  async function saveCard(instance: Card, id: string) {
+    await updateFromSerialized(
+      instance,
+      { ...serializeCard(instance).data, ...{ id } }
+    );
+  }
 
   test('can deserialize field', async function (assert) {
     let { field, contains, Card, Component, createFromSerialized } = cardApi;
@@ -298,38 +311,35 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a linksTo relationship', async function(assert) {
-    let { field, contains, linksTo, Card, createFromSerialized, serializeCard } = cardApi;
+    let { field, contains, linksTo, Card, serializeCard } = cardApi;
     let { default: StringCard } = string;
 
+    class Toy extends Card {
+      @field description = contains(StringCard);
+    }
     class Pet extends Card {
       @field firstName = contains(StringCard);
+      @field favoriteToy = linksTo(Toy)
     }
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field pet = linksTo(Pet)
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
 
-    // createFromSerialized with an ID creates a "saved" card
-    let mango = await createFromSerialized({
-      id: `${realmURL}Pets/mango`,
-      type: 'card',
-      attributes: {
-        firstName: 'Mango'
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Pet'
-        }
-      }
-    }, undefined);
 
+    let spookyToiletPaper = new Toy({ description: 'Toilet paper ghost: Poooo!' });
+    let mango = new Pet({
+      firstName: "Mango",
+      favoriteToy: spookyToiletPaper
+    });
     let hassan = new Person({
       firstName: "Hassan",
       pet: mango
     });
-
+    await saveCard(spookyToiletPaper, `${realmURL}Toy/spookyToiletPaper`);
+    await saveCard(mango, `${realmURL}Pet/mango`);
+    
     let serialized = serializeCard(hassan);
     assert.deepEqual(serialized, {
       data: {
@@ -340,10 +350,10 @@ module('Integration | serialization', function (hooks) {
         relationships: {
           pet: {
             links: {
-              self: `${realmURL}Pets/mango`,
+              self: `${realmURL}Pet/mango`,
             },
             data: {
-              id: `${realmURL}Pets/mango`,
+              id: `${realmURL}Pet/mango`,
               type: 'card'
             }
           }
@@ -356,10 +366,33 @@ module('Integration | serialization', function (hooks) {
         }
       },
       included: [{
-        id: `${realmURL}Pets/mango`,
+        id: `${realmURL}Toy/spookyToiletPaper`,
+        type: 'card',
+        attributes: {
+          description: 'Toilet paper ghost: Poooo!'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Toy'
+          }
+        }
+      },{
+        id: `${realmURL}Pet/mango`,
         type: 'card',
         attributes: {
           firstName: 'Mango'
+        },
+        relationships: {
+          favoriteToy: {
+            links: {
+              self: `${realmURL}Toy/spookyToiletPaper`,
+            },
+            data: {
+              id: `${realmURL}Toy/spookyToiletPaper`,
+              type: 'card'
+            }
+          }
         },
         meta: {
           adoptsFrom: {
@@ -371,7 +404,6 @@ module('Integration | serialization', function (hooks) {
     });
   });
 
-  skip('can include nested linksTo resource when serializing card');
   skip('throws when serializing a linksTo relationship to an unsaved card');
   skip('can deserialize a linksTo relationship');
   skip('can serialize an empty linksTo relationship');
