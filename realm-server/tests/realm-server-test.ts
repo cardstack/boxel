@@ -10,7 +10,7 @@ import {
   compiledCard,
 } from "@cardstack/runtime-common/etc/test-fixtures";
 import {
-  isCardSingleResourceDocument,
+  isSingleCardDocument,
   Realm,
   Loader,
   baseRealm,
@@ -100,7 +100,7 @@ module("Realm Server", function (hooks) {
     assert.strictEqual(response.status, 201, "HTTP 201 status");
     let json = response.body;
 
-    if (isCardSingleResourceDocument(json)) {
+    if (isSingleCardDocument(json)) {
       assert.strictEqual(
         json.data.id,
         `${testRealmHref}Card/1`,
@@ -152,7 +152,7 @@ module("Realm Server", function (hooks) {
     assert.strictEqual(response.status, 200, "HTTP 200 status");
     let json = response.body;
     assert.ok(json.data.meta.lastModified, "lastModified exists");
-    if (isCardSingleResourceDocument(json)) {
+    if (isSingleCardDocument(json)) {
       assert.strictEqual(
         json.data.attributes?.firstName,
         "Van Gogh",

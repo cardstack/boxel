@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import {
   CardRef,
-  isCardSingleResourceDocument,
+  isSingleCardDocument,
 } from '@cardstack/runtime-common/search-index';
 import {
   cardSrc,
@@ -153,7 +153,7 @@ module('Unit | realm', function (hooks) {
       );
       assert.strictEqual(response.status, 201, 'successful http status');
       let json = await response.json();
-      if (isCardSingleResourceDocument(json)) {
+      if (isSingleCardDocument(json)) {
         assert.strictEqual(
           json.data.id,
           `${testRealmURL}Card/1`,
@@ -224,7 +224,7 @@ module('Unit | realm', function (hooks) {
       );
       assert.strictEqual(response.status, 201, 'successful http status');
       let json = await response.json();
-      if (isCardSingleResourceDocument(json)) {
+      if (isSingleCardDocument(json)) {
         assert.strictEqual(
           json.data.id,
           `${testRealmURL}Card/2`,
@@ -300,7 +300,7 @@ module('Unit | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
-    if (isCardSingleResourceDocument(json)) {
+    if (isSingleCardDocument(json)) {
       assert.strictEqual(
         json.data.id,
         `${testRealmURL}dir/card`,

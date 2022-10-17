@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
@@ -6,6 +6,7 @@ import { p, cleanWhiteSpace, shimModule } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 import { shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
+import { Card } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -13,6 +14,9 @@ let integer: typeof import ("https://cardstack.com/base/integer");
 let date: typeof import ("https://cardstack.com/base/date");
 let datetime: typeof import ("https://cardstack.com/base/datetime");
 let cardRef: typeof import ("https://cardstack.com/base/card-ref");
+let updateFromSerialized: typeof cardApi["updateFromSerialized"];
+let serializeCard: typeof cardApi["serializeCard"];
+
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
@@ -31,7 +35,16 @@ module('Integration | serialization', function (hooks) {
     date = await Loader.import(`${baseRealm.url}date`);
     datetime = await Loader.import(`${baseRealm.url}datetime`);
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
+    updateFromSerialized = cardApi.updateFromSerialized;
+    serializeCard = cardApi.serializeCard;
   });
+
+  async function saveCard(instance: Card, id: string) {
+    await updateFromSerialized(
+      instance,
+      { ...serializeCard(instance).data, ...{ id } }
+    );
+  }
 
   test('can deserialize field', async function (assert) {
     let { field, contains, Card, Component, createFromSerialized } = cardApi;
@@ -112,15 +125,17 @@ module('Integration | serialization', function (hooks) {
     });
 
     assert.deepEqual(serializeCard(mango), {
-      id: `${realmURL}Person/mango`,
-      type: 'card',
-      attributes: {
-        firstName: 'Mango'
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Person'
+      data: {
+        id: `${realmURL}Person/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
         }
       }
     });
@@ -241,7 +256,7 @@ module('Integration | serialization', function (hooks) {
 
     let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
-    let serializedRef = serializeCard(driver).attributes?.ref;
+    let serializedRef = serializeCard(driver).data.attributes?.ref;
     assert.ok(serializedRef !== ref, 'the card ref value is not strict equals to its serialized counter part');
     assert.deepEqual(serializedRef, ref, 'the card ref value is deep equal to its serialized counter part')
   });
@@ -259,8 +274,8 @@ module('Integration | serialization', function (hooks) {
     // initialize card data as deserialized to force us to serialize instead of using cached data
     let firstPost =  new Post({ title: 'First Post', created: p('2022-04-22'), published: parseISO('2022-04-27T16:30+00:00') });
     let serialized = serializeCard(firstPost);
-    assert.strictEqual(serialized.attributes?.created, '2022-04-22');
-    assert.strictEqual(serialized.attributes?.published, '2022-04-27T16:30:00.000Z');
+    assert.strictEqual(serialized.data.attributes?.created, '2022-04-22');
+    assert.strictEqual(serialized.data.attributes?.published, '2022-04-27T16:30:00.000Z');
   });
 
   test('can deserialize a date field with null value', async function (assert) {
@@ -295,6 +310,252 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'First Post created [no date] published [no date-time]');
   });
 
+  test('can serialize a linksTo relationship', async function(assert) {
+    let { field, contains, linksTo, Card, serializeCard } = cardApi;
+    let { default: StringCard } = string;
+
+    class Toy extends Card {
+      @field description = contains(StringCard);
+    }
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+      @field favoriteToy = linksTo(Toy)
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+
+
+    let spookyToiletPaper = new Toy({ description: 'Toilet paper ghost: Poooo!' });
+    let mango = new Pet({
+      firstName: "Mango",
+      favoriteToy: spookyToiletPaper
+    });
+    let hassan = new Person({
+      firstName: "Hassan",
+      pet: mango
+    });
+    await saveCard(spookyToiletPaper, `${realmURL}Toy/spookyToiletPaper`);
+    await saveCard(mango, `${realmURL}Pet/mango`);
+    
+    let serialized = serializeCard(hassan);
+    assert.deepEqual(serialized, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: `${realmURL}Pet/mango`,
+            },
+            data: {
+              id: `${realmURL}Pet/mango`,
+              type: 'card'
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      },
+      included: [{
+        id: `${realmURL}Toy/spookyToiletPaper`,
+        type: 'card',
+        attributes: {
+          description: 'Toilet paper ghost: Poooo!'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Toy'
+          }
+        }
+      },{
+        id: `${realmURL}Pet/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango'
+        },
+        relationships: {
+          favoriteToy: {
+            links: {
+              self: `${realmURL}Toy/spookyToiletPaper`,
+            },
+            data: {
+              id: `${realmURL}Toy/spookyToiletPaper`,
+              type: 'card'
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Pet'
+          }
+        }
+      }]
+    });
+  });
+
+  test('can serialize an empty linksTo relationship', async function(assert) {
+    let { field, contains, linksTo, Card, serializeCard } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+
+    let hassan = new Person({ firstName: "Hassan" });
+    
+    let serialized = serializeCard(hassan);
+    assert.deepEqual(serialized, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: null
+            },
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }
+    });
+
+    let mango = new Person({ firstName: "Mango", pet: null });
+    serialized = serializeCard(mango);
+    assert.deepEqual(serialized, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Mango'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: null
+            },
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }
+    });
+  });
+
+  test('can serialize a linksTo relationship that points to own card class', async function(assert) {
+    let { field, contains, linksTo, Card, serializeCard } = cardApi;
+    let { default: StringCard } = string;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field friend = linksTo(() => Person)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person });
+
+    let mango = new Person({ firstName: "Mango" });
+    let hassan = new Person({ firstName: "Hassan", friend: mango });
+    await saveCard(mango, `${realmURL}Person/mango`);
+    let serialized = serializeCard(hassan);
+    assert.deepEqual(serialized, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          friend: {
+            links: {
+              self: `${realmURL}Person/mango`,
+            },
+            data: {
+              id: `${realmURL}Person/mango`,
+              type: 'card'
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      },
+      included: [{
+        id: `${realmURL}Person/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango'
+        },
+        relationships: {
+          friend: {
+            links: {
+              self: null
+            },
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }]
+    });
+  });
+
+  test('throws when serializing a linksTo relationship to an unsaved card', async function(assert) {
+    let { field, contains, linksTo, Card, serializeCard } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+
+    let mango = new Pet({ firstName: "Mango" });
+    let hassan = new Person({ firstName: "Hassan", pet: mango });
+
+    try {
+      serializeCard(hassan);
+      throw new Error(`expected error not thrown`);
+    } catch (err) {
+      assert.ok(err.message.match(/field 'pet' cannot be serialized with an unsaved card/), 'cannot serialize a linksTo relationship to an unsaved card');
+    }
+  });
+
+  skip('can deserialize a linksTo relationship');
+  skip('can deserialize an empty linksTo relationship');
+  skip('can deserialize a linksTo relationship that points to own card class');
+
   test('can serialize a date field with null value', async function(assert) {
     let { field, contains, Card, serializeCard } = cardApi;
     let { default: DateCard } = date;
@@ -307,8 +568,8 @@ module('Integration | serialization', function (hooks) {
 
     let firstPost =  new Post({ title: 'First Post', created: null, published: null });
     let serialized = serializeCard(firstPost);
-    assert.strictEqual(serialized.attributes?.created, null);
-    assert.strictEqual(serialized.attributes?.published, null);
+    assert.strictEqual(serialized.data.attributes?.created, null);
+    assert.strictEqual(serialized.data.attributes?.published, null);
   });
 
   test('can deserialize a nested field', async function(assert) {
@@ -420,7 +681,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let serialized = serializeCard(firstPost);
-    assert.deepEqual(serialized.attributes, {
+    assert.deepEqual(serialized.data.attributes, {
       author: {
         birthdate: "2019-10-30",
         firstName:"Mango",
@@ -428,7 +689,7 @@ module('Integration | serialization', function (hooks) {
       }
     });
     // this means the field card for the value is the same as the field's card
-    assert.deepEqual(serialized.meta.fields, undefined);
+    assert.deepEqual(serialized.data.meta.fields, undefined);
   });
 
 
@@ -464,13 +725,13 @@ module('Integration | serialization', function (hooks) {
     });
 
     let serialized = serializeCard(firstPost);
-    assert.deepEqual(serialized.attributes?.author, {
+    assert.deepEqual(serialized.data.attributes?.author, {
       birthdate: "2019-10-30",
       firstName:"Mango",
       lastLogin:"2022-04-27T16:30:00.000Z",
       department: 'wagging'
     });
-    assert.deepEqual(serialized.meta?.fields?.author, {
+    assert.deepEqual(serialized.data.meta?.fields?.author, {
       adoptsFrom: {
         module: `${realmURL}test-cards`,
         name: 'Employee',
@@ -529,18 +790,20 @@ module('Integration | serialization', function (hooks) {
 
     assert.deepEqual(
       serializeCard(helloWorld), {
-        type: 'card',
-        attributes: {
-          title: 'First Post',
-          reviews: 1,
-          author: {
-            firstName: 'Carl Stack'
-          }
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Post'
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'First Post',
+            reviews: 1,
+            author: {
+              firstName: 'Carl Stack'
+            }
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Post'
+            }
           }
         }
       }
@@ -561,7 +824,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Person });
     let mango =  new Person({ birthdate: p('2019-10-30') });
     let serialized = serializeCard(mango, { includeComputeds: true });
-    assert.strictEqual(serialized.attributes?.firstBirthday, '2020-10-30');
+    assert.strictEqual(serialized.data.attributes?.firstBirthday, '2020-10-30');
   });
 
   test('can deserialize a containsMany field', async function(assert) {
@@ -640,7 +903,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Schedule });
 
     let classSchedule = new Schedule({ dates: [p('2022-4-1'), p('2022-4-4')] });
-    assert.deepEqual(serializeCard(classSchedule).attributes?.dates, ["2022-04-01","2022-04-04"]);
+    assert.deepEqual(serializeCard(classSchedule).data.attributes?.dates, ["2022-04-01","2022-04-04"]);
   });
 
   test("can serialize a containsMany's nested field", async function(assert) {
@@ -663,7 +926,7 @@ module('Integration | serialization', function (hooks) {
     ]});
 
     let serialized = serializeCard(classSchedule);
-    assert.deepEqual(serialized.attributes?.appointments, [{
+    assert.deepEqual(serialized.data.attributes?.appointments, [{
       date:"2022-04-01",
       location:"Room 332",
       title:"Biology"
@@ -672,7 +935,7 @@ module('Integration | serialization', function (hooks) {
       location:"Room 102",
       title:"Civics"
     }]);
-    assert.deepEqual(serialized.meta?.fields?.apointments, undefined); // this means the field card for the value is the same as the field's card
+    assert.deepEqual(serialized.data.meta?.fields?.apointments, undefined); // this means the field card for the value is the same as the field's card
   });
 
   test('can serialize a card with primitive fields', async function (assert) {
@@ -691,18 +954,20 @@ module('Integration | serialization', function (hooks) {
     await recompute(firstPost);
     let payload = serializeCard(firstPost);
     assert.deepEqual(
-      payload as any,
+      payload,
       {
-        type: 'card',
-        attributes: {
-          title: 'First Post',
-          created: '2022-04-22',
-          published: '2022-04-27T16:30:00.000Z',
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Post'
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'First Post',
+            created: '2022-04-22',
+            published: '2022-04-27T16:30:00.000Z',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Post'
+            }
           }
         }
       },
@@ -737,21 +1002,23 @@ module('Integration | serialization', function (hooks) {
     });
     let payload = serializeCard(firstPost);
     assert.deepEqual(
-      payload as any,
+      payload,
       {
-        type: 'card',
-        attributes: {
-          title: 'First Post',
-          author: {
-            firstName: 'Mango',
-            birthdate: '2019-10-30',
-            species: 'canis familiaris',
-          }
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Post'
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'First Post',
+            author: {
+              firstName: 'Mango',
+              birthdate: '2019-10-30',
+              species: 'canis familiaris',
+            }
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Post'
+            }
           }
         }
       }
@@ -789,27 +1056,29 @@ module('Integration | serialization', function (hooks) {
     });
     let payload = serializeCard(firstPost);
     assert.deepEqual(
-      payload as any,
+      payload,
       {
-        type: 'card',
-        attributes: {
-          title: 'First Post',
-          author: {
-            firstName: 'Mango',
-            birthdate: '2019-10-30',
-            department: 'wagging'
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Post',
-          },
-          fields: {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'First Post',
             author: {
-              adoptsFrom: {
-                module: `${realmURL}test-cards`,
-                name: 'Employee',
+              firstName: 'Mango',
+              birthdate: '2019-10-30',
+              department: 'wagging'
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Post',
+            },
+            fields: {
+              author: {
+                adoptsFrom: {
+                  module: `${realmURL}test-cards`,
+                  name: 'Employee',
+                }
               }
             }
           }
@@ -817,7 +1086,7 @@ module('Integration | serialization', function (hooks) {
       }
     );
 
-    let post2 = await createFromSerialized<typeof Post>(payload, new URL(realmURL)); // success is not blowing up
+    let post2 = await createFromSerialized<typeof Post>(payload.data, new URL(realmURL)); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     let { author } = post2;
     if (author instanceof Employee) {
@@ -866,37 +1135,39 @@ module('Integration | serialization', function (hooks) {
     });
     let payload = serializeCard(firstPost);
     assert.deepEqual(
-      payload as any,
+      payload,
       {
-        type: 'card',
-        attributes: {
-          title: 'First Post',
-          author: {
-            firstName: 'Mango',
-            birthdate: '2019-10-30',
-            department: 'wagging',
-            loves: {
-              firstName: 'Van Gogh'
-            }
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Post',
-          },
-          fields: {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'First Post',
             author: {
-              adoptsFrom: {
-                module: `${realmURL}test-cards`,
-                name: 'Employee',
-              },
-              fields: {
-                loves: {
-                  adoptsFrom: {
-                    module: `${realmURL}test-cards`,
-                    name: 'Pet',
-                  },
+              firstName: 'Mango',
+              birthdate: '2019-10-30',
+              department: 'wagging',
+              loves: {
+                firstName: 'Van Gogh'
+              }
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Post',
+            },
+            fields: {
+              author: {
+                adoptsFrom: {
+                  module: `${realmURL}test-cards`,
+                  name: 'Employee',
+                },
+                fields: {
+                  loves: {
+                    adoptsFrom: {
+                      module: `${realmURL}test-cards`,
+                      name: 'Pet',
+                    },
+                  }
                 }
               }
             }
@@ -905,7 +1176,7 @@ module('Integration | serialization', function (hooks) {
       }
     );
 
-    let post2 = await createFromSerialized<any>(payload, new URL(realmURL)); // success is not blowing up
+    let post2 = await createFromSerialized<any>(payload.data, new URL(realmURL)); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     assert.strictEqual(post2.author.loves.firstName, 'Van Gogh');
     let { author } = post2;
@@ -961,38 +1232,40 @@ module('Integration | serialization', function (hooks) {
 
     let payload = serializeCard(group);
     assert.deepEqual(payload, {
-      type: 'card',
-      attributes: {
-        people: [{
-          firstName: 'Mango',
-          department: 'begging'
-        },{
-          firstName: 'Van Gogh',
-          billAmount: 100
-        }]
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Group'
-        },
-        fields: {
+      data: {
+        type: 'card',
+        attributes: {
           people: [{
-            adoptsFrom: {
-              module: `${realmURL}test-cards`,
-              name: 'Employee'
-            },
+            firstName: 'Mango',
+            department: 'begging'
           },{
-            adoptsFrom: {
-              module: `${realmURL}test-cards`,
-              name: 'Customer'
-            },
+            firstName: 'Van Gogh',
+            billAmount: 100
           }]
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Group'
+          },
+          fields: {
+            people: [{
+              adoptsFrom: {
+                module: `${realmURL}test-cards`,
+                name: 'Employee'
+              },
+            },{
+              adoptsFrom: {
+                module: `${realmURL}test-cards`,
+                name: 'Customer'
+              },
+            }]
+          }
         }
       }
     });
 
-    let group2 = await createFromSerialized<any>(payload, new URL(realmURL));
+    let group2 = await createFromSerialized<any>(payload.data, new URL(realmURL));
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
     assert.strictEqual(people.length, 2, 'array length is correct');
@@ -1052,46 +1325,47 @@ module('Integration | serialization', function (hooks) {
     });
 
     let payload = serializeCard(group);
-    debugger;
     assert.deepEqual(payload, {
-      type: 'card',
-      attributes: {
-        people: [{
-          firstName: 'Mango',
-          roles: [{
-            roleName: 'treat eater'
-          },{
-            roleName: 'dog walker',
-            poopBagCount: 4
-          }]
-        }]
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Group'
-        },
-        fields: {
+      data: {
+        type: 'card',
+        attributes: {
           people: [{
-            adoptsFrom: {
-              module: `${realmURL}test-cards`,
-              name: 'Employee',
-            },
-            fields: {
-              roles: [{
-              },{
-                adoptsFrom: {
-                  module: `${realmURL}test-cards`,
-                  name: 'DogWalker',
-                }
-              }]
-            }
+            firstName: 'Mango',
+            roles: [{
+              roleName: 'treat eater'
+            },{
+              roleName: 'dog walker',
+              poopBagCount: 4
+            }]
           }]
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Group'
+          },
+          fields: {
+            people: [{
+              adoptsFrom: {
+                module: `${realmURL}test-cards`,
+                name: 'Employee',
+              },
+              fields: {
+                roles: [{
+                },{
+                  adoptsFrom: {
+                    module: `${realmURL}test-cards`,
+                    name: 'DogWalker',
+                  }
+                }]
+              }
+            }]
+          }
         }
       }
     });
 
-    let group2 = await createFromSerialized<any>(payload, new URL(realmURL));
+    let group2 = await createFromSerialized<any>(payload.data, new URL(realmURL));
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
     assert.strictEqual(people.length, 1, 'array length is correct');
@@ -1138,14 +1412,16 @@ module('Integration | serialization', function (hooks) {
     }, new URL(realmURL)) as Person;
     assert.strictEqual(person.firstName, 'Mango');
     assert.deepEqual(serializeCard(person), {
-      type: 'card',
-      attributes: {
-        firstName: 'Mango',
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}person`,
-          name: "Person"
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Mango',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}person`,
+            name: "Person"
+          }
         }
       }
     }, 'card serialization is correct')
@@ -1184,17 +1460,19 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(post.title, 'Things I Want to Chew');
     assert.strictEqual(post.author.firstName, 'Mango');
     assert.deepEqual(serializeCard(post), {
-      type: 'card',
-      attributes: {
-        title: "Things I Want to Chew",
-        author: {
-          firstName: 'Mango',
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}post`,
-          name: "Post"
+      data: {
+        type: 'card',
+        attributes: {
+          title: "Things I Want to Chew",
+          author: {
+            firstName: 'Mango',
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}post`,
+            name: "Post"
+          }
         }
       }
     }, 'card serialization is correct')
@@ -1248,24 +1526,26 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(posts[1].author.firstName, 'Van Gogh');
 
     assert.deepEqual(serializeCard(blog), {
-      type: 'card',
-      attributes: {
-        posts: [{
-          title: "Things I Want to Chew",
-          author: {
-            firstName: 'Mango',
+      data: {
+        type: 'card',
+        attributes: {
+          posts: [{
+            title: "Things I Want to Chew",
+            author: {
+              firstName: 'Mango',
+            }
+          },{
+            title: "When Mango Steals My Bone",
+            author: {
+              firstName: 'Van Gogh',
+            }
+          }]
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}blog`,
+            name: "Blog"
           }
-        },{
-          title: "When Mango Steals My Bone",
-          author: {
-            firstName: 'Van Gogh',
-          }
-        }]
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}blog`,
-          name: "Blog"
         }
       }
     }, 'card serialization is correct')
@@ -1289,16 +1569,18 @@ module('Integration | serialization', function (hooks) {
     await renderCard(mango, 'isolated');
     let withoutComputeds = serializeCard(mango);
     assert.deepEqual(
-      withoutComputeds as any,
+      withoutComputeds,
       {
-        type: 'card',
-        attributes: {
-          birthdate: '2019-10-30',
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Person'
+        data: {
+          type: 'card',
+          attributes: {
+            birthdate: '2019-10-30',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Person'
+            }
           }
         }
       }
@@ -1306,17 +1588,19 @@ module('Integration | serialization', function (hooks) {
 
     let withComputeds = serializeCard(mango, { includeComputeds: true });
     assert.deepEqual(
-      withComputeds as any,
+      withComputeds,
       {
-        type: 'card',
-        attributes: {
-          birthdate: '2019-10-30',
-          firstBirthday: '2020-10-30',
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Person'
+        data: {
+          type: 'card',
+          attributes: {
+            birthdate: '2019-10-30',
+            firstBirthday: '2020-10-30',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Person'
+            }
           }
         }
       }

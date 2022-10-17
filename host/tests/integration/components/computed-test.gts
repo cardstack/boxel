@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from 'ember-qunit';
 import waitUntil from '@ember/test-helpers/wait-until';
@@ -496,4 +496,6 @@ module('Integration | computeds', function (hooks) {
     );
     assert.shadowDOM('[data-test-field="slowHomeTown"] span').containsText('Scarsdale');
   });
+
+  skip('can render a computed linksTo relationship');
 });

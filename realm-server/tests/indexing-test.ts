@@ -3,7 +3,7 @@ import { dirSync, setGracefulCleanup } from "tmp";
 import {
   Loader,
   baseRealm,
-  LooseCardDocument,
+  LooseSingleCardDocument,
   Realm,
 } from "@cardstack/runtime-common";
 import { createRealm, testRealm } from "./helpers";
@@ -147,7 +147,7 @@ module("indexing", function (hooks) {
             },
           },
         },
-      } as LooseCardDocument)
+      } as LooseSingleCardDocument)
     );
 
     let result = await realm.searchIndex.search({

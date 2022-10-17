@@ -27,8 +27,11 @@ import typescriptPlugin from "@babel/plugin-syntax-typescript";
 import type { types as t } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
 import type { ExportedCardRef } from "./search-index";
+import type { CardAPI } from "./index";
 
 export type { ClassReference, ExternalReference };
+
+type FieldType = CardAPI.FieldType;
 
 export class ModuleSyntax {
   declare possibleCards: PossibleCardClass[];
@@ -71,7 +74,7 @@ export class ModuleSyntax {
       | { type: "localName"; name: string },
     fieldName: string,
     fieldRef: ExportedCardRef,
-    fieldType: "contains" | "containsMany"
+    fieldType: FieldType
   ) {
     let card = this.getCard(cardName);
     if (card.possibleFields.has(fieldName)) {
@@ -194,7 +197,7 @@ function preprocessTemplateTags(src: string): string {
 function makeNewField(
   target: NodePath<t.Node>,
   fieldRef: ExportedCardRef,
-  fieldType: "contains" | "containsMany",
+  fieldType: FieldType,
   fieldName: string
 ): string {
   let programPath = getProgramPath(target);

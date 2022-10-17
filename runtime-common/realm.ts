@@ -1,10 +1,5 @@
 import { Deferred } from "./deferred";
-import {
-  SearchIndex,
-  CardRef,
-  CardSingleResourceDocument,
-  isCardSingleResourceDocument,
-} from "./search-index";
+import { SearchIndex, CardRef } from "./search-index";
 import { Loader } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
 import {
@@ -16,12 +11,15 @@ import {
 } from "@cardstack/runtime-common/error";
 import { formatRFC7231 } from "date-fns";
 import {
-  LooseCardDocument,
   isCardResource,
-  ResourceObjectWithId,
-  DirectoryEntryRelationship,
   executableExtensions,
   isNode,
+  isSingleCardDocument,
+  type LooseSingleCardDocument,
+  type ResourceObjectWithId,
+  type DirectoryEntryRelationship,
+  type Card,
+  type CardAPI,
 } from "./index";
 import merge from "lodash/merge";
 import cloneDeep from "lodash/cloneDeep";
@@ -46,8 +44,6 @@ import emberConcurrencyAsyncPlugin from "ember-concurrency-async-plugin";
 import { Router } from "./router";
 import { parseQueryString } from "./query";
 import type { Readable } from "stream";
-//@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
-type CardAPI = typeof import("https://cardstack.com/base/card-api");
 
 export interface FileRef {
   path: LocalPath;
@@ -381,7 +377,7 @@ export class Realm {
       JSON.stringify(await this.fileSerialization(json, fileURL), null, 2)
     );
     let newURL = fileURL.href.replace(/\.json$/, "");
-    if (!isCardSingleResourceDocument(json)) {
+    if (!isSingleCardDocument(json)) {
       return badRequest(
         `bug: the card document is not actually a card document`
       );
@@ -389,7 +385,7 @@ export class Realm {
     json.data.id = newURL;
     json.data.links = { self: newURL };
     json.data.meta.lastModified = lastModified;
-    if (!isCardSingleResourceDocument(json)) {
+    if (!isSingleCardDocument(json)) {
       return systemError(
         `bug: constructed non-card document resource in JSON-API request for ${newURL}`
       );
@@ -425,7 +421,7 @@ export class Realm {
     delete originalClone.meta.lastModified;
 
     let patch = await request.json();
-    if (!isCardSingleResourceDocument(patch)) {
+    if (!isSingleCardDocument(patch)) {
       return badRequest(`The request body was not a card document`);
     }
     // prevent the client from changing the card type or ID in the patch
@@ -620,21 +616,16 @@ export class Realm {
   }
 
   private async fileSerialization(
-    doc: LooseCardDocument,
+    doc: LooseSingleCardDocument,
     relativeTo: URL
-  ): Promise<LooseCardDocument> {
+  ): Promise<LooseSingleCardDocument> {
     let api = await this.searchIndex.loader.import<CardAPI>(
       "https://cardstack.com/base/card-api"
     );
-    let card = await api.createFromSerialized(doc.data, relativeTo, {
+    let card: Card = await api.createFromSerialized(doc.data, relativeTo, {
       loader: this.searchIndex.loader,
     });
-    let data = { data: api.serializeCard(card) }; // this strips out computeds
-    if (!isCardSingleResourceDocument(data)) {
-      throw new Error(
-        `bug: card was serialized into a non-card JSON structure`
-      );
-    }
+    let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     return data;
   }
 }
@@ -653,7 +644,7 @@ export function getExportedCardContext(ref: CardRef): {
 }
 
 function lastModifiedHeader(
-  card: CardSingleResourceDocument
+  card: LooseSingleCardDocument
 ): {} | { "last-modified": string } {
   return (
     card.data.meta.lastModified != null
