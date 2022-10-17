@@ -86,6 +86,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "Loader",
       "Deferred",
       "isCardResource",
+      "isRelationship",
       "isSingleCardDocument",
       "chooseCard",
       "baseCardRef",
@@ -130,6 +131,7 @@ export {
   isMeta,
   isCardResource,
   isCardDocument,
+  isRelationship,
   isCardCollectionDocument,
   isSingleCardDocument,
 } from "./search-index";

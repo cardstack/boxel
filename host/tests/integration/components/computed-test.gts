@@ -80,14 +80,16 @@ module('Integration | computeds', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let firstPost = await createFromSerialized({
-      attributes: {
-        title: 'First Post',
-        author: { firstName: 'Mango' }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          title: 'First Post',
+          author: { firstName: 'Mango' }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     }, undefined);
@@ -206,14 +208,16 @@ module('Integration | computeds', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let firstPost = await createFromSerialized({
-      attributes: {
-        title: 'First Post',
-        author: { firstName: 'Mango' }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          title: 'First Post',
+          author: { firstName: 'Mango' }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     }, undefined);
@@ -320,20 +324,22 @@ module('Integration | computeds', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
     let abdelRahmans = await createFromSerialized({
-      attributes: {
-        people: [
-          { firstName: 'Mango'},
-          { firstName: 'Van Gogh'},
-          { firstName: 'Hassan'},
-          { firstName: 'Mariko'},
-          { firstName: 'Yume'},
-          { firstName: 'Sakura'},
-        ]
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards` ,
-          name: 'Family'
+      data: {
+        attributes: {
+          people: [
+            { firstName: 'Mango'},
+            { firstName: 'Van Gogh'},
+            { firstName: 'Hassan'},
+            { firstName: 'Mariko'},
+            { firstName: 'Yume'},
+            { firstName: 'Sakura'},
+          ]
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards` ,
+            name: 'Family'
+          }
         }
       }
     }, undefined);
@@ -392,19 +398,21 @@ module('Integration | computeds', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
     let family = await createFromSerialized<typeof Family>({
-      attributes: {
-        people: [{
-          firstName: "Mango",
-          age: 3
-        }, {
-          firstName: "Van Gogh",
-          age: 6
-        }]
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Family'
+      data: {
+        attributes: {
+          people: [{
+            firstName: "Mango",
+            age: 3
+          }, {
+            firstName: "Van Gogh",
+            age: 6
+          }]
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Family'
+          }
         }
       }
     }, undefined);
@@ -467,14 +475,16 @@ module('Integration | computeds', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Location, Person });
 
     let person = await createFromSerialized({
-      attributes: {
-        firstName: 'Mango',
-        homeTown: { city: 'Bronxville' }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Person'
+      data: {
+        attributes: {
+          firstName: 'Mango',
+          homeTown: { city: 'Bronxville' }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Person'
+          }
         }
       }
      }, undefined);

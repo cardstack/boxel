@@ -304,7 +304,7 @@ export default class Preview extends Component<Signature> {
   }
 
   private async getComparableCardJson(json: LooseSingleCardDocument): Promise<LooseSingleCardDocument> {
-    let card = await this.api.createFromSerialized(json.data, this.localRealm.url, { loader: this.loaderService.loader });
+    let card = await this.api.createFromSerialized(json, this.localRealm.url, { loader: this.loaderService.loader });
     return this.api.serializeCard(card);
   }
 }

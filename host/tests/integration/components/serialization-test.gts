@@ -40,10 +40,9 @@ module('Integration | serialization', function (hooks) {
   });
 
   async function saveCard(instance: Card, id: string) {
-    await updateFromSerialized(
-      instance,
-      { ...serializeCard(instance).data, ...{ id } }
-    );
+    let doc = serializeCard(instance);
+    doc.data.id = id;
+    await updateFromSerialized(instance, doc);
   }
 
   test('can deserialize field', async function (assert) {
@@ -63,15 +62,17 @@ module('Integration | serialization', function (hooks) {
 
     // initialize card data as serialized to force us to deserialize instead of using cached data
     let firstPost = await createFromSerialized(Post, {
-      attributes: {
-        title: 'First Post',
-        created: '2022-04-22',
-        published: '2022-04-27T16:02'
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          title: 'First Post',
+          created: '2022-04-22',
+          published: '2022-04-27T16:02'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     });
@@ -92,14 +93,16 @@ module('Integration | serialization', function (hooks) {
 
     // deserialize a card with an ID to mark it as "saved"
     let savedCard = await createFromSerialized({
-      id: `${realmURL}Person/mango`,
-      attributes: {
-        firstName: 'Mango'
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Person'
+      data: {
+        id: `${realmURL}Person/mango`,
+        attributes: {
+          firstName: 'Mango'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
         }
       }
     }, undefined);
@@ -157,14 +160,16 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(isSaved(card), false, 'card is not saved');
 
     let result = await updateFromSerialized(card, {
-      id: `${realmURL}Person/vanGogh`,
-      attributes: {
-        firstName: 'Van Gogh',
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Person'
+      data: {
+        id: `${realmURL}Person/vanGogh`,
+        attributes: {
+          firstName: 'Van Gogh',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
         }
       }
     });
@@ -185,28 +190,32 @@ module('Integration | serialization', function (hooks) {
 
     // deserialize a card with an ID to mark it as "saved"
     let savedCard = await createFromSerialized({
-      id: `${realmURL}Person/mango`,
-      attributes: {
-        firstName: 'Mango'
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Person'
+      data: {
+        id: `${realmURL}Person/mango`,
+        attributes: {
+          firstName: 'Mango'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
         }
       }
     }, undefined);
 
     try {
       await updateFromSerialized(savedCard, {
-        id: `${realmURL}Person/vanGogh`,
-        attributes: {
-          firstName: 'Van Gogh',
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Person'
+        data: {
+          id: `${realmURL}Person/vanGogh`,
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Person'
+            }
           }
         }
       });
@@ -229,13 +238,15 @@ module('Integration | serialization', function (hooks) {
 
     let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
     let driver = await createFromSerialized(DriverCard, {
-      attributes: {
-        ref
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'DriverCard'
+      data: {
+        attributes: {
+          ref
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'DriverCard'
+          }
         }
       }
     });
@@ -294,15 +305,17 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Post });
 
     let firstPost = await createFromSerialized(Post, {
-      attributes: {
-        title: 'First Post',
-        created: null,
-        published: null
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          title: 'First Post',
+          created: null,
+          published: null
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     });
@@ -403,6 +416,107 @@ module('Integration | serialization', function (hooks) {
       }]
     });
   });
+  
+  test('can deserialize a linksTo relationship', async function(assert) {
+    let { field, contains, linksTo, Card, createFromSerialized, isSaved } = cardApi;
+    let { default: StringCard } = string;
+
+    class Toy extends Card {
+      @field description = contains(StringCard);
+    }
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+      @field favoriteToy = linksTo(Toy)
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+
+    let card = await createFromSerialized<typeof Person>({
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: `${realmURL}Pet/mango`,
+            },
+            data: {
+              id: `${realmURL}Pet/mango`,
+              type: 'card'
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      },
+      included: [{
+        id: `${realmURL}Toy/spookyToiletPaper`,
+        type: 'card',
+        attributes: {
+          description: 'Toilet paper ghost: Poooo!'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Toy'
+          }
+        }
+      },{
+        id: `${realmURL}Pet/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango'
+        },
+        relationships: {
+          favoriteToy: {
+            links: {
+              self: `${realmURL}Toy/spookyToiletPaper`,
+            },
+            data: {
+              id: `${realmURL}Toy/spookyToiletPaper`,
+              type: 'card'
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Pet'
+          }
+        }
+      }]
+    }, undefined);
+
+    assert.ok(card instanceof Person, 'card is an instance of person');
+    assert.strictEqual(card.firstName, 'Hassan');
+    let { pet } = card;
+    if (pet instanceof Pet) {
+      assert.strictEqual(isSaved(pet), true, 'Pet card is saved');
+      assert.strictEqual(pet.firstName, 'Mango');
+      let { favoriteToy } = pet;
+      if (favoriteToy instanceof Toy) {
+        assert.strictEqual(isSaved(favoriteToy), true, 'Toy card is saved');
+        assert.strictEqual(favoriteToy.description, 'Toilet paper ghost: Poooo!');
+      } else {
+        assert.ok(false, '"favoriteToy" field value is not an instance of Toy');
+      }
+    } else {
+      assert.ok(false, '"pet" field value is not an instance of Pet');
+    }
+  });
+
+  skip('can deserialize a linksTo relationship that does not include all the related resources');
+  // implement a "peek" to get info about an unloaded relationship
+  skip('can serialize an unloaded linksTo relationship');
 
   test('can serialize an empty linksTo relationship', async function(assert) {
     let { field, contains, linksTo, Card, serializeCard } = cardApi;
@@ -467,6 +581,8 @@ module('Integration | serialization', function (hooks) {
     });
   });
 
+  skip('can deserialize an empty linksTo relationship');
+
   test('can serialize a linksTo relationship that points to own card class', async function(assert) {
     let { field, contains, linksTo, Card, serializeCard } = cardApi;
     let { default: StringCard } = string;
@@ -528,6 +644,8 @@ module('Integration | serialization', function (hooks) {
     });
   });
 
+  skip('can deserialize a linksTo relationship that points to own card class');
+
   test('throws when serializing a linksTo relationship to an unsaved card', async function(assert) {
     let { field, contains, linksTo, Card, serializeCard } = cardApi;
     let { default: StringCard } = string;
@@ -551,10 +669,6 @@ module('Integration | serialization', function (hooks) {
       assert.ok(err.message.match(/field 'pet' cannot be serialized with an unsaved card/), 'cannot serialize a linksTo relationship to an unsaved card');
     }
   });
-
-  skip('can deserialize a linksTo relationship');
-  skip('can deserialize an empty linksTo relationship');
-  skip('can deserialize a linksTo relationship that points to own card class');
 
   test('can serialize a date field with null value', async function(assert) {
     let { field, contains, Card, serializeCard } = cardApi;
@@ -593,18 +707,20 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Post, Person });
 
     let firstPost = await createFromSerialized(Post, {
-      attributes: {
-        title: 'First Post',
-        author: {
-          firstName: 'Mango',
-          birthdate: '2019-10-30',
-          lastLogin: '2022-04-27T16:58'
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          title: 'First Post',
+          author: {
+            firstName: 'Mango',
+            birthdate: '2019-10-30',
+            lastLogin: '2022-04-27T16:58'
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     });
@@ -636,18 +752,20 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Post, Person });
 
     let firstPost = await createFromSerialized(Post, {
-      attributes: {
-        title: 'First Post',
-        author: {
-          firstName: 'Mango',
-          birthdate: '2019-10-30',
-          lastLogin: '2022-04-27T17:00'
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          title: 'First Post',
+          author: {
+            firstName: 'Mango',
+            birthdate: '2019-10-30',
+            lastLogin: '2022-04-27T17:00'
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     });
@@ -771,17 +889,19 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized(Post, {
-      attributes: {
-        title: 'First Post',
-        reviews: 1,
-        author: {
-          firstName: 'Arthur'
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          title: 'First Post',
+          reviews: 1,
+          author: {
+            firstName: 'Arthur'
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     });
@@ -839,13 +959,15 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Schedule });
 
     let classSchedule = await createFromSerialized(Schedule, {
-      attributes: {
-        dates: ['2022-4-1', '2022-4-4']
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Schedule'
+      data: {
+        attributes: {
+          dates: ['2022-4-1', '2022-4-4']
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Schedule'
+          }
         }
       }
     });
@@ -874,16 +996,18 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Schedule, Appointment });
 
     let classSchedule = await createFromSerialized(Schedule, {
-      attributes: {
-        appointments: [
-          { date: '2022-4-1', location: 'Room 332', title: 'Biology' },
-          { date: '2022-4-4', location: 'Room 102', title: 'Civics' }
-        ]
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmURL}test-cards`,
-          name: 'Schedule'
+      data: {
+        attributes: {
+          appointments: [
+            { date: '2022-4-1', location: 'Room 332', title: 'Biology' },
+            { date: '2022-4-4', location: 'Room 102', title: 'Civics' }
+          ]
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Schedule'
+          }
         }
       }
     });
@@ -1086,7 +1210,7 @@ module('Integration | serialization', function (hooks) {
       }
     );
 
-    let post2 = await createFromSerialized<typeof Post>(payload.data, new URL(realmURL)); // success is not blowing up
+    let post2 = await createFromSerialized<typeof Post>(payload, new URL(realmURL)); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     let { author } = post2;
     if (author instanceof Employee) {
@@ -1176,7 +1300,7 @@ module('Integration | serialization', function (hooks) {
       }
     );
 
-    let post2 = await createFromSerialized<any>(payload.data, new URL(realmURL)); // success is not blowing up
+    let post2 = await createFromSerialized<any>(payload, new URL(realmURL)); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     assert.strictEqual(post2.author.loves.firstName, 'Van Gogh');
     let { author } = post2;
@@ -1265,7 +1389,7 @@ module('Integration | serialization', function (hooks) {
       }
     });
 
-    let group2 = await createFromSerialized<any>(payload.data, new URL(realmURL));
+    let group2 = await createFromSerialized<any>(payload, new URL(realmURL));
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
     assert.strictEqual(people.length, 2, 'array length is correct');
@@ -1365,7 +1489,7 @@ module('Integration | serialization', function (hooks) {
       }
     });
 
-    let group2 = await createFromSerialized<any>(payload.data, new URL(realmURL));
+    let group2 = await createFromSerialized<any>(payload, new URL(realmURL));
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
     assert.strictEqual(people.length, 1, 'array length is correct');
@@ -1389,6 +1513,91 @@ module('Integration | serialization', function (hooks) {
     }
   });
 
+  test('can deserialize a linksTo field that contains a polymorphic field', async function (assert) {
+    let { field, contains, linksTo, Card, createFromSerialized, isSaved } = cardApi;
+    let { default: StringCard } = string;
+
+    class Toy extends Card {
+      @field description = contains(StringCard);
+    }
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+      @field favorite = contains(Card)
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+
+    let card = await createFromSerialized<typeof Person>({
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: `${realmURL}Pet/mango`,
+            },
+            data: {
+              id: `${realmURL}Pet/mango`,
+              type: 'card'
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      },
+      included: [{
+        id: `${realmURL}Pet/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango',
+          favorite: {
+            description: 'Toilet paper ghost: Poooo!'
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Pet'
+          },
+          fields: {
+            favorite: {
+              adoptsFrom: {
+                module: `${realmURL}test-cards`,
+                name: 'Toy'
+              }
+            }
+          }
+        }
+      }]
+    }, undefined);
+
+    assert.ok(card instanceof Person, 'card is an instance of person');
+    assert.strictEqual(card.firstName, 'Hassan');
+    let { pet } = card;
+    if (pet instanceof Pet) {
+      assert.strictEqual(isSaved(pet), true, 'Pet card is saved');
+      assert.strictEqual(pet.firstName, 'Mango');
+      let { favorite } = pet;
+      if (favorite instanceof Toy) {
+        assert.strictEqual(favorite.description, 'Toilet paper ghost: Poooo!');
+      } else {
+        assert.ok(false, '"favorite" field value is not an instance of Toy');
+      }
+    } else {
+      assert.ok(false, '"pet" field value is not an instance of Pet');
+    }
+
+  });
+
   test('can deserialize a card from a resource object', async function(assert) {
     let { field, contains, serializeCard, Card, createFromSerialized } = cardApi;
     let { default: StringCard } = string;
@@ -1399,14 +1608,16 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}person`, { Person });
 
     let person = await createFromSerialized({
-      type: 'card',
-      attributes: {
-        firstName: 'Mango',
-      },
-      meta: {
-        adoptsFrom: {
-          module: "./person",
-          name: "Person"
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Mango',
+        },
+        meta: {
+          adoptsFrom: {
+            module: "./person",
+            name: "Person"
+          }
         }
       }
     }, new URL(realmURL)) as Person;
@@ -1443,17 +1654,19 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}post`, { Post });
 
     let post = await createFromSerialized<typeof Post>({
-      type: 'card',
-      attributes: {
-        title: "Things I Want to Chew",
-        author: {
-          firstName: 'Mango',
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: "./post",
-          name: "Post"
+      data: {
+        type: 'card',
+        attributes: {
+          title: "Things I Want to Chew",
+          author: {
+            firstName: 'Mango',
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: "./post",
+            name: "Post"
+          }
         }
       }
     }, new URL(realmURL));
@@ -1497,24 +1710,26 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}blog`, { Blog });
 
     let blog = await createFromSerialized({
-      type: 'card',
-      attributes: {
-        posts: [{
-          title: "Things I Want to Chew",
-          author: {
-            firstName: 'Mango',
+      data: {
+        type: 'card',
+        attributes: {
+          posts: [{
+            title: "Things I Want to Chew",
+            author: {
+              firstName: 'Mango',
+            }
+          },{
+            title: "When Mango Steals My Bone",
+            author: {
+              firstName: 'Van Gogh',
+            }
+          }]
+        },
+        meta: {
+          adoptsFrom: {
+            module: "./blog",
+            name: "Blog"
           }
-        },{
-          title: "When Mango Steals My Bone",
-          author: {
-            firstName: 'Van Gogh',
-          }
-        }]
-      },
-      meta: {
-        adoptsFrom: {
-          module: "./blog",
-          name: "Blog"
         }
       }
     }, new URL(realmURL)) as Blog;

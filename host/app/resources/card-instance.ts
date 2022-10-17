@@ -37,7 +37,7 @@ export class CardInstance extends Resource<Args> {
       typeof import('https://cardstack.com/base/card-api')
     >('https://cardstack.com/base/card-api');
     let instance = await api.createFromSerialized(
-      resource,
+      { data: resource },
       this.localRealm.url,
       { loader }
     );

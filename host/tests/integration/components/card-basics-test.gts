@@ -119,19 +119,21 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized(Post, {
-      attributes: {
-        title: 'First Post',
-        author: {
-          firstName: 'Arthur',
-          subscribers: 5,
-          isCool: true,
-          languagesSpoken: ['english', 'japanese']
+      data: {
+        attributes: {
+          title: 'First Post',
+          author: {
+            firstName: 'Arthur',
+            subscribers: 5,
+            isCool: true,
+            languagesSpoken: ['english', 'japanese']
+          },
         },
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Post'
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     });
@@ -199,14 +201,16 @@ module('Integration | card-basics', function (hooks) {
 
     // deserialize a card with an ID to mark it as "saved"
     let savedCard = await createFromSerialized({
-      id: `${testRealmURL}Person/mango`,
-      attributes: {
-        firstName: 'Mango'
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Person'
+      data: {
+        id: `${testRealmURL}Person/mango`,
+        attributes: {
+          firstName: 'Mango'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Person'
+          }
         }
       }
     }, undefined);
@@ -323,32 +327,36 @@ module('Integration | card-basics', function (hooks) {
     let { CatalogEntry } = catalogEntry;
 
     let nonPrimitiveEntry = await createFromSerialized<typeof CatalogEntry>({
-      attributes: {
-        title: "CatalogEntry Card",
-        ref: {
-          module: "https://cardstack.com/base/catalog-entry",
-          name: "CatalogEntry"
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${baseRealm.url}catalog-entry`,
-          name: 'CatalogEntry'
+      data: {
+        attributes: {
+          title: "CatalogEntry Card",
+          ref: {
+            module: "https://cardstack.com/base/catalog-entry",
+            name: "CatalogEntry"
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${baseRealm.url}catalog-entry`,
+            name: 'CatalogEntry'
+          }
         }
       }
     }, undefined);
     let primitiveEntry = await createFromSerialized<typeof CatalogEntry>({
-      attributes: {
-        title: "String Card",
-        ref: {
-          module: "https://cardstack.com/base/string",
-          name: "default"
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${baseRealm.url}catalog-entry`,
-          name: 'CatalogEntry'
+      data: {
+        attributes: {
+          title: "String Card",
+          ref: {
+            module: "https://cardstack.com/base/string",
+            name: "default"
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${baseRealm.url}catalog-entry`,
+            name: 'CatalogEntry'
+          }
         }
       }
     }, undefined);
@@ -382,17 +390,19 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized({
-      attributes: {
-        author: {
-          firstName: 'Arthur',
-          title: 'Mr',
-          number: 10
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          author: {
+            firstName: 'Arthur',
+            title: 'Mr',
+            number: 10
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     }, undefined);
@@ -417,16 +427,18 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Person });
 
     let mango = await createFromSerialized({
-      attributes: {
-        firstName: 'Mango',
-        friend: {
-          firstName: 'Van Gogh'
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Person'
+      data: {
+        attributes: {
+          firstName: 'Mango',
+          friend: {
+            firstName: 'Van Gogh'
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Person'
+          }
         }
       }
     }, undefined);
@@ -465,16 +477,18 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Post, Person, TestInteger, TestString });
 
     let helloWorld = await createFromSerialized({
-      attributes: {
-        author: {
-          firstName: 'Arthur',
-          number: 10
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          author: {
+            firstName: 'Arthur',
+            number: 10
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     }, undefined);
@@ -503,16 +517,18 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized({
-      attributes: {
-        title: 'First Post',
-        author: {
-          firstName: 'Arthur'
-        }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          title: 'First Post',
+          author: {
+            firstName: 'Arthur'
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     }, undefined);
@@ -575,20 +591,22 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Family, Person });
 
     let abdelRahmans = await createFromSerialized({
-      attributes: {
-        people: [
-          { firstName: 'Mango'},
-          { firstName: 'Van Gogh'},
-          { firstName: 'Hassan'},
-          { firstName: 'Mariko'},
-          { firstName: 'Yume'},
-          { firstName: 'Sakura'},
-        ]
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Family'
+      data: {
+        attributes: {
+          people: [
+            { firstName: 'Mango'},
+            { firstName: 'Van Gogh'},
+            { firstName: 'Hassan'},
+            { firstName: 'Mariko'},
+            { firstName: 'Yume'},
+            { firstName: 'Sakura'},
+          ]
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Family'
+          }
         }
       }
     }, undefined);
@@ -758,13 +776,15 @@ module('Integration | card-basics', function (hooks) {
     assert.throws(() => new Person({ languagesSpoken: 'english' }), /Expected array for field value languagesSpoken/);
     try {
       await createFromSerialized({
-        attributes: {
-          languagesSpoken: 'english'
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
-            name: 'Person'
+        data: {
+          attributes: {
+            languagesSpoken: 'english'
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'Person'
+            }
           }
         }
       }, undefined);
@@ -788,14 +808,16 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized({
-      attributes: {
-        title: 'My Post',
-        author: { firstName: 'Arthur' }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          title: 'My Post',
+          author: { firstName: 'Arthur' }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     }, undefined);
@@ -825,14 +847,16 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Person });
 
     let mango = await createFromSerialized({
-      attributes: {
-        firstName: 'Mango',
-        isCool: true
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Person'
+      data: {
+        attributes: {
+          firstName: 'Mango',
+          isCool: true
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Person'
+          }
         }
       }
     }, undefined);
@@ -852,15 +876,17 @@ module('Integration | card-basics', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { Person });
     let mango = await createFromSerialized<typeof Person>({
-      attributes: {
-        firstName: 'Mango',
-        isCool: true,
-        isHuman: false
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Person'
+      data: {
+        attributes: {
+          firstName: 'Mango',
+          isCool: true,
+          isHuman: false
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Person'
+          }
         }
       }
     }, undefined);
@@ -939,15 +965,17 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
     let helloWorld = await createFromSerialized({
-      attributes: {
-        title: 'First Post',
-        reviews: 1,
-        author: { firstName: 'Arthur' }
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'Post'
+      data: {
+        attributes: {
+          title: 'First Post',
+          reviews: 1,
+          author: { firstName: 'Arthur' }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post'
+          }
         }
       }
     }, undefined);
