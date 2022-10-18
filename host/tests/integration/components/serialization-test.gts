@@ -738,9 +738,190 @@ module('Integration | serialization', function (hooks) {
     }
   });
 
-  skip('can serialize a contains field that has a nested linksTo field', async function (assert) {
+  test('can serialize a contains field that has a nested linksTo field', async function (assert) {
+    let { field, contains, linksTo, Card, serializeCard, createFromSerialized } = cardApi;
+    let { default: StringCard } = string;
 
+    class Toy extends Card {
+      @field description = contains(StringCard);
+    }
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+      @field favoriteToy = linksTo(Toy);
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = contains(Pet);
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+
+    let spookyToiletPaper = new Toy({ description: 'Toilet paper ghost: Poooo!' });
+    let mango = new Pet({
+      firstName: "Mango",
+      favoriteToy: spookyToiletPaper
+    });
+    let hassan = new Person({
+      firstName: "Hassan",
+      pet: mango
+    });
+    await saveCard(spookyToiletPaper, `${realmURL}Toy/spookyToiletPaper`);
+    let serialized = serializeCard(hassan);
+    assert.deepEqual(serialized, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: "Hassan",
+          pet: {
+            firstName: "Mango"
+          }
+        },
+        relationships: {
+          "pet.favoriteToy": {
+            links: {
+              self: `${realmURL}Toy/spookyToiletPaper`
+            },
+            data: {
+              type: 'card', id: `${realmURL}Toy/spookyToiletPaper`
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      },
+      included: [{
+        id: `${realmURL}Toy/spookyToiletPaper`,
+        type: 'card',
+        attributes: {
+          description: 'Toilet paper ghost: Poooo!'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Toy'
+          }
+        }
+      }]
+    });
+
+    let card = await createFromSerialized(serialized, undefined);
+    if (card instanceof Person){
+      assert.strictEqual(card.firstName, 'Hassan');
+      let { pet } = card;
+      if (pet instanceof Pet) {
+        assert.strictEqual(pet.firstName, 'Mango');
+        let { favoriteToy } = pet;
+        if (favoriteToy instanceof Toy) {
+          assert.strictEqual(favoriteToy.description, 'Toilet paper ghost: Poooo!');
+        } else {
+          assert.ok(false, 'card is not instance of Toy');
+        }
+      } else {
+        assert.ok(false, 'card is not instance of Pet');
+      }
+    } else {
+      assert.ok(false, 'card is not instance of Person');
+    }
   });
+
+  test('can serialize a containsMany field that has a nested linksTo field', async function (assert) {
+    let { field, contains, containsMany, linksTo, Card, serializeCard, createFromSerialized } = cardApi;
+    let { default: StringCard } = string;
+
+    class Toy extends Card {
+      @field description = contains(StringCard);
+    }
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+      @field favoriteToy = linksTo(Toy);
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pets = containsMany(Pet);
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+
+    let spookyToiletPaper = new Toy({ description: 'Toilet paper ghost: Poooo!' });
+    let mango = new Pet({
+      firstName: "Mango",
+      favoriteToy: spookyToiletPaper
+    });
+    let hassan = new Person({
+      firstName: "Hassan",
+      pets: [mango]
+    });
+    await saveCard(spookyToiletPaper, `${realmURL}Toy/spookyToiletPaper`);
+    let serialized = serializeCard(hassan);
+    assert.deepEqual(serialized, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: "Hassan",
+          pets: [{
+            firstName: "Mango"
+          }]
+        },
+        relationships: {
+          "pets.0.favoriteToy": {
+            links: {
+              self: `${realmURL}Toy/spookyToiletPaper`
+            },
+            data: {
+              type: 'card', id: `${realmURL}Toy/spookyToiletPaper`
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      },
+      included: [{
+        id: `${realmURL}Toy/spookyToiletPaper`,
+        type: 'card',
+        attributes: {
+          description: 'Toilet paper ghost: Poooo!'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Toy'
+          }
+        }
+      }]
+    });
+
+    let card = await createFromSerialized(serialized, undefined);
+    if (card instanceof Person){
+      assert.strictEqual(card.firstName, 'Hassan');
+      let { pets } = card;
+      if (Array.isArray(pets)) {
+        assert.strictEqual(pets.length, 1, 'correct number of pets');
+        let [ pet ] = pets;
+        if (pet instanceof Pet) {
+          assert.strictEqual(pet.firstName, 'Mango');
+          let { favoriteToy } = pet;
+          if (favoriteToy instanceof Toy) {
+            assert.strictEqual(favoriteToy.description, 'Toilet paper ghost: Poooo!');
+          } else {
+            assert.ok(false, 'card is not instance of Toy');
+          }
+        } else {
+          assert.ok(false, 'card is not instance of Pet');
+        }
+      } else {
+        assert.ok(false, 'Person.pets is not an array');
+      }
+    } else {
+      assert.ok(false, 'card is not instance of Person');
+    }
+  });
+
   skip('can deserialize a contains field that has a nested linksTo field', async function (assert) {
 
   });

@@ -106,7 +106,7 @@ interface Field<CardT extends CardConstructor> {
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
   serialize(value: any, doc: JSONAPISingleResourceDocument): JSONAPIResource;
-  deserialize(value: any, doc: LooseSingleCardDocument, fieldMeta: CardFields[string] | undefined, instancePromise: Promise<Card>): Promise<any>;
+  deserialize(value: any, doc: LooseSingleCardDocument, relationships: JSONAPIResource["relationships"] | undefined, fieldMeta: CardFields[string] | undefined, instancePromise: Promise<Card>): Promise<any>;
   emptyValue(instance: Card): any;
   validate(instance: Card, value: any): void;
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
@@ -182,8 +182,14 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     if (primitive in this.card) {
       return { attributes: { [this.name]:  values.map(value => callSerializeHook(this.card, value, doc)) } };
     } else {
-      let serialized = values.map(value => {
+      let relationships: Record<string, Relationship> = {};
+      let serialized = values.map((value, index) => {
         let resource: JSONAPIResource = callSerializeHook(this.card, value, doc);
+        if (resource.relationships) {
+          for (let [fieldName, relationship] of Object.entries(resource.relationships as Record<string, Relationship>)) {
+            relationships[`${this.name}.${index}.${fieldName}`] = relationship; // warning side-effect
+          }
+        }
         if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
           // when our implementation matches the default we don't need to include
           // meta.adoptsFrom
@@ -200,6 +206,9 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
           [this.name]: serialized.map(resource => resource.attributes )
         }
       };
+      if (Object.keys(relationships).length > 0) {
+        result.relationships = relationships;
+      }
 
       if (serialized.some(resource => resource.meta)) {
         result.meta = {
@@ -213,7 +222,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     }
   }
 
-  async deserialize(value: any[], doc: LooseSingleCardDocument, fieldMeta: CardFields[string] | undefined, instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
+  async deserialize(value: any[], doc: LooseSingleCardDocument, relationships: JSONAPIResource["relationships"] | undefined, fieldMeta: CardFields[string] | undefined, instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
@@ -226,6 +235,15 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
           let resource: LooseCardResource = {
             attributes: entry,
             meta: makeMetaForField(fieldMeta, this.name, this.card, index)
+          }
+          if (relationships) {
+            resource.relationships = Object.fromEntries(
+              Object.entries(relationships)
+                .map(([fieldName, relationship]) => {
+                  let relName = `${this.name}.${index}`;
+                  return [fieldName.startsWith(`${relName}.`) ? fieldName.substring(relName.length + 1) : fieldName, relationship]
+                })
+              );
           }
           return (await cardClassFromResource(resource, this.card))[deserialize](resource, doc);
         }
@@ -294,6 +312,12 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
           [this.name]: serialized.attributes 
         }
       };
+      if (serialized.relationships) {
+        resource.relationships = {};
+        for (let [fieldName, relationship] of Object.entries(serialized.relationships as Record<string, Relationship>)) {
+          resource.relationships[`${this.name}.${fieldName}`] = relationship;
+        }
+      }
 
       if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
         // when our implementation matches the default we don't need to include
@@ -310,7 +334,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     }
   }
 
-  async deserialize(value: any, doc: LooseSingleCardDocument, fieldMeta: CardFields[string] | undefined): Promise<CardInstanceType<CardT>> {
+  async deserialize(value: any, doc: LooseSingleCardDocument, relationships: JSONAPIResource["relationships"] | undefined, fieldMeta: CardFields[string] | undefined): Promise<CardInstanceType<CardT>> {
     if (primitive in this.card) {
       return this.card[deserialize](value, doc);
     }
@@ -318,6 +342,14 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
       attributes: value,
       meta: makeMetaForField(fieldMeta, this.name, this.card)
     };
+    if (relationships) {
+      resource.relationships = Object.fromEntries(
+        Object.entries(relationships)
+          .map(([fieldName, relationship]) => 
+            [fieldName.startsWith(`${this.name}.`) ? fieldName.substring(this.name.length + 1) : fieldName, relationship]
+          )
+        );
+    }
     return (await cardClassFromResource(resource, this.card))[deserialize](resource, doc);
   }
 
@@ -639,7 +671,7 @@ async function getDeserializedValues<CardT extends CardConstructor>({
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
-  return await field.deserialize(value, doc, resource.meta.fields?.[fieldName], modelPromise);
+  return await field.deserialize(value, doc, resource.relationships, resource.meta.fields?.[fieldName], modelPromise);
 }
 
 function serializeCardResource(
@@ -739,10 +771,14 @@ async function _updateFromSerialized<T extends CardConstructor>(
 ): Promise<CardInstanceType<T>> {
   let deferred = new Deferred<Card>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
+  let nonNestedRelationships = Object.fromEntries(
+    Object.entries(resource.relationships ?? {})
+      .filter(([fieldName]) => !fieldName.includes('.'))
+    );
   let values = await Promise.all(
     Object.entries({
       ...resource.attributes,
-      ...resource.relationships,
+      ...nonNestedRelationships,
       ...(resource.id !== undefined ? { id: resource.id } : {})
     } ?? {}).map(
       async ([fieldName, value]) => {
