@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
@@ -649,7 +649,44 @@ module('Integration | serialization', function (hooks) {
     });
   });
 
-  skip('can deserialize an empty linksTo relationship');
+  test('can deserialize an empty linksTo relationship', async function (assert) {
+    let { field, contains, linksTo, Card, createFromSerialized } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+
+    let card = await createFromSerialized<typeof Person>({
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: null
+            },
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }
+    }, undefined);
+    assert.ok(card instanceof Person, 'card is a Person');
+    assert.strictEqual(card.firstName, 'Hassan');
+    assert.strictEqual(card.pet, null, 'relationship is null');
+  });
 
   test('can serialize a linksTo relationship that points to own card class', async function(assert) {
     let { field, contains, linksTo, Card, serializeCard } = cardApi;
@@ -712,7 +749,68 @@ module('Integration | serialization', function (hooks) {
     });
   });
 
-  skip('can deserialize a linksTo relationship that points to own card class');
+  test('can deserialize a linksTo relationship that points to own card class', async function(assert) {
+    let { field, contains, linksTo, Card, createFromSerialized, isSaved } = cardApi;
+    let { default: StringCard } = string;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field friend = linksTo(() => Person)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person });
+
+    let card = await createFromSerialized<typeof Person>({
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          friend: {
+            links: {
+              self: `${realmURL}Person/mango`,
+            },
+            data: {
+              id: `${realmURL}Person/mango`,
+              type: 'card'
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      },
+      included: [{
+        id: `${realmURL}Person/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango'
+        },
+        relationships: {
+          friend: {
+            links: {
+              self: null
+            },
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }]
+    }, undefined);
+    assert.ok(card instanceof Person, 'card is a Person');
+    assert.strictEqual(card.firstName, 'Hassan');
+    let { friend } = card;
+    assert.ok(friend instanceof Person, 'friend is a Person');
+    assert.ok(isSaved(friend), 'card is saved');
+    assert.strictEqual(friend.firstName, 'Mango');
+  });
 
   test('throws when serializing a linksTo relationship to an unsaved card', async function(assert) {
     let { field, contains, linksTo, Card, serializeCard } = cardApi;
@@ -920,10 +1018,6 @@ module('Integration | serialization', function (hooks) {
     } else {
       assert.ok(false, 'card is not instance of Person');
     }
-  });
-
-  skip('can deserialize a contains field that has a nested linksTo field', async function (assert) {
-
   });
 
   test('can serialize a date field with null value', async function(assert) {
