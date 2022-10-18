@@ -7,12 +7,12 @@ import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
-import { isCardDocument, type ExistingCardArgs } from '@cardstack/runtime-common';
+import { isCardDocument, isSingleCardDocument } from '@cardstack/runtime-common';
 import type { Format } from "https://cardstack.com/base/card-api";
 import LocalRealm from '../services/local-realm';
 import LoaderService from '../services/loader-service';
 import type { FileResource } from '../resources/file';
-import Preview from './preview';
+import CardEditor from './card-editor';
 import Module from './module';
 import FileTree from './file-tree';
 import {
@@ -21,6 +21,7 @@ import {
   languageConfigs
 } from '../utils/editor-language';
 import monaco from '../modifiers/monaco';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -45,10 +46,13 @@ export default class Go extends Component<Signature> {
           {{#if (isRunnable this.openFile.name)}}
             <Module @file={{this.openFile}}/>
           {{else if this.openFileCardJSON}}
-            <Preview
-              @card={{this.cardArgs}}
-              @formats={{this.formats}}
-            />
+            {{#if this.card}}
+              <CardEditor
+                @card={{this.card}}
+                @formats={{this.formats}}
+                @selectedFormat="isolated"
+              />
+            {{/if}}
           {{else if this.jsonError}}
             <h2>Encountered error parsing JSON</h2>
             <pre>{{this.jsonError}}</pre>
@@ -63,6 +67,7 @@ export default class Go extends Component<Signature> {
   @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
   @tracked jsonError: string | undefined;
+  @tracked card: Card | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -88,23 +93,30 @@ export default class Go extends Component<Signature> {
         return undefined;
       }
       if (isCardDocument(maybeCard)) {
+        let url = this.args.openFile?.url.replace(/\.json$/, '');
+        taskFor(this.loadData).perform(url);
         return maybeCard;
       }
     }
     return undefined;
   }
 
-  get cardArgs(): ExistingCardArgs {
-    if (this.args.openFile?.state !== 'ready') {
-      throw new Error('No file has been opened yet');
+  @restartableTask private async loadData(url: string | undefined): Promise<void> {
+    if (!url) {
+      return;
     }
-    if (!this.openFileCardJSON) {
-      throw new Error('Card JSON is not currently available');
+    let response = await this.loaderService.loader.fetch(url, {
+      headers: {
+        'Accept': 'application/vnd.api+json'
+      },
+    });
+    let json = await response.json();
+    if (!isSingleCardDocument(json)) {
+      throw new Error(`bug: server returned a non card document to us for ${url}`);
     }
-    return {
-      type: 'existing',
-      url: this.args.openFile.url.replace(/\.json$/, ''),
-    }
+    let api = await this.loaderService.loader.import<typeof import('https://cardstack.com/base/card-api')>('https://cardstack.com/base/card-api');
+    let card = await api.createFromSerialized(json.data, this.localRealm.url, { loader: this.loaderService.loader });
+    this.card = card;
   }
 
   get openFile() {

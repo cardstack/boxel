@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
-import { Loader, baseRealm, type ExistingCardArgs } from '@cardstack/runtime-common';
+import { Loader, baseRealm } from '@cardstack/runtime-common';
 import Preview  from 'runtime-spike/components/preview';
 import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
@@ -31,7 +31,7 @@ module('Integration | preview', function (hooks) {
   });
 
   test('renders card', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, Card, Component, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
@@ -40,23 +40,21 @@ module('Integration | preview', function (hooks) {
       }
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
-    let json = {
-      data: {
-        attributes: { firstName: 'Mango' },
-        meta: {
-          adoptsFrom:
-          {
-            module: `${testRealmURL}test-cards`,
-            name: 'TestCard'
-          }
+    let card = await createFromSerialized(TestCard, {
+      id: `${testRealmURL}test-cards/test-card`, // madeup id to satisfy saved card condition
+      attributes: { firstName: 'Mango' },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'TestCard'
         }
       }
-    };
-    const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
+    });
+
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @card={{args}} @formats={{formats}}/>
+          <Preview @card={{card}} @formats={{formats}}/>
         </template>
       }
     )
@@ -65,7 +63,7 @@ module('Integration | preview', function (hooks) {
   });
 
   test('can change card format', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, Card, Component, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
@@ -81,23 +79,22 @@ module('Integration | preview', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
 
-    let json = {
-      data: {
-        attributes: { firstName: 'Mango' },
-        meta: {
-          adoptsFrom:
-          {
-            module: `${testRealmURL}test-cards`,
-            name: 'TestCard'
-          }
+    let card = await createFromSerialized(TestCard, {
+      id: `${testRealmURL}test-cards/test-card`, // madeup id to satisfy saved card condition
+      attributes: { firstName: 'Mango' },
+      meta: {
+        adoptsFrom:
+        {
+          module: `${testRealmURL}test-cards`,
+          name: 'TestCard'
         }
       }
-    };
-    const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
+    });
+
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @card={{args}} @formats={{formats}}/>
+          <Preview @card={{card}} @formats={{formats}}/>
         </template>
       }
     )
@@ -117,8 +114,8 @@ module('Integration | preview', function (hooks) {
     assert.shadowDOM('[data-test-edit-firstName] input').hasValue('Mango');
   });
 
-  test('edited card data in visible in different formats', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+  test('edited card data is visible in different formats', async function (assert) {
+    let { field, contains, Card, Component, createFromSerialized } = cardApi;
     let { default: StringCard} = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
@@ -133,23 +130,21 @@ module('Integration | preview', function (hooks) {
       }
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
-    let json = {
-      data: {
-        attributes: { firstName: 'Mango' },
-        meta: {
-          adoptsFrom:
-          {
-            module: `${testRealmURL}test-cards`,
-            name: 'TestCard'
-          }
+    let card = await createFromSerialized(TestCard, {
+      id: `${testRealmURL}test-cards/test-card`, // madeup id to satisfy saved card condition
+      attributes: { firstName: 'Mango' },
+      meta: {
+        adoptsFrom:
+        {
+          module: `${testRealmURL}test-cards`,
+          name: 'TestCard'
         }
       }
-    };
-    const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
+    });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @card={{args}} @formats={{formats}}/>
+          <Preview @card={{card}} @formats={{formats}}/>
         </template>
       }
     )
@@ -163,79 +158,5 @@ module('Integration | preview', function (hooks) {
 
     await click('.format-button.isolated');
     assert.shadowDOM('[data-test-isolated-firstName]').hasText('Van Gogh');
-  });
-
-  test('can detect when card is dirty', async function(assert) {
-    let { field, contains, Card, Component } = cardApi;
-    let { default: StringCard} = string;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.firstName /></template>
-      }
-    }
-
-    class Post extends Card{
-      @field title = contains(StringCard);
-      @field author = contains(Person);
-      @field nickName = contains(StringCard, {
-        computeVia: function(this: Post) {
-          return this.author.firstName + '-poo';
-        }
-      });
-    }
-    await shimModule(`${testRealmURL}test-cards`, { Person, Post }, loader);
-
-    let json = {
-      data: {
-        attributes: {
-          author: {
-            firstName: 'Mango',
-          },
-          title: 'We Need to Go to the Dog Park Now!'
-        },
-        meta: {
-          adoptsFrom:
-          {
-            module: `${testRealmURL}test-cards`,
-            name: 'Post'
-          }
-        }
-      }
-    };
-    const args: ExistingCardArgs = { type: 'existing', json, url: `${testRealmURL}card` };
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <Preview @card={{args}} @formats={{formats}}/>
-        </template>
-      }
-    )
-
-    await click('.format-button.edit')
-    assert.shadowDOM('[data-test-save-card]').doesNotExist();
-    assert.shadowDOM('[data-test-reset]').doesNotExist();
-
-    await waitFor('[data-test-field="title"] input'); // we need to wait for the card instance to load
-    await fillIn('[data-test-field="title"] input', 'Why I Whine'); // dirty top level field
-    assert.shadowDOM('[data-test-field="title"] input').hasValue('Why I Whine');
-    assert.shadowDOM('[data-test-save-card]').exists();
-    assert.shadowDOM('[data-test-reset]').exists();
-
-    await click('[data-test-reset]');
-    assert.shadowDOM('[data-test-save-card]').doesNotExist();
-    assert.shadowDOM('[data-test-reset]').doesNotExist();
-    assert.shadowDOM('[data-test-field="title"] input').hasValue('We Need to Go to the Dog Park Now!');
-
-
-    await fillIn('[data-test-field="firstName"] input', 'Van Gogh'); // dirty nested field
-    assert.shadowDOM('[data-test-field="firstName"] input').hasValue('Van Gogh');
-    assert.shadowDOM('[data-test-save-card]').exists();
-    assert.shadowDOM('[data-test-reset]').exists();
-
-    await click('[data-test-reset]');
-    assert.shadowDOM('[data-test-save-card]').doesNotExist();
-    assert.shadowDOM('[data-test-reset]').doesNotExist();
-    assert.shadowDOM('[data-test-field="firstName"] input').hasValue('Mango');
   });
 });

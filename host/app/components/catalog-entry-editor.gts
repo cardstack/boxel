@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { catalogEntryRef, type ExportedCardRef, type NewCardArgs, type LooseCardResource } from '@cardstack/runtime-common';
+import { catalogEntryRef, type ExportedCardRef } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -7,13 +7,13 @@ import { LinkTo } from '@ember/routing';
 import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
 import LoaderService from '../services/loader-service';
-//@ts-ignore cached not available yet in definitely typed
-import { cached } from '@glimmer/tracking';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
 import { getSearchResults } from '../resources/search';
 import LocalRealm from '../services/local-realm';
-import Preview from './preview';
+import CardEditor from './card-editor';
+import { cardInstance } from '../resources/card-instance';
+import type { Card, Format } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -21,7 +21,7 @@ interface Signature {
   }
 }
 
-const formats = ['isolated', "embedded", "edit"] as ('isolated' | 'embedded' | 'edit')[];
+const formats = ['isolated', "embedded", "edit"] as Format[];
 
 export default class CatalogEntryEditor extends Component<Signature> {
   <template>
@@ -32,21 +32,28 @@ export default class CatalogEntryEditor extends Component<Signature> {
           <LinkTo @route="application" @query={{hash path=(ensureJsonExtension this.entry.id)}} data-test-catalog-entry-id>
             {{this.entry.id}}
           </LinkTo>
-          <Preview
-            @formats={{formats}}
-            @card={{hash type="existing" url=this.entry.id format="embedded" }}
-          />
+          {{#if this.card.instance}}
+            <CardEditor
+              @formats={{this.formats}}
+              @selectedFormat="embedded"
+              @card={{this.card.instance}}
+              @onSave={{this.onSave}}
+            />
+          {{/if}}
         </fieldset>
       {{else}}
         {{#if this.showEditor}}
-          <fieldset>
-            <legend>Publish New Card Type</legend>
-            <Preview
-              @card={{this.cardArgs}}
-              @onSave={{this.onSave}}
-              @onCancel={{this.onCancel}}
-            />
-          </fieldset>
+          {{#if this.card.instance}}
+            <fieldset>
+              <legend>Publish New Card Type</legend>
+              <CardEditor
+                @formats={{this.formats}}
+                @card={{this.card.instance}}
+                @onSave={{this.onSave}}
+                @onCancel={{this.onCancel}}
+              />
+            </fieldset>
+          {{/if}}
         {{else}}
           <button {{on "click" this.displayEditor}} type="button" data-test-catalog-entry-publish>
             Publish Card Type
@@ -56,6 +63,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
     </div>
   </template>
 
+  formats = formats;
   @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
   @service declare router: RouterService;
@@ -74,37 +82,30 @@ export default class CatalogEntryEditor extends Component<Signature> {
     return this.catalogEntry.instances[0];
   }
 
-  get initialCardResource(): LooseCardResource | undefined {
-    if (!this.args.ref) {
-      return;
-    }
-    let resource = {
-      attributes: {
-        title: this.args.ref.name,
-        description: `Catalog entry for ${this.args.ref.name} card`,
-        ref: this.args.ref,
-        demo: undefined
-      },
-      meta: {
-        adoptsFrom: this.catalogEntryRef,
-        fields: {
-          demo: {
-            adoptsFrom: this.args.ref
+  get resource() {
+    if (this.entry) {
+      return this.entry;
+    } else {
+      return {
+        attributes: {
+          title: this.args.ref.name,
+          description: `Catalog entry for ${this.args.ref.name} card`,
+          ref: this.args.ref,
+          demo: undefined
+        },
+        meta: {
+          adoptsFrom: this.catalogEntryRef,
+          fields: {
+            demo: {
+              adoptsFrom: this.args.ref
+            }
           }
         }
-      }
+      };
     }
-    return resource;
   }
 
-  get cardArgs(): NewCardArgs {
-    return {
-      type: 'new',
-      realmURL: this.localRealm.url.href,
-      cardSource: this.catalogEntryRef,
-      initialCardResource: this.initialCardResource,
-    }
-  }
+  card = cardInstance(this, () => this.resource);
 
   @action
   displayEditor() {
@@ -117,8 +118,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
   }
 
   @action
-  onSave(path: string) {
-    this.router.transitionTo({ queryParams: { path }});
+  onSave(card: Card) {
+    this.router.transitionTo({ queryParams: { path: ensureJsonExtension(card.id)}});
   }
 }
 

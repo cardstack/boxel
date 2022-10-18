@@ -49,23 +49,6 @@ export const baseCardRef: ExportedCardRef = {
   name: "Card",
 };
 
-type Format = "isolated" | "embedded" | "edit";
-export interface NewCardArgs {
-  type: "new";
-  realmURL: string;
-  cardSource: ExportedCardRef;
-  initialCardResource?: LooseCardResource;
-}
-export interface ExistingCardArgs {
-  type: "existing";
-  url: string;
-  // this is just used for test fixture data. as soon as we
-  // have an actual ember service for the API we should just
-  //  mock that instead
-  json?: LooseSingleCardDocument;
-  format?: Format;
-}
-
 // From https://github.com/iliakan/detect-node
 export const isNode =
   Object.prototype.toString.call(globalThis.process) === "[object process]";
