@@ -8,7 +8,6 @@ import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import CatalogEntryEditor from 'runtime-spike/components/catalog-entry-editor';
 import Service from '@ember/service';
-import waitUntil from '@ember/test-helpers/wait-until';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
@@ -167,6 +166,9 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can edit existing catalog entry', async function (assert) {
+    let router = this.owner.lookup('service:router') as MockRouter;
+    let deferred = new Deferred<void>();
+    router.initialize(assert, { queryParams: { path: `${testRealmURL}pet-catalog-entry.json`}}, deferred);
     await realm.write('pet-catalog-entry.json', JSON.stringify({
       data: {
         type: 'card',
@@ -228,12 +230,10 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await fillIn('[data-test-field="firstName"] input', 'EA');
 
     await click('button[data-test-save-card]');
-    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
+    await deferred.promise; // wait for the component to transition on save
 
-    assert.dom('button[data-test-save-card]').doesNotExist();
-    assert.shadowDOM('[data-test-title]').exists();
-    assert.shadowDOM('[data-test-title]').containsText('test title');
-    assert.shadowDOM('[data-test-description]').containsText('test description');
+    assert.shadowDOM('[data-test-title]').hasText('test title');
+    assert.shadowDOM('[data-test-description]').hasText('test description');
     assert.shadowDOM('[data-test-demo] [data-test-pet-name]').hasText('Jackie Wackie');
     assert.shadowDOM('[data-test-demo] [data-test-pet-owner]').hasText('EA');
 
