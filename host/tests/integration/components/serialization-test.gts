@@ -22,7 +22,7 @@ module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
   const realmURL = `https://test-realm/`;
 
-  hooks.before(async function () {
+  hooks.beforeEach(async function () {
     Loader.destroy();
     Loader.addURLMapping(
       new URL(baseRealm.url),
@@ -514,9 +514,77 @@ module('Integration | serialization', function (hooks) {
     }
   });
 
-  skip('can deserialize a linksTo relationship that does not include all the related resources');
-  // implement a "peek" to get info about an unloaded relationship
-  skip('can serialize an unloaded linksTo relationship');
+  test('can deserialize a linksTo relationship that does not include all the related resources', async function(assert) {
+    let { field, contains, linksTo, Card, createFromSerialized, peekAtField, NotLoaded, serializeCard } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+    }
+    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+
+    let hassan = await createFromSerialized<typeof Person>({
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: `${realmURL}Pet/mango`
+            },
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }
+    }, undefined);
+
+    try {
+      hassan.pet;
+      throw new Error(`expected error not thrown`);
+    } catch (err) {
+      assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
+      assert.ok(err.message.match(/The field Person\.pet refers to the card instance https:\/\/test-realm\/Pet\/mango which is not loaded/, 'NotLoaded error describes field not loaded'));
+    }
+
+    assert.deepEqual(peekAtField(hassan, 'pet'), {
+      type: 'not-loaded',
+      reference: `${realmURL}Pet/mango`
+    });
+
+    let payload = serializeCard(hassan);
+    assert.deepEqual(payload, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: `${realmURL}Pet/mango`
+            },
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }
+    });
+  });
 
   test('can serialize an empty linksTo relationship', async function(assert) {
     let { field, contains, linksTo, Card, serializeCard } = cardApi;
