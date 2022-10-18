@@ -151,3 +151,14 @@ Plain language, WITHOUT having to account for interruptions:
 - Field.move: Move the field to its new spot
   - Conditional:
     - Field.move: Synchronize all fields' movements.
+
+
+- leave out the metadata and state-matching first, assume we can match UI elements to animate
+- once matched, how do we specify rules so that they can run with conditional timing?
+  - low level : complex logic is possible at the expense of readability of code
+  - higher level (to implement) : current direction - individual transitions for each matched UI element, apply different timings based on conditions (what other transitions are happening?)
+    - alternative : matching combinations one by one. this seems difficult.
+    - alternative : individual transitions for each matched UI element. "grouping" to apply timing modifications to transitions?
+
+bottom to top seems feasible if we're doing the card hard-rerender thing (what are the implications of the card rerender thing?)
+
