@@ -250,6 +250,7 @@ module('Integration | schema', function (hooks) {
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/integer-field`).exists('base realm primitive field displayed');
     assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`).exists('base realm primitive field displayed');
 
+    await waitFor('[data-test-demo-embedded]');
     assert.shadowDOM(`[data-test-demo-embedded]`, shadowQuerySelector('[data-test-card-catalog]')).exists({ count: 1 }, 'demo card is not displayed for primitive fields');
 
     // a "contains" field cannot be the same card as it's enclosing card
