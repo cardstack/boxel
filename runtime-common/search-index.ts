@@ -65,7 +65,7 @@ export interface Meta {
   adoptsFrom: ExportedCardRef;
   fields?: CardFields;
 }
-interface CardFields {
+export interface CardFields {
   [fieldName: string]: Partial<Meta> | Partial<Meta>[];
 }
 

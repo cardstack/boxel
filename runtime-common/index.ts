@@ -123,6 +123,7 @@ export type {
   ExportedCardRef,
   CardResource,
   CardDocument,
+  CardFields,
   SingleCardDocument,
   Relationship,
   Meta,

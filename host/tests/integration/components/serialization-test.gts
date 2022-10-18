@@ -670,6 +670,13 @@ module('Integration | serialization', function (hooks) {
     }
   });
 
+  skip('can serialize a contains field that has a nested linksTo field', async function (assert) {
+
+  });
+  skip('can deserialize a contains field that has a nested linksTo field', async function (assert) {
+
+  });
+
   test('can serialize a date field with null value', async function(assert) {
     let { field, contains, Card, serializeCard } = cardApi;
     let { default: DateCard } = date;
@@ -1059,7 +1066,7 @@ module('Integration | serialization', function (hooks) {
       location:"Room 102",
       title:"Civics"
     }]);
-    assert.deepEqual(serialized.data.meta?.fields?.apointments, undefined); // this means the field card for the value is the same as the field's card
+    assert.deepEqual(serialized.data.meta?.fields?.appointments, undefined); // this means the field card for the value is the same as the field's card
   });
 
   test('can serialize a card with primitive fields', async function (assert) {
