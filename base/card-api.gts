@@ -86,7 +86,7 @@ interface Field<CardT extends CardConstructor> {
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
   serialize(value: any, doc: JSONAPISingleResourceDocument): JSONAPIResource;
-  deserialize(value: any, fieldMeta: CardFields[string] | undefined, resourceId: string | undefined, doc: LooseSingleCardDocument, instancePromise: Promise<Card>): Promise<any>;
+  deserialize(value: any, doc: LooseSingleCardDocument, fieldMeta: CardFields[string] | undefined, instancePromise: Promise<Card>): Promise<any>;
   emptyValue(instance: Card): any;
   validate(instance: Card, value: any): void;
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
@@ -164,7 +164,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     }
   }
 
-  async deserialize(value: any[], fieldMeta: CardFields[string] | undefined, resourceId: string | undefined, doc: LooseSingleCardDocument, instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
+  async deserialize(value: any[], doc: LooseSingleCardDocument, fieldMeta: CardFields[string] | undefined, instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
@@ -172,13 +172,13 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
       () => instancePromise.then(instance => recompute(instance)),
       await Promise.all(value.map(async (entry, index) => {
         if (primitive in this.card) {
-          return this.card[deserialize](entry, resourceId, doc);
+          return this.card[deserialize](entry, doc);
         } else {
           let resource: LooseCardResource = {
             attributes: entry,
-            meta: getMeta(fieldMeta, this.name, this.card, index)
+            meta: makeMetaForField(fieldMeta, this.name, this.card, index)
           }
-          return (await cardClassFromResource(resource, this.card))[deserialize](resource, resourceId, doc);
+          return (await cardClassFromResource(resource, this.card))[deserialize](resource, doc);
         }
       }))
     );
@@ -257,15 +257,15 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     }
   }
 
-  async deserialize(value: any, fieldMeta: CardFields[string] | undefined, resourceId: string | undefined, doc: LooseSingleCardDocument): Promise<CardInstanceType<CardT>> {
+  async deserialize(value: any, doc: LooseSingleCardDocument, fieldMeta: CardFields[string] | undefined): Promise<CardInstanceType<CardT>> {
     if (primitive in this.card) {
-      return this.card[deserialize](value, resourceId, doc);
+      return this.card[deserialize](value, doc);
     }
     let resource: LooseCardResource = { 
       attributes: value,
-      meta: getMeta(fieldMeta, this.name, this.card)
+      meta: makeMetaForField(fieldMeta, this.name, this.card)
     };
-    return (await cardClassFromResource(resource, this.card))[deserialize](resource, resourceId, doc);
+    return (await cardClassFromResource(resource, this.card))[deserialize](resource, doc);
   }
 
   emptyValue(_instance: Card) {
@@ -338,7 +338,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     };
   }
 
-  async deserialize(value: any, _fieldMeta: CardFields[string] | undefined, _resourceId: string | undefined, doc: LooseSingleCardDocument): Promise<CardInstanceType<CardT> | null> {
+  async deserialize(value: any, doc: LooseSingleCardDocument): Promise<CardInstanceType<CardT> | null> {
     if (!isRelationship(value)) {
       throw new Error(`linkTo field '${this.name}' cannot deserialize non-relationship value ${JSON.stringify(value)}`);
     }
@@ -346,7 +346,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       return null;
     }
     let resource = resourceFrom(doc, value.links.self);
-    return (await cardClassFromResource(resource, this.card))[deserialize](resource, value.links.self, doc);
+    return (await cardClassFromResource(resource, this.card))[deserialize](resource, doc);
   }
 
   emptyValue(_instance: Card) {
@@ -434,12 +434,12 @@ export class Card {
     }
   }
 
-  static async [deserialize]<T extends CardConstructor>(this: T, data: any, resourceId?: string, doc?: LooseSingleCardDocument): Promise<CardInstanceType<T>> {
+  static async [deserialize]<T extends CardConstructor>(this: T, data: any, doc?: LooseSingleCardDocument): Promise<CardInstanceType<T>> {
     if (primitive in this) {
       // primitive cards can override this as need be
       return data;
     }
-    return _createFromSerialized(this, data, resourceId, doc);
+    return _createFromSerialized(this, data, doc);
   }
 
   static async didRecompute(card: Card): Promise<void> {
@@ -537,7 +537,6 @@ async function getDeserializedValues<CardT extends CardConstructor>({
   resource,
   modelPromise,
   doc,
-  resourceId
 }: {
   card: CardT; 
   fieldName: string; 
@@ -545,13 +544,12 @@ async function getDeserializedValues<CardT extends CardConstructor>({
   resource: LooseCardResource;
   modelPromise: Promise<Card>; 
   doc: LooseSingleCardDocument; 
-  resourceId: string | undefined;
 }): Promise<any> {
   let field = getField(card, fieldName);
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
-  return await field.deserialize(value, resource.meta.fields?.[fieldName], resourceId, doc, modelPromise);
+  return await field.deserialize(value, doc, resource.meta.fields?.[fieldName], modelPromise);
 }
 
 function serializeCardResource(
@@ -608,17 +606,16 @@ export async function createFromSerialized<T extends CardConstructor>(cardClassO
   } else {
     throw new Error(`don't know how to serialize ${JSON.stringify(cardClassOrDoc, null, 2)}`);
   }
-  return await _createFromSerialized(card, data, undefined, undefined);
+  return await _createFromSerialized(card, data, undefined);
 }
 
 export async function updateFromSerialized<T extends CardConstructor>(instance: CardInstanceType<T>, doc: LooseSingleCardDocument): Promise<CardInstanceType<T>> {
-  return await _updateFromSerialized(instance, doc.data, undefined, doc);
+  return await _updateFromSerialized(instance, doc.data, doc);
 }
 
 async function _createFromSerialized<T extends CardConstructor>(
   card: T,
   data: T extends { [primitive]: infer P } ? P : LooseCardResource,
-  resourceId: string | undefined,
   doc: LooseSingleCardDocument | undefined,
 ): Promise<CardInstanceType<T>> {
   if (primitive in card) {
@@ -642,13 +639,12 @@ async function _createFromSerialized<T extends CardConstructor>(
   if (!isSingleCardDocument(doc)) {
     throw new Error(`bug: document not provided in _createFromSerialized(). it is ${JSON.stringify(data, null, 2)}`);
   }
-  return await _updateFromSerialized(new card() as CardInstanceType<T>, resource, resourceId, doc);
+  return await _updateFromSerialized(new card() as CardInstanceType<T>, resource, doc);
 }
 
 async function _updateFromSerialized<T extends CardConstructor>(
   instance: CardInstanceType<T>,
   resource: LooseCardResource,
-  resourceId: string | undefined,
   doc: LooseSingleCardDocument,
 ): Promise<CardInstanceType<T>> {
   let deferred = new Deferred<Card>();
@@ -673,7 +669,6 @@ async function _updateFromSerialized<T extends CardConstructor>(
             resource,
             modelPromise: deferred.promise,
             doc,
-            resourceId
           })
         ];
       }
@@ -709,7 +704,7 @@ export async function searchDoc<CardT extends CardConstructor>(model: InstanceTy
 }
 
 
-function getMeta(fieldMeta: CardFields[string] | undefined, fieldName: string, fallback: typeof Card, index?: number): Meta {
+function makeMetaForField(fieldMeta: CardFields[string] | undefined, fieldName: string, fallback: typeof Card, index?: number): Meta {
   let meta: Partial<Meta> | undefined;
   if (fieldMeta && Array.isArray(fieldMeta)) {
     if (index == null || index > (fieldMeta.length - 1)) {
