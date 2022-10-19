@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { baseRealm, ExportedCardRef } from '@cardstack/runtime-common';
 import { Loader } from "@cardstack/runtime-common/loader";
@@ -281,6 +281,64 @@ module('Integration | catalog-entry-editor', function (hooks) {
                 adoptsFrom: {
                   module: `${testRealmURL}pet`,
                   name: 'Pet',
+                }
+              },
+            }
+          },
+        },
+      },
+      'file contents are correct'
+    );
+  });
+
+  skip('can create new catalog entry with all demo field values missing', async function (assert) {
+    const args: ExportedCardRef =  { module: `${testRealmURL}person`, name: 'Person' };
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CatalogEntryEditor @ref={{args}} />
+        </template>
+      }
+    );
+
+    await waitFor('button[data-test-catalog-entry-publish]');
+    await click('[data-test-catalog-entry-publish]');
+    await waitFor('[data-test-ref]');
+
+    await click('button[data-test-save-card]');
+    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
+
+    let entry = await realm.searchIndex.card(new URL(`${testRealmURL}CatalogEntry/1`));
+    assert.ok(entry, 'catalog entry was created');
+
+    let fileRef = await adapter.openFile('CatalogEntry/1.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      JSON.parse(fileRef.content as string),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Person',
+            description: 'Catalog entry for Person card',
+            ref: {
+              module: `${testRealmURL}person`,
+              name: 'Person'
+            },
+            demo: {}
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/catalog-entry',
+              name: 'CatalogEntry',
+            },
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
                 }
               },
             }
