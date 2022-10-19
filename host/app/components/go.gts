@@ -7,9 +7,10 @@ import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
-import { isCardDocument, isSingleCardDocument } from '@cardstack/runtime-common';
+import { isCardDocument } from '@cardstack/runtime-common';
 import LocalRealm from '../services/local-realm';
 import LoaderService from '../services/loader-service';
+import CardService from '../services/card-service';
 import type { FileResource } from '../resources/file';
 import CardEditor from './card-editor';
 import Module from './module';
@@ -44,7 +45,11 @@ export default class Go extends Component<Signature> {
             <Module @file={{this.openFile}}/>
           {{else if this.openFileCardJSON}}
             {{#if this.card}}
-              <CardEditor @card={{this.card}} @format="isolated" />
+              <CardEditor
+                @card={{this.card}}
+                @format="isolated"
+                @onSave={{this.onSave}}
+              />
             {{/if}}
           {{else if this.jsonError}}
             <h2>Encountered error parsing JSON</h2>
@@ -58,6 +63,7 @@ export default class Go extends Component<Signature> {
 
   @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
+  @service declare cardService: CardService;
   @tracked jsonError: string | undefined;
   @tracked card: Card | undefined;
 
@@ -86,28 +92,19 @@ export default class Go extends Component<Signature> {
       }
       if (isCardDocument(maybeCard)) {
         let url = this.args.openFile?.url.replace(/\.json$/, '');
-        taskFor(this.loadData).perform(url);
+        taskFor(this.loadCard).perform(url);
         return maybeCard;
       }
     }
     return undefined;
   }
 
-  @restartableTask private async loadData(url: string | undefined): Promise<void> {
-    if (!url) {
-      return;
-    }
-    let response = await this.loaderService.loader.fetch(url, {
-      headers: {
-        'Accept': 'application/vnd.api+json'
-      },
-    });
-    let json = await response.json();
-    if (!isSingleCardDocument(json)) {
-      throw new Error(`bug: server returned a non card document to us for ${url}`);
-    }
-    let api = await this.loaderService.loader.import<typeof import('https://cardstack.com/base/card-api')>('https://cardstack.com/base/card-api');
-    let card = await api.createFromSerialized(json.data, this.localRealm.url, { loader: this.loaderService.loader });
+  @restartableTask private async loadCard(url: string | undefined): Promise<void> {
+    this.card = await this.cardService.loadCard(url);
+  }
+
+  @action
+  onSave(card: Card) {
     this.card = card;
   }
 
