@@ -418,7 +418,7 @@ module('Integration | serialization', function (hooks) {
   });
   
   test('can deserialize a linksTo relationship', async function(assert) {
-    let { field, contains, linksTo, Card, createFromSerialized, isSaved } = cardApi;
+    let { field, contains, linksTo, Card, createFromSerialized, relationshipMeta, isSaved } = cardApi;
     let { default: StringCard } = string;
 
     class Toy extends Card {
@@ -512,10 +512,21 @@ module('Integration | serialization', function (hooks) {
     } else {
       assert.ok(false, '"pet" field value is not an instance of Pet');
     }
+    
+    let relationship = relationshipMeta(card, 'pet');
+    if (relationship?.type === 'loaded') {
+      let relatedCard = relationship.card;
+      assert.strictEqual(relatedCard instanceof Pet, true, 'related card is a Pet');
+      assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
+    } else {
+      assert.ok(false, 'relationship type was not "loaded"');
+    }
+
+    assert.strictEqual(relationshipMeta(card, 'firstName'), undefined, 'relationshipMeta returns undefined for non-relationship field');
   });
 
   test('can deserialize a linksTo relationship that does not include all the related resources', async function(assert) {
-    let { field, contains, linksTo, Card, createFromSerialized, peekAtField, NotLoaded, serializeCard } = cardApi;
+    let { field, contains, linksTo, Card, createFromSerialized, relationshipMeta, NotLoaded, serializeCard } = cardApi;
     let { default: StringCard } = string;
 
     class Pet extends Card {
@@ -557,10 +568,12 @@ module('Integration | serialization', function (hooks) {
       assert.ok(err.message.match(/The field Person\.pet refers to the card instance https:\/\/test-realm\/Pet\/mango which is not loaded/, 'NotLoaded error describes field not loaded'));
     }
 
-    assert.deepEqual(peekAtField(hassan, 'pet'), {
-      type: 'not-loaded',
-      reference: `${realmURL}Pet/mango`
-    });
+    let relationship = relationshipMeta(hassan, 'pet');
+    if (relationship?.type === 'not-loaded') {
+      assert.strictEqual(relationship.reference, `${realmURL}Pet/mango`);
+    } else {
+      assert.ok(false, 'relationship type was not "not-loaded"');
+    }
 
     let payload = serializeCard(hassan);
     assert.deepEqual(payload, {

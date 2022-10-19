@@ -226,15 +226,20 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
+    if (fieldMeta && !Array.isArray(fieldMeta)) {
+      throw new Error(`fieldMeta for contains-many field '${this.name}' is not an array: ${JSON.stringify(fieldMeta, null, 2)}`);
+    }
+    let metas: Partial<Meta>[] = fieldMeta ?? [];
     return new WatchedArray(
       () => instancePromise.then(instance => recompute(instance)),
       await Promise.all(value.map(async (entry, index) => {
         if (primitive in this.card) {
           return this.card[deserialize](entry, doc);
         } else {
+          let meta = metas[index];
           let resource: LooseCardResource = {
             attributes: entry,
-            meta: makeMetaForField(fieldMeta, this.name, this.card, index)
+            meta: makeMetaForField(meta, this.name, this.card)
           }
           if (relationships) {
             resource.relationships = Object.fromEntries(
@@ -338,9 +343,13 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     if (primitive in this.card) {
       return this.card[deserialize](value, doc);
     }
+    if (fieldMeta && Array.isArray(fieldMeta)) {
+      throw new Error(`fieldMeta for contains field '${this.name}' is an array: ${JSON.stringify(fieldMeta, null, 2)}`);
+    }
+    let meta: Partial<Meta> | undefined = fieldMeta;
     let resource: LooseCardResource = { 
       attributes: value,
-      meta: makeMetaForField(fieldMeta, this.name, this.card)
+      meta: makeMetaForField(meta, this.name, this.card)
     };
     if (relationships) {
       resource.relationships = Object.fromEntries(
@@ -632,12 +641,40 @@ export function getQueryableValue(fieldCard: typeof Card, value: any): any {
   return flatten((fieldCard as any)[queryableValue](value), { safe: true });
 }
 
-export function peekAtField(instance: Card, fieldName: string): any {
+function peekAtField(instance: Card, fieldName: string): any {
   let field = getField(Reflect.getPrototypeOf(instance)!.constructor as typeof Card, fieldName);
   if (!field) {
     throw new Error(`the card ${instance.constructor.name} does not have a field '${fieldName}'`);
   }
   return getter(instance, field);
+}
+
+type RelationshipMeta = NotLoadedRelationship | LoadedRelationship;
+interface NotLoadedRelationship {
+  type: 'not-loaded';
+  reference: string;
+  // TODO add a loader (which may turn this into a class)
+  // load(): Promise<CardInstanceType<CardT>>;
+}
+interface LoadedRelationship {
+  type: 'loaded';
+  card: Card | null;
+}
+
+export function relationshipMeta(instance: Card, fieldName: string): RelationshipMeta | undefined {
+  let field = getField(Reflect.getPrototypeOf(instance)!.constructor as typeof Card, fieldName);
+  if (!field) {
+    throw new Error(`the card ${instance.constructor.name} does not have a field '${fieldName}'`);
+  }
+  if (field.fieldType !== 'linksTo') {
+    return undefined;
+  }
+  let related = getter(instance, field);
+  if (isNotLoadedValue(related)) {
+    return { type: 'not-loaded', reference: related.reference };
+  } else {
+    return { type: 'loaded', card: related ?? null };
+  }
 }
 
 function serializedGet<CardT extends CardConstructor>(
@@ -830,16 +867,7 @@ export async function searchDoc<CardT extends CardConstructor>(model: InstanceTy
 }
 
 
-function makeMetaForField(fieldMeta: CardFields[string] | undefined, fieldName: string, fallback: typeof Card, index?: number): Meta {
-  let meta: Partial<Meta> | undefined;
-  if (fieldMeta && Array.isArray(fieldMeta)) {
-    if (index == null || index > (fieldMeta.length - 1)) {
-      throw new Error(`cannot determine meta for field '${fieldName}', field meta is an array but does not contains index '${index}'`);
-    }
-    meta = fieldMeta[index];
-  } else if (fieldMeta) {
-    meta = fieldMeta;
-  }
+function makeMetaForField(meta: Partial<Meta> | undefined, fieldName: string, fallback: typeof Card): Meta {
   let adoptsFrom = meta?.adoptsFrom ?? Loader.identify(fallback);
   if (!adoptsFrom) {
     throw new Error(`bug: cannot determine identity for field '${fieldName}'`);
@@ -1082,8 +1110,11 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
       isLoaded = true;
     } catch (e: any) {
       if (isNotLoadedError(e)) {
-        // these are unloaded non-computed linksTo relationships. we track these with a NotLoaded error
-        // in our linksTo Field.getter, we can ignore them here.
+        // TODO these are unloaded relationships. eventually we want to be able to load these
+        // relationships.
+        // This is also exposing awkwardness around exceptions thrown during
+        // async computeds in that nothing is able to catch them since they are executed in an
+        // async IIFE within the property descriptor setter that is unwatched--need to address this.
         isLoaded = true;
         continue;
       }
