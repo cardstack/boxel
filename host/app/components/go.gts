@@ -8,7 +8,6 @@ import { service } from '@ember/service';
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
 import { isCardDocument, isSingleCardDocument } from '@cardstack/runtime-common';
-import type { Format } from "https://cardstack.com/base/card-api";
 import LocalRealm from '../services/local-realm';
 import LoaderService from '../services/loader-service';
 import type { FileResource } from '../resources/file';
@@ -30,8 +29,6 @@ interface Signature {
   }
 }
 
-const formats: Format[] = ['isolated', 'embedded', 'edit'];
-
 export default class Go extends Component<Signature> {
   <template>
     <div class="editor">
@@ -47,11 +44,7 @@ export default class Go extends Component<Signature> {
             <Module @file={{this.openFile}}/>
           {{else if this.openFileCardJSON}}
             {{#if this.card}}
-              <CardEditor
-                @card={{this.card}}
-                @formats={{this.formats}}
-                @selectedFormat="isolated"
-              />
+              <CardEditor @card={{this.card}} @format="isolated" />
             {{/if}}
           {{else if this.jsonError}}
             <h2>Encountered error parsing JSON</h2>
@@ -63,7 +56,6 @@ export default class Go extends Component<Signature> {
     </div>
   </template>
 
-  formats = formats;
   @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
   @tracked jsonError: string | undefined;

@@ -10,6 +10,7 @@ import type LocalRealm from '../services/local-realm';
 import { importResource } from '../resources/import';
 import { baseRealm } from '@cardstack/runtime-common';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import FormatPicker from './format-picker';
 import Preview from './preview';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -17,18 +18,23 @@ type CardAPI = typeof import('https://cardstack.com/base/card-api');
 interface Signature {
   Args: {
     card: Card;
-    selectedFormat?: Format;
-    formats?: Format[];
+    format?: Format;
     onCancel?: () => void;
     onSave?: (card: Card) => void;
   }
 }
 
+const formats: Format[] = ['isolated', 'embedded', 'edit'];
+
 export default class CardEditor extends Component<Signature> {
   <template>
+    <FormatPicker
+      @formats={{this.formats}}
+      @format={{this.format}}
+      @setFormat={{this.setFormat}}
+    />
     <Preview
-      @formats={{@formats}}
-      @selectedFormat={{this.format}}
+      @format={{this.format}}
       @card={{@card}}
     />
     {{!-- @glint-ignore glint doesn't know about EC task properties --}}
@@ -44,9 +50,10 @@ export default class CardEditor extends Component<Signature> {
     {{/if}}
   </template>
 
+  formats = formats;
   @service declare loaderService: LoaderService;
   @service declare localRealm: LocalRealm;
-  @tracked format: Format = this.args.selectedFormat ?? 'edit';
+  @tracked format: Format = this.args.format ?? 'edit';
   private apiModule = importResource(this, () => `${baseRealm.url}card-api`);
 
   private get api() {
