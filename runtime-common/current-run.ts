@@ -351,7 +351,7 @@ export class CurrentRun {
     let cardType: typeof Card | undefined;
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
-      let card = await api.createFromSerialized(resource, moduleURL, {
+      let card = await api.createFromSerialized({ data: resource }, moduleURL, {
         loader: this.#loader,
       });
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;

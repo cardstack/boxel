@@ -39,11 +39,13 @@ module('Integration | preview', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let card = await createFromSerialized(TestCard, {
-      attributes: { firstName: 'Mango' },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'TestCard'
+      data: {
+        attributes: { firstName: 'Mango' },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'TestCard'
+          }
         }
       }
     });

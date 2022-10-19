@@ -94,7 +94,7 @@ export default class CardEditor extends Component<Signature> {
       throw new Error(`could not save file, status: ${response.status} - ${response.statusText}. ${await response.text()}`);
     }
     let json = await response.json();
-    let card = await this.api!.createFromSerialized(json.data, this.localRealm.url, { loader: this.loaderService.loader });
+    let card = await this.api!.createFromSerialized(json, this.localRealm.url, { loader: this.loaderService.loader });
     this.args.onSave?.(card);
   }
 }

@@ -107,7 +107,7 @@ export default class Go extends Component<Signature> {
       throw new Error(`bug: server returned a non card document to us for ${url}`);
     }
     let api = await this.loaderService.loader.import<typeof import('https://cardstack.com/base/card-api')>('https://cardstack.com/base/card-api');
-    let card = await api.createFromSerialized(json.data, this.localRealm.url, { loader: this.loaderService.loader });
+    let card = await api.createFromSerialized(json, this.localRealm.url, { loader: this.loaderService.loader });
     this.card = card;
   }
 
