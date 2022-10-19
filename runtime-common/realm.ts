@@ -622,7 +622,7 @@ export class Realm {
     let api = await this.searchIndex.loader.import<CardAPI>(
       "https://cardstack.com/base/card-api"
     );
-    let card: Card = await api.createFromSerialized(doc.data, relativeTo, {
+    let card: Card = await api.createFromSerialized(doc, relativeTo, {
       loader: this.searchIndex.loader,
     });
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds

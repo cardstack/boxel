@@ -65,7 +65,7 @@ export interface Meta {
   adoptsFrom: ExportedCardRef;
   fields?: CardFields;
 }
-interface CardFields {
+export interface CardFields {
   [fieldName: string]: Partial<Meta> | Partial<Meta>[];
 }
 
@@ -208,7 +208,9 @@ export function isMeta(meta: any, allowPartial = false) {
   return true;
 }
 
-function isRelationship(relationship: any): relationship is Relationship {
+export function isRelationship(
+  relationship: any
+): relationship is Relationship {
   if (typeof relationship !== "object" || relationship == null) {
     return false;
   }
@@ -246,7 +248,7 @@ export function isCardDocument(doc: any): doc is CardDocument {
 }
 
 export function isSingleCardDocument(doc: any): doc is SingleCardDocument {
-  if (typeof doc !== "object") {
+  if (typeof doc !== "object" || doc == null) {
     return false;
   }
   if (!("data" in doc)) {
@@ -268,7 +270,7 @@ export function isSingleCardDocument(doc: any): doc is SingleCardDocument {
 export function isCardCollectionDocument(
   doc: any
 ): doc is CardCollectionDocument {
-  if (typeof doc !== "object") {
+  if (typeof doc !== "object" || doc == null) {
     return false;
   }
   if (!("data" in doc)) {

@@ -39,12 +39,14 @@ module('Integration | card-editor', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let card = await createFromSerialized(TestCard, {
-      id: `${testRealmURL}test-cards/test-card`, // madeup id to satisfy saved card condition
-      attributes: { firstName: 'Mango' },
-      meta: {
-        adoptsFrom: {
-          module: `${testRealmURL}test-cards`,
-          name: 'TestCard'
+      data: {
+        id: `${testRealmURL}test-cards/test-card`, // madeup id to satisfy saved card condition
+        attributes: { firstName: 'Mango' },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'TestCard'
+          }
         }
       }
     });
@@ -79,13 +81,15 @@ module('Integration | card-editor', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
 
     let card = await createFromSerialized(TestCard, {
-      id: `${testRealmURL}test-cards/test-card`, // madeup id to satisfy saved card condition
-      attributes: { firstName: 'Mango' },
-      meta: {
-        adoptsFrom:
-        {
-          module: `${testRealmURL}test-cards`,
-          name: 'TestCard'
+      data: {
+        id: `${testRealmURL}test-cards/test-card`, // madeup id to satisfy saved card condition
+        attributes: { firstName: 'Mango' },
+        meta: {
+          adoptsFrom:
+          {
+            module: `${testRealmURL}test-cards`,
+            name: 'TestCard'
+          }
         }
       }
     });
@@ -130,12 +134,14 @@ module('Integration | card-editor', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let card = await createFromSerialized(TestCard, {
-      attributes: { firstName: 'Mango' },
-      meta: {
-        adoptsFrom:
-        {
-          module: `${testRealmURL}test-cards`,
-          name: 'TestCard'
+      data: {
+        attributes: { firstName: 'Mango' },
+        meta: {
+          adoptsFrom:
+          {
+            module: `${testRealmURL}test-cards`,
+            name: 'TestCard'
+          }
         }
       }
     });

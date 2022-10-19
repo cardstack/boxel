@@ -43,7 +43,7 @@ export default class CardService extends Service {
     if (!this.api) {
       this.api = await this.loadAPI();
     }
-    return await this.api.createFromSerialized(json.data, this.localRealm.url, {
+    return await this.api.createFromSerialized(json, this.localRealm.url, {
       loader: this.loaderService.loader,
     });
   }
@@ -71,7 +71,7 @@ export default class CardService extends Service {
       );
     }
     let json = await response.json();
-    return await this.api.createFromSerialized(json.data, this.localRealm.url, {
+    return await this.api.createFromSerialized(json, this.localRealm.url, {
       loader: this.loaderService.loader,
     });
   }
@@ -80,7 +80,7 @@ export default class CardService extends Service {
     if (!this.api) {
       this.api = await this.loadAPI();
     }
-    return await this.api.createFromSerialized(doc.data, this.localRealm.url, {
+    return await this.api.createFromSerialized(doc, this.localRealm.url, {
       loader: this.loaderService.loader,
     });
   }
@@ -114,9 +114,13 @@ export default class CardService extends Service {
     }
     return await Promise.all(
       json.data.map(async (doc) => {
-        return await this.api!.createFromSerialized(doc, this.localRealm.url, {
-          loader: this.loaderService.loader,
-        });
+        return await this.api!.createFromSerialized(
+          { data: doc },
+          this.localRealm.url,
+          {
+            loader: this.loaderService.loader,
+          }
+        );
       })
     );
   }

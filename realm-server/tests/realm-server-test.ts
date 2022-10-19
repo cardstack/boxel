@@ -361,13 +361,15 @@ module("Realm Server", function (hooks) {
     module.Person;
     let person = await api.createFromSerialized(
       {
-        attributes: {
-          firstName: "Mango",
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealmHref}person`,
-            name: "Person",
+        data: {
+          attributes: {
+            firstName: "Mango",
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmHref}person`,
+              name: "Person",
+            },
           },
         },
       },
@@ -384,13 +386,15 @@ module("Realm Server", function (hooks) {
     module.Person;
     let person = await api.createFromSerialized(
       {
-        attributes: {
-          firstName: "Mango",
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealm2Href}person`,
-            name: "Person",
+        data: {
+          attributes: {
+            firstName: "Mango",
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealm2Href}person`,
+              name: "Person",
+            },
           },
         },
       },
@@ -408,13 +412,15 @@ module("Realm Server", function (hooks) {
     let ref = { module: `${testRealm2Href}person`, name: "Person" };
     let testCard = await api.createFromSerialized(
       {
-        attributes: {
-          ref,
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealm2Href}card-ref-test`,
-            name: "TestCard",
+        data: {
+          attributes: {
+            ref,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealm2Href}card-ref-test`,
+              name: "TestCard",
+            },
           },
         },
       },
