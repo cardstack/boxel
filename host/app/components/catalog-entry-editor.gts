@@ -13,15 +13,13 @@ import { getSearchResults } from '../resources/search';
 import LocalRealm from '../services/local-realm';
 import CardEditor from './card-editor';
 import { cardInstance } from '../resources/card-instance';
-import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
     ref: ExportedCardRef;
   }
 }
-
-const formats = ['isolated', "embedded", "edit"] as Format[];
 
 export default class CatalogEntryEditor extends Component<Signature> {
   <template>
@@ -34,8 +32,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
           </LinkTo>
           {{#if this.card.instance}}
             <CardEditor
-              @formats={{this.formats}}
-              @selectedFormat="embedded"
+              @format="embedded"
               @card={{this.card.instance}}
               @onSave={{this.onSave}}
             />
@@ -47,7 +44,6 @@ export default class CatalogEntryEditor extends Component<Signature> {
             <fieldset>
               <legend>Publish New Card Type</legend>
               <CardEditor
-                @formats={{this.formats}}
                 @card={{this.card.instance}}
                 @onSave={{this.onSave}}
                 @onCancel={{this.onCancel}}
@@ -63,7 +59,6 @@ export default class CatalogEntryEditor extends Component<Signature> {
     </div>
   </template>
 
-  formats = formats;
   @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
   @service declare router: RouterService;
