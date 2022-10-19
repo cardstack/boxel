@@ -2,7 +2,10 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import LoaderService from './loader-service';
 import LocalRealm from '../services/local-realm';
-import { isSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  isSingleCardDocument,
+  LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import type { Card } from 'https://cardstack.com/base/card-api';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -65,6 +68,15 @@ export default class CardService extends Service {
     }
     let json = await response.json();
     return await this.api.createFromSerialized(json.data, this.localRealm.url, {
+      loader: this.loaderService.loader,
+    });
+  }
+
+  async createNewInstance(doc: LooseSingleCardDocument): Promise<Card> {
+    if (!this.api) {
+      this.api = await this.loadAPI();
+    }
+    return await this.api.createFromSerialized(doc.data, this.localRealm.url, {
       loader: this.loaderService.loader,
     });
   }
