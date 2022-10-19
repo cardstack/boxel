@@ -1,19 +1,15 @@
 import Component from '@glimmer/component';
-import { catalogEntryRef, type ExportedCardRef } from '@cardstack/runtime-common';
+import { catalogEntryRef, type ExportedCardRef, type Card } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { LinkTo } from '@ember/routing';
 import { service } from '@ember/service';
-import type RouterService from '@ember/routing/router-service';
-import LoaderService from '../services/loader-service';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
 import { getSearchResults } from '../resources/search';
-import LocalRealm from '../services/local-realm';
+import CardService from '../services/card-service';
 import CardEditor from './card-editor';
-import { cardInstance } from '../resources/card-instance';
-import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -24,44 +20,36 @@ interface Signature {
 export default class CatalogEntryEditor extends Component<Signature> {
   <template>
     <div class="catalog-entry-editor" data-test-catalog-entry-editor>
-      {{#if this.entry}}
+      {{#if this.card}}
         <fieldset>
           <legend>Edit Catalog Entry</legend>
-          <LinkTo @route="application" @query={{hash path=(ensureJsonExtension this.entry.id)}} data-test-catalog-entry-id>
-            {{this.entry.id}}
+          <LinkTo @route="application" @query={{hash path=(ensureJsonExtension this.card.id)}} data-test-catalog-entry-id>
+            {{this.card.id}}
           </LinkTo>
-          {{#if this.card.instance}}
-            <CardEditor
-              @format="embedded"
-              @card={{this.card.instance}}
-              @onSave={{this.onSave}}
-            />
-          {{/if}}
+          <CardEditor
+            @format="embedded"
+            @card={{this.card}}
+            @onSave={{this.onSave}}
+          />
+        </fieldset>
+      {{else if this.newEntry}}
+        <fieldset>
+          <legend>Publish New Card Type</legend>
+          <CardEditor
+            @card={{this.newEntry}}
+            @onSave={{this.onSave}}
+            @onCancel={{this.onCancel}}
+          />
         </fieldset>
       {{else}}
-        {{#if this.showEditor}}
-          {{#if this.card.instance}}
-            <fieldset>
-              <legend>Publish New Card Type</legend>
-              <CardEditor
-                @card={{this.card.instance}}
-                @onSave={{this.onSave}}
-                @onCancel={{this.onCancel}}
-              />
-            </fieldset>
-          {{/if}}
-        {{else}}
-          <button {{on "click" this.displayEditor}} type="button" data-test-catalog-entry-publish>
-            Publish Card Type
-          </button>
-        {{/if}}
+        <button {{on "click" this.createEntry}} type="button" data-test-catalog-entry-publish>
+          Publish Card Type
+        </button>
       {{/if}}
     </div>
   </template>
 
-  @service declare localRealm: LocalRealm;
-  @service declare loaderService: LoaderService;
-  @service declare router: RouterService;
+  @service declare cardService: CardService;
   catalogEntryRef = catalogEntryRef;
   catalogEntry = getSearchResults(this,
     () => ({
@@ -71,17 +59,17 @@ export default class CatalogEntryEditor extends Component<Signature> {
       },
     })
   );
-  @tracked showEditor = false;
+  @tracked entry: Card | undefined;
+  @tracked newEntry: Card | undefined;
 
-  get entry() {
-    return this.catalogEntry.instances[0];
+  get card() {
+    return this.entry ?? this.catalogEntry.instances[0];
   }
 
-  get resource() {
-    if (this.entry) {
-      return this.entry;
-    } else {
-      return {
+  @action
+  async createEntry(): Promise<void> {
+    this.newEntry = await this.cardService.createNewInstance({
+      data: {
         attributes: {
           title: this.args.ref.name,
           description: `Catalog entry for ${this.args.ref.name} card`,
@@ -96,25 +84,18 @@ export default class CatalogEntryEditor extends Component<Signature> {
             }
           }
         }
-      };
-    }
-  }
-
-  card = cardInstance(this, () => this.resource);
-
-  @action
-  displayEditor() {
-    this.showEditor = true;
+      }
+    });
   }
 
   @action
   onCancel() {
-    this.showEditor = false;
+    this.newEntry = undefined;
   }
 
   @action
   onSave(card: Card) {
-    this.router.transitionTo({ queryParams: { path: ensureJsonExtension(card.id)}});
+    this.entry = card;
   }
 }
 

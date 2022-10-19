@@ -1,11 +1,15 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+import { stringify } from 'qs';
 import LoaderService from './loader-service';
 import LocalRealm from '../services/local-realm';
 import {
-  isSingleCardDocument,
   LooseSingleCardDocument,
+  isSingleCardDocument,
+  isCardCollectionDocument,
 } from '@cardstack/runtime-common';
+import type { ResolvedURL } from '@cardstack/runtime-common/loader';
+import type { Query } from '@cardstack/runtime-common/query';
 import type { Card } from 'https://cardstack.com/base/card-api';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -79,5 +83,41 @@ export default class CardService extends Service {
     return await this.api.createFromSerialized(doc.data, this.localRealm.url, {
       loader: this.loaderService.loader,
     });
+  }
+
+  async search(query: Query, realmURL: string | ResolvedURL): Promise<Card[]> {
+    let response = await this.loaderService.loader.fetch(
+      `${realmURL}_search?${stringify(query)}`,
+      {
+        headers: { Accept: 'application/vnd.api+json' },
+      }
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Could not load card for query ${stringify(query)}: ${
+          response.status
+        } - ${await response.text()}`
+      );
+    }
+    let json = await response.json();
+    if (!isCardCollectionDocument(json)) {
+      throw new Error(
+        `The realm search response was not a card collection document: ${JSON.stringify(
+          json,
+          null,
+          2
+        )}`
+      );
+    }
+    if (!this.api) {
+      this.api = await this.loadAPI();
+    }
+    return await Promise.all(
+      json.data.map(async (doc) => {
+        return await this.api!.createFromSerialized(doc, this.localRealm.url, {
+          loader: this.loaderService.loader,
+        });
+      })
+    );
   }
 }
