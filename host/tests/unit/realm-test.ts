@@ -21,7 +21,7 @@ module('Unit | realm', function (hooks) {
     );
   });
 
-  test('realm can serve card data requests', async function (assert) {
+  test('realm can serve GET card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/empty.json': {
         data: {
@@ -64,6 +64,106 @@ module('Unit | realm', function (hooks) {
           self: `${testRealmURL}dir/empty`,
         },
       },
+    });
+    assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+  });
+
+  test('realm can server GET card requests with linksTo relationships', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'dir/owner.json': {
+        data: {
+          id: `${testRealmURL}dir/owner`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'dir/mango.json': {
+        data: {
+          id: `${testRealmURL}dir/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}dir/owner`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+
+    let response = await realm.handle(
+      new Request(`${testRealmURL}dir/mango`, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let json = await response.json();
+    assert.deepEqual(json, {
+      data: {
+        type: 'card',
+        id: `${testRealmURL}dir/mango`,
+        attributes: {
+          firstName: 'Mango',
+        },
+        relationships: {
+          owner: {
+            links: {
+              self: `${testRealmURL}dir/owner`,
+            },
+            data: {
+              type: 'card',
+              id: `${testRealmURL}dir/owner`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4201/test/pet',
+            name: 'Pet',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}dir/mango.json`
+          ),
+        },
+        links: {
+          self: `${testRealmURL}dir/mango`,
+        },
+      },
+      included: [
+        {
+          type: 'card',
+          id: `${testRealmURL}dir/owner`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      ],
     });
     assert.ok(json.data.meta.lastModified, 'lastModified is populated');
   });
