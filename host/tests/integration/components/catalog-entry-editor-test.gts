@@ -47,7 +47,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     adapter = new TestRealmAdapter({});
     realm = TestRealm.createWithAdapter(adapter);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
-    loader.addRealmFetchOverride(realm);
+    loader.registerRealm(realm);
     await realm.ready;
 
     await realm.write('person.gts', `

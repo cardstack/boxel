@@ -25,17 +25,17 @@ const testRealmURL = new URL("http://127.0.0.1:4444/");
 const testRealmHref = testRealmURL.href;
 const testRealm2Href = "http://localhost:4202/node-test/";
 
-Loader.addURLMapping(
-  new URL(baseRealm.url),
-  new URL("http://localhost:4201/base/")
-);
-
 module("Realm Server", function (hooks) {
   let server: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
 
   hooks.beforeEach(async function () {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
 

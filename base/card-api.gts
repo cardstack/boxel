@@ -1110,13 +1110,8 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
       isLoaded = true;
     } catch (e: any) {
       if (isNotLoadedError(e)) {
-        // TODO these are unloaded relationships. eventually we want to be able to load these
-        // relationships.
-        // This is also exposing awkwardness around exceptions thrown during
-        // async computeds in that nothing is able to catch them since they are executed in an
-        // async IIFE within the property descriptor setter that is unwatched--need to address this.
-        isLoaded = true;
-        continue;
+        // TODO load e.reference and assign to model[fieldName]
+        throw new Error('Not implemented--load relationships');
       }
       if (!isNotReadyError(e)) {
         throw e;

@@ -10,11 +10,6 @@ import { createRealm, testRealm } from "./helpers";
 
 setGracefulCleanup();
 
-Loader.addURLMapping(
-  new URL(baseRealm.url),
-  new URL("http://localhost:4201/base/")
-);
-
 // Using the node tests for indexing as it is much easier to support the dynamic
 // loading of cards necessary for indexing and the ability to manipulate the
 // underlying filesystem in a manner that doesn't leak into other tests (as well
@@ -24,6 +19,11 @@ module("indexing", function (hooks) {
   let realm: Realm;
 
   hooks.beforeEach(async function () {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     dir = dirSync().name;
 
     realm = createRealm(dir, {
@@ -363,7 +363,8 @@ module("indexing", function (hooks) {
       {
         type: "error",
         error: {
-          message: "CardError 404 (TODO include stack trace)",
+          message:
+            'Could not retrieve http://test-realm/post: 404 - {"errors":["http://test-realm/post not found"]} (TODO include stack trace)',
           errorReferences: ["http://test-realm/post"],
         },
       },

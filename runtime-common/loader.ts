@@ -2,7 +2,7 @@ import TransformModulesAmdPlugin from "transform-modules-amd-plugin";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
 import { trimExecutableExtension } from "./index";
-import { RealmPaths, LocalPath } from "./paths";
+import { RealmPaths } from "./paths";
 import type { Realm } from "./realm";
 
 // this represents a URL that has already been resolved to aid in documenting
@@ -53,12 +53,10 @@ type Module =
       consumedModules: Set<string>;
     };
 
-type FileLoader = (path: LocalPath) => Promise<string>;
 export class Loader {
   private modules = new Map<string, Module>();
-  private fileLoaders = new Map<string, FileLoader>();
+  private realms = new Set<Realm>();
   private urlMappings = new Map<RealmPaths, string>();
-  private realmFetchOverride: Realm[] = [];
   private moduleShims = new Map<string, Record<string, any>>();
   private identities = new WeakMap<
     Function,
@@ -83,17 +81,15 @@ export class Loader {
   static createLoaderFromGlobal(): Loader {
     let globalLoader = Loader.getLoader();
     let loader = new Loader();
-    loader.fileLoaders = globalLoader.fileLoaders;
+    loader.realms = globalLoader.realms;
     loader.urlMappings = globalLoader.urlMappings;
-    loader.realmFetchOverride = globalLoader.realmFetchOverride;
     return loader;
   }
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader();
-    clone.fileLoaders = loader.fileLoaders;
+    clone.realms = loader.realms;
     clone.urlMappings = loader.urlMappings;
-    clone.realmFetchOverride = loader.realmFetchOverride;
     return clone;
   }
 
@@ -131,15 +127,6 @@ export class Loader {
     return loader.fetch(urlOrRequest, init);
   }
 
-  static addFileLoader(url: URL, fileLoader: FileLoader) {
-    let loader = Loader.getLoader();
-    loader.addFileLoader(url, fileLoader);
-  }
-
-  addFileLoader(url: URL, fileLoader: FileLoader) {
-    this.fileLoaders.set(url.href, fileLoader);
-  }
-
   static addURLMapping(from: URL, to: URL) {
     let loader = Loader.getLoader();
     loader.addURLMapping(from, to);
@@ -149,13 +136,13 @@ export class Loader {
     this.urlMappings.set(new RealmPaths(from), to.href);
   }
 
-  static addRealmFetchOverride(realm: Realm) {
+  static registerRealm(realm: Realm) {
     let loader = Loader.getLoader();
-    loader.addRealmFetchOverride(realm);
+    loader.registerRealm(realm);
   }
 
-  addRealmFetchOverride(realm: Realm) {
-    this.realmFetchOverride.push(realm);
+  registerRealm(realm: Realm) {
+    this.realms.add(realm);
   }
 
   static shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -276,7 +263,7 @@ export class Loader {
     init?: RequestInit
   ): Promise<Response> {
     if (urlOrRequest instanceof Request) {
-      for (let realm of this.realmFetchOverride) {
+      for (let realm of this.realms) {
         if (realm.paths.inRealm(new URL(urlOrRequest.url))) {
           return await realm.handle(urlOrRequest);
         }
@@ -288,7 +275,7 @@ export class Loader {
       });
       return fetch(request);
     } else {
-      for (let realm of this.realmFetchOverride) {
+      for (let realm of this.realms) {
         if (realm.paths.inRealm(new URL(urlOrRequest))) {
           let request = new Request(
             typeof urlOrRequest === "string" ? urlOrRequest : urlOrRequest.href,
@@ -531,13 +518,6 @@ export class Loader {
   }
 
   private async load(moduleURL: ResolvedURL): Promise<string> {
-    for (let [realmURL, fileLoader] of this.fileLoaders) {
-      let realmPath = new RealmPaths(this.resolve(realmURL));
-      if (realmPath.inRealm(moduleURL)) {
-        return await fileLoader(realmPath.local(moduleURL));
-      }
-    }
-
     let response: Response;
     try {
       response = await this.fetch(moduleURL);

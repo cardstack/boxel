@@ -7,7 +7,6 @@ import {
   notFound,
   methodNotAllowed,
   badRequest,
-  CardError,
 } from "@cardstack/runtime-common/error";
 import { formatRFC7231 } from "date-fns";
 import {
@@ -84,18 +83,7 @@ export class Realm {
 
   constructor(url: string, adapter: RealmAdapter) {
     this.paths = new RealmPaths(url);
-    Loader.addFileLoader(new URL(this.url), async (path: LocalPath) => {
-      let content = await this.cardSourceFromPath(path);
-      if (!content) {
-        throw CardError.withResponse(
-          notFound(
-            new Request(this.paths.fileURL(path).href),
-            `cannot find module ${path}`
-          )
-        );
-      }
-      return this.transpileJS(content, path);
-    });
+    Loader.registerRealm(this);
     this.#adapter = adapter;
     this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
@@ -240,17 +228,6 @@ export class Realm {
       });
     }
     return await this.serveLocalFile(handle);
-  }
-
-  // as opposed to getCardSourceOrRedirect, this will follow the redirect
-  private async cardSourceFromPath(
-    path: LocalPath
-  ): Promise<string | undefined> {
-    let handle = await this.getFileWithFallbacks(path);
-    if (!handle) {
-      return undefined;
-    }
-    return (await this.readFileAsText(handle.path))?.content;
   }
 
   private async removeCardSource(request: Request): Promise<Response> {

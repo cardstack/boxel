@@ -1,9 +1,18 @@
 import { module, test } from "qunit";
 import { Loader } from "@cardstack/runtime-common";
+import { dirSync, setGracefulCleanup } from "tmp";
+import { createRealm } from "./helpers";
+
+setGracefulCleanup();
 
 const testRealm = "http://localhost:4202/node-test/";
 
-module("loader", function () {
+module("loader", function (hooks) {
+  let dir: string;
+  hooks.beforeEach(async function () {
+    dir = dirSync().name;
+  });
+
   test("can dynamically load modules with cycles", async function (assert) {
     let loader = new Loader();
     let module = await loader.import<{ three(): number }>(
@@ -23,14 +32,19 @@ module("loader", function () {
 
   test("supports import.meta", async function (assert) {
     let loader = new Loader();
-    loader.addFileLoader(
-      new URL("http://example.com/"),
-      async (_localPath) =>
-        `
-        export function checkImportMeta() { return import.meta.url; }
-        export function myLoader() { return import.meta.loader; }
-      `
+    let realm = createRealm(
+      dir,
+      {
+        "foo.js": `
+          export function checkImportMeta() { return import.meta.url; }
+          export function myLoader() { return import.meta.loader; }
+        `,
+      },
+      "http://example.com/"
     );
+    await realm.ready;
+    loader.registerRealm(realm);
+
     let { checkImportMeta, myLoader } = await loader.import<{
       checkImportMeta: () => string;
       myLoader: () => Loader;
