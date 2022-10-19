@@ -165,7 +165,6 @@ module('Unit | realm', function (hooks) {
         },
       ],
     });
-    assert.ok(json.data.meta.lastModified, 'lastModified is populated');
   });
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {

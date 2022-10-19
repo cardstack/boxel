@@ -54,6 +54,75 @@ module('Unit | search-index', function (hooks) {
     ]);
   });
 
+  test('can index card with linkTo field', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Person/owner.json': {
+        data: {
+          id: `${testRealmURL}Person/owner`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'Pet/mango.json': {
+        data: {
+          id: `${testRealmURL}Pet/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}Person/owner`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    let indexer = realm.searchIndex;
+    await indexer.run();
+    let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
+    if (mango?.type === 'entry') {
+      assert.deepEqual(mango.entry.resource, {
+        id: `${testRealmURL}Pet/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango',
+        },
+        relationships: {
+          owner: {
+            links: {
+              self: `${testRealmURL}Person/owner`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4201/test/pet',
+            name: 'Pet',
+          },
+          lastModified: adapter.lastModified.get(`${testRealmURL}empty.json`),
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${mango?.error.message}`);
+    }
+  });
+
   test("indexing identifies an instance's card references", async function (assert) {
     let realm = TestRealm.create({
       'person-1.json': {
