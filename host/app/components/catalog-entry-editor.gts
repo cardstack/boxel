@@ -68,7 +68,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
 
   @action
   async createEntry(): Promise<void> {
-    this.newEntry = await this.cardService.createNewInstance({
+    this.newEntry = await this.cardService.create({
       data: {
         attributes: {
           title: this.args.ref.name,
