@@ -67,22 +67,22 @@ export default class Sprite {
 
   within(options: {
     parent: {
-      currentBounds?: DOMRect;
-      lastBounds?: DOMRect;
+      boundsAfterRender?: DOMRect;
+      boundsBeforeRender?: DOMRect;
     };
     contextElement: {
-      currentBounds?: DOMRect;
-      lastBounds?: DOMRect;
+      boundsAfterRender?: DOMRect;
+      boundsBeforeRender?: DOMRect;
     };
   }) {
     this.initialBounds = this.initialBounds?.within({
-      parent: options.parent.lastBounds,
-      contextElement: options.contextElement.lastBounds,
+      parent: options.parent.boundsBeforeRender,
+      contextElement: options.contextElement.boundsBeforeRender,
     });
 
     this.finalBounds = this.finalBounds?.within({
-      parent: options.parent.currentBounds,
-      contextElement: options.contextElement.currentBounds,
+      parent: options.parent.boundsAfterRender,
+      contextElement: options.contextElement.boundsAfterRender,
     });
 
     if (this.counterpart) {

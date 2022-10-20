@@ -177,7 +177,7 @@ export default class AnimationsService extends Service {
 
         this.intermediateSprites.set(identifierString, {
           modifier: spriteModifier,
-          intermediateBounds: spriteModifier.currentBounds as DOMRect,
+          intermediateBounds: spriteModifier.boundsAfterRender as DOMRect,
           intermediateStyles: spriteModifier.currentComputedStyle as CopiedCSS,
         });
       } else {

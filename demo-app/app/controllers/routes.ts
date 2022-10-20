@@ -16,7 +16,7 @@ export default class RoutesController extends Controller {
   async transition(changeset: Changeset): Promise<void> {
     let { removedSprites, keptSprites, insertedSprites, context } = changeset;
 
-    assert('Context must always have currentBounds', context.currentBounds);
+    assert('Context must always have currentBounds', context.boundsAfterRender);
 
     if (keptSprites.size > 0) {
       let keptSprite = changeset.spriteFor({
@@ -70,7 +70,7 @@ export default class RoutesController extends Controller {
 
         removedSprite.setupAnimation('position', {
           startX: initialBounds.x,
-          endX: finalElementBounds.x - context.currentBounds.x,
+          endX: finalElementBounds.x - context.boundsAfterRender.x,
           behavior: springBehavior,
         });
       }

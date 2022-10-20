@@ -24,8 +24,8 @@ class MockAnimationContext implements IContext {
     this.id = id;
   }
   orphans: Map<string, HTMLElement> = new Map();
-  currentBounds?: DOMRect | undefined;
-  lastBounds?: DOMRect | undefined;
+  boundsAfterRender?: DOMRect | undefined;
+  boundsBeforeRender?: DOMRect | undefined;
   isInitialRenderCompleted = false;
   isStable = false;
   args = {};
@@ -67,8 +67,8 @@ class MockSpriteModifier implements ISpriteModifier {
     }
   }
   role: string | null = null;
-  currentBounds?: DOMRect | undefined;
-  lastBounds?: DOMRect | undefined;
+  boundsAfterRender?: DOMRect | undefined;
+  boundsBeforeRender?: DOMRect | undefined;
   captureSnapshot(
     opts?: { withAnimations: boolean; playAnimations: boolean } | undefined
   ): void {

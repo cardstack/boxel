@@ -37,8 +37,8 @@ export default class AnimationContextComponent
 
   element!: HTMLElement; //set by template
   orphansElement: HTMLElement | null = null; //set by template
-  lastBounds: DOMRect | undefined;
-  currentBounds: DOMRect | undefined;
+  boundsBeforeRender: DOMRect | undefined;
+  boundsAfterRender: DOMRect | undefined;
   isInitialRenderCompleted = false;
 
   orphans = new Map<string, HTMLElement>();
@@ -76,8 +76,8 @@ export default class AnimationContextComponent
       'animation context must be an HTML element',
       element instanceof HTMLElement
     );
-    this.lastBounds = this.currentBounds;
-    this.currentBounds = getDocumentPosition(element);
+    this.boundsBeforeRender = this.boundsAfterRender;
+    this.boundsAfterRender = getDocumentPosition(element);
   }
 
   shouldAnimate(): boolean {

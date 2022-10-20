@@ -18,8 +18,8 @@ class MockAnimationContext implements IContext {
   isAnimationContext = true;
   isStable = true;
   isInitialRenderCompleted = false;
-  lastBounds: DOMRect | undefined = undefined;
-  currentBounds = new DOMRect(0, 0, 0, 0);
+  boundsBeforeRender: DOMRect | undefined = undefined;
+  boundsAfterRender = new DOMRect(0, 0, 0, 0);
   nextBounds = new DOMRect(0, 0, 0, 0);
   args = {};
 
@@ -57,8 +57,8 @@ class MockAnimationContext implements IContext {
   }
 
   captureSnapshot() {
-    this.lastBounds = this.currentBounds;
-    this.currentBounds = new DOMRect(
+    this.boundsBeforeRender = this.boundsAfterRender;
+    this.boundsAfterRender = new DOMRect(
       this.nextBounds.x,
       this.nextBounds.y,
       this.nextBounds.width,
@@ -85,8 +85,8 @@ class MockAnimationContext implements IContext {
 class MockSpriteModifier implements ISpriteModifier {
   element: HTMLElement;
   id: string;
-  lastBounds: DOMRect | undefined = undefined;
-  currentBounds = new DOMRect(0, 0, 0, 0);
+  boundsBeforeRender: DOMRect | undefined = undefined;
+  boundsAfterRender = new DOMRect(0, 0, 0, 0);
   nextBounds = new DOMRect(0, 0, 0, 0);
 
   constructor(
@@ -110,8 +110,8 @@ class MockSpriteModifier implements ISpriteModifier {
   }
 
   captureSnapshot() {
-    this.lastBounds = this.currentBounds;
-    this.currentBounds = new DOMRect(
+    this.boundsBeforeRender = this.boundsAfterRender;
+    this.boundsAfterRender = new DOMRect(
       this.nextBounds.x,
       this.nextBounds.y,
       this.nextBounds.width,

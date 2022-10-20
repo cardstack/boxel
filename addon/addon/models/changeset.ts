@@ -260,7 +260,9 @@ export class ChangesetBuilder {
 
         assert(
           'Contexts should always be stable and have last and current bounds',
-          context.lastBounds && context.currentBounds && context.isStable
+          context.boundsBeforeRender &&
+            context.boundsAfterRender &&
+            context.isStable
         );
 
         sprite.within({
@@ -521,7 +523,7 @@ export class ChangesetBuilder {
     if (sprite.type === SpriteType.Kept) {
       assert(
         'kept sprite should have lastBounds and currentBounds',
-        spriteModifier.lastBounds && spriteModifier.currentBounds
+        spriteModifier.boundsBeforeRender && spriteModifier.boundsAfterRender
       );
 
       if (intermediateSprite) {
@@ -532,13 +534,13 @@ export class ChangesetBuilder {
         sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
       } else {
         sprite.initialBounds = new ContextAwareBounds({
-          element: spriteModifier.lastBounds,
+          element: spriteModifier.boundsBeforeRender,
         });
         sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
       }
 
       sprite.finalBounds = new ContextAwareBounds({
-        element: spriteModifier.currentBounds,
+        element: spriteModifier.boundsAfterRender,
       });
       sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
 
@@ -549,7 +551,8 @@ export class ChangesetBuilder {
         );
         assert(
           'kept sprite counterpart should have lastBounds and currentBounds',
-          counterpartModifier.lastBounds && counterpartModifier.currentBounds
+          counterpartModifier.boundsBeforeRender &&
+            counterpartModifier.boundsAfterRender
         );
 
         if (counterpartModifier) {
@@ -560,7 +563,7 @@ export class ChangesetBuilder {
               sprite.initialComputedStyle;
           } else {
             sprite.counterpart.initialBounds = new ContextAwareBounds({
-              element: counterpartModifier.currentBounds,
+              element: counterpartModifier.boundsAfterRender,
             });
             sprite.counterpart.initialComputedStyle =
               counterpartModifier.lastComputedStyle;
@@ -577,7 +580,7 @@ export class ChangesetBuilder {
     } else if (sprite.type === SpriteType.Inserted) {
       assert(
         'inserted sprite should have currentBounds',
-        spriteModifier.currentBounds
+        spriteModifier.boundsAfterRender
       );
       assert(
         'there should not be an intermediate sprite for an inserted sprite',
@@ -585,13 +588,13 @@ export class ChangesetBuilder {
       );
 
       sprite.finalBounds = new ContextAwareBounds({
-        element: spriteModifier.currentBounds,
+        element: spriteModifier.boundsAfterRender,
       });
       sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
     } else if (sprite.type === SpriteType.Removed) {
       assert(
         'removed sprite should have currentBounds',
-        spriteModifier.currentBounds
+        spriteModifier.boundsAfterRender
       );
 
       if (intermediateSprite) {
@@ -601,7 +604,7 @@ export class ChangesetBuilder {
         sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
       } else {
         sprite.initialBounds = new ContextAwareBounds({
-          element: spriteModifier.currentBounds,
+          element: spriteModifier.boundsAfterRender,
         });
         sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
       }

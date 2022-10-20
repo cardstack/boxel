@@ -21,8 +21,8 @@ interface SpriteModifierArgs {
 export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   id: string | null = null;
   role: string | null = null;
-  lastBounds: DOMRect | undefined;
-  currentBounds: DOMRect | undefined;
+  boundsBeforeRender: DOMRect | undefined;
+  boundsAfterRender: DOMRect | undefined;
   lastComputedStyle: CopiedCSS | undefined;
   currentComputedStyle: CopiedCSS | undefined;
 
@@ -44,9 +44,9 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
         'sprite modifier can only be installed on HTML elements',
         element instanceof HTMLElement
       );
-      this.lastBounds = this.currentBounds;
+      this.boundsBeforeRender = this.boundsAfterRender;
       this.lastComputedStyle = this.currentComputedStyle;
-      this.currentBounds = getDocumentPosition(element, opts);
+      this.boundsAfterRender = getDocumentPosition(element, opts);
       this.currentComputedStyle = copyComputedStyle(element);
       this.alreadyTracked = true;
     }

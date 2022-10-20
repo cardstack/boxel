@@ -15,8 +15,8 @@ export interface Rule {
 export interface IContext {
   id: string | undefined;
   element: Element;
-  currentBounds?: DOMRect;
-  lastBounds?: DOMRect;
+  boundsAfterRender?: DOMRect;
+  boundsBeforeRender?: DOMRect;
   isInitialRenderCompleted: boolean;
   isStable: boolean;
   orphans: Map<string, HTMLElement>;
@@ -42,8 +42,8 @@ export interface ISpriteModifier {
   id: string | null;
   role: string | null;
   element: Element;
-  currentBounds?: DOMRect;
-  lastBounds?: DOMRect;
+  boundsAfterRender?: DOMRect;
+  boundsBeforeRender?: DOMRect;
   captureSnapshot(opts?: {
     withAnimations: boolean;
     playAnimations: boolean;
