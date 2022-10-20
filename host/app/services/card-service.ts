@@ -33,12 +33,12 @@ export default class CardService extends Service {
   }
 
   private async fetchJSON(
-    url: string,
-    opts?: RequestInit
+    url: string | URL,
+    args?: RequestInit
   ): Promise<LooseSingleCardDocument> {
     let response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: 'application/vnd.api+json' },
-      ...opts,
+      ...args,
     });
     if (!response.ok) {
       throw new Error(
@@ -57,7 +57,7 @@ export default class CardService extends Service {
     });
   }
 
-  async load(url: string | undefined): Promise<Card | undefined> {
+  async load(url: string | URL | undefined): Promise<Card | undefined> {
     if (!url) {
       return;
     }
@@ -76,8 +76,9 @@ export default class CardService extends Service {
 
   async save(card: Card): Promise<Card> {
     let cardJSON = this.api.serializeCard(card, { includeComputeds: true });
-    let json = await this.fetchJSON(card.id ?? this.localRealm.url, {
-      method: card.id ? 'PATCH' : 'POST',
+    let isSaved = this.api.isSaved(card);
+    let json = await this.fetchJSON(isSaved ? card.id : this.localRealm.url, {
+      method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(cardJSON, null, 2),
     });
     return await this.create(json);
