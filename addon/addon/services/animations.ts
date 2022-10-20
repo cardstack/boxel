@@ -151,7 +151,9 @@ export default class AnimationsService extends Service {
       animationsToCancel = animationsToCancel.concat(animations);
       if (
         animations?.length &&
-        animations.some((v) => v.playState === 'running')
+        animations.some(
+          (v) => v.playState === 'running' || v.playState === 'paused'
+        )
       ) {
         spriteModifier.captureSnapshot(true, {
           withAnimations: true,
