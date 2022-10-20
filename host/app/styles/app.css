@@ -80,6 +80,10 @@ button {
   overflow-y: auto;
 }
 
+.dialog-box > * + * {
+  margin-top: 1rem;
+}
+
 .catalog-entry-editor {
   margin-top: 1rem;
 }
