@@ -100,7 +100,7 @@ export default class Go extends Component<Signature> {
   }
 
   @restartableTask private async loadCard(url: string | undefined): Promise<void> {
-    this.card = await this.cardService.load(url);
+    this.card = await this.cardService.loadModel(url);
   }
 
   @action

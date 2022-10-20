@@ -51,7 +51,7 @@ export default class CreateCardModal extends Component {
   @enqueueTask private async _create<T extends Card>(ref: ExportedCardRef): Promise<undefined | T> {
     this.currentRequest = {
       ref,
-      card: await this.cardService.create({ data: { meta: { adoptsFrom: ref }}}),
+      card: await this.cardService.makeCardFromResponse({ data: { meta: { adoptsFrom: ref }}}),
       deferred: new Deferred(),
     };
     let card = await this.currentRequest.deferred.promise;

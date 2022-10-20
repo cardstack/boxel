@@ -42,61 +42,64 @@ export default class CardService extends Service {
     });
     if (!response.ok) {
       throw new Error(
-        `status: ${response.status} - ${
-          response.statusText
+        `status: ${response.status} -
+        ${response.statusText}. ${await response.text()}`
         }. ${await response.text()}`
       );
     }
     return await response.json();
   }
 
-  async create(json: LooseSingleCardDocument): Promise<Card> {
+  async makeCardFromResponse(json: LooseSingleCardDocument): Promise<Card> {
     await this.apiModule.loaded;
     return await this.api.createFromSerialized(json, this.localRealm.url, {
       loader: this.loaderService.loader,
     });
   }
 
-  async load(url: string | URL | undefined): Promise<Card | undefined> {
+  async loadModel(url: string | URL | undefined): Promise<Card | undefined> {
     if (!url) {
       return;
     }
     let json = await this.fetchJSON(url);
     if (!isSingleCardDocument(json)) {
       throw new Error(
-        `bug: server returned a non card document for ${url}: ${JSON.stringify(
-          json,
+        `bug: server returned a non card document for ${url}:
+        ${JSON.stringify(json, null, 2)}`
           null,
           2
         )}`
       );
     }
-    return await this.create(json);
+    return await this.makeCardFromResponse(json);
   }
 
   async save(card: Card): Promise<Card> {
+  async saveModel(card: Card): Promise<Card> {
     let cardJSON = this.api.serializeCard(card, { includeComputeds: true });
     let isSaved = this.api.isSaved(card);
     let json = await this.fetchJSON(isSaved ? card.id : this.localRealm.url, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(cardJSON, null, 2),
     });
-    return await this.create(json);
+    return await this.makeCardFromResponse(json);
   }
 
   async search(query: Query, realmURL: string | ResolvedURL): Promise<Card[]> {
     let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
     if (!isCardCollectionDocument(json)) {
       throw new Error(
-        `The realm search response was not a card collection document: ${JSON.stringify(
-          json,
+        `The realm search response was not a card collection document:
+        ${JSON.stringify(json, null, 2)}`
           null,
           2
         )}`
       );
     }
     return await Promise.all(
-      json.data.map(async (doc) => await this.create({ data: doc }))
+      json.data.map(
+        async (doc) => await this.makeCardFromResponse({ data: doc })
+      )
     );
   }
 }
