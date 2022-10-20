@@ -159,7 +159,7 @@ export default class AnimationsService extends Service {
         animations?.length &&
         animations.some((v) => v.playState === 'running')
       ) {
-        spriteModifier.captureSnapshot({
+        spriteModifier.captureSnapshot(true, {
           withAnimations: true,
           playAnimations: false,
         });
@@ -177,11 +177,11 @@ export default class AnimationsService extends Service {
 
         this.intermediateSprites.set(identifierString, {
           modifier: spriteModifier,
-          intermediateBounds: spriteModifier.boundsAfterRender as DOMRect,
+          intermediateBounds: spriteModifier.boundsBeforeRender as DOMRect,
           intermediateStyles: spriteModifier.currentComputedStyle as CopiedCSS,
         });
       } else {
-        spriteModifier.captureSnapshot();
+        spriteModifier.captureSnapshot(true);
       }
     }
 
@@ -198,7 +198,7 @@ export default class AnimationsService extends Service {
     // We need to measure if this was an already rendered context in case the window has resized.
     // The element check is there because the renderDetector may fire this before the actual element exists.
     if (context.element) {
-      context.captureSnapshot();
+      context.captureSnapshot(true);
       animationsToCancel = this.createIntermediateSpritesForContext(context);
       let contextNode = this.spriteTree.lookupNodeByElement(
         context.element

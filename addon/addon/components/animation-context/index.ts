@@ -63,21 +63,24 @@ export default class AnimationContextComponent
   @action didInsertEl(element: HTMLElement): void {
     this.element = element;
     this.animations.registerContext(this);
-    this.captureSnapshot();
   }
 
   @action didInsertOrphansEl(element: HTMLElement): void {
     this.orphansElement = element;
   }
 
-  captureSnapshot(): void {
+  captureSnapshot(before: boolean): void {
     let { element } = this;
     assert(
       'animation context must be an HTML element',
       element instanceof HTMLElement
     );
-    this.boundsBeforeRender = this.boundsAfterRender;
-    this.boundsAfterRender = getDocumentPosition(element);
+    if (before) {
+      this.boundsBeforeRender = getDocumentPosition(element);
+      this.boundsAfterRender = undefined;
+    } else {
+      this.boundsAfterRender = getDocumentPosition(element);
+    }
   }
 
   shouldAnimate(): boolean {

@@ -34,27 +34,26 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
     this.id = this.args.named.id;
     this.role = this.args.named.role;
     this.animations.registerSpriteModifier(this);
-    this.captureSnapshot();
   }
 
-  captureSnapshot(opts: Partial<DocumentPositionArgs> = {}): void {
-    if (!this.alreadyTracked) {
-      let { element } = this;
-      assert(
-        'sprite modifier can only be installed on HTML elements',
-        element instanceof HTMLElement
-      );
-      this.boundsBeforeRender = this.boundsAfterRender;
-      this.lastComputedStyle = this.currentComputedStyle;
+  captureSnapshot(
+    before: boolean,
+    opts: Partial<DocumentPositionArgs> = {}
+  ): void {
+    let { element } = this;
+    assert(
+      'sprite modifier can only be installed on HTML elements',
+      element instanceof HTMLElement
+    );
+    if (before) {
+      this.boundsBeforeRender = getDocumentPosition(element, opts);
+      this.lastComputedStyle = copyComputedStyle(element);
+      this.boundsAfterRender = undefined;
+      this.currentComputedStyle = undefined;
+    } else {
       this.boundsAfterRender = getDocumentPosition(element, opts);
       this.currentComputedStyle = copyComputedStyle(element);
-      this.alreadyTracked = true;
     }
-    once(this, this.clearTrackedPosition);
-  }
-
-  clearTrackedPosition(): void {
-    this.alreadyTracked = false;
   }
 
   willRemove(): void {

@@ -20,10 +20,13 @@ export interface IContext {
   isInitialRenderCompleted: boolean;
   isStable: boolean;
   orphans: Map<string, HTMLElement>;
-  captureSnapshot(opts?: {
-    withAnimations: boolean;
-    playAnimations: boolean;
-  }): void;
+  captureSnapshot(
+    before: boolean,
+    opts?: {
+      withAnimations: boolean;
+      playAnimations: boolean;
+    }
+  ): void;
   shouldAnimate(): boolean;
   hasOrphan(spriteOrElement: Sprite): boolean;
   removeOrphan(spriteOrElement: Sprite): void;
@@ -44,10 +47,13 @@ export interface ISpriteModifier {
   element: Element;
   boundsAfterRender?: DOMRect;
   boundsBeforeRender?: DOMRect;
-  captureSnapshot(opts?: {
-    withAnimations: boolean;
-    playAnimations: boolean;
-  }): void;
+  captureSnapshot(
+    before: boolean,
+    opts?: {
+      withAnimations: boolean;
+      playAnimations: boolean;
+    }
+  ): void;
   lastComputedStyle: CopiedCSS | undefined;
   currentComputedStyle: CopiedCSS | undefined;
 }
