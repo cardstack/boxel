@@ -196,7 +196,7 @@ export default class AnimationsService extends Service {
           !context.orphans
             .get(identifier)
             ?.getAnimations()
-            .some((v) => v.playState === 'running')
+            .some((v) => v.playState === 'running' || v.playState === 'paused')
         ) {
           node.delete();
         } else {
