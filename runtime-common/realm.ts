@@ -1,9 +1,10 @@
 import { Deferred } from "./deferred";
 import { SearchIndex, CardRef } from "./search-index";
-import { Loader } from "./loader";
+import { Loader, type MaybeLocalRequest } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
 import {
   systemError,
+  systemUnavailable,
   notFound,
   methodNotAllowed,
   badRequest,
@@ -76,6 +77,7 @@ export class Realm {
   readonly paths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
+  #readyForLocalRequests = false;
 
   get url(): string {
     return this.paths.url;
@@ -132,17 +134,39 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#searchIndex.run();
+    this.#searchIndex.run();
+    // The first phase will perform a from scratch index, but leave the docs
+    // with links in an error state since in order to prevent a deadlock since
+    // the index can't query it's own realm's index (aka itself) via fetch
+    // before it starts up.
+    await this.#searchIndex.phase1Ready();
+
+    // After the 1st indexing phase, the realm can answer index based requests
+    // from itself, and notably return with errors docs when asked about an
+    // instance with an unloaded link.
+    this.#readyForLocalRequests = true;
+
+    // The 2nd phase of indexing invalidates all the instances that have
+    // unloaded links and is now able to load the unloaded links
+    await this.#searchIndex.ready();
   }
 
   get ready(): Promise<void> {
     return this.#startedUp.promise;
   }
 
-  async handle(request: Request): Promise<ResponseWithNodeStream> {
+  async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
     if (request.headers.get("Accept")?.includes("application/vnd.api+json")) {
-      await this.ready;
+      if (request.isLocal && !this.#readyForLocalRequests) {
+        // this is so that we don't deadlock on ourselves when trying to
+        // resolve our own missing links during from scratch indexing
+        return systemUnavailable(
+          `cannot handle request ${request.method} ${request.url}, search index is not ready yet`
+        );
+      } else if (!request.isLocal) {
+        await this.ready;
+      }
       if (!this.searchIndex) {
         return systemError("search index is not available");
       }

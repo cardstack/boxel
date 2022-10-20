@@ -108,6 +108,10 @@ module('Unit | search-index', function (hooks) {
             links: {
               self: `${testRealmURL}Person/owner`,
             },
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Person/owner`,
+            },
           },
         },
         meta: {
@@ -115,11 +119,116 @@ module('Unit | search-index', function (hooks) {
             module: 'http://localhost:4201/test/pet',
             name: 'Pet',
           },
-          lastModified: adapter.lastModified.get(`${testRealmURL}empty.json`),
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}Pet/mango.json`
+          ),
         },
       });
     } else {
       assert.ok(false, `search entry was an error: ${mango?.error.message}`);
+    }
+  });
+
+  test('can index a card that has nested linksTo fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Friend/hassan.json': {
+        data: {
+          id: `${testRealmURL}Friend/hassan`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/mango`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+          },
+        },
+      },
+      'Friend/mango.json': {
+        data: {
+          id: `${testRealmURL}Friend/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/vanGogh`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+          },
+        },
+      },
+      'Friend/vanGogh.json': {
+        data: {
+          id: `${testRealmURL}Friend/vanGogh`,
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    let indexer = realm.searchIndex;
+    await indexer.run();
+    let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`));
+    if (hassan?.type === 'entry') {
+      assert.deepEqual(hassan.entry.resource, {
+        id: `${testRealmURL}Friend/hassan`,
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan',
+        },
+        relationships: {
+          friend: {
+            links: {
+              self: `${testRealmURL}Friend/mango`,
+            },
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Friend/mango`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4201/test/friend',
+            name: 'Friend',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}Friend/hassan.json`
+          ),
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${hassan?.error.message}`);
     }
   });
 

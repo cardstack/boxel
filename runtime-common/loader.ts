@@ -3,6 +3,7 @@ import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
 import { trimExecutableExtension } from "./index";
 import { RealmPaths } from "./paths";
+import { CardError } from "./error";
 import type { Realm } from "./realm";
 
 // this represents a URL that has already been resolved to aid in documenting
@@ -52,6 +53,10 @@ type Module =
       exception: any;
       consumedModules: Set<string>;
     };
+
+export interface MaybeLocalRequest extends Request {
+  isLocal?: true;
+}
 
 export class Loader {
   private modules = new Map<string, Module>();
@@ -265,7 +270,9 @@ export class Loader {
     if (urlOrRequest instanceof Request) {
       for (let realm of this.realms) {
         if (realm.paths.inRealm(new URL(urlOrRequest.url))) {
-          return await realm.handle(urlOrRequest);
+          let request = urlOrRequest as MaybeLocalRequest;
+          request.isLocal = true;
+          return await realm.handle(request);
         }
       }
       let request = new Request(this.resolve(urlOrRequest.url).href, {
@@ -280,7 +287,8 @@ export class Loader {
           let request = new Request(
             typeof urlOrRequest === "string" ? urlOrRequest : urlOrRequest.href,
             init
-          );
+          ) as MaybeLocalRequest;
+          request.isLocal = true;
           return await realm.handle(request);
         }
       }
@@ -529,11 +537,8 @@ export class Loader {
       throw err;
     }
     if (!response.ok) {
-      throw new Error(
-        `Could not retrieve ${moduleURL}: ${
-          response.status
-        } - ${await response.text()}`
-      );
+      let error = await CardError.fromFetchResponse(moduleURL.href, response);
+      throw error;
     }
     return await response.text();
   }

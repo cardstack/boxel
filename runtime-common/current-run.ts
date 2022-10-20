@@ -17,6 +17,7 @@ import isEqual from "lodash/isEqual";
 import { Deferred } from "./deferred";
 import flatMap from "lodash/flatMap";
 import merge from "lodash/merge";
+import { isCardError } from "./error";
 import type {
   ExportedCardRef,
   CardRef,
@@ -78,6 +79,7 @@ class URLMap<T> {
 }
 
 interface IndexError {
+  type: "not-loaded" | "general"; // expand as necessary
   message: string;
   errorReferences?: string[];
   // TODO we need to serialize the stack trace too, checkout the mono repo card compiler for examples
@@ -129,7 +131,7 @@ export class CurrentRun {
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
-  #loader = Loader.createLoaderFromGlobal();
+  #loader: Loader;
   private realm: Realm;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -143,12 +145,14 @@ export class CurrentRun {
     instances,
     modules,
     ignoreMap,
+    loader,
   }: {
     realm: Realm;
     reader: Reader | undefined; // the "empty" case doesn't need a reader
     instances: URLMap<SearchEntryWithErrors>;
     modules: Map<string, ModuleWithErrors>;
     ignoreMap: URLMap<Ignore>;
+    loader?: Loader;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
     this.#reader = reader;
@@ -156,6 +160,7 @@ export class CurrentRun {
     this.#instances = instances;
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
+    this.#loader = loader ?? Loader.createLoaderFromGlobal();
   }
 
   static empty(realm: Realm) {
@@ -177,6 +182,32 @@ export class CurrentRun {
       ignoreMap: new URLMap(),
     });
     await current.visitDirectory(new URL(realm.url));
+    return current;
+  }
+
+  static async incrementalUnloadedLinks(prev: CurrentRun) {
+    let instances = new URLMap(prev.instances);
+    let ignoreMap = new URLMap(prev.ignoreMap);
+    let modules = new Map(prev.modules);
+    let invalidations = invalidateUnloadedLinks(instances).map(
+      (u) => new URL(u)
+    );
+
+    let current = new this({
+      realm: prev.realm,
+      reader: prev.reader,
+      instances,
+      modules,
+      ignoreMap,
+      // this incremental index never invalidates modules, so we should reuse
+      // the previous loader (this keeps our symbols lined up)
+      loader: prev.loader,
+    });
+
+    for (let invalidation of invalidations) {
+      await current.visitFile(invalidation);
+    }
+
     return current;
   }
 
@@ -311,6 +342,7 @@ export class CurrentRun {
         type: "error",
         moduleURL: url.href,
         error: {
+          type: "general",
           message: `encountered error loading module "${url.href}": ${err.message}`,
           errorReferences,
         },
@@ -399,8 +431,17 @@ export class CurrentRun {
         error = {
           type: "error",
           error: {
+            type:
+              "isNotLoadedError" in uncaughtError ||
+              (isCardError(uncaughtError) &&
+                uncaughtError.additionalErrors?.find(
+                  (e) => "isNotLoadedError" in e
+                ))
+                ? "not-loaded"
+                : "general",
             message: `${uncaughtError.message} (TODO include stack trace)`,
             errorReferences: [cardRef.module],
+            // TODO serialize CardError and attach to this doc
           },
         };
       } else if (typesMaybeError?.type === "error") {
@@ -482,6 +523,7 @@ export class CurrentRun {
         let result: TypesWithErrors = {
           type: "error",
           error: {
+            type: "general",
             message: `Unable to determine card types for ${JSON.stringify(
               ref
             )}`,
@@ -575,6 +617,20 @@ export class CurrentRun {
       return undefined;
     }
   }
+}
+
+function invalidateUnloadedLinks(
+  instances: URLMap<SearchEntryWithErrors>
+): string[] {
+  return [...instances]
+    .filter(([instanceURL, item]) => {
+      if (item.type === "error" && item.error.type === "not-loaded") {
+        instances.remove(instanceURL); // note this is a side-effect
+        return true;
+      }
+      return false;
+    })
+    .map(([u]) => `${u.href}.json`);
 }
 
 function invalidate(

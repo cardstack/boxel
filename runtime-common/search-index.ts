@@ -3,6 +3,7 @@ import { Kind, Realm } from "./realm";
 import { CurrentRun, SearchEntry, SearchEntryWithErrors } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
+import { Deferred } from "./deferred";
 import flatMap from "lodash/flatMap";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
@@ -310,6 +311,9 @@ function isIncluded(included: any): included is CardResource<Saved>[] {
 export class SearchIndex {
   #currentRun: CurrentRun;
 
+  #startedPhase1 = new Deferred<void>();
+  #startedPhase2 = new Deferred<void>();
+
   constructor(
     private realm: Realm,
     private readdir: (
@@ -328,6 +332,28 @@ export class SearchIndex {
       readdir: this.readdir,
       readFileAsText: this.readFileAsText,
     });
+    this.#startedPhase1.fulfill();
+    let numUnloadedLinks = this.findCardsWithUnloadedLinks().length;
+    while (numUnloadedLinks > 0) {
+      this.#currentRun = await CurrentRun.incrementalUnloadedLinks(
+        this.#currentRun
+      );
+      let nextUnloadedLinks = this.findCardsWithUnloadedLinks().length;
+      if (nextUnloadedLinks === numUnloadedLinks) {
+        break;
+      }
+      numUnloadedLinks = nextUnloadedLinks;
+    }
+    this.#startedPhase2.fulfill();
+  }
+
+  async phase1Ready() {
+    await this.#startedPhase1.promise;
+  }
+
+  async ready() {
+    await this.#startedPhase1.promise;
+    await this.#startedPhase2.promise;
   }
 
   get stats() {
@@ -377,6 +403,13 @@ export class SearchIndex {
     return undefined;
   }
 
+  private findCardsWithUnloadedLinks() {
+    return [...this.#currentRun.instances.values()].filter(
+      (maybeError) =>
+        maybeError.type === "error" && maybeError.error.type === "not-loaded"
+    );
+  }
+
   private loadAPI(): Promise<CardAPI> {
     return this.loader.import<CardAPI>(`${baseRealm.url}card-api`);
   }
@@ -409,7 +442,7 @@ export class SearchIndex {
     while (segments.length) {
       let fieldName = segments.shift()!;
       let prevCard = card;
-      card = (await api.getField(card, fieldName))?.card;
+      card = api.getField(card, fieldName)?.card;
       if (!card) {
         throw new Error(
           `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(

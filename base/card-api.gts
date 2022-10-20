@@ -17,6 +17,7 @@ import {
   Loader,
   isSingleCardDocument,
   isRelationship,
+  CardError,
   type Meta,
   type CardFields,
   type Relationship,
@@ -34,7 +35,7 @@ export const queryableValue = Symbol('cardstack-queryable-value');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol('cardstack-is-saved-instance');
-
+const cardSettled = Symbol('cardstack-card-settled');
 const isField = Symbol('cardstack-field');
 
 export type CardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
@@ -110,7 +111,7 @@ interface Field<CardT extends CardConstructor> {
   emptyValue(instance: Card): any;
   validate(instance: Card, value: any): void;
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
-  getter(instance: Card): any;
+  getter(instance: Card): CardInstanceType<CardT>;
 }
 
 function callSerializeHook(card: typeof Card, value: any, doc: JSONAPISingleResourceDocument) {
@@ -138,7 +139,7 @@ function resourceFrom(doc: LooseSingleCardDocument | undefined, resourceId: stri
   return [doc.data, ...(doc.included ?? [])].find(resource => resource.id === resourceId);
 }
 
-function getter(instance: Card, field: Field<typeof Card>) {
+function getter<CardT extends CardConstructor>(instance: Card, field: Field<CardT>): CardInstanceType<CardT> {
   let deserialized = getDataBucket(instance);
   // this establishes that our field should rerender when cardTracking for this card changes
   cardTracking.get(instance);
@@ -174,7 +175,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return this.cardThunk();
   }
 
-  getter(instance: Card) {
+  getter(instance: Card): CardInstanceType<FieldT> {
     return getter(instance, this);
   }
 
@@ -303,7 +304,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
-  getter(instance: Card) {
+  getter(instance: Card): CardInstanceType<CardT> {
     return getter(instance, this);
   }
 
@@ -403,7 +404,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
-  getter(instance: Card) {
+  getter(instance: Card): CardInstanceType<CardT> {
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
     cardTracking.get(instance);
@@ -534,6 +535,7 @@ export class Card {
   // typescript considers everything a valid card.
   [isBaseCard] = true;
   [isSavedInstance] = false;
+  [cardSettled] = Promise.resolve();
   declare ["constructor"]: CardConstructor;
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
@@ -551,8 +553,12 @@ export class Card {
     if (primitive in this) {
       return value;
     } else {
+      if (value == null) {
+        return null;
+      }
       return Object.fromEntries(
-        Object.entries(getFields(value, { includeComputeds: true })).map(([fieldName, field]) => [fieldName, getQueryableValue(field!.card, value[fieldName])])
+        Object.entries(getFields(value, { includeComputeds: true }))
+          .map(([fieldName, field]) => [fieldName, getQueryableValue(field!.card, value[fieldName])])
       );
     }
   }
@@ -634,6 +640,9 @@ export function getQueryableValue(fieldCard: typeof Card, value: any): any {
     let result = (fieldCard as any)[queryableValue](value);
     assertScalar(result, fieldCard);
     return result;
+  }
+  if (value == null) {
+    return null;
   }
 
   // this recurses through the fields of the compound card via
@@ -856,6 +865,7 @@ async function _updateFromSerialized<T extends CardConstructor>(
       instance[isSavedInstance] = true;
     }
   }
+  await instance[cardSettled];
 
   deferred.fulfill(instance);
   return instance;
@@ -915,7 +925,7 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
       for (let computedFieldName of Object.keys(getComputedFields(this))) {
         deserialized.delete(computedFieldName);
       }
-      (async () => await recompute(this))();
+      this[cardSettled] = this[cardSettled].then(() => recompute(this));
     }
   }
   (descriptor.get as any)[isField] = field;
@@ -1076,9 +1086,10 @@ export async function recompute(card: Card): Promise<void> {
     return;
   }
 
+  let loader = Loader.getLoaderFor(Reflect.getPrototypeOf(card)!.constructor);
   async function _loadModel<T extends Card>(model: T, stack: { from: T, to: T, name: string}[] = []): Promise<void> {
     for (let [fieldName, field] of Object.entries(getFields(model, { includeComputeds: true }))) {
-      let value: any = await loadField(model, fieldName as keyof T);
+      let value: any = await loadField(model, fieldName as keyof T, loader);
       if (recomputePromises.get(card) !== recomputePromise) {
         return;
       }
@@ -1100,7 +1111,7 @@ export async function recompute(card: Card): Promise<void> {
   done!();
 }
 
-async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K): Promise<T[K]> {
+async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K, loader: Loader): Promise<T[K]> {
   let result: T[K];
   let isLoaded = false;
   let deserialized = getDataBucket(model);
@@ -1110,17 +1121,39 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
       isLoaded = true;
     } catch (e: any) {
       if (isNotLoadedError(e)) {
-        // TODO load e.reference and assign to model[fieldName]
-        throw new Error('Not implemented--load relationships');
+        let response = await loader.fetch(e.reference, { headers: { 'Accept': 'application/vnd.api+json' } });
+        if (!response.ok) {
+          // TODO use a more precise guard to detect the server not being ready
+          // yet--deserialize the error from the fetch response first and then use 
+          // CardError.title to figure this out
+          if (response.status === 503) {
+            // while the realm server is still performing it's 1st phase indexing 
+            // we will just not load the links--links will be loaded as part of the 
+            // index's 2nd phase of indexing
+            isLoaded = true;
+            continue;
+          }
+          let cardError = await CardError.fromFetchResponse(e.reference, response);
+          cardError!.additionalErrors = [...(cardError!.additionalErrors || []), e];
+          throw cardError!;
+        }
+        let json = await response.json();
+        if (!isSingleCardDocument(json)) {
+          throw new Error(`instance ${e.reference} is not a card document. it is: ${JSON.stringify(json, null, 2)}`);
+        }
+        deserialized.set(fieldName as string, await createFromSerialized(json, undefined, { loader }));
+        continue;
       }
+
       if (!isNotReadyError(e)) {
         throw e;
       }
-      let { model, computeVia, fieldName } = e;
+
+      let { model: depModel, computeVia, fieldName: depField } = e;
       if (typeof computeVia === 'function') {
-        deserialized.set(fieldName, await computeVia.bind(model)());
+        deserialized.set(depField, await computeVia.bind(depModel)());
       } else {
-        deserialized.set(fieldName, await model[computeVia]());
+        deserialized.set(depField, await depModel[computeVia]());
       }
     }
   }

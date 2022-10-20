@@ -12,6 +12,7 @@ export interface LooseSingleCardDocument {
 }
 
 export { Deferred } from "./deferred";
+export { CardError } from "./error";
 
 export interface ResourceObject {
   type: string;
@@ -73,6 +74,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "isSingleCardDocument",
       "chooseCard",
       "baseCardRef",
+      "CardError",
       "isMetaFieldItem",
       "createNewCard",
     ],
