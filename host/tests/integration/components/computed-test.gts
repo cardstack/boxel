@@ -14,7 +14,7 @@ let integer: typeof import ("https://cardstack.com/base/integer");
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
 
-  hooks.before(async function () {
+  hooks.beforeEach(async function () {
     Loader.destroy();
     Loader.addURLMapping(
       new URL(baseRealm.url),

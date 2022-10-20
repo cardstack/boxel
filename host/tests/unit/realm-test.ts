@@ -13,7 +13,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 module('Unit | realm', function (hooks) {
-  hooks.before(async function () {
+  hooks.beforeEach(async function () {
     Loader.destroy();
     Loader.addURLMapping(
       new URL(baseRealm.url),
