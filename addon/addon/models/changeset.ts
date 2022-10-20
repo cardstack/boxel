@@ -10,7 +10,6 @@ import SpriteTree, {
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';
 import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
-import { IntermediateSprite } from 'animations-experiment/services/animations';
 import { AnimationDefinition } from './transition-runner';
 
 export type SpritesForArgs = {
@@ -128,8 +127,7 @@ export class ChangesetBuilder {
     spriteTree: SpriteTree,
     contexts: Set<IContext>,
     freshlyAdded: Set<ISpriteModifier>,
-    freshlyRemoved: Set<ISpriteModifier>,
-    intermediateSprites: Map<string, IntermediateSprite>
+    freshlyRemoved: Set<ISpriteModifier>
   ) {
     let contextArray = [...contexts];
     this.spriteTree = spriteTree;
@@ -156,12 +154,7 @@ export class ChangesetBuilder {
       }
     }
 
-    let sprites = this.createSprites(
-      freshlyAdded,
-      freshlyRemoved,
-      naturalKept,
-      intermediateSprites
-    );
+    let sprites = this.createSprites(freshlyAdded, freshlyRemoved, naturalKept);
 
     // Sort top to bottom
     contextArray.sort((a, b) => {
@@ -279,35 +272,21 @@ export class ChangesetBuilder {
   createSprites(
     freshlyAdded: Set<ISpriteModifier>,
     freshlyRemoved: Set<ISpriteModifier>,
-    naturalKept: Set<ISpriteModifier>,
-    intermediateSprites: Map<string, IntermediateSprite>
+    naturalKept: Set<ISpriteModifier>
   ) {
     let {
       spriteModifiers,
       spriteModifierToSpriteMap,
       spriteModifierToCounterpartModifierMap,
-    } = this.classifySprites(
-      freshlyAdded,
-      freshlyRemoved,
-      naturalKept,
-      intermediateSprites
-    );
+    } = this.classifySprites(freshlyAdded, freshlyRemoved, naturalKept);
 
     let unallocatedItems: Sprite[] = [];
     for (let spriteModifier of spriteModifiers) {
       let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
       let counterpartModifier =
         spriteModifierToCounterpartModifierMap.get(spriteModifier);
-      let intermediateSprite = intermediateSprites.get(
-        sprite.identifier.toString()
-      );
 
-      this.setSpriteOwnBounds(
-        sprite,
-        spriteModifier,
-        counterpartModifier,
-        intermediateSprite
-      );
+      this.setSpriteOwnBounds(sprite, spriteModifier, counterpartModifier);
 
       unallocatedItems.push(sprite);
     }
@@ -325,8 +304,7 @@ export class ChangesetBuilder {
   classifySprites(
     freshlyAdded: Set<ISpriteModifier>,
     freshlyRemoved: Set<ISpriteModifier>,
-    naturalKept: Set<ISpriteModifier>,
-    intermediateSprites: Map<string, IntermediateSprite>
+    naturalKept: Set<ISpriteModifier>
   ) {
     let classifiedInsertedSpriteModifiers = new Set([...freshlyAdded]);
     let classifiedRemovedSpriteModifiers = new Set([...freshlyRemoved]);
@@ -364,17 +342,7 @@ export class ChangesetBuilder {
         classifiedRemovedSpriteModifiers.delete(removedSpriteModifier);
       }
 
-      let intermediateSprite = intermediateSprites.get(
-        new SpriteIdentifier(
-          insertedSpriteModifier.id,
-          insertedSpriteModifier.role
-        ).toString()
-      );
-
-      // a matching IntermediateSprite always wins from a RemovedSprite counterpart
-      // as it is more up-to-date (mid-animation interruption).
-      let counterpartSpriteModifier =
-        intermediateSprite?.modifier ?? removedSpriteModifier;
+      let counterpartSpriteModifier = removedSpriteModifier;
       if (counterpartSpriteModifier) {
         classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
 
@@ -517,8 +485,7 @@ export class ChangesetBuilder {
   setSpriteOwnBounds(
     sprite: Sprite,
     spriteModifier: ISpriteModifier,
-    counterpartModifier?: ISpriteModifier,
-    intermediateSprite?: IntermediateSprite
+    counterpartModifier?: ISpriteModifier
   ): void {
     if (sprite.type === SpriteType.Kept) {
       // This is no longer true
@@ -526,19 +493,11 @@ export class ChangesetBuilder {
       //   'kept sprite should have lastBounds and currentBounds',
       //   spriteModifier.boundsBeforeRender && spriteModifier.boundsAfterRender
       // );
-
-      if (intermediateSprite) {
-        // If an interruption happened we set the intermediate sprite's bounds as the starting point.
-        sprite.initialBounds = new ContextAwareBounds({
-          element: intermediateSprite.intermediateBounds,
-        });
-        sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
-      } else {
-        sprite.initialBounds = new ContextAwareBounds({
-          element: spriteModifier.boundsBeforeRender!,
-        });
-        sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
-      }
+      console.log(spriteModifier.boundsBeforeRender);
+      sprite.initialBounds = new ContextAwareBounds({
+        element: spriteModifier.boundsBeforeRender!,
+      });
+      sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
 
       sprite.finalBounds = new ContextAwareBounds({
         element: spriteModifier.boundsAfterRender!,
@@ -550,37 +509,22 @@ export class ChangesetBuilder {
           'counterpart modifier should have been passed',
           counterpartModifier
         );
+        sprite.counterpart.initialBounds = new ContextAwareBounds({
+          element: counterpartModifier.boundsBeforeRender!,
+        });
+        sprite.counterpart.initialComputedStyle =
+          counterpartModifier.lastComputedStyle;
 
-        if (counterpartModifier) {
-          if (intermediateSprite) {
-            // If an interruption happened the counterpart starts at the same point as the sprite.
-            sprite.counterpart.initialBounds = sprite.initialBounds;
-            sprite.counterpart.initialComputedStyle =
-              sprite.initialComputedStyle;
-          } else {
-            sprite.counterpart.initialBounds = new ContextAwareBounds({
-              element: counterpartModifier.boundsBeforeRender!,
-            });
-            sprite.counterpart.initialComputedStyle =
-              counterpartModifier.lastComputedStyle;
-
-            // If we have a counterpart the sprite should start there.
-            sprite.initialBounds = sprite.counterpart.initialBounds;
-            sprite.initialComputedStyle =
-              sprite.counterpart.initialComputedStyle;
-          }
-          sprite.counterpart.finalBounds = sprite.finalBounds;
-          sprite.counterpart.finalComputedStyle = sprite.finalComputedStyle;
-        }
+        // If we have a counterpart the sprite should start there.
+        sprite.initialBounds = sprite.counterpart.initialBounds;
+        sprite.initialComputedStyle = sprite.counterpart.initialComputedStyle;
+        sprite.counterpart.finalBounds = sprite.finalBounds;
+        sprite.counterpart.finalComputedStyle = sprite.finalComputedStyle;
       }
     } else if (sprite.type === SpriteType.Inserted) {
       assert(
         'inserted sprite should have currentBounds',
         spriteModifier.boundsAfterRender
-      );
-      assert(
-        'there should not be an intermediate sprite for an inserted sprite',
-        !intermediateSprite
       );
 
       sprite.finalBounds = new ContextAwareBounds({
@@ -593,17 +537,10 @@ export class ChangesetBuilder {
         spriteModifier.boundsBeforeRender
       );
 
-      if (intermediateSprite) {
-        sprite.initialBounds = new ContextAwareBounds({
-          element: intermediateSprite.intermediateBounds,
-        });
-        sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
-      } else {
-        sprite.initialBounds = new ContextAwareBounds({
-          element: spriteModifier.boundsBeforeRender,
-        });
-        sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
-      }
+      sprite.initialBounds = new ContextAwareBounds({
+        element: spriteModifier.boundsBeforeRender,
+      });
+      sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
     }
   }
 }

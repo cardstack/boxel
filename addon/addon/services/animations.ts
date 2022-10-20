@@ -30,17 +30,10 @@ export type AnimateFunction = (
   motion: Motion
 ) => SpriteAnimation;
 
-export interface IntermediateSprite {
-  modifier: ISpriteModifier;
-  intermediateBounds: DOMRect;
-  intermediateStyles: CopiedCSS;
-}
-
 export default class AnimationsService extends Service {
   spriteTree = new SpriteTree();
   eligibleContexts: Set<IContext> = new Set();
   intent: string | undefined;
-  intermediateSprites: Map<string, IntermediateSprite> = new Map();
   runningAnimations: Map<string, Set<Animation>> = new Map();
 
   get freshlyAdded(): Set<ISpriteModifier> {
@@ -142,7 +135,8 @@ export default class AnimationsService extends Service {
     // });
   }
 
-  createIntermediateSpritesForContext(context: IContext) {
+  captureBeforeRenderState(context: IContext) {
+    context.captureSnapshot(true);
     // We do not care about "stableness of contexts here".
     // For intermediate sprites it is good enough to measure direct children only.
 
@@ -163,23 +157,6 @@ export default class AnimationsService extends Service {
           withAnimations: true,
           playAnimations: false,
         });
-
-        let identifier = new SpriteIdentifier(
-          spriteModifier.id,
-          spriteModifier.role
-        );
-        let identifierString = identifier.toString();
-
-        assert(
-          `IntermediateSprite already exists for identifier ${identifierString}`,
-          !this.intermediateSprites.has(identifierString)
-        );
-
-        this.intermediateSprites.set(identifierString, {
-          modifier: spriteModifier,
-          intermediateBounds: spriteModifier.boundsBeforeRender as DOMRect,
-          intermediateStyles: spriteModifier.currentComputedStyle as CopiedCSS,
-        });
       } else {
         spriteModifier.captureSnapshot(true);
       }
@@ -198,8 +175,7 @@ export default class AnimationsService extends Service {
     // We need to measure if this was an already rendered context in case the window has resized.
     // The element check is there because the renderDetector may fire this before the actual element exists.
     if (context.element) {
-      context.captureSnapshot(true);
-      animationsToCancel = this.createIntermediateSpritesForContext(context);
+      animationsToCancel = this.captureBeforeRenderState(context);
       let contextNode = this.spriteTree.lookupNodeByElement(
         context.element
       ) as SpriteTreeNode;
@@ -215,10 +191,10 @@ export default class AnimationsService extends Service {
           spriteModifier.role
         ).toString();
         if (
-          !(
-            context.orphans.has(identifier) &&
-            this.intermediateSprites.get(identifier)
-          )
+          !context.orphans
+            .get(identifier)
+            ?.getAnimations()
+            .some((v) => v.playState === 'running')
         ) {
           node.delete();
         } else {
@@ -249,7 +225,7 @@ export default class AnimationsService extends Service {
 
     // Update the SpriteTree
     this.spriteTree.flushPendingAdditions();
-    this.spriteTree.log();
+    // this.spriteTree.log();
 
     // This classifies sprites and puts them under the correct first stable ancestor context.
     let changesetBuilder = new ChangesetBuilder(
@@ -259,8 +235,7 @@ export default class AnimationsService extends Service {
       new Set([
         ...this.spriteTree.freshlyRemoved,
         ...this.spriteTree.interruptedRemoved,
-      ]),
-      this.intermediateSprites
+      ])
     );
 
     // We can already do cleanup here so that we're guaranteed to have the
@@ -268,7 +243,6 @@ export default class AnimationsService extends Service {
     this.spriteTree.freshlyAdded.clear();
     this.spriteTree.freshlyRemoved.clear();
     this.spriteTree.interruptedRemoved.clear();
-    this.intermediateSprites = new Map();
     this.runningAnimations = new Map();
     this.intent = undefined;
 
