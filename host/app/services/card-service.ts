@@ -1,4 +1,5 @@
 import Service, { service } from '@ember/service';
+import { ComponentLike } from '@glint/template';
 import { stringify } from 'qs';
 import LoaderService from './loader-service';
 import LocalRealm from '../services/local-realm';
@@ -6,11 +7,11 @@ import {
   type LooseSingleCardDocument,
   isSingleCardDocument,
   isCardCollectionDocument,
-  type Card,
 } from '@cardstack/runtime-common';
 import type { ResolvedURL } from '@cardstack/runtime-common/loader';
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
+import type { Card, Format } from 'https://cardstack.com/base/card-api';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -44,7 +45,6 @@ export default class CardService extends Service {
       throw new Error(
         `status: ${response.status} -
         ${response.statusText}. ${await response.text()}`
-        }. ${await response.text()}`
       );
     }
     return await response.json();
@@ -66,16 +66,22 @@ export default class CardService extends Service {
       throw new Error(
         `bug: server returned a non card document for ${url}:
         ${JSON.stringify(json, null, 2)}`
-          null,
-          2
-        )}`
       );
     }
     return await this.makeCardFromResponse(json);
   }
 
-  async save(card: Card): Promise<Card> {
+  async loadComponent(
+    card: Card,
+    format: Format
+  ): Promise<ComponentLike<{ Args: {}; Blocks: {} }>> {
+    await this.apiModule.loaded;
+    await this.api.recompute(card);
+    return this.api.getComponent(card, format);
+  }
+
   async saveModel(card: Card): Promise<Card> {
+    await this.apiModule.loaded;
     let cardJSON = this.api.serializeCard(card, { includeComputeds: true });
     let isSaved = this.api.isSaved(card);
     let json = await this.fetchJSON(isSaved ? card.id : this.localRealm.url, {
@@ -91,9 +97,6 @@ export default class CardService extends Service {
       throw new Error(
         `The realm search response was not a card collection document:
         ${JSON.stringify(json, null, 2)}`
-          null,
-          2
-        )}`
       );
     }
     return await Promise.all(

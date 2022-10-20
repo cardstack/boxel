@@ -285,7 +285,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return class ContainsMany extends GlimmerComponent {
       <template>
         {{#each arrayField.children as |boxedElement|}}
-          {{#let (getComponent (cardTypeFor field boxedElement) format boxedElement) as |Item|}}
+          {{#let (getBoxComponent (cardTypeFor field boxedElement) format boxedElement) as |Item|}}
             <Item/>
           {{/let}}
         {{/each}}
@@ -390,7 +390,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
       card = model.value[fieldName].constructor as typeof Card;
     }
     let innerModel = model.field(fieldName) as unknown as Box<Card>;
-    return getComponent(card, format, innerModel);
+    return getBoxComponent(card, format, innerModel);
   }
 }
 
@@ -1017,7 +1017,7 @@ function defaultFieldFormat(format: Format): Format {
   }
 }
 
-function getComponent<CardT extends CardConstructor>(card: CardT, format: Format, model: Box<InstanceType<CardT>>): ComponentLike<{ Args: {}, Blocks: {} }> {
+function getBoxComponent<CardT extends CardConstructor>(card: CardT, format: Format, model: Box<InstanceType<CardT>>): ComponentLike<{ Args: {}, Blocks: {} }> {
   let stable = componentCache.get(model);
   if (stable) {
     return stable;
@@ -1056,11 +1056,10 @@ function getComponent<CardT extends CardConstructor>(card: CardT, format: Format
   return stable;
 }
 
-export async function prepareToRender(model: Card, format: Format): Promise<{ component: ComponentLike<{ Args: never, Blocks: never }> }> {
-  await recompute(model); // absorb model asynchronicity
+export function getComponent(model: Card, format: Format): ComponentLike<{ Args: never, Blocks: never }> {
   let box = Box.create(model);
-  let component = getComponent(model.constructor as CardConstructor, format, box);
-  return { component };
+  let component = getBoxComponent(model.constructor as CardConstructor, format, box);
+  return component;
 }
 
 export async function recompute(card: Card): Promise<void> {
@@ -1370,7 +1369,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManySignature> {
       <ul>
         {{#each @arrayField.children as |boxedElement i|}}
           <li data-test-item={{i}}>
-            {{#let (getComponent (cardTypeFor @field boxedElement) @format boxedElement) as |Item|}}
+            {{#let (getBoxComponent (cardTypeFor @field boxedElement) @format boxedElement) as |Item|}}
               <Item />
             {{/let}}
             <button {{on "click" (fn this.remove i)}} type="button" data-test-remove={{i}}>Remove</button>
