@@ -461,7 +461,7 @@ export class SearchIndex {
             linkURL.href,
             response
           );
-          throw cardError!;
+          throw cardError;
         }
         let json = await response.json();
         if (!isSingleCardDocument(json)) {

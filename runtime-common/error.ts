@@ -58,7 +58,7 @@ export class CardError extends Error {
   static async fromFetchResponse(
     url: string,
     response: Response
-  ): Promise<CardError | undefined> {
+  ): Promise<CardError> {
     if (!response.ok) {
       let text: string | undefined;
       try {
@@ -96,7 +96,11 @@ export class CardError extends Error {
       ];
       return cardError;
     }
-    return undefined; // not actually an error
+    throw new CardError(
+      `tried to create a card error from a successful fetch response from ${url}, status ${
+        response.status
+      }, with body: ${await response.text()}`
+    );
   }
 }
 
