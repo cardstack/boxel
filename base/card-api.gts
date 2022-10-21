@@ -1088,7 +1088,10 @@ export function cardHasSettled(instance: Card): Promise<void> {
   return instance[cardSettled];
 }
 
-export async function recompute(card: Card): Promise<void> {
+interface RecomputeOptions {
+  loadFields?: true;
+}
+export async function recompute(card: Card, opts?: RecomputeOptions): Promise<void> {
   // Note that after each async step we check to see if we are still the
   // current promise, otherwise we bail
   let done: () => void;
@@ -1105,7 +1108,7 @@ export async function recompute(card: Card): Promise<void> {
   let loader = Loader.getLoaderFor(Reflect.getPrototypeOf(card)!.constructor);
   async function _loadModel<T extends Card>(model: T, stack: { from: T, to: T, name: string}[] = []): Promise<void> {
     for (let [fieldName, field] of Object.entries(getFields(model, { includeComputeds: true }))) {
-      let value: any = await loadField(model, fieldName as keyof T, loader);
+      let value: any = await loadField(model, fieldName as keyof T, loader, opts);
       if ((current = recomputePromises.get(card)) !== recomputePromise) {
         return current;
       }
@@ -1127,7 +1130,7 @@ export async function recompute(card: Card): Promise<void> {
   done!();
 }
 
-async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K, loader: Loader): Promise<T[K]> {
+async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K, loader: Loader, opts?: RecomputeOptions): Promise<T[K]> {
   let result: T[K];
   let isLoaded = false;
   let deserialized = getDataBucket(model);
@@ -1137,28 +1140,33 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
       isLoaded = true;
     } catch (e: any) {
       if (isNotLoadedError(e)) {
-        let response = await loader.fetch(e.reference, { headers: { 'Accept': 'application/vnd.api+json' } });
-        if (!response.ok) {
-          // TODO use a more precise guard to detect the server not being ready
-          // yet--deserialize the error from the fetch response first and then use 
-          // CardError.title to figure this out
-          if (response.status === 503) {
-            // while the realm server is still performing it's 1st phase indexing 
-            // we will just not load the links--links will be loaded as part of the 
-            // index's 2nd phase of indexing
-            isLoaded = true;
-            continue;
+        if (opts?.loadFields) {
+          let response = await loader.fetch(e.reference, { headers: { 'Accept': 'application/vnd.api+json' } });
+          if (!response.ok) {
+            // TODO use a more precise guard to detect the server not being ready
+            // yet--deserialize the error from the fetch response first and then use 
+            // CardError.title to figure this out
+            if (response.status === 503) {
+              // while the realm server is still performing it's 1st phase indexing 
+              // we will just not load the links--links will be loaded as part of the 
+              // index's 2nd phase of indexing
+              isLoaded = true;
+              continue;
+            }
+            let cardError = await CardError.fromFetchResponse(e.reference, response);
+            cardError!.additionalErrors = [...(cardError!.additionalErrors || []), e];
+            throw cardError!;
           }
-          let cardError = await CardError.fromFetchResponse(e.reference, response);
-          cardError!.additionalErrors = [...(cardError!.additionalErrors || []), e];
-          throw cardError!;
+          let json = await response.json();
+          if (!isSingleCardDocument(json)) {
+            throw new Error(`instance ${e.reference} is not a card document. it is: ${JSON.stringify(json, null, 2)}`);
+          }
+          deserialized.set(fieldName as string, await createFromSerialized(json, undefined, { loader }));
+          continue;
+        } else {
+          isLoaded = true;
+          continue;
         }
-        let json = await response.json();
-        if (!isSingleCardDocument(json)) {
-          throw new Error(`instance ${e.reference} is not a card document. it is: ${JSON.stringify(json, null, 2)}`);
-        }
-        deserialized.set(fieldName as string, await createFromSerialized(json, undefined, { loader }));
-        continue;
       }
 
       if (!isNotReadyError(e)) {

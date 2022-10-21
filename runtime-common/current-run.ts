@@ -387,7 +387,7 @@ export class CurrentRun {
         loader: this.#loader,
       });
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
-      await api.recompute(card);
+      await api.recompute(card, { loadFields: true });
       let data: SingleCardDocument = api.serializeCard(card, {
         includeComputeds: true,
       });
