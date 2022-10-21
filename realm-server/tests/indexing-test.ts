@@ -363,8 +363,9 @@ module("indexing", function (hooks) {
       {
         type: "error",
         error: {
+          type: "general",
           message:
-            'Could not retrieve http://test-realm/post: 404 - {"errors":["http://test-realm/post not found"]} (TODO include stack trace)',
+            "unable to fetch http://test-realm/post (TODO include stack trace)",
           errorReferences: ["http://test-realm/post"],
         },
       },
