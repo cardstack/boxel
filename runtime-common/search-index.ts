@@ -390,18 +390,36 @@ export class SearchIndex {
     );
   }
 
-  async search(query: Query): Promise<CardResource[]> {
+  async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
     let matcher = await this.buildMatcher(query.filter, {
       module: `${baseRealm.url}card-api`,
       name: "Card",
     });
 
-    return flatMap([...this.#currentRun.instances.values()], (maybeError) =>
-      maybeError.type !== "error" ? [maybeError.entry] : []
-    )
-      .filter(matcher)
-      .sort(this.buildSorter(query.sort))
-      .map((entry) => entry.resource);
+    let doc: CardCollectionDocument = {
+      data: flatMap([...this.#currentRun.instances.values()], (maybeError) =>
+        maybeError.type !== "error" ? [maybeError.entry] : []
+      )
+        .filter(matcher)
+        .sort(this.buildSorter(query.sort))
+        .map((entry) => ({
+          ...entry.resource,
+          ...{ links: { self: entry.resource.id } },
+        })),
+    };
+
+    let omit = doc.data.map((r) => r.id);
+    if (opts?.loadLinks) {
+      let included: CardResource<Saved>[] = [];
+      for (let resource of doc.data) {
+        included = await this.loadLinks(resource, omit, included);
+      }
+      if (included.length > 0) {
+        doc.included = included;
+      }
+    }
+
+    return doc;
   }
 
   public isIgnored(url: URL): boolean {
@@ -418,7 +436,7 @@ export class SearchIndex {
     }
     let doc: SingleCardDocument = { data: card.entry.resource };
     if (opts?.loadLinks) {
-      let included = await this.loadLinks(doc.data);
+      let included = await this.loadLinks(doc.data, [doc.data.id]);
       if (included.length > 0) {
         doc.included = included;
       }
@@ -430,6 +448,7 @@ export class SearchIndex {
   // control how deep to load links
   async loadLinks(
     resource: LooseCardResource,
+    omit: string[] = [],
     included: CardResource<Saved>[] = [],
     visited: string[] = []
   ): Promise<CardResource<Saved>[]> {
@@ -471,16 +490,22 @@ export class SearchIndex {
             } is not a card document. it is: ${JSON.stringify(json, null, 2)}`
           );
         }
-        linkResource = json.data;
+        linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
       }
       if (linkResource) {
-        included.push(
-          ...(await this.loadLinks(
-            linkResource,
-            [...included, linkResource],
-            visited
-          ))
-        );
+        for (let includedResource of await this.loadLinks(
+          linkResource,
+          omit,
+          [...included, linkResource],
+          visited
+        )) {
+          if (
+            !omit.includes(includedResource.id) &&
+            !included.find((r) => r.id === includedResource.id)
+          ) {
+            included.push(includedResource);
+          }
+        }
       }
     }
     return included;

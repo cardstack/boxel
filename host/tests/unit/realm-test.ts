@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import {
   CardRef,
   isSingleCardDocument,
@@ -453,7 +453,114 @@ module('Unit | realm', function (hooks) {
     }
   });
 
-  skip('realm can serve POST requests that include linksTo fields');
+  test('realm can serve POST requests that include linksTo fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'dir/owner.json': {
+        data: {
+          id: `${testRealmURL}dir/owner`,
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(testRealmURL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              attributes: {
+                firstName: 'Mango',
+              },
+              relationships: {
+                owner: {
+                  links: {
+                    self: `${testRealmURL}dir/owner`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4201/test/pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          null,
+          2
+        ),
+      })
+    );
+    assert.strictEqual(response.status, 201, 'successful http status');
+    let json = await response.json();
+    assert.deepEqual(json, {
+      data: {
+        type: 'card',
+        id: `${testRealmURL}Pet/1`,
+        attributes: {
+          firstName: 'Mango',
+        },
+        relationships: {
+          owner: {
+            links: {
+              self: `${testRealmURL}dir/owner`,
+            },
+            data: {
+              type: 'card',
+              id: `${testRealmURL}dir/owner`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4201/test/pet',
+            name: 'Pet',
+          },
+          lastModified: adapter.lastModified.get(`${testRealmURL}Pet/1.json`),
+        },
+        links: {
+          self: `${testRealmURL}Pet/1`,
+        },
+      },
+      included: [
+        {
+          type: 'card',
+          id: `${testRealmURL}dir/owner`,
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}dir/owner.json`
+            ),
+          },
+          links: {
+            self: `${testRealmURL}dir/owner`,
+          },
+        },
+      ],
+    });
+  });
 
   test('realm can serve patch card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
@@ -573,7 +680,7 @@ module('Unit | realm', function (hooks) {
       'field value is correct'
     );
 
-    let cards = await searchIndex.search({
+    let { data: cards } = await searchIndex.search({
       filter: {
         on: { module: `http://localhost:4201/test/person`, name: 'Person' },
         eq: { firstName: 'Van Gogh' },
@@ -583,7 +690,151 @@ module('Unit | realm', function (hooks) {
     assert.strictEqual(cards.length, 1, 'search finds updated value');
   });
 
-  skip('realm can serve PATCH requests that include linksTo fields');
+  test('realm can serve PATCH requests that include linksTo fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'dir/hassan.json': {
+        data: {
+          id: `${testRealmURL}dir/hassan`,
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'dir/mariko.json': {
+        data: {
+          id: `${testRealmURL}dir/mariko`,
+          attributes: {
+            firstName: 'Mariko',
+            lastName: 'Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'dir/mango.json': {
+        data: {
+          id: `${testRealmURL}dir/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}dir/hassan`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(`${testRealmURL}dir/mango`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              relationships: {
+                owner: {
+                  links: {
+                    self: `${testRealmURL}dir/mariko`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4201/test/person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          null,
+          2
+        ),
+      })
+    );
+
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let json = await response.json();
+    assert.deepEqual(json, {
+      data: {
+        type: 'card',
+        id: `${testRealmURL}dir/mango`,
+        attributes: {
+          firstName: 'Mango',
+        },
+        relationships: {
+          owner: {
+            links: {
+              self: `${testRealmURL}dir/mariko`,
+            },
+            data: {
+              type: 'card',
+              id: `${testRealmURL}dir/mariko`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4201/test/pet',
+            name: 'Pet',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}dir/mango.json`
+          ),
+        },
+        links: {
+          self: `${testRealmURL}dir/mango`,
+        },
+      },
+      included: [
+        {
+          type: 'card',
+          id: `${testRealmURL}dir/mariko`,
+          attributes: {
+            firstName: 'Mariko',
+            lastName: 'Abdel-Rahman',
+            fullName: 'Mariko Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}dir/mariko.json`
+            ),
+          },
+          links: {
+            self: `${testRealmURL}dir/mariko`,
+          },
+        },
+      ],
+    });
+  });
 
   test('realm can serve delete card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
@@ -613,7 +864,7 @@ module('Unit | realm', function (hooks) {
 
     let searchIndex = realm.searchIndex;
 
-    let cards = await searchIndex.search({});
+    let { data: cards } = await searchIndex.search({});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
     let result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
@@ -653,7 +904,7 @@ module('Unit | realm', function (hooks) {
       'card 1 is still there'
     );
 
-    cards = await searchIndex.search({});
+    cards = (await searchIndex.search({})).data;
     assert.strictEqual(cards.length, 1, 'only one card remains');
   });
 
@@ -869,7 +1120,194 @@ module('Unit | realm', function (hooks) {
     );
   });
 
-  skip('realm can serve search requests whose results have linksTo fields');
+  test('realm can serve search requests whose results have linksTo fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'dir/mariko.json': {
+        data: {
+          id: `${testRealmURL}dir/mariko`,
+          attributes: {
+            firstName: 'Mariko',
+            lastName: 'Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'dir/mango.json': {
+        data: {
+          id: `${testRealmURL}dir/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}dir/mariko`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'dir/vanGogh.json': {
+        data: {
+          id: `${testRealmURL}dir/vanGogh`,
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `http://localhost:4201/test/hassan`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+
+    let response = await realm.handle(
+      new Request(
+        `${testRealmURL}_search?${stringify({
+          sort: [
+            {
+              by: 'id',
+              on: { module: `${baseRealm.url}card-api`, name: 'Card' },
+            },
+          ],
+        })}`,
+        {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        }
+      )
+    );
+    let json = await response.json();
+    delete json.included?.[0].meta.lastModified;
+    assert.deepEqual(json, {
+      data: [
+        {
+          type: 'card',
+          id: `${testRealmURL}dir/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}dir/mariko`,
+              },
+              data: {
+                type: 'card',
+                id: `${testRealmURL}dir/mariko`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}dir/mango.json`
+            ),
+          },
+          links: {
+            self: `${testRealmURL}dir/mango`,
+          },
+        },
+        {
+          type: 'card',
+          id: `${testRealmURL}dir/mariko`,
+          attributes: {
+            firstName: 'Mariko',
+            lastName: 'Abdel-Rahman',
+            fullName: 'Mariko Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}dir/mariko.json`
+            ),
+          },
+          links: {
+            self: `${testRealmURL}dir/mariko`,
+          },
+        },
+        {
+          type: 'card',
+          id: `${testRealmURL}dir/vanGogh`,
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `http://localhost:4201/test/hassan`,
+              },
+              data: {
+                type: 'card',
+                id: `http://localhost:4201/test/hassan`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}dir/vanGogh.json`
+            ),
+          },
+          links: {
+            self: `${testRealmURL}dir/vanGogh`,
+          },
+        },
+      ],
+      included: [
+        {
+          type: 'card',
+          id: `http://localhost:4201/test/hassan`,
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+          },
+          links: {
+            self: `http://localhost:4201/test/hassan`,
+          },
+        },
+      ],
+    });
+  });
 
   test('realm can serve directory requests', async function (assert) {
     let realm = TestRealm.create({

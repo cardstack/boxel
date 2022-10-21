@@ -38,7 +38,7 @@ module('Unit | search-index', function (hooks) {
     let realm = TestRealm.createWithAdapter(adapter);
     let indexer = realm.searchIndex;
     await indexer.run();
-    let cards = await indexer.search({});
+    let { data: cards } = await indexer.search({});
     assert.deepEqual(cards, [
       {
         id: `${testRealmURL}empty`,
@@ -49,6 +49,9 @@ module('Unit | search-index', function (hooks) {
             name: 'Card',
           },
           lastModified: adapter.lastModified.get(`${testRealmURL}empty.json`),
+        },
+        links: {
+          self: `${testRealmURL}empty`,
         },
       },
     ]);
@@ -594,7 +597,7 @@ posts/ignore-me.json
     });
 
     test(`can search for cards by using the 'eq' filter`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
           eq: { title: 'Card 1', description: 'Sample post' },
@@ -607,7 +610,7 @@ posts/ignore-me.json
     });
 
     test(`can use 'eq' to find 'null' values`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}book`, name: 'Book' },
           eq: { 'author.lastName': null },
@@ -620,7 +623,7 @@ posts/ignore-me.json
     });
 
     test(`can search for cards by using a computed field`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
           eq: { 'author.fullName': 'Carl Stack' },
@@ -635,7 +638,7 @@ posts/ignore-me.json
     skip('can search for cards by using a linksTo field');
 
     test(`can search for cards that have custom queryableValue`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${baseRealm.url}catalog-entry`, name: 'CatalogEntry' },
           eq: {
@@ -653,7 +656,7 @@ posts/ignore-me.json
     });
 
     test('can combine multiple filters', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: {
             module: `${testModuleRealm}post`,
@@ -670,7 +673,7 @@ posts/ignore-me.json
     });
 
     test('can handle a filter with double negatives', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
           not: { not: { not: { eq: { 'author.firstName': 'Carl' } } } },
@@ -683,7 +686,7 @@ posts/ignore-me.json
     });
 
     test('can filter by card type', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           type: { module: `${testModuleRealm}article`, name: 'Article' },
         },
@@ -694,9 +697,11 @@ posts/ignore-me.json
         'found cards of type Article'
       );
 
-      matching = await indexer.search({
-        filter: { type: { module: `${testModuleRealm}post`, name: 'Post' } },
-      });
+      matching = (
+        await indexer.search({
+          filter: { type: { module: `${testModuleRealm}post`, name: 'Post' } },
+        })
+      ).data;
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${paths.url}card-1`, `${paths.url}cards/1`, `${paths.url}cards/2`],
@@ -705,7 +710,7 @@ posts/ignore-me.json
     });
 
     test(`can filter on a card's own fields using range`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
           range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
@@ -718,7 +723,7 @@ posts/ignore-me.json
     });
 
     test('can use a range filter with custom queryableValue', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}dog`, name: 'Dog' },
           range: {
@@ -773,7 +778,7 @@ posts/ignore-me.json
     });
 
     test(`can filter on a nested field using 'eq'`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
           eq: { 'author.firstName': 'Carl' },
@@ -786,7 +791,7 @@ posts/ignore-me.json
     });
 
     test('can negate a filter', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}article`, name: 'Article' },
           not: { eq: { 'author.firstName': 'Carl' } },
@@ -799,7 +804,7 @@ posts/ignore-me.json
     });
 
     test('can combine multiple types', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           any: [
             {
@@ -821,7 +826,7 @@ posts/ignore-me.json
 
     // sorting
     test('can sort in alphabetical order', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'author.lastName',
@@ -839,7 +844,7 @@ posts/ignore-me.json
     });
 
     test('can sort in reverse alphabetical order', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'author.firstName',
@@ -860,7 +865,7 @@ posts/ignore-me.json
     });
 
     test('can sort by custom queryableValue', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'numberOfTreats',
@@ -881,7 +886,7 @@ posts/ignore-me.json
     });
 
     test('can sort by multiple string field conditions in given directions', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'author.lastName',
@@ -908,7 +913,7 @@ posts/ignore-me.json
     });
 
     test('can sort by integer value', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'editions',
@@ -933,7 +938,7 @@ posts/ignore-me.json
     });
 
     test('can sort by date', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'pubDate',
@@ -954,7 +959,7 @@ posts/ignore-me.json
     });
 
     test('can sort by mixed field types', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'editions',
@@ -980,7 +985,7 @@ posts/ignore-me.json
     });
 
     test(`can sort on multiple paths in combination with 'any' filter`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'author.lastName',
@@ -1013,7 +1018,7 @@ posts/ignore-me.json
     });
 
     test(`can sort on multiple paths in combination with 'every' filter`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'author.firstName',

@@ -150,7 +150,7 @@ module("indexing", function (hooks) {
       } as LooseSingleCardDocument)
     );
 
-    let result = await realm.searchIndex.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}person`, name: "Person" },
         eq: { firstName: "Mang-Mang" },
@@ -207,7 +207,7 @@ module("indexing", function (hooks) {
       },
       "indexed correct number of files"
     );
-    let result = await realm.searchIndex.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         type: { module: `${testRealm}person`, name: "Person" },
       },
@@ -237,11 +237,13 @@ module("indexing", function (hooks) {
       },
       "indexed correct number of files"
     );
-    result = await realm.searchIndex.search({
-      filter: {
-        type: { module: `${testRealm}person`, name: "Person" },
-      },
-    });
+    result = (
+      await realm.searchIndex.search({
+        filter: {
+          type: { module: `${testRealm}person`, name: "Person" },
+        },
+      })
+    ).data;
     assert.strictEqual(
       result.length,
       2,
@@ -252,7 +254,7 @@ module("indexing", function (hooks) {
   test("can incrementally index deleted instance", async function (assert) {
     await realm.delete("mango.json");
 
-    let result = await realm.searchIndex.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}person`, name: "Person" },
         eq: { firstName: "Mango" },
@@ -290,7 +292,7 @@ module("indexing", function (hooks) {
       `
     );
 
-    let result = await realm.searchIndex.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}post`, name: "Post" },
         eq: { nickName: "Van Gogh-poo" },
@@ -326,7 +328,7 @@ module("indexing", function (hooks) {
     `
     );
 
-    let result = await realm.searchIndex.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}post`, name: "Post" },
         eq: { "author.nickName": "Van Gogh-poo" },
@@ -347,7 +349,7 @@ module("indexing", function (hooks) {
   test("can incrementally index instance that depends on deleted card source", async function (assert) {
     await realm.delete("post.gts");
     {
-      let result = await realm.searchIndex.search({
+      let { data: result } = await realm.searchIndex.search({
         filter: {
           type: { module: `${testRealm}post`, name: "Post" },
         },
@@ -401,7 +403,7 @@ module("indexing", function (hooks) {
       `
     );
     {
-      let result = await realm.searchIndex.search({
+      let { data: result } = await realm.searchIndex.search({
         filter: {
           on: { module: `${testRealm}post`, name: "Post" },
           eq: { nickName: "Van Gogh-poo" },
