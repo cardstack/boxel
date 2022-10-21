@@ -176,7 +176,97 @@ module('Unit | realm', function (hooks) {
     });
   });
 
-  skip('realm can serve GET card requests with linksTo relationships to other realms', async function (_assert) {});
+  test('realm can serve GET card requests with linksTo relationships to other realms', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'dir/mango.json': {
+        data: {
+          id: `${testRealmURL}dir/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `http://localhost:4201/test/hassan`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+
+    let response = await realm.handle(
+      new Request(`${testRealmURL}dir/mango`, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+      })
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let json = await response.json();
+    let { included = [] } = json;
+    delete included[0]?.meta.lastModified;
+    assert.deepEqual(json, {
+      data: {
+        type: 'card',
+        id: `${testRealmURL}dir/mango`,
+        attributes: {
+          firstName: 'Mango',
+        },
+        relationships: {
+          owner: {
+            links: {
+              self: `http://localhost:4201/test/hassan`,
+            },
+            data: {
+              type: 'card',
+              id: `http://localhost:4201/test/hassan`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4201/test/pet',
+            name: 'Pet',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}dir/mango.json`
+          ),
+        },
+        links: {
+          self: `${testRealmURL}dir/mango`,
+        },
+      },
+      included: [
+        {
+          type: 'card',
+          id: `http://localhost:4201/test/hassan`,
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+          },
+          links: {
+            self: `http://localhost:4201/test/hassan`,
+          },
+        },
+      ],
+    });
+  });
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
     let realm = TestRealm.create(

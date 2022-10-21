@@ -4,6 +4,7 @@ import { CurrentRun, SearchEntry, type IndexError } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import { Deferred } from "./deferred";
+import { CardError } from "./error";
 import flatMap from "lodash/flatMap";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
@@ -417,7 +418,7 @@ export class SearchIndex {
     }
     let doc: SingleCardDocument = { data: card.entry.resource };
     if (opts?.loadLinks) {
-      let included = this.loadLinks(doc.data);
+      let included = await this.loadLinks(doc.data);
       if (included.length > 0) {
         doc.included = included;
       }
@@ -427,11 +428,11 @@ export class SearchIndex {
 
   // TODO this will load links all the way down, need to provide a way to
   // control how deep to load links
-  loadLinks(
+  async loadLinks(
     resource: LooseCardResource,
     included: CardResource<Saved>[] = [],
     visited: string[] = []
-  ): CardResource<Saved>[] {
+  ): Promise<CardResource<Saved>[]> {
     if (resource.id != null) {
       if (visited.includes(resource.id)) {
         return [];
@@ -443,16 +444,42 @@ export class SearchIndex {
       if (!relationship.links.self) {
         continue;
       }
-      let maybeEntry = this.#currentRun.instances.get(
-        new URL(relationship.links.self)
-      );
-      if (maybeEntry?.type === "entry") {
+      let linkURL = new URL(relationship.links.self);
+      let linkResource: CardResource<Saved> | undefined;
+      if (this.realm.paths.inRealm(linkURL)) {
+        let maybeEntry = this.#currentRun.instances.get(
+          new URL(relationship.links.self)
+        );
+        linkResource =
+          maybeEntry?.type === "entry" ? maybeEntry.entry.resource : undefined;
+      } else {
+        let response = await this.loader.fetch(linkURL, {
+          headers: { Accept: "application/vnd.api+json" },
+        });
+        if (!response.ok) {
+          let cardError = await CardError.fromFetchResponse(
+            linkURL.href,
+            response
+          );
+          throw cardError!;
+        }
+        let json = await response.json();
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `instance ${
+              linkURL.href
+            } is not a card document. it is: ${JSON.stringify(json, null, 2)}`
+          );
+        }
+        linkResource = json.data;
+      }
+      if (linkResource) {
         included.push(
-          ...this.loadLinks(
-            maybeEntry.entry.resource,
-            [...included, maybeEntry.entry.resource],
+          ...(await this.loadLinks(
+            linkResource,
+            [...included, linkResource],
             visited
-          )
+          ))
         );
       }
     }
