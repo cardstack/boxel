@@ -1,6 +1,6 @@
-import { baseRealm, internalKeyFor } from ".";
+import { baseRealm, internalKeyFor, LooseCardResource } from ".";
 import { Kind, Realm } from "./realm";
-import { CurrentRun, SearchEntry, SearchEntryWithErrors } from "./current-run";
+import { CurrentRun, SearchEntry, type IndexError } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import { Deferred } from "./deferred";
@@ -308,6 +308,20 @@ function isIncluded(included: any): included is CardResource<Saved>[] {
   return true;
 }
 
+interface Options {
+  loadLinks?: true;
+}
+
+type SearchResult = SearchResultDoc | SearchResultError;
+interface SearchResultDoc {
+  type: "doc";
+  doc: SingleCardDocument;
+}
+interface SearchResultError {
+  type: "error";
+  error: IndexError;
+}
+
 export class SearchIndex {
   #currentRun: CurrentRun;
 
@@ -340,6 +354,9 @@ export class SearchIndex {
       );
       let nextUnloadedLinks = this.findCardsWithUnloadedLinks().length;
       if (nextUnloadedLinks >= numUnloadedLinks) {
+        // TODO we need to think thru how to deal with linksTo cycles
+        // and what kind of searchDoc's we should make for those.
+        // currently this will be unable to penetrate a cycle in the relationships
         break;
       }
       numUnloadedLinks = nextUnloadedLinks;
@@ -390,8 +407,56 @@ export class SearchIndex {
     return this.#currentRun.isIgnored(url);
   }
 
-  async card(url: URL): Promise<SearchEntryWithErrors | undefined> {
-    return this.#currentRun.instances.get(url);
+  async card(url: URL, opts?: Options): Promise<SearchResult | undefined> {
+    let card = this.#currentRun.instances.get(url);
+    if (!card) {
+      return undefined;
+    }
+    if (card.type === "error") {
+      return card;
+    }
+    let doc: SingleCardDocument = { data: card.entry.resource };
+    if (opts?.loadLinks) {
+      let included = this.loadLinks(doc.data);
+      if (included.length > 0) {
+        doc.included = included;
+      }
+    }
+    return { type: "doc", doc };
+  }
+
+  // TODO this will load links all the way down, need to provide a way to
+  // control how deep to load links
+  loadLinks(
+    resource: LooseCardResource,
+    included: CardResource<Saved>[] = [],
+    visited: string[] = []
+  ): CardResource<Saved>[] {
+    if (resource.id != null) {
+      if (visited.includes(resource.id)) {
+        return [];
+      }
+      visited.push(resource.id);
+    }
+
+    for (let relationship of Object.values(resource.relationships ?? {})) {
+      if (!relationship.links.self) {
+        continue;
+      }
+      let maybeEntry = this.#currentRun.instances.get(
+        new URL(relationship.links.self)
+      );
+      if (maybeEntry?.type === "entry") {
+        included.push(
+          ...this.loadLinks(
+            maybeEntry.entry.resource,
+            [...included, maybeEntry.entry.resource],
+            visited
+          )
+        );
+      }
+    }
+    return included;
   }
 
   // this is meant for tests only

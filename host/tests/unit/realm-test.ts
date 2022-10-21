@@ -68,13 +68,14 @@ module('Unit | realm', function (hooks) {
     assert.ok(json.data.meta.lastModified, 'lastModified is populated');
   });
 
-  skip('realm can serve GET card requests with linksTo relationships', async function (assert) {
+  test('realm can serve GET card requests with linksTo relationships', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/owner.json': {
         data: {
           id: `${testRealmURL}dir/owner`,
           attributes: {
             firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -155,17 +156,27 @@ module('Unit | realm', function (hooks) {
           id: `${testRealmURL}dir/owner`,
           attributes: {
             firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
               module: 'http://localhost:4201/test/person',
               name: 'Person',
             },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}dir/owner.json`
+            ),
+          },
+          links: {
+            self: `${testRealmURL}dir/owner`,
           },
         },
       ],
     });
   });
+
+  skip('realm can serve GET card requests with linksTo relationships to other realms', async function (_assert) {});
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
     let realm = TestRealm.create(
@@ -283,14 +294,14 @@ module('Unit | realm', function (hooks) {
       }
 
       let searchIndex = realm.searchIndex;
-      let card = await searchIndex.card(new URL(json.data.links.self));
-      if (card?.type === 'error') {
+      let result = await searchIndex.card(new URL(json.data.links.self));
+      if (result?.type === 'error') {
         throw new Error(
-          `unexpected error when getting card from index: ${card.error.message}`
+          `unexpected error when getting card from index: ${result.error.message}`
         );
       }
       assert.strictEqual(
-        card?.entry.resource.id,
+        result?.doc.data.id,
         `${testRealmURL}Card/1`,
         'found card in index'
       );
@@ -338,19 +349,21 @@ module('Unit | realm', function (hooks) {
       }
 
       let searchIndex = realm.searchIndex;
-      let card = await searchIndex.card(new URL(json.data.links.self));
-      if (card?.type === 'error') {
+      let result = await searchIndex.card(new URL(json.data.links.self));
+      if (result?.type === 'error') {
         throw new Error(
-          `unexpected error when getting card from index: ${card.error.message}`
+          `unexpected error when getting card from index: ${result.error.message}`
         );
       }
       assert.strictEqual(
-        card?.entry.resource.id,
+        result?.doc.data.id,
         `${testRealmURL}Card/2`,
         'found card in index'
       );
     }
   });
+
+  skip('realm can serve POST requests that include linksTo fields');
 
   test('realm can serve patch card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
@@ -448,24 +461,24 @@ module('Unit | realm', function (hooks) {
     }
 
     let searchIndex = realm.searchIndex;
-    let card = await searchIndex.card(new URL(json.data.links.self));
-    if (card?.type === 'error') {
+    let result = await searchIndex.card(new URL(json.data.links.self));
+    if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${card.error.message}`
+        `unexpected error when getting card from index: ${result.error.message}`
       );
     }
     assert.strictEqual(
-      card?.entry.resource.id,
+      result?.doc.data.id,
       `${testRealmURL}dir/card`,
       'found card in index'
     );
     assert.strictEqual(
-      card?.entry.resource.attributes?.firstName,
+      result?.doc.data.attributes?.firstName,
       'Van Gogh',
       'field value is correct'
     );
     assert.strictEqual(
-      card?.entry.resource.attributes?.lastName,
+      result?.doc.data.attributes?.lastName,
       'Abdel-Rahman',
       'field value is correct'
     );
@@ -479,6 +492,8 @@ module('Unit | realm', function (hooks) {
 
     assert.strictEqual(cards.length, 1, 'search finds updated value');
   });
+
+  skip('realm can serve PATCH requests that include linksTo fields');
 
   test('realm can serve delete card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
@@ -511,14 +526,14 @@ module('Unit | realm', function (hooks) {
     let cards = await searchIndex.search({});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
-    let card = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
-    if (card?.type === 'error') {
+    let result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
+    if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${card.error.message}`
+        `unexpected error when getting card from index: ${result.error.message}`
       );
     }
     assert.strictEqual(
-      card?.entry.resource.id,
+      result?.doc.data.id,
       `${testRealmURL}cards/2`,
       'found card in index'
     );
@@ -533,17 +548,17 @@ module('Unit | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 204, 'status was 204');
 
-    card = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
-    assert.strictEqual(card, undefined, 'card was deleted');
+    result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
+    assert.strictEqual(result, undefined, 'card was deleted');
 
-    card = await searchIndex.card(new URL(`${testRealmURL}cards/1`));
-    if (card?.type === 'error') {
+    result = await searchIndex.card(new URL(`${testRealmURL}cards/1`));
+    if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${card.error.message}`
+        `unexpected error when getting card from index: ${result.error.message}`
       );
     }
     assert.strictEqual(
-      card?.entry.resource.id,
+      result?.doc.data.id,
       `${testRealmURL}cards/1`,
       'card 1 is still there'
     );
@@ -763,6 +778,8 @@ module('Unit | realm', function (hooks) {
       'card ID is correct'
     );
   });
+
+  skip('realm can serve search requests whose results have linksTo fields');
 
   test('realm can serve directory requests', async function (assert) {
     let realm = TestRealm.create({

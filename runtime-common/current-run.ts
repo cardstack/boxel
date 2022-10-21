@@ -78,7 +78,7 @@ class URLMap<T> {
   }
 }
 
-interface IndexError {
+export interface IndexError {
   type: "not-loaded" | "general"; // expand as necessary
   message: string;
   errorReferences?: string[];

@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -96,8 +96,8 @@ module('Unit | search-index', function (hooks) {
     let indexer = realm.searchIndex;
     await indexer.run();
     let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
-    if (mango?.type === 'entry') {
-      assert.deepEqual(mango.entry.resource, {
+    if (mango?.type === 'doc') {
+      assert.deepEqual(mango.doc.data, {
         id: `${testRealmURL}Pet/mango`,
         type: 'card',
         attributes: {
@@ -199,8 +199,8 @@ module('Unit | search-index', function (hooks) {
     let indexer = realm.searchIndex;
     await indexer.run();
     let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`));
-    if (hassan?.type === 'entry') {
-      assert.deepEqual(hassan.entry.resource, {
+    if (hassan?.type === 'doc') {
+      assert.deepEqual(hassan.doc.data, {
         id: `${testRealmURL}Friend/hassan`,
         type: 'card',
         attributes: {
@@ -231,6 +231,9 @@ module('Unit | search-index', function (hooks) {
       assert.ok(false, `search entry was an error: ${hassan?.error.message}`);
     }
   });
+
+  // How would the searchDoc look for a cycle in the fields?
+  skip('can index a field with a cycle in the linksTo field');
 
   test("indexing identifies an instance's card references", async function (assert) {
     let realm = TestRealm.create({
@@ -628,6 +631,8 @@ posts/ignore-me.json
         [`${paths.url}cards/1`]
       );
     });
+
+    skip('can search for cards by using a linksTo field');
 
     test(`can search for cards that have custom queryableValue`, async function (assert) {
       let matching = await indexer.search({

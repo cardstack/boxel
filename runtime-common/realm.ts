@@ -414,12 +414,9 @@ export class Realm {
     if (originalMaybeError.type === "error") {
       return systemError(originalMaybeError.error.message);
     }
-    let {
-      entry: { resource: original },
-    } = originalMaybeError;
-
+    let { doc: original } = originalMaybeError;
     let originalClone = cloneDeep(original);
-    delete originalClone.meta.lastModified;
+    delete originalClone.data.meta.lastModified;
 
     let patch = await request.json();
     if (!isSingleCardDocument(patch)) {
@@ -429,7 +426,7 @@ export class Realm {
     delete (patch as any).data.meta;
     delete (patch as any).data.type;
 
-    let card = merge({}, { data: originalClone }, patch);
+    let card = merge({}, originalClone, patch);
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
     let { lastModified } = await this.write(
@@ -450,18 +447,15 @@ export class Realm {
   private async getCard(request: Request): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     let url = this.paths.fileURL(localPath);
-    let maybeError = await this.#searchIndex.card(url);
+    let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
       return notFound(request);
     }
     if (maybeError.type === "error") {
       return systemError(maybeError.error.message);
     }
-    let {
-      entry: { resource: data },
-    } = maybeError;
-    (data as any).links = { self: url.href };
-    let card = { data };
+    let { doc: card } = maybeError;
+    card.data.links = { self: url.href };
     return new Response(JSON.stringify(card, null, 2), {
       headers: {
         "last-modified": formatRFC7231(card.data.meta.lastModified!),
@@ -473,8 +467,8 @@ export class Realm {
 
   private async removeCard(request: Request): Promise<Response> {
     let url = new URL(request.url);
-    let data = await this.#searchIndex.card(url);
-    if (!data) {
+    let result = await this.#searchIndex.card(url);
+    if (!result) {
       return notFound(request);
     }
     let localPath = this.paths.local(url) + ".json";

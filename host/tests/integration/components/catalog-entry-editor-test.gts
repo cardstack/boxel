@@ -243,11 +243,11 @@ module('Integration | catalog-entry-editor', function (hooks) {
         `unexpected error when getting card from index: ${maybeError.error.message}`
       );
     }
-    let { entry } = maybeError!;
-    assert.strictEqual(entry?.resource.attributes?.title, 'test title', 'catalog entry title was updated');
-    assert.strictEqual(entry?.resource.attributes?.description, 'test description', 'catalog entry description was updated');
-    assert.strictEqual(entry?.resource.attributes?.demo?.name, 'Jackie Wackie', 'demo name field was updated');
-    assert.strictEqual(entry?.resource.attributes?.demo?.owner?.firstName, 'EA', 'demo owner firstName field was updated');
+    let { doc } = maybeError!;
+    assert.strictEqual(doc?.data.attributes?.title, 'test title', 'catalog entry title was updated');
+    assert.strictEqual(doc?.data.attributes?.description, 'test description', 'catalog entry description was updated');
+    assert.strictEqual(doc?.data.attributes?.demo?.name, 'Jackie Wackie', 'demo name field was updated');
+    assert.strictEqual(doc?.data.attributes?.demo?.owner?.firstName, 'EA', 'demo owner firstName field was updated');
   });
 
   test('can create new card with missing composite field value', async function (assert) {
