@@ -232,7 +232,12 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     }
     let metas: Partial<Meta>[] = fieldMeta ?? [];
     return new WatchedArray(
-      () => instancePromise.then(instance => recompute(instance)),
+      () => 
+        instancePromise
+          .then(instance => instance[cardSettled] = 
+            instance[cardSettled]
+              .then(() => recompute(instance))
+          ),
       await Promise.all(value.map(async (entry, index) => {
         if (primitive in this.card) {
           return this.card[deserialize](entry, doc);
@@ -257,13 +262,20 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     );
   }
 
-  emptyValue(instance: Card) { return new WatchedArray(() => recompute(instance)) }
+  emptyValue(instance: Card) {
+    return new WatchedArray(
+      () => instance[cardSettled] = instance[cardSettled].then(() => recompute(instance))
+    );
+  };
 
   validate(instance: Card, value: any) {
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray(() => recompute(instance), value);
+    return new WatchedArray(
+      () => instance[cardSettled] = instance[cardSettled].then(() => recompute(instance)),
+      value
+    );
   }
 
   component(model: Box<Card>, format: Format) {
@@ -571,9 +583,8 @@ export class Card {
     return _createFromSerialized(this, data, doc);
   }
 
-  static async didRecompute(card: Card): Promise<void> {
-    let promise = recomputePromises.get(card);
-    await promise;
+  static async hasSettled(card: Card): Promise<void> {
+    await card[cardSettled];
   }
 
   constructor(data?: Record<string, any>) {
@@ -583,7 +594,7 @@ export class Card {
       }
     }
 
-    registerDestructor(this, Card.didRecompute.bind(this));
+    registerDestructor(this, Card.hasSettled.bind(this));
   }
 
   @field id = contains(() => IDCard);
@@ -1073,6 +1084,10 @@ export async function prepareToRender(model: Card, format: Format): Promise<{ co
   return { component };
 }
 
+export function cardHasSettled(instance: Card): Promise<void> {
+  return instance[cardSettled];
+}
+
 export async function recompute(card: Card): Promise<void> {
   // Note that after each async step we check to see if we are still the
   // current promise, otherwise we bail
@@ -1082,16 +1097,17 @@ export async function recompute(card: Card): Promise<void> {
 
   // wait a full micro task before we start - this is simple debounce
   await Promise.resolve();
-  if (recomputePromises.get(card) !== recomputePromise) {
-    return;
+  let current: Promise<void> | undefined;
+  if ((current = recomputePromises.get(card)) !== recomputePromise) {
+    return current;
   }
 
   let loader = Loader.getLoaderFor(Reflect.getPrototypeOf(card)!.constructor);
   async function _loadModel<T extends Card>(model: T, stack: { from: T, to: T, name: string}[] = []): Promise<void> {
     for (let [fieldName, field] of Object.entries(getFields(model, { includeComputeds: true }))) {
       let value: any = await loadField(model, fieldName as keyof T, loader);
-      if (recomputePromises.get(card) !== recomputePromise) {
-        return;
+      if ((current = recomputePromises.get(card)) !== recomputePromise) {
+        return current;
       }
       if (!(primitive in field.card) && value != null &&
         !stack.find(({ from, to, name }) => from === model && to === value && name === fieldName)
@@ -1102,8 +1118,8 @@ export async function recompute(card: Card): Promise<void> {
   }
 
   await _loadModel(card);
-  if (recomputePromises.get(card) !== recomputePromise) {
-    return;
+  if ((current = recomputePromises.get(card)) !== recomputePromise) {
+    return current;
   }
 
   // notify glimmer to rerender this card
