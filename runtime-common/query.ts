@@ -92,17 +92,14 @@ export function assertQuery(
         assertFilter(value, pointer.concat("filter"));
         break;
       case "sort":
-        if (
-          typeof value !== "string" &&
-          (!Array.isArray(value) ||
-            value.some((i: any) => typeof i !== "string"))
-        ) {
+        if (!Array.isArray(value)) {
           throw new Error(
-            `${
-              pointer.concat("sort").join("/") || "/"
-            }: sort must be a string or string array`
+            `${pointer.concat("sort").join("/") || "/"}: sort must be an array`
           );
         }
+        value.forEach((sort, i) => {
+          assertSortExpression(sort, pointer.concat(`sort[${i}]`));
+        });
         break;
       case "queryString":
         if (typeof value !== "string") {
@@ -118,6 +115,41 @@ export function assertQuery(
         break;
       default:
         throw new Error(`unknown field in query: ${key}`);
+    }
+  }
+}
+
+function assertSortExpression(
+  sort: any,
+  pointer: string[]
+): asserts sort is Query["sort"] {
+  if (typeof sort !== "object" || sort == null) {
+    throw new Error(`${pointer.join("/") || "/"}: missing sort object`);
+  }
+  if (!("by" in sort)) {
+    throw new Error(
+      `${pointer.concat("by").join("/") || "/"}: missing by object`
+    );
+  }
+  if (typeof sort.by !== "string") {
+    throw new Error(
+      `${pointer.concat("by").join("/") || "/"}: by must be a string`
+    );
+  }
+  if (!("on" in sort)) {
+    throw new Error(
+      `${pointer.concat("on").join("/") || "/"}: missing on object`
+    );
+  }
+  assertCardType(sort.on, pointer.concat("on"));
+
+  if ("direction" in sort) {
+    if (sort.direction !== "asc" && sort.direction !== "desc") {
+      throw new Error(
+        `${
+          pointer.concat("direction").join("/") || "/"
+        }: direction must be either 'asc' or 'desc'`
+      );
     }
   }
 }
