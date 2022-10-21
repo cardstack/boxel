@@ -339,7 +339,7 @@ export class SearchIndex {
         this.#currentRun
       );
       let nextUnloadedLinks = this.findCardsWithUnloadedLinks().length;
-      if (nextUnloadedLinks === numUnloadedLinks) {
+      if (nextUnloadedLinks >= numUnloadedLinks) {
         break;
       }
       numUnloadedLinks = nextUnloadedLinks;
