@@ -68,7 +68,7 @@ module('Unit | realm', function (hooks) {
     assert.ok(json.data.meta.lastModified, 'lastModified is populated');
   });
 
-  skip('realm can server GET card requests with linksTo relationships', async function (assert) {
+  skip('realm can serve GET card requests with linksTo relationships', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/owner.json': {
         data: {
