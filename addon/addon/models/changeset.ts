@@ -18,6 +18,25 @@ export type SpritesForArgs = {
   id?: string | undefined;
 };
 
+function getOwnNode(spriteTree: SpriteTree, sprite: Sprite): SpriteTreeNode {
+  return spriteTree.lookupNode(sprite)!;
+}
+
+function getHighestNode(
+  spriteTree: SpriteTree,
+  sprite: Sprite
+): SpriteTreeNode {
+  let ownNode = getOwnNode(spriteTree, sprite);
+  if (!sprite.counterpart || sprite.counterpart.element === sprite.element) {
+    return ownNode;
+  } else {
+    let counterpartNode = getOwnNode(spriteTree, sprite.counterpart);
+    return counterpartNode.ancestors.length < ownNode.ancestors.length
+      ? counterpartNode
+      : ownNode;
+  }
+}
+
 function union<T>(...sets: Set<T>[]): Set<T> {
   switch (sets.length) {
     case 0:
@@ -113,13 +132,6 @@ export class Changeset {
 export class ChangesetBuilder {
   contextToChangeset: WeakMap<IContext, Changeset> = new WeakMap();
   spriteTree: SpriteTree;
-  private nodesForSprite = new Map<
-    Sprite,
-    {
-      own: SpriteTreeNode;
-      highest: SpriteTreeNode;
-    }
-  >();
 
   constructor(
     spriteTree: SpriteTree,
@@ -171,11 +183,7 @@ export class ChangesetBuilder {
         let _next = [];
         let spritesForContext: Sprite[] = [];
         for (let sprite of sprites) {
-          if (
-            contextDescendants.includes(
-              this.nodesForSprite.get(sprite)!.highest
-            )
-          ) {
+          if (contextDescendants.includes(getHighestNode(spriteTree, sprite))) {
             spritesForContext.push(sprite);
           } else {
             _next.push(sprite);
@@ -184,7 +192,7 @@ export class ChangesetBuilder {
         sprites = _next;
 
         for (let sprite of spritesForContext) {
-          let parentNode = this.nodesForSprite.get(sprite)!.own.parent;
+          let parentNode = getOwnNode(spriteTree, sprite).parent;
           let parent = parentNode.contextModel ?? parentNode.spriteModel!;
 
           assert(
@@ -340,19 +348,6 @@ export class ChangesetBuilder {
           );
         }
 
-        let highestNode =
-          ancestorsOfCounterpartSprite?.length < ancestorsOfKeptSprite?.length
-            ? counterpartNode
-            : keptSpriteNode;
-        this.nodesForSprite.set(keptSprite, {
-          own: keptSpriteNode,
-          highest: highestNode,
-        });
-        this.nodesForSprite.set(keptSprite.counterpart, {
-          own: counterpartNode,
-          highest: highestNode,
-        });
-
         spriteModifierToSpriteMap.set(insertedSpriteModifier, keptSprite);
         spriteModifierToCounterpartModifierMap.set(
           insertedSpriteModifier,
@@ -370,14 +365,7 @@ export class ChangesetBuilder {
         insertedSpriteModifier.role,
         SpriteType.Inserted
       );
-      let insertedSpriteNode = this.spriteTree.lookupNode(
-        insertedSpriteModifier.element
-      )!;
       spriteModifierToSpriteMap.set(insertedSpriteModifier, insertedSprite);
-      this.nodesForSprite.set(insertedSprite, {
-        own: insertedSpriteNode,
-        highest: insertedSpriteNode,
-      });
     }
 
     for (let removedSpriteModifier of classifiedRemovedSpriteModifiers) {
@@ -388,14 +376,7 @@ export class ChangesetBuilder {
         removedSpriteModifier.role,
         SpriteType.Removed
       );
-      let removedSpriteNode = this.spriteTree.lookupNode(
-        removedSpriteModifier
-      )!;
       spriteModifierToSpriteMap.set(removedSpriteModifier, removedSprite);
-      this.nodesForSprite.set(removedSprite, {
-        own: removedSpriteNode,
-        highest: removedSpriteNode,
-      });
     }
 
     for (let keptSpriteModifier of naturalKept) {
@@ -410,14 +391,7 @@ export class ChangesetBuilder {
         keptSpriteModifier.role,
         SpriteType.Kept
       );
-      let keptSpriteNode = this.spriteTree.lookupNode(
-        keptSpriteModifier.element
-      )!;
       spriteModifierToSpriteMap.set(keptSpriteModifier, keptSprite);
-      this.nodesForSprite.set(keptSprite, {
-        own: keptSpriteNode,
-        highest: keptSpriteNode,
-      });
     }
 
     return {
