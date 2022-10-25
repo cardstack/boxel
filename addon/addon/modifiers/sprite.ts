@@ -33,7 +33,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   didReceiveArguments(): void {
     this.id = this.args.named.id;
     this.role = this.args.named.role;
-    if (!this.animations.spriteTree.lookupNodeByElement(this.element)) {
+    if (!this.animations.spriteTree.lookupNode(this.element)) {
       this.animations.registerSpriteModifier(this);
     }
     this.captureSnapshot();
