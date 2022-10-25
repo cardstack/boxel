@@ -225,7 +225,7 @@ export class ChangesetBuilder {
       intermediateSprites
     );
 
-    let unallocatedItems: Sprite[] = [];
+    let sprites: Sprite[] = [];
     for (let spriteModifier of spriteModifiers) {
       let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
       let counterpartModifier =
@@ -241,10 +241,10 @@ export class ChangesetBuilder {
         intermediateSprite
       );
 
-      unallocatedItems.push(sprite);
+      sprites.push(sprite);
     }
 
-    return unallocatedItems;
+    return sprites;
   }
 
   classifySprites(
