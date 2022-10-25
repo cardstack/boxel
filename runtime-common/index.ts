@@ -37,6 +37,7 @@ import { RealmPaths } from "./paths";
 import { Query } from "./query";
 export const baseRealm = new RealmPaths("https://cardstack.com/base/");
 export { RealmPaths };
+export { NotLoaded, isNotLoadedError } from "./not-loaded";
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 
@@ -72,8 +73,10 @@ export const externalsMap: Map<string, string[]> = new Map([
       "isCardResource",
       "isRelationship",
       "isSingleCardDocument",
+      "isNotLoadedError",
       "chooseCard",
       "baseCardRef",
+      "NotLoaded",
       "CardError",
       "isMetaFieldItem",
       "createNewCard",

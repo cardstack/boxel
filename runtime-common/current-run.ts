@@ -4,9 +4,11 @@ import {
   baseCardRef,
   LooseCardResource,
   isCardResource,
+  isNotLoadedError,
   internalKeyFor,
   trimExecutableExtension,
   hasExecutableExtension,
+  type NotLoaded,
   type Card,
   type CardAPI,
 } from ".";
@@ -24,7 +26,6 @@ import type {
   CardResource,
   SingleCardDocument,
 } from "./search-index";
-import { isNotLoadedError, NotLoaded } from "../base/not-loaded";
 
 // Forces callers to use URL (which avoids accidentally using relative url
 // strings without a base)

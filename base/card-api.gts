@@ -1,7 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
-import { NotLoaded, isNotLoadedError } from './not-loaded';
 import { flatMap, startCase, merge } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { registerDestructor } from '@ember/destroyable';
@@ -17,14 +16,15 @@ import {
   Loader,
   isSingleCardDocument,
   isRelationship,
+  isNotLoadedError,
   CardError,
+  NotLoaded,
   type Meta,
   type CardFields,
   type Relationship,
   type LooseCardResource,
   type LooseSingleCardDocument
 } from '@cardstack/runtime-common';
-export { NotLoaded };
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
 export const deserialize = Symbol('cardstack-deserialize');
