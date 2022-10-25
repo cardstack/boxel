@@ -35,7 +35,7 @@ export const queryableValue = Symbol('cardstack-queryable-value');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol('cardstack-is-saved-instance');
-const cardSettled = Symbol('cardstack-card-settled');
+const myRecomputes = Symbol('cardstack-my-recomputes');
 const isField = Symbol('cardstack-field');
 
 export type CardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
@@ -234,10 +234,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return new WatchedArray(
       () => 
         instancePromise
-          .then(instance => instance[cardSettled] = 
-            instance[cardSettled]
-              .then(() => recompute(instance))
-          ),
+          .then(instance => instance[myRecomputes].push(recompute(instance))),
       await Promise.all(value.map(async (entry, index) => {
         if (primitive in this.card) {
           return this.card[deserialize](entry, doc);
@@ -264,7 +261,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
 
   emptyValue(instance: Card) {
     return new WatchedArray(
-      () => instance[cardSettled] = instance[cardSettled].then(() => recompute(instance))
+      () => instance[myRecomputes].push(recompute(instance))
     );
   };
 
@@ -273,7 +270,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
       throw new Error(`Expected array for field value ${this.name}`);
     }
     return new WatchedArray(
-      () => instance[cardSettled] = instance[cardSettled].then(() => recompute(instance)),
+      () => instance[myRecomputes].push(recompute(instance)),
       value
     );
   }
@@ -547,7 +544,7 @@ export class Card {
   // typescript considers everything a valid card.
   [isBaseCard] = true;
   [isSavedInstance] = false;
-  [cardSettled] = Promise.resolve();
+  [myRecomputes]: (Promise<void>)[] = [];
   declare ["constructor"]: CardConstructor;
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
@@ -583,10 +580,6 @@ export class Card {
     return _createFromSerialized(this, data, doc);
   }
 
-  static async hasSettled(card: Card): Promise<void> {
-    await card[cardSettled];
-  }
-
   constructor(data?: Record<string, any>) {
     if (data !== undefined) {
       for (let [fieldName, value] of Object.entries(data)) {
@@ -594,7 +587,7 @@ export class Card {
       }
     }
 
-    registerDestructor(this, Card.hasSettled.bind(this));
+    registerDestructor(this, logCardErrors);
   }
 
   @field id = contains(() => IDCard);
@@ -875,7 +868,7 @@ async function _updateFromSerialized<T extends CardConstructor>(
       instance[isSavedInstance] = true;
     }
   }
-  await instance[cardSettled];
+  await logCardErrors(instance);
 
   deferred.fulfill(instance);
   return instance;
@@ -935,7 +928,7 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
       for (let computedFieldName of Object.keys(getComputedFields(this))) {
         deserialized.delete(computedFieldName);
       }
-      this[cardSettled] = this[cardSettled].then(() => recompute(this));
+      this[myRecomputes].push(recompute(this));
     }
   }
   (descriptor.get as any)[isField] = field;
@@ -1083,8 +1076,18 @@ export async function prepareToRender(model: Card, format: Format): Promise<{ co
   return { component };
 }
 
-export function cardHasSettled(instance: Card): Promise<void> {
-  return instance[cardSettled];
+async function logCardErrors(instance: Card) {
+  let results = await Promise.allSettled(instance[myRecomputes]);
+  for (let result of results) {
+    if (result.status === 'rejected') {
+      console.error(`Encountered error recomputing card instance '${
+          instance.id != null ? instance.id : instance.constructor.name
+        }':`, result.reason);
+      if (result.reason instanceof Error) {
+        console.error(result.reason.stack);
+      }
+    }
+  }
 }
 
 interface RecomputeOptions {
@@ -1099,17 +1102,16 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
 
   // wait a full micro task before we start - this is simple debounce
   await Promise.resolve();
-  let current: Promise<void> | undefined;
-  if ((current = recomputePromises.get(card)) !== recomputePromise) {
-    return current;
+  if (recomputePromises.get(card) !== recomputePromise) {
+    return;
   }
 
   let loader = Loader.getLoaderFor(Reflect.getPrototypeOf(card)!.constructor);
   async function _loadModel<T extends Card>(model: T, stack: { from: T, to: T, name: string}[] = []): Promise<void> {
     for (let [fieldName, field] of Object.entries(getFields(model, { includeComputeds: true }))) {
       let value: any = await loadField(model, fieldName as keyof T, loader, opts);
-      if ((current = recomputePromises.get(card)) !== recomputePromise) {
-        return current;
+      if (recomputePromises.get(card) !== recomputePromise) {
+        return;
       }
       if (!(primitive in field.card) && value != null &&
         !stack.find(({ from, to, name }) => from === model && to === value && name === fieldName)
@@ -1120,8 +1122,8 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
   }
 
   await _loadModel(card);
-  if ((current = recomputePromises.get(card)) !== recomputePromise) {
-    return current;
+  if (recomputePromises.get(card) !== recomputePromise) {
+    return;
   }
 
   // notify glimmer to rerender this card
