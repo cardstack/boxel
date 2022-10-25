@@ -119,7 +119,7 @@ module('Unit | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
-    assert.deepEqual(json, {
+    let expected = {
       data: {
         type: 'card',
         id: `${testRealmURL}dir/mango`,
@@ -173,7 +173,10 @@ module('Unit | realm', function (hooks) {
           },
         },
       ],
-    });
+    };
+    console.log(`ACTUAL:`, JSON.stringify(json, null, 2));
+    console.log(`EXPECTED:`, JSON.stringify(expected, null, 2));
+    assert.deepEqual(json, expected);
   });
 
   test('realm can serve GET card requests with linksTo relationships to other realms', async function (assert) {
@@ -214,7 +217,7 @@ module('Unit | realm', function (hooks) {
     let json = await response.json();
     let { included = [] } = json;
     delete included[0]?.meta.lastModified;
-    assert.deepEqual(json, {
+    let expected = {
       data: {
         type: 'card',
         id: `${testRealmURL}dir/mango`,
@@ -265,7 +268,10 @@ module('Unit | realm', function (hooks) {
           },
         },
       ],
-    });
+    };
+    console.log(`ACTUAL:`, JSON.stringify(json, null, 2));
+    console.log(`EXPECTED:`, JSON.stringify(expected, null, 2));
+    assert.deepEqual(json, expected);
   });
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
@@ -507,7 +513,7 @@ module('Unit | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 201, 'successful http status');
     let json = await response.json();
-    assert.deepEqual(json, {
+    let expected = {
       data: {
         type: 'card',
         id: `${testRealmURL}Pet/1`,
@@ -559,7 +565,10 @@ module('Unit | realm', function (hooks) {
           },
         },
       ],
-    });
+    };
+    console.log(`ACTUAL:`, JSON.stringify(json, null, 2));
+    console.log(`EXPECTED:`, JSON.stringify(expected, null, 2));
+    assert.deepEqual(json, expected);
   });
 
   test('realm can serve patch card requests', async function (assert) {
@@ -779,7 +788,7 @@ module('Unit | realm', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
-    assert.deepEqual(json, {
+    let expected = {
       data: {
         type: 'card',
         id: `${testRealmURL}dir/mango`,
@@ -833,7 +842,10 @@ module('Unit | realm', function (hooks) {
           },
         },
       ],
-    });
+    };
+    console.log(`ACTUAL:`, JSON.stringify(json, null, 2));
+    console.log(`EXPECTED:`, JSON.stringify(expected, null, 2));
+    assert.deepEqual(json, expected);
   });
 
   test('realm can serve delete card requests', async function (assert) {
