@@ -151,7 +151,6 @@ export class ChangesetBuilder {
     );
 
     let sprites = ChangesetBuilder.createSprites(
-      spriteTree,
       freshlyAdded,
       freshlyRemoved,
       naturalKept,
@@ -162,17 +161,32 @@ export class ChangesetBuilder {
       ChangesetBuilder.createSortedAnimatingContextArray(contexts);
     let sortedChangesets = ChangesetBuilder.toChangesets(sortedContexts);
 
+    // To not need to mock the sprite tree, we'd want to make it possible to
+    // get the descendants of a context without having to read from the sprite tree
+    // This will incur a perf hit, probably.
+    // I think it's worth it until we're clear what kinds of rules we want.
+    // Being able to test distribution of sprites without having to mock the sprite tree
+    // Should make things a lot easier to iterate on
+    // We'll need to do testing on getting up to this state, and distribution afterwards
+
     let remainingSprites = ChangesetBuilder.performRuleMatching(
       spriteTree,
       sortedChangesets,
       sprites
     );
 
-    ChangesetBuilder.distributeSprites(
+    let leftoverSprites = ChangesetBuilder.distributeSprites(
       spriteTree,
       sortedChangesets,
       remainingSprites
     );
+
+    if (leftoverSprites.length) {
+      console.warn(
+        'Some sprites were unable to be distributed to contexts and will not animate. This is likely to be because they or their counterparts are root nodes.',
+        leftoverSprites
+      );
+    }
 
     this.contextToChangeset = ChangesetBuilder.toWeakMap(sortedChangesets);
   }
@@ -194,6 +208,7 @@ export class ChangesetBuilder {
     sortedChangesets: Changeset[],
     sprites: Sprite[]
   ) {
+    let cloned = [...sprites];
     for (let changeset of sortedChangesets) {
       let context = changeset.context;
       let node = spriteTree.lookupNode(context.element);
@@ -203,14 +218,14 @@ export class ChangesetBuilder {
 
       let _next = [];
       let itemsForContext: Sprite[] = [];
-      for (let sprite of sprites) {
+      for (let sprite of cloned) {
         if (contextDescendants.includes(getHighestNode(spriteTree, sprite))) {
           itemsForContext.push(sprite);
         } else {
           _next.push(sprite);
         }
       }
-      sprites = _next;
+      cloned = _next;
 
       for (let sprite of itemsForContext) {
         let parentNode = getOwnNode(spriteTree, sprite).parent;
@@ -228,6 +243,8 @@ export class ChangesetBuilder {
         ChangesetBuilder.addSpriteTo(changeset, sprite);
       }
     }
+
+    return cloned;
   }
 
   /**
@@ -370,7 +387,6 @@ export class ChangesetBuilder {
   }
 
   static createSprites(
-    spriteTree: SpriteTree,
     freshlyAdded: Set<ISpriteModifier>,
     freshlyRemoved: Set<ISpriteModifier>,
     naturalKept: Set<ISpriteModifier>,
@@ -381,7 +397,6 @@ export class ChangesetBuilder {
       spriteModifierToSpriteMap,
       spriteModifierToCounterpartModifierMap,
     } = ChangesetBuilder.classifySprites(
-      spriteTree,
       freshlyAdded,
       freshlyRemoved,
       naturalKept,
@@ -418,7 +433,6 @@ export class ChangesetBuilder {
   }
 
   static classifySprites(
-    spriteTree: SpriteTree,
     freshlyAdded: Set<ISpriteModifier>,
     freshlyRemoved: Set<ISpriteModifier>,
     naturalKept: Set<ISpriteModifier>,
@@ -486,28 +500,6 @@ export class ChangesetBuilder {
           counterpartSpriteModifier.role,
           SpriteType.Removed
         );
-        let keptSpriteNode = spriteTree.lookupNode(
-          insertedSpriteModifier.element
-        )!;
-        let counterpartNode = spriteTree.lookupNode(counterpartSpriteModifier)!;
-
-        let ancestorsOfKeptSprite = keptSpriteNode.ancestors;
-        let stableAncestorsOfKeptSprite = ancestorsOfKeptSprite.filter(
-          (v) => v.contextModel?.isStable
-        );
-        let ancestorsOfCounterpartSprite = counterpartNode.ancestors;
-        let stableAncestorsOfCounterpartSprite =
-          ancestorsOfCounterpartSprite?.filter((v) => v.contextModel?.isStable);
-
-        let sharedContextNode = stableAncestorsOfKeptSprite?.find((v) =>
-          stableAncestorsOfCounterpartSprite?.includes(v)
-        );
-
-        if (!sharedContextNode) {
-          console.warn(
-            `Non-natural kept sprite with id ${insertedSpriteModifier.id} will not animate because there is no shared animation context that encloses both it and its counterpart`
-          );
-        }
 
         spriteModifierToSpriteMap.set(insertedSpriteModifier, keptSprite);
         spriteModifierToCounterpartModifierMap.set(
