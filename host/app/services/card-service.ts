@@ -1,7 +1,7 @@
 import Service, { service } from '@ember/service';
 import { stringify } from 'qs';
-import LoaderService from './loader-service';
-import LocalRealm from '../services/local-realm';
+import type LoaderService from './loader-service';
+import type LocalRealm from '../services/local-realm';
 import {
   type LooseSingleCardDocument,
   isSingleCardDocument,

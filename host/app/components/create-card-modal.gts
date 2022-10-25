@@ -9,7 +9,7 @@ import { Deferred } from '@cardstack/runtime-common/deferred';
 import { taskFor } from 'ember-concurrency-ts';
 import { enqueueTask } from 'ember-concurrency'
 import { service } from '@ember/service';
-import CardService from '../services/card-service';
+import type CardService from '../services/card-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
 

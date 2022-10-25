@@ -8,7 +8,7 @@ import { service } from '@ember/service';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
 import { getSearchResults } from '../resources/search';
-import CardService from '../services/card-service';
+import type CardService from '../services/card-service';
 import CardEditor from './card-editor';
 
 interface Signature {
