@@ -36,8 +36,8 @@ module('Unit | search-index', function (hooks) {
       },
     });
     let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
     let indexer = realm.searchIndex;
-    await indexer.run();
     let { data: cards } = await indexer.search({});
     assert.deepEqual(cards, [
       {
@@ -96,8 +96,8 @@ module('Unit | search-index', function (hooks) {
       },
     });
     let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
     let indexer = realm.searchIndex;
-    await indexer.run();
     let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
     if (mango?.type === 'doc') {
       assert.deepEqual(mango.doc.data, {
@@ -199,8 +199,8 @@ module('Unit | search-index', function (hooks) {
       },
     });
     let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
     let indexer = realm.searchIndex;
-    await indexer.run();
     let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`));
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc.data, {
@@ -254,8 +254,8 @@ module('Unit | search-index', function (hooks) {
         },
       },
     });
+    await realm.ready;
     let indexer = realm.searchIndex;
-    await indexer.run();
     let refs = (await indexer.searchEntry(new URL(`${testRealmURL}person-1`)))
       ?.deps;
     assert.deepEqual(
@@ -307,8 +307,8 @@ posts/please-ignore-me.json
       `,
     });
 
+    await realm.ready;
     let indexer = realm.searchIndex;
-    await indexer.run();
 
     {
       let card = await indexer.card(
@@ -364,8 +364,8 @@ posts/ignore-me.json
       `,
     });
 
+    await realm.ready;
     let indexer = realm.searchIndex;
-    await indexer.run();
     await indexer.update(new URL(`${testRealmURL}posts/ignore-me.json`));
 
     let instance = await indexer.card(
@@ -592,8 +592,8 @@ posts/ignore-me.json
 
     hooks.beforeEach(async function () {
       let realm = TestRealm.create(sampleCards);
+      await realm.ready;
       indexer = realm.searchIndex;
-      await indexer.run();
     });
 
     test(`can search for cards by using the 'eq' filter`, async function (assert) {

@@ -365,7 +365,6 @@ module("indexing", function (hooks) {
       {
         type: "error",
         error: {
-          type: "general",
           message:
             "unable to fetch http://test-realm/post (TODO include stack trace)",
           errorReferences: ["http://test-realm/post"],

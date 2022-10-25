@@ -1143,16 +1143,6 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
         if (opts?.loadFields) {
           let response = await loader.fetch(e.reference, { headers: { 'Accept': 'application/vnd.api+json' } });
           if (!response.ok) {
-            // TODO use a more precise guard to detect the server not being ready
-            // yet--deserialize the error from the fetch response first and then use 
-            // CardError.title to figure this out
-            if (response.status === 503) {
-              // while the realm server is still performing it's 1st phase indexing 
-              // we will just not load the links--links will be loaded as part of the 
-              // index's 2nd phase of indexing
-              isLoaded = true;
-              continue;
-            }
             let cardError = await CardError.fromFetchResponse(e.reference, response);
             cardError.additionalErrors = [...(cardError.additionalErrors || []), e];
             throw cardError;

@@ -3,7 +3,6 @@ import { Kind, Realm } from "./realm";
 import { CurrentRun, SearchEntry, type IndexError } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
-import { Deferred } from "./deferred";
 import { CardError } from "./error";
 import flatMap from "lodash/flatMap";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
@@ -326,9 +325,6 @@ interface SearchResultError {
 export class SearchIndex {
   #currentRun: CurrentRun;
 
-  #startedPhase1 = new Deferred<void>();
-  #startedPhase2 = new Deferred<void>();
-
   constructor(
     private realm: Realm,
     private readdir: (
@@ -343,35 +339,14 @@ export class SearchIndex {
   }
 
   async run() {
-    this.#currentRun = await CurrentRun.fromScratch(this.realm, {
-      readdir: this.readdir,
-      readFileAsText: this.readFileAsText,
-    });
-    this.#startedPhase1.fulfill();
-    let numUnloadedLinks = this.findCardsWithUnloadedLinks().length;
-    while (numUnloadedLinks > 0) {
-      this.#currentRun = await CurrentRun.incrementalUnloadedLinks(
-        this.#currentRun
-      );
-      let nextUnloadedLinks = this.findCardsWithUnloadedLinks().length;
-      if (nextUnloadedLinks >= numUnloadedLinks) {
-        // TODO we need to think thru how to deal with linksTo cycles
-        // and what kind of searchDoc's we should make for those.
-        // currently this will be unable to penetrate a cycle in the relationships
-        break;
-      }
-      numUnloadedLinks = nextUnloadedLinks;
-    }
-    this.#startedPhase2.fulfill();
-  }
-
-  async phase1Ready() {
-    await this.#startedPhase1.promise;
-  }
-
-  async ready() {
-    await this.#startedPhase1.promise;
-    await this.#startedPhase2.promise;
+    this.#currentRun = await CurrentRun.fromScratch(
+      this.realm,
+      {
+        readdir: this.readdir,
+        readFileAsText: this.readFileAsText,
+      },
+      (workingIndex) => (this.#currentRun = workingIndex)
+    );
   }
 
   get stats() {
@@ -518,13 +493,6 @@ export class SearchIndex {
       return result?.entry;
     }
     return undefined;
-  }
-
-  private findCardsWithUnloadedLinks() {
-    return [...this.#currentRun.instances.values()].filter(
-      (maybeError) =>
-        maybeError.type === "error" && maybeError.error.type === "not-loaded"
-    );
   }
 
   private loadAPI(): Promise<CardAPI> {

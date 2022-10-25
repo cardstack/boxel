@@ -24,6 +24,7 @@ import type {
   CardResource,
   SingleCardDocument,
 } from "./search-index";
+import { isNotLoadedError, NotLoaded } from "../base/not-loaded";
 
 // Forces callers to use URL (which avoids accidentally using relative url
 // strings without a base)
@@ -79,7 +80,6 @@ class URLMap<T> {
 }
 
 export interface IndexError {
-  type: "not-loaded" | "general"; // expand as necessary
   message: string;
   errorReferences?: string[];
   // TODO we need to serialize the stack trace too, checkout the mono repo card compiler for examples
@@ -128,6 +128,7 @@ export class CurrentRun {
   #modules = new Map<string, ModuleWithErrors>();
   #moduleWorkingCache = new Map<string, Promise<Module>>();
   #typesCache = new WeakMap<typeof Card, Promise<TypesWithErrors>>();
+  #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
@@ -173,7 +174,11 @@ export class CurrentRun {
     });
   }
 
-  static async fromScratch(realm: Realm, reader: Reader) {
+  static async fromScratch(
+    realm: Realm,
+    reader: Reader,
+    workingIndex: (workingIndex: CurrentRun) => void
+  ) {
     let current = new this({
       realm,
       reader,
@@ -181,33 +186,10 @@ export class CurrentRun {
       modules: new Map(),
       ignoreMap: new URLMap(),
     });
+    // expose the index as it's being built so we can ask questions of ourselves
+    // as we load the links
+    workingIndex(current);
     await current.visitDirectory(new URL(realm.url));
-    return current;
-  }
-
-  static async incrementalUnloadedLinks(prev: CurrentRun) {
-    let instances = new URLMap(prev.instances);
-    let ignoreMap = new URLMap(prev.ignoreMap);
-    let modules = new Map(prev.modules);
-    let invalidations = invalidateUnloadedLinks(instances).map(
-      (u) => new URL(u)
-    );
-
-    let current = new this({
-      realm: prev.realm,
-      reader: prev.reader,
-      instances,
-      modules,
-      ignoreMap,
-      // this incremental index never invalidates modules, so we should reuse
-      // the previous loader (this keeps our symbols lined up)
-      loader: prev.loader,
-    });
-
-    for (let invalidation of invalidations) {
-      await current.visitFile(invalidation);
-    }
-
     return current;
   }
 
@@ -295,16 +277,15 @@ export class CurrentRun {
     }
   }
 
-  private async visitFile(url: URL): Promise<void> {
+  private async visitFile(url: URL, stack: string[] = []): Promise<void> {
     if (this.isIgnored(url)) {
       return;
     }
 
     if (
-      (hasExecutableExtension(url.href) ||
-        // handle modules with no extension too
-        !url.href.split("/").pop()!.includes(".")) &&
-      url.href !== `${baseRealm.url}card-api.gts` // TODO the base card's module is not analyzable
+      hasExecutableExtension(url.href) ||
+      // handle modules with no extension too
+      !url.href.split("/").pop()!.includes(".")
     ) {
       return await this.indexCardSource(url);
     }
@@ -319,7 +300,7 @@ export class CurrentRun {
     if (url.href.endsWith(".json")) {
       let { data: resource } = JSON.parse(content);
       if (isCardResource(resource)) {
-        await this.indexCard(localPath, lastModified, resource);
+        await this.indexCard(localPath, lastModified, resource, stack);
       }
     }
   }
@@ -342,7 +323,6 @@ export class CurrentRun {
         type: "error",
         moduleURL: url.href,
         error: {
-          type: "general",
           message: `encountered error loading module "${url.href}": ${err.message}`,
           errorReferences,
         },
@@ -362,11 +342,49 @@ export class CurrentRun {
     }
   }
 
+  private async recomputeCard(
+    card: Card,
+    instanceURL: string,
+    maxDepth: number,
+    stack: string[]
+  ): Promise<void> {
+    let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+    try {
+      await api.recompute(card, { loadFields: stack.length < maxDepth });
+    } catch (err: any) {
+      let notLoadedErr: NotLoaded | undefined;
+      if (
+        isCardError(err) &&
+        (notLoadedErr = err.additionalErrors?.find((e) =>
+          isNotLoadedError(e)
+        ) as NotLoaded | undefined)
+      ) {
+        let linkURL = new URL(`${notLoadedErr.reference}.json`);
+        if (this.#realmPaths.inRealm(linkURL)) {
+          await this.visitFile(linkURL, [instanceURL, ...stack]);
+          await api.recompute(card, { loadFields: true });
+        } else {
+          // in this case the instance we are linked to is a missing instance
+          // in an external realm.
+          throw err;
+        }
+      }
+    }
+  }
+
   private async indexCard(
     path: LocalPath,
     lastModified: number,
-    resource: LooseCardResource
+    resource: LooseCardResource,
+    stack: string[]
   ): Promise<void> {
+    // TODO handle cycles
+    let indexingInstance = this.#indexingInstances.get(path);
+    if (indexingInstance) {
+      return await indexingInstance;
+    }
+    let deferred = new Deferred<void>();
+    this.#indexingInstances.set(path, deferred.promise);
     let instanceURL = new URL(
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
@@ -383,11 +401,22 @@ export class CurrentRun {
     let cardType: typeof Card | undefined;
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
-      let card = await api.createFromSerialized({ data: resource }, moduleURL, {
-        loader: this.#loader,
-      });
+      let card = (await api.createFromSerialized(
+        { data: resource },
+        moduleURL,
+        {
+          loader: this.#loader,
+        }
+      )) as Card;
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
-      await api.recompute(card, { loadFields: true });
+      await this.recomputeCard(
+        card,
+        this.#realmPaths.fileURL(path).href,
+        // TODO hardcoding link traversal depth to 5 for now, eventually this
+        // will be based on the fields used by the card's template
+        5,
+        stack
+      );
       let data: SingleCardDocument = api.serializeCard(card, {
         includeComputeds: true,
       });
@@ -422,6 +451,7 @@ export class CurrentRun {
           ]),
         },
       });
+      deferred.fulfill();
     }
 
     if (uncaughtError || typesMaybeError?.type === "error") {
@@ -431,14 +461,6 @@ export class CurrentRun {
         error = {
           type: "error",
           error: {
-            type:
-              "isNotLoadedError" in uncaughtError ||
-              (isCardError(uncaughtError) &&
-                uncaughtError.additionalErrors?.find(
-                  (e) => "isNotLoadedError" in e
-                ))
-                ? "not-loaded"
-                : "general",
             message: `${uncaughtError.message} (TODO include stack trace)`,
             errorReferences: [cardRef.module],
             // TODO serialize CardError and attach to this doc
@@ -447,7 +469,9 @@ export class CurrentRun {
       } else if (typesMaybeError?.type === "error") {
         error = { type: "error", error: typesMaybeError.error };
       } else {
-        throw new Error(`bug: should never get here`);
+        let err = new Error(`bug: should never get here`);
+        deferred.reject(err);
+        throw err;
       }
       if (globalThis.process?.env?.SUPPRESS_ERRORS !== "true") {
         console.warn(
@@ -455,6 +479,7 @@ export class CurrentRun {
         );
       }
       this.#instances.set(instanceURL, error);
+      deferred.fulfill();
     }
   }
 
@@ -523,7 +548,6 @@ export class CurrentRun {
         let result: TypesWithErrors = {
           type: "error",
           error: {
-            type: "general",
             message: `Unable to determine card types for ${JSON.stringify(
               ref
             )}`,
@@ -617,20 +641,6 @@ export class CurrentRun {
       return undefined;
     }
   }
-}
-
-function invalidateUnloadedLinks(
-  instances: URLMap<SearchEntryWithErrors>
-): string[] {
-  return [...instances]
-    .filter(([instanceURL, item]) => {
-      if (item.type === "error" && item.error.type === "not-loaded") {
-        instances.remove(instanceURL); // note this is a side-effect
-        return true;
-      }
-      return false;
-    })
-    .map(([u]) => `${u.href}.json`);
 }
 
 function invalidate(
