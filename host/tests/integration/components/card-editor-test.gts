@@ -1,6 +1,5 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
-import { ComponentLike } from '@glint/template';
 import { setupRenderingTest } from 'ember-qunit';
 import { Loader, baseRealm } from '@cardstack/runtime-common';
 import CardEditor  from 'runtime-spike/components/card-editor';
@@ -9,7 +8,6 @@ import { renderComponent } from '../../helpers/render-component';
 import { testRealmURL, shimModule } from '../../helpers';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
-import type CardService from 'runtime-spike/services/card-service';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -19,25 +17,15 @@ class MockLocalRealm extends Service {
   url = new URL(testRealmURL);
 }
 
-class MockCardService extends Service {
-  components = new WeakMap<
-    Record<string, any>,
-    (format: 'isolated' | 'embedded' | 'edit') => ComponentLike<{ Args: {}; Blocks: {} }>
-  >();
-}
-
 module('Integration | card-editor', function (hooks) {
   let loader: Loader;
-  let cardService: CardService;
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
-    cardService = this.owner.lookup('service:card-service') as CardService;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-realm', MockLocalRealm);
-    this.owner.register('service:card-service', MockCardService);
   });
 
   test('renders card in edit (default) format', async function (assert) {
@@ -62,7 +50,6 @@ module('Integration | card-editor', function (hooks) {
         }
       }
     });
-    cardService.components.set(card, format => cardApi.getComponent(card, format));
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -106,7 +93,6 @@ module('Integration | card-editor', function (hooks) {
         }
       }
     });
-    cardService.components.set(card, format => cardApi.getComponent(card, format));
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -159,7 +145,6 @@ module('Integration | card-editor', function (hooks) {
         }
       }
     });
-    cardService.components.set(card, format => cardApi.getComponent(card, format));
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

@@ -570,6 +570,10 @@ export class Card {
     await promise;
   }
 
+  static getComponent(card: Card, format: Format) {
+    return getComponent(card, format);
+  }
+
   constructor(data?: Record<string, any>) {
     if (data !== undefined) {
       for (let [fieldName, value] of Object.entries(data)) {
