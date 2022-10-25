@@ -651,6 +651,8 @@ module('Unit | realm', function (hooks) {
             attributes: {
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
+              email: null,
+              posts: null,
             },
             meta: {
               adoptsFrom: {

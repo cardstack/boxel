@@ -115,7 +115,7 @@ interface Field<CardT extends CardConstructor> {
 }
 
 function callSerializeHook(card: typeof Card, value: any, doc: JSONAPISingleResourceDocument) {
-  if (value !== null) {
+  if (value != null) {
     return card[serialize](value, doc);
   } else {
     return null;
@@ -744,7 +744,6 @@ function serializeCardResource(
   }
   let { id: removedIdField, ...fields } = getFields(model, opts);
   let fieldResources = Object.keys(fields)
-    .filter(fieldName => peekAtField(model, fieldName) !== undefined) // skip over missing fields
     .map(fieldName => serializedGet(model, fieldName, doc));
   return merge({}, ...fieldResources, {
     type: 'card',
