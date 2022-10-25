@@ -8,6 +8,7 @@ import {
   internalKeyFor,
   trimExecutableExtension,
   hasExecutableExtension,
+  maxLinkDepth,
   type NotLoaded,
   type Card,
   type CardAPI,
@@ -346,12 +347,11 @@ export class CurrentRun {
   private async recomputeCard(
     card: Card,
     instanceURL: string,
-    maxDepth: number,
     stack: string[]
   ): Promise<void> {
     let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
     try {
-      await api.recompute(card, { loadFields: stack.length < maxDepth });
+      await api.recompute(card, { loadFields: stack.length < maxLinkDepth });
     } catch (err: any) {
       let notLoadedErr: NotLoaded | undefined;
       if (
@@ -413,9 +413,6 @@ export class CurrentRun {
       await this.recomputeCard(
         card,
         this.#realmPaths.fileURL(path).href,
-        // TODO hardcoding link traversal depth to 5 for now, eventually this
-        // will be based on the fields used by the card's template
-        5,
         stack
       );
       let data: SingleCardDocument = api.serializeCard(card, {

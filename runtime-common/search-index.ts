@@ -1,4 +1,4 @@
-import { baseRealm, internalKeyFor, LooseCardResource } from ".";
+import { baseRealm, internalKeyFor, LooseCardResource, maxLinkDepth } from ".";
 import { Kind, Realm } from "./realm";
 import { CurrentRun, SearchEntry, type IndexError } from "./current-run";
 import { LocalPath } from "./paths";
@@ -425,7 +425,8 @@ export class SearchIndex {
     resource: LooseCardResource,
     omit: string[] = [],
     included: CardResource<Saved>[] = [],
-    visited: string[] = []
+    visited: string[] = [],
+    stack: string[] = []
   ): Promise<CardResource<Saved>[]> {
     if (resource.id != null) {
       if (visited.includes(resource.id)) {
@@ -467,12 +468,13 @@ export class SearchIndex {
         }
         linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
       }
-      if (linkResource) {
+      if (linkResource && stack.length < maxLinkDepth) {
         for (let includedResource of await this.loadLinks(
           linkResource,
           omit,
           [...included, linkResource],
-          visited
+          visited,
+          [...(resource.id != null ? [resource.id] : []), ...stack]
         )) {
           if (
             !omit.includes(includedResource.id) &&
