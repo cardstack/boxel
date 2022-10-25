@@ -16,10 +16,6 @@ export class CardError extends Error {
   source?: ErrorDetails["source"];
   isCardError: true = true;
   additionalErrors: (CardError | Error)[] | null = null;
-
-  // If this error originated from a row in the search index that has stored
-  // `compilerErrors`, this propagates forward the card URLs that were
-  // dependencies of the failed compile.
   deps?: string[];
 
   constructor(detail: string, { status, title, source }: ErrorDetails = {}) {
@@ -42,14 +38,14 @@ export class CardError extends Error {
     if (!err || typeof err !== "object" || !isCardError(err)) {
       return err;
     }
-    let result = new this(err.detail, {
+    let result = new CardError(err.detail, {
       status: err.status,
       title: err.title,
       source: err.source,
     });
     if (err.additionalErrors) {
       result.additionalErrors = err.additionalErrors.map((inner) =>
-        this.fromSerializableError(inner)
+        CardError.fromSerializableError(inner)
       );
     }
     return result;
@@ -64,8 +60,7 @@ export class CardError extends Error {
       try {
         text = await response.text();
       } catch (err) {
-        debugger;
-        // throw err;
+        throw err;
       }
       let errorJSON: { errors: any[] } | undefined;
       let maybeErrorJSON: any;
@@ -134,10 +129,7 @@ export function serializableError(err: any): any {
 }
 
 export function responseWithError(error: CardError): Response {
-  // TODO error.toJSON() does not recursively serialize the additionalErrors
-  // array. let's use the serializableError() to do that (need to make sure the
-  // result works as a fetch response)
-  return new Response(JSON.stringify({ errors: [error.toJSON()] }), {
+  return new Response(JSON.stringify({ errors: [serializableError(error)] }), {
     status: error.status,
     statusText: error.title,
     headers: { "content-type": "application/vnd.api+json" },

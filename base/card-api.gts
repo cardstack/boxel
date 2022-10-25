@@ -1138,6 +1138,7 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
           if (!response.ok) {
             let cardError = await CardError.fromFetchResponse(e.reference, response);
             cardError.additionalErrors = [...(cardError.additionalErrors || []), e];
+            cardError.deps = [e.reference];
             throw cardError;
           }
           let json = await response.json();
