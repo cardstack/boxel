@@ -570,6 +570,10 @@ export class Card {
     await promise;
   }
 
+  static api = {
+    getComponent: (card: Card, format: Format) => getComponent(card, format)
+  }
+
   constructor(data?: Record<string, any>) {
     if (data !== undefined) {
       for (let [fieldName, value] of Object.entries(data)) {
@@ -1055,7 +1059,7 @@ function getBoxComponent<CardT extends CardConstructor>(card: CardT, format: For
   return stable;
 }
 
-export function getComponent(model: Card, format: Format): ComponentLike<{ Args: never, Blocks: never }> {
+export function getComponent(model: Card, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
   let box = Box.create(model);
   let component = getBoxComponent(model.constructor as CardConstructor, format, box);
   return component;

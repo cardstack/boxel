@@ -1,5 +1,4 @@
 import Service, { service } from '@ember/service';
-import { ComponentLike } from '@glint/template';
 import { stringify } from 'qs';
 import LoaderService from './loader-service';
 import LocalRealm from '../services/local-realm';
@@ -11,7 +10,7 @@ import {
 import type { ResolvedURL } from '@cardstack/runtime-common/loader';
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
-import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -52,9 +51,11 @@ export default class CardService extends Service {
 
   async createFromSerialized(json: LooseSingleCardDocument): Promise<Card> {
     await this.apiModule.loaded;
-    return await this.api.createFromSerialized(json, this.localRealm.url, {
+    let card = await this.api.createFromSerialized(json, this.localRealm.url, {
       loader: this.loaderService.loader,
     });
+    await this.api.recompute(card);
+    return card;
   }
 
   async loadModel(url: string | URL | undefined): Promise<Card | undefined> {
@@ -69,15 +70,6 @@ export default class CardService extends Service {
       );
     }
     return await this.createFromSerialized(json);
-  }
-
-  async loadComponent(
-    card: Card,
-    format: Format
-  ): Promise<ComponentLike<{ Args: {}; Blocks: {} }>> {
-    await this.apiModule.loaded;
-    await this.api.recompute(card);
-    return this.api.getComponent(card, format);
   }
 
   async saveModel(card: Card): Promise<Card> {
