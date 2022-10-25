@@ -231,10 +231,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
       throw new Error(`fieldMeta for contains-many field '${this.name}' is not an array: ${JSON.stringify(fieldMeta, null, 2)}`);
     }
     let metas: Partial<Meta>[] = fieldMeta ?? [];
-    return new WatchedArray(
-      () => 
-        instancePromise
-          .then(instance => instance[myRecomputes].push(recompute(instance))),
+    return new WatchedArray( () => instancePromise .then(instance => instance[myRecomputes].push(recompute(instance))),
       await Promise.all(value.map(async (entry, index) => {
         if (primitive in this.card) {
           return this.card[deserialize](entry, doc);
@@ -260,19 +257,14 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
   }
 
   emptyValue(instance: Card) {
-    return new WatchedArray(
-      () => instance[myRecomputes].push(recompute(instance))
-    );
+    return new WatchedArray( () => instance[myRecomputes].push(recompute(instance)));
   };
 
   validate(instance: Card, value: any) {
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray(
-      () => instance[myRecomputes].push(recompute(instance)),
-      value
-    );
+    return new WatchedArray( () => instance[myRecomputes].push(recompute(instance)), value);
   }
 
   component(model: Box<Card>, format: Format) {
