@@ -148,7 +148,7 @@ export default class AnimationsService extends Service {
 
     let animationsToCancel: Animation[] = [];
 
-    let contextNode = this.spriteTree.lookupNodeByElement(
+    let contextNode = this.spriteTree.lookupNode(
       context.element
     ) as SpriteTreeNode;
 
@@ -200,7 +200,7 @@ export default class AnimationsService extends Service {
     if (context.element) {
       context.captureSnapshot();
       animationsToCancel = this.createIntermediateSpritesForContext(context);
-      let contextNode = this.spriteTree.lookupNodeByElement(
+      let contextNode = this.spriteTree.lookupNode(
         context.element
       ) as SpriteTreeNode;
       for (let {

@@ -134,7 +134,7 @@ export class ChangesetBuilder {
     let naturalKept: Set<ISpriteModifier> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
-      let contextNode = this.spriteTree.lookupNodeByElement(context.element);
+      let contextNode = this.spriteTree.lookupNode(context.element);
       let contextChildren: ISpriteModifier[] = contextNode!
         .getSpriteDescendants()
         .filter((v) => !v.isRemoved)
@@ -163,7 +163,7 @@ export class ChangesetBuilder {
       if (context.isStable) {
         let changeset = new Changeset(context);
 
-        let node = spriteTree.lookupNodeByElement(context.element);
+        let node = spriteTree.lookupNode(context.element);
         let contextDescendants = node!
           .getSpriteDescendants({ deep: true })
           .map((v) => v.node);
@@ -315,10 +315,10 @@ export class ChangesetBuilder {
           counterpartSpriteModifier.role,
           SpriteType.Removed
         );
-        let keptSpriteNode = this.spriteTree.lookupNodeByElement(
+        let keptSpriteNode = this.spriteTree.lookupNode(
           insertedSpriteModifier.element
         )!;
-        let counterpartNode = this.spriteTree.lookupRemovedNode(
+        let counterpartNode = this.spriteTree.lookupNode(
           counterpartSpriteModifier
         )!;
 
@@ -370,7 +370,7 @@ export class ChangesetBuilder {
         insertedSpriteModifier.role,
         SpriteType.Inserted
       );
-      let insertedSpriteNode = this.spriteTree.lookupNodeByElement(
+      let insertedSpriteNode = this.spriteTree.lookupNode(
         insertedSpriteModifier.element
       )!;
       spriteModifierToSpriteMap.set(insertedSpriteModifier, insertedSprite);
@@ -388,7 +388,7 @@ export class ChangesetBuilder {
         removedSpriteModifier.role,
         SpriteType.Removed
       );
-      let removedSpriteNode = this.spriteTree.lookupRemovedNode(
+      let removedSpriteNode = this.spriteTree.lookupNode(
         removedSpriteModifier
       )!;
       spriteModifierToSpriteMap.set(removedSpriteModifier, removedSprite);
@@ -410,7 +410,7 @@ export class ChangesetBuilder {
         keptSpriteModifier.role,
         SpriteType.Kept
       );
-      let keptSpriteNode = this.spriteTree.lookupNodeByElement(
+      let keptSpriteNode = this.spriteTree.lookupNode(
         keptSpriteModifier.element
       )!;
       spriteModifierToSpriteMap.set(keptSpriteModifier, keptSprite);
