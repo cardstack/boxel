@@ -50,7 +50,7 @@ export default class CardService extends Service {
     return await response.json();
   }
 
-  async makeCardFromResponse(json: LooseSingleCardDocument): Promise<Card> {
+  async createFromSerialized(json: LooseSingleCardDocument): Promise<Card> {
     await this.apiModule.loaded;
     return await this.api.createFromSerialized(json, this.localRealm.url, {
       loader: this.loaderService.loader,
@@ -68,7 +68,7 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`
       );
     }
-    return await this.makeCardFromResponse(json);
+    return await this.createFromSerialized(json);
   }
 
   async loadComponent(
@@ -88,7 +88,10 @@ export default class CardService extends Service {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(cardJSON, null, 2),
     });
-    return await this.makeCardFromResponse(json);
+    if (isSaved) {
+      return await this.api.updateFromSerialized(card, json);
+    }
+    return await this.createFromSerialized(json);
   }
 
   async search(query: Query, realmURL: string | ResolvedURL): Promise<Card[]> {
@@ -101,7 +104,7 @@ export default class CardService extends Service {
     }
     return await Promise.all(
       json.data.map(
-        async (doc) => await this.makeCardFromResponse({ data: doc })
+        async (doc) => await this.createFromSerialized({ data: doc })
       )
     );
   }
