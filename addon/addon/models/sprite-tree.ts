@@ -1,7 +1,7 @@
 import { assert } from '@ember/debug';
 import { CopiedCSS } from '../utils/measurement';
 import { formatTreeString, TreeNode } from '../utils/format-tree';
-import Sprite, { SpriteIdentifier } from './sprite';
+import Sprite, { SpriteIdentifier, SpriteType } from './sprite';
 import { Changeset } from './changeset';
 
 export interface IContext {
@@ -271,7 +271,7 @@ export default class SpriteTree {
     | { item: IContext; type: 'CONTEXT' }
     | { item: ISpriteModifier; type: 'SPRITE' }
   )[] = [];
-  freshlyRemovedToNode: WeakMap<ISpriteModifier, SpriteTreeNode> =
+  freshlyRemovedElementsToNode: WeakMap<Element, SpriteTreeNode> =
     new WeakMap();
 
   addPendingAnimationContext(item: IContext) {
@@ -312,7 +312,7 @@ export default class SpriteTree {
   }
 
   addAnimationContext(context: IContext): SpriteTreeNode {
-    let existingNode = this.lookupNodeByElement(context.element);
+    let existingNode = this.lookupNode(context.element);
 
     if (existingNode) {
       assert(
@@ -334,20 +334,20 @@ export default class SpriteTree {
     }
   }
   removeAnimationContext(context: IContext): void {
-    let node = this.lookupNodeByElement(context.element);
+    let node = this.lookupNode(context.element);
     if (node) {
       node.parent?.removeChild(node);
       if (node.isSprite()) {
         // TODO: we might need to do some cleanup? This is currently a WeakMap but..
         // situation where this matters is SpriteModifier hanging around when it should be removed
-        this.freshlyRemovedToNode.set(node.spriteModel, node);
+        this.freshlyRemovedElementsToNode.set(node.spriteModel.element, node);
       }
       this.nodesByElement.delete(context.element);
     }
   }
   addSpriteModifier(spriteModifier: ISpriteModifier): SpriteTreeNode {
     let resultNode: SpriteTreeNode;
-    let existingNode = this.lookupNodeByElement(spriteModifier.element);
+    let existingNode = this.lookupNode(spriteModifier.element);
     if (existingNode) {
       assert(
         'Cannot add a SpriteModel which was already added',
@@ -366,7 +366,9 @@ export default class SpriteTree {
 
       for (let item of this.interruptedRemoved) {
         if (new SpriteIdentifier(item.id, item.role).equals(identifier)) {
-          matchingRemovedItems.push(this.freshlyRemovedToNode.get(item)!);
+          matchingRemovedItems.push(
+            this.freshlyRemovedElementsToNode.get(item.element)!
+          );
         }
       }
 
@@ -394,26 +396,66 @@ export default class SpriteTree {
     return resultNode;
   }
   removeSpriteModifier(spriteModifier: ISpriteModifier): void {
-    let node = this.lookupNodeByElement(spriteModifier.element);
+    let node = this.lookupNode(spriteModifier.element);
     if (node) {
       node.parent?.removeChild(node);
       if (node.isSprite()) {
         // TODO: we might need to do some cleanup? This is currently a WeakMap but..
         // situation where this matters is SpriteModifier hanging around when it should be removed
-        this.freshlyRemovedToNode.set(node.spriteModel, node);
+        this.freshlyRemovedElementsToNode.set(node.spriteModel.element, node);
         this.freshlyRemoved.add(spriteModifier);
       }
       this.nodesByElement.delete(spriteModifier.element);
     }
   }
-  lookupNodeByElement(element: Element): SpriteTreeNode | undefined {
-    return this.nodesByElement.get(element);
+
+  lookupNode(target: Element): SpriteTreeNode | undefined;
+  lookupNode(target: ISpriteModifier): SpriteTreeNode | undefined;
+  lookupNode(target: IContext): SpriteTreeNode | undefined;
+  lookupNode(target: Sprite): SpriteTreeNode | undefined;
+  lookupNode(target: Element | { element: Element }) {
+    let element =
+      target instanceof Element
+        ? target
+        : target.element instanceof Element
+        ? target.element
+        : null;
+
+    if (!element) {
+      throw new Error(
+        'Unable to determine element for which to lookup a SpriteTreeNode'
+      );
+    }
+
+    let nonRemoved = this.nodesByElement.get(element);
+    let removed = this.freshlyRemovedElementsToNode.get(element);
+
+    if (target instanceof Sprite) {
+      if (target.type === SpriteType.Removed)
+        assert(
+          'Unexpectedly found SpriteTreeNode via non-removed lookup, while looking up a removed sprite',
+          !nonRemoved
+        );
+      if (target.type !== SpriteType.Removed)
+        assert(
+          'Unexpectedly found SpriteTreeNode via removed lookup, while looking up a non-removed sprite',
+          !removed
+        );
+    }
+
+    assert(
+      'Sprite tree lookup maps appear to be incorrect. Element is in map for removed and non-removed.',
+      !(nonRemoved && removed)
+    );
+
+    return nonRemoved ?? removed;
   }
+
   descendantsOf(
     model: SpriteTreeModel,
     opts: GetDescendantNodesOptions = { includeFreshlyRemoved: false }
   ): SpriteTreeModel[] {
-    let node = this.lookupNodeByElement(model.element);
+    let node = this.lookupNode(model.element);
     if (node) {
       return node.getDescendantNodes(opts).reduce((result, n) => {
         if (n.contextModel) {
@@ -434,7 +476,7 @@ export default class SpriteTree {
     for (let context of requestedContexts) {
       if (result.indexOf(context) !== -1) continue;
       result.unshift(context);
-      let node = this.lookupNodeByElement(context.element);
+      let node = this.lookupNode(context.element);
       let ancestor = node && node.parent;
       while (ancestor) {
         if (ancestor.isContext()) {
@@ -464,26 +506,13 @@ export default class SpriteTree {
 
   private findParentNode(element: Element) {
     while (element.parentElement) {
-      let node = this.lookupNodeByElement(element.parentElement);
+      let node = this.lookupNode(element.parentElement);
       if (node) {
         return node;
       }
       element = element.parentElement;
     }
     return null;
-  }
-
-  findStableSharedAncestor(spriteA: ISpriteModifier, spriteB: ISpriteModifier) {
-    let ancestorsOfKeptSprite = this.nodesByElement
-      .get(spriteA.element)
-      ?.ancestors.filter((v) => v.contextModel?.isStable);
-    let ancestorsOfCounterpartSprite = this.freshlyRemovedToNode
-      .get(spriteB)
-      ?.ancestors.filter((v) => v.contextModel?.isStable);
-
-    return ancestorsOfKeptSprite?.find((v) =>
-      ancestorsOfCounterpartSprite?.includes(v)
-    )?.contextModel;
   }
 
   log() {

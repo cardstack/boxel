@@ -98,7 +98,7 @@ module('Unit | Models | SpriteTree', function (hooks) {
       assert.ok(node, 'addAnimationContext returns a node');
       assert.equal(
         node,
-        subject.lookupNodeByElement(context.element),
+        subject.lookupNode(context.element),
         'can lookup node after adding it'
       );
       assert.equal(node.isRoot, true, 'context node with none above it isRoot');
@@ -160,7 +160,7 @@ module('Unit | Models | SpriteTree', function (hooks) {
       assert.ok(spriteNode, 'addSpriteModifier returns a node');
       assert.equal(
         spriteNode,
-        subject.lookupNodeByElement(spriteModifer.element),
+        subject.lookupNode(spriteModifer.element),
         'can lookup node after adding it'
       );
       assert.equal(
@@ -200,7 +200,7 @@ module('Unit | Models | SpriteTree', function (hooks) {
       assert.ok(spriteNode, 'addSpriteModifier returns a node');
       assert.equal(
         spriteNode,
-        subject.lookupNodeByElement(spriteModifer.element),
+        subject.lookupNode(spriteModifer.element),
         'can lookup node after adding it'
       );
       assert.equal(
@@ -231,7 +231,7 @@ module('Unit | Models | SpriteTree', function (hooks) {
     test('remove an animation context', function (assert) {
       subject.removeAnimationContext(context);
       assert.equal(
-        subject.lookupNodeByElement(context.element),
+        subject.lookupNode(context.element),
         null,
         'can no longer lookup node after removing it'
       );
@@ -284,9 +284,9 @@ module('Unit | Models | SpriteTree', function (hooks) {
     test('remove a sprite modifier', function (assert) {
       subject.removeSpriteModifier(spriteModifer);
       assert.equal(
-        subject.lookupNodeByElement(spriteModifer.element),
-        null,
-        'can no longer lookup node after removing it'
+        subject.lookupNode(spriteModifer.element),
+        spriteNode,
+        'can still lookup sprite node after removing it'
       );
       assert.equal(
         contextNode.children.size,
@@ -296,7 +296,7 @@ module('Unit | Models | SpriteTree', function (hooks) {
       assert.equal(
         contextNode.freshlyRemovedChildren.size,
         1,
-        'context node has no freshlyRemovedChildren yet'
+        'context node has a single node in its freshlyRemovedChildren'
       );
       assert.equal(
         Array.from(contextNode.freshlyRemovedChildren)[0],
@@ -472,7 +472,7 @@ module('Unit | Models | SpriteTree', function (hooks) {
         subject.addSpriteModifier(leafSpriteModifier);
       });
       test('nodes are correctly added and typed', function (assert) {
-        let childNode = subject.lookupNodeByElement(
+        let childNode = subject.lookupNode(
           childContext.element
         ) as SpriteTreeNode;
 

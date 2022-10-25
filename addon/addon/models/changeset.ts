@@ -18,6 +18,25 @@ export type SpritesForArgs = {
   id?: string | undefined;
 };
 
+function getOwnNode(spriteTree: SpriteTree, sprite: Sprite): SpriteTreeNode {
+  return spriteTree.lookupNode(sprite)!;
+}
+
+function getHighestNode(
+  spriteTree: SpriteTree,
+  sprite: Sprite
+): SpriteTreeNode {
+  let ownNode = getOwnNode(spriteTree, sprite);
+  if (!sprite.counterpart || sprite.counterpart.element === sprite.element) {
+    return ownNode;
+  } else {
+    let counterpartNode = getOwnNode(spriteTree, sprite.counterpart);
+    return counterpartNode.ancestors.length < ownNode.ancestors.length
+      ? counterpartNode
+      : ownNode;
+  }
+}
+
 function union<T>(...sets: Set<T>[]): Set<T> {
   switch (sets.length) {
     case 0:
@@ -34,22 +53,6 @@ function union<T>(...sets: Set<T>[]): Set<T> {
       }
       return result;
   }
-}
-
-// DESCENDANT ACCESS: exclusively used to get descendants to filter for descendants that should be included in a changeset
-export function filterToContext(
-  spriteTree: SpriteTree,
-  animationContext: IContext,
-  spriteModifiers: Set<ISpriteModifier>
-): Set<ISpriteModifier> {
-  let node = spriteTree.lookupNodeByElement(animationContext.element);
-  let contextDescendants = node!
-    .getSpriteDescendants({ deep: true })
-    .map((v) => v.spriteModifier);
-
-  return new Set(
-    [...spriteModifiers].filter((m) => contextDescendants.includes(m))
-  );
 }
 
 export class Changeset {
@@ -143,7 +146,7 @@ export class ChangesetBuilder {
     let naturalKept: Set<ISpriteModifier> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
-      let contextNode = this.spriteTree.lookupNodeByElement(context.element);
+      let contextNode = this.spriteTree.lookupNode(context.element);
       let contextChildren: ISpriteModifier[] = contextNode!
         .getSpriteDescendants()
         .filter((v) => !v.isRemoved)
@@ -161,12 +164,7 @@ export class ChangesetBuilder {
       }
     }
 
-    let {
-      spriteModifiers,
-      spriteModifierToSpriteMap,
-      spriteModifierToCounterpartModifierMap,
-      contextToKeptSpriteModifierMap,
-    } = this.classifySprites(
+    let sprites = this.createSprites(
       freshlyAdded,
       freshlyRemoved,
       naturalKept,
@@ -177,43 +175,36 @@ export class ChangesetBuilder {
       if (context.isStable) {
         let changeset = new Changeset(context);
 
-        let spriteModifiersForContext = filterToContext(
-          this.spriteTree,
-          context,
-          spriteModifiers
-        );
+        let node = spriteTree.lookupNode(context.element);
+        let contextDescendants = node!
+          .getSpriteDescendants({ deep: true })
+          .map((v) => v.node);
 
-        // add the sprites with counterparts here, if necessary
-        if (contextToKeptSpriteModifierMap.has(context)) {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          for (let modifier of contextToKeptSpriteModifierMap.get(context)!) {
-            spriteModifiersForContext.add(modifier);
+        let _next = [];
+        let spritesForContext: Sprite[] = [];
+        for (let sprite of sprites) {
+          if (contextDescendants.includes(getHighestNode(spriteTree, sprite))) {
+            spritesForContext.push(sprite);
+          } else {
+            _next.push(sprite);
           }
         }
+        sprites = _next;
 
-        for (let spriteModifier of spriteModifiersForContext) {
-          let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
-          let counterpartModifier =
-            spriteModifierToCounterpartModifierMap.get(spriteModifier);
-          let intermediateSprite = intermediateSprites.get(
-            sprite.identifier.toString()
-          );
-
-          let spriteNode =
-            spriteTree.lookupNodeByElement(sprite.element) ??
-            spriteTree.freshlyRemovedToNode.get(spriteModifier);
-          let parentNode = spriteNode!.parent;
+        for (let sprite of spritesForContext) {
+          let parentNode = getOwnNode(spriteTree, sprite).parent;
           let parent = parentNode.contextModel ?? parentNode.spriteModel!;
 
-          this.addSpriteTo(
-            changeset,
-            sprite,
-            spriteModifier,
-            context,
-            parent,
-            counterpartModifier,
-            intermediateSprite
+          assert(
+            'Contexts should always be stable and have last and current bounds',
+            context.lastBounds && context.currentBounds && context.isStable
           );
+
+          sprite.within({
+            parent: parent,
+            contextElement: context,
+          });
+          this.addSpriteTo(changeset, sprite);
         }
 
         this.contextToChangeset.set(context, changeset);
@@ -223,6 +214,45 @@ export class ChangesetBuilder {
         context.isInitialRenderCompleted = true;
       }
     }
+  }
+
+  createSprites(
+    freshlyAdded: Set<ISpriteModifier>,
+    freshlyRemoved: Set<ISpriteModifier>,
+    naturalKept: Set<ISpriteModifier>,
+    intermediateSprites: Map<string, IntermediateSprite>
+  ) {
+    let {
+      spriteModifiers,
+      spriteModifierToSpriteMap,
+      spriteModifierToCounterpartModifierMap,
+    } = this.classifySprites(
+      freshlyAdded,
+      freshlyRemoved,
+      naturalKept,
+      intermediateSprites
+    );
+
+    let sprites: Sprite[] = [];
+    for (let spriteModifier of spriteModifiers) {
+      let sprite = spriteModifierToSpriteMap.get(spriteModifier) as Sprite;
+      let counterpartModifier =
+        spriteModifierToCounterpartModifierMap.get(spriteModifier);
+      let intermediateSprite = intermediateSprites.get(
+        sprite.identifier.toString()
+      );
+
+      this.setSpriteOwnBounds(
+        sprite,
+        spriteModifier,
+        counterpartModifier,
+        intermediateSprite
+      );
+
+      sprites.push(sprite);
+    }
+
+    return sprites;
   }
 
   classifySprites(
@@ -239,11 +269,6 @@ export class ChangesetBuilder {
     let spriteModifierToCounterpartModifierMap = new Map<
       ISpriteModifier,
       ISpriteModifier
-    >();
-    // non-natural kept sprites only
-    let contextToKeptSpriteModifierMap = new WeakMap<
-      IContext,
-      Set<ISpriteModifier>
     >();
 
     // Classify non-natural KeptSprites
@@ -286,19 +311,6 @@ export class ChangesetBuilder {
       if (counterpartSpriteModifier) {
         classifiedInsertedSpriteModifiers.delete(insertedSpriteModifier);
 
-        // Find a stable shared ancestor ContextModel
-        let sharedContext = this.spriteTree.findStableSharedAncestor(
-          insertedSpriteModifier,
-          counterpartSpriteModifier
-        );
-
-        if (!sharedContext) {
-          console.warn(
-            `Non-natural kept sprite with id ${insertedSpriteModifier.id} will not animate because there is no shared animation context that encloses both it and its counterpart`
-          );
-          continue;
-        }
-
         let keptSprite = new Sprite(
           insertedSpriteModifier.element as HTMLElement,
           insertedSpriteModifier.id,
@@ -311,49 +323,60 @@ export class ChangesetBuilder {
           counterpartSpriteModifier.role,
           SpriteType.Removed
         );
+        let keptSpriteNode = this.spriteTree.lookupNode(
+          insertedSpriteModifier.element
+        )!;
+        let counterpartNode = this.spriteTree.lookupNode(
+          counterpartSpriteModifier
+        )!;
+
+        let ancestorsOfKeptSprite = keptSpriteNode.ancestors;
+        let stableAncestorsOfKeptSprite = ancestorsOfKeptSprite.filter(
+          (v) => v.contextModel?.isStable
+        );
+        let ancestorsOfCounterpartSprite = counterpartNode.ancestors;
+        let stableAncestorsOfCounterpartSprite =
+          ancestorsOfCounterpartSprite?.filter((v) => v.contextModel?.isStable);
+
+        let sharedContextNode = stableAncestorsOfKeptSprite?.find((v) =>
+          stableAncestorsOfCounterpartSprite?.includes(v)
+        );
+
+        if (!sharedContextNode) {
+          console.warn(
+            `Non-natural kept sprite with id ${insertedSpriteModifier.id} will not animate because there is no shared animation context that encloses both it and its counterpart`
+          );
+        }
 
         spriteModifierToSpriteMap.set(insertedSpriteModifier, keptSprite);
         spriteModifierToCounterpartModifierMap.set(
           insertedSpriteModifier,
           counterpartSpriteModifier
         );
-        if (contextToKeptSpriteModifierMap.has(sharedContext)) {
-          contextToKeptSpriteModifierMap
-            .get(sharedContext)
-            ?.add(insertedSpriteModifier);
-        } else {
-          contextToKeptSpriteModifierMap.set(
-            sharedContext,
-            new Set([insertedSpriteModifier])
-          );
-        }
+        spriteModifiers.add(insertedSpriteModifier);
       }
     }
 
     for (let insertedSpriteModifier of classifiedInsertedSpriteModifiers) {
       spriteModifiers.add(insertedSpriteModifier);
-      spriteModifierToSpriteMap.set(
-        insertedSpriteModifier,
-        new Sprite(
-          insertedSpriteModifier.element as HTMLElement,
-          insertedSpriteModifier.id,
-          insertedSpriteModifier.role,
-          SpriteType.Inserted
-        )
+      let insertedSprite = new Sprite(
+        insertedSpriteModifier.element as HTMLElement,
+        insertedSpriteModifier.id,
+        insertedSpriteModifier.role,
+        SpriteType.Inserted
       );
+      spriteModifierToSpriteMap.set(insertedSpriteModifier, insertedSprite);
     }
 
     for (let removedSpriteModifier of classifiedRemovedSpriteModifiers) {
       spriteModifiers.add(removedSpriteModifier);
-      spriteModifierToSpriteMap.set(
-        removedSpriteModifier,
-        new Sprite(
-          removedSpriteModifier.element as HTMLElement,
-          removedSpriteModifier.id,
-          removedSpriteModifier.role,
-          SpriteType.Removed
-        )
+      let removedSprite = new Sprite(
+        removedSpriteModifier.element as HTMLElement,
+        removedSpriteModifier.id,
+        removedSpriteModifier.role,
+        SpriteType.Removed
       );
+      spriteModifierToSpriteMap.set(removedSpriteModifier, removedSprite);
     }
 
     for (let keptSpriteModifier of naturalKept) {
@@ -362,64 +385,61 @@ export class ChangesetBuilder {
         !spriteModifierToCounterpartModifierMap.has(keptSpriteModifier)
       );
       spriteModifiers.add(keptSpriteModifier);
-      spriteModifierToSpriteMap.set(
-        keptSpriteModifier,
-        new Sprite(
-          keptSpriteModifier.element as HTMLElement,
-          keptSpriteModifier.id,
-          keptSpriteModifier.role,
-          SpriteType.Kept
-        )
+      let keptSprite = new Sprite(
+        keptSpriteModifier.element as HTMLElement,
+        keptSpriteModifier.id,
+        keptSpriteModifier.role,
+        SpriteType.Kept
       );
+      spriteModifierToSpriteMap.set(keptSpriteModifier, keptSprite);
     }
 
     return {
       spriteModifiers,
       spriteModifierToSpriteMap,
       spriteModifierToCounterpartModifierMap,
-      contextToKeptSpriteModifierMap,
     };
   }
 
-  addSpriteTo(
-    node: Changeset,
+  addSpriteTo(changeset: Changeset, sprite: Sprite) {
+    if (sprite.type === SpriteType.Kept) {
+      changeset.keptSprites.add(sprite);
+    } else if (sprite.type === SpriteType.Inserted) {
+      changeset.insertedSprites.add(sprite);
+    } else if (sprite.type === SpriteType.Removed) {
+      changeset.removedSprites.add(sprite);
+    } else {
+      throw new Error('Unexpected sprite type received in changeset');
+    }
+  }
+
+  setSpriteOwnBounds(
     sprite: Sprite,
     spriteModifier: ISpriteModifier,
-    context: IContext,
-    parent: IContext | ISpriteModifier,
     counterpartModifier?: ISpriteModifier,
     intermediateSprite?: IntermediateSprite
-  ) {
+  ): void {
     if (sprite.type === SpriteType.Kept) {
       assert(
         'kept sprite should have lastBounds and currentBounds',
-        spriteModifier.lastBounds &&
-          context.lastBounds &&
-          spriteModifier.currentBounds &&
-          context.currentBounds
+        spriteModifier.lastBounds && spriteModifier.currentBounds
       );
 
       if (intermediateSprite) {
         // If an interruption happened we set the intermediate sprite's bounds as the starting point.
         sprite.initialBounds = new ContextAwareBounds({
           element: intermediateSprite.intermediateBounds,
-          contextElement: context.lastBounds,
-          parent: parent.lastBounds,
         });
         sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
       } else {
         sprite.initialBounds = new ContextAwareBounds({
           element: spriteModifier.lastBounds,
-          contextElement: context.lastBounds,
-          parent: parent.lastBounds,
         });
         sprite.initialComputedStyle = spriteModifier.lastComputedStyle;
       }
 
       sprite.finalBounds = new ContextAwareBounds({
         element: spriteModifier.currentBounds,
-        contextElement: context.currentBounds,
-        parent: parent.currentBounds,
       });
       sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
 
@@ -442,8 +462,6 @@ export class ChangesetBuilder {
           } else {
             sprite.counterpart.initialBounds = new ContextAwareBounds({
               element: counterpartModifier.currentBounds,
-              contextElement: context.lastBounds,
-              parent: parent.lastBounds,
             });
             sprite.counterpart.initialComputedStyle =
               counterpartModifier.lastComputedStyle;
@@ -457,12 +475,10 @@ export class ChangesetBuilder {
           sprite.counterpart.finalComputedStyle = sprite.finalComputedStyle;
         }
       }
-
-      node.keptSprites.add(sprite);
     } else if (sprite.type === SpriteType.Inserted) {
       assert(
         'inserted sprite should have currentBounds',
-        spriteModifier.currentBounds && context.currentBounds
+        spriteModifier.currentBounds
       );
       assert(
         'there should not be an intermediate sprite for an inserted sprite',
@@ -471,35 +487,25 @@ export class ChangesetBuilder {
 
       sprite.finalBounds = new ContextAwareBounds({
         element: spriteModifier.currentBounds,
-        contextElement: context.currentBounds,
-        parent: parent.currentBounds,
       });
       sprite.finalComputedStyle = spriteModifier.currentComputedStyle;
-
-      node.insertedSprites.add(sprite);
     } else if (sprite.type === SpriteType.Removed) {
       assert(
         'removed sprite should have currentBounds',
-        spriteModifier.currentBounds && context.lastBounds
+        spriteModifier.currentBounds
       );
 
       if (intermediateSprite) {
         sprite.initialBounds = new ContextAwareBounds({
           element: intermediateSprite.intermediateBounds,
-          contextElement: context.lastBounds,
-          parent: parent.lastBounds,
         });
         sprite.initialComputedStyle = intermediateSprite.intermediateStyles;
       } else {
         sprite.initialBounds = new ContextAwareBounds({
           element: spriteModifier.currentBounds,
-          contextElement: context.lastBounds,
-          parent: parent.lastBounds,
         });
         sprite.initialComputedStyle = spriteModifier.currentComputedStyle;
       }
-
-      node.removedSprites.add(sprite);
     }
   }
 }

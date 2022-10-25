@@ -23,10 +23,7 @@ import {
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
-import {
-  filterToContext,
-  ChangesetBuilder,
-} from 'animations-experiment/models/changeset';
+import { ChangesetBuilder } from 'animations-experiment/models/changeset';
 
 export type AnimateFunction = (
   sprite: Sprite,
@@ -151,7 +148,7 @@ export default class AnimationsService extends Service {
 
     let animationsToCancel: Animation[] = [];
 
-    let contextNode = this.spriteTree.lookupNodeByElement(
+    let contextNode = this.spriteTree.lookupNode(
       context.element
     ) as SpriteTreeNode;
 
@@ -205,7 +202,7 @@ export default class AnimationsService extends Service {
     if (context.element) {
       context.captureSnapshot();
       animationsToCancel = this.createIntermediateSpritesForContext(context);
-      let contextNode = this.spriteTree.lookupNodeByElement(
+      let contextNode = this.spriteTree.lookupNode(
         context.element
       ) as SpriteTreeNode;
       for (let {
