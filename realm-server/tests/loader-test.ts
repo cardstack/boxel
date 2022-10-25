@@ -42,8 +42,8 @@ module("loader", function (hooks) {
       },
       "http://example.com/"
     );
+    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
-    loader.registerRealm(realm);
 
     let { checkImportMeta, myLoader } = await loader.import<{
       checkImportMeta: () => string;

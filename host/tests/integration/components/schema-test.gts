@@ -37,7 +37,7 @@ module('Integration | schema', function (hooks) {
     adapter = new TestRealmAdapter({});
     realm = TestRealm.createWithAdapter(adapter);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
-    loader.registerRealm(realm);
+    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
     this.owner.register('service:local-realm', MockLocalRealm);
   })

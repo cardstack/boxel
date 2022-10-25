@@ -4,7 +4,6 @@ import { Deferred } from "./deferred";
 import { trimExecutableExtension } from "./index";
 import { RealmPaths } from "./paths";
 import { CardError } from "./error";
-import type { Realm } from "./realm";
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -60,8 +59,8 @@ export interface MaybeLocalRequest extends Request {
 
 export class Loader {
   private modules = new Map<string, Module>();
-  private realms = new Set<Realm>();
-  private urlMappings = new Map<RealmPaths, string>();
+  private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
+  private urlMappings = new Map<string, string>();
   private moduleShims = new Map<string, Record<string, any>>();
   private identities = new WeakMap<
     Function,
@@ -86,14 +85,14 @@ export class Loader {
   static createLoaderFromGlobal(): Loader {
     let globalLoader = Loader.getLoader();
     let loader = new Loader();
-    loader.realms = globalLoader.realms;
+    loader.urlHandlers = globalLoader.urlHandlers;
     loader.urlMappings = globalLoader.urlMappings;
     return loader;
   }
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader();
-    clone.realms = loader.realms;
+    clone.urlHandlers = loader.urlHandlers;
     clone.urlMappings = loader.urlMappings;
     return clone;
   }
@@ -138,16 +137,19 @@ export class Loader {
   }
 
   addURLMapping(from: URL, to: URL) {
-    this.urlMappings.set(new RealmPaths(from), to.href);
+    this.urlMappings.set(from.href, to.href);
   }
 
-  static registerRealm(realm: Realm) {
+  static registerURLHandler(
+    url: URL,
+    handler: (req: Request) => Promise<Response>
+  ) {
     let loader = Loader.getLoader();
-    loader.registerRealm(realm);
+    loader.registerURLHandler(url, handler);
   }
 
-  registerRealm(realm: Realm) {
-    this.realms.add(realm);
+  registerURLHandler(url: URL, handler: (req: Request) => Promise<Response>) {
+    this.urlHandlers.set(url.href, handler);
   }
 
   static shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -268,11 +270,12 @@ export class Loader {
     init?: RequestInit
   ): Promise<Response> {
     if (urlOrRequest instanceof Request) {
-      for (let realm of this.realms) {
-        if (realm.paths.inRealm(new URL(urlOrRequest.url))) {
+      for (let [url, handle] of this.urlHandlers) {
+        let path = new RealmPaths(new URL(url));
+        if (path.inRealm(new URL(urlOrRequest.url))) {
           let request = urlOrRequest as MaybeLocalRequest;
           request.isLocal = true;
-          return await realm.handle(request);
+          return await handle(request);
         }
       }
       let request = new Request(this.resolve(urlOrRequest.url).href, {
@@ -282,14 +285,15 @@ export class Loader {
       });
       return fetch(request);
     } else {
-      for (let realm of this.realms) {
-        if (realm.paths.inRealm(new URL(urlOrRequest))) {
+      for (let [url, handle] of this.urlHandlers) {
+        let path = new RealmPaths(new URL(url));
+        if (path.inRealm(new URL(urlOrRequest))) {
           let request = new Request(
             typeof urlOrRequest === "string" ? urlOrRequest : urlOrRequest.href,
             init
           ) as MaybeLocalRequest;
           request.isLocal = true;
-          return await realm.handle(request);
+          return await handle(request);
         }
       }
       let resolvedURL = this.resolve(urlOrRequest);
@@ -299,9 +303,10 @@ export class Loader {
 
   resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
-    for (let [paths, to] of this.urlMappings) {
-      if (paths.inRealm(absoluteURL)) {
-        return new URL(paths.local(absoluteURL), to) as ResolvedURL;
+    for (let [sourceURL, to] of this.urlMappings) {
+      let sourcePath = new RealmPaths(new URL(sourceURL));
+      if (sourcePath.inRealm(absoluteURL)) {
+        return new URL(sourcePath.local(absoluteURL), to) as ResolvedURL;
       }
     }
     return absoluteURL as ResolvedURL;
@@ -312,7 +317,8 @@ export class Loader {
     relativeTo?: URL
   ): URL {
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
-    for (let [sourcePath, to] of this.urlMappings) {
+    for (let [sourceURL, to] of this.urlMappings) {
+      let sourcePath = new RealmPaths(new URL(sourceURL));
       let destinationPath = new RealmPaths(to);
       if (destinationPath.inRealm(absoluteURL)) {
         return new URL(destinationPath.local(absoluteURL), sourcePath.url);

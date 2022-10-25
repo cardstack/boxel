@@ -83,7 +83,7 @@ export class Realm {
 
   constructor(url: string, adapter: RealmAdapter) {
     this.paths = new RealmPaths(url);
-    Loader.registerRealm(this);
+    Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
     this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
