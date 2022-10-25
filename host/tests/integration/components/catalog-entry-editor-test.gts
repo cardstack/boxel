@@ -313,9 +313,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can create new catalog entry with all demo card field values missing', async function (assert) {
-    let router = this.owner.lookup('service:router') as MockRouter;
-    let deferred = new Deferred<void>();
-    router.initialize(assert, { queryParams: { path: `${testRealmURL}CatalogEntry/1.json`}}, deferred);
     const args: ExportedCardRef =  { module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -330,7 +327,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await waitFor('[data-test-ref]');
 
     await click('button[data-test-save-card]');
-    await deferred.promise; // wait for the component to transition on save
+    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -342,7 +339,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await waitFor('[data-test-ref]');
     await click('[data-test-format-button="edit"]');
-    await assert.shadowDOM('[data-test-field="firstName"] input').exists();
+    assert.shadowDOM('[data-test-field="firstName"] input').exists();
 
     let entry = await realm.searchIndex.card(new URL(`${testRealmURL}CatalogEntry/1`));
     assert.ok(entry, 'catalog entry was created');
