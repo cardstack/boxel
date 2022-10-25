@@ -5,7 +5,7 @@ import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
-import CardService from '../services/card-service';
+import type CardService from '../services/card-service';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
 import FormatPicker from './format-picker';
 import Preview from './preview';

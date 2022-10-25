@@ -1,5 +1,6 @@
 import Service, { service } from '@ember/service';
 import { stringify } from 'qs';
+import { ComponentLike } from '@glint/template';
 import LoaderService from './loader-service';
 import LocalRealm from '../services/local-realm';
 import {
@@ -10,13 +11,18 @@ import {
 import type { ResolvedURL } from '@cardstack/runtime-common/loader';
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { Card, Format } from 'https://cardstack.com/base/card-api';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
   @service declare localRealm: LocalRealm;
+
+  components = new WeakMap<
+    Card,
+    (format: Format) => ComponentLike<{ Args: {}; Blocks: {} }>
+  >();
 
   private apiModule = importResource(
     this,
@@ -55,6 +61,9 @@ export default class CardService extends Service {
       loader: this.loaderService.loader,
     });
     await this.api.recompute(card);
+    this.components.set(card, (format: Format) =>
+      this.api.getComponent(card, format)
+    );
     return card;
   }
 
