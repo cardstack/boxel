@@ -142,29 +142,13 @@ export class ChangesetBuilder {
     freshlyRemoved: Set<ISpriteModifier>,
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
-    let contextArray = [...contexts];
+    ChangesetBuilder.measureAnimatingItems(spriteTree, contexts);
 
-    // Capture snapshots & lookup natural KeptSprites
-    let naturalKept: Set<ISpriteModifier> = new Set();
-    for (let context of contexts) {
-      context.captureSnapshot();
-      let contextNode = spriteTree.lookupNode(context.element);
-      let contextChildren: ISpriteModifier[] = contextNode!
-        .getSpriteDescendants()
-        .filter((v) => !v.isRemoved)
-        .map((c) => c.spriteModifier);
-
-      for (let spriteModifier of contextChildren) {
-        spriteModifier.captureSnapshot({
-          withAnimations: false,
-          playAnimations: false,
-        });
-
-        if (!freshlyAdded.has(spriteModifier)) {
-          naturalKept.add(spriteModifier);
-        }
-      }
-    }
+    let naturalKept = ChangesetBuilder.pickNaturalKeptSpriteModifiers(
+      spriteTree,
+      contexts,
+      freshlyAdded
+    );
 
     let sprites = ChangesetBuilder.createSprites(
       spriteTree,
@@ -174,78 +158,44 @@ export class ChangesetBuilder {
       intermediateSprites
     );
 
-    // Sort top to bottom
-    contextArray.sort((a, b) => {
-      let bitmask = a.element.compareDocumentPosition(b.element);
+    let sortedContexts =
+      ChangesetBuilder.createSortedAnimatingContextArray(contexts);
+    let sortedChangesets = ChangesetBuilder.toChangesets(sortedContexts);
 
-      assert(
-        'Sorting contexts - Document position of two compared contexts is implementation-specific or disconnected',
-        !(
-          bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
-          bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
-        )
-      );
+    let remainingSprites = ChangesetBuilder.performRuleMatching(
+      spriteTree,
+      sortedChangesets,
+      sprites
+    );
 
-      return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-    });
+    ChangesetBuilder.distributeSprites(
+      spriteTree,
+      sortedChangesets,
+      remainingSprites
+    );
 
-    let animationDefinitionsPerContext = new Map<
-      IContext,
-      AnimationDefinition[]
-    >();
-    for (let context of contextArray) {
-      if (context.isStable) {
-        if (!context.args.rules) {
-          animationDefinitionsPerContext.set(context, []);
-        } else {
-          let contextNode = spriteTree.lookupNode(context.element)!;
-          let descendants = contextNode.getDescendantNodes({
-            includeFreshlyRemoved: true,
-            filter: (_childNode: SpriteTreeNode) => true,
-          });
-          let spritesForContext: Sprite[] = [];
-          let setAside: Sprite[] = [];
-          sprites.forEach((sprite) => {
-            let parentNode = getOwnNode(spriteTree, sprite).parent;
-            let parent = parentNode.contextModel ?? parentNode.spriteModel!;
-            sprite.within({
-              parent,
-              contextElement: context,
-            });
+    this.contextToChangeset = ChangesetBuilder.toWeakMap(sortedChangesets);
+  }
 
-            if (descendants.includes(getHighestNode(spriteTree, sprite))) {
-              spritesForContext.push(sprite);
-            } else {
-              setAside.push(sprite);
-            }
-          });
-
-          let animationDefinitions: AnimationDefinition[] = [];
-          for (let rule of context.args.rules) {
-            let { claimed, remaining } = rule.match(spritesForContext);
-            animationDefinitions = animationDefinitions.concat(claimed);
-            spritesForContext = remaining;
-          }
-          sprites = spritesForContext.concat(setAside);
-          animationDefinitionsPerContext.set(context, animationDefinitions);
-        }
-      } else {
-        // We already decided what contexts we're going to use for this render,
-        // so we can mark new contexts for the next run.
-        context.isInitialRenderCompleted = true;
-      }
+  static toWeakMap(changesets: Changeset[]): WeakMap<IContext, Changeset> {
+    let contextToChangeset = new WeakMap<IContext, Changeset>();
+    for (let changeset of changesets) {
+      contextToChangeset.set(changeset.context, changeset);
     }
 
-    for (let [context, claimed] of animationDefinitionsPerContext) {
-      let changeset = new Changeset(context);
+    return contextToChangeset;
+  }
 
-      for (let animationDefinition of claimed) {
-        ChangesetBuilder.addAnimationDefinitionTo(
-          changeset,
-          animationDefinition
-        );
-      }
-
+  /**
+   * Distributes sprites, following "lowest stable context drives"
+   */
+  static distributeSprites(
+    spriteTree: SpriteTree,
+    sortedChangesets: Changeset[],
+    sprites: Sprite[]
+  ) {
+    for (let changeset of sortedChangesets) {
+      let context = changeset.context;
       let node = spriteTree.lookupNode(context.element);
       let contextDescendants = node!
         .getSpriteDescendants({ deep: true })
@@ -277,9 +227,146 @@ export class ChangesetBuilder {
         });
         ChangesetBuilder.addSpriteTo(changeset, sprite);
       }
-
-      this.contextToChangeset.set(context, changeset);
     }
+  }
+
+  /**
+   * Creates AnimationDefinitions from matching sprites to rules, returns remaining sprites
+   */
+  static performRuleMatching(
+    spriteTree: SpriteTree,
+    sortedChangesets: Changeset[],
+    sprites: Sprite[]
+  ) {
+    let cloned = [...sprites];
+
+    for (let changeset of sortedChangesets) {
+      let context = changeset.context;
+      if (context.args.rules) {
+        let contextNode = spriteTree.lookupNode(context.element)!;
+        let descendants = contextNode.getDescendantNodes({
+          includeFreshlyRemoved: true,
+          filter: (_childNode: SpriteTreeNode) => true,
+        });
+        let spritesForContext: Sprite[] = [];
+        let setAside: Sprite[] = [];
+        cloned.forEach((sprite) => {
+          let parentNode = getOwnNode(spriteTree, sprite).parent;
+          let parent = parentNode.contextModel ?? parentNode.spriteModel!;
+          sprite.within({
+            parent,
+            contextElement: context,
+          });
+
+          if (descendants.includes(getHighestNode(spriteTree, sprite))) {
+            spritesForContext.push(sprite);
+          } else {
+            setAside.push(sprite);
+          }
+        });
+
+        let animationDefinitions: AnimationDefinition[] = [];
+        for (let rule of context.args.rules) {
+          let { claimed, remaining } = rule.match(spritesForContext);
+          animationDefinitions = animationDefinitions.concat(claimed);
+          spritesForContext = remaining;
+        }
+        cloned = spritesForContext.concat(setAside);
+        for (let animationDefinition of animationDefinitions) {
+          ChangesetBuilder.addAnimationDefinitionTo(
+            changeset,
+            animationDefinition
+          );
+        }
+      }
+    }
+
+    return cloned;
+  }
+
+  static measureAnimatingItems(
+    spriteTree: SpriteTree,
+    contexts: Set<IContext>
+  ) {
+    // Capture snapshots & lookup natural KeptSprites
+    for (let context of contexts) {
+      context.captureSnapshot();
+      let contextNode = spriteTree.lookupNode(context.element);
+      let contextChildren: ISpriteModifier[] = contextNode!
+        .getSpriteDescendants()
+        .filter((v) => !v.isRemoved)
+        .map((c) => c.spriteModifier);
+
+      for (let spriteModifier of contextChildren) {
+        spriteModifier.captureSnapshot({
+          withAnimations: false,
+          playAnimations: false,
+        });
+      }
+    }
+  }
+
+  static pickNaturalKeptSpriteModifiers(
+    spriteTree: SpriteTree,
+    contexts: Set<IContext>,
+    freshlyAdded: Set<ISpriteModifier>
+  ) {
+    let naturalKeptModifiers: Set<ISpriteModifier> = new Set();
+
+    for (let context of contexts) {
+      let contextNode = spriteTree.lookupNode(context.element);
+      let contextChildren: ISpriteModifier[] = contextNode!
+        .getSpriteDescendants()
+        .filter((v) => !v.isRemoved)
+        .map((c) => c.spriteModifier);
+
+      for (let spriteModifier of contextChildren) {
+        if (!freshlyAdded.has(spriteModifier)) {
+          naturalKeptModifiers.add(spriteModifier);
+        }
+      }
+    }
+
+    return naturalKeptModifiers;
+  }
+
+  /**
+   * Creates an array of contexts that are able to animate. Array is sorted based on DOM hierarchy, top to bottom.
+   * SIDE EFFECT - marks contexts as having completed their initial render
+   */
+  static createSortedAnimatingContextArray(contexts: Set<IContext>) {
+    let contextArray: IContext[] = [];
+
+    for (let context of contexts) {
+      if (context.isStable) {
+        contextArray.push(context);
+      } else {
+        // We already decided what contexts we're going to use for this render,
+        // so we can mark new contexts for the next run.
+        context.isInitialRenderCompleted = true;
+      }
+    }
+
+    // Sort top to bottom
+    contextArray.sort((a, b) => {
+      let bitmask = a.element.compareDocumentPosition(b.element);
+
+      assert(
+        'Sorting contexts - Document position of two compared contexts is implementation-specific or disconnected',
+        !(
+          bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
+          bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
+        )
+      );
+
+      return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
+
+    return contextArray;
+  }
+
+  static toChangesets(contextArray: IContext[]) {
+    return contextArray.map((v) => new Changeset(v));
   }
 
   static createSprites(
