@@ -134,7 +134,6 @@ export class Changeset {
 
 export class ChangesetBuilder {
   contextToChangeset: WeakMap<IContext, Changeset> = new WeakMap();
-  spriteTree: SpriteTree;
 
   constructor(
     spriteTree: SpriteTree,
@@ -144,13 +143,12 @@ export class ChangesetBuilder {
     intermediateSprites: Map<string, IntermediateSprite>
   ) {
     let contextArray = [...contexts];
-    this.spriteTree = spriteTree;
 
     // Capture snapshots & lookup natural KeptSprites
     let naturalKept: Set<ISpriteModifier> = new Set();
     for (let context of contexts) {
       context.captureSnapshot();
-      let contextNode = this.spriteTree.lookupNode(context.element);
+      let contextNode = spriteTree.lookupNode(context.element);
       let contextChildren: ISpriteModifier[] = contextNode!
         .getSpriteDescendants()
         .filter((v) => !v.isRemoved)
@@ -168,7 +166,8 @@ export class ChangesetBuilder {
       }
     }
 
-    let sprites = this.createSprites(
+    let sprites = ChangesetBuilder.createSprites(
+      spriteTree,
       freshlyAdded,
       freshlyRemoved,
       naturalKept,
@@ -199,7 +198,7 @@ export class ChangesetBuilder {
         if (!context.args.rules) {
           animationDefinitionsPerContext.set(context, []);
         } else {
-          let contextNode = this.spriteTree.lookupNode(context.element)!;
+          let contextNode = spriteTree.lookupNode(context.element)!;
           let descendants = contextNode.getDescendantNodes({
             includeFreshlyRemoved: true,
             filter: (_childNode: SpriteTreeNode) => true,
@@ -241,7 +240,10 @@ export class ChangesetBuilder {
       let changeset = new Changeset(context);
 
       for (let animationDefinition of claimed) {
-        this.addAnimationDefinitionTo(changeset, animationDefinition);
+        ChangesetBuilder.addAnimationDefinitionTo(
+          changeset,
+          animationDefinition
+        );
       }
 
       let node = spriteTree.lookupNode(context.element);
@@ -273,14 +275,15 @@ export class ChangesetBuilder {
           parent: parent,
           contextElement: context,
         });
-        this.addSpriteTo(changeset, sprite);
+        ChangesetBuilder.addSpriteTo(changeset, sprite);
       }
 
       this.contextToChangeset.set(context, changeset);
     }
   }
 
-  createSprites(
+  static createSprites(
+    spriteTree: SpriteTree,
     freshlyAdded: Set<ISpriteModifier>,
     freshlyRemoved: Set<ISpriteModifier>,
     naturalKept: Set<ISpriteModifier>,
@@ -290,7 +293,8 @@ export class ChangesetBuilder {
       spriteModifiers,
       spriteModifierToSpriteMap,
       spriteModifierToCounterpartModifierMap,
-    } = this.classifySprites(
+    } = ChangesetBuilder.classifySprites(
+      spriteTree,
       freshlyAdded,
       freshlyRemoved,
       naturalKept,
@@ -306,7 +310,7 @@ export class ChangesetBuilder {
         sprite.identifier.toString()
       );
 
-      this.setSpriteOwnBounds(
+      ChangesetBuilder.setSpriteOwnBounds(
         sprite,
         spriteModifier,
         counterpartModifier,
@@ -319,14 +323,15 @@ export class ChangesetBuilder {
     return sprites;
   }
 
-  addAnimationDefinitionTo(
+  static addAnimationDefinitionTo(
     changeset: Changeset,
     animationDefinition: AnimationDefinition
   ) {
     changeset.animationDefinitions.add(animationDefinition);
   }
 
-  classifySprites(
+  static classifySprites(
+    spriteTree: SpriteTree,
     freshlyAdded: Set<ISpriteModifier>,
     freshlyRemoved: Set<ISpriteModifier>,
     naturalKept: Set<ISpriteModifier>,
@@ -394,12 +399,10 @@ export class ChangesetBuilder {
           counterpartSpriteModifier.role,
           SpriteType.Removed
         );
-        let keptSpriteNode = this.spriteTree.lookupNode(
+        let keptSpriteNode = spriteTree.lookupNode(
           insertedSpriteModifier.element
         )!;
-        let counterpartNode = this.spriteTree.lookupNode(
-          counterpartSpriteModifier
-        )!;
+        let counterpartNode = spriteTree.lookupNode(counterpartSpriteModifier)!;
 
         let ancestorsOfKeptSprite = keptSpriteNode.ancestors;
         let stableAncestorsOfKeptSprite = ancestorsOfKeptSprite.filter(
@@ -472,7 +475,7 @@ export class ChangesetBuilder {
     };
   }
 
-  addSpriteTo(changeset: Changeset, sprite: Sprite) {
+  static addSpriteTo(changeset: Changeset, sprite: Sprite) {
     if (sprite.type === SpriteType.Kept) {
       changeset.keptSprites.add(sprite);
     } else if (sprite.type === SpriteType.Inserted) {
@@ -484,7 +487,7 @@ export class ChangesetBuilder {
     }
   }
 
-  setSpriteOwnBounds(
+  static setSpriteOwnBounds(
     sprite: Sprite,
     spriteModifier: ISpriteModifier,
     counterpartModifier?: ISpriteModifier,
