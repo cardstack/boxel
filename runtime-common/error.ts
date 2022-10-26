@@ -9,7 +9,18 @@ export interface ErrorDetails {
   };
 }
 
-export class CardError extends Error {
+export interface SerializedError {
+  detail: string;
+  status: number;
+  title?: string;
+  source?: ErrorDetails["source"];
+  additionalErrors: any[] | null;
+  isCardError?: true;
+  deps?: string[];
+  stack?: string;
+}
+
+export class CardError extends Error implements SerializedError {
   detail: string;
   status: number;
   title?: string;
@@ -31,6 +42,7 @@ export class CardError extends Error {
       detail: this.detail,
       code: this.status,
       source: this.source,
+      stack: this.stack,
     };
   }
 
@@ -43,6 +55,7 @@ export class CardError extends Error {
       title: err.title,
       source: err.source,
     });
+    result.stack = err.stack;
     if (err.additionalErrors) {
       result.additionalErrors = err.additionalErrors.map((inner) =>
         CardError.fromSerializableError(inner)
@@ -62,7 +75,6 @@ export class CardError extends Error {
       } catch (err) {
         throw err;
       }
-      let errorJSON: { errors: any[] } | undefined;
       let maybeErrorJSON: any;
       try {
         maybeErrorJSON = text ? JSON.parse(text) : undefined;
@@ -73,23 +85,18 @@ export class CardError extends Error {
         maybeErrorJSON &&
         typeof maybeErrorJSON === "object" &&
         "errors" in maybeErrorJSON &&
-        Array.isArray(maybeErrorJSON.errors)
+        Array.isArray(maybeErrorJSON.errors) &&
+        maybeErrorJSON.errors.length > 0
       ) {
-        errorJSON = maybeErrorJSON;
+        return CardError.fromSerializableError(maybeErrorJSON.errors[0]);
       }
-      let cardError = new CardError(
-        `unable to fetch ${url}${!errorJSON ? ": " + text : ""}`,
+      return new CardError(
+        `unable to fetch ${url}${!maybeErrorJSON ? ": " + text : ""}`,
         {
           title: response.statusText,
           status: response.status,
         }
       );
-      cardError.additionalErrors = [
-        ...((errorJSON?.errors.map(
-          CardError.fromSerializableError
-        ) as Error[]) ?? []),
-      ];
-      return cardError;
     }
     throw new CardError(
       `tried to create a card error from a successful fetch response from ${url}, status ${
@@ -122,7 +129,7 @@ export function serializableError(err: any): any {
     return err;
   }
 
-  let result = Object.assign({}, err);
+  let result = Object.assign({}, err, { stack: err.stack });
   result.additionalErrors =
     result.additionalErrors?.map((inner) => serializableError(inner)) ?? null;
   return result;
@@ -159,6 +166,13 @@ export function systemUnavailable(message: string): Response {
   return responseWithError(new CardError(message, { status: 503 }));
 }
 
-export function systemError(message: string): Response {
-  return responseWithError(new CardError(message, { status: 500 }));
+export function systemError(
+  message: string,
+  additionalError?: CardError | Error
+): Response {
+  let err = new CardError(message, { status: 500 });
+  if (additionalError) {
+    err.additionalErrors = [additionalError];
+  }
+  return responseWithError(err);
 }

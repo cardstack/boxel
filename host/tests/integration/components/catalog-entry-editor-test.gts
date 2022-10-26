@@ -224,7 +224,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     let maybeError = await realm.searchIndex.card(new URL(`${testRealmURL}pet-catalog-entry`));
     if (maybeError?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${maybeError.error.message}`
+        `unexpected error when getting card from index: ${maybeError.error.detail}`
       );
     }
     let { doc } = maybeError!;

@@ -20,7 +20,12 @@ import isEqual from "lodash/isEqual";
 import { Deferred } from "./deferred";
 import flatMap from "lodash/flatMap";
 import merge from "lodash/merge";
-import { isCardError } from "./error";
+import {
+  CardError,
+  isCardError,
+  serializableError,
+  type SerializedError,
+} from "./error";
 import type {
   ExportedCardRef,
   CardRef,
@@ -81,12 +86,6 @@ class URLMap<T> {
   }
 }
 
-export interface IndexError {
-  message: string;
-  errorReferences?: string[];
-  // TODO we need to serialize the stack trace too, checkout the mono repo card compiler for examples
-  // TODO when we support relationships we'll need to have instance references too.
-}
 export interface SearchEntry {
   resource: CardResource;
   searchData: Record<string, any>;
@@ -112,10 +111,10 @@ interface Stats {
 
 export type SearchEntryWithErrors =
   | { type: "entry"; entry: SearchEntry }
-  | { type: "error"; error: IndexError };
+  | { type: "error"; error: SerializedError };
 type TypesWithErrors =
   | { type: "types"; types: string[] }
-  | { type: "error"; error: IndexError };
+  | { type: "error"; error: SerializedError };
 
 interface Module {
   url: string;
@@ -123,7 +122,7 @@ interface Module {
 }
 type ModuleWithErrors =
   | { type: "module"; module: Module }
-  | { type: "error"; moduleURL: string; error: IndexError };
+  | { type: "error"; moduleURL: string; error: SerializedError };
 
 export class CurrentRun {
   #instances: URLMap<SearchEntryWithErrors>;
@@ -308,15 +307,17 @@ export class CurrentRun {
           `encountered error loading module "${url.href}": ${err.message}`
         );
       }
-      let errorReferences = await (
+      let deps = await (
         await this.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
       this.#modules.set(url.href, {
         type: "error",
         moduleURL: url.href,
         error: {
-          message: `encountered error loading module "${url.href}": ${err.message}`,
-          errorReferences,
+          status: 500,
+          detail: `encountered error loading module "${url.href}": ${err.message}`,
+          additionalErrors: null,
+          deps,
         },
       });
       return;
@@ -448,12 +449,12 @@ export class CurrentRun {
       if (uncaughtError) {
         error = {
           type: "error",
-          error: {
-            message: `${uncaughtError.message} (TODO include stack trace)`,
-            errorReferences: [cardRef.module],
-            // TODO serialize CardError and attach to this doc
-          },
+          error:
+            uncaughtError instanceof CardError
+              ? serializableError(uncaughtError)
+              : { detail: `${uncaughtError.message}` },
         };
+        error.error.deps = [cardRef.module];
       } else if (typesMaybeError?.type === "error") {
         error = { type: "error", error: typesMaybeError.error };
       } else {
@@ -463,7 +464,7 @@ export class CurrentRun {
       }
       if (globalThis.process?.env?.SUPPRESS_ERRORS !== "true") {
         console.warn(
-          `encountered error indexing card instance ${path}: ${error.error.message}`
+          `encountered error indexing card instance ${path}: ${error.error.detail}`
         );
       }
       this.#instances.set(instanceURL, error);
@@ -536,10 +537,10 @@ export class CurrentRun {
         let result: TypesWithErrors = {
           type: "error",
           error: {
-            message: `Unable to determine card types for ${JSON.stringify(
-              ref
-            )}`,
-            errorReferences: [module],
+            detail: `Unable to determine card types for ${JSON.stringify(ref)}`,
+            status: 500,
+            additionalErrors: null,
+            deps: [module],
           },
         };
         deferred.fulfill(result);
@@ -647,7 +648,7 @@ function invalidate(
   let invalidatedInstances = [...instances]
     .filter(([instanceURL, item]) => {
       if (item.type === "error") {
-        for (let errorModule of item.error.errorReferences ?? []) {
+        for (let errorModule of item.error.deps ?? []) {
           if (
             errorModule === url.href ||
             errorModule === trimExecutableExtension(url).href
@@ -686,7 +687,7 @@ function invalidate(
 
       // invalidate any modules in an error state whose errorReference comes
       // from the URL
-      for (let maybeDef of maybeError.error.errorReferences ?? []) {
+      for (let maybeDef of maybeError.error.deps ?? []) {
         if (
           maybeDef === url.href ||
           maybeDef === trimExecutableExtension(url).href
