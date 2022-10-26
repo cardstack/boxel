@@ -28,6 +28,10 @@ module('Integration | card-editor', function (hooks) {
     this.owner.register('service:local-realm', MockLocalRealm);
   });
 
+  hooks.afterEach(async function() {
+    await cardApi.flushLogs();
+  });
+
   test('renders card in edit (default) format', async function (assert) {
     let { field, contains, Card, Component, createFromSerialized } = cardApi;
     let { default: StringCard} = string;

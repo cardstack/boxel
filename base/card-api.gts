@@ -579,7 +579,7 @@ export class Card {
       }
     }
 
-    registerDestructor(this, logCardErrors);
+    registerDestructor(this, settleCard);
   }
 
   @field id = contains(() => IDCard);
@@ -680,6 +680,43 @@ export function relationshipMeta(instance: Card, fieldName: string): Relationshi
   } else {
     return { type: 'loaded', card: related ?? null };
   }
+}
+
+async function settleCard(instance: Card) {
+  return await Promise.allSettled(instance[myRecomputes]);
+}
+
+class Logger {
+  private settledCards:Promise<any> = Promise.resolve();
+
+  log(instance: Card) {
+    this.settleCard(instance);
+  }
+
+  async flush() {
+    await this.settledCards;
+  }
+
+  private async settleCard(instance: Card) {
+    this.settledCards = this.settledCards.then(async () => {
+      let results = await settleCard(instance);
+      for (let result of results) {
+        if (result.status === 'rejected') {
+          console.error(`Encountered error recomputing card instance '${
+              instance.id != null ? instance.id : instance.constructor.name
+            }':`, result.reason);
+          if (result.reason instanceof Error) {
+            console.error(result.reason.stack);
+          }
+        }
+      }
+    });
+  }
+}
+
+let logger = new Logger();
+export async function flushLogs() {
+  await logger.flush();
 }
 
 function serializedGet<CardT extends CardConstructor>(
@@ -860,7 +897,7 @@ async function _updateFromSerialized<T extends CardConstructor>(
       instance[isSavedInstance] = true;
     }
   }
-  await logCardErrors(instance);
+  logger.log(instance);
 
   deferred.fulfill(instance);
   return instance;
@@ -1066,20 +1103,6 @@ export async function prepareToRender(model: Card, format: Format): Promise<{ co
   let box = Box.create(model);
   let component = getComponent(model.constructor as CardConstructor, format, box);
   return { component };
-}
-
-async function logCardErrors(instance: Card) {
-  let results = await Promise.allSettled(instance[myRecomputes]);
-  for (let result of results) {
-    if (result.status === 'rejected') {
-      console.error(`Encountered error recomputing card instance '${
-          instance.id != null ? instance.id : instance.constructor.name
-        }':`, result.reason);
-      if (result.reason instanceof Error) {
-        console.error(result.reason.stack);
-      }
-    }
-  }
 }
 
 interface RecomputeOptions {

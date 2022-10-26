@@ -24,6 +24,10 @@ module('Integration | computeds', function (hooks) {
     string = await Loader.import(`${baseRealm.url}string`);
     integer = await Loader.import(`${baseRealm.url}integer`);
   });
+  
+  hooks.afterEach(async function() {
+    await cardApi.flushLogs();
+  });
 
   test('can render a synchronous computed field', async function(assert) {
     let { field, contains, Card, Component } = cardApi;

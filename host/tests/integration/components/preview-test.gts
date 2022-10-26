@@ -27,6 +27,10 @@ module('Integration | preview', function (hooks) {
     string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-realm', MockLocalRealm);
   });
+  
+  hooks.afterEach(async function() {
+    await cardApi.flushLogs();
+  });
 
   test('renders card', async function (assert) {
     let { field, contains, Card, Component, createFromSerialized } = cardApi;

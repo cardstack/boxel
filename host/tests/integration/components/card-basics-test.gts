@@ -44,6 +44,10 @@ module('Integration | card-basics', function (hooks) {
     catalogEntry = await Loader.import(`${baseRealm.url}catalog-entry`);
     pickModule = await Loader.import(`${baseRealm.url}pick`);
   });
+
+  hooks.afterEach(async function() {
+    await cardApi.flushLogs();
+  });
   
   test('primitive field type checking', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;

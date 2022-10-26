@@ -38,6 +38,10 @@ module('Integration | serialization', function (hooks) {
     updateFromSerialized = cardApi.updateFromSerialized;
     serializeCard = cardApi.serializeCard;
   });
+  
+  hooks.afterEach(async function() {
+    await cardApi.flushLogs();
+  });
 
   async function saveCard(instance: Card, id: string) {
     let doc = serializeCard(instance);
