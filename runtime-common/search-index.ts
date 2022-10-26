@@ -327,26 +327,22 @@ export class SearchIndex {
 
   constructor(
     private realm: Realm,
-    private readdir: (
+    readdir: (
       path: string
     ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
-    private readFileAsText: (
+    readFileAsText: (
       path: LocalPath,
       opts?: { withFallbacks?: true }
     ) => Promise<{ content: string; lastModified: number } | undefined>
   ) {
-    this.#currentRun = CurrentRun.empty(realm);
+    this.#currentRun = new CurrentRun({
+      realm,
+      reader: { readdir, readFileAsText },
+    });
   }
 
   async run() {
-    this.#currentRun = await CurrentRun.fromScratch(
-      this.realm,
-      {
-        readdir: this.readdir,
-        readFileAsText: this.readFileAsText,
-      },
-      (workingIndex) => (this.#currentRun = workingIndex)
-    );
+    await CurrentRun.fromScratch(this.#currentRun);
   }
 
   get stats() {

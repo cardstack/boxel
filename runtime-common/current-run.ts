@@ -142,19 +142,19 @@ export class CurrentRun {
     moduleErrors: 0,
   };
 
-  private constructor({
+  constructor({
     realm,
     reader,
-    instances,
-    modules,
-    ignoreMap,
+    instances = new URLMap(),
+    modules = new Map(),
+    ignoreMap = new URLMap(),
     loader,
   }: {
     realm: Realm;
-    reader: Reader | undefined; // the "empty" case doesn't need a reader
-    instances: URLMap<SearchEntryWithErrors>;
-    modules: Map<string, ModuleWithErrors>;
-    ignoreMap: URLMap<Ignore>;
+    reader: Reader;
+    instances?: URLMap<SearchEntryWithErrors>;
+    modules?: Map<string, ModuleWithErrors>;
+    ignoreMap?: URLMap<Ignore>;
     loader?: Loader;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
@@ -166,32 +166,22 @@ export class CurrentRun {
     this.#loader = loader ?? Loader.createLoaderFromGlobal();
   }
 
-  static empty(realm: Realm) {
-    return new this({
-      realm,
-      reader: undefined,
-      instances: new URLMap(),
-      modules: new Map(),
-      ignoreMap: new URLMap(),
-    });
+  private resetState() {
+    this.#instances = new URLMap();
+    this.#modules = new Map();
+    this.#moduleWorkingCache = new Map();
+    this.#typesCache = new WeakMap();
+    this.#indexingInstances = new Map();
+    this.#ignoreMap = new URLMap();
+    this.#loader = Loader.createLoaderFromGlobal();
+    this.stats.instancesIndexed = 0;
+    this.stats.instanceErrors = 0;
+    this.stats.moduleErrors = 0;
   }
 
-  static async fromScratch(
-    realm: Realm,
-    reader: Reader,
-    workingIndex: (workingIndex: CurrentRun) => void
-  ) {
-    let current = new this({
-      realm,
-      reader,
-      instances: new URLMap(),
-      modules: new Map(),
-      ignoreMap: new URLMap(),
-    });
-    // expose the index as it's being built so we can ask questions of ourselves
-    // as we load the links
-    workingIndex(current);
-    await current.visitDirectory(new URL(realm.url));
+  static async fromScratch(current: CurrentRun) {
+    current.resetState();
+    await current.visitDirectory(new URL(current.realm.url));
     return current;
   }
 
