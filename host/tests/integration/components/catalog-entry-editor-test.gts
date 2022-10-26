@@ -3,33 +3,18 @@ import GlimmerComponent from '@glimmer/component';
 import { baseRealm, ExportedCardRef } from '@cardstack/runtime-common';
 import { Loader } from "@cardstack/runtime-common/loader";
 import { Realm } from "@cardstack/runtime-common/realm";
-import { Deferred } from "@cardstack/runtime-common/deferred";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import CatalogEntryEditor from 'runtime-spike/components/catalog-entry-editor';
 import Service from '@ember/service';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
+import waitUntil from '@ember/test-helpers/wait-until';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
 
 class MockLocalRealm extends Service {
   isAvailable = true;
   url = new URL(testRealmURL);
-}
-
-class MockRouter extends Service {
-  assert: Assert | undefined;
-  expectedRoute: any | undefined;
-  deferred: Deferred<void> | undefined;
-  initialize(assert: Assert, expectedRoute: any, deferred: Deferred<void>) {
-    this.assert = assert;
-    this.expectedRoute = expectedRoute;
-    this.deferred = deferred;
-  }
-  transitionTo(route: any) {
-    this.assert!.deepEqual(route, this.expectedRoute, 'the route transitioned correctly')
-    this.deferred!.fulfill();
-  }
 }
 
 module('Integration | catalog-entry-editor', function (hooks) {
@@ -83,7 +68,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
     `);
 
     this.owner.register('service:local-realm', MockLocalRealm);
-    this.owner.register('service:router', MockRouter);
   });
 
   hooks.afterEach(function() {
@@ -91,9 +75,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can publish new catalog entry', async function (assert) {
-    let router = this.owner.lookup('service:router') as MockRouter;
-    let deferred = new Deferred<void>();
-    router.initialize(assert, { queryParams: { path: `${testRealmURL}CatalogEntry/1.json`}}, deferred);
     const args: ExportedCardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -120,7 +101,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await fillIn('[data-test-field="firstName"] input', 'BN');
     await click('button[data-test-save-card]');
 
-    await deferred.promise; // wait for the component to transition on save
+    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
+
     let entry = await realm.searchIndex.card(new URL(`${testRealmURL}CatalogEntry/1`));
     assert.ok(entry, 'the new catalog entry was created');
 
@@ -170,9 +152,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can edit existing catalog entry', async function (assert) {
-    let router = this.owner.lookup('service:router') as MockRouter;
-    let deferred = new Deferred<void>();
-    router.initialize(assert, { queryParams: { path: `${testRealmURL}pet-catalog-entry.json`}}, deferred);
     await realm.write('pet-catalog-entry.json', JSON.stringify({
       data: {
         type: 'card',
@@ -235,7 +214,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await fillIn('[data-test-field="firstName"] input', 'EA');
 
     await click('button[data-test-save-card]');
-    await deferred.promise; // wait for the component to transition on save
+    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
 
     assert.shadowDOM('[data-test-title]').hasText('test title');
     assert.shadowDOM('[data-test-description]').hasText('test description');
@@ -256,9 +235,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can create new card with missing composite field value', async function (assert) {
-    let router = this.owner.lookup('service:router') as MockRouter;
-    let deferred = new Deferred<void>();
-    router.initialize(assert, { queryParams: { path: `${testRealmURL}CatalogEntry/1.json`}}, deferred);
     const args: ExportedCardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -274,8 +250,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await fillIn('[data-test-field="name"] input', 'Jackie');
     await click('button[data-test-save-card]');
+    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
 
-    await deferred.promise; // wait for the component to transition on save
     let entry = await realm.searchIndex.card(new URL(`${testRealmURL}CatalogEntry/1`));
     assert.ok(entry, 'catalog entry was created');
 
@@ -337,9 +313,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can create new catalog entry with all demo card field values missing', async function (assert) {
-    let router = this.owner.lookup('service:router') as MockRouter;
-    let deferred = new Deferred<void>();
-    router.initialize(assert, { queryParams: { path: `${testRealmURL}CatalogEntry/1.json`}}, deferred);
     const args: ExportedCardRef =  { module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -354,7 +327,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await waitFor('[data-test-ref]');
 
     await click('button[data-test-save-card]');
-    await deferred.promise; // wait for the component to transition on save
+    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -366,7 +339,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await waitFor('[data-test-ref]');
     await click('[data-test-format-button="edit"]');
-    await assert.shadowDOM('[data-test-field="firstName"] input').exists();
+    assert.shadowDOM('[data-test-field="firstName"] input').exists();
 
     let entry = await realm.searchIndex.card(new URL(`${testRealmURL}CatalogEntry/1`));
     assert.ok(entry, 'catalog entry was created');

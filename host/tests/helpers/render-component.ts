@@ -3,8 +3,7 @@ import { precompileTemplate } from '@ember/template-compilation';
 import { render, getContext } from '@ember/test-helpers';
 import { ComponentLike } from '@glint/template';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Loader } from '@cardstack/runtime-common';
 
 async function cardApi(): Promise<
   typeof import('https://cardstack.com/base/card-api')
@@ -20,9 +19,9 @@ export async function renderCard(
   card: Card,
   format: Format
 ): Promise<DocumentFragment> {
-  let { prepareToRender } = await cardApi();
-  let { component } = await prepareToRender(card, format);
-  await renderComponent(component);
+  let api = await cardApi();
+  await api.recompute(card);
+  await renderComponent(api.getComponent(card, format));
   return (getContext() as { element: Element }).element.children[0]!
     .shadowRoot!;
 }

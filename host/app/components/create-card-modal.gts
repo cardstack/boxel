@@ -8,8 +8,9 @@ import { registerDestructor } from '@ember/destroyable';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { taskFor } from 'ember-concurrency-ts';
 import { enqueueTask } from 'ember-concurrency'
+import { service } from '@ember/service';
+import type CardService from '../services/card-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
-import { cardInstance, type CardInstance } from '../resources/card-instance';
 import CardEditor from './card-editor';
 
 export default class CreateCardModal extends Component {
@@ -18,9 +19,9 @@ export default class CreateCardModal extends Component {
       <dialog class="dialog-box" open data-test-create-new-card={{this.currentRequest.ref.name}}>
         <button {{on "click" (fn this.save undefined)}} type="button">X Close</button>
         <h1>Create New Card: {{this.currentRequest.ref.name}}</h1>
-        {{#if this.currentRequest.card.instance}}
+        {{#if this.currentRequest.card}}
           <CardEditor
-            @card={{this.currentRequest.card.instance}}
+            @card={{this.currentRequest.card}}
             @onSave={{this.save}}
           />
         {{/if}}
@@ -28,9 +29,10 @@ export default class CreateCardModal extends Component {
     {{/if}}
   </template>
 
+  @service declare cardService: CardService;
   @tracked currentRequest: {
     ref: ExportedCardRef;
-    card: CardInstance;
+    card: Card;
     deferred: Deferred<Card | undefined>;
   } | undefined = undefined;
 
@@ -49,7 +51,7 @@ export default class CreateCardModal extends Component {
   @enqueueTask private async _create<T extends Card>(ref: ExportedCardRef): Promise<undefined | T> {
     this.currentRequest = {
       ref,
-      card: cardInstance(this, () => ({ meta: { adoptsFrom: ref }})),
+      card: await this.cardService.createFromSerialized({ data: { meta: { adoptsFrom: ref }}}),
       deferred: new Deferred(),
     };
     let card = await this.currentRequest.deferred.promise;

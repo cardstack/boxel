@@ -7,12 +7,9 @@ import { registerDestructor } from '@ember/destroyable';
 import { taskFor } from 'ember-concurrency-ts';
 import { enqueueTask } from 'ember-concurrency';
 import type { Card } from 'https://cardstack.com/base/card-api';
-//@ts-ignore cached not available yet in definitely typed
-import { cached } from '@glimmer/tracking';
 import type { Query } from '@cardstack/runtime-common/query';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
-import { cardInstance } from '../resources/card-instance';
 import Preview from './preview';
 
 export default class CardCatalogModal extends Component {
@@ -26,15 +23,13 @@ export default class CardCatalogModal extends Component {
             Loading...
           {{else}}
             <ul class="card-catalog" data-test-card-catalog>
-              {{#each this.cards as |card|}}
-                {{#if card}}
-                  <li data-test-card-catalog-item={{card.id}}>
-                    <Preview @card={{card}} @format="embedded" />
-                    <button {{on "click" (fn this.pick card)}} type="button" data-test-select={{card.id}}>
-                      Select
-                    </button>
-                  </li>
-                {{/if}}
+              {{#each this.currentRequest.search.instances as |card|}}
+                <li data-test-card-catalog-item={{card.id}}>
+                  <Preview @card={{card}} @format="embedded" />
+                  <button {{on "click" (fn this.pick card)}} type="button" data-test-select={{card.id}}>
+                    Select
+                  </button>
+                </li>
               {{else}}
                 <p>No cards available</p>
               {{/each}}
@@ -49,15 +44,6 @@ export default class CardCatalogModal extends Component {
     search: Search;
     deferred: Deferred<Card | undefined>;
   } | undefined = undefined;
-
-  @cached
-  get cardInstances() {
-    return this.currentRequest?.search.instances?.map((instance) => cardInstance(this, () => instance));
-  }
-  @cached
-  get cards() {
-    return this.cardInstances?.map((c) => c.instance);
-  }
 
   constructor(owner: unknown, args: {}) {
     super(owner, args);
