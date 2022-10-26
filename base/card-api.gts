@@ -695,14 +695,14 @@ class Logger {
   private settledCards:Promise<any> = Promise.resolve();
 
   log(instance: Card) {
-    this.settleCard(instance);
+    this.logSettledCard(instance);
   }
 
   async flush() {
     await this.settledCards;
   }
 
-  private async settleCard(instance: Card) {
+  private async logSettledCard(instance: Card) {
     this.settledCards = this.settledCards.then(async () => {
       let results = await settleCard(instance);
       for (let result of results) {
