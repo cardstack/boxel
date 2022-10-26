@@ -37,6 +37,7 @@ export const queryableValue = Symbol('cardstack-queryable-value');
 const isSavedInstance = Symbol('cardstack-is-saved-instance');
 const myRecomputes = Symbol('cardstack-my-recomputes');
 const isField = Symbol('cardstack-field');
+const settle = Symbol('cardstack-settle-card');
 
 export type CardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
 export type PartialCardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P | null : Partial<InstanceType<T>>;
@@ -579,7 +580,11 @@ export class Card {
       }
     }
 
-    registerDestructor(this, settleCard);
+    registerDestructor(this, this[settle].bind(this));
+  }
+
+  async [settle](){
+    await settleCard(this);
   }
 
   @field id = contains(() => IDCard);
