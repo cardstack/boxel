@@ -419,8 +419,9 @@ export class SearchIndex {
     return { type: "doc", doc };
   }
 
-  // TODO this will load links all the way down, need to provide a way to
-  // control how deep to load links
+  // TODO The caller should provide a list of fields to be included via JSONAPI
+  // request. currently we just use the maxLinkDepth to control how deep to load
+  // links
   async loadLinks(
     resource: LooseCardResource,
     omit: string[] = [],
