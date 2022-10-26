@@ -1,10 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
-import { NotLoaded, isNotLoadedError } from './not-loaded';
 import { flatMap, startCase, merge } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
-import { registerDestructor } from '@ember/destroyable';
 import { WatchedArray } from './watched-array';
 import { flatten } from "flat";
 import { on } from '@ember/modifier';
@@ -17,13 +15,15 @@ import {
   Loader,
   isSingleCardDocument,
   isRelationship,
+  isNotLoadedError,
+  CardError,
+  NotLoaded,
   type Meta,
   type CardFields,
   type Relationship,
   type LooseCardResource,
   type LooseSingleCardDocument
 } from '@cardstack/runtime-common';
-export { NotLoaded };
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
 export const deserialize = Symbol('cardstack-deserialize');
@@ -34,7 +34,6 @@ export const queryableValue = Symbol('cardstack-queryable-value');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol('cardstack-is-saved-instance');
-
 const isField = Symbol('cardstack-field');
 
 export type CardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
@@ -83,6 +82,32 @@ const cardTracking = new TrackedWeakMap<object, any>();
 
 const isBaseCard = Symbol('isBaseCard');
 
+class Logger {
+  private promises:Promise<any>[] = [];
+
+  log(promise: Promise<any>) {
+    this.promises.push(promise);
+    (async () => await promise)(); // make an effort to resolve the promise at the time it is logged
+  }
+
+  async flush() {
+    let results = await Promise.allSettled(this.promises);
+    for (let result of results) {
+      if (result.status === 'rejected') {
+        console.error(`Promise rejected`, result.reason);
+        if (result.reason instanceof Error) {
+          console.error(result.reason.stack);
+        }
+      }
+    }
+  }
+}
+
+let logger = new Logger();
+export async function flushLogs() {
+  await logger.flush();
+}
+
 type JSONAPIResource = 
 { 
   attributes: Record<string, any>;
@@ -110,7 +135,7 @@ interface Field<CardT extends CardConstructor> {
   emptyValue(instance: Card): any;
   validate(instance: Card, value: any): void;
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
-  getter(instance: Card): any;
+  getter(instance: Card): CardInstanceType<CardT>;
 }
 
 function callSerializeHook(card: typeof Card, value: any, doc: JSONAPISingleResourceDocument) {
@@ -138,7 +163,7 @@ function resourceFrom(doc: LooseSingleCardDocument | undefined, resourceId: stri
   return [doc.data, ...(doc.included ?? [])].find(resource => resource.id === resourceId);
 }
 
-function getter(instance: Card, field: Field<typeof Card>) {
+function getter<CardT extends CardConstructor>(instance: Card, field: Field<CardT>): CardInstanceType<CardT> {
   let deserialized = getDataBucket(instance);
   // this establishes that our field should rerender when cardTracking for this card changes
   cardTracking.get(instance);
@@ -174,7 +199,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return this.cardThunk();
   }
 
-  getter(instance: Card) {
+  getter(instance: Card): CardInstanceType<FieldT> {
     return getter(instance, this);
   }
 
@@ -231,7 +256,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     }
     let metas: Partial<Meta>[] = fieldMeta ?? [];
     return new WatchedArray(
-      () => instancePromise.then(instance => recompute(instance)),
+      () => instancePromise.then(instance => logger.log(recompute(instance))),
       await Promise.all(value.map(async (entry, index) => {
         if (primitive in this.card) {
           return this.card[deserialize](entry, doc);
@@ -256,13 +281,15 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     );
   }
 
-  emptyValue(instance: Card) { return new WatchedArray(() => recompute(instance)) }
+  emptyValue(instance: Card) {
+    return new WatchedArray(() => logger.log(recompute(instance)));
+  };
 
   validate(instance: Card, value: any) {
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray(() => recompute(instance), value);
+    return new WatchedArray(() => logger.log(recompute(instance)), value);
   }
 
   component(model: Box<Card>, format: Format) {
@@ -303,7 +330,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
-  getter(instance: Card) {
+  getter(instance: Card): CardInstanceType<CardT> {
     return getter(instance, this);
   }
 
@@ -403,7 +430,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
-  getter(instance: Card) {
+  getter(instance: Card): CardInstanceType<CardT> {
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
     cardTracking.get(instance);
@@ -551,8 +578,12 @@ export class Card {
     if (primitive in this) {
       return value;
     } else {
+      if (value == null) {
+        return null;
+      }
       return Object.fromEntries(
-        Object.entries(getFields(value, { includeComputeds: true })).map(([fieldName, field]) => [fieldName, getQueryableValue(field!.card, value[fieldName])])
+        Object.entries(getFields(value, { includeComputeds: true }))
+          .map(([fieldName, field]) => [fieldName, getQueryableValue(field!.card, value[fieldName])])
       );
     }
   }
@@ -565,11 +596,6 @@ export class Card {
     return _createFromSerialized(this, data, doc);
   }
 
-  static async didRecompute(card: Card): Promise<void> {
-    let promise = recomputePromises.get(card);
-    await promise;
-  }
-
   static getComponent(card: Card, format: Format) {
     return getComponent(card, format);
   }
@@ -580,8 +606,6 @@ export class Card {
         (this as any)[fieldName] = value;
       }
     }
-
-    registerDestructor(this, Card.didRecompute.bind(this));
   }
 
   @field id = contains(() => IDCard);
@@ -638,6 +662,9 @@ export function getQueryableValue(fieldCard: typeof Card, value: any): any {
     let result = (fieldCard as any)[queryableValue](value);
     assertScalar(result, fieldCard);
     return result;
+  }
+  if (value == null) {
+    return null;
   }
 
   // this recurses through the fields of the compound card via
@@ -918,7 +945,7 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
       for (let computedFieldName of Object.keys(getComputedFields(this))) {
         deserialized.delete(computedFieldName);
       }
-      (async () => await recompute(this))();
+      logger.log(recompute(this));
     }
   }
   (descriptor.get as any)[isField] = field;
@@ -1065,7 +1092,10 @@ export function getComponent(model: Card, format: Format): ComponentLike<{ Args:
   return component;
 }
 
-export async function recompute(card: Card): Promise<void> {
+interface RecomputeOptions {
+  loadFields?: true;
+}
+export async function recompute(card: Card, opts?: RecomputeOptions): Promise<void> {
   // Note that after each async step we check to see if we are still the
   // current promise, otherwise we bail
   let done: () => void;
@@ -1078,9 +1108,10 @@ export async function recompute(card: Card): Promise<void> {
     return;
   }
 
+  let loader = Loader.getLoaderFor(Reflect.getPrototypeOf(card)!.constructor);
   async function _loadModel<T extends Card>(model: T, stack: { from: T, to: T, name: string}[] = []): Promise<void> {
     for (let [fieldName, field] of Object.entries(getFields(model, { includeComputeds: true }))) {
-      let value: any = await loadField(model, fieldName as keyof T);
+      let value: any = await loadField(model, fieldName as keyof T, loader, opts);
       if (recomputePromises.get(card) !== recomputePromise) {
         return;
       }
@@ -1102,7 +1133,7 @@ export async function recompute(card: Card): Promise<void> {
   done!();
 }
 
-async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K): Promise<T[K]> {
+async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K, loader: Loader, opts?: RecomputeOptions): Promise<T[K]> {
   let result: T[K];
   let isLoaded = false;
   let deserialized = getDataBucket(model);
@@ -1112,22 +1143,35 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
       isLoaded = true;
     } catch (e: any) {
       if (isNotLoadedError(e)) {
-        // TODO these are unloaded relationships. eventually we want to be able to load these
-        // relationships.
-        // This is also exposing awkwardness around exceptions thrown during
-        // async computeds in that nothing is able to catch them since they are executed in an
-        // async IIFE within the property descriptor setter that is unwatched--need to address this.
-        isLoaded = true;
-        continue;
+        if (opts?.loadFields) {
+          let response = await loader.fetch(e.reference, { headers: { 'Accept': 'application/vnd.api+json' } });
+          if (!response.ok) {
+            let cardError = await CardError.fromFetchResponse(e.reference, response);
+            cardError.additionalErrors = [...(cardError.additionalErrors || []), e];
+            cardError.deps = [e.reference];
+            throw cardError;
+          }
+          let json = await response.json();
+          if (!isSingleCardDocument(json)) {
+            throw new Error(`instance ${e.reference} is not a card document. it is: ${JSON.stringify(json, null, 2)}`);
+          }
+          deserialized.set(fieldName as string, await createFromSerialized(json, undefined, { loader }));
+          continue;
+        } else {
+          isLoaded = true;
+          continue;
+        }
       }
+
       if (!isNotReadyError(e)) {
         throw e;
       }
-      let { model, computeVia, fieldName } = e;
+
+      let { model: depModel, computeVia, fieldName: depField } = e;
       if (typeof computeVia === 'function') {
-        deserialized.set(fieldName, await computeVia.bind(model)());
+        deserialized.set(depField, await computeVia.bind(depModel)());
       } else {
-        deserialized.set(fieldName, await model[computeVia]());
+        deserialized.set(depField, await depModel[computeVia]());
       }
     }
   }

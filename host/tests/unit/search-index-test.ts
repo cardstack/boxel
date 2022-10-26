@@ -1,8 +1,9 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
+  setupCardLogs,
   type CardDocFiles,
 } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
@@ -14,6 +15,11 @@ const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4201/test/';
 
 module('Unit | search-index', function (hooks) {
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
+
   hooks.beforeEach(async function () {
     Loader.destroy();
     Loader.addURLMapping(
@@ -36,9 +42,9 @@ module('Unit | search-index', function (hooks) {
       },
     });
     let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
     let indexer = realm.searchIndex;
-    await indexer.run();
-    let cards = await indexer.search({});
+    let { data: cards } = await indexer.search({});
     assert.deepEqual(cards, [
       {
         id: `${testRealmURL}empty`,
@@ -50,9 +56,193 @@ module('Unit | search-index', function (hooks) {
           },
           lastModified: adapter.lastModified.get(`${testRealmURL}empty.json`),
         },
+        links: {
+          self: `${testRealmURL}empty`,
+        },
       },
     ]);
   });
+
+  test('can index card with linkTo field', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Person/owner.json': {
+        data: {
+          id: `${testRealmURL}Person/owner`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'Pet/mango.json': {
+        data: {
+          id: `${testRealmURL}Pet/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}Person/owner`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
+    if (mango?.type === 'doc') {
+      assert.deepEqual(mango.doc.data, {
+        id: `${testRealmURL}Pet/mango`,
+        type: 'card',
+        attributes: {
+          firstName: 'Mango',
+        },
+        relationships: {
+          owner: {
+            links: {
+              self: `${testRealmURL}Person/owner`,
+            },
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Person/owner`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4201/test/pet',
+            name: 'Pet',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}Pet/mango.json`
+          ),
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${mango?.error.message}`);
+    }
+  });
+
+  test('can index a card that has nested linksTo fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Friend/hassan.json': {
+        data: {
+          id: `${testRealmURL}Friend/hassan`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/mango`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+          },
+        },
+      },
+      'Friend/mango.json': {
+        data: {
+          id: `${testRealmURL}Friend/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/vanGogh`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+          },
+        },
+      },
+      'Friend/vanGogh.json': {
+        data: {
+          id: `${testRealmURL}Friend/vanGogh`,
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`));
+    if (hassan?.type === 'doc') {
+      assert.deepEqual(hassan.doc.data, {
+        id: `${testRealmURL}Friend/hassan`,
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan',
+        },
+        relationships: {
+          friend: {
+            links: {
+              self: `${testRealmURL}Friend/mango`,
+            },
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Friend/mango`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4201/test/friend',
+            name: 'Friend',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}Friend/hassan.json`
+          ),
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${hassan?.error.message}`);
+    }
+  });
+
+  // How would the searchDoc look for a cycle in the fields?
+  skip('can index a field with a cycle in the linksTo field');
 
   test("indexing identifies an instance's card references", async function (assert) {
     let realm = TestRealm.create({
@@ -70,8 +260,8 @@ module('Unit | search-index', function (hooks) {
         },
       },
     });
+    await realm.ready;
     let indexer = realm.searchIndex;
-    await indexer.run();
     let refs = (await indexer.searchEntry(new URL(`${testRealmURL}person-1`)))
       ?.deps;
     assert.deepEqual(
@@ -80,7 +270,6 @@ module('Unit | search-index', function (hooks) {
         'http://localhost:4201/base/attach-styles',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/integer',
-        'http://localhost:4201/base/not-loaded',
         'http://localhost:4201/base/not-ready',
         'http://localhost:4201/base/pick',
         'http://localhost:4201/base/shadow-dom',
@@ -89,7 +278,6 @@ module('Unit | search-index', function (hooks) {
         'http://localhost:4201/externals/@cardstack/runtime-common',
         'http://localhost:4201/externals/@ember/component',
         'http://localhost:4201/externals/@ember/component/template-only',
-        'http://localhost:4201/externals/@ember/destroyable',
         'http://localhost:4201/externals/@ember/helper',
         'http://localhost:4201/externals/@ember/modifier',
         'http://localhost:4201/externals/@ember/object',
@@ -123,8 +311,8 @@ posts/please-ignore-me.json
       `,
     });
 
+    await realm.ready;
     let indexer = realm.searchIndex;
-    await indexer.run();
 
     {
       let card = await indexer.card(
@@ -180,8 +368,8 @@ posts/ignore-me.json
       `,
     });
 
+    await realm.ready;
     let indexer = realm.searchIndex;
-    await indexer.run();
     await indexer.update(new URL(`${testRealmURL}posts/ignore-me.json`));
 
     let instance = await indexer.card(
@@ -408,12 +596,12 @@ posts/ignore-me.json
 
     hooks.beforeEach(async function () {
       let realm = TestRealm.create(sampleCards);
+      await realm.ready;
       indexer = realm.searchIndex;
-      await indexer.run();
     });
 
     test(`can search for cards by using the 'eq' filter`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
           eq: { title: 'Card 1', description: 'Sample post' },
@@ -426,7 +614,7 @@ posts/ignore-me.json
     });
 
     test(`can use 'eq' to find 'null' values`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}book`, name: 'Book' },
           eq: { 'author.lastName': null },
@@ -439,7 +627,7 @@ posts/ignore-me.json
     });
 
     test(`can search for cards by using a computed field`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
           eq: { 'author.fullName': 'Carl Stack' },
@@ -451,8 +639,10 @@ posts/ignore-me.json
       );
     });
 
+    skip('can search for cards by using a linksTo field');
+
     test(`can search for cards that have custom queryableValue`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${baseRealm.url}catalog-entry`, name: 'CatalogEntry' },
           eq: {
@@ -470,7 +660,7 @@ posts/ignore-me.json
     });
 
     test('can combine multiple filters', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: {
             module: `${testModuleRealm}post`,
@@ -487,7 +677,7 @@ posts/ignore-me.json
     });
 
     test('can handle a filter with double negatives', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
           not: { not: { not: { eq: { 'author.firstName': 'Carl' } } } },
@@ -500,7 +690,7 @@ posts/ignore-me.json
     });
 
     test('can filter by card type', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           type: { module: `${testModuleRealm}article`, name: 'Article' },
         },
@@ -511,9 +701,11 @@ posts/ignore-me.json
         'found cards of type Article'
       );
 
-      matching = await indexer.search({
-        filter: { type: { module: `${testModuleRealm}post`, name: 'Post' } },
-      });
+      matching = (
+        await indexer.search({
+          filter: { type: { module: `${testModuleRealm}post`, name: 'Post' } },
+        })
+      ).data;
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${paths.url}card-1`, `${paths.url}cards/1`, `${paths.url}cards/2`],
@@ -522,7 +714,7 @@ posts/ignore-me.json
     });
 
     test(`can filter on a card's own fields using range`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
           range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
@@ -535,7 +727,7 @@ posts/ignore-me.json
     });
 
     test('can use a range filter with custom queryableValue', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}dog`, name: 'Dog' },
           range: {
@@ -590,7 +782,7 @@ posts/ignore-me.json
     });
 
     test(`can filter on a nested field using 'eq'`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
           eq: { 'author.firstName': 'Carl' },
@@ -603,7 +795,7 @@ posts/ignore-me.json
     });
 
     test('can negate a filter', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}article`, name: 'Article' },
           not: { eq: { 'author.firstName': 'Carl' } },
@@ -616,7 +808,7 @@ posts/ignore-me.json
     });
 
     test('can combine multiple types', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         filter: {
           any: [
             {
@@ -638,7 +830,7 @@ posts/ignore-me.json
 
     // sorting
     test('can sort in alphabetical order', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'author.lastName',
@@ -656,7 +848,7 @@ posts/ignore-me.json
     });
 
     test('can sort in reverse alphabetical order', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'author.firstName',
@@ -677,7 +869,7 @@ posts/ignore-me.json
     });
 
     test('can sort by custom queryableValue', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'numberOfTreats',
@@ -698,7 +890,7 @@ posts/ignore-me.json
     });
 
     test('can sort by multiple string field conditions in given directions', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'author.lastName',
@@ -725,7 +917,7 @@ posts/ignore-me.json
     });
 
     test('can sort by integer value', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'editions',
@@ -750,7 +942,7 @@ posts/ignore-me.json
     });
 
     test('can sort by date', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'pubDate',
@@ -771,7 +963,7 @@ posts/ignore-me.json
     });
 
     test('can sort by mixed field types', async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'editions',
@@ -797,7 +989,7 @@ posts/ignore-me.json
     });
 
     test(`can sort on multiple paths in combination with 'any' filter`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'author.lastName',
@@ -830,7 +1022,7 @@ posts/ignore-me.json
     });
 
     test(`can sort on multiple paths in combination with 'every' filter`, async function (assert) {
-      let matching = await indexer.search({
+      let { data: matching } = await indexer.search({
         sort: [
           {
             by: 'author.firstName',

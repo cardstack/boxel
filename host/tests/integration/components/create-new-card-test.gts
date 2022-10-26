@@ -36,7 +36,7 @@ module('Integration | create-new-card', function (hooks) {
     adapter = new TestRealmAdapter({});
     realm = TestRealm.createWithAdapter(adapter);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
-    loader.addRealmFetchOverride(realm);
+    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
 
     await realm.write('person.gts', `

@@ -1,4 +1,9 @@
-import { methodNotAllowed, notFound, CardError } from "./error";
+import {
+  methodNotAllowed,
+  notFound,
+  CardError,
+  responseWithError,
+} from "./error";
 import { RealmPaths } from "./paths";
 
 type Handler = (request: Request) => Promise<Response>;
@@ -70,7 +75,7 @@ export class Router {
           return await handler(request);
         } catch (err) {
           if (err instanceof CardError) {
-            return err.response;
+            return responseWithError(err);
           }
           console.error(err);
           return new Response(`unexpected exception in realm ${err}`, {

@@ -55,11 +55,6 @@ import * as emberHelper from '@ember/helper';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('@ember/helper', emberHelper);
 import * as emberModifier from '@ember/modifier';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('@ember/modifier', emberModifier);
-import * as emberDestroyable from '@ember/destroyable';
-(window as any).RUNTIME_SPIKE_EXTERNALS.set(
-  '@ember/destroyable',
-  emberDestroyable
-);
 import * as emberResources from 'ember-resources';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('ember-resources', emberResources);
 import * as emberConcurrency from 'ember-concurrency';

@@ -2,9 +2,9 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
-import { p, cleanWhiteSpace, shimModule } from '../../helpers';
+import { p, cleanWhiteSpace, shimModule, setupCardLogs } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, NotLoaded } from '@cardstack/runtime-common';
 import { shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
 import { Card } from "https://cardstack.com/base/card-api";
 
@@ -20,6 +20,7 @@ let serializeCard: typeof cardApi["serializeCard"];
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
+  setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
   const realmURL = `https://test-realm/`;
 
   hooks.beforeEach(async function () {
@@ -526,7 +527,7 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a linksTo relationship that does not include all the related resources', async function(assert) {
-    let { field, contains, linksTo, Card, createFromSerialized, relationshipMeta, NotLoaded, serializeCard } = cardApi;
+    let { field, contains, linksTo, Card, createFromSerialized, relationshipMeta, serializeCard } = cardApi;
     let { default: StringCard } = string;
 
     class Pet extends Card {

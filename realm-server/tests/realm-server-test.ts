@@ -18,6 +18,7 @@ import {
 import { stringify } from "qs";
 import { NodeAdapter } from "../node-realm";
 import { Query } from "@cardstack/runtime-common/query";
+import { setupCardLogs } from "./helpers";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 
 setGracefulCleanup();
@@ -25,17 +26,21 @@ const testRealmURL = new URL("http://127.0.0.1:4444/");
 const testRealmHref = testRealmURL.href;
 const testRealm2Href = "http://localhost:4202/node-test/";
 
-Loader.addURLMapping(
-  new URL(baseRealm.url),
-  new URL("http://localhost:4201/base/")
-);
-
 module("Realm Server", function (hooks) {
   let server: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
 
   hooks.beforeEach(async function () {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
 

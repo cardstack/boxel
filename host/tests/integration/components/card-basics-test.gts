@@ -2,7 +2,7 @@ import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import waitUntil from '@ember/test-helpers/wait-until';
 import { renderCard } from '../../helpers/render-component';
-import { cleanWhiteSpace, p, testRealmURL, shimModule } from '../../helpers';
+import { cleanWhiteSpace, p, testRealmURL, shimModule, setupCardLogs } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
 import { baseRealm, } from "@cardstack/runtime-common";
@@ -25,6 +25,7 @@ let queryableValue: typeof queryableValueType;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
+  setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   hooks.before(async function () {
     Loader.destroy();
@@ -44,7 +45,7 @@ module('Integration | card-basics', function (hooks) {
     catalogEntry = await Loader.import(`${baseRealm.url}catalog-entry`);
     pickModule = await Loader.import(`${baseRealm.url}pick`);
   });
-  
+
   test('primitive field type checking', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;

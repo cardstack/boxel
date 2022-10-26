@@ -4,9 +4,12 @@ import {
   baseCardRef,
   LooseCardResource,
   isCardResource,
+  isNotLoadedError,
   internalKeyFor,
   trimExecutableExtension,
   hasExecutableExtension,
+  maxLinkDepth,
+  type NotLoaded,
   type Card,
   type CardAPI,
 } from ".";
@@ -17,6 +20,7 @@ import isEqual from "lodash/isEqual";
 import { Deferred } from "./deferred";
 import flatMap from "lodash/flatMap";
 import merge from "lodash/merge";
+import { isCardError } from "./error";
 import type {
   ExportedCardRef,
   CardRef,
@@ -77,7 +81,7 @@ class URLMap<T> {
   }
 }
 
-interface IndexError {
+export interface IndexError {
   message: string;
   errorReferences?: string[];
   // TODO we need to serialize the stack trace too, checkout the mono repo card compiler for examples
@@ -126,10 +130,11 @@ export class CurrentRun {
   #modules = new Map<string, ModuleWithErrors>();
   #moduleWorkingCache = new Map<string, Promise<Module>>();
   #typesCache = new WeakMap<typeof Card, Promise<TypesWithErrors>>();
+  #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
-  #loader = Loader.createLoaderFromGlobal();
+  #loader: Loader;
   private realm: Realm;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -137,18 +142,20 @@ export class CurrentRun {
     moduleErrors: 0,
   };
 
-  private constructor({
+  constructor({
     realm,
     reader,
-    instances,
-    modules,
-    ignoreMap,
+    instances = new URLMap(),
+    modules = new Map(),
+    ignoreMap = new URLMap(),
+    loader,
   }: {
     realm: Realm;
-    reader: Reader | undefined; // the "empty" case doesn't need a reader
-    instances: URLMap<SearchEntryWithErrors>;
-    modules: Map<string, ModuleWithErrors>;
-    ignoreMap: URLMap<Ignore>;
+    reader: Reader;
+    instances?: URLMap<SearchEntryWithErrors>;
+    modules?: Map<string, ModuleWithErrors>;
+    ignoreMap?: URLMap<Ignore>;
+    loader?: Loader;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
     this.#reader = reader;
@@ -156,27 +163,25 @@ export class CurrentRun {
     this.#instances = instances;
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
+    this.#loader = loader ?? Loader.createLoaderFromGlobal();
   }
 
-  static empty(realm: Realm) {
-    return new this({
-      realm,
-      reader: undefined,
-      instances: new URLMap(),
-      modules: new Map(),
-      ignoreMap: new URLMap(),
-    });
+  private resetState() {
+    this.#instances = new URLMap();
+    this.#modules = new Map();
+    this.#moduleWorkingCache = new Map();
+    this.#typesCache = new WeakMap();
+    this.#indexingInstances = new Map();
+    this.#ignoreMap = new URLMap();
+    this.#loader = Loader.createLoaderFromGlobal();
+    this.stats.instancesIndexed = 0;
+    this.stats.instanceErrors = 0;
+    this.stats.moduleErrors = 0;
   }
 
-  static async fromScratch(realm: Realm, reader: Reader) {
-    let current = new this({
-      realm,
-      reader,
-      instances: new URLMap(),
-      modules: new Map(),
-      ignoreMap: new URLMap(),
-    });
-    await current.visitDirectory(new URL(realm.url));
+  static async fromScratch(current: CurrentRun) {
+    current.resetState();
+    await current.visitDirectory(new URL(current.realm.url));
     return current;
   }
 
@@ -264,16 +269,15 @@ export class CurrentRun {
     }
   }
 
-  private async visitFile(url: URL): Promise<void> {
+  private async visitFile(url: URL, stack: string[] = []): Promise<void> {
     if (this.isIgnored(url)) {
       return;
     }
 
     if (
-      (hasExecutableExtension(url.href) ||
-        // handle modules with no extension too
-        !url.href.split("/").pop()!.includes(".")) &&
-      url.href !== `${baseRealm.url}card-api.gts` // TODO the base card's module is not analyzable
+      hasExecutableExtension(url.href) ||
+      // handle modules with no extension too
+      !url.href.split("/").pop()!.includes(".")
     ) {
       return await this.indexCardSource(url);
     }
@@ -288,7 +292,7 @@ export class CurrentRun {
     if (url.href.endsWith(".json")) {
       let { data: resource } = JSON.parse(content);
       if (isCardResource(resource)) {
-        await this.indexCard(localPath, lastModified, resource);
+        await this.indexCard(localPath, lastModified, resource, stack);
       }
     }
   }
@@ -330,11 +334,48 @@ export class CurrentRun {
     }
   }
 
+  private async recomputeCard(
+    card: Card,
+    instanceURL: string,
+    stack: string[]
+  ): Promise<void> {
+    let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+    try {
+      await api.recompute(card, { loadFields: stack.length < maxLinkDepth });
+    } catch (err: any) {
+      let notLoadedErr: NotLoaded | undefined;
+      if (
+        isCardError(err) &&
+        (notLoadedErr = err.additionalErrors?.find((e) =>
+          isNotLoadedError(e)
+        ) as NotLoaded | undefined)
+      ) {
+        let linkURL = new URL(`${notLoadedErr.reference}.json`);
+        if (this.#realmPaths.inRealm(linkURL)) {
+          await this.visitFile(linkURL, [instanceURL, ...stack]);
+          await api.recompute(card, { loadFields: true });
+        } else {
+          // in this case the instance we are linked to is a missing instance
+          // in an external realm.
+          throw err;
+        }
+      }
+    }
+  }
+
   private async indexCard(
     path: LocalPath,
     lastModified: number,
-    resource: LooseCardResource
+    resource: LooseCardResource,
+    stack: string[]
   ): Promise<void> {
+    // TODO handle cycles
+    let indexingInstance = this.#indexingInstances.get(path);
+    if (indexingInstance) {
+      return await indexingInstance;
+    }
+    let deferred = new Deferred<void>();
+    this.#indexingInstances.set(path, deferred.promise);
     let instanceURL = new URL(
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
@@ -351,11 +392,19 @@ export class CurrentRun {
     let cardType: typeof Card | undefined;
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
-      let card = await api.createFromSerialized({ data: resource }, moduleURL, {
-        loader: this.#loader,
-      });
+      let card = (await api.createFromSerialized(
+        { data: resource },
+        moduleURL,
+        {
+          loader: this.#loader,
+        }
+      )) as Card;
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
-      await api.recompute(card);
+      await this.recomputeCard(
+        card,
+        this.#realmPaths.fileURL(path).href,
+        stack
+      );
       let data: SingleCardDocument = api.serializeCard(card, {
         includeComputeds: true,
       });
@@ -390,6 +439,7 @@ export class CurrentRun {
           ]),
         },
       });
+      deferred.fulfill();
     }
 
     if (uncaughtError || typesMaybeError?.type === "error") {
@@ -401,12 +451,15 @@ export class CurrentRun {
           error: {
             message: `${uncaughtError.message} (TODO include stack trace)`,
             errorReferences: [cardRef.module],
+            // TODO serialize CardError and attach to this doc
           },
         };
       } else if (typesMaybeError?.type === "error") {
         error = { type: "error", error: typesMaybeError.error };
       } else {
-        throw new Error(`bug: should never get here`);
+        let err = new Error(`bug: should never get here`);
+        deferred.reject(err);
+        throw err;
       }
       if (globalThis.process?.env?.SUPPRESS_ERRORS !== "true") {
         console.warn(
@@ -414,6 +467,7 @@ export class CurrentRun {
         );
       }
       this.#instances.set(instanceURL, error);
+      deferred.fulfill();
     }
   }
 

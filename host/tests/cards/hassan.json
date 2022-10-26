@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "id": "http://localhost:4201/test/hassan",
+    "attributes": {
+      "firstName": "Hassan",
+      "lastName": "Abdel-Rahman"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./person",
+        "name": "Person"
+      }
+    }
+  }
+}

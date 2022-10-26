@@ -1,8 +1,9 @@
-import { baseRealm, internalKeyFor } from ".";
+import { baseRealm, internalKeyFor, LooseCardResource, maxLinkDepth } from ".";
 import { Kind, Realm } from "./realm";
-import { CurrentRun, SearchEntry, SearchEntryWithErrors } from "./current-run";
+import { CurrentRun, SearchEntry, type IndexError } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
+import { CardError } from "./error";
 import flatMap from "lodash/flatMap";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
@@ -307,27 +308,41 @@ function isIncluded(included: any): included is CardResource<Saved>[] {
   return true;
 }
 
+interface Options {
+  loadLinks?: true;
+}
+
+type SearchResult = SearchResultDoc | SearchResultError;
+interface SearchResultDoc {
+  type: "doc";
+  doc: SingleCardDocument;
+}
+interface SearchResultError {
+  type: "error";
+  error: IndexError;
+}
+
 export class SearchIndex {
   #currentRun: CurrentRun;
 
   constructor(
     private realm: Realm,
-    private readdir: (
+    readdir: (
       path: string
     ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>,
-    private readFileAsText: (
+    readFileAsText: (
       path: LocalPath,
       opts?: { withFallbacks?: true }
     ) => Promise<{ content: string; lastModified: number } | undefined>
   ) {
-    this.#currentRun = CurrentRun.empty(realm);
+    this.#currentRun = new CurrentRun({
+      realm,
+      reader: { readdir, readFileAsText },
+    });
   }
 
   async run() {
-    this.#currentRun = await CurrentRun.fromScratch(this.realm, {
-      readdir: this.readdir,
-      readFileAsText: this.readFileAsText,
-    });
+    await CurrentRun.fromScratch(this.#currentRun);
   }
 
   get stats() {
@@ -346,26 +361,128 @@ export class SearchIndex {
     );
   }
 
-  async search(query: Query): Promise<CardResource[]> {
+  async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
     let matcher = await this.buildMatcher(query.filter, {
       module: `${baseRealm.url}card-api`,
       name: "Card",
     });
 
-    return flatMap([...this.#currentRun.instances.values()], (maybeError) =>
-      maybeError.type !== "error" ? [maybeError.entry] : []
-    )
-      .filter(matcher)
-      .sort(this.buildSorter(query.sort))
-      .map((entry) => entry.resource);
+    let doc: CardCollectionDocument = {
+      data: flatMap([...this.#currentRun.instances.values()], (maybeError) =>
+        maybeError.type !== "error" ? [maybeError.entry] : []
+      )
+        .filter(matcher)
+        .sort(this.buildSorter(query.sort))
+        .map((entry) => ({
+          ...entry.resource,
+          ...{ links: { self: entry.resource.id } },
+        })),
+    };
+
+    let omit = doc.data.map((r) => r.id);
+    if (opts?.loadLinks) {
+      let included: CardResource<Saved>[] = [];
+      for (let resource of doc.data) {
+        included = await this.loadLinks(resource, omit, included);
+      }
+      if (included.length > 0) {
+        doc.included = included;
+      }
+    }
+
+    return doc;
   }
 
   public isIgnored(url: URL): boolean {
     return this.#currentRun.isIgnored(url);
   }
 
-  async card(url: URL): Promise<SearchEntryWithErrors | undefined> {
-    return this.#currentRun.instances.get(url);
+  async card(url: URL, opts?: Options): Promise<SearchResult | undefined> {
+    let card = this.#currentRun.instances.get(url);
+    if (!card) {
+      return undefined;
+    }
+    if (card.type === "error") {
+      return card;
+    }
+    let doc: SingleCardDocument = { data: card.entry.resource };
+    if (opts?.loadLinks) {
+      let included = await this.loadLinks(doc.data, [doc.data.id]);
+      if (included.length > 0) {
+        doc.included = included;
+      }
+    }
+    return { type: "doc", doc };
+  }
+
+  // TODO The caller should provide a list of fields to be included via JSONAPI
+  // request. currently we just use the maxLinkDepth to control how deep to load
+  // links
+  async loadLinks(
+    resource: LooseCardResource,
+    omit: string[] = [],
+    included: CardResource<Saved>[] = [],
+    visited: string[] = [],
+    stack: string[] = []
+  ): Promise<CardResource<Saved>[]> {
+    if (resource.id != null) {
+      if (visited.includes(resource.id)) {
+        return [];
+      }
+      visited.push(resource.id);
+    }
+
+    for (let relationship of Object.values(resource.relationships ?? {})) {
+      if (!relationship.links.self) {
+        continue;
+      }
+      let linkURL = new URL(relationship.links.self);
+      let linkResource: CardResource<Saved> | undefined;
+      if (this.realm.paths.inRealm(linkURL)) {
+        let maybeEntry = this.#currentRun.instances.get(
+          new URL(relationship.links.self)
+        );
+        linkResource =
+          maybeEntry?.type === "entry" ? maybeEntry.entry.resource : undefined;
+      } else {
+        let response = await this.loader.fetch(linkURL, {
+          headers: { Accept: "application/vnd.api+json" },
+        });
+        if (!response.ok) {
+          let cardError = await CardError.fromFetchResponse(
+            linkURL.href,
+            response
+          );
+          throw cardError;
+        }
+        let json = await response.json();
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `instance ${
+              linkURL.href
+            } is not a card document. it is: ${JSON.stringify(json, null, 2)}`
+          );
+        }
+        linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
+      }
+      if (linkResource && stack.length <= maxLinkDepth) {
+        for (let includedResource of await this.loadLinks(
+          linkResource,
+          omit,
+          [...included, linkResource],
+          visited,
+          [...(resource.id != null ? [resource.id] : []), ...stack]
+        )) {
+          if (
+            !omit.includes(includedResource.id) &&
+            !included.find((r) => r.id === includedResource.id)
+          ) {
+            included.push(includedResource);
+          }
+        }
+      }
+    }
+    return included;
   }
 
   // this is meant for tests only
@@ -409,7 +526,7 @@ export class SearchIndex {
     while (segments.length) {
       let fieldName = segments.shift()!;
       let prevCard = card;
-      card = (await api.getField(card, fieldName))?.card;
+      card = api.getField(card, fieldName)?.card;
       if (!card) {
         throw new Error(
           `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(

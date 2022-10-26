@@ -1,13 +1,12 @@
 import { Deferred } from "./deferred";
-import { SearchIndex, CardRef } from "./search-index";
-import { Loader } from "./loader";
+import { SearchIndex, CardRef, SingleCardDocument } from "./search-index";
+import { Loader, type MaybeLocalRequest } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
 import {
   systemError,
   notFound,
   methodNotAllowed,
   badRequest,
-  CardError,
 } from "@cardstack/runtime-common/error";
 import { formatRFC7231 } from "date-fns";
 import {
@@ -84,18 +83,7 @@ export class Realm {
 
   constructor(url: string, adapter: RealmAdapter) {
     this.paths = new RealmPaths(url);
-    Loader.addFileLoader(new URL(this.url), async (path: LocalPath) => {
-      let content = await this.cardSourceFromPath(path);
-      if (!content) {
-        throw CardError.withResponse(
-          notFound(
-            new Request(this.paths.fileURL(path).href),
-            `cannot find module ${path}`
-          )
-        );
-      }
-      return this.transpileJS(content, path);
-    });
+    Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
     this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
@@ -151,10 +139,13 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async handle(request: Request): Promise<ResponseWithNodeStream> {
+  async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
     if (request.headers.get("Accept")?.includes("application/vnd.api+json")) {
-      await this.ready;
+      // local requests are allowed to query the realm as the index is being built up
+      if (!request.isLocal) {
+        await this.ready;
+      }
       if (!this.searchIndex) {
         return systemError("search index is not available");
       }
@@ -240,17 +231,6 @@ export class Realm {
       });
     }
     return await this.serveLocalFile(handle);
-  }
-
-  // as opposed to getCardSourceOrRedirect, this will follow the redirect
-  private async cardSourceFromPath(
-    path: LocalPath
-  ): Promise<string | undefined> {
-    let handle = await this.getFileWithFallbacks(path);
-    if (!handle) {
-      return undefined;
-    }
-    return (await this.readFileAsText(handle.path))?.content;
   }
 
   private async removeCardSource(request: Request): Promise<Response> {
@@ -377,24 +357,28 @@ export class Realm {
       JSON.stringify(await this.fileSerialization(json, fileURL), null, 2)
     );
     let newURL = fileURL.href.replace(/\.json$/, "");
-    if (!isSingleCardDocument(json)) {
-      return badRequest(
-        `bug: the card document is not actually a card document`
-      );
-    }
-    json.data.id = newURL;
-    json.data.links = { self: newURL };
-    json.data.meta.lastModified = lastModified;
-    if (!isSingleCardDocument(json)) {
+    let entry = await this.#searchIndex.card(new URL(newURL), {
+      loadLinks: true,
+    });
+    if (!entry || entry?.type === "error") {
+      // TODO we should just return the serialized error in the error document
       return systemError(
-        `bug: constructed non-card document resource in JSON-API request for ${newURL}`
+        `Unable to index document: ${
+          entry ? entry.error.message : "can't find document in index"
+        }`
       );
     }
-    return new Response(JSON.stringify(json, null, 2), {
+    let doc: SingleCardDocument = merge({}, entry.doc, {
+      data: {
+        links: { self: newURL },
+        meta: { lastModified },
+      },
+    });
+    return new Response(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
         "content-type": "application/vnd.api+json",
-        ...lastModifiedHeader(json),
+        ...lastModifiedHeader(doc),
       },
     });
   }
@@ -413,12 +397,9 @@ export class Realm {
     if (originalMaybeError.type === "error") {
       return systemError(originalMaybeError.error.message);
     }
-    let {
-      entry: { resource: original },
-    } = originalMaybeError;
-
+    let { doc: original } = originalMaybeError;
     let originalClone = cloneDeep(original);
-    delete originalClone.meta.lastModified;
+    delete originalClone.data.meta.lastModified;
 
     let patch = await request.json();
     if (!isSingleCardDocument(patch)) {
@@ -428,20 +409,35 @@ export class Realm {
     delete (patch as any).data.meta;
     delete (patch as any).data.type;
 
-    let card = merge({}, { data: originalClone }, patch);
+    let card = merge({}, originalClone, patch);
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
     let { lastModified } = await this.write(
       path,
       JSON.stringify(await this.fileSerialization(card, url), null, 2)
     );
-    card.data.id = url.href.replace(/\.json$/, "");
-    card.data.links = { self: url.href };
-    card.data.meta.lastModified = lastModified;
-    return new Response(JSON.stringify(card, null, 2), {
+    let instanceURL = url.href.replace(/\.json$/, "");
+    let entry = await this.#searchIndex.card(new URL(instanceURL), {
+      loadLinks: true,
+    });
+    if (!entry || entry?.type === "error") {
+      // TODO we should just return the serialized error in the error document
+      return systemError(
+        `Unable to index document: ${
+          entry ? entry.error.message : "can't find document in index"
+        }`
+      );
+    }
+    let doc: SingleCardDocument = merge({}, entry.doc, {
+      data: {
+        links: { self: instanceURL },
+        meta: { lastModified },
+      },
+    });
+    return new Response(JSON.stringify(doc, null, 2), {
       headers: {
         "content-type": "application/vnd.api+json",
-        ...lastModifiedHeader(card),
+        ...lastModifiedHeader(doc),
       },
     });
   }
@@ -449,18 +445,15 @@ export class Realm {
   private async getCard(request: Request): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     let url = this.paths.fileURL(localPath);
-    let maybeError = await this.#searchIndex.card(url);
+    let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
       return notFound(request);
     }
     if (maybeError.type === "error") {
       return systemError(maybeError.error.message);
     }
-    let {
-      entry: { resource: data },
-    } = maybeError;
-    (data as any).links = { self: url.href };
-    let card = { data };
+    let { doc: card } = maybeError;
+    card.data.links = { self: url.href };
     return new Response(JSON.stringify(card, null, 2), {
       headers: {
         "last-modified": formatRFC7231(card.data.meta.lastModified!),
@@ -472,8 +465,8 @@ export class Realm {
 
   private async removeCard(request: Request): Promise<Response> {
     let url = new URL(request.url);
-    let data = await this.#searchIndex.card(url);
-    if (!data) {
+    let result = await this.#searchIndex.card(url);
+    if (!result) {
       return notFound(request);
     }
     let localPath = this.paths.local(url) + ".json";
@@ -598,21 +591,13 @@ export class Realm {
   }
 
   private async search(request: Request): Promise<Response> {
-    let data = await this.#searchIndex.search(
-      parseQueryString(new URL(request.url).search.slice(1))
+    let doc = await this.#searchIndex.search(
+      parseQueryString(new URL(request.url).search.slice(1)),
+      { loadLinks: true }
     );
-    return new Response(
-      JSON.stringify(
-        {
-          data,
-        },
-        null,
-        2
-      ),
-      {
-        headers: { "content-type": "application/vnd.api+json" },
-      }
-    );
+    return new Response(JSON.stringify(doc, null, 2), {
+      headers: { "content-type": "application/vnd.api+json" },
+    });
   }
 
   private async fileSerialization(

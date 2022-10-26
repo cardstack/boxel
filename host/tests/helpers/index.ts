@@ -6,6 +6,7 @@ import {
   FileRef,
   LooseSingleCardDocument,
   Loader,
+  type CardAPI,
 } from '@cardstack/runtime-common';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 
@@ -57,6 +58,16 @@ export async function shimModule(
       m[name];
     })
   );
+}
+
+export function setupCardLogs(
+  hooks: NestedHooks,
+  apiThunk: () => Promise<CardAPI>
+) {
+  hooks.afterEach(async function () {
+    let api = await apiThunk();
+    await api.flushLogs();
+  });
 }
 
 export class TestRealmAdapter implements RealmAdapter {

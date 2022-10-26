@@ -12,6 +12,7 @@ export interface LooseSingleCardDocument {
 }
 
 export { Deferred } from "./deferred";
+export { CardError } from "./error";
 
 export interface ResourceObject {
   type: string;
@@ -36,6 +37,7 @@ import { RealmPaths } from "./paths";
 import { Query } from "./query";
 export const baseRealm = new RealmPaths("https://cardstack.com/base/");
 export { RealmPaths };
+export { NotLoaded, isNotLoadedError } from "./not-loaded";
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 
@@ -71,8 +73,11 @@ export const externalsMap: Map<string, string[]> = new Map([
       "isCardResource",
       "isRelationship",
       "isSingleCardDocument",
+      "isNotLoadedError",
       "chooseCard",
       "baseCardRef",
+      "NotLoaded",
+      "CardError",
       "isMetaFieldItem",
       "createNewCard",
     ],
@@ -85,7 +90,6 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["@ember/object", ["action", "get"]],
   ["@ember/helper", ["get", "fn"]],
   ["@ember/modifier", ["on"]],
-  ["@ember/destroyable", ["registerDestructor"]],
   ["ember-resources", ["Resource", "useResource"]],
   ["ember-concurrency", ["task", "restartableTask"]],
   ["ember-concurrency-ts", ["taskFor"]],
@@ -125,6 +129,11 @@ import type CardAPI from "https://cardstack.com/base/card-api";
 // @ts-ignore tsc doesn't understand .gts files
 import type { Card } from "https://cardstack.com/base/card-api";
 export { CardAPI, Card };
+
+// TODO hardcoding link traversal depth to 5 for now, eventually this will be
+// based on the fields used by the card's template, and/or fields requested in
+// JSONAPI request
+export const maxLinkDepth = 5;
 
 export interface CardChooser {
   chooseCard<T extends Card>(query: Query): Promise<undefined | T>;

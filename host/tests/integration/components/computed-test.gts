@@ -2,7 +2,7 @@ import { module, test, skip } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from 'ember-qunit';
 import waitUntil from '@ember/test-helpers/wait-until';
-import { cleanWhiteSpace, testRealmURL, shimModule } from '../../helpers';
+import { cleanWhiteSpace, testRealmURL, shimModule, setupCardLogs } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 import { shadowQuerySelector, shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
@@ -13,8 +13,9 @@ let integer: typeof import ("https://cardstack.com/base/integer");
 
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
+  setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
-  hooks.before(async function () {
+  hooks.beforeEach(async function () {
     Loader.destroy();
     Loader.addURLMapping(
       new URL(baseRealm.url),

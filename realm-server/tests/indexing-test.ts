@@ -6,24 +6,29 @@ import {
   LooseSingleCardDocument,
   Realm,
 } from "@cardstack/runtime-common";
-import { createRealm, testRealm } from "./helpers";
+import { createRealm, testRealm, setupCardLogs } from "./helpers";
 
 setGracefulCleanup();
-
-Loader.addURLMapping(
-  new URL(baseRealm.url),
-  new URL("http://localhost:4201/base/")
-);
 
 // Using the node tests for indexing as it is much easier to support the dynamic
 // loading of cards necessary for indexing and the ability to manipulate the
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
 module("indexing", function (hooks) {
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
+
   let dir: string;
   let realm: Realm;
 
   hooks.beforeEach(async function () {
+    Loader.destroy();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     dir = dirSync().name;
 
     realm = createRealm(dir, {
@@ -150,7 +155,7 @@ module("indexing", function (hooks) {
       } as LooseSingleCardDocument)
     );
 
-    let result = await realm.searchIndex.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}person`, name: "Person" },
         eq: { firstName: "Mang-Mang" },
@@ -207,7 +212,7 @@ module("indexing", function (hooks) {
       },
       "indexed correct number of files"
     );
-    let result = await realm.searchIndex.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         type: { module: `${testRealm}person`, name: "Person" },
       },
@@ -237,11 +242,13 @@ module("indexing", function (hooks) {
       },
       "indexed correct number of files"
     );
-    result = await realm.searchIndex.search({
-      filter: {
-        type: { module: `${testRealm}person`, name: "Person" },
-      },
-    });
+    result = (
+      await realm.searchIndex.search({
+        filter: {
+          type: { module: `${testRealm}person`, name: "Person" },
+        },
+      })
+    ).data;
     assert.strictEqual(
       result.length,
       2,
@@ -252,7 +259,7 @@ module("indexing", function (hooks) {
   test("can incrementally index deleted instance", async function (assert) {
     await realm.delete("mango.json");
 
-    let result = await realm.searchIndex.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}person`, name: "Person" },
         eq: { firstName: "Mango" },
@@ -290,7 +297,7 @@ module("indexing", function (hooks) {
       `
     );
 
-    let result = await realm.searchIndex.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}post`, name: "Post" },
         eq: { nickName: "Van Gogh-poo" },
@@ -326,7 +333,7 @@ module("indexing", function (hooks) {
     `
     );
 
-    let result = await realm.searchIndex.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}post`, name: "Post" },
         eq: { "author.nickName": "Van Gogh-poo" },
@@ -347,7 +354,7 @@ module("indexing", function (hooks) {
   test("can incrementally index instance that depends on deleted card source", async function (assert) {
     await realm.delete("post.gts");
     {
-      let result = await realm.searchIndex.search({
+      let { data: result } = await realm.searchIndex.search({
         filter: {
           type: { module: `${testRealm}post`, name: "Post" },
         },
@@ -363,7 +370,8 @@ module("indexing", function (hooks) {
       {
         type: "error",
         error: {
-          message: "CardError 404 (TODO include stack trace)",
+          message:
+            "unable to fetch http://test-realm/post (TODO include stack trace)",
           errorReferences: ["http://test-realm/post"],
         },
       },
@@ -399,7 +407,7 @@ module("indexing", function (hooks) {
       `
     );
     {
-      let result = await realm.searchIndex.search({
+      let { data: result } = await realm.searchIndex.search({
         filter: {
           on: { module: `${testRealm}post`, name: "Post" },
           eq: { nickName: "Van Gogh-poo" },

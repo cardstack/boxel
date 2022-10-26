@@ -2,8 +2,8 @@ import TransformModulesAmdPlugin from "transform-modules-amd-plugin";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
 import { trimExecutableExtension } from "./index";
-import { RealmPaths, LocalPath } from "./paths";
-import type { Realm } from "./realm";
+import { RealmPaths } from "./paths";
+import { CardError } from "./error";
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -53,12 +53,14 @@ type Module =
       consumedModules: Set<string>;
     };
 
-type FileLoader = (path: LocalPath) => Promise<string>;
+export interface MaybeLocalRequest extends Request {
+  isLocal?: true;
+}
+
 export class Loader {
   private modules = new Map<string, Module>();
-  private fileLoaders = new Map<string, FileLoader>();
-  private urlMappings = new Map<RealmPaths, string>();
-  private realmFetchOverride: Realm[] = [];
+  private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
+  private urlMappings = new Map<string, string>();
   private moduleShims = new Map<string, Record<string, any>>();
   private identities = new WeakMap<
     Function,
@@ -83,17 +85,15 @@ export class Loader {
   static createLoaderFromGlobal(): Loader {
     let globalLoader = Loader.getLoader();
     let loader = new Loader();
-    loader.fileLoaders = globalLoader.fileLoaders;
+    loader.urlHandlers = globalLoader.urlHandlers;
     loader.urlMappings = globalLoader.urlMappings;
-    loader.realmFetchOverride = globalLoader.realmFetchOverride;
     return loader;
   }
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader();
-    clone.fileLoaders = loader.fileLoaders;
+    clone.urlHandlers = loader.urlHandlers;
     clone.urlMappings = loader.urlMappings;
-    clone.realmFetchOverride = loader.realmFetchOverride;
     return clone;
   }
 
@@ -131,31 +131,25 @@ export class Loader {
     return loader.fetch(urlOrRequest, init);
   }
 
-  static addFileLoader(url: URL, fileLoader: FileLoader) {
-    let loader = Loader.getLoader();
-    loader.addFileLoader(url, fileLoader);
-  }
-
-  addFileLoader(url: URL, fileLoader: FileLoader) {
-    this.fileLoaders.set(url.href, fileLoader);
-  }
-
   static addURLMapping(from: URL, to: URL) {
     let loader = Loader.getLoader();
     loader.addURLMapping(from, to);
   }
 
   addURLMapping(from: URL, to: URL) {
-    this.urlMappings.set(new RealmPaths(from), to.href);
+    this.urlMappings.set(from.href, to.href);
   }
 
-  static addRealmFetchOverride(realm: Realm) {
+  static registerURLHandler(
+    url: URL,
+    handler: (req: Request) => Promise<Response>
+  ) {
     let loader = Loader.getLoader();
-    loader.addRealmFetchOverride(realm);
+    loader.registerURLHandler(url, handler);
   }
 
-  addRealmFetchOverride(realm: Realm) {
-    this.realmFetchOverride.push(realm);
+  registerURLHandler(url: URL, handler: (req: Request) => Promise<Response>) {
+    this.urlHandlers.set(url.href, handler);
   }
 
   static shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -276,9 +270,12 @@ export class Loader {
     init?: RequestInit
   ): Promise<Response> {
     if (urlOrRequest instanceof Request) {
-      for (let realm of this.realmFetchOverride) {
-        if (realm.paths.inRealm(new URL(urlOrRequest.url))) {
-          return await realm.handle(urlOrRequest);
+      for (let [url, handle] of this.urlHandlers) {
+        let path = new RealmPaths(new URL(url));
+        if (path.inRealm(new URL(urlOrRequest.url))) {
+          let request = urlOrRequest as MaybeLocalRequest;
+          request.isLocal = true;
+          return await handle(request);
         }
       }
       let request = new Request(this.resolve(urlOrRequest.url).href, {
@@ -288,13 +285,15 @@ export class Loader {
       });
       return fetch(request);
     } else {
-      for (let realm of this.realmFetchOverride) {
-        if (realm.paths.inRealm(new URL(urlOrRequest))) {
+      for (let [url, handle] of this.urlHandlers) {
+        let path = new RealmPaths(new URL(url));
+        if (path.inRealm(new URL(urlOrRequest))) {
           let request = new Request(
             typeof urlOrRequest === "string" ? urlOrRequest : urlOrRequest.href,
             init
-          );
-          return await realm.handle(request);
+          ) as MaybeLocalRequest;
+          request.isLocal = true;
+          return await handle(request);
         }
       }
       let resolvedURL = this.resolve(urlOrRequest);
@@ -304,9 +303,10 @@ export class Loader {
 
   resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
-    for (let [paths, to] of this.urlMappings) {
-      if (paths.inRealm(absoluteURL)) {
-        return new URL(paths.local(absoluteURL), to) as ResolvedURL;
+    for (let [sourceURL, to] of this.urlMappings) {
+      let sourcePath = new RealmPaths(new URL(sourceURL));
+      if (sourcePath.inRealm(absoluteURL)) {
+        return new URL(sourcePath.local(absoluteURL), to) as ResolvedURL;
       }
     }
     return absoluteURL as ResolvedURL;
@@ -317,7 +317,8 @@ export class Loader {
     relativeTo?: URL
   ): URL {
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
-    for (let [sourcePath, to] of this.urlMappings) {
+    for (let [sourceURL, to] of this.urlMappings) {
+      let sourcePath = new RealmPaths(new URL(sourceURL));
       let destinationPath = new RealmPaths(to);
       if (destinationPath.inRealm(absoluteURL)) {
         return new URL(destinationPath.local(absoluteURL), sourcePath.url);
@@ -531,13 +532,6 @@ export class Loader {
   }
 
   private async load(moduleURL: ResolvedURL): Promise<string> {
-    for (let [realmURL, fileLoader] of this.fileLoaders) {
-      let realmPath = new RealmPaths(this.resolve(realmURL));
-      if (realmPath.inRealm(moduleURL)) {
-        return await fileLoader(realmPath.local(moduleURL));
-      }
-    }
-
     let response: Response;
     try {
       response = await this.fetch(moduleURL);
@@ -549,11 +543,8 @@ export class Loader {
       throw err;
     }
     if (!response.ok) {
-      throw new Error(
-        `Could not retrieve ${moduleURL}: ${
-          response.status
-        } - ${await response.text()}`
-      );
+      let error = await CardError.fromFetchResponse(moduleURL.href, response);
+      throw error;
     }
     return await response.text();
   }
