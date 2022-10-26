@@ -134,7 +134,7 @@ module('Unit | search-index', function (hooks) {
         },
       });
     } else {
-      assert.ok(false, `search entry was an error: ${mango?.error.message}`);
+      assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
     }
   });
 
@@ -237,7 +237,7 @@ module('Unit | search-index', function (hooks) {
         },
       });
     } else {
-      assert.ok(false, `search entry was an error: ${hassan?.error.message}`);
+      assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
     }
   });
 

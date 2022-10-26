@@ -365,18 +365,29 @@ module("indexing", function (hooks) {
         "the deleted type results in no card instance results"
       );
     }
-    assert.deepEqual(
-      await realm.searchIndex.card(new URL(`${testRealm}post-1`)),
-      {
-        type: "error",
-        error: {
-          message:
-            "unable to fetch http://test-realm/post (TODO include stack trace)",
-          errorReferences: ["http://test-realm/post"],
+    let actual = await realm.searchIndex.card(new URL(`${testRealm}post-1`));
+    if (actual?.type === "error") {
+      assert.ok(actual.error.stack, "stack trace is included");
+      delete actual.error.stack;
+      assert.deepEqual(
+        await realm.searchIndex.card(new URL(`${testRealm}post-1`)),
+        {
+          type: "error",
+          error: {
+            isCardError: true,
+            additionalErrors: null,
+            detail: "http://test-realm/post not found",
+            source: undefined,
+            status: 404,
+            title: "Not Found",
+            deps: ["http://test-realm/post"],
+          },
         },
-      },
-      "card instance is an error document"
-    );
+        "card instance is an error document"
+      );
+    } else {
+      assert.ok(false, "search index entry is not an error document");
+    }
     assert.deepEqual(
       realm.searchIndex.stats,
       {

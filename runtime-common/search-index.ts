@@ -1,9 +1,9 @@
 import { baseRealm, internalKeyFor, LooseCardResource, maxLinkDepth } from ".";
 import { Kind, Realm } from "./realm";
-import { CurrentRun, SearchEntry, type IndexError } from "./current-run";
+import { CurrentRun, SearchEntry } from "./current-run";
 import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
-import { CardError } from "./error";
+import { CardError, type SerializedError } from "./error";
 import flatMap from "lodash/flatMap";
 //@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
 import type { Card } from "https://cardstack.com/base/card-api";
@@ -319,7 +319,7 @@ interface SearchResultDoc {
 }
 interface SearchResultError {
   type: "error";
-  error: IndexError;
+  error: SerializedError;
 }
 
 export class SearchIndex {

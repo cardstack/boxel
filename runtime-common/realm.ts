@@ -7,6 +7,7 @@ import {
   notFound,
   methodNotAllowed,
   badRequest,
+  CardError,
 } from "@cardstack/runtime-common/error";
 import { formatRFC7231 } from "date-fns";
 import {
@@ -361,11 +362,12 @@ export class Realm {
       loadLinks: true,
     });
     if (!entry || entry?.type === "error") {
-      // TODO we should just return the serialized error in the error document
+      let err = entry
+        ? CardError.fromSerializableError(entry.error)
+        : undefined;
       return systemError(
-        `Unable to index document: ${
-          entry ? entry.error.message : "can't find document in index"
-        }`
+        `Unable to index new card, can't find new instance in index`,
+        err
       );
     }
     let doc: SingleCardDocument = merge({}, entry.doc, {
@@ -395,7 +397,10 @@ export class Realm {
       return notFound(request);
     }
     if (originalMaybeError.type === "error") {
-      return systemError(originalMaybeError.error.message);
+      return systemError(
+        `unable to patch card, cannot load original from index`,
+        CardError.fromSerializableError(originalMaybeError.error)
+      );
     }
     let { doc: original } = originalMaybeError;
     let originalClone = cloneDeep(original);
@@ -421,11 +426,9 @@ export class Realm {
       loadLinks: true,
     });
     if (!entry || entry?.type === "error") {
-      // TODO we should just return the serialized error in the error document
       return systemError(
-        `Unable to index document: ${
-          entry ? entry.error.message : "can't find document in index"
-        }`
+        `Unable to index card: can't find patched instance in index`,
+        entry ? CardError.fromSerializableError(entry.error) : undefined
       );
     }
     let doc: SingleCardDocument = merge({}, entry.doc, {
@@ -450,7 +453,10 @@ export class Realm {
       return notFound(request);
     }
     if (maybeError.type === "error") {
-      return systemError(maybeError.error.message);
+      return systemError(
+        `cannot return card from index`,
+        CardError.fromSerializableError(maybeError.error)
+      );
     }
     let { doc: card } = maybeError;
     card.data.links = { self: url.href };

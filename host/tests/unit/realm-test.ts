@@ -401,7 +401,7 @@ module('Unit | realm', function (hooks) {
       let result = await searchIndex.card(new URL(json.data.links.self));
       if (result?.type === 'error') {
         throw new Error(
-          `unexpected error when getting card from index: ${result.error.message}`
+          `unexpected error when getting card from index: ${result.error.detail}`
         );
       }
       assert.strictEqual(
@@ -456,7 +456,7 @@ module('Unit | realm', function (hooks) {
       let result = await searchIndex.card(new URL(json.data.links.self));
       if (result?.type === 'error') {
         throw new Error(
-          `unexpected error when getting card from index: ${result.error.message}`
+          `unexpected error when getting card from index: ${result.error.detail}`
         );
       }
       assert.strictEqual(
@@ -679,7 +679,7 @@ module('Unit | realm', function (hooks) {
     let result = await searchIndex.card(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${result.error.message}`
+        `unexpected error when getting card from index: ${result.error.detail}`
       );
     }
     assert.strictEqual(
@@ -890,7 +890,7 @@ module('Unit | realm', function (hooks) {
     let result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
     if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${result.error.message}`
+        `unexpected error when getting card from index: ${result.error.detail}`
       );
     }
     assert.strictEqual(
@@ -915,7 +915,7 @@ module('Unit | realm', function (hooks) {
     result = await searchIndex.card(new URL(`${testRealmURL}cards/1`));
     if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${result.error.message}`
+        `unexpected error when getting card from index: ${result.error.detail}`
       );
     }
     assert.strictEqual(
