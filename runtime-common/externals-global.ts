@@ -48,10 +48,6 @@ import * as runtime from "@cardstack/runtime-common";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@ember/modifier", {
   on() {},
 });
-// import * as emberDestroyable from "ember-source/dist/packages/@ember/destroyable";
-(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@ember/destroyable", {
-  registerDestructor() {},
-});
 // import * as emberResources from 'ember-resources';
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("ember-resources", {
   Resource: class {},

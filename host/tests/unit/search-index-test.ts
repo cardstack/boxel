@@ -272,7 +272,6 @@ module('Unit | search-index', function (hooks) {
         'http://localhost:4201/externals/@cardstack/runtime-common',
         'http://localhost:4201/externals/@ember/component',
         'http://localhost:4201/externals/@ember/component/template-only',
-        'http://localhost:4201/externals/@ember/destroyable',
         'http://localhost:4201/externals/@ember/helper',
         'http://localhost:4201/externals/@ember/modifier',
         'http://localhost:4201/externals/@ember/object',

@@ -3,7 +3,6 @@ import { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
 import { flatMap, startCase, merge } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
-import { registerDestructor } from '@ember/destroyable';
 import { WatchedArray } from './watched-array';
 import { flatten } from "flat";
 import { on } from '@ember/modifier';
@@ -35,9 +34,7 @@ export const queryableValue = Symbol('cardstack-queryable-value');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol('cardstack-is-saved-instance');
-const myRecomputes = Symbol('cardstack-my-recomputes');
 const isField = Symbol('cardstack-field');
-const settle = Symbol('cardstack-settle-card');
 
 export type CardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
 export type PartialCardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P | null : Partial<InstanceType<T>>;
@@ -84,6 +81,32 @@ const componentCache = new WeakMap<Box<unknown>, ComponentLike<{ Args: {}; Block
 const cardTracking = new TrackedWeakMap<object, any>();
 
 const isBaseCard = Symbol('isBaseCard');
+
+class Logger {
+  private promises:Promise<any>[] = [];
+
+  log(promise: Promise<any>) {
+    this.promises.push(promise);
+    (async () => await promise)(); // make an effort to resolve the promise at the time it is logged
+  }
+
+  async flush() {
+    let results = await Promise.allSettled(this.promises);
+    for (let result of results) {
+      if (result.status === 'rejected') {
+        console.error(`Promise rejected`, result.reason);
+        if (result.reason instanceof Error) {
+          console.error(result.reason.stack);
+        }
+      }
+    }
+  }
+}
+
+let logger = new Logger();
+export async function flushLogs() {
+  await logger.flush();
+}
 
 type JSONAPIResource = 
 { 
@@ -232,7 +255,8 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
       throw new Error(`fieldMeta for contains-many field '${this.name}' is not an array: ${JSON.stringify(fieldMeta, null, 2)}`);
     }
     let metas: Partial<Meta>[] = fieldMeta ?? [];
-    return new WatchedArray( () => instancePromise .then(instance => instance[myRecomputes].push(recompute(instance))),
+    return new WatchedArray(
+      () => instancePromise.then(instance => logger.log(recompute(instance))),
       await Promise.all(value.map(async (entry, index) => {
         if (primitive in this.card) {
           return this.card[deserialize](entry, doc);
@@ -258,14 +282,14 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
   }
 
   emptyValue(instance: Card) {
-    return new WatchedArray( () => instance[myRecomputes].push(recompute(instance)));
+    return new WatchedArray(() => logger.log(recompute(instance)));
   };
 
   validate(instance: Card, value: any) {
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray( () => instance[myRecomputes].push(recompute(instance)), value);
+    return new WatchedArray(() => logger.log(recompute(instance)), value);
   }
 
   component(model: Box<Card>, format: Format) {
@@ -537,7 +561,6 @@ export class Card {
   // typescript considers everything a valid card.
   [isBaseCard] = true;
   [isSavedInstance] = false;
-  [myRecomputes]: (Promise<void>)[] = [];
   declare ["constructor"]: CardConstructor;
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
@@ -579,12 +602,6 @@ export class Card {
         (this as any)[fieldName] = value;
       }
     }
-
-    registerDestructor(this, this[settle].bind(this));
-  }
-
-  async [settle](){
-    await settleCard(this);
   }
 
   @field id = contains(() => IDCard);
@@ -685,43 +702,6 @@ export function relationshipMeta(instance: Card, fieldName: string): Relationshi
   } else {
     return { type: 'loaded', card: related ?? null };
   }
-}
-
-async function settleCard(instance: Card) {
-  return await Promise.allSettled(instance[myRecomputes]);
-}
-
-class Logger {
-  private settledCards:Promise<any> = Promise.resolve();
-
-  log(instance: Card) {
-    this.logSettledCard(instance);
-  }
-
-  async flush() {
-    await this.settledCards;
-  }
-
-  private async logSettledCard(instance: Card) {
-    this.settledCards = this.settledCards.then(async () => {
-      let results = await settleCard(instance);
-      for (let result of results) {
-        if (result.status === 'rejected') {
-          console.error(`Encountered error recomputing card instance '${
-              instance.id != null ? instance.id : instance.constructor.name
-            }':`, result.reason);
-          if (result.reason instanceof Error) {
-            console.error(result.reason.stack);
-          }
-        }
-      }
-    });
-  }
-}
-
-let logger = new Logger();
-export async function flushLogs() {
-  await logger.flush();
 }
 
 function serializedGet<CardT extends CardConstructor>(
@@ -902,7 +882,6 @@ async function _updateFromSerialized<T extends CardConstructor>(
       instance[isSavedInstance] = true;
     }
   }
-  logger.log(instance);
 
   deferred.fulfill(instance);
   return instance;
@@ -962,7 +941,7 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
       for (let computedFieldName of Object.keys(getComputedFields(this))) {
         deserialized.delete(computedFieldName);
       }
-      this[myRecomputes].push(recompute(this));
+      logger.log(recompute(this));
     }
   }
   (descriptor.get as any)[isField] = field;

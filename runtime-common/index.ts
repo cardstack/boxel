@@ -90,7 +90,6 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["@ember/object", ["action", "get"]],
   ["@ember/helper", ["get", "fn"]],
   ["@ember/modifier", ["on"]],
-  ["@ember/destroyable", ["registerDestructor"]],
   ["ember-resources", ["Resource", "useResource"]],
   ["ember-concurrency", ["task", "restartableTask"]],
   ["ember-concurrency-ts", ["taskFor"]],
