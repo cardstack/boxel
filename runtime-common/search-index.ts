@@ -469,7 +469,7 @@ export class SearchIndex {
         }
         linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
       }
-      if (linkResource && stack.length < maxLinkDepth) {
+      if (linkResource && stack.length <= maxLinkDepth) {
         for (let includedResource of await this.loadLinks(
           linkResource,
           omit,
