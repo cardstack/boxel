@@ -5,7 +5,7 @@ import { Loader, baseRealm } from '@cardstack/runtime-common';
 import Preview  from 'runtime-spike/components/preview';
 import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
-import { testRealmURL, shimModule } from '../../helpers';
+import { testRealmURL, shimModule, setupCardLogs } from '../../helpers';
 import { waitFor } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
 
@@ -20,6 +20,7 @@ class MockLocalRealm extends Service {
 module('Integration | preview', function (hooks) {
   let loader: Loader;
   setupRenderingTest(hooks);
+  setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   hooks.beforeEach(async function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
@@ -28,10 +29,6 @@ module('Integration | preview', function (hooks) {
     this.owner.register('service:local-realm', MockLocalRealm);
   });
   
-  hooks.afterEach(async function() {
-    await cardApi.flushLogs();
-  });
-
   test('renders card', async function (assert) {
     let { field, contains, Card, Component, createFromSerialized } = cardApi;
     let { default: StringCard} = string;

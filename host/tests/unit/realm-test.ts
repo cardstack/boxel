@@ -7,12 +7,22 @@ import {
   cardSrc,
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
-import { TestRealm, TestRealmAdapter, testRealmURL } from '../helpers';
+import {
+  TestRealm,
+  TestRealmAdapter,
+  testRealmURL,
+  setupCardLogs,
+} from '../helpers';
 import { stringify } from 'qs';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 module('Unit | realm', function (hooks) {
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
+
   hooks.beforeEach(async function () {
     Loader.destroy();
     Loader.addURLMapping(

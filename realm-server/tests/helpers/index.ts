@@ -1,7 +1,11 @@
 import { writeFileSync, writeJSONSync } from "fs-extra";
 import { NodeAdapter } from "../../node-realm";
 import { join } from "path";
-import { Realm, LooseSingleCardDocument } from "@cardstack/runtime-common";
+import {
+  Realm,
+  LooseSingleCardDocument,
+  type CardAPI,
+} from "@cardstack/runtime-common";
 
 export const testRealm = "http://test-realm/";
 
@@ -18,4 +22,14 @@ export function createRealm(
     }
   }
   return new Realm(realmURL, new NodeAdapter(dir));
+}
+
+export function setupCardLogs(
+  hooks: NestedHooks,
+  apiThunk: () => Promise<CardAPI>
+) {
+  hooks.afterEach(async function () {
+    let api = await apiThunk();
+    await api.flushLogs();
+  });
 }

@@ -2,7 +2,7 @@ import { module, test, skip } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from 'ember-qunit';
 import waitUntil from '@ember/test-helpers/wait-until';
-import { cleanWhiteSpace, testRealmURL, shimModule } from '../../helpers';
+import { cleanWhiteSpace, testRealmURL, shimModule, setupCardLogs } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 import { shadowQuerySelector, shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
@@ -13,6 +13,7 @@ let integer: typeof import ("https://cardstack.com/base/integer");
 
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
+  setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   hooks.beforeEach(async function () {
     Loader.destroy();
@@ -23,10 +24,6 @@ module('Integration | computeds', function (hooks) {
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
     integer = await Loader.import(`${baseRealm.url}integer`);
-  });
-  
-  hooks.afterEach(async function() {
-    await cardApi.flushLogs();
   });
 
   test('can render a synchronous computed field', async function(assert) {

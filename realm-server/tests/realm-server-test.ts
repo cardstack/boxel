@@ -18,6 +18,7 @@ import {
 import { stringify } from "qs";
 import { NodeAdapter } from "../node-realm";
 import { Query } from "@cardstack/runtime-common/query";
+import { setupCardLogs } from "./helpers";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 
 setGracefulCleanup();
@@ -29,6 +30,10 @@ module("Realm Server", function (hooks) {
   let server: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
 
   hooks.beforeEach(async function () {
     Loader.destroy();

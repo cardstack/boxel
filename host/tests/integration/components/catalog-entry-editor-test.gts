@@ -8,7 +8,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import CatalogEntryEditor from 'runtime-spike/components/catalog-entry-editor';
 import Service from '@ember/service';
-import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL, setupCardLogs } from '../../helpers';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
 
@@ -36,6 +36,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
+  setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   hooks.beforeEach(async function() {
     // this seeds the loader used during index which obtains url mappings

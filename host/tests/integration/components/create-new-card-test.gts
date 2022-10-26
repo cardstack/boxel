@@ -6,7 +6,7 @@ import { Realm } from "@cardstack/runtime-common/realm";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import Service from '@ember/service';
-import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL, setupCardLogs } from '../../helpers';
 import CreateCardModal from 'runtime-spike/components/create-card-modal';
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
 import waitUntil from '@ember/test-helpers/wait-until';
@@ -25,6 +25,7 @@ module('Integration | create-new-card', function (hooks) {
   let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
+  setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   hooks.beforeEach(async function() {
     // this seeds the loader used during index which obtains url mappings

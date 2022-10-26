@@ -6,7 +6,7 @@ import {
   LooseSingleCardDocument,
   Realm,
 } from "@cardstack/runtime-common";
-import { createRealm, testRealm } from "./helpers";
+import { createRealm, testRealm, setupCardLogs } from "./helpers";
 
 setGracefulCleanup();
 
@@ -15,6 +15,11 @@ setGracefulCleanup();
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
 module("indexing", function (hooks) {
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
+
   let dir: string;
   let realm: Realm;
 

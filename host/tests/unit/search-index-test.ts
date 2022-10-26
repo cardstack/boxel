@@ -3,6 +3,7 @@ import {
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
+  setupCardLogs,
   type CardDocFiles,
 } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
@@ -14,6 +15,11 @@ const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4201/test/';
 
 module('Unit | search-index', function (hooks) {
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
+
   hooks.beforeEach(async function () {
     Loader.destroy();
     Loader.addURLMapping(

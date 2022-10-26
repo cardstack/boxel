@@ -9,7 +9,7 @@ import Service from '@ember/service';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm, ExportedCardRef } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL, setupCardLogs } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
@@ -26,6 +26,7 @@ module('Integration | schema', function (hooks) {
   let adapter: TestRealmAdapter;
 
   setupRenderingTest(hooks);
+  setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   hooks.beforeEach(async function() {
     // this seeds the loader used during index which obtains url mappings
