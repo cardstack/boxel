@@ -90,7 +90,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry for Pet card');
-    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
+    assert.shadowDOM('[data-test-ref]').exists();
+    assert.shadowDOM('[data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').hasText('');
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(2) input').isChecked();
 
@@ -203,7 +204,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
     assert.dom('[data-test-catalog-entry-id]').hasText(`${testRealmURL}pet-catalog-entry`);
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry');
-    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
+    assert.shadowDOM('[data-test-ref]').exists();
+    assert.shadowDOM('[data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').hasValue('Jackie');
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(1) input').isChecked();
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="owner"] [data-test-field="firstName"] input').hasValue('BN');

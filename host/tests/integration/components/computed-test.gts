@@ -436,6 +436,7 @@ module('Integration | computeds', function (hooks) {
 
     let person = new Person({ firstName: 'Mango' });
     await renderCard(person, 'edit');
+    assert.shadowDOM('[data-test-field=alias]').exists();
     assert.shadowDOM('[data-test-field=alias]').containsText('Mango');
     assert.shadowDOM('[data-test-field=alias] input').doesNotExist('input field not rendered for computed')
   });
@@ -446,7 +447,7 @@ module('Integration | computeds', function (hooks) {
     class Location extends Card {
       @field city = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
-        <template><span><@fields.city/></span></template>
+        <template><span data-test-location><@fields.city/></span></template>
       }
     }
     class Person extends Card {
@@ -491,6 +492,7 @@ module('Integration | computeds', function (hooks) {
      }, undefined);
 
     await renderCard(person, 'edit');
+    assert.shadowDOM('[data-test-field="slowName"]').exists();
     assert.shadowDOM('[data-test-field="slowName"]').containsText('Mango');
     await fillIn('[data-test-field="firstName"] input', 'Van Gogh');
     // We want to ensure data consistency, so that when the template rerenders,
@@ -498,14 +500,18 @@ module('Integration | computeds', function (hooks) {
     await waitUntil(() =>
       shadowQuerySelector('[data-test-dep-field="firstName"]')?.textContent?.includes('Van Gogh')
     );
+    assert.shadowDOM('[data-test-field="slowName"]').exists();
     assert.shadowDOM('[data-test-field="slowName"]').containsText('Van Gogh');
 
-    assert.shadowDOM('[data-test-field="slowHomeTown"] span').containsText('Bronxville');
+    // this targets the slowHomeTown field which is the only Location card rendered in a nested shadow root
+    assert.shadowDOM('[data-test-location]').exists();
+    assert.shadowDOM('[data-test-location]').containsText('Bronxville');
     await fillIn('[data-test-field="homeTown"] input', 'Scarsdale');
     await waitUntil(() =>
       shadowQuerySelector('[data-test-dep-field="homeTown"]')?.textContent?.includes('Scarsdale')
     );
-    assert.shadowDOM('[data-test-field="slowHomeTown"] span').containsText('Scarsdale');
+    assert.shadowDOM('[data-test-location]').exists();
+    assert.shadowDOM('[data-test-location]').containsText('Scarsdale');
   });
 
   skip('can render a computed linksTo relationship');

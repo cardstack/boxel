@@ -408,16 +408,8 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     return value;
   }
 
-  component(model: Box<Card>, format: Format) {
-    let fieldName = this.name as keyof Card;
-    let card: typeof Card;
-    if (primitive in this.card) {
-      card = this.card;
-    } else {
-      card = model.value[fieldName].constructor as typeof Card;
-    }
-    let innerModel = model.field(fieldName) as unknown as Box<Card>;
-    return getBoxComponent(card, format, innerModel);
+  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
+    return fieldComponent(this, model, format);
   }
 }
 
@@ -517,9 +509,21 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     return value;
   }
 
-  component(_model: Box<Card>, _format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
-    throw new Error('not implemented');
+  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
+    return fieldComponent(this, model, format);
   }
+}
+
+function fieldComponent(field: Field<typeof Card>, model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
+  let fieldName = field.name as keyof Card;
+  let card: typeof Card;
+  if (primitive in field.card) {
+    card = field.card;
+  } else {
+    card = model.value[fieldName]?.constructor as typeof Card ?? field.card;
+  }
+  let innerModel = model.field(fieldName) as unknown as Box<Card>;
+  return getBoxComponent(card, format, innerModel);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
