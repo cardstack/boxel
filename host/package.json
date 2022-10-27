@@ -115,7 +115,6 @@
     "fast-json-stable-stringify": "^2.1.0",
     "flat": "^5.0.2",
     "glint-environment-ember-template-imports": "^0.0.4",
-    "ignore": "^5.2.0",
     "json-typescript": "^1.1.2",
     "loader.js": "^4.7.0",
     "lodash": "^4.17.21",
@@ -136,9 +135,5 @@
   },
   "ember": {
     "edition": "octane"
-  },
-  "volta": {
-    "extends": "../package.json",
-    "node": "14.19.1"
   }
 }

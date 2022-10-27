@@ -11,7 +11,7 @@ module.exports = {
   plugins: [
     new webpack.ProvidePlugin({
       process: 'process',
-      Buffer: 'buffer',
+      Buffer: 'buffer', // can we take this out?
     }),
   ],
   module: {

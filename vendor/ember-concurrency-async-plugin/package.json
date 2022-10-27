@@ -7,8 +7,5 @@
   "author": "Godfrey Chan <godfreykfc@gmail.com>",
   "dependencies": {
     "@babel/types": "^7.10.2"
-  },
-  "volta": {
-    "extends":"../../package.json"
   }
 }

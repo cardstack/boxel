@@ -3,10 +3,6 @@
   "version": "0.0.0",
   "license": "MIT",
   "dependencies": {},
-  "volta": {
-    "node": "18.6.0",
-    "yarn": "1.22.18"
-  },
   "devDependencies": {
     "@cardstack/runtime-common": "1.0.0",
     "@types/qunit": "^2.11.3",

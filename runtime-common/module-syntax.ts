@@ -16,7 +16,7 @@ import startCase from "lodash/startCase";
 import camelCase from "lodash/camelCase";
 import upperFirst from "lodash/upperFirst";
 import { parseTemplates } from "@cardstack/ember-template-imports/lib/parse-templates";
-import { baseRealm } from "@cardstack/runtime-common";
+import { baseRealm } from "./index";
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from "@babel/plugin-syntax-decorators";
 //@ts-ignore unsure where these types live

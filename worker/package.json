@@ -17,8 +17,5 @@
   "scripts": {
     "prepare": "webpack",
     "start": "webpack --watch"
-  },
-  "volta": {
-    "extends": "../package.json"
   }
 }

@@ -15,10 +15,6 @@
     "vendor/transform-modules-amd-plugin"
   ],
   "private": true,
-  "volta": {
-    "node": "14.19.1",
-    "yarn": "1.22.18"
-  },
   "devDependencies": {
     "@glimmer/component": "^1.1.2",
     "@glint/core": "^0.9.1",

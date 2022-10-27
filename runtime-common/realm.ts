@@ -8,7 +8,7 @@ import {
   methodNotAllowed,
   badRequest,
   CardError,
-} from "@cardstack/runtime-common/error";
+} from "./error";
 import { formatRFC7231 } from "date-fns";
 import {
   isCardResource,
@@ -587,12 +587,19 @@ export class Realm {
       if (!isNode) {
         throw new Error(`cannot handle node-streams when not in node`);
       }
+
+      // we're in a node-only branch, so this code isn't relevant to the worker
+      // build, but the worker build will try to resolve the buffer polyfill and
+      // blow up sinc we don't include that library. So we're hiding from
+      // webpack.
+      const B = (globalThis as any)["Buffer"];
+
       const chunks: Buffer[] = []; // Buffer is available from globalThis when in the node env
       // the types for Readable have not caught up to the fact these are async generators
       for await (const chunk of content as any) {
-        chunks.push(Buffer.from(chunk));
+        chunks.push(B.from(chunk));
       }
-      return Buffer.concat(chunks).toString("utf-8");
+      return B.concat(chunks).toString("utf-8");
     }
   }
 

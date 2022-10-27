@@ -1,7 +1,7 @@
 import type * as Babel from "@babel/core";
 import type { types as t } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
-import { baseRealm, externalsMap } from "@cardstack/runtime-common";
+import { baseRealm, externalsMap } from "./index";
 import { Loader } from "./loader";
 
 export function externalsPlugin(_babel: typeof Babel) {

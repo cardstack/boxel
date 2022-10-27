@@ -1,0 +1,10 @@
+packages:
+  - host
+  - realm-server
+  - worker
+  - cards
+  - base
+  - runtime-common
+  - vendor/ember-template-imports
+  - vendor/ember-concurrency-async-plugin
+  - vendor/transform-modules-amd-plugin
