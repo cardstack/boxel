@@ -10,10 +10,14 @@ import { RealmPaths } from '@cardstack/runtime-common';
 interface Model {
   path: string | undefined;
   openFile: FileResource | undefined;
+  polling: 'off' | undefined;
 }
 export default class Application extends Route<Model> {
   queryParams = {
     path: {
+      refreshModel: true,
+    },
+    polling: {
       refreshModel: true,
     },
   };
@@ -22,17 +26,20 @@ export default class Application extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare localRealm: LocalRealm;
 
-  async model(args: { path: string | undefined }): Promise<Model> {
-    let { path } = args;
+  async model(args: {
+    path: string | undefined;
+    polling: 'off' | undefined;
+  }): Promise<Model> {
+    let { path, polling } = args;
 
     let openFile: FileResource | undefined;
     if (!path) {
-      return { path, openFile };
+      return { path, openFile, polling };
     }
 
     await this.localRealm.startedUp;
     if (!this.localRealm.isAvailable) {
-      return { path, openFile };
+      return { path, openFile, polling };
     }
 
     let realmPath = new RealmPaths(this.localRealm.url);
@@ -47,11 +54,14 @@ export default class Application extends Route<Model> {
       console.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
-      return { path, openFile };
+      return { path, openFile, polling };
     }
     if (response.url !== url) {
       this.router.transitionTo('application', {
-        queryParams: { path: realmPath.local(new URL(response.url)) },
+        queryParams: {
+          path: realmPath.local(new URL(response.url)),
+          polling,
+        },
       });
     } else {
       let content = await response.text();
@@ -62,15 +72,16 @@ export default class Application extends Route<Model> {
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.router.transitionTo('application', {
-              queryParams: { path: undefined },
+              queryParams: { path: undefined, polling: undefined },
             });
           }
         },
+        polling,
       }));
       await openFile.loading;
     }
 
-    return { path, openFile };
+    return { path, openFile, polling };
   }
 
   @action

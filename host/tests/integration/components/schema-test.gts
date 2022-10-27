@@ -368,6 +368,7 @@ async function getFileResource(context: TestContext, adapter: TestRealmAdapter, 
   return file(context, () => ({
     url: fileURL,
     lastModified: undefined,
-    content
+    content,
+    polling: 'off'
   }));
 }

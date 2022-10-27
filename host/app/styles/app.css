@@ -15,6 +15,9 @@ button {
 .file-tree + div {
   flex-grow: 3;
 }
+.polling-button {
+  margin-top: 3rem;
+}
 .preview {
   flex-grow: 2;
   min-width: 10rem;

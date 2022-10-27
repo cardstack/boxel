@@ -4,6 +4,7 @@ import type RouterService from '@ember/routing/router-service';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
 import { eq } from '../helpers/truth-helpers'
 import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
@@ -16,6 +17,7 @@ interface Args {
     // to open or close it.
     localRealm: LocalRealm;
     path: string | undefined;
+    polling: 'off' | undefined;
   }
 }
 
@@ -39,6 +41,11 @@ export default class FileTree extends Component<Args> {
       <button {{on "click" this.createNew}} type="button" data-test-create-new-card-button>
         Create New Card
       </button>
+
+      <div class="polling-button">
+        <button {{on "click" this.togglePolling}} type="button">{{if this.isPolling "Stop" "Start"}} Polling</button>
+        {{#unless this.isPolling}}<p><strong>Status: Polling is off!</strong></p>{{/unless}}
+      </div>
     {{else if @localRealm.isLoading }}
       ...
     {{else if @localRealm.isEmpty}}
@@ -46,8 +53,15 @@ export default class FileTree extends Component<Args> {
     {{/if}}
   </template>
 
-  listing = directory(this, () => this.args.localRealm.isAvailable ? "http://local-realm/" : undefined)
+  listing = directory(this, () => this.args.localRealm.isAvailable ? "http://local-realm/" : undefined, () => this.args.polling);
   @service declare router: RouterService;
+  @tracked isPolling = this.args.polling !== 'off';
+
+  @action
+  togglePolling() {
+    this.router.transitionTo({ queryParams: { polling: this.isPolling ? 'off' : undefined } });
+    this.isPolling = !this.isPolling;
+  }
 
   @action
   openRealm() {
