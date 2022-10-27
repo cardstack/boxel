@@ -10,6 +10,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import type { ExportedCardRef, } from "@cardstack/runtime-common";
 import type { SignatureFor, primitive as primitiveType, queryableValue as queryableValueType } from "https://cardstack.com/base/card-api";
 import { shadowQuerySelector, shadowQuerySelectorAll, fillIn, click } from '../../helpers/shadow-assert';
+import { Card } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -22,6 +23,8 @@ let catalogEntry: typeof import ("https://cardstack.com/base/catalog-entry");
 let pickModule: typeof import ("https://cardstack.com/base/pick");
 let primitive: typeof primitiveType;
 let queryableValue: typeof queryableValueType;
+let serializeCard: typeof cardApi["serializeCard"];
+let updateFromSerialized: typeof cardApi["updateFromSerialized"];
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -44,7 +47,15 @@ module('Integration | card-basics', function (hooks) {
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
     catalogEntry = await Loader.import(`${baseRealm.url}catalog-entry`);
     pickModule = await Loader.import(`${baseRealm.url}pick`);
+    updateFromSerialized = cardApi.updateFromSerialized;
+    serializeCard = cardApi.serializeCard;
   });
+
+  async function saveCard(instance: Card, id: string) {
+    let doc = serializeCard(instance);
+    doc.data.id = id;
+    await updateFromSerialized(instance, doc);
+  }
 
   test('primitive field type checking', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
@@ -171,7 +182,9 @@ module('Integration | card-basics', function (hooks) {
     let arthur = new Person({ firstName: 'Arthur', number: 10 });
 
     await renderCard(arthur, 'embedded');
+    assert.shadowDOM('[data-test="name"]').exists();
     assert.shadowDOM('[data-test="name"]').containsText('Arthur');
+    assert.shadowDOM('[data-test="integer"]').exists();
     assert.shadowDOM('[data-test="integer"]').containsText('10');
   });
 
@@ -238,6 +251,7 @@ module('Integration | card-basics', function (hooks) {
     let driver = new DriverCard({ ref });
 
     await renderCard(driver, 'embedded');
+    assert.shadowDOM('[data-test-ref]').exists();
     assert.shadowDOM('[data-test-ref]').containsText(`Module: http://localhost:4201/test/person Name: Person`);
 
     // is this worth an assertion? or is it just obvious?
@@ -259,6 +273,7 @@ module('Integration | card-basics', function (hooks) {
 
     await renderCard(driver, 'edit');
     assert.shadowDOM('input').doesNotExist('no input fields exist');
+    assert.shadowDOM('[data-test-ref').exists();
     assert.shadowDOM('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
   });
 
@@ -321,7 +336,47 @@ module('Integration | card-basics', function (hooks) {
     }
   });
 
-  skip('can render a linksTo field');
+  test('can render a linksTo field', async function (assert) {
+    let { field, contains, linksTo, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+      @field friend = linksTo(() => Pet)
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-pet={{@model.firstName}}>
+            <@fields.firstName/>
+            <@fields.friend/>
+          </div>
+        </template>
+      }
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet)
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-person><@fields.firstName/><@fields.pet/></div>
+        </template>
+      }
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+    let vanGogh = new Pet({ firstName: 'Van Gogh' });
+    let mango = new Pet({ firstName: 'Mango', friend: vanGogh });
+    let hassan = new Person({ firstName: 'Hassan', pet: mango });
+    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`);
+    await saveCard(mango, `${testRealmURL}Pet/mango`);
+    await renderCard(hassan, 'embedded');
+
+    assert.shadowDOM('[data-test-person]').exists();
+    assert.shadowDOM('[data-test-person]').containsText('Hassan');
+    assert.shadowDOM('[data-test-pet="Mango"]').exists();
+    assert.shadowDOM('[data-test-pet="Mango"]').containsText('Mango');
+    assert.shadowDOM('[data-test-pet="Van Gogh"]').exists();
+    assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
+  });
 
   test('catalog entry isPrimitive indicates if the catalog entry is a primitive field card', async function (assert) {
     let { createFromSerialized } = cardApi;
@@ -408,6 +463,7 @@ module('Integration | card-basics', function (hooks) {
       }
     }, undefined);
     await renderCard(helloWorld, 'isolated');
+    assert.shadowDOM('[data-test-embedded-person]').exists();
     assert.shadowDOM('[data-test-embedded-person]').containsText('Mr Arthur 10');
   });
 
@@ -495,6 +551,7 @@ module('Integration | card-basics', function (hooks) {
     }, undefined);
 
     await renderCard(helloWorld, 'isolated');
+    assert.shadowDOM('[data-test="string"]').exists();
     assert.shadowDOM('[data-test="string"]').containsText('Arthur');
     assert.shadowDOM('[data-test="integer"]').containsText('10');
   });
@@ -535,7 +592,9 @@ module('Integration | card-basics', function (hooks) {
     }, undefined);
 
     await renderCard(helloWorld, 'isolated');
+    assert.shadowDOM('[data-test="first-name"]').exists();
     assert.shadowDOM('[data-test="first-name"]').containsText('Arthur');
+    assert.shadowDOM('[data-test="title"]').exists();
     assert.shadowDOM('[data-test="title"]').containsText('First Post');
   });
 
@@ -671,9 +730,13 @@ module('Integration | card-basics', function (hooks) {
       ]
     });
     await renderCard(group, 'isolated');
+    assert.shadowDOM('[data-test-employee-firstName]').exists();
     assert.shadowDOM('[data-test-employee-firstName]').containsText('Mango');
+    assert.shadowDOM('[data-test-employee-department]').exists();
     assert.shadowDOM('[data-test-employee-department]').containsText('begging');
+    assert.shadowDOM('[data-test-customer-firstName]').exists();
     assert.shadowDOM('[data-test-customer-firstName]').containsText('Van Gogh');
+    assert.shadowDOM('[data-test-customer-billAmount]').exists();
     assert.shadowDOM('[data-test-customer-billAmount]').containsText('100');
   });
 
@@ -688,6 +751,7 @@ module('Integration | card-basics', function (hooks) {
     }
     let child = new Person({ firstName: 'Arthur' });
     let root = await renderCard(child, 'embedded');
+    assert.dom(root.children[0]).exists();
     assert.dom(root.children[0]).containsText('Arthur');
     child.firstName = 'Quint';
     await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Quint');
@@ -930,7 +994,9 @@ module('Integration | card-basics', function (hooks) {
     let hassan = new Person ({ firstName: 'Hassan', species: 'Homo Sapiens' });
 
     await renderCard(hassan, 'embedded');
+    assert.shadowDOM('[data-test="first-name"]').exists();
     assert.shadowDOM('[data-test="first-name"]').containsText('Hassan');
+    assert.shadowDOM('[data-test="species"]').exists();
     assert.shadowDOM('[data-test="species"]').containsText('Homo Sapiens');
   });
 
