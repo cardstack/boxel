@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import waitUntil from '@ember/test-helpers/wait-until';
 import { renderCard } from '../../helpers/render-component';
@@ -465,42 +465,6 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(helloWorld, 'isolated');
     assert.shadowDOM('[data-test-embedded-person]').exists();
     assert.shadowDOM('[data-test-embedded-person]').containsText('Mr Arthur 10');
-  });
-
-  // this will apply to linksTo, but doesn't apply to contains
-  skip('render a field that is the enclosing card', async function(assert) {
-    let {field, contains,  Card, Component, createFromSerialized } = cardApi;
-    let { default: StringCard} = string;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      // @field friend = contains(() => Person); // a thunk can be used to specify a circular reference
-      // static isolated = class Isolated extends Component<typeof this> {
-      //   <template><@fields.firstName/> friend is <@fields.friend/></template>
-      // }
-      static embedded = class Embedded extends Component<typeof this> {
-        <template><@fields.firstName/></template>
-      }
-    }
-    await shimModule(`${testRealmURL}test-cards`, { Person });
-
-    let mango = await createFromSerialized({
-      data: {
-        attributes: {
-          firstName: 'Mango',
-          friend: {
-            firstName: 'Van Gogh'
-          }
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
-            name: 'Person'
-          }
-        }
-      }
-    }, undefined);
-    await renderCard(mango, 'isolated');
-    assert.strictEqual(cleanWhiteSpace(this.element.textContent!), 'Mango friend is Van Gogh');
   });
 
   test('render nested composite field', async function (assert) {
