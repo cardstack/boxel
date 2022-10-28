@@ -11,7 +11,7 @@ import LoaderService from '../services/loader-service';
 import LocalRealm from '../services/local-realm';
 
 interface Args {
-  named: { url: string | undefined };
+  named: { url: string | undefined; polling: 'off' | undefined };
 }
 
 export interface Entry {
@@ -23,7 +23,7 @@ export interface Entry {
 
 export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
-  private interval: ReturnType<typeof setInterval>;
+  private interval: ReturnType<typeof setInterval> | undefined;
   private url: string | undefined;
   private realmPath: RealmPaths;
 
@@ -32,10 +32,6 @@ export class DirectoryResource extends Resource<Args> {
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    registerDestructor(this, () => {
-      clearInterval(this.interval);
-    });
-    this.interval = setInterval(() => taskFor(this.readdir).perform(), 1000);
     if (!this.localRealm.isAvailable) {
       throw new Error('Local realm is not available');
     }
@@ -46,6 +42,12 @@ export class DirectoryResource extends Resource<Args> {
       }
       this.url = args.named.url;
       taskFor(this.readdir).perform();
+    }
+    if (args.named.polling !== 'off') {
+      this.interval = setInterval(() => taskFor(this.readdir).perform(), 1000);
+      registerDestructor(this, () => clearInterval(this.interval!));
+    } else if (this.interval) {
+      clearInterval(this.interval);
     }
   }
 
@@ -109,8 +111,12 @@ export class DirectoryResource extends Resource<Args> {
   }
 }
 
-export function directory(parent: object, url: () => string | undefined) {
+export function directory(
+  parent: object,
+  url: () => string | undefined,
+  polling: () => 'off' | undefined
+) {
   return useResource(parent, DirectoryResource, () => ({
-    named: { url: url() },
+    named: { url: url(), polling: polling() },
   }));
 }
