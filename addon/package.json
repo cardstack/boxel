@@ -28,6 +28,7 @@
     "postpack": "ember ts:clean"
   },
   "dependencies": {
+    "@ember/render-modifiers": "^2.0.4",
     "@glimmer/component": "^1.0.0",
     "ember-cli-babel": "^7.26.11",
     "ember-cli-htmlbars": "^6.0.1",
@@ -76,6 +77,9 @@
     "prettier": "^2.6.1",
     "typescript": "^4.6.4",
     "webpack": "^5.70.0"
+  },
+  "peerDependencies": {
+    "ember-source@": "^3.8 || 4"
   },
   "engines": {
     "node": "12.* || 14.* || >= 16"
