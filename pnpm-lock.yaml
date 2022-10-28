@@ -36,10 +36,10 @@ importers:
       '@babel/plugin-syntax-class-properties': ^7.12.13
       '@babel/plugin-syntax-decorators': ^7.17.12
       '@babel/plugin-syntax-typescript': ^7.17.12
-      '@cardstack/base': 1.0.0
+      '@cardstack/base': workspace:*
       '@cardstack/requirejs-monaco-ember-polyfill': ^0.0.1
-      '@cardstack/runtime-common': 1.0.0
-      '@cardstack/worker': 1.0.0
+      '@cardstack/runtime-common': workspace:*
+      '@cardstack/worker': workspace:*
       '@ember/optional-features': ^2.0.0
       '@ember/test-helpers': ^2.6.0
       '@embroider/compat': ^1.5.0
@@ -248,7 +248,7 @@ importers:
 
   realm-server:
     specifiers:
-      '@cardstack/runtime-common': 1.0.0
+      '@cardstack/runtime-common': workspace:*
       '@types/qs': ^6.9.7
       '@types/qunit': ^2.11.3
       '@types/supertest': ^2.0.12
@@ -292,7 +292,7 @@ importers:
       '@babel/plugin-transform-modules-amd': ^7.13.0
       '@babel/plugin-transform-typescript': ^7.16.8
       '@babel/traverse': ^7.17.9
-      '@cardstack/ember-template-imports': 2.0.1
+      '@cardstack/ember-template-imports': workspace:*
       '@types/babel__core': ^7.1.19
       '@types/babel__traverse': ^7.14.2
       '@types/diff': ^5.0.2
@@ -302,14 +302,14 @@ importers:
       babel-plugin-ember-template-compilation: ^1.0.0
       date-fns: ^2.28.0
       diff: ^5.1.0
-      ember-concurrency-async-plugin: ^1.0.2
+      ember-concurrency-async-plugin: workspace:*
       ember-source: ~4.2.0
       flat: ^5.0.2
       http-status-codes: ^2.2.0
       ignore: ^5.2.0
       lodash: ^4.17.21
       qs: ^6.10.5
-      transform-modules-amd-plugin: ^7.18.6
+      transform-modules-amd-plugin: workspace:*
     dependencies:
       '@babel/core': 7.19.6
       '@babel/generator': 7.20.0
@@ -472,7 +472,7 @@ importers:
 
   worker:
     specifiers:
-      '@cardstack/runtime-common': 1.0.0
+      '@cardstack/runtime-common': workspace:*
       '@types/qs': ^6.9.7
       assert-never: ^1.2.1
       babel-loader: ^8.2.4
@@ -1730,7 +1730,6 @@ packages:
     engines: {node: '>=6.9.0'}
     dependencies:
       regenerator-runtime: 0.13.10
-    dev: true
 
   /@babel/template/7.18.10:
     resolution: {integrity: sha512-TI+rCtooWHr3QJ27kJxfjutghu44DLnasDMwpDqCXVTal9RLp3RSYNh4NdBrRP2cQAoG9A8juOQl6P6oZG4JxA==}
@@ -2665,7 +2664,7 @@ packages:
     peerDependencies:
       '@glimmer/component': ^1.1.2
     dependencies:
-      '@glimmer/component': 1.1.2
+      '@glimmer/component': 1.1.2_@babel+core@7.19.6
     dev: true
 
   /@glint/transform/0.9.7:
@@ -3404,7 +3403,7 @@ packages:
   /@types/glob/7.2.0:
     resolution: {integrity: sha512-ZUxbzKl0IfJILTS6t7ip5fQQM/J3TJYubDm3nMbgubNNYS62eXeUpoLUC8/7fJNiFYHTrGPQn7hspDUzIHX3UA==}
     dependencies:
-      '@types/minimatch': 3.0.5
+      '@types/minimatch': 5.1.2
       '@types/node': 18.11.7
     dev: true
 
@@ -3446,6 +3445,10 @@ packages:
 
   /@types/minimatch/3.0.5:
     resolution: {integrity: sha512-Klz949h02Gz2uZCMGwDUSDS1YBlTdDDgbWHi+81l29tQALUtvz4rAYi5uoVhE5Lagoq6DeqAUlbrHvW/mXDgdQ==}
+
+  /@types/minimatch/5.1.2:
+    resolution: {integrity: sha512-K0VQKziLUWkVKiRVrx4a40iPaxTUefQmjtkQofBkYRcoaaL/8rhwDWww9qWbrgicNOgnpIsMxyNIUM4+n6dUIA==}
+    dev: true
 
   /@types/node/18.11.7:
     resolution: {integrity: sha512-LhFTglglr63mNXUSRYD8A+ZAIu5sFqNJ4Y2fPuY7UlrySJH87rRRlhtVmMHplmfk5WkoJGmDjE9oiTfyX94CpQ==}
@@ -4281,8 +4284,8 @@ packages:
     resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
     dev: true
 
-  /aria-query/5.1.1:
-    resolution: {integrity: sha512-4cPQjOYM2mqq7mZG8CSxkUvL2Yv/x29VhGq5LKehTsxRnoVQps1YGt9NyjcNQsznEsD4rr8a6zGxqeNTqJWjpA==}
+  /aria-query/5.1.2:
+    resolution: {integrity: sha512-JWydkr9MirMg2jGJstDqDgzoHqaFbv7n1ghfXYdtEgXWgdq3jz7IU3SQvtj9k3mAszQBiTpQhFdlH+JIRuGTzg==}
     dependencies:
       deep-equal: 2.0.5
     dev: true
@@ -4462,7 +4465,7 @@ packages:
   /axios/0.21.4_debug@4.3.2:
     resolution: {integrity: sha512-ut5vewkiu8jjGBdqpM44XxjuCjq9LAKeHVmoVfHVzy8eHgxxq8SbAVQNovDA8mVi05kP0Ea/n/UzcSHcTJQfNg==}
     dependencies:
-      follow-redirects: 1.15.2
+      follow-redirects: 1.15.2_debug@4.3.2
     transitivePeerDependencies:
       - debug
     dev: true
@@ -6450,7 +6453,7 @@ packages:
       mississippi: 3.0.0
       mkdirp: 0.5.6
       move-concurrently: 1.0.1
-      promise-inflight: 1.0.1_bluebird@3.7.2
+      promise-inflight: 1.0.1
       rimraf: 2.7.1
       ssri: 6.0.2
       unique-filename: 1.1.1
@@ -6475,7 +6478,7 @@ packages:
       mkdirp: 1.0.4
       move-concurrently: 1.0.1
       p-map: 3.0.0
-      promise-inflight: 1.0.1_bluebird@3.7.2
+      promise-inflight: 1.0.1
       rimraf: 2.7.1
       ssri: 7.1.1
       tar: 6.1.11
@@ -7701,7 +7704,7 @@ packages:
       supports-color:
         optional: true
     dependencies:
-      ms: 2.1.2
+      ms: 2.1.3
     dev: true
 
   /debug/4.3.2:
@@ -9377,6 +9380,7 @@ packages:
       - '@babel/core'
       - supports-color
       - webpack
+    dev: false
 
   /ember-template-imports/2.0.1_ember-cli-htmlbars@6.1.1:
     resolution: {integrity: sha512-2J0p3NU1hyP9VW6FX7/IAQtJPP0jDg/4zS3E2aYGND7uzuFbGJRgz9Ifze7yKkgWd7EAGnCjDQYCm5jTLu8Fvg==}
@@ -9444,7 +9448,7 @@ packages:
     hasBin: true
     dependencies:
       '@lint-todo/utils': 13.0.3
-      aria-query: 5.1.1
+      aria-query: 5.1.2
       chalk: 4.1.2
       ci-info: 3.5.0
       date-fns: 2.29.3
@@ -10635,7 +10639,7 @@ packages:
       readable-stream: 2.3.7
     dev: true
 
-  /follow-redirects/1.15.2:
+  /follow-redirects/1.15.2_debug@4.3.2:
     resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
     engines: {node: '>=4.0'}
     peerDependencies:
@@ -10643,6 +10647,8 @@ packages:
     peerDependenciesMeta:
       debug:
         optional: true
+    dependencies:
+      debug: 4.3.2
     dev: true
 
   /for-each/0.3.3:
@@ -11558,7 +11564,7 @@ packages:
     engines: {node: '>=8.0.0'}
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.2
+      follow-redirects: 1.15.2_debug@4.3.2
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -14520,15 +14526,13 @@ packages:
     engines: {node: '>=0.4.0'}
     dev: true
 
-  /promise-inflight/1.0.1_bluebird@3.7.2:
+  /promise-inflight/1.0.1:
     resolution: {integrity: sha512-6zWPyEOFaQBJYcGMHBKTKJ3u6TBsnMFOIZSa6ce1e/ZrrsOlnHRHbabMjLiBYKp+n44X9eUI6VUPaukCXHuG4g==}
     peerDependencies:
       bluebird: '*'
     peerDependenciesMeta:
       bluebird:
         optional: true
-    dependencies:
-      bluebird: 3.7.2
     dev: true
 
   /promise-map-series/0.2.3:
@@ -14944,7 +14948,7 @@ packages:
   /regenerator-transform/0.15.0:
     resolution: {integrity: sha512-LsrGtPmbYg19bcPHwdtmXwbW+TqNvtY4riE3P83foeHRroMbH6/2ddFBfab3t7kbzc7v7p4wbkIecHImqt0QNg==}
     dependencies:
-      '@babel/runtime': 7.12.18
+      '@babel/runtime': 7.20.0
 
   /regex-not/1.0.2:
     resolution: {integrity: sha512-J6SDjUgDxQj5NusnOtdFxDwN/+HWykR8GELwctJ7mdqhcyy1xEc4SRFHUXvxTp661YaVKAjfRLZ9cCqS6tn32A==}
@@ -17140,7 +17144,7 @@ packages:
       is-yarn-global: 0.3.0
       latest-version: 5.1.0
       pupa: 2.1.1
-      semver: 7.3.8
+      semver: 7.3.5
       semver-diff: 3.1.1
       xdg-basedir: 4.0.0
     dev: true

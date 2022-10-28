@@ -4,7 +4,7 @@
   "main": "index.js",
   "license": "MIT",
   "devDependencies": {
-    "@cardstack/runtime-common": "1.0.0",
+    "@cardstack/runtime-common": "workspace:*",
     "@types/qs": "^6.9.7",
     "assert-never": "^1.2.1",
     "babel-loader": "^8.2.4",
