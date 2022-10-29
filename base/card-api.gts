@@ -130,7 +130,7 @@ interface JSONAPISingleResourceDocument {
   included?: (Partial<JSONAPIResource> & { id: string, type: string })[];
 }
 
-export interface Field<CardT extends CardConstructor> {
+interface Field<CardT extends CardConstructor> {
   card: CardT;
   name: string;
   fieldType: FieldType;
