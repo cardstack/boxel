@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import waitUntil from '@ember/test-helpers/wait-until';
 import { renderCard } from '../../helpers/render-component';
-import { cleanWhiteSpace, p, testRealmURL, shimModule, setupCardLogs } from '../../helpers';
+import { cleanWhiteSpace, p, testRealmURL, shimModule, setupCardLogs, saveCard } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
 import { baseRealm, } from "@cardstack/runtime-common";
@@ -10,7 +10,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import type { ExportedCardRef, } from "@cardstack/runtime-common";
 import type { SignatureFor, primitive as primitiveType, queryableValue as queryableValueType } from "https://cardstack.com/base/card-api";
 import { shadowQuerySelector, shadowQuerySelectorAll, fillIn, click } from '../../helpers/shadow-assert';
-import { Card } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -23,8 +22,6 @@ let catalogEntry: typeof import ("https://cardstack.com/base/catalog-entry");
 let pickModule: typeof import ("https://cardstack.com/base/pick");
 let primitive: typeof primitiveType;
 let queryableValue: typeof queryableValueType;
-let serializeCard: typeof cardApi["serializeCard"];
-let updateFromSerialized: typeof cardApi["updateFromSerialized"];
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -47,15 +44,7 @@ module('Integration | card-basics', function (hooks) {
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
     catalogEntry = await Loader.import(`${baseRealm.url}catalog-entry`);
     pickModule = await Loader.import(`${baseRealm.url}pick`);
-    updateFromSerialized = cardApi.updateFromSerialized;
-    serializeCard = cardApi.serializeCard;
   });
-
-  async function saveCard(instance: Card, id: string) {
-    let doc = serializeCard(instance);
-    doc.data.id = id;
-    await updateFromSerialized(instance, doc);
-  }
 
   test('primitive field type checking', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;

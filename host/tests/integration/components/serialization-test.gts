@@ -2,11 +2,10 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
-import { p, cleanWhiteSpace, shimModule, setupCardLogs } from '../../helpers';
+import { p, cleanWhiteSpace, shimModule, setupCardLogs, saveCard } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm, NotLoaded } from '@cardstack/runtime-common';
 import { shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
-import { Card } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -14,9 +13,6 @@ let integer: typeof import ("https://cardstack.com/base/integer");
 let date: typeof import ("https://cardstack.com/base/date");
 let datetime: typeof import ("https://cardstack.com/base/datetime");
 let cardRef: typeof import ("https://cardstack.com/base/card-ref");
-let updateFromSerialized: typeof cardApi["updateFromSerialized"];
-let serializeCard: typeof cardApi["serializeCard"];
-
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
@@ -36,15 +32,7 @@ module('Integration | serialization', function (hooks) {
     date = await Loader.import(`${baseRealm.url}date`);
     datetime = await Loader.import(`${baseRealm.url}datetime`);
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
-    updateFromSerialized = cardApi.updateFromSerialized;
-    serializeCard = cardApi.serializeCard;
   });
-
-  async function saveCard(instance: Card, id: string) {
-    let doc = serializeCard(instance);
-    doc.data.id = id;
-    await updateFromSerialized(instance, doc);
-  }
 
   test('can deserialize field', async function (assert) {
     let { field, contains, Card, Component, createFromSerialized } = cardApi;

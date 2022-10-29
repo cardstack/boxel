@@ -6,6 +6,8 @@ import {
   FileRef,
   LooseSingleCardDocument,
   Loader,
+  baseRealm,
+  type Card,
   type CardAPI,
 } from '@cardstack/runtime-common';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
@@ -39,6 +41,13 @@ export const TestRealm = {
     return new Realm(realmURL ?? testRealmURL, adapter);
   },
 };
+
+export async function saveCard(instance: Card, id: string) {
+  let api = await Loader.import<CardAPI>(`${baseRealm.url}card-api`);
+  let doc = api.serializeCard(instance);
+  doc.data.id = id;
+  await api.updateFromSerialized(instance, doc);
+}
 
 export async function shimModule(
   moduleURL: string,
