@@ -617,6 +617,7 @@ export class Realm {
       loader: this.searchIndex.loader,
     });
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
+    delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
     return data;
   }
 }
