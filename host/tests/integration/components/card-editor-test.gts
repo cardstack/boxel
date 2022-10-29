@@ -35,6 +35,19 @@ module('Integration | card-editor', function (hooks) {
     await updateFromSerialized(instance, doc);
   }
 
+  async function loadCard(url: string): Promise<Card> {
+    let { createFromSerialized, recompute } = cardApi;
+    let result = await realm.searchIndex.card(new URL(url));
+    if (!result || result.type === 'error') {
+      throw new Error(`cannot get instance ${url} from the index: ${result ? result.error.detail : 'not found'}`);
+    }
+    let card = await createFromSerialized<typeof Card>(result.doc, undefined, {
+      loader: Loader.getLoaderFor(createFromSerialized)
+    });
+    await recompute(card, { loadFields: true });
+    return card;
+  }
+
   hooks.beforeEach(async function () {
     Loader.addURLMapping(
       new URL(baseRealm.url),
@@ -162,6 +175,28 @@ module('Integration | card-editor', function (hooks) {
         }
       }
     } as LooseSingleCardDocument));
+    await realm.write('Person/mariko.json', JSON.stringify({
+      data: {
+        type: 'card',
+        id: `${testRealmURL}Person/mariko`,
+        attributes: {
+          firstName: 'Mariko'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: null
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}person`,
+            name: 'Person'
+          }
+        }
+      }
+    } as LooseSingleCardDocument));
   });
 
   test('renders card in edit (default) format', async function (assert) {
@@ -269,17 +304,7 @@ module('Integration | card-editor', function (hooks) {
   });
   
   test('can choose a card for a linksTo field that has an existing value', async function(assert) {
-    let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.searchIndex.card(new URL(`${testRealmURL}Person/hassan`));
-    if (!result || result.type === 'error') {
-      assert.ok(false, `cannot get hassan doc from the index: ${result ? result.error.detail : 'not found'}`);
-      return;
-    }
-    let card = await createFromSerialized<typeof Card>(result.doc, undefined, {
-      loader: Loader.getLoaderFor(createFromSerialized)
-    });
-    await recompute(card, { loadFields: true });
-
+    let card = await loadCard(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -291,15 +316,15 @@ module('Integration | card-editor', function (hooks) {
     
     assert.shadowDOM('[data-test-pet="Mango"]').exists();
     assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
-    assert.shadowDOM('button[data-test-choose-card]').exists();
-    assert.shadowDOM('button[data-test-choose-card]').hasProperty('disabled', false, 'choose button is enabled');
     assert.shadowDOM('button[data-test-remove-card]').exists();
     assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', false, 'remove button is enabled');
 
     await click('[data-test-choose-card]');
     await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
 
-    assert.shadowDOM('[data-test-card-catalog-modal] [data-test-card-catalog-item]').exists({ count: 3});
+    assert.shadowDOM('[data-test-card-catalog-modal] [data-test-card-catalog-item]').exists({ count: 2});
+    assert.shadowDOM(`[data-test-select="${testRealmURL}Pet/vangogh"]`).exists();
+    assert.shadowDOM(`[data-test-select="${testRealmURL}Pet/ringo"]`).exists();
     await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
 
     assert.shadowDOM('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
@@ -307,7 +332,52 @@ module('Integration | card-editor', function (hooks) {
     assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
   });
 
-  skip('can choose a card for a linksTo field that has no existing value');
-  skip('can set the linksTo field to no card');
+  test('can choose a card for a linksTo field that has no existing value', async function(assert) {
+    let card = await loadCard(`${testRealmURL}Person/mariko`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardEditor @card={{card}} />
+          <CardCatalogModal />
+        </template>
+      }
+    );
+
+    assert.shadowDOM('[data-test-empty-link]').exists();
+    assert.shadowDOM('button[data-test-remove-card]').exists();
+    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', true, 'remove button is disabled');
+    
+    await click('[data-test-choose-card]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
+    await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
+
+    assert.shadowDOM('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
+    assert.shadowDOM('[data-test-pet="Van Gogh"]').exists();
+    assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
+    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', false, 'remove button is disabled');
+  });
+
+  test('can remove the link for a linksTo field', async function (assert) {
+    let card = await loadCard(`${testRealmURL}Person/hassan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardEditor @card={{card}} />
+          <CardCatalogModal />
+        </template>
+      }
+    );
+    
+    assert.shadowDOM('[data-test-pet="Mango"]').exists();
+    assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
+
+    await click('[data-test-remove-card]');
+
+    assert.shadowDOM('[data-test-pet="Mango"]').doesNotExist();
+    assert.shadowDOM('[data-test-empty-link]').exists();
+    assert.shadowDOM('button[data-test-remove-card]').exists();
+    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', true, 'remove button is disabled');
+  });
+
   skip('can create a new card for a linksTo field');
 });

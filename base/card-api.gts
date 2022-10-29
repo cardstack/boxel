@@ -1459,12 +1459,24 @@ interface LinksToEditorSignature {
 class LinksToEditor extends GlimmerComponent<LinksToEditorSignature> {
   <template>
     <button {{on "click" this.choose}} data-test-choose-card>Choose</button>
-    <button data-test-remove-card>Remove</button>
-    <this.linkedCard/>
+    <button {{on "click" this.remove}} data-test-remove-card disabled={{this.isEmpty}}>Remove</button>
+    {{#if this.isEmpty}}
+      <div data-test-empty-link>[empty]</div>
+    {{else}}
+      <this.linkedCard/>
+    {{/if}}
   </template>
 
   choose = () => {
     taskFor(this.chooseCard).perform();
+  }
+
+  remove = () => {
+    (this.args.model.value as any)[this.args.field.name] = null;
+  }
+
+  get isEmpty() {
+    return (this.args.model.value as any)[this.args.field.name] == null;
   }
 
   get linkedCard() {
@@ -1472,8 +1484,24 @@ class LinksToEditor extends GlimmerComponent<LinksToEditorSignature> {
   }
 
   @restartableTask private async chooseCard(this: LinksToEditor) {
+    let currentlyChosen = !this.isEmpty ? (this.args.model.value as any)[this.args.field.name]["id"] as string : undefined;
     let type = Loader.identify(this.args.field.card) ?? baseCardRef;
-    let chosenCard = await chooseCard({ filter: { type } });
+    let chosenCard = await chooseCard(
+      {
+        filter: {
+          every: [
+            { type },
+            // omit the currently chosen card from the chooser
+            ...(currentlyChosen ? [{
+              not: {
+                eq: { id: currentlyChosen },
+                on: baseCardRef,
+              }
+            }] : [])
+          ]
+        }
+      }
+    );
     if (chosenCard) {
       (this.args.model.value as any)[this.args.field.name] = chosenCard;
     }
