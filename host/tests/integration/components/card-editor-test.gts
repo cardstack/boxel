@@ -308,8 +308,6 @@ module('Integration | card-editor', function (hooks) {
     
     assert.shadowDOM('[data-test-pet="Mango"]').exists();
     assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
-    assert.shadowDOM('button[data-test-remove-card]').exists();
-    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', false, 'remove button is enabled');
 
     await click('[data-test-choose-card]');
     await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
@@ -346,7 +344,7 @@ module('Integration | card-editor', function (hooks) {
     assert.shadowDOM('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
     assert.shadowDOM('[data-test-pet="Van Gogh"]').exists();
     assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
-    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', false, 'remove button is disabled');
+    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', false, 'remove button is enabled');
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
