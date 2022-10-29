@@ -10,7 +10,8 @@ import { fn } from '@ember/helper';
 import { pick } from './pick';
 import ShadowDOM from 'https://cardstack.com/base/shadow-dom';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
-import { LinksToEditor } from './links-to-editor';
+import { restartableTask } from 'ember-concurrency';
+import { taskFor } from 'ember-concurrency-ts';
 import {
   Deferred,
   isCardResource,
@@ -20,6 +21,8 @@ import {
   isNotLoadedError,
   CardError,
   NotLoaded,
+  chooseCard,
+  baseCardRef,
   type Meta,
   type CardFields,
   type Relationship,
@@ -515,7 +518,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       let field = this;
       return class LinksToEditTemplate extends GlimmerComponent {
         <template>
-          <LinksToEditor @model={{model}} @field={{field}} @fieldComponent={{fieldComponent}} />
+          <LinksToEditor @model={{model}} @field={{field}} />
         </template>
       };
     }
@@ -1446,3 +1449,61 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManySignature> {
     (this.args.model.value as any)[this.args.field.name].splice(index, 1);
   }
 }
+
+interface LinksToEditorSignature {
+  Args: {
+    model: Box<Card>;
+    field: Field<typeof Card>;
+  }
+}
+class LinksToEditor extends GlimmerComponent<LinksToEditorSignature> {
+  <template>
+    <button {{on "click" this.choose}} data-test-choose-card>Choose</button>
+    <button {{on "click" this.remove}} data-test-remove-card disabled={{this.isEmpty}}>Remove</button>
+    {{#if this.isEmpty}}
+      <div data-test-empty-link>[empty]</div>
+    {{else}}
+      <this.linkedCard/>
+    {{/if}}
+  </template>
+
+  choose = () => {
+    taskFor(this.chooseCard).perform();
+  }
+
+  remove = () => {
+    (this.args.model.value as any)[this.args.field.name] = null;
+  }
+
+  get isEmpty() {
+    return (this.args.model.value as any)[this.args.field.name] == null;
+  }
+
+  get linkedCard() {
+    return fieldComponent(this.args.field, this.args.model, 'embedded');
+  }
+
+  @restartableTask private async chooseCard(this: LinksToEditor) {
+    let currentlyChosen = !this.isEmpty ? (this.args.model.value as any)[this.args.field.name]["id"] as string : undefined;
+    let type = Loader.identify(this.args.field.card) ?? baseCardRef;
+    let chosenCard = await chooseCard(
+      {
+        filter: {
+          every: [
+            { type },
+            // omit the currently chosen card from the chooser
+            ...(currentlyChosen ? [{
+              not: {
+                eq: { id: currentlyChosen },
+                on: baseCardRef,
+              }
+            }] : [])
+          ]
+        }
+      }
+    );
+    if (chosenCard) {
+      (this.args.model.value as any)[this.args.field.name] = chosenCard;
+    }
+  }
+};
