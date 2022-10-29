@@ -1024,8 +1024,10 @@ let editStyles = initStyleSheet(`
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
     <div {{attachStyles defaultStyles}}>
-      {{#each-in @fields as |_key Field|}}
-        <Field />
+      {{#each-in @fields as |key Field|}}
+        {{#unless (eq key 'id')}}
+          <Field />
+        {{/unless}}
       {{/each-in}}
     </div>
   </template>;
