@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Hassan",
+      "lastName": "Abdel-Rahman",
+      "isCool": false,
+      "isHuman": false
+    },
+    "relationships": {
+      "pet": {
+        "links": {
+          "self": "http://local-realm/Pet/2"
+        },
+        "data": {
+          "type": "card",
+          "id": "http://local-realm/Pet/2"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/person",
+        "name": "Person"
+      }
+    }
+  },
+  "included": [
+    {
+      "attributes": {
+        "firstName": "Mango",
+        "favoriteToy": null,
+        "favoriteTreat": null,
+        "cutenessRating": null,
+        "sleepsOnTheCouch": null
+      },
+      "type": "card",
+      "meta": {
+        "adoptsFrom": {
+          "module": "http://local-realm/pet",
+          "name": "Pet"
+        }
+      },
+      "id": "http://local-realm/Pet/2"
+    }
+  ]
+}

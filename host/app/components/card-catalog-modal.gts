@@ -15,7 +15,7 @@ import Preview from './preview';
 export default class CardCatalogModal extends Component {
   <template>
     {{#if this.currentRequest}}
-      <dialog class="dialog-box" open data-test-card-catalog-modal>
+      <dialog class="dialog-box card-catalog-dialog" open data-test-card-catalog-modal>
         <button {{on "click" (fn this.pick undefined)}} type="button">X Close</button>
         <h1>Card Catalog</h1>
         <div>
