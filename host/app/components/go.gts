@@ -26,7 +26,8 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 interface Signature {
   Args: {
     openFile: FileResource | undefined;
-    path: string | undefined
+    path: string | undefined,
+    polling: 'off' | undefined,
   }
 }
 
@@ -34,7 +35,7 @@ export default class Go extends Component<Signature> {
   <template>
     <div class="editor">
       <div class="file-tree">
-        <FileTree @localRealm={{this.localRealm}} @path={{@path}} />
+        <FileTree @localRealm={{this.localRealm}} @path={{@path}} @polling={{@polling}} />
       </div>
       {{#if this.openFile}}
         <div {{monaco content=this.openFile.content

@@ -12,6 +12,7 @@ interface Args {
     content: string | undefined;
     lastModified: string | undefined;
     onStateChange?: (state: FileResource['state']) => void;
+    polling: 'off' | undefined;
   };
 }
 
@@ -37,7 +38,7 @@ export type FileResource =
     };
 
 class _FileResource extends Resource<Args> {
-  private interval: ReturnType<typeof setInterval>;
+  private interval: ReturnType<typeof setInterval> | undefined;
   private _url: string;
   private lastModified: string | undefined;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
@@ -47,7 +48,7 @@ class _FileResource extends Resource<Args> {
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
-    let { url, content, lastModified, onStateChange } = args.named;
+    let { url, content, lastModified, onStateChange, polling } = args.named;
     this._url = url;
     this.onStateChange = onStateChange;
     if (content !== undefined) {
@@ -57,8 +58,12 @@ class _FileResource extends Resource<Args> {
       // get the initial content if we haven't already been seeded with initial content
       taskFor(this.read).perform();
     }
-    this.interval = setInterval(() => taskFor(this.read).perform(), 1000);
-    registerDestructor(this, () => clearInterval(this.interval));
+    if (polling !== 'off') {
+      this.interval = setInterval(() => taskFor(this.read).perform(), 1000);
+      registerDestructor(this, () => clearInterval(this.interval!));
+    } else if (this.interval) {
+      clearInterval(this.interval);
+    }
   }
 
   get url() {
@@ -74,7 +79,9 @@ class _FileResource extends Resource<Args> {
   }
 
   close() {
-    clearInterval(this.interval);
+    if (this.interval) {
+      clearInterval(this.interval);
+    }
   }
 
   @restartableTask private async read() {
