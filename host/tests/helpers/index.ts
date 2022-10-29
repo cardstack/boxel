@@ -42,8 +42,12 @@ export const TestRealm = {
   },
 };
 
-export async function saveCard(instance: Card, id: string) {
-  let api = await Loader.import<CardAPI>(`${baseRealm.url}card-api`);
+export async function saveCard(
+  instance: Card,
+  id: string,
+  loader: Loader = Loader.getLoader()
+) {
+  let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);
   doc.data.id = id;
   await api.updateFromSerialized(instance, doc);

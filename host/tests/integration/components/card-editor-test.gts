@@ -7,14 +7,13 @@ import CardEditor  from 'runtime-spike/components/card-editor';
 import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
 import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
-import { testRealmURL, shimModule, setupCardLogs, TestRealmAdapter, TestRealm } from '../../helpers';
+import { testRealmURL, shimModule, setupCardLogs, TestRealmAdapter, TestRealm, saveCard } from '../../helpers';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
 import { Card } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
-let serializeCard: typeof cardApi["serializeCard"];
 let updateFromSerialized: typeof cardApi["updateFromSerialized"];
 
 class MockLocalRealm extends Service {
@@ -28,12 +27,6 @@ module('Integration | card-editor', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
   setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
-
-  async function saveCard(instance: Card, id: string) {
-    let doc = serializeCard(instance);
-    doc.data.id = id;
-    await updateFromSerialized(instance, doc);
-  }
 
   async function loadCard(url: string): Promise<Card> {
     let { createFromSerialized, recompute } = cardApi;
@@ -57,7 +50,6 @@ module('Integration | card-editor', function (hooks) {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     updateFromSerialized = cardApi.updateFromSerialized;
-    serializeCard = cardApi.serializeCard;
     this.owner.register('service:local-realm', MockLocalRealm);
 
     adapter = new TestRealmAdapter({});
@@ -210,7 +202,7 @@ module('Integration | card-editor', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let card = new TestCard({ firstName: "Mango" });
-    await saveCard(card, `${testRealmURL}test-cards/test-card`);
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, Loader.getLoaderFor(updateFromSerialized));
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -242,7 +234,7 @@ module('Integration | card-editor', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
 
     let card = new TestCard({ firstName: "Mango" });
-    await saveCard(card, `${testRealmURL}test-cards/test-card`);
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, Loader.getLoaderFor(updateFromSerialized));
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -284,7 +276,7 @@ module('Integration | card-editor', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let card = new TestCard({ firstName: "Mango" });
-    await saveCard(card, `${testRealmURL}test-cards/test-card`);
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, Loader.getLoaderFor(updateFromSerialized));
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -379,5 +371,5 @@ module('Integration | card-editor', function (hooks) {
     assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', true, 'remove button is disabled');
   });
 
-  skip('can create a new card for a linksTo field');
+  skip('can create (or specialize) a new card to populate a linksTo field');
 });
