@@ -11,7 +11,6 @@ module.exports = {
   plugins: [
     new webpack.ProvidePlugin({
       process: 'process',
-      Buffer: 'buffer', // can we take this out?
     }),
   ],
   module: {
@@ -42,8 +41,7 @@ module.exports = {
       // This utility can optionally accept a file path to your template
       // compiler and load it dynamically. We don't use that feature, so this
       // warning doesn't break for us.
-      module:
-        /vendor\/ember-template-imports\/lib\/preprocess-embedded-templates\.js$/,
+      module: /ember-template-imports\/lib\/preprocess-embedded-templates\.js$/,
       message: /the request of a dependency is an expression/,
     },
   ],

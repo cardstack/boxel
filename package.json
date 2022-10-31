@@ -22,11 +22,15 @@
     "@glint/environment-ember-template-imports": "^0.9.1",
     "ember-cli-htmlbars": "^6.1.0",
     "ember-resources": "^4.4.0",
-    "ember-template-imports": "^3.0.1",
-    "patch-package": "^6.4.7",
-    "postinstall-postinstall": "^2.1.0"
+    "ember-template-imports": "^3.0.1"
   },
-  "scripts": {
-    "postinstall": "patch-package"
+  "scripts": {},
+  "pnpm": {
+    "overrides": {
+      "jsesc": "^3.0.0"
+    },
+    "patchedDependencies": {
+      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch"
+    }
   }
 }

@@ -31,5 +31,10 @@
     "lodash": "^4.17.21",
     "qs": "^6.10.5",
     "transform-modules-amd-plugin": "workspace:*"
+  },
+  "dependenciesMeta": {
+    "@cardstack/ember-template-imports": {
+      "injected": true
+    }
   }
 }
