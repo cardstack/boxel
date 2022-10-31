@@ -516,9 +516,10 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
     if (format === 'edit') {
       let field = this;
+      let innerModel = model.field(this.name as keyof Card) as unknown as Box<Card>;
       return class LinksToEditTemplate extends GlimmerComponent {
         <template>
-          <LinksToEditor @model={{model}} @field={{field}} />
+          <LinksToEditor @model={{innerModel}} @field={{field}} />
         </template>
       };
     }
@@ -1454,7 +1455,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManySignature> {
 
 interface LinksToEditorSignature {
   Args: {
-    model: Box<Card>;
+    model: Box<Card | null>;
     field: Field<typeof Card>;
   }
 }
@@ -1474,19 +1475,23 @@ class LinksToEditor extends GlimmerComponent<LinksToEditorSignature> {
   }
 
   remove = () => {
-    (this.args.model.value as any)[this.args.field.name] = null;
+    this.args.model.value = null;
   }
 
   get isEmpty() {
-    return (this.args.model.value as any)[this.args.field.name] == null;
+    return this.args.model.value == null;
   }
 
   get linkedCard() {
-    return fieldComponent(this.args.field, this.args.model, 'embedded');
+    if (this.args.model.value == null) {
+      throw new Error(`can't make field component with box value of null for field ${field.name}`);
+    }
+    let card = Reflect.getPrototypeOf(this.args.model.value)!.constructor as typeof Card;
+    return getBoxComponent(card, 'embedded', this.args.model as Box<Card>);
   }
 
   @restartableTask private async chooseCard(this: LinksToEditor) {
-    let currentlyChosen = !this.isEmpty ? (this.args.model.value as any)[this.args.field.name]["id"] as string : undefined;
+    let currentlyChosen = !this.isEmpty ? (this.args.model.value as any)["id"] as string : undefined;
     let type = Loader.identify(this.args.field.card) ?? baseCardRef;
     let chosenCard = await chooseCard(
       {
@@ -1505,7 +1510,7 @@ class LinksToEditor extends GlimmerComponent<LinksToEditorSignature> {
       }
     );
     if (chosenCard) {
-      (this.args.model.value as any)[this.args.field.name] = chosenCard;
+      this.args.model.value = chosenCard;
     }
   }
 };
