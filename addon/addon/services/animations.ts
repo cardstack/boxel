@@ -159,7 +159,9 @@ export default class AnimationsService extends Service {
       // we need to check the animation state because safari doesn't remove finished animations
       if (
         animations?.length &&
-        animations.some((v) => v.playState === 'running')
+        animations.some(
+          (v) => v.playState === 'running' || v.playState === 'paused'
+        )
       ) {
         spriteModifier.captureSnapshot({
           withAnimations: true,
