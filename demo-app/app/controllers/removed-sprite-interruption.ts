@@ -4,6 +4,7 @@ import runAnimations from 'animations-experiment/utils/run-animations';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import LinearBehavior from 'animations-experiment/behaviors/linear';
+import { AnimationDefinition } from 'animations-experiment/models/transition-runner';
 
 export default class DoubleRenderController extends Controller {
   @tracked count = 0;
@@ -24,56 +25,48 @@ export default class DoubleRenderController extends Controller {
     this.count += 1;
   }
 
-  async transition(changeset: Changeset): Promise<void> {
+  transition(changeset: Changeset): AnimationDefinition {
     let { removedSprites, keptSprites, insertedSprites } = changeset;
     let duration = 3000;
 
-    removedSprites.forEach((sprite) => {
-      if (changeset.context.hasOrphan(sprite)) {
-        changeset.context.removeOrphan(sprite);
-      }
-      console.log('handling removed sprite');
-      changeset.context.appendOrphan(sprite);
-      sprite.lockStyles();
-      sprite.setupAnimation('position', {
-        startY: 0,
-        startX: 0,
-        endY: -200,
-        endX: 0,
-        behavior: new LinearBehavior(),
-        duration,
-      });
-    });
+    let timing = {
+      behavior: new LinearBehavior(),
+      duration,
+    };
 
-    insertedSprites.forEach((sprite) => {
-      if (changeset.context.hasOrphan(sprite)) {
-        changeset.context.removeOrphan(sprite);
-      }
-      sprite.setupAnimation('position', {
-        startY: -200,
-        behavior: new LinearBehavior(),
-        duration,
-      });
-    });
-
-    keptSprites.forEach((sprite) => {
-      if (changeset.context.hasOrphan(sprite)) {
-        changeset.context.removeOrphan(sprite);
-      }
-      sprite.setupAnimation('position', {
-        startY: sprite.initialBounds?.relativeToContext.y,
-        endY: sprite.finalBounds?.relativeToContext.y,
-        behavior: new LinearBehavior(),
-        duration,
-      });
-    });
-
-    await runAnimations([
-      ...removedSprites,
-      ...keptSprites,
-      ...insertedSprites,
-    ]);
-
-    console.log('done animating');
+    return {
+      timeline: {
+        parallel: [
+          {
+            sprites: removedSprites,
+            properties: {
+              position: {
+                startY: 0,
+                startX: 0,
+                endY: -200,
+                endX: 0,
+              },
+            },
+            timing,
+          },
+          {
+            sprites: insertedSprites,
+            properties: {
+              position: {
+                startY: -200,
+              },
+            },
+            timing,
+          },
+          {
+            sprites: keptSprites,
+            properties: {
+              position: {},
+            },
+            timing,
+          },
+        ],
+      },
+    } as AnimationDefinition;
   }
 }
