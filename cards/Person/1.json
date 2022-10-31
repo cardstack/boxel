@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Hassan",
+      "lastName": "Abdel-Rahman",
+      "isCool": false,
+      "isHuman": true
+    },
+    "relationships": {
+      "pet": {
+        "links": {
+          "self": "http://local-realm/Pet/2"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/person",
+        "name": "Person"
+      }
+    }
+  }
+}

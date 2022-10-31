@@ -1,16 +1,20 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
-import { Loader, baseRealm } from '@cardstack/runtime-common';
+import { Loader, baseRealm, LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { Realm } from "@cardstack/runtime-common/realm";
 import CardEditor  from 'runtime-spike/components/card-editor';
 import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
-import { testRealmURL, shimModule, setupCardLogs } from '../../helpers';
+import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
+import { testRealmURL, shimModule, setupCardLogs, TestRealmAdapter, TestRealm, saveCard } from '../../helpers';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
+import { Card } from "https://cardstack.com/base/card-api";
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
+let updateFromSerialized: typeof cardApi["updateFromSerialized"];
 
 class MockLocalRealm extends Service {
   isAvailable = true;
@@ -19,18 +23,176 @@ class MockLocalRealm extends Service {
 
 module('Integration | card-editor', function (hooks) {
   let loader: Loader;
+  let adapter: TestRealmAdapter
+  let realm: Realm;
   setupRenderingTest(hooks);
   setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
+  async function loadCard(url: string): Promise<Card> {
+    let { createFromSerialized, recompute } = cardApi;
+    let result = await realm.searchIndex.card(new URL(url));
+    if (!result || result.type === 'error') {
+      throw new Error(`cannot get instance ${url} from the index: ${result ? result.error.detail : 'not found'}`);
+    }
+    let card = await createFromSerialized<typeof Card>(result.doc, undefined, {
+      loader: Loader.getLoaderFor(createFromSerialized)
+    });
+    await recompute(card, { loadFields: true });
+    return card;
+  }
+
   hooks.beforeEach(async function () {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
+    updateFromSerialized = cardApi.updateFromSerialized;
     this.owner.register('service:local-realm', MockLocalRealm);
+
+    adapter = new TestRealmAdapter({});
+    realm = TestRealm.createWithAdapter(adapter);
+    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    await realm.ready;
+
+    await realm.write('pet.gts',`
+      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Pet extends Card {
+        @field firstName = contains(StringCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.firstName}}>
+              <@fields.firstName/>
+            </h3>
+          </template>
+        }
+      }
+    `);
+    await realm.write('fancy-pet.gts',`
+      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { Pet } from "./pet";
+
+      export class FancyPet extends Pet {
+        @field favoriteToy = contains(StringCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.firstName}}>
+              <@fields.firstName/>
+              (plays with <@fields.favoriteToy/>)
+            </h3>
+          </template>
+        }
+      }
+    `);
+    await realm.write('person.gts',`
+      import { contains, linksTo, field, Component, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { Pet } from "./pet";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field pet = linksTo(Pet);
+      }
+    `);
+    await realm.write('Pet/mango.json', JSON.stringify({
+      data: {
+        type: 'card',
+        id: `${testRealmURL}Pet/mango`,
+        attributes: {
+          firstName: 'Mango'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet'
+          }
+        }
+      }
+    } as LooseSingleCardDocument));
+    await realm.write('Pet/vangogh.json', JSON.stringify({
+      data: {
+        type: 'card',
+        id: `${testRealmURL}Pet/vangogh`,
+        attributes: {
+          firstName: 'Van Gogh'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet'
+          }
+        }
+      }
+    } as LooseSingleCardDocument));
+    await realm.write('Pet/ringo.json', JSON.stringify({
+      data: {
+        type: 'card',
+        id: `${testRealmURL}Pet/ringo`,
+        attributes: {
+          firstName: 'Ringo',
+          favoriteToy: 'sneaky snake',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}fancy-pet`,
+            name: 'FancyPet'
+          }
+        }
+      }
+    } as LooseSingleCardDocument));
+    await realm.write('Person/hassan.json', JSON.stringify({
+      data: {
+        type: 'card',
+        id: `${testRealmURL}Person/hassan`,
+        attributes: {
+          firstName: 'Hassan'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: `${testRealmURL}Pet/mango`
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}person`,
+            name: 'Person'
+          }
+        }
+      }
+    } as LooseSingleCardDocument));
+    await realm.write('Person/mariko.json', JSON.stringify({
+      data: {
+        type: 'card',
+        id: `${testRealmURL}Person/mariko`,
+        attributes: {
+          firstName: 'Mariko'
+        },
+        relationships: {
+          pet: {
+            links: {
+              self: null
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}person`,
+            name: 'Person'
+          }
+        }
+      }
+    } as LooseSingleCardDocument));
   });
 
   test('renders card in edit (default) format', async function (assert) {
-    let { field, contains, Card, Component, createFromSerialized } = cardApi;
+    let { field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
@@ -39,18 +201,8 @@ module('Integration | card-editor', function (hooks) {
       }
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
-    let card = await createFromSerialized(TestCard, {
-      data: {
-        id: `${testRealmURL}test-cards/test-card`, // madeup id to satisfy saved card condition
-        attributes: { firstName: 'Mango' },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
-            name: 'TestCard'
-          }
-        }
-      }
-    });
+    let card = new TestCard({ firstName: "Mango" });
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, Loader.getLoaderFor(updateFromSerialized));
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -65,7 +217,7 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('can change card format', async function (assert) {
-    let { field, contains, Card, Component, createFromSerialized } = cardApi;
+    let { field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
@@ -81,19 +233,8 @@ module('Integration | card-editor', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
 
-    let card = await createFromSerialized(TestCard, {
-      data: {
-        id: `${testRealmURL}test-cards/test-card`, // madeup id to satisfy saved card condition
-        attributes: { firstName: 'Mango' },
-        meta: {
-          adoptsFrom:
-          {
-            module: `${testRealmURL}test-cards`,
-            name: 'TestCard'
-          }
-        }
-      }
-    });
+    let card = new TestCard({ firstName: "Mango" });
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, Loader.getLoaderFor(updateFromSerialized));
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -119,7 +260,7 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('edited card data is visible in different formats', async function (assert) {
-    let { field, contains, Card, Component, createFromSerialized } = cardApi;
+    let { field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
@@ -134,18 +275,8 @@ module('Integration | card-editor', function (hooks) {
       }
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
-    let card = await createFromSerialized(TestCard, {
-      data: {
-        attributes: { firstName: 'Mango' },
-        meta: {
-          adoptsFrom:
-          {
-            module: `${testRealmURL}test-cards`,
-            name: 'TestCard'
-          }
-        }
-      }
-    });
+    let card = new TestCard({ firstName: "Mango" });
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, Loader.getLoaderFor(updateFromSerialized));
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -163,4 +294,80 @@ module('Integration | card-editor', function (hooks) {
     await click('.format-button.isolated');
     assert.shadowDOM('[data-test-isolated-firstName]').hasText('Van Gogh');
   });
+  
+  test('can choose a card for a linksTo field that has an existing value', async function(assert) {
+    let card = await loadCard(`${testRealmURL}Person/hassan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardEditor @card={{card}} />
+          <CardCatalogModal />
+        </template>
+      }
+    );
+    
+    assert.shadowDOM('[data-test-pet="Mango"]').exists();
+    assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
+
+    await click('[data-test-choose-card]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
+
+    assert.shadowDOM('[data-test-card-catalog-modal] [data-test-card-catalog-item]').exists({ count: 2});
+    assert.shadowDOM(`[data-test-select="${testRealmURL}Pet/vangogh"]`).exists();
+    assert.shadowDOM(`[data-test-select="${testRealmURL}Pet/ringo"]`).exists();
+    await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
+
+    assert.shadowDOM('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
+    assert.shadowDOM('[data-test-pet="Van Gogh"]').exists();
+    assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
+  });
+
+  test('can choose a card for a linksTo field that has no existing value', async function(assert) {
+    let card = await loadCard(`${testRealmURL}Person/mariko`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardEditor @card={{card}} />
+          <CardCatalogModal />
+        </template>
+      }
+    );
+
+    assert.shadowDOM('[data-test-empty-link]').exists();
+    assert.shadowDOM('button[data-test-remove-card]').exists();
+    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', true, 'remove button is disabled');
+    
+    await click('[data-test-choose-card]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
+    await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
+
+    assert.shadowDOM('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
+    assert.shadowDOM('[data-test-pet="Van Gogh"]').exists();
+    assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
+    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', false, 'remove button is enabled');
+  });
+
+  test('can remove the link for a linksTo field', async function (assert) {
+    let card = await loadCard(`${testRealmURL}Person/hassan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardEditor @card={{card}} />
+          <CardCatalogModal />
+        </template>
+      }
+    );
+    
+    assert.shadowDOM('[data-test-pet="Mango"]').exists();
+    assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
+
+    await click('[data-test-remove-card]');
+
+    assert.shadowDOM('[data-test-pet="Mango"]').doesNotExist();
+    assert.shadowDOM('[data-test-empty-link]').exists();
+    assert.shadowDOM('button[data-test-remove-card]').exists();
+    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', true, 'remove button is disabled');
+  });
+
+  skip('can create (or specialize) a new card to populate a linksTo field');
 });

@@ -576,6 +576,35 @@ module('Unit | realm', function (hooks) {
         },
       ],
     });
+    let fileRef = await adapter.openFile('Pet/1.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      JSON.parse(fileRef.content as string),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}dir/owner`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'file contents are correct'
+    );
   });
 
   test('realm can serve patch card requests', async function (assert) {
@@ -854,6 +883,35 @@ module('Unit | realm', function (hooks) {
         },
       ],
     });
+    let fileRef = await adapter.openFile('dir/mango.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      JSON.parse(fileRef.content as string),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}dir/mariko`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'file contents are correct'
+    );
   });
 
   test('realm can serve delete card requests', async function (assert) {

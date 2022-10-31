@@ -29,7 +29,7 @@ module('Integration | preview', function (hooks) {
   });
   
   test('renders card', async function (assert) {
-    let { field, contains, Card, Component, createFromSerialized } = cardApi;
+    let { field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
@@ -38,17 +38,7 @@ module('Integration | preview', function (hooks) {
       }
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
-    let card = await createFromSerialized(TestCard, {
-      data: {
-        attributes: { firstName: 'Mango' },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
-            name: 'TestCard'
-          }
-        }
-      }
-    });
+    let card = new TestCard({ firstName: 'Mango '});
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

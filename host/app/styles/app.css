@@ -83,6 +83,11 @@ button {
   overflow-y: auto;
 }
 
+.dialog-box.card-catalog-dialog {
+  /* Need to overlay on top of the create card dialog when both appear */
+  z-index:2;
+}
+
 .dialog-box > * + * {
   margin-top: 1rem;
 }
