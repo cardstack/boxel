@@ -16,9 +16,12 @@ declare global {
   interface CSSStyleSheet {
     replaceSync(cssText: string): void;
   }
-  interface Node {
-    adoptedStyleSheets?: CSSStyleSheet[];
-  }
+
+  // TODO: we needed to remove this during a typescript upgrade, but might want
+  // to re-add it
+  // interface Node {
+  //   adoptedStyleSheets?: CSSStyleSheet[];
+  // }
 }
 
 declare module '@ember/component' {

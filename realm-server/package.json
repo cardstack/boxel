@@ -5,6 +5,7 @@
   "dependencies": {},
   "devDependencies": {
     "@cardstack/runtime-common": "workspace:*",
+    "@types/fs-extra": "^9.0.13",
     "@types/qunit": "^2.11.3",
     "@types/supertest": "^2.0.12",
     "@types/qs": "^6.9.7",

@@ -17,7 +17,9 @@
     "@babel/core": "^7.19.6"
   },
   "devDependencies": {
-    "@babel/core": "^7.19.6"
+    "@babel/core": "^7.19.6",
+    "@types/babel__traverse": "^7.14.2",
+    "@types/babel__core": "^7.1.19"
   },
   "author": "The Babel Team (https://babel.dev/team)"
 }
