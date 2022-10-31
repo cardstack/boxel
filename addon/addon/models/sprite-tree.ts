@@ -54,6 +54,130 @@ export enum SpriteTreeNodeType {
   Sprite,
 }
 
+/**
+ * We can also separate the proposed SpriteTreeNode below as a UIElement and have the SpriteTree be responsible
+ * for keeping track of hierarchies, while storing pointers to UIElements (and UIElements store pointers of DOM elements that
+ * are in the SpriteTree). We would pass UIElements around still, and supply them with visibility information based on the SpriteTree.
+ * The SpriteTree would generally change based on DOM structure, removed things are a tricky but important part. If they're not animated
+ * on the first render when they're gone, they should be cleaned up (from the SpriteTree/however we track them, the DOM part happens automatically).
+ * If they're animated, they should be kept where they're animated and ideally not move around until they're done, though it seems impossible to prevent
+ * a removed sprite from being forced to move upwards if another rule decides to claim it (until it's run out of ancestor contexts completely).
+ * It is hard to reliably keep a removed SpriteTree branch around as a reference point for where a Sprite should be in the DOM
+ * because it is possible to introduce matching Sprites for certain elements... and invalidate a branch of the SpriteTree, or maybe an ancestor gets removed...
+ * and also we'd be keeping phantoms around. Also, once an AnimationContext has claimed a removed Sprite and attached it as an orphan, you might see bugs where
+ * another AnimationContext claiming it ends up causing a layer bug (where the animated Sprite is no longer visible because of overflow on the new AnimationContext
+ * controlling it, which is lower in the DOM hierarchy than the original controlling one).
+ *
+ * I think we'll need to make sure that if a context claims a removed sprite and animates it, it now belongs to the context (directly under it in the SpriteTree hierarchy)
+ * until it is cleaned up. Clean up will happen when the animation completes, or the removed sprite is no longer valid, because ANOTHER representation of the UI element
+ * in the DOM has now been removed and you cannot (and should not need to?) have two removed UI elements at once. <-- not sure how easy it is to guarantee this.
+ *
+ * It's hard to imagine the right way to handle the removed sprite's descendant sprites. The easier path for now is to assume we will not
+ * attempt to reintroduce those as UI elements that need animating from the current orphaned elements to the new position,
+ * and dispose of any state that represents them within our animation system. I don't think this is perfect, but this reduces the chances
+ * that we are handling ghosts of removed sprites past, and prevents passing removed sprites around in a confusing manner (I hope).
+ *
+ *
+ * TLDR: for removed sprites, use it this render or lose it; this includes descendant sprite representations in our animation system.
+ */
+
+/**
+ * If we want removed sprites to be able to be handled the same way as non-removed sprites, how should we structure the
+ * SpriteTree? (things I'm considering are related to relationships between UI elements: coordinate systems and hierarchy-based requirements,
+ * like child UI elements of a card need to animate out with a certain timing)
+ */
+
+/**
+ * When you clone a Sprite, you are cloning both the sprite's DOM element AND DOM elements that represent descendant sprites.
+ * This is a potential source of bugs. The cloning implementation has to account for this.
+ *
+ * Related to the coordinate system problem below.
+ */
+
+/**
+ * Should it be possible to attach a root Sprite as an orphan, and handle the descendant Sprites as if they have coordinate relative to the root orphan?
+ * Or should the only way be to attach to the context and use coordinates relative to the context?
+ *
+ * It currently is, but.... this means that there are now multiple ways to specify the same animations for the same batch of removed sprites.
+ * What should our recommended way be? Can we hide this detail? <-- I think we can, for most simple exit transitions
+ */
+
+/**
+ * What happens if you clone a sprite that is also a context, and then try to attach orphans to that context???
+ * We should decide what we want to do about this and document it.
+ */
+
+/**
+ * How should the DOM structure that affects the SpriteTree hierarchy be defined, if only one SpriteTreeNode
+ * should represent each UI element?
+ *
+ * How should we understand removed sprites and **where they can be attached to the DOM**? Considering interruptions, how can we answer this questions?
+ */
+
+/**
+ * Each instance of SpriteTreeNode will answer:
+ *
+ * What is the state of this UI element? How did it change?
+ *
+ * UI element is a separate concept from DOM element. DOM elements can change without anything perceptibly changing
+ * in the UI. The animation system attempts to keep track of UI elements as perceived by the user,
+ * aided by metadata provided by consumers of the library. This means that the SpriteTreeNode will need to
+ * keep track of different DOM elements that it recognizes as matching based on the provided metadata.
+ *
+ * The reason we're using a SpriteTreeNode this way is because it seems like a reasonable place to store state that's
+ * relevant to a particular UI element **across renders**. Why? We may not be animating a sprite modifier's
+ * DOM element (or we could be animating it + other things). A sprite modifier may have a "counterpart",
+ * and we plan to introduce a cloning API at some point.
+ * We need a place to keep track of what we are animating, and also what is current in the DOM.
+ * Having easy ways to keep track of these things for a given UI element, in an understandable way
+ * helps us have better interruption-handling and cleanup too.
+ *
+ * This means that the SpriteTreeNode, as a representation of a UI element, needs to keep track of:
+ *
+ * - any DOM element that is detached but we're still interested in (counterparts, clones)
+ * - the current representation of the UI element in the DOM
+ * - animations that are running on the DOM element
+ * - state before and after render -> this determines whether removed, inserted, or kept
+ * - opportunities for cleanup (animations completing, no animations being attached after render)
+ *
+ * With all this state, at the end of each render, a SpriteTreeNode would have enough information to create a Sprite.
+ * A Sprite could become a readonly snapshot of a SpriteTreeNode's state for a given render (a subset of it, maybe), and starting an animation
+ * using a Sprite would feed the information back to the SpriteTreeNode so that it knows what animating element to measure during interruptions
+ * and keep track of for cleanup purposes.
+ *
+ * This reduces the need to consolidate state from various places - we've mentioned sprite modifiers;
+ * the SpriteTree and the DOM are other sources that we're querying from a modifier in the
+ * process of creating animations for a UI element. There's also the concept of intermediate sprites,
+ * which we would no longer need.
+ *
+ * A goal of this work - we would pass SpriteTreeNodes around instead of passing AnimationContexts and Modifiers.
+ * This does require that we provide a way to query for visibility of a SpriteTreeNode representing a Sprite to a
+ * given SpriteTreeNode representing a Context. We can update visibility within the SpriteTree each render,
+ * to provide SpriteTreeNodes with the following information:
+ *
+ * - For AnimationContexts:
+ *   - visible descendant SpriteTreeNodes (taking into account multiple representations of UI elements in the DOM)
+ *   - immediate descendant SpriteTreeNodes
+ *     - this means that responsibility for deciding whether an AnimationContext can animate is in the SpriteTree?
+ * - Parent SpriteTreeNode
+ *
+ * The ability to know by the end of each render, before we proceed into deciding how each Sprite should animate,
+ * which Sprites will be visible to which AnimationContexts (and hence their rules) should make it easier to understand
+ * and debug things. A tradeoff here is that we make hierarchy-based logic harder, whether in the library
+ * itself or for users. I think having clarity about visibility makes things easier in the beginning, and we
+ * can dismantle this abstraction later (I think?). We could also provide SpriteTreeNodes with a method to see if they match
+ * a certain pattern (are you a descendant of this card?), without directly requiring interaction with the SpriteTree.
+ *
+ * Another goal - improved testability because we can separate the handling of DOM changes (SpriteTree/SpriteTreeNode concern)
+ * from distribution (ChangesetBuilder concern) since we can mock SpriteTreeNodes for testing ChangesetBuilder, 
+ * without having to think about DOM structure and the SpriteTree directly.
+ *
+ * ------
+ *
+ * SOME OTHER ISSUES THAT THIS HOPES TO HANDLE
+ * Since a SpriteTreeNode is meant to be persistent across renders, it allows us to avoid using string-based keys to keep track of the state of things.
+ * Also, interrupted removed sprites' SpriteTreeNodes are represented in an odd phantom-like way at the moment.
+ */
 export class SpriteTreeNode {
   contextModel: IContext | undefined;
   spriteModel: ISpriteModifier | undefined;
