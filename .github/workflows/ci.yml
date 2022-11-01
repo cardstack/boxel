@@ -75,7 +75,7 @@ jobs:
         working-directory: realm-server
       - run: sleep 5
       - name: Start node test realm server
-        run: pnpm start:node-test-realm &
+        run: pnpm start:test-node-realm &
         working-directory: realm-server
       - run: sleep 5
       - name: realm server test suite
