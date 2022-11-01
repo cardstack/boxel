@@ -4,11 +4,13 @@
   "main": "index.js",
   "license": "MIT",
   "devDependencies": {
+    "@babel/core": "^7.17.8",
     "@cardstack/runtime-common": "workspace:*",
     "@types/qs": "^6.9.7",
     "assert-never": "^1.2.1",
     "babel-loader": "^8.2.4",
     "date-fns": "^2.28.0",
+    "ember-cli-htmlbars": "^6.0.1",
     "path-browserify": "^1.0.1",
     "qs": "^6.10.5",
     "webpack": "^5.69.1",

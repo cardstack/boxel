@@ -4,7 +4,9 @@
   "main": "index.js",
   "license": "MIT",
   "devDependencies": {
+    "@babel/core": "^7.17.8",
     "@cardstack/runtime-common": "workspace:*",
+    "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.0.4",
     "@glint/template": "^0.9.7",
     "@types/ember__helper": "^4.0.0",
@@ -12,11 +14,14 @@
     "@types/ember__object": "^4.0.1",
     "@types/lodash": "^4.14.182",
     "@types/flat": "^5.0.2",
+    "ember-cli-htmlbars": "^6.0.1",
     "ember-concurrency": "^2.2.1",
     "ember-concurrency-ts": "^0.3.1",
     "ember-modifier": "^3.2.1",
-    "tracked-built-ins": "^2.0.1"
+    "tracked-built-ins": "^2.0.1",
+    "webpack": "^5.69.1"
   },
+  "peerDependencies": {},
   "dependenciesMeta": {
     "@cardstack/runtime-common": {
       "injected": true

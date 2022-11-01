@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "license": "MIT",
   "dependencies": {
-    "@babel/core": "^7.17.8",
     "@babel/generator": "^7.17.8",
     "@babel/plugin-proposal-class-properties": "^7.16.7",
     "@babel/plugin-proposal-decorators": "^7.17.9",
@@ -35,6 +34,15 @@
     "lodash": "^4.17.21",
     "qs": "^6.10.5",
     "transform-modules-amd-plugin": "workspace:*"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.17.8",
+    "ember-cli-htmlbars": "^6.0.1",
+    "webpack": "^5.69.1"
+  },
+  "peerDependencies": {
+    "@babel/core": "^7.17.8",
+    "ember-cli-htmlbars": "^6.0.1"
   },
   "dependenciesMeta": {
     "@cardstack/ember-template-imports": {
