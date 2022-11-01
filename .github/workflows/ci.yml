@@ -36,17 +36,17 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 18.6.0
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: "pnpm"
       - uses: pnpm/action-setup@v2.2.4
         name: Install pnpm
         id: pnpm-install
         with:
           version: 7
           run_install: false
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "pnpm"
       # - uses: volta-cli/action@v4
       # - name: Find yarn cache
       #   id: yarn-cache-path
