@@ -43,6 +43,7 @@ import typescriptPlugin from "@babel/plugin-transform-typescript";
 import emberConcurrencyAsyncPlugin from "ember-concurrency-async-plugin";
 import { Router } from "./router";
 import { parseQueryString } from "./query";
+//@ts-ignore service worker can't handle this
 import type { Readable } from "stream";
 
 export interface FileRef {
@@ -594,7 +595,7 @@ export class Realm {
       // webpack.
       const B = (globalThis as any)["Buffer"];
 
-      const chunks: Buffer[] = []; // Buffer is available from globalThis when in the node env
+      const chunks: typeof B[] = []; // Buffer is available from globalThis when in the node env, however tsc can't type check this for the worker
       // the types for Readable have not caught up to the fact these are async generators
       for await (const chunk of content as any) {
         chunks.push(B.from(chunk));

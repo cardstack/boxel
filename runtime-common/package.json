@@ -36,9 +36,6 @@
     "qs": "^6.10.5",
     "transform-modules-amd-plugin": "workspace:*"
   },
-  "devDependencies": {
-    "@types/node": "^18.11.9"
-  },
   "dependenciesMeta": {
     "@cardstack/ember-template-imports": {
       "injected": true
