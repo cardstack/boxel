@@ -302,7 +302,7 @@ export class CurrentRun {
       module = await this.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
-      if (globalThis.process?.env?.SUPPRESS_ERRORS !== "true") {
+      if ((globalThis as any).process?.env?.SUPPRESS_ERRORS !== "true") {
         console.warn(
           `encountered error loading module "${url.href}": ${err.message}`
         );
@@ -462,7 +462,7 @@ export class CurrentRun {
         deferred.reject(err);
         throw err;
       }
-      if (globalThis.process?.env?.SUPPRESS_ERRORS !== "true") {
+      if ((globalThis as any).process?.env?.SUPPRESS_ERRORS !== "true") {
         console.warn(
           `encountered error indexing card instance ${path}: ${error.error.detail}`
         );
