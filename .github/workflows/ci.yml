@@ -29,25 +29,26 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: install
     steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-      - uses: volta-cli/action@v4
-      - name: Find yarn cache
-        id: yarn-cache-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
-      - name: Set up yarn cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/yarn
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-      - run: yarn --prefer-offline
-      - run: yarn glint
-      - run: cd ./worker && yarn tsc
-      - run: cd ./realm-server && yarn tsc
+      # - uses: actions/checkout@v3
+      #   with:
+      #     fetch-depth: 0
+      # - uses: volta-cli/action@v4
+      # - name: Find yarn cache
+      #   id: yarn-cache-path
+      #   run: echo "::set-output name=dir::$(yarn cache dir)"
+      # - name: Set up yarn cache
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: ~/.cache/yarn
+      #     key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-yarn-
+      # - run: yarn --prefer-offline
+      - run: pnpm glint
+      - run: cd ./worker && pnpm tsc
+      - run: cd ./realm-server && pnpm tsc
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
