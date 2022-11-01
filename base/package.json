@@ -3,6 +3,21 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
-  "dependencies": {},
+  "devDependencies": {
+    "@cardstack/runtime-common": "workspace:*",
+    "@glimmer/tracking": "^1.0.4",
+    "@types/ember__helper": "^4.0.0",
+    "@types/ember__modifier": "^4.0.1",
+    "@types/ember__object": "^4.0.1",
+    "@types/lodash": "^4.14.182",
+    "@types/flat": "^5.0.2",
+    "ember-modifier": "^3.2.1",
+    "tracked-built-ins": "^2.0.1"
+  },
+  "devDependenciesMeta": {
+    "@cardstack/runtime-common": {
+      "injected": true
+    }
+  },
   "scripts": {}
 }
