@@ -16,12 +16,13 @@ jobs:
       - uses: pnpm/action-setup@v2.2.4
         name: Install pnpm
         with:
-          version: 7
+          version: latest
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
           cache: "pnpm"
+      - run: pnpm --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm glint
       - run: cd ./worker && pnpm tsc
@@ -38,12 +39,13 @@ jobs:
       - uses: pnpm/action-setup@v2.2.4
         name: Install pnpm
         with:
-          version: 7
+          version: latest
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
           cache: "pnpm"
+      - run: pnpm --version
       - run: pnpm install --frozen-lockfile
       - name: Start realm servers
         run: pnpm start:base-and-host-test-realms &
@@ -63,12 +65,13 @@ jobs:
       - uses: pnpm/action-setup@v2.2.4
         name: Install pnpm
         with:
-          version: 7
+          version: latest
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
           cache: "pnpm"
+      - run: pnpm --version
       - run: pnpm install --frozen-lockfile
       - name: Start base realm server
         run: pnpm start:base-and-host-test-realms &
