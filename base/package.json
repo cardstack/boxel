@@ -12,6 +12,8 @@
     "@types/ember__object": "^4.0.1",
     "@types/lodash": "^4.14.182",
     "@types/flat": "^5.0.2",
+    "ember-concurrency": "^2.2.1",
+    "ember-concurrency-ts": "^0.3.1",
     "ember-modifier": "^3.2.1",
     "tracked-built-ins": "^2.0.1"
   },
