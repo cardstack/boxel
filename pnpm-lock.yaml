@@ -341,7 +341,6 @@ importers:
       '@types/diff': ^5.0.2
       '@types/flat': ^5.0.2
       '@types/lodash': ^4.14.182
-      '@types/node': ^18.11.9
       '@types/qs': ^6.9.7
       babel-import-util: ^1.2.2
       babel-plugin-ember-template-compilation: ^1.0.0
@@ -389,8 +388,6 @@ importers:
       lodash: 4.17.21
       qs: 6.11.0
       transform-modules-amd-plugin: link:../vendor/transform-modules-amd-plugin
-    devDependencies:
-      '@types/node': 18.11.9
     dependenciesMeta:
       '@cardstack/ember-template-imports':
         injected: true
