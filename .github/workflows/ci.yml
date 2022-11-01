@@ -30,49 +30,83 @@ jobs:
     name: Host Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      # - uses: actions/checkout@v2
+      #   with:
+      #     fetch-depth: 0
+      # - uses: volta-cli/action@v4
+      # - name: Find yarn cache
+      #   id: yarn-cache-path
+      #   run: echo "::set-output name=dir::$(yarn cache dir)"
+      # - name: Set up yarn cache
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: ~/.cache/yarn
+      #     key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-yarn-
+      # - run: yarn --prefer-offline
+      - uses: actions/checkout@v3
+      - name: Install Node.js
+        uses: actions/setup-node@v3
         with:
-          fetch-depth: 0
-      - uses: volta-cli/action@v4
-      - name: Find yarn cache
-        id: yarn-cache-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
-      - name: Set up yarn cache
-        uses: actions/cache@v2
+          node-version: 18.6.0
+      - uses: pnpm/action-setup@v2.2.4
+        name: Install pnpm
         with:
-          path: ~/.cache/yarn
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-      - run: yarn --prefer-offline
+          version: 7
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
       - name: Start realm servers
-        run: yarn start:test-realms &
+        run: pnpm start:base-and-host-test-realms &
         working-directory: realm-server
       - name: host test suite
-        run: yarn test:ember
+        run: pnpm test:ember
         working-directory: host
   realm-test:
     name: Realm Server Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      # - uses: actions/checkout@v2
+      #   with:
+      #     fetch-depth: 0
+      # - uses: volta-cli/action@v4
+      # - name: Find yarn cache
+      #   id: yarn-cache-path
+      #   run: echo "::set-output name=dir::$(yarn cache dir)"
+      # - name: Set up yarn cache
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: ~/.cache/yarn
+      #     key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-yarn-
+      # - run: yarn --prefer-offline
+      - uses: actions/checkout@v3
+      - name: Install Node.js
+        uses: actions/setup-node@v3
         with:
-          fetch-depth: 0
-      - uses: volta-cli/action@v4
-      - name: Find yarn cache
-        id: yarn-cache-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
-      - name: Set up yarn cache
-        uses: actions/cache@v2
+          node-version: 18.6.0
+      - uses: pnpm/action-setup@v2.2.4
+        name: Install pnpm
         with:
-          path: ~/.cache/yarn
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-      - run: yarn --prefer-offline
-      - name: Start realm servers
-        run: yarn start:test-realms &
+          version: 7
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Start base realm server
+        run: pnpm start:base-and-host-test-realms &
+        working-directory: realm-server
+      - run: sleep 10
+      - name: Start node test realm server
+        run: pnpm start:node-test-realm &
         working-directory: realm-server
       - name: realm server test suite
-        run: yarn test
+        run: pnpm test
         working-directory: realm-server
