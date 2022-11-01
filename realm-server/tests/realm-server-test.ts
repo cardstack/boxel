@@ -276,7 +276,7 @@ module("Realm Server", function (hooks) {
 
     assert.strictEqual(response.status, 200, "HTTP 200 status");
     let body = response.text.trim();
-    assert.strictEqual(
+    assert.codeEqual(
       body,
       compiledCard(`"bM7Gc0dx"` /* id that glimmer assigns for the block */),
       "module JS is correct"
