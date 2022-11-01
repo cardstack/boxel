@@ -24,7 +24,9 @@
     "ember-resources": "^4.4.0",
     "ember-template-imports": "^3.0.1"
   },
-  "scripts": {},
+  "scripts": {
+    "glint": "./node_modules/.bin/glint"
+  },
   "pnpm": {
     "overrides": {
       "jsesc": "^3.0.0",

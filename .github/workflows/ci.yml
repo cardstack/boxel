@@ -22,19 +22,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: "pnpm"
-      # - uses: volta-cli/action@v4
-      # - name: Find yarn cache
-      #   id: yarn-cache-path
-      #   run: echo "::set-output name=dir::$(yarn cache dir)"
-      # - name: Set up yarn cache
-      #   uses: actions/cache@v2
-      #   with:
-      #     path: ~/.cache/yarn
-      #     key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-yarn-
-      # - run: yarn --prefer-offline
-      - run: pnpm glint
+      - run: pnpm run glint
       - run: cd ./worker && pnpm tsc
       - run: cd ./realm-server && pnpm tsc
   host-test:
