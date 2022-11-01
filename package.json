@@ -26,8 +26,7 @@
     "ember-resources": "^4.4.0",
     "ember-source": "~4.2.0",
     "ember-template-imports": "^3.0.1",
-    "typescript": "^4.6.3",
-    "webpack": "^5.69.1"
+    "typescript": "^4.6.3"
   },
   "scripts": {},
   "pnpm": {
