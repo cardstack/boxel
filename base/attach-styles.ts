@@ -35,18 +35,18 @@ export const attachStyles = modifier<{
       element.classList.add(className);
     }
 
-    let current: Node | null = element;
+    let current: Node | DocumentOrShadowRoot | null = element;
     while (current) {
       if ("adoptedStyleSheets" in current) {
         let root = current;
-        root.adoptedStyleSheets = [...root.adoptedStyleSheets!, sheet];
+        root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
         return () => {
-          let newSheets = [...root.adoptedStyleSheets!];
-          newSheets.splice(root.adoptedStyleSheets!.indexOf(sheet), 1);
+          let newSheets = [...root.adoptedStyleSheets];
+          newSheets.splice(root.adoptedStyleSheets.indexOf(sheet), 1);
           root.adoptedStyleSheets = newSheets;
         };
       }
-      current = (current as Node).parentNode;
+      current = current.parentNode as Node | DocumentOrShadowRoot | null;
     }
     throw new Error(`bug: found no root to append styles into`);
   },

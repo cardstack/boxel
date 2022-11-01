@@ -17,5 +17,10 @@
   "scripts": {
     "prepare": "webpack",
     "start": "webpack --watch"
+  },
+  "dependenciesMeta": {
+    "@cardstack/runtime-common": {
+      "injected": true
+    }
   }
 }

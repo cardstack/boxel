@@ -2,12 +2,9 @@ import { contains, field, Component, Card } from 'https://cardstack.com/base/car
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
-import lodash from '//cdn.skypack.dev/lodash';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
 let imageURL = new URL('./logo.png', import.meta.url).href;
-let test = lodash.isObject({});
-console.log(`{} is object? ${test}`);
 
 let styles = initStyleSheet(`this { background-color: #ffcad4; border: 1px solid gray; border-radius: 10px; padding: 1rem; }`);
 

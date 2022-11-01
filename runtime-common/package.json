@@ -39,6 +39,9 @@
   "dependenciesMeta": {
     "@cardstack/ember-template-imports": {
       "injected": true
+    },
+    "@cardstack/runtime-common": {
+      "injected": true
     }
   }
 }

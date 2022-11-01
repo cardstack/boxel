@@ -12,16 +12,6 @@ declare module 'runtime-spike/templates/*' {
 
 declare global {
   function showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
-
-  interface CSSStyleSheet {
-    replaceSync(cssText: string): void;
-  }
-
-  // TODO: we needed to remove this during a typescript upgrade, but might want
-  // to re-add it
-  // interface Node {
-  //   adoptedStyleSheets?: CSSStyleSheet[];
-  // }
 }
 
 declare module '@ember/component' {

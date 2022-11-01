@@ -6,6 +6,7 @@
   "devDependencies": {
     "@cardstack/runtime-common": "workspace:*",
     "@glimmer/tracking": "^1.0.4",
+    "@glint/template": "^0.9.7",
     "@types/ember__helper": "^4.0.0",
     "@types/ember__modifier": "^4.0.1",
     "@types/ember__object": "^4.0.1",
@@ -14,7 +15,7 @@
     "ember-modifier": "^3.2.1",
     "tracked-built-ins": "^2.0.1"
   },
-  "devDependenciesMeta": {
+  "dependenciesMeta": {
     "@cardstack/runtime-common": {
       "injected": true
     }

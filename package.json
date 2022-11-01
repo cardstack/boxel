@@ -28,7 +28,8 @@
   "pnpm": {
     "overrides": {
       "jsesc": "^3.0.0",
-      "ember-concurrency": "2.2.1"
+      "ember-concurrency": "2.2.1",
+      "@types/eslint": "^8.0.0"
     },
     "patchedDependencies": {
       "magic-string@0.25.9": "patches/magic-string@0.25.9.patch"

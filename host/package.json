@@ -40,6 +40,7 @@
     "@glimmer/tracking": "^1.0.4",
     "@glint/core": "^0.9.1",
     "@glint/environment-ember-loose": "^0.9.1",
+    "@glint/template": "^0.9.7",
     "@types/ember-data": "^4.0.0",
     "@types/ember-data__adapter": "^4.0.0",
     "@types/ember-data__model": "^4.0.0",
