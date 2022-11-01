@@ -23,7 +23,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run glint
+      - run: pnpm glint
       - run: cd ./worker && pnpm tsc
       - run: cd ./realm-server && pnpm tsc
   host-test:
