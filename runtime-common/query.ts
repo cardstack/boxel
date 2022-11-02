@@ -2,7 +2,7 @@ import * as JSON from "json-typescript";
 import isEqual from "lodash/isEqual";
 import { assertJSONValue, assertJSONPrimitive } from "./json-validation";
 import qs from "qs";
-import { ExportedCardRef } from "@cardstack/runtime-common/search-index";
+import { ExportedCardRef } from "./search-index";
 
 export interface Query {
   filter?: Filter;

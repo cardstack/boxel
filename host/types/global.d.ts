@@ -12,13 +12,6 @@ declare module 'runtime-spike/templates/*' {
 
 declare global {
   function showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
-
-  interface CSSStyleSheet {
-    replaceSync(cssText: string): void;
-  }
-  interface Node {
-    adoptedStyleSheets?: CSSStyleSheet[];
-  }
 }
 
 declare module '@ember/component' {

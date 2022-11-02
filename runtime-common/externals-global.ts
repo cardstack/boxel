@@ -7,7 +7,7 @@
  */
 
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS = new Map();
-import * as runtime from "@cardstack/runtime-common";
+import * as runtime from "./index";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set(
   "@cardstack/runtime-common",
   runtime

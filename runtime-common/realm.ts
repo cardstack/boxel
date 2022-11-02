@@ -8,7 +8,7 @@ import {
   methodNotAllowed,
   badRequest,
   CardError,
-} from "@cardstack/runtime-common/error";
+} from "./error";
 import { formatRFC7231 } from "date-fns";
 import {
   isCardResource,
@@ -43,6 +43,7 @@ import typescriptPlugin from "@babel/plugin-transform-typescript";
 import emberConcurrencyAsyncPlugin from "ember-concurrency-async-plugin";
 import { Router } from "./router";
 import { parseQueryString } from "./query";
+//@ts-ignore service worker can't handle this
 import type { Readable } from "stream";
 
 export interface FileRef {
@@ -587,12 +588,19 @@ export class Realm {
       if (!isNode) {
         throw new Error(`cannot handle node-streams when not in node`);
       }
-      const chunks: Buffer[] = []; // Buffer is available from globalThis when in the node env
+
+      // we're in a node-only branch, so this code isn't relevant to the worker
+      // build, but the worker build will try to resolve the buffer polyfill and
+      // blow up sinc we don't include that library. So we're hiding from
+      // webpack.
+      const B = (globalThis as any)["Buffer"];
+
+      const chunks: typeof B[] = []; // Buffer is available from globalThis when in the node env, however tsc can't type check this for the worker
       // the types for Readable have not caught up to the fact these are async generators
       for await (const chunk of content as any) {
-        chunks.push(Buffer.from(chunk));
+        chunks.push(B.from(chunk));
       }
-      return Buffer.concat(chunks).toString("utf-8");
+      return B.concat(chunks).toString("utf-8");
     }
   }
 

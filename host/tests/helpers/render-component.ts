@@ -15,10 +15,7 @@ export async function renderComponent(C: ComponentLike) {
   await render(precompileTemplate(`<C/>`, { scope: () => ({ C }) }));
 }
 
-export async function renderCard(
-  card: Card,
-  format: Format
-): Promise<DocumentFragment> {
+export async function renderCard(card: Card, format: Format) {
   let api = await cardApi();
   await api.recompute(card);
   await renderComponent(api.getComponent(card, format));

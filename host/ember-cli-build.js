@@ -34,7 +34,6 @@ module.exports = function (defaults) {
           new MonacoWebpackPlugin(),
           new webpack.ProvidePlugin({
             process: 'process',
-            Buffer: 'buffer',
           }),
         ],
         resolve: {

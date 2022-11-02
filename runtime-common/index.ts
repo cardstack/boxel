@@ -53,7 +53,8 @@ export const baseCardRef: ExportedCardRef = {
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
-  Object.prototype.toString.call(globalThis.process) === "[object process]";
+  Object.prototype.toString.call((globalThis as any).process) ===
+  "[object process]";
 
 /* Any new externally consumed modules should be added here,
  * along with the exports from the modules that are consumed.

@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { ComponentLike } from '@glint/template';
+import type { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
 import { flatMap, startCase, merge } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';

@@ -67,31 +67,31 @@ module('Integration | Modifier | attach-styles', function (hooks) {
     let root = await renderCard(person, 'isolated');
 
     assert.shadowDOM('[data-test-name]').hasText('Jackie');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 0, 'no stylesheets attached');
+    assert.strictEqual(root.adoptedStyleSheets.length, 0, 'no stylesheets attached');
 
     await click('[data-test-button-1]');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 1, 'stylesheet 1 attached');
-    assert.ok( [...root.adoptedStyleSheets!][0].cssRules[0].cssText.includes('{ color: magenta; }'), 'sheet 1 rule matches');
+    assert.strictEqual(root.adoptedStyleSheets.length, 1, 'stylesheet 1 attached');
+    assert.ok( [...root.adoptedStyleSheets][0].cssRules[0].cssText.includes('{ color: magenta; }'), 'sheet 1 rule matches');
 
     await click('[data-test-button-1]');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 0, 'stylesheet 1 removed');
+    assert.strictEqual(root.adoptedStyleSheets.length, 0, 'stylesheet 1 removed');
 
     await click('[data-test-button-2]');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 1, 'stylesheet 2 attached');
+    assert.strictEqual(root.adoptedStyleSheets.length, 1, 'stylesheet 2 attached');
 
     await click('[data-test-button-2]');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 0, 'stylesheet 2 removed');
+    assert.strictEqual(root.adoptedStyleSheets.length, 0, 'stylesheet 2 removed');
 
     await click('[data-test-button-1]');
     await click('[data-test-button-2]');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 2, 'both stylesheets attached');
+    assert.strictEqual(root.adoptedStyleSheets.length, 2, 'both stylesheets attached');
 
     await click('[data-test-button-1]');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 1, 'stylesheet 1 removed');
-    assert.ok([...root.adoptedStyleSheets!][0].cssRules[0].cssText.includes('{ color: magenta; }'), 'sheet 2 rule matches');
+    assert.strictEqual(root.adoptedStyleSheets.length, 1, 'stylesheet 1 removed');
+    assert.ok([...root.adoptedStyleSheets][0].cssRules[0].cssText.includes('{ color: magenta; }'), 'sheet 2 rule matches');
 
     await click('[data-test-button-2]');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 0, 'no stylesheets remain');
+    assert.strictEqual(root.adoptedStyleSheets.length, 0, 'no stylesheets remain');
   });
 
   test('can correctly add and teardown constructable stylesheets in nested shadow roots', async function (assert) {
@@ -155,28 +155,28 @@ module('Integration | Modifier | attach-styles', function (hooks) {
     let root = await renderCard(post, 'isolated');
 
     assert.shadowDOM('[data-test-intro]').hasText('Latest Post');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 0, 'no stylesheets in root');
+    assert.strictEqual(root.adoptedStyleSheets.length, 0, 'no stylesheets in root');
 
     await click('[data-test-post-button]');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 1, 'post styles added');
-    assert.ok([...root.adoptedStyleSheets!][0].cssRules[0].cssText.includes('background-color: lightpink;'), 'first rule is correct');
-    assert.ok([...root.adoptedStyleSheets!][0].cssRules[1].cssText.includes(`p { color: blue; font-weight: bold; }`), 'second rule is correct');
+    assert.strictEqual(root.adoptedStyleSheets.length, 1, 'post styles added');
+    assert.ok([...root.adoptedStyleSheets][0].cssRules[0].cssText.includes('background-color: lightpink;'), 'first rule is correct');
+    assert.ok([...root.adoptedStyleSheets][0].cssRules[1].cssText.includes(`p { color: blue; font-weight: bold; }`), 'second rule is correct');
 
     await click('[data-test-author-button]');
 
-    assert.strictEqual(root.adoptedStyleSheets?.length, 2, 'author styles added');
-    assert.ok([...root.adoptedStyleSheets!][1].cssRules[0].cssText.includes('lightyellow'), 'author rules are correct');
-    let personRoot = shadowQuerySelector('[data-test-person]').parentNode!;
-    assert.strictEqual(personRoot.adoptedStyleSheets?.length, 1, 'embedded person styles are present only in person root');
-    assert.ok([...personRoot.adoptedStyleSheets!][0].cssRules[0].cssText.includes('lightblue'), 'embedded person rules are correct');
+    assert.strictEqual(root.adoptedStyleSheets.length, 2, 'author styles added');
+    assert.ok([...root.adoptedStyleSheets][1].cssRules[0].cssText.includes('lightyellow'), 'author rules are correct');
+    let personRoot = shadowQuerySelector('[data-test-person]').parentNode! as ShadowRoot;
+    assert.strictEqual(personRoot.adoptedStyleSheets.length, 1, 'embedded person styles are present only in person root');
+    assert.ok([...personRoot.adoptedStyleSheets][0].cssRules[0].cssText.includes('lightblue'), 'embedded person rules are correct');
 
     await click('[data-test-post-button]');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 1, 'post styles removed');
-    assert.ok([...root.adoptedStyleSheets!][0].cssRules[0].cssText.includes('lightyellow'), 'author styles remain');
-    assert.strictEqual(personRoot.adoptedStyleSheets?.length, 1, 'person styles remain');
-    assert.ok([...personRoot.adoptedStyleSheets!][0].cssRules[0].cssText.includes('lightblue'), 'person styles are correct');
+    assert.strictEqual(root.adoptedStyleSheets.length, 1, 'post styles removed');
+    assert.ok([...root.adoptedStyleSheets][0].cssRules[0].cssText.includes('lightyellow'), 'author styles remain');
+    assert.strictEqual(personRoot.adoptedStyleSheets.length, 1, 'person styles remain');
+    assert.ok([...personRoot.adoptedStyleSheets][0].cssRules[0].cssText.includes('lightblue'), 'person styles are correct');
 
     await click('[data-test-author-button]');
-    assert.strictEqual(root.adoptedStyleSheets?.length, 0, 'no stylesheets remain');
+    assert.strictEqual(root.adoptedStyleSheets.length, 0, 'no stylesheets remain');
   });
 });
