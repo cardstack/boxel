@@ -28,6 +28,34 @@ module.exports = function (defaults) {
               test: /\.ttf$/,
               type: 'asset',
             },
+            {
+              test: /\.ts$/,
+              exclude: /(node_modules)/,
+              use: {
+                loader: 'babel-loader',
+                options: {
+                  presets: [
+                    [
+                      '@babel/preset-env',
+                      { targets: { browsers: ['last 1 Chrome versions'] } },
+                    ],
+                  ],
+                  plugins: [
+                    [
+                      '@babel/plugin-transform-typescript',
+                      { allowDeclareFields: true },
+                    ],
+                    '@babel/plugin-proposal-optional-chaining',
+                    '@babel/plugin-proposal-nullish-coalescing-operator',
+                    ['@babel/plugin-proposal-decorators', { legacy: true }],
+                    [
+                      '@babel/plugin-proposal-class-properties',
+                      { loose: true },
+                    ],
+                  ],
+                },
+              },
+            },
           ],
         },
         plugins: [
