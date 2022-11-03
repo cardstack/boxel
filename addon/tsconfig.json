@@ -66,16 +66,16 @@
     // work with TypeScript.
     "baseUrl": ".",
     "paths": {
-      "boxel-motion": [
+      "@cardstack/boxel-motion": [
         "addon"
       ],
-      "boxel-motion/*": [
+      "@cardstack/boxel-motion/*": [
         "addon/*"
       ],
-      "boxel-motion/test-support": [
+      "@cardstack/boxel-motion/test-support": [
         "addon-test-support"
       ],
-      "boxel-motion/test-support/*": [
+      "@cardstack/boxel-motion/test-support/*": [
         "addon-test-support/*"
       ],
       "*": [
