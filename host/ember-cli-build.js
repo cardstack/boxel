@@ -7,7 +7,11 @@ const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
 module.exports = function (defaults) {
-  let app = new EmberApp(defaults, {});
+  let app = new EmberApp(defaults, {
+    'ember-cli-babel': {
+      enableTypeScriptTransform: true,
+    },
+  });
   return compatBuild(app, Webpack, {
     staticAddonTrees: true,
     staticAddonTestSupportTrees: true,
@@ -27,36 +31,6 @@ module.exports = function (defaults) {
             {
               test: /\.ttf$/,
               type: 'asset',
-            },
-            {
-              test: /\.ts$/,
-              exclude: /(node_modules)/,
-              use: {
-                loader: 'babel-loader',
-                options: {
-                  presets: [
-                    [
-                      '@babel/preset-env',
-                      { targets: { browsers: ['last 1 Chrome versions'] } },
-                    ],
-                  ],
-                  plugins: [
-                    'ember-template-imports/src/babel-plugin',
-                    [
-                      '@babel/plugin-transform-typescript',
-                      { allowDeclareFields: true },
-                    ],
-                    '@babel/plugin-proposal-optional-chaining',
-                    '@babel/plugin-proposal-nullish-coalescing-operator',
-                    ['@babel/plugin-proposal-decorators', { legacy: true }],
-                    ['@babel/plugin-proposal-private-methods', { loose: true }],
-                    [
-                      '@babel/plugin-proposal-class-properties',
-                      { loose: true },
-                    ],
-                  ],
-                },
-              },
             },
           ],
         },
