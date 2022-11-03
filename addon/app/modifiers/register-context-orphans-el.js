@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/modifiers/register-context-orphans-el';
+export { default } from '@cardstack/boxel-motion/modifiers/register-context-orphans-el';

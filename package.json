@@ -2,7 +2,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/cardstack/animations-experiment"
+    "url": "https://github.com/cardstack/boxel-motion"
   },
   "workspaces": [
     "addon",

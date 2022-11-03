@@ -1,0 +1,184 @@
+/* styles for animations/components/accordion/index.css */
+._Accordion_uk9m7z {
+  margin: 0;
+  padding: 0;
+  border: 2px solid hsl(0, 0%, 82%);
+  border-radius: 7px;
+  width: 20em;
+}
+
+._Accordion_uk9m7z._focus_uk9m7z {
+  border-color: hsl(216, 94%, 73%);
+}
+
+._Accordion_uk9m7z._focus_uk9m7z h3 {
+  background-color: hsl(0, 0%, 97%);
+}
+
+._Accordion_uk9m7z > * + * {
+  border-top: 1px solid hsl(0, 0%, 82%);
+}
+
+/* styles for animations/components/accordion/panel/index.css */
+._Accordion_1kdpbt {
+  margin: 0;
+  padding: 0;
+  border: 2px solid hsl(0, 0%, 82%);
+  border-radius: 7px;
+  width: 20em;
+}
+
+._Accordion_1kdpbt._focus_1kdpbt {
+  border-color: hsl(216, 94%, 73%);
+}
+
+._accordion-panel-animation-context_1kdpbt, ._accordion-panel-body_1kdpbt {
+  overflow-y: hidden;
+}
+
+._accordion-panel-header_1kdpbt {
+  background-color: hsl(0, 0%, 97%);
+  border-top: 1px solid hsl(0, 0%, 82%);
+  margin: 0;
+  padding: 0;
+}
+
+._Accordion-trigger_1kdpbt {
+  background: none;
+  color: hsl(0, 0%, 13%);
+  display: block;
+  font-size: 1rem;
+  font-weight: normal;
+  margin: 0;
+  padding: 1em 1.5em;
+  position: relative;
+  text-align: left;
+  width: 100%;
+  outline: none;
+}
+
+._Accordion-trigger_1kdpbt:focus,
+._Accordion-trigger_1kdpbt:hover {
+  background: hsl(216, 94%, 94%);
+}
+
+._accordion-panel-header_1kdpbt:first-child ._Accordion-trigger_1kdpbt {
+  border-radius: 5px 5px 0 0;
+}
+
+._accordion-panel-header_1kdpbt button {
+  border-style: none;
+}
+
+._accordion-panel-header_1kdpbt button::-moz-focus-inner {
+  border: 0;
+}
+
+._Accordion-title_1kdpbt {
+  display: block;
+  pointer-events: none;
+  border: transparent 2px solid;
+  border-radius: 5px;
+  padding: 0.25em;
+  outline: none;
+}
+
+._Accordion-trigger_1kdpbt:focus ._Accordion-title_1kdpbt {
+  border-color: hsl(216, 94%, 73%);
+}
+
+._Accordion-icon_1kdpbt {
+  border: solid hsl(0, 0%, 62%);
+  border-width: 0 2px 2px 0;
+  height: 0.5rem;
+  pointer-events: none;
+  position: absolute;
+  right: 2em;
+  top: 50%;
+  transform: translateY(-60%) rotate(45deg);
+  width: 0.5rem;
+}
+
+._Accordion-trigger_1kdpbt:focus ._Accordion-icon_1kdpbt,
+._Accordion-trigger_1kdpbt:hover ._Accordion-icon_1kdpbt {
+  border-color: hsl(216, 94%, 73%);
+}
+
+._Accordion-trigger_1kdpbt[aria-expanded="true"] ._Accordion-icon_1kdpbt {
+  transform: translateY(-50%) rotate(-135deg);
+}
+
+._Accordion-panel_1kdpbt {
+  margin: 0;
+  padding: 1em 1.5em;
+  overflow: hidden;
+}
+
+fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+input {
+  border: 1px solid hsl(0, 0%, 62%);
+  border-radius: 0.3em;
+  display: block;
+  font-size: inherit;
+  padding: 0.3em 0.5em;
+}
+
+/* styles for animations/components/motion-card/styles.css */
+._card_6ir69e {
+  background: orange;
+  border-radius: 15px;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid black;
+  overflow: hidden;
+  position: relative;
+}
+
+._content_6ir69e {
+  padding: 40px 50px;
+  color: #fff;
+}
+
+._content_6ir69e p {
+  font-size: 16px;
+}
+
+._footer_6ir69e {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 50px;
+  background: white;
+}
+
+/* styles for animations/styles/app.css */
+
+/* styles for animations/styles/motion-study/details.css */
+._container_r6m2yf {
+  padding: 25px;
+}
+
+._card_r6m2yf {
+  height: calc(100vh - 50px);
+}
+
+._title_r6m2yf {
+  font-size: 32px;
+  color: #FFF;
+}
+
+/* styles for animations/styles/motion-study/index.css */
+._grid_1mnhn6 {
+  display: grid;
+  grid-auto-rows: 200px;
+  grid-template-columns: calc(50% - 25px) calc(50% - 25px);
+  grid-gap: 50px;
+
+  padding: 100px;
+}

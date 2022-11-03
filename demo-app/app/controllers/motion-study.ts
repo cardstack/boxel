@@ -1,10 +1,10 @@
 import Controller from '@ember/controller';
-import { Changeset } from 'animations-experiment/models/changeset';
-import magicMove from 'animations-experiment/transitions/magic-move';
-import { SpriteType } from 'animations-experiment/models/sprite';
-import fade from 'animations-experiment/transitions/fade';
-import runAnimations from 'animations-experiment/utils/run-animations';
-import SpringBehavior from 'animations-experiment/behaviors/spring';
+import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
+import { SpriteType } from '@cardstack/boxel-motion/models/sprite';
+import fade from '@cardstack/boxel-motion/transitions/fade';
+import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 
 export default class MotionStudy extends Controller {
   async transition(changeset: Changeset): Promise<void> {

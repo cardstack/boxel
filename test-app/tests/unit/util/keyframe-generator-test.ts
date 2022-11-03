@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import KeyframeGenerator from 'animations-experiment/utils/keyframe-generator';
+import KeyframeGenerator from '@cardstack/boxel-motion/utils/keyframe-generator';
 
 module('Unit | Util | KeyframeGenerator', function () {
   module('generate', function () {

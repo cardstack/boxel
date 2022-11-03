@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/behaviors/linear';
+export { default } from '@cardstack/boxel-motion/behaviors/linear';

@@ -1,8 +1,8 @@
 import Motion, { BaseOptions } from './base';
 import Sprite from '../models/sprite';
-import LinearBehavior from 'animations-experiment/behaviors/linear';
-import BaseValue from 'animations-experiment/value';
-import Behavior from 'animations-experiment/behaviors/base';
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import BaseValue from '@cardstack/boxel-motion/value';
+import Behavior from '@cardstack/boxel-motion/behaviors/base';
 
 const DEFAULT_DURATION = 300;
 const DEFAULT_BEHAVIOR = LinearBehavior;

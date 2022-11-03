@@ -1,15 +1,15 @@
 import Sprite, {
   SpriteIdentifier,
   SpriteType,
-} from 'animations-experiment/models/sprite';
+} from '@cardstack/boxel-motion/models/sprite';
 import { assert } from '@ember/debug';
 import SpriteTree, {
   IContext,
   ISpriteModifier,
   SpriteTreeNode,
-} from 'animations-experiment/models/sprite-tree';
-import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
-import { IntermediateSprite } from 'animations-experiment/services/animations';
+} from '@cardstack/boxel-motion/models/sprite-tree';
+import ContextAwareBounds from '@cardstack/boxel-motion/models/context-aware-bounds';
+import { IntermediateSprite } from '@cardstack/boxel-motion/services/animations';
 
 export type SpritesForArgs = {
   type?: SpriteType | undefined;

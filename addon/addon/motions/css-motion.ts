@@ -1,9 +1,9 @@
 import Motion, { BaseOptions } from './base';
 import Sprite from '../models/sprite';
 import { assert } from '@ember/debug';
-import BaseValue, { Value } from 'animations-experiment/value';
-import LinearBehavior from 'animations-experiment/behaviors/linear';
-import Behavior from 'animations-experiment/behaviors/base';
+import BaseValue, { Value } from '@cardstack/boxel-motion/value';
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import Behavior from '@cardstack/boxel-motion/behaviors/base';
 import { dasherize } from '@ember/string';
 
 const DEFAULT_DURATION = 300;

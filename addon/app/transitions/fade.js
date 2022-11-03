@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/transitions/fade';
+export { default } from '@cardstack/boxel-motion/transitions/fade';

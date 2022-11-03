@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/behaviors/spring';
+export { default } from '@cardstack/boxel-motion/behaviors/spring';

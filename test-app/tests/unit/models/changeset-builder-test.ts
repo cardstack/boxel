@@ -2,15 +2,17 @@ import { module, test } from 'qunit';
 import SpriteTree, {
   IContext,
   ISpriteModifier,
-} from 'animations-experiment/models/sprite-tree';
+} from '@cardstack/boxel-motion/models/sprite-tree';
 import {
   Changeset,
   ChangesetBuilder,
-} from 'animations-experiment/models/changeset';
-import Sprite, { SpriteIdentifier } from 'animations-experiment/models/sprite';
-import { IntermediateSprite } from 'animations-experiment/services/animations';
-import { CopiedCSS } from 'animations-experiment/utils/measurement';
-import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
+} from '@cardstack/boxel-motion/models/changeset';
+import Sprite, {
+  SpriteIdentifier,
+} from '@cardstack/boxel-motion/models/sprite';
+import { IntermediateSprite } from '@cardstack/boxel-motion/services/animations';
+import { CopiedCSS } from '@cardstack/boxel-motion/utils/measurement';
+import ContextAwareBounds from '@cardstack/boxel-motion/models/context-aware-bounds';
 
 class MockAnimationContext implements IContext {
   id: string | undefined;

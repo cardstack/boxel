@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/motions/css-motion';
+export { default } from '@cardstack/boxel-motion/motions/css-motion';

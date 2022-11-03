@@ -1,7 +1,7 @@
 import { assert } from '@ember/debug';
-import { SpriteType } from 'animations-experiment/models/sprite';
-import { Changeset } from 'animations-experiment/models/changeset';
-import LinearBehavior from 'animations-experiment/behaviors/linear';
+import { SpriteType } from '@cardstack/boxel-motion/models/sprite';
+import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 
 // FADE OUT : ----------
 // TRANSLATE:     ----------

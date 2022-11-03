@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/models/sprite';
+export { default } from '@cardstack/boxel-motion/models/sprite';

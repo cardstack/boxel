@@ -1,11 +1,11 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
-import { Changeset } from 'animations-experiment/models/changeset';
-import Sprite, { SpriteType } from 'animations-experiment/models/sprite';
-import runAnimations from 'animations-experiment/utils/run-animations';
+import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import Sprite, { SpriteType } from '@cardstack/boxel-motion/models/sprite';
+import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
 
-//import LinearBehavior from 'animations-experiment/behaviors/linear';
-import SpringBehavior from 'animations-experiment/behaviors/spring';
+//import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 
 export default class AccordionPanel extends Component {
   @action async resizePanels(changeset: Changeset) {

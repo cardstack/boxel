@@ -1,11 +1,11 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import runAnimations from 'animations-experiment/utils/run-animations';
-import { Changeset } from 'animations-experiment/models/changeset';
-import magicMove from 'animations-experiment/transitions/magic-move';
+import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
+import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
 import { COMPACT_CARD_STATES } from './card/compact';
-import Sprite, { SpriteType } from 'animations-experiment/models/sprite';
+import Sprite, { SpriteType } from '@cardstack/boxel-motion/models/sprite';
 
 type ExistingCards = 'outline' | 'gallery' | 'form';
 
