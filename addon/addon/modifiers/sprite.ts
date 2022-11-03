@@ -11,15 +11,19 @@ import { once } from '@ember/runloop';
 import AnimationsService from '../services/animations';
 
 interface SpriteModifierArgs {
-  Args: {
-    Named: {
-      id?: string;
-      role?: string;
-    };
+  Positional: unknown[];
+  Named: {
+    id?: string;
+    role?: string;
   };
 }
 
-export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
+export interface SpriteModifierSignature {
+  Element: HTMLElement;
+  Args: SpriteModifierArgs;
+}
+
+export default class SpriteModifier extends Modifier<SpriteModifierSignature> {
   id: string | null = null;
   role: string | null = null;
   lastBounds: DOMRect | undefined;

@@ -23,7 +23,7 @@ export interface IContext {
   appendOrphan(spriteOrElement: Sprite): void;
   clearOrphans(): void;
   args: {
-    use?(changeset: Changeset): AnimationDefinition;
+    use?(changeset: Changeset): AnimationDefinition | Promise<void>;
     id?: string;
   };
 }

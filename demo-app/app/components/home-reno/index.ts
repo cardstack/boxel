@@ -9,7 +9,11 @@ import Sprite, { SpriteType } from '@cardstack/boxel-motion/models/sprite';
 
 type ExistingCards = 'outline' | 'gallery' | 'form';
 
-export default class HomeReno extends Component {
+interface Signature {
+  Element: HTMLDivElement;
+}
+
+export default class HomeReno extends Component<Signature> {
   @tracked currentExpandedItem: ExistingCards | null = null;
   @tracked currentMaximizedItem: ExistingCards | null = null;
   @tracked secondaryItemExpanded = false;
@@ -110,5 +114,11 @@ export default class HomeReno extends Component {
 
   @action minimize() {
     this.currentMaximizedItem = null;
+  }
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    HomeReno: typeof HomeReno;
   }
 }

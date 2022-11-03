@@ -18,17 +18,22 @@ const { VOLATILE_TAG, consumeTag } =
   Ember.__loader.require('@glimmer/validator');
 
 interface AnimationContextArgs {
-  Args: {
-    id?: string;
-    use: ((changeset: Changeset) => AnimationDefinition) | undefined;
-  };
+  id?: string;
+  use:
+    | ((changeset: Changeset) => AnimationDefinition | Promise<void>)
+    | undefined;
+}
+
+interface Signature {
+  Element: HTMLDivElement;
+  Args: AnimationContextArgs;
   Blocks: {
-    default: [];
+    default: [AnimationContextComponent];
   };
 }
 
 export default class AnimationContextComponent
-  extends Component<AnimationContextArgs>
+  extends Component<Signature>
   implements IContext
 {
   @service declare animations: AnimationsService;

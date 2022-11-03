@@ -4,34 +4,34 @@
   <p>
     <label>
       {{!-- template-lint-disable no-action --}}
-      <input type="checkbox" checked={{this.showContentBeforeContext}} onclick={{action (mut this.showContentBeforeContext) value="target.checked"}}>
+      <input type="checkbox" checked={{this.showContentBeforeContext}} {{on 'click' (pick "target.checked" (fn (mut this.showContentBeforeContext)))}}>
       Show content before AnimationContext 1
     </label>
   </p>
   <p>
     <label>
       {{!-- template-lint-disable no-action --}}
-      <input type="checkbox" checked={{this.showContentBefore}} onclick={{action (mut this.showContentBefore) value="target.checked"}}>
+      <input type="checkbox" checked={{this.showContentBefore}} {{on 'click' (pick "target.checked" (fn (mut this.showContentBefore)))}}>
       Show content before sprites in AnimationContext 1
     </label>
   </p>
   <p>
     <label>
       {{!-- template-lint-disable no-action --}}
-      <input type="checkbox" checked={{this.showSpriteA}} onclick={{action (mut this.showSpriteA) value="target.checked"}}>
+      <input type="checkbox" checked={{this.showSpriteA}} {{on 'click' (pick "target.checked" (fn (mut this.showSpriteA)))}}>
       Include Sprite A
     </label>
     |
     <label>
       {{!-- template-lint-disable no-action --}}
-      <input type="checkbox" checked={{this.spriteAPositionBottom}} onclick={{action (mut this.spriteAPositionBottom) value="target.checked"}}>
+      <input type="checkbox" checked={{this.spriteAPositionBottom}} {{on 'click' (pick "target.checked" (fn (mut this.spriteAPositionBottom)))}}>
       Sprite A appears at bottom
     </label>
   </p>
   <p>
     <label>
       {{!-- template-lint-disable no-action --}}
-      <input type="checkbox" checked={{this.showSpriteB}} onclick={{action (mut this.showSpriteB) value="target.checked"}}>
+      <input type="checkbox" checked={{this.showSpriteB}} {{on 'click' (pick "target.checked" (fn (mut this.showSpriteB)))}}>
       Include Sprite B
     </label>
   </p>
@@ -46,14 +46,14 @@
   <p>
     <label>
       {{!-- template-lint-disable no-action --}}
-      <input type="checkbox" checked={{this.showContentAfter}} onclick={{action (mut this.showContentAfter) value="target.checked"}}>
+      <input type="checkbox" checked={{this.showContentAfter}} {{on 'click' (pick "target.checked" (fn (mut this.showContentAfter)))}}>
       Show content after sprite
     </label>
   </p>
   <p>
     <label>
       {{!-- template-lint-disable no-action --}}
-      <input type="checkbox" checked={{this.contextHasPadding}} onclick={{action (mut this.contextHasPadding) value="target.checked"}}>
+      <input type="checkbox" checked={{this.contextHasPadding}} {{on 'click' (pick "target.checked" (fn (mut this.contextHasPadding)))}}>
       AnimationContext has padding
     </label>
   </p>
