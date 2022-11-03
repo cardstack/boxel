@@ -1,8 +1,8 @@
 import { Changeset } from '../models/changeset';
 import { assert } from '@ember/debug';
-import LinearBehavior from 'animations-experiment/behaviors/linear';
-import approximatelyEqual from 'animations-experiment/utils/approximately-equal';
-import Behavior from 'animations-experiment/behaviors/base';
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import approximatelyEqual from '@cardstack/boxel-motion/utils/approximately-equal';
+import Behavior from '@cardstack/boxel-motion/behaviors/base';
 
 export type TransitionOptions = {
   behavior?: Behavior;

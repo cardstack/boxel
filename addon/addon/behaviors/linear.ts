@@ -4,7 +4,7 @@ import Behavior, {
   Frame,
   timeToFrame,
 } from '../behaviors/base';
-import instantaneousVelocity from 'animations-experiment/utils/instantaneous-velocity';
+import instantaneousVelocity from '@cardstack/boxel-motion/utils/instantaneous-velocity';
 
 export default class LinearBehavior implements Behavior {
   toFrames(options: EasingToFramesArgument): Frame[] {

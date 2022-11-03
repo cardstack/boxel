@@ -1,7 +1,6 @@
-# animations
+# Boxel Motion
 
-This README outlines the details of collaborating on this Ember application.
-A short introduction of this app could easily go here.
+This addon is designed to supply animation capabilities to Cardstack's Ember applications and potentially other Ember apps too.
 
 ## Prerequisites
 
@@ -9,15 +8,15 @@ You will need the following things properly installed on your computer.
 
 * [Git](https://git-scm.com/)
 * [Node.js](https://nodejs.org/)
-* [Yarn](https://yarnpkg.com/)
+* [pnpm](https://pnpm.io/)
 * [Ember CLI](https://ember-cli.com/)
 * [Google Chrome](https://google.com/chrome/)
 
 ## Installation
 
 * `git clone <repository-url>` this repository
-* `cd animations`
-* `yarn install`
+* `cd boxel-motion`
+* `pnpm i`
 
 ## Running / Development
 
@@ -36,9 +35,9 @@ Make use of the many generators for code, try `ember help generate` for more det
 
 ### Linting
 
-* `yarn lint:hbs`
-* `yarn lint:js`
-* `yarn lint:js --fix`
+* `pnpm lint:hbs`
+* `pnpm lint:js`
+* `pnpm lint:js --fix`
 
 ### Building
 

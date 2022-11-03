@@ -1,9 +1,9 @@
 import Controller from '@ember/controller';
-import { Changeset } from 'animations-experiment/models/changeset';
+import { Changeset } from '@cardstack/boxel-motion/models/changeset';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import LinearBehavior from 'animations-experiment/behaviors/linear';
-import { AnimationDefinition } from 'animations-experiment/models/orchestration';
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 
 export default class DoubleRenderController extends Controller {
   @tracked count = 0;

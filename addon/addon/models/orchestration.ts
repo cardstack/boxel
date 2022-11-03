@@ -1,6 +1,6 @@
-import { Frame } from 'animations-experiment/behaviors/base';
+import { Frame } from '@cardstack/boxel-motion/behaviors/base';
 import Sprite, { MotionOptions, MotionProperty } from './sprite';
-import Behavior from 'animations-experiment/behaviors/base';
+import Behavior from '@cardstack/boxel-motion/behaviors/base';
 
 interface RowFragment {
   startColumn: number;

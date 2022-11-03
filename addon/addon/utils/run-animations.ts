@@ -1,5 +1,5 @@
-import { SpriteAnimation } from 'animations-experiment/models/sprite-animation';
-import Sprite from 'animations-experiment/models/sprite';
+import { SpriteAnimation } from '@cardstack/boxel-motion/models/sprite-animation';
+import Sprite from '@cardstack/boxel-motion/models/sprite';
 
 /**
  * Utility to compile & run all animations that were setup for a given changeset.

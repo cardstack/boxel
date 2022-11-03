@@ -1,1 +1,1 @@
-export { Changeset } from 'animations-experiment/models/changeset';
+export { Changeset } from '@cardstack/boxel-motion/models/changeset';

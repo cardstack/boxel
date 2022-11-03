@@ -1,11 +1,11 @@
 import Controller from '@ember/controller';
-import Sprite, { SpriteType } from 'animations-experiment/models/sprite';
-import { Changeset } from 'animations-experiment/models/changeset';
-import magicMove from 'animations-experiment/transitions/magic-move';
+import Sprite, { SpriteType } from '@cardstack/boxel-motion/models/sprite';
+import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
 import { assert } from '@ember/debug';
-import ContextAwareBounds from 'animations-experiment/models/context-aware-bounds';
-import runAnimations from 'animations-experiment/utils/run-animations';
-import SpringBehavior from 'animations-experiment/behaviors/spring';
+import ContextAwareBounds from '@cardstack/boxel-motion/models/context-aware-bounds';
+import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 
 const springBehavior = new SpringBehavior({
   overshootClamping: true,

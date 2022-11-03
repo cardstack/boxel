@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
-import BaseValue, { Value } from 'animations-experiment/value/index';
-import LinearBehavior from 'animations-experiment/behaviors/linear';
+import BaseValue, { Value } from '@cardstack/boxel-motion/value/index';
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 
 module('Unit | BaseValue | Index', function () {
   module('keyframe generation with linear behavior', function () {

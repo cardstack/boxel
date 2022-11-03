@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/components/animation-context';
+export { default } from '@cardstack/boxel-motion/components/animation-context';

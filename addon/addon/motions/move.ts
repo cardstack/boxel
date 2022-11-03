@@ -1,10 +1,10 @@
 import Motion, { BaseOptions } from './base';
 import Sprite, { SpriteType } from '../models/sprite';
 import { BoundsDelta } from '../models/context-aware-bounds';
-import SpringBehavior from 'animations-experiment/behaviors/spring';
-import BaseValue from 'animations-experiment/value';
-import Behavior from 'animations-experiment/behaviors/base';
-import { BoundsVelocity } from 'animations-experiment/utils/measurement';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import BaseValue from '@cardstack/boxel-motion/value';
+import Behavior from '@cardstack/boxel-motion/behaviors/base';
+import { BoundsVelocity } from '@cardstack/boxel-motion/utils/measurement';
 
 const DEFAULT_DURATION = 300;
 const DEFAULT_BEHAVIOR = SpringBehavior;

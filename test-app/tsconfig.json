@@ -62,11 +62,11 @@
     "inlineSources": true,
     "baseUrl": ".",
     "paths": {
-      "animations-experiment": [
-        "node_modules/animations-experiment/addon"
+      "@cardstack/boxel-motion": [
+        "node_modules/@cardstack/boxel-motion/addon"
       ],
-      "animations-experiment/*": [
-        "node_modules/animations-experiment/addon/*"
+      "@cardstack/boxel-motion/*": [
+        "node_modules/@cardstack/boxel-motion/addon/*"
       ],
       "test-app/tests/*": [
         "tests/*"

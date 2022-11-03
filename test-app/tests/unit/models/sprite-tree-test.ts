@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import Sprite from 'animations-experiment/models/sprite';
-import { CopiedCSS } from 'animations-experiment/utils/measurement';
+import Sprite from '@cardstack/boxel-motion/models/sprite';
+import { CopiedCSS } from '@cardstack/boxel-motion/utils/measurement';
 import SpriteTree, {
   IContext,
   ISpriteModifier,
   SpriteTreeNode,
-} from 'animations-experiment/models/sprite-tree';
+} from '@cardstack/boxel-motion/models/sprite-tree';
 import { module, test } from 'qunit';
 
 class MockAnimationContext implements IContext {

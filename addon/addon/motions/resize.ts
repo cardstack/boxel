@@ -1,9 +1,9 @@
 import Motion, { BaseOptions } from './base';
 import Sprite from '../models/sprite';
-import Behavior from 'animations-experiment/behaviors/base';
-import { BoundsVelocity } from 'animations-experiment/utils/measurement';
-import BaseValue from 'animations-experiment/value';
-import SpringBehavior from 'animations-experiment/behaviors/spring';
+import Behavior from '@cardstack/boxel-motion/behaviors/base';
+import { BoundsVelocity } from '@cardstack/boxel-motion/utils/measurement';
+import BaseValue from '@cardstack/boxel-motion/value';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 
 const DEFAULT_DURATION = 300;
 const DEFAULT_BEHAVIOR = SpringBehavior;

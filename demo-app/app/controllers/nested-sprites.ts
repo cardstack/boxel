@@ -1,8 +1,8 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
-import { Changeset } from 'animations-experiment/models/changeset';
-import magicMove from 'animations-experiment/transitions/magic-move';
-import runAnimations from 'animations-experiment/utils/run-animations';
+import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
+import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
 
 export default class NestedSprites extends Controller {
   @tracked moveOuter = false;

@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/motions/resize';
+export { default } from '@cardstack/boxel-motion/motions/resize';

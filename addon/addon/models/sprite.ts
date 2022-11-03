@@ -9,14 +9,17 @@ import {
 } from '../utils/measurement';
 import { SpriteAnimation } from './sprite-animation';
 import Motion from '../motions/base';
-import { Opacity, OpacityOptions } from 'animations-experiment/motions/opacity';
+import {
+  Opacity,
+  OpacityOptions,
+} from '@cardstack/boxel-motion/motions/opacity';
 import { Move, MoveOptions } from '../motions/move';
 import { Resize, ResizeOptions } from '../motions/resize';
 import { CssMotion, CssMotionOptions } from '../motions/css-motion';
-import { FPS } from 'animations-experiment/behaviors/base';
+import { FPS } from '@cardstack/boxel-motion/behaviors/base';
 import { assert } from '@ember/debug';
-import SpringBehavior from 'animations-experiment/behaviors/spring';
-import LinearBehavior from 'animations-experiment/behaviors/linear';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 
 export class SpriteIdentifier {
   id: string | null;

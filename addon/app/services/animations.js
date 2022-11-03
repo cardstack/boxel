@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/services/animations';
+export { default } from '@cardstack/boxel-motion/services/animations';

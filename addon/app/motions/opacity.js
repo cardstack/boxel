@@ -1,1 +1,1 @@
-export { default } from 'animations-experiment/motions/opacity';
+export { default } from '@cardstack/boxel-motion/motions/opacity';

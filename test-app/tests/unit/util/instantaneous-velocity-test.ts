@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import instantaneousVelocity from 'animations-experiment/utils/instantaneous-velocity';
+import instantaneousVelocity from '@cardstack/boxel-motion/utils/instantaneous-velocity';
 
 module('Unit | Util | instantaneousVelocity', function () {
   test('calculates the instantaneous velocity in units per second (60FPS) based on the surrounding frames', function (assert) {

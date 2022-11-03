@@ -1,4 +1,4 @@
-import { FPS, Frame } from 'animations-experiment/behaviors/base';
+import { FPS, Frame } from '@cardstack/boxel-motion/behaviors/base';
 
 /**
  * Calculates an approximation of the instantaneous velocity (per second) for the given frame.

@@ -11,7 +11,7 @@ import { taskFor } from 'ember-concurrency-ts';
 import Sprite, { SpriteIdentifier } from '../models/sprite';
 import Motion from '../motions/base';
 import { SpriteAnimation } from '../models/sprite-animation';
-import { CopiedCSS } from 'animations-experiment/utils/measurement';
+import { CopiedCSS } from '@cardstack/boxel-motion/utils/measurement';
 import { assert } from '@ember/debug';
 import {
   all,
@@ -19,7 +19,7 @@ import {
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
-import { ChangesetBuilder } from 'animations-experiment/models/changeset';
+import { ChangesetBuilder } from '@cardstack/boxel-motion/models/changeset';
 
 export type AnimateFunction = (
   sprite: Sprite,

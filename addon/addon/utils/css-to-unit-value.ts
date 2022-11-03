@@ -1,4 +1,4 @@
-import { Value } from 'animations-experiment/value';
+import { Value } from '@cardstack/boxel-motion/value';
 
 export type UnitValue = {
   value: number;

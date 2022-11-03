@@ -108,6 +108,7 @@ importers:
   demo-app:
     specifiers:
       '@babel/core': ^7.18.10
+      '@cardstack/boxel-motion': workspace:^1.0.0
       '@ember/optional-features': ^2.0.0
       '@ember/test-helpers': ^2.8.1
       '@glimmer/component': ^1.1.2
@@ -138,7 +139,6 @@ importers:
       '@types/rsvp': ^4.0.4
       '@typescript-eslint/eslint-plugin': ^5.33.1
       '@typescript-eslint/parser': ^5.33.1
-      animations-experiment: workspace:^1.0.0
       broccoli-asset-rev: ^3.0.0
       ember-auto-import: ^2.4.2
       ember-cli: ~4.6.0
@@ -179,6 +179,7 @@ importers:
       webpack: ^5.74.0
     devDependencies:
       '@babel/core': 7.18.10
+      '@cardstack/boxel-motion': link:../addon
       '@ember/optional-features': 2.0.0
       '@ember/test-helpers': 2.8.1_bfwx5527ud67pz7vm5nr6nmdqq
       '@glimmer/component': 1.1.2_@babel+core@7.18.10
@@ -209,7 +210,6 @@ importers:
       '@types/rsvp': 4.0.4
       '@typescript-eslint/eslint-plugin': 5.33.1_x7odfvjd3i24ajk3p6cf3dj5pm
       '@typescript-eslint/parser': 5.33.1_hxadhbs2xogijvk7vq4t2azzbu
-      animations-experiment: link:../addon
       broccoli-asset-rev: 3.0.0
       ember-auto-import: 2.4.2_webpack@5.74.0
       ember-cli: 4.6.0
@@ -252,6 +252,7 @@ importers:
   test-app:
     specifiers:
       '@babel/core': ^7.17.10
+      '@cardstack/boxel-motion': ^1.0.0
       '@ember/optional-features': ^2.0.0
       '@ember/test-helpers': ^2.6.0
       '@embroider/test-setup': ^1.5.0
@@ -282,7 +283,6 @@ importers:
       '@types/rsvp': ^4.0.4
       '@typescript-eslint/eslint-plugin': ^5.21.0
       '@typescript-eslint/parser': ^5.21.0
-      animations-experiment: ^1.0.0
       broccoli-asset-rev: ^3.0.0
       ember-auto-import: ^2.4.1
       ember-cli: ~4.3.0
@@ -319,6 +319,7 @@ importers:
       webpack: ^5.70.0
     devDependencies:
       '@babel/core': 7.18.10
+      '@cardstack/boxel-motion': link:../addon
       '@ember/optional-features': 2.0.0
       '@ember/test-helpers': 2.8.1_p4naesa4u3ac5j65i4q4qol7iy
       '@embroider/test-setup': 1.8.3
@@ -349,7 +350,6 @@ importers:
       '@types/rsvp': 4.0.4
       '@typescript-eslint/eslint-plugin': 5.33.1_x7odfvjd3i24ajk3p6cf3dj5pm
       '@typescript-eslint/parser': 5.33.1_hxadhbs2xogijvk7vq4t2azzbu
-      animations-experiment: link:../addon
       broccoli-asset-rev: 3.0.0
       ember-auto-import: 2.4.2_webpack@5.74.0
       ember-cli: 4.3.0

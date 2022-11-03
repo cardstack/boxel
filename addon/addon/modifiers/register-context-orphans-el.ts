@@ -1,4 +1,4 @@
-import AnimationContextComponent from 'animations-experiment/components/animation-context';
+import AnimationContextComponent from '@cardstack/boxel-motion/components/animation-context';
 import { modifier } from 'ember-modifier';
 
 export default modifier(
