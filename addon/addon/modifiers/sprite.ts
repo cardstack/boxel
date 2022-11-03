@@ -11,10 +11,11 @@ import { once } from '@ember/runloop';
 import AnimationsService from '../services/animations';
 
 interface SpriteModifierArgs {
-  positional: [];
-  named: {
-    id: string | null;
-    role: string | null;
+  Args: {
+    Named: {
+      id?: string;
+      role?: string;
+    };
   };
 }
 
@@ -31,8 +32,8 @@ export default class SpriteModifier extends Modifier<SpriteModifierArgs> {
   @service declare animations: AnimationsService;
 
   didReceiveArguments(): void {
-    this.id = this.args.named.id;
-    this.role = this.args.named.role;
+    this.id = this.args.named.id ?? null;
+    this.role = this.args.named.role ?? null;
     this.animations.registerSpriteModifier(this);
     this.captureSnapshot();
   }

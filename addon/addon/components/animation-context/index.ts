@@ -10,6 +10,7 @@ import AnimationsService from '@cardstack/boxel-motion/services/animations';
 import { assert } from '@ember/debug';
 import { getDocumentPosition } from '@cardstack/boxel-motion/utils/measurement';
 import { IContext } from '@cardstack/boxel-motion/models/sprite-tree';
+import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 
 const { VOLATILE_TAG, consumeTag } =
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -17,8 +18,13 @@ const { VOLATILE_TAG, consumeTag } =
   Ember.__loader.require('@glimmer/validator');
 
 interface AnimationContextArgs {
-  id: string | undefined;
-  use: ((changeset: Changeset) => Promise<void>) | undefined;
+  Args: {
+    id?: string;
+    use: ((changeset: Changeset) => AnimationDefinition) | undefined;
+  };
+  Blocks: {
+    default: [];
+  };
 }
 
 export default class AnimationContextComponent
