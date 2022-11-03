@@ -1,10 +1,6 @@
 import { Frame } from 'animations-experiment/behaviors/base';
-import Sprite, { MotionProperty } from './sprite';
-import {
-  MotionDefinition,
-  ParallelAnimationTimeline,
-  SequentialAnimationTimeline,
-} from './transition-runner';
+import Sprite, { MotionOptions, MotionProperty } from './sprite';
+import Behavior from 'animations-experiment/behaviors/base';
 
 interface RowFragment {
   startColumn: number;
@@ -95,77 +91,46 @@ export class OrchestrationMatrix {
     return new OrchestrationMatrix();
   }
 
-  static fromTimeline(
-    timeline: SequentialAnimationTimeline | ParallelAnimationTimeline
-  ) {
-    if ((timeline as SequentialAnimationTimeline).sequence) {
-      return OrchestrationMatrix.fromSequentialTimeline(
-        timeline as SequentialAnimationTimeline
-      );
-    } else if ((timeline as ParallelAnimationTimeline).parallel) {
-      return OrchestrationMatrix.fromParallelTimeline(
-        timeline as ParallelAnimationTimeline
-      );
+  static from(
+    animationDefinitionPart: AnimationTimeline | MotionDefinition
+  ): OrchestrationMatrix {
+    if (isAnimationTimeline(animationDefinitionPart)) {
+      if (animationDefinitionPart.type === 'sequence') {
+        return OrchestrationMatrix.fromSequentialTimeline(
+          animationDefinitionPart
+        );
+      } else {
+        return OrchestrationMatrix.fromParallelTimeline(
+          animationDefinitionPart
+        );
+      }
     } else {
-      throw new Error(
-        'Expected a timeline that was sequential or parallel, got neither'
-      );
+      return OrchestrationMatrix.fromMotionDefinition(animationDefinitionPart);
     }
   }
 
   static fromSequentialTimeline(
-    timeline: SequentialAnimationTimeline
+    timeline: AnimationTimeline
   ): OrchestrationMatrix {
     let timelineMatrix = OrchestrationMatrix.empty();
-    let submatrices = [];
-    for (let item of timeline.sequence) {
-      let submatrix: OrchestrationMatrix;
-      if ((item as SequentialAnimationTimeline).sequence) {
-        submatrix = OrchestrationMatrix.fromSequentialTimeline(
-          item as SequentialAnimationTimeline
-        );
-      } else if ((item as ParallelAnimationTimeline).parallel) {
-        submatrix = OrchestrationMatrix.fromParallelTimeline(
-          item as ParallelAnimationTimeline
-        );
-      } else {
-        submatrix = OrchestrationMatrix.fromMotionDefinition(
-          item as MotionDefinition
-        );
-      }
-
-      submatrices.push(submatrix);
+    for (let item of timeline.animations) {
+      timelineMatrix.add(
+        timelineMatrix.totalColumns,
+        OrchestrationMatrix.from(item)
+      );
     }
-
-    for (let submatrix of submatrices) {
-      timelineMatrix.add(timelineMatrix.totalColumns, submatrix);
-    }
-
     return timelineMatrix;
   }
 
   static fromParallelTimeline(
-    timeline: ParallelAnimationTimeline
+    timeline: AnimationTimeline
   ): OrchestrationMatrix {
     let timelineMatrix = OrchestrationMatrix.empty();
     let submatrices = [];
     // maxLength is for anchoring to the end. not using yet
     // let maxLength = 0;
-    for (let item of timeline.parallel) {
-      let submatrix: OrchestrationMatrix;
-      if ((item as SequentialAnimationTimeline).sequence) {
-        submatrix = OrchestrationMatrix.fromSequentialTimeline(
-          item as SequentialAnimationTimeline
-        );
-      } else if ((item as ParallelAnimationTimeline).parallel) {
-        submatrix = OrchestrationMatrix.fromParallelTimeline(
-          item as ParallelAnimationTimeline
-        );
-      } else {
-        submatrix = OrchestrationMatrix.fromMotionDefinition(
-          item as MotionDefinition
-        );
-      }
+    for (let item of timeline.animations) {
+      let submatrix = OrchestrationMatrix.from(item);
 
       // maxLength = Math.max(maxLength, submatrix.totalColumns);
       submatrices.push(submatrix);
@@ -174,6 +139,7 @@ export class OrchestrationMatrix {
     for (let submatrix of submatrices) {
       timelineMatrix.add(0, submatrix);
     }
+
     return timelineMatrix;
   }
 
@@ -204,4 +170,30 @@ export class OrchestrationMatrix {
 
     return new OrchestrationMatrix(rows, maxLength);
   }
+}
+
+
+export interface AnimationDefinition {
+  timeline: AnimationTimeline;
+}
+
+export type AnimationTimeline = {
+  type: 'sequence' | 'parallel';
+  animations: (MotionDefinition | AnimationTimeline)[];
+};
+
+export interface MotionDefinition {
+  sprites: Set<Sprite>;
+  properties: {
+    [k in MotionProperty]?: MotionOptions | Record<string, never>;
+  };
+  timing: {
+    behavior: Behavior;
+    duration?: number;
+    delay?: number;
+  };
+}
+
+function isAnimationTimeline(item: unknown): item is AnimationTimeline {
+  return Boolean((item as AnimationTimeline).type);
 }

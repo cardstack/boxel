@@ -1,43 +1,11 @@
 import { task } from 'ember-concurrency';
 import { Changeset } from '../models/changeset';
-import Sprite, {
-  MotionOptions,
-  MotionProperty,
-  SpriteType,
-} from '../models/sprite';
+import Sprite, { SpriteType } from '../models/sprite';
 import { assert } from '@ember/debug';
 import { IContext } from './sprite-tree';
 import { SpriteAnimation } from 'animations-experiment/models/sprite-animation';
-import Behavior, { FPS } from 'animations-experiment/behaviors/base';
-import { OrchestrationMatrix } from './orchestration-matrix';
-
-export interface AnimationDefinition {
-  timeline: AnimationTimeline;
-}
-
-export type AnimationTimeline =
-  | SequentialAnimationTimeline
-  | ParallelAnimationTimeline;
-export interface SequentialAnimationTimeline {
-  sequence: (MotionDefinition | AnimationTimeline)[];
-  parallel: never;
-}
-export interface ParallelAnimationTimeline {
-  parallel: (MotionDefinition | AnimationTimeline)[];
-  sequence: never;
-}
-
-export interface MotionDefinition {
-  sprites: Set<Sprite>;
-  properties: {
-    [k in MotionProperty]: MotionOptions | Record<string, never>;
-  };
-  timing: {
-    behavior: Behavior;
-    duration?: number;
-    delay?: number;
-  };
-}
+import { FPS } from 'animations-experiment/behaviors/base';
+import { AnimationDefinition, OrchestrationMatrix } from './orchestration';
 
 export default class TransitionRunner {
   animationContext: IContext;
@@ -50,12 +18,8 @@ export default class TransitionRunner {
   setupAnimations(definition: AnimationDefinition): SpriteAnimation[] {
     let timeline = definition.timeline;
     assert('No timeline present in AnimationDefinition', Boolean(timeline));
-    assert(
-      'Timeline can have either a sequence or a parallel definition, not both',
-      !(timeline.sequence && timeline.parallel)
-    );
 
-    let orchestrationMatrix = OrchestrationMatrix.fromTimeline(timeline);
+    let orchestrationMatrix = OrchestrationMatrix.from(timeline);
     let result: SpriteAnimation[] = [];
     for (let [sprite, keyframes] of orchestrationMatrix
       .getKeyframes((prev, incoming) => {
