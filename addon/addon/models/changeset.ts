@@ -5,7 +5,6 @@ import Sprite, {
 import { assert } from '@ember/debug';
 import SpriteTree, {
   IContext,
-  GetDescendantNodesOptions,
   ISpriteModifier,
   SpriteTreeNode,
 } from 'animations-experiment/models/sprite-tree';

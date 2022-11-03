@@ -81,14 +81,14 @@ export class SpriteTreeNode {
     parentNode: SpriteTreeNode | SpriteTree
   );
   constructor(
-    model: any,
+    model: ISpriteModifier | IContext,
     nodeType: SpriteTreeNodeType,
     parentNode: SpriteTreeNode | SpriteTree
   ) {
     if (nodeType === SpriteTreeNodeType.Context) {
-      this.contextModel = model;
+      this.contextModel = model as IContext;
     } else if (nodeType === SpriteTreeNodeType.Sprite) {
-      this.spriteModel = model;
+      this.spriteModel = model as ISpriteModifier;
     } else {
       throw new Error('Passed model is not a context or sprite');
     }

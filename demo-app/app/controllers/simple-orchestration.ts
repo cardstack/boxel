@@ -2,7 +2,7 @@ import Controller from '@ember/controller';
 import { Changeset } from 'animations-experiment/models/changeset';
 import LinearBehavior from 'animations-experiment/behaviors/linear';
 import SpringBehavior from 'animations-experiment/behaviors/spring';
-import { AnimationDefinition } from 'animations-experiment/models/transition-runner';
+import { AnimationDefinition } from 'animations-experiment/models/orchestration';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 
@@ -23,7 +23,8 @@ export default class SimpleOrchestration extends Controller {
 
     return {
       timeline: {
-        sequence: [
+        type: 'sequence',
+        animations: [
           {
             sprites: keptSprites,
             properties: {
@@ -55,7 +56,7 @@ export default class SimpleOrchestration extends Controller {
           },
         ],
       },
-    } as unknown as AnimationDefinition;
+    };
   }
 
   parallel(changeset: Changeset): AnimationDefinition {
@@ -63,7 +64,8 @@ export default class SimpleOrchestration extends Controller {
 
     return {
       timeline: {
-        parallel: [
+        type: 'parallel',
+        animations: [
           {
             sprites: keptSprites,
             properties: {
@@ -75,7 +77,8 @@ export default class SimpleOrchestration extends Controller {
             },
           },
           {
-            sequence: [
+            type: 'sequence',
+            animations: [
               {
                 sprites: keptSprites,
                 properties: {
@@ -99,7 +102,7 @@ export default class SimpleOrchestration extends Controller {
           },
         ],
       },
-    } as unknown as AnimationDefinition;
+    };
   }
 }
 
