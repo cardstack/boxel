@@ -11,11 +11,7 @@ import { taskFor } from 'ember-concurrency-ts';
 import Sprite, { SpriteIdentifier } from '../models/sprite';
 import Motion from '../motions/base';
 import { SpriteAnimation } from '../models/sprite-animation';
-import {
-  CopiedCSS,
-  copyComputedStyle,
-  getDocumentPosition,
-} from 'animations-experiment/utils/measurement';
+import { CopiedCSS } from 'animations-experiment/utils/measurement';
 import { assert } from '@ember/debug';
 import {
   all,

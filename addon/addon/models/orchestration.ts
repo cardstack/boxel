@@ -172,7 +172,6 @@ export class OrchestrationMatrix {
   }
 }
 
-
 export interface AnimationDefinition {
   timeline: AnimationTimeline;
 }

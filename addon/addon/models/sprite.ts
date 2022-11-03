@@ -13,7 +13,7 @@ import { Opacity, OpacityOptions } from 'animations-experiment/motions/opacity';
 import { Move, MoveOptions } from '../motions/move';
 import { Resize, ResizeOptions } from '../motions/resize';
 import { CssMotion, CssMotionOptions } from '../motions/css-motion';
-import { FPS, Frame } from 'animations-experiment/behaviors/base';
+import { FPS } from 'animations-experiment/behaviors/base';
 import { assert } from '@ember/debug';
 import SpringBehavior from 'animations-experiment/behaviors/spring';
 import LinearBehavior from 'animations-experiment/behaviors/linear';

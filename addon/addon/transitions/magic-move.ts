@@ -29,7 +29,6 @@ export default function (
       s.initialBounds && s.finalBounds
     );
     let initialBounds = s.initialBounds.relativeToParent;
-    let initialStyles = s.initialComputedStyle;
     let initialVelocity = s.initialBounds.velocity;
 
     // TODO "oldInitialBounds" when interrupting to calculate Tween duration proportionally
@@ -46,11 +45,9 @@ export default function (
       );
 
       initialBounds = counterpart.initialBounds.relativeToParent;
-      initialStyles = counterpart.initialComputedStyle;
     } else {
       // This is the same Sprite moving elsewhere
       initialBounds = s.initialBounds.relativeToParent;
-      initialStyles = s.initialComputedStyle;
     }
 
     assert('kept sprite should always have finalBounds', s.finalBounds);
@@ -81,11 +78,5 @@ export default function (
         delay,
       });
     }
-
-    // TODO: we don't support this yet
-    /*s.setupAnimation('style', {
-        property: 'backgroundColor',
-        from: initialStyles['backgroundColor'],
-      });*/
   }
 }
