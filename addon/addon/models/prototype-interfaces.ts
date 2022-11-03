@@ -118,7 +118,12 @@ interface AnimationParticipant {
   //
   // REMOVED
   // If there is a previous domRef and no current domRef
-  spriteState: 'REMOVED' | 'INSERTED' | 'KEPT';
+  //
+  // INVALID
+  // If there is a previous domRef and it's not in the BEFORE_RENDER state, it's invalid
+  // If there is a current domRef and it's not in the AFTER_RENDER state, it's invalid
+  // With this, we can create a UIState class that prevents us from having stale data (maybe overkill?)
+  spriteState: 'REMOVED' | 'INSERTED' | 'KEPT' | 'INVALID';
   /**
    * Anytime a sprite modifier with a new identifier is introduced, a new AnimationParticipant
    * is created that keeps track of its state across renders.
@@ -169,6 +174,7 @@ interface AnimationParticipant {
       animation?: Animation;
       // Relationships to the DOM. Will be used to check for hierarchy/relationships
       domRef: DOMRefNode;
+      _stage: 'CLEARED' | 'BEFORE_RENDER' | 'AFTER_RENDER';
     };
     // This is what becomes a counterpart. It's also the one we refer to for a removed sprite
     previous?: {
@@ -179,6 +185,7 @@ interface AnimationParticipant {
       animation?: Animation;
       // Relationships to the DOM. Will be used to check for hierarchy/relationships
       domRef: DOMRefNode;
+      _stage: 'CLEARED' | 'BEFORE_RENDER';
     };
   };
   clearSnapshots(): void;
