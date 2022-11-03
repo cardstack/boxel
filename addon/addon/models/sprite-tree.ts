@@ -3,6 +3,7 @@ import { CopiedCSS } from '../utils/measurement';
 import { formatTreeString, TreeNode } from '../utils/format-tree';
 import Sprite, { SpriteIdentifier, SpriteType } from './sprite';
 import { Changeset } from './changeset';
+import { AnimationDefinition } from './orchestration';
 
 export interface IContext {
   id: string | undefined;
@@ -22,7 +23,7 @@ export interface IContext {
   appendOrphan(spriteOrElement: Sprite): void;
   clearOrphans(): void;
   args: {
-    use?(changeset: Changeset): Promise<void>;
+    use?(changeset: Changeset): AnimationDefinition;
     id?: string;
   };
 }
