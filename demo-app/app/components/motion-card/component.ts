@@ -3,11 +3,17 @@ import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import RouterService from '@ember/routing/router-service';
 
-interface MotionCardArgs {
-  identifier: number;
+interface Signature {
+  Element: HTMLDivElement;
+  Args: {
+    identifier: string;
+  };
+  Blocks: {
+    default: [];
+  };
 }
 
-export default class MotionCard extends Component<MotionCardArgs> {
+export default class MotionCard extends Component<Signature> {
   @service router!: RouterService;
 
   @action
@@ -19,5 +25,11 @@ export default class MotionCard extends Component<MotionCardArgs> {
     } else {
       this.router.transitionTo('motion-study.index');
     }
+  }
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    MotionCard: typeof MotionCard;
   }
 }

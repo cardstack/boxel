@@ -1,8 +1,10 @@
+{{! @glint-expect-error: TODO: migrate this.transition to return AnimationDefinition }}
 <AnimationContext @use={{this.transition}} @id="outer" local-class="home-reno-list">
   <HomeReno::Card::Maximized>
     This is the entrypoint.
 
     {{!-- <div local-class="compact-list"> --}}
+    {{! @glint-expect-error: TODO: migrate this.insideTransition to return AnimationDefinition }}
     <AnimationContext @use={{this.insideTransition}} @id="inner" local-class="compact-list">
       <HomeReno::Outline::Compact
         @state={{this.compactCardState.outline}}

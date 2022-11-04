@@ -9,6 +9,7 @@
     </p>
 
     <p class="text-lg mt-16 mb-8">1 ball sprite</p>
+    {{! @glint-expect-error: TODO: migrate this.transition to return AnimationDefinition }}
     <AnimationContext @use={{this.transition}}>
       <div local-class="grid">
         {{#each this.ballIds as |id|}}
@@ -18,7 +19,7 @@
               class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
               style="top: 0; left: 0"
               {{on 'click' (fn (mut this.ballGoWhere) 'A')}}
-              {{on-key 'a'}}
+              {{on-key-mod 'a'}}
             >
               A
             </button>
@@ -27,7 +28,7 @@
               class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
               type="button"
               {{on 'click' (fn (mut this.ballGoWhere) 'B')}}
-              {{on-key 'b'}}
+              {{on-key-mod 'b'}}
             >
               B
             </button>
@@ -36,7 +37,7 @@
               class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
               type="button"
               {{on 'click' (fn (mut this.ballGoWhere) 'C')}}
-              {{on-key 'c'}}
+              {{on-key-mod 'c'}}
             >
               C
             </button>
@@ -45,7 +46,7 @@
               class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
               type="button"
               {{on 'click' (fn (mut this.ballGoWhere) 'D')}}
-              {{on-key 'd'}}
+              {{on-key-mod 'd'}}
             >
               D
             </button>
@@ -59,6 +60,7 @@
     </AnimationContext>
 
     <p class="text-lg mt-16">4 ball sprites</p>
+    {{! @glint-expect-error: TODO: migrate this.transition to return AnimationDefinition }}
     <AnimationContext @use={{this.transition}} class="mt-8">
       <div local-class="grid">
         {{#each this.ballIds as |id|}}
@@ -68,7 +70,7 @@
               class="absolute rounded-full w-12 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
               style="top: 0; left: 0"
               {{on 'click' (fn (mut this.ballGoWhere) 'A')}}
-              {{on-key 'a'}}
+              {{on-key-mod 'a'}}
             >
               {{#if (eq this.ballGoWhere 'A')}}
                 <div
@@ -83,7 +85,7 @@
               class="absolute rounded-full w-24 h-24 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
               type="button"
               {{on 'click' (fn (mut this.ballGoWhere) 'B')}}
-              {{on-key 'b'}}
+              {{on-key-mod 'b'}}
             >
               {{#if (eq this.ballGoWhere 'B')}}
                 <div
@@ -98,7 +100,7 @@
               class="absolute rounded-full w-24 h-12 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
               type="button"
               {{on 'click' (fn (mut this.ballGoWhere) 'C')}}
-              {{on-key 'c'}}
+              {{on-key-mod 'c'}}
             >
               {{#if (eq this.ballGoWhere 'C')}}
                 <div
@@ -113,7 +115,7 @@
               class="absolute rounded-full w-12 h-24 border-2 p-2 cursor-pointer focus:outline-none focus:shadow-outline"
               type="button"
               {{on 'click' (fn (mut this.ballGoWhere) 'D')}}
-              {{on-key 'd'}}
+              {{on-key-mod 'd'}}
             >
               {{#if (eq this.ballGoWhere 'D')}}
                 <div

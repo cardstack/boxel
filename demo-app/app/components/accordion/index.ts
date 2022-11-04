@@ -2,7 +2,11 @@ import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
-export default class Accordion extends Component {
+interface Signature {
+  Element: HTMLDivElement;
+}
+
+export default class Accordion extends Component<Signature> {
   items = [
     {
       id: 'pi',
@@ -100,5 +104,11 @@ export default class Accordion extends Component {
     }
 
     event.preventDefault();
+  }
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    Accordion: typeof Accordion;
   }
 }

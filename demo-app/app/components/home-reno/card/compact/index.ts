@@ -6,12 +6,25 @@ export const COMPACT_CARD_STATES = {
   MAXIMIZED_PLACEHOLDER: 'MAXIMIZED_PLACEHOLDER',
 } as const;
 
-interface CompactCardArgs {
-  state: typeof COMPACT_CARD_STATES[keyof typeof COMPACT_CARD_STATES];
-  toggleExpansion: () => void;
-  maximize: () => void;
+interface Signature {
+  Element: HTMLDivElement | HTMLButtonElement;
+  Args: {
+    state: typeof COMPACT_CARD_STATES[keyof typeof COMPACT_CARD_STATES];
+    toggleExpansion: (ev: Event) => void;
+    maximize?: (ev: Event) => void;
+    identifier: string;
+  };
+  Blocks: {
+    default: [];
+  };
 }
 
-export default class CompactCard extends Component<CompactCardArgs> {
+export default class HomeRenoCardCompact extends Component<Signature> {
   STATES = COMPACT_CARD_STATES;
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    'HomeReno::Card::Compact': typeof HomeRenoCardCompact;
+  }
 }

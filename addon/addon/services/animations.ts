@@ -233,7 +233,7 @@ export default class AnimationsService extends Service {
   async maybeTransition(): Promise<TaskInstance<void>> {
     return taskFor(this.maybeTransitionTask)
       .perform()
-      .catch((error) => {
+      .catch((error: Error) => {
         if (!didCancel(error)) {
           console.error(error);
           throw error;

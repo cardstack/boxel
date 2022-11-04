@@ -7,7 +7,18 @@ import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
 //import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 
-export default class AccordionPanel extends Component {
+interface Signature {
+  Element: HTMLDivElement;
+  Args: {
+    id: string;
+    expanded: boolean;
+    trigger: (id: string) => void;
+    title: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    fields: any[];
+  };
+}
+export default class AccordionPanel extends Component<Signature> {
   @action async resizePanels(changeset: Changeset) {
     let behavior = new SpringBehavior({ overshootClamping: true });
     let duration = behavior instanceof SpringBehavior ? undefined : 320;
@@ -72,5 +83,11 @@ export default class AccordionPanel extends Component {
     }
 
     await runAnimations(spritesToAnimate);
+  }
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    'Accordion::Panel': typeof AccordionPanel;
   }
 }

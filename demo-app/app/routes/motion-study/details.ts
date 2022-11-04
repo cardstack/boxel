@@ -5,7 +5,7 @@ interface Params {
 }
 
 export default class MotionStudyDetails extends Route {
-  model(params: Params): number {
-    return Number(params.id);
+  model(params: Params): string {
+    return params.id;
   }
 }
