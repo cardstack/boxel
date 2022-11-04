@@ -7,7 +7,7 @@ import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
 import { baseRealm, } from "@cardstack/runtime-common";
 import { Loader } from '@cardstack/runtime-common/loader';
-import type { ExportedCardRef, } from "@cardstack/runtime-common";
+import type { ExportedCardRef } from "@cardstack/runtime-common";
 import type { SignatureFor, primitive as primitiveType, queryableValue as queryableValueType } from "https://cardstack.com/base/card-api";
 import { shadowQuerySelector, shadowQuerySelectorAll, fillIn, click } from '../../helpers/shadow-assert';
 
@@ -170,7 +170,7 @@ module('Integration | card-basics', function (hooks) {
   test('can set the ID for an unsaved card', async function(assert) {
     let { field, contains, Card } = cardApi;
     let { default: StringCard} = string;
-    
+
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
@@ -184,7 +184,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('throws when setting the ID for a saved card', async function (assert) {
-    let { field, contains, Card, createFromSerialized } = cardApi;
+    let { field, contains, Card } = cardApi;
     let { default: StringCard} = string;
 
     class Person extends Card {
@@ -193,23 +193,11 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Person });
 
     // deserialize a card with an ID to mark it as "saved"
-    let savedCard = await createFromSerialized({
-      data: {
-        id: `${testRealmURL}Person/mango`,
-        attributes: {
-          firstName: 'Mango'
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
-            name: 'Person'
-          }
-        }
-      }
-    }, undefined);
+    let card = new Person({ firstName: 'Mango' });
+    await saveCard(card, `${testRealmURL}Person/mango`);
 
     try {
-      savedCard.id = 'boom';
+      card.id = 'boom';
       throw new Error(`expected exception not thrown`);
     } catch (err: any) {
       assert.ok(err.message.match(/cannot assign a value to the field 'id' on the saved card/), 'exception thrown when setting ID of saved card');
@@ -988,7 +976,7 @@ module('Integration | card-basics', function (hooks) {
 
     await renderCard(card, 'edit');
     assert.shadowDOM('[data-test-item]').doesNotExist();
-    
+
     await click('[data-test-add-new]');
     await fillIn('[data-test-field="title"] input', "Tail Wagging Basics");
     assert.shadowDOM('[data-test-item]').exists({ count: 1 });

@@ -19,7 +19,6 @@ import {
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
   type Card,
-  type CardAPI,
 } from "./index";
 import merge from "lodash/merge";
 import cloneDeep from "lodash/cloneDeep";
@@ -45,6 +44,8 @@ import { Router } from "./router";
 import { parseQueryString } from "./query";
 //@ts-ignore service worker can't handle this
 import type { Readable } from "stream";
+// @ts-ignore tsc doesn't understand .gts files
+type CardAPI = typeof import("https://cardstack.com/base/card-api");
 
 export interface FileRef {
   path: LocalPath;
@@ -621,7 +622,7 @@ export class Realm {
     let api = await this.searchIndex.loader.import<CardAPI>(
       "https://cardstack.com/base/card-api"
     );
-    let card: Card = await api.createFromSerialized(doc, relativeTo, {
+    let card: Card = await api.createFromSerialized(doc.data, doc, relativeTo, {
       loader: this.searchIndex.loader,
     });
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds

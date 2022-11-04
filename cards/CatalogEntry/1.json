@@ -1,5 +1,6 @@
 {
   "data": {
+    "type": "card",
     "attributes": {
       "title": "Person",
       "description": "Catalog entry for Person card",
@@ -14,11 +15,14 @@
         "isHuman": false
       }
     },
+    "relationships": {
+      "demo.pet": {
+        "links": {
+          "self": "http://local-realm/Pet/1"
+        }
+      }
+    },
     "meta": {
-      "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
-      },
       "fields": {
         "demo": {
           "adoptsFrom": {
@@ -26,8 +30,11 @@
             "name": "Person"
           }
         }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
       }
-    },
-    "type": "card"
+    }
   }
 }

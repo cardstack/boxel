@@ -34,7 +34,7 @@ module('Integration | card-editor', function (hooks) {
     if (!result || result.type === 'error') {
       throw new Error(`cannot get instance ${url} from the index: ${result ? result.error.detail : 'not found'}`);
     }
-    let card = await createFromSerialized<typeof Card>(result.doc, undefined, {
+    let card = await createFromSerialized<typeof Card>(result.doc.data, result.doc, undefined, {
       loader: Loader.getLoaderFor(createFromSerialized)
     });
     await recompute(card, { loadFields: true });
@@ -294,7 +294,7 @@ module('Integration | card-editor', function (hooks) {
     await click('.format-button.isolated');
     assert.shadowDOM('[data-test-isolated-firstName]').hasText('Van Gogh');
   });
-  
+
   test('can choose a card for a linksTo field that has an existing value', async function(assert) {
     let card = await loadCard(`${testRealmURL}Person/hassan`);
     await renderComponent(
@@ -305,7 +305,7 @@ module('Integration | card-editor', function (hooks) {
         </template>
       }
     );
-    
+
     assert.shadowDOM('[data-test-pet="Mango"]').exists();
     assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
 
@@ -336,7 +336,7 @@ module('Integration | card-editor', function (hooks) {
     assert.shadowDOM('[data-test-empty-link]').exists();
     assert.shadowDOM('button[data-test-remove-card]').exists();
     assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', true, 'remove button is disabled');
-    
+
     await click('[data-test-choose-card]');
     await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
     await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
@@ -357,7 +357,7 @@ module('Integration | card-editor', function (hooks) {
         </template>
       }
     );
-    
+
     assert.shadowDOM('[data-test-pet="Mango"]').exists();
     assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
 

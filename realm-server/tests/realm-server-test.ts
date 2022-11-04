@@ -364,23 +364,22 @@ module("Realm Server", function (hooks) {
     let api = await loader.import<any>("https://cardstack.com/base/card-api");
     let module = await loader.import<any>(`${testRealmHref}person`);
     module.Person;
-    let person = await api.createFromSerialized(
-      {
-        data: {
-          attributes: {
-            firstName: "Mango",
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmHref}person`,
-              name: "Person",
-            },
+    let doc = {
+      data: {
+        attributes: {
+          firstName: "Mango",
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmHref}person`,
+            name: "Person",
           },
         },
       },
-      undefined,
-      { loader }
-    );
+    };
+    let person = await api.createFromSerialized(doc.data, doc, undefined, {
+      loader,
+    });
     assert.strictEqual(person.firstName, "Mango", "card data is correct");
   });
 
@@ -389,23 +388,22 @@ module("Realm Server", function (hooks) {
     let api = await loader.import<any>("https://cardstack.com/base/card-api");
     let module = await loader.import<any>(`${testRealm2Href}person`);
     module.Person;
-    let person = await api.createFromSerialized(
-      {
-        data: {
-          attributes: {
-            firstName: "Mango",
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealm2Href}person`,
-              name: "Person",
-            },
+    let doc = {
+      data: {
+        attributes: {
+          firstName: "Mango",
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealm2Href}person`,
+            name: "Person",
           },
         },
       },
-      undefined,
-      { loader }
-    );
+    };
+    let person = await api.createFromSerialized(doc.data, doc, undefined, {
+      loader,
+    });
     assert.strictEqual(person.firstName, "Mango", "card data is correct");
   });
 
@@ -415,23 +413,22 @@ module("Realm Server", function (hooks) {
     let module = await loader.import<any>(`${testRealm2Href}card-ref-test`);
     module.TestCard;
     let ref = { module: `${testRealm2Href}person`, name: "Person" };
-    let testCard = await api.createFromSerialized(
-      {
-        data: {
-          attributes: {
-            ref,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealm2Href}card-ref-test`,
-              name: "TestCard",
-            },
+    let doc = {
+      data: {
+        attributes: {
+          ref,
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealm2Href}card-ref-test`,
+            name: "TestCard",
           },
         },
       },
-      undefined,
-      { loader }
-    );
+    };
+    let testCard = await api.createFromSerialized(doc.data, doc, undefined, {
+      loader,
+    });
     assert.deepEqual(testCard.ref, ref, "card data is correct");
   });
 });

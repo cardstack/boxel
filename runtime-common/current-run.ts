@@ -11,7 +11,6 @@ import {
   maxLinkDepth,
   type NotLoaded,
   type Card,
-  type CardAPI,
 } from ".";
 import { Kind, Realm, getExportedCardContext } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
@@ -32,6 +31,8 @@ import type {
   CardResource,
   SingleCardDocument,
 } from "./search-index";
+// @ts-ignore tsc doesn't understand .gts files
+type CardAPI = typeof import("https://cardstack.com/base/card-api");
 
 // Forces callers to use URL (which avoids accidentally using relative url
 // strings without a base)
@@ -342,7 +343,9 @@ export class CurrentRun {
   ): Promise<void> {
     let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
     try {
-      await api.recompute(card, { loadFields: stack.length < maxLinkDepth });
+      await api.recompute(card, {
+        loadFields: stack.length < maxLinkDepth ? true : undefined,
+      });
     } catch (err: any) {
       let notLoadedErr: NotLoaded | undefined;
       if (
@@ -394,6 +397,7 @@ export class CurrentRun {
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
       let card = (await api.createFromSerialized(
+        resource,
         { data: { ...resource, ...{ id: instanceURL.href } } },
         moduleURL,
         {
@@ -406,7 +410,7 @@ export class CurrentRun {
         this.#realmPaths.fileURL(path).href,
         stack
       );
-      let data: SingleCardDocument = api.serializeCard(card, {
+      let data = api.serializeCard(card, {
         includeComputeds: true,
       });
       let maybeDoc = merge(data, {
@@ -414,7 +418,7 @@ export class CurrentRun {
           id: instanceURL.href,
           meta: { lastModified: lastModified },
         },
-      });
+      }) as SingleCardDocument;
       doc = maybeDoc;
       searchData = await api.searchDoc(card);
     } catch (err: any) {

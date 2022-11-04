@@ -68,24 +68,23 @@ export default class CatalogEntryEditor extends Component<Signature> {
 
   @action
   async createEntry(): Promise<void> {
-    this.newEntry = await this.cardService.createFromSerialized({
-      data: {
-        attributes: {
-          title: this.args.ref.name,
-          description: `Catalog entry for ${this.args.ref.name} card`,
-          ref: this.args.ref,
-          demo: undefined
-        },
-        meta: {
-          adoptsFrom: this.catalogEntryRef,
-          fields: {
-            demo: {
-              adoptsFrom: this.args.ref
-            }
+    let resource = {
+      attributes: {
+        title: this.args.ref.name,
+        description: `Catalog entry for ${this.args.ref.name} card`,
+        ref: this.args.ref,
+        demo: undefined
+      },
+      meta: {
+        adoptsFrom: this.catalogEntryRef,
+        fields: {
+          demo: {
+            adoptsFrom: this.args.ref
           }
         }
       }
-    });
+    };
+    this.newEntry = await this.cardService.createFromSerialized(resource, { data: resource });
   }
 
   @action

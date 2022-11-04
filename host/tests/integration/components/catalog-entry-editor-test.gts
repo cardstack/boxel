@@ -385,4 +385,103 @@ module('Integration | catalog-entry-editor', function (hooks) {
       'file contents are correct'
     );
   });
+
+  test('it can render catalog entry for card with linksTo field', async function (assert) {
+    await realm.write('pet.gts', `
+      import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      export class Pet extends Card {
+        @field name = contains(StringCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h4 data-test-pet-name><@fields.name/></h4></template>
+        };
+      }
+    `);
+    await realm.write('person.gts', `
+      import { contains, field, linksTo, Card, Component } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { Pet } from "./pet";
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+        @field pet = linksTo(Pet);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h3 data-test-person-name><@fields.firstName/> <@fields.lastName/></h3>
+            <div>Pet: <@fields.pet/></div>
+          </template>
+        };
+      }
+    `);
+    await realm.write('jackie-pet.json', JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: {
+          name: 'Jackie',
+        },
+        meta: {
+          adoptsFrom: {
+            module:`${testRealmURL}pet`,
+            name: 'Pet'
+          }
+        }
+      }
+    }));
+    await realm.write('person-entry.json', JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'Person',
+          description: 'Catalog entry',
+          ref: {
+            module: `${testRealmURL}person`,
+            name: 'Person'
+          },
+          demo: {
+            firstName: 'Burcu',
+            lastName: 'Noyan'
+          }
+        },
+        relationships: {
+          "demo.pet": {
+            links: {
+              self: `${testRealmURL}jackie-pet`
+            }
+          }
+        },
+        meta: {
+          fields: {
+            demo: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: "Person"
+              }
+            }
+          },
+          adoptsFrom: {
+            module:`${baseRealm.url}catalog-entry`,
+            name: 'CatalogEntry'
+          }
+        }
+      }
+    }));
+
+    const args: ExportedCardRef =  { module: `${testRealmURL}person`, name: 'Person' };
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CatalogEntryEditor @ref={{args}}/>
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-ref]');
+    assert.shadowDOM(`[data-test-ref]`).hasText(`Module: ${testRealmURL}person Name: Person`);
+
+    await waitFor('[data-test-person-name]');
+    assert.shadowDOM('[data-test-person-name]').hasText('Burcu Noyan');
+
+    await waitFor('[data-test-pet-name]');
+    assert.shadowDOM('[data-test-pet-name]').hasText('Jackie');
+  });
 });

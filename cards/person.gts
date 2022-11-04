@@ -16,7 +16,8 @@ export class Person extends Card {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div {{attachStyles styles}}>
-        <@fields.firstName/>
+        <h3><@fields.firstName/> <@fields.lastName/></h3>
+        <div>Pet: <@fields.pet/></div>
       </div>
     </template>
   }

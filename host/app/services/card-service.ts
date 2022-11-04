@@ -3,9 +3,11 @@ import { stringify } from 'qs';
 import type LoaderService from './loader-service';
 import type LocalRealm from '../services/local-realm';
 import {
-  type LooseSingleCardDocument,
+  type LooseCardResource,
   isSingleCardDocument,
   isCardCollectionDocument,
+  type CardDocument,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import type { ResolvedURL } from '@cardstack/runtime-common/loader';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -35,7 +37,7 @@ export default class CardService extends Service {
   private async fetchJSON(
     url: string | URL,
     args?: RequestInit
-  ): Promise<LooseSingleCardDocument> {
+  ): Promise<CardDocument> {
     let response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: 'application/vnd.api+json' },
       ...args,
@@ -49,11 +51,19 @@ export default class CardService extends Service {
     return await response.json();
   }
 
-  async createFromSerialized(json: LooseSingleCardDocument): Promise<Card> {
+  async createFromSerialized(
+    resource: LooseCardResource,
+    doc: LooseSingleCardDocument | CardDocument
+  ): Promise<Card> {
     await this.apiModule.loaded;
-    let card = await this.api.createFromSerialized(json, this.localRealm.url, {
-      loader: this.loaderService.loader,
-    });
+    let card = await this.api.createFromSerialized(
+      resource,
+      doc,
+      this.localRealm.url,
+      {
+        loader: this.loaderService.loader,
+      }
+    );
     await this.api.recompute(card);
     return card;
   }
@@ -69,7 +79,7 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`
       );
     }
-    return await this.createFromSerialized(json);
+    return await this.createFromSerialized(json.data, json);
   }
 
   async saveModel(card: Card): Promise<Card> {
@@ -80,10 +90,16 @@ export default class CardService extends Service {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(cardJSON, null, 2),
     });
+    if (!isSingleCardDocument(json)) {
+      throw new Error(
+        `bug: arg is not a card document:
+        ${JSON.stringify(json, null, 2)}`
+      );
+    }
     if (isSaved) {
       return await this.api.updateFromSerialized(card, json);
     }
-    return await this.createFromSerialized(json);
+    return await this.createFromSerialized(json.data, json);
   }
 
   async search(query: Query, realmURL: string | ResolvedURL): Promise<Card[]> {
@@ -95,9 +111,7 @@ export default class CardService extends Service {
       );
     }
     return await Promise.all(
-      json.data.map(
-        async (doc) => await this.createFromSerialized({ data: doc })
-      )
+      json.data.map(async (doc) => await this.createFromSerialized(doc, json))
     );
   }
 }

@@ -4,7 +4,7 @@ import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
 import { p, cleanWhiteSpace, shimModule, setupCardLogs, saveCard } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm, NotLoaded } from '@cardstack/runtime-common';
+import { baseRealm, NotLoaded, type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -50,21 +50,20 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Post });
 
     // initialize card data as serialized to force us to deserialize instead of using cached data
-    let firstPost = await createFromSerialized(Post, {
-      data: {
-        attributes: {
-          title: 'First Post',
-          created: '2022-04-22',
-          published: '2022-04-27T16:02'
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Post'
-          }
+    let resource = {
+      attributes: {
+        title: 'First Post',
+        created: '2022-04-22',
+        published: '2022-04-27T16:02'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Post'
         }
       }
-    });
+    };
+    let firstPost = await createFromSerialized(resource, { data: resource }, undefined);
     let root = await renderCard(firstPost, 'isolated');
 
     // the template value 'Apr 22, 2022' can only be realized when the card has
@@ -81,20 +80,19 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Person });
 
     // deserialize a card with an ID to mark it as "saved"
-    let savedCard = await createFromSerialized({
-      data: {
-        id: `${realmURL}Person/mango`,
-        attributes: {
-          firstName: 'Mango'
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Person'
-          }
+    let resource = {
+      id: `${realmURL}Person/mango`,
+      attributes: {
+        firstName: 'Mango'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Person'
         }
       }
-    }, undefined);
+    };
+    let savedCard = await createFromSerialized(resource, { data: resource }, undefined);
 
     assert.strictEqual(savedCard.id, `${realmURL}Person/mango`, 'instance id is set');
     assert.strictEqual(isSaved(savedCard), true, 'API recognizes card as saved');
@@ -102,10 +100,10 @@ module('Integration | serialization', function (hooks) {
     let unsavedCard = new Person();
     assert.strictEqual(isSaved(unsavedCard), false, 'API recognizes card as unsaved');
   });
-  
+
   test('can serialize a card that has an ID', async function(assert) {
     let { field, contains, Card, serializeCard } = cardApi;
-    let { default: StringCard} = string;  
+    let { default: StringCard} = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
@@ -178,20 +176,19 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Person });
 
     // deserialize a card with an ID to mark it as "saved"
-    let savedCard = await createFromSerialized({
-      data: {
-        id: `${realmURL}Person/mango`,
-        attributes: {
-          firstName: 'Mango'
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Person'
-          }
+    let resource = {
+      id: `${realmURL}Person/mango`,
+      attributes: {
+        firstName: 'Mango'
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Person'
         }
       }
-    }, undefined);
+    };
+    let savedCard = await createFromSerialized(resource, { data: resource }, undefined);
 
     try {
       await updateFromSerialized(savedCard, {
@@ -226,19 +223,18 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { DriverCard });
 
     let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
-    let driver = await createFromSerialized(DriverCard, {
-      data: {
-        attributes: {
-          ref
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'DriverCard'
-          }
+    let resource = {
+      attributes: {
+        ref
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'DriverCard'
         }
       }
-    });
+    };
+    let driver = await createFromSerialized<typeof DriverCard>(resource, { data: resource }, undefined);
     assert.ok(driver.ref !== ref, 'the card ref value is not strict equals to its serialized counter part');
     assert.deepEqual(driver.ref, ref, 'the card ref value is deep equal to its serialized counter part')
   });
@@ -292,22 +288,20 @@ module('Integration | serialization', function (hooks) {
       }
     }
     await shimModule(`${realmURL}test-cards`, { Post });
-
-    let firstPost = await createFromSerialized(Post, {
-      data: {
-        attributes: {
-          title: 'First Post',
-          created: null,
-          published: null
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Post'
-          }
+    let resource = {
+      attributes: {
+        title: 'First Post',
+        created: null,
+        published: null
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmURL}test-cards`,
+          name: 'Post'
         }
       }
-    });
+    };
+    let firstPost = await createFromSerialized(resource, { data: resource }, undefined);
     let root = await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'First Post created [no date] published [no date-time]');
   });
@@ -341,7 +335,7 @@ module('Integration | serialization', function (hooks) {
     });
     await saveCard(spookyToiletPaper, `${realmURL}Toy/spookyToiletPaper`);
     await saveCard(mango, `${realmURL}Pet/mango`);
-    
+
     let serialized = serializeCard(hassan);
     assert.deepEqual(serialized, {
       data: {
@@ -405,7 +399,7 @@ module('Integration | serialization', function (hooks) {
       }]
     });
   });
-  
+
   test('can deserialize a linksTo relationship', async function(assert) {
     let { field, contains, linksTo, Card, createFromSerialized, relationshipMeta, isSaved } = cardApi;
     let { default: StringCard } = string;
@@ -422,8 +416,7 @@ module('Integration | serialization', function (hooks) {
       @field pet = linksTo(Pet)
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
-
-    let card = await createFromSerialized<typeof Person>({
+    let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
         attributes: {
@@ -483,7 +476,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }]
-    }, undefined);
+    };
+    let card = await createFromSerialized<typeof Person>(doc.data, doc, undefined);
 
     assert.ok(card instanceof Person, 'card is an instance of person');
     assert.strictEqual(card.firstName, 'Hassan');
@@ -501,7 +495,7 @@ module('Integration | serialization', function (hooks) {
     } else {
       assert.ok(false, '"pet" field value is not an instance of Pet');
     }
-    
+
     let relationship = relationshipMeta(card, 'pet');
     if (relationship?.type === 'loaded') {
       let relatedCard = relationship.card;
@@ -526,8 +520,7 @@ module('Integration | serialization', function (hooks) {
       @field pet = linksTo(Pet)
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet });
-
-    let hassan = await createFromSerialized<typeof Person>({
+    let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
         attributes: {
@@ -547,7 +540,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }
-    }, undefined);
+    };
+    let hassan = await createFromSerialized<typeof Person>(doc.data, doc, undefined);
 
     try {
       hassan.pet;
@@ -602,7 +596,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Person, Pet });
 
     let hassan = new Person({ firstName: "Hassan" });
-    
+
     let serialized = serializeCard(hassan);
     assert.deepEqual(serialized, {
       data: {
@@ -664,7 +658,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet });
 
-    let card = await createFromSerialized<typeof Person>({
+    let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
         attributes: {
@@ -684,7 +678,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }
-    }, undefined);
+    };
+    let card = await createFromSerialized<typeof Person>(doc.data, doc, undefined);
     assert.ok(card instanceof Person, 'card is a Person');
     assert.strictEqual(card.firstName, 'Hassan');
     assert.strictEqual(card.pet, null, 'relationship is null');
@@ -761,7 +756,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { Person });
 
-    let card = await createFromSerialized<typeof Person>({
+    let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
         attributes: {
@@ -805,7 +800,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }]
-    }, undefined);
+    };
+    let card = await createFromSerialized<typeof Person>(doc.data, doc, undefined);
     assert.ok(card instanceof Person, 'card is a Person');
     assert.strictEqual(card.firstName, 'Hassan');
     let { friend } = card;
@@ -907,7 +903,7 @@ module('Integration | serialization', function (hooks) {
       }]
     });
 
-    let card = await createFromSerialized(serialized, undefined);
+    let card = await createFromSerialized(serialized.data, serialized, undefined);
     if (card instanceof Person){
       assert.strictEqual(card.firstName, 'Hassan');
       let { pet } = card;
@@ -996,7 +992,7 @@ module('Integration | serialization', function (hooks) {
       }]
     });
 
-    let card = await createFromSerialized(serialized, undefined);
+    let card = await createFromSerialized(serialized.data, serialized, undefined);
     if (card instanceof Person){
       assert.strictEqual(card.firstName, 'Hassan');
       let { pets } = card;
@@ -1058,7 +1054,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { Post, Person });
 
-    let firstPost = await createFromSerialized(Post, {
+    let doc = {
       data: {
         attributes: {
           title: 'First Post',
@@ -1075,7 +1071,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }
-    });
+    };
+    let firstPost = await createFromSerialized<typeof Post>(doc.data, doc, undefined);
     let root = await renderCard(firstPost, 'isolated');
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM');
   });
@@ -1103,7 +1100,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { Post, Person });
 
-    let firstPost = await createFromSerialized(Post, {
+    let doc = {
       data: {
         attributes: {
           title: 'First Post',
@@ -1120,7 +1117,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }
-    });
+    };
+    let firstPost = await createFromSerialized<typeof Post>(doc.data, doc, undefined);
     await renderCard(firstPost, 'isolated');
     assert.shadowDOM('[data-test]').hasText('Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM');
   });
@@ -1210,7 +1208,7 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a composite field that has been edited', async function(assert) {
-    let { field, contains, serializeCard, Card, Component, createFromSerialized } = cardApi;
+    let { field, contains, serializeCard, Card, Component } = cardApi;
     let { default: StringCard } = string;
     let { default: IntegerCard} = integer;
     class Person extends Card {
@@ -1240,22 +1238,12 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { Post, Person });
 
-    let helloWorld = await createFromSerialized(Post, {
-      data: {
-        attributes: {
-          title: 'First Post',
-          reviews: 1,
-          author: {
-            firstName: 'Arthur'
-          }
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Post'
-          }
-        }
-      }
+    let helloWorld = new Post({
+      title: 'First Post',
+      reviews: 1,
+      author: new Person({
+        firstName: 'Arthur'
+      })
     });
     await renderCard(helloWorld, 'edit');
     await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
@@ -1310,7 +1298,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { Schedule });
 
-    let classSchedule = await createFromSerialized(Schedule, {
+    let doc = {
       data: {
         attributes: {
           dates: ['2022-4-1', '2022-4-4']
@@ -1322,7 +1310,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }
-    });
+    };
+    let classSchedule = await createFromSerialized<typeof Schedule>(doc.data, doc, undefined);
     let root = await renderCard(classSchedule, 'isolated');
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Apr 1, 2022 Apr 4, 2022');
   });
@@ -1347,7 +1336,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { Schedule, Appointment });
 
-    let classSchedule = await createFromSerialized(Schedule, {
+    let doc = {
       data: {
         attributes: {
           appointments: [
@@ -1362,7 +1351,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }
-    });
+    };
+    let classSchedule = await createFromSerialized<typeof Schedule>(doc.data, doc, undefined);
     await renderCard(classSchedule, 'isolated');
     assert.deepEqual(
       shadowQuerySelectorAll('[data-test="appointment"]', this.element).map(element => cleanWhiteSpace(element.textContent!)),
@@ -1562,7 +1552,7 @@ module('Integration | serialization', function (hooks) {
       }
     );
 
-    let post2 = await createFromSerialized<typeof Post>(payload, new URL(realmURL)); // success is not blowing up
+    let post2 = await createFromSerialized<typeof Post>(payload.data, payload, new URL(realmURL)); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     let { author } = post2;
     if (author instanceof Employee) {
@@ -1652,7 +1642,7 @@ module('Integration | serialization', function (hooks) {
       }
     );
 
-    let post2 = await createFromSerialized<any>(payload, new URL(realmURL)); // success is not blowing up
+    let post2 = await createFromSerialized<any>(payload.data, payload, new URL(realmURL)); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     assert.strictEqual(post2.author.loves.firstName, 'Van Gogh');
     let { author } = post2;
@@ -1741,7 +1731,7 @@ module('Integration | serialization', function (hooks) {
       }
     });
 
-    let group2 = await createFromSerialized<any>(payload, new URL(realmURL));
+    let group2 = await createFromSerialized<any>(payload.data, payload, new URL(realmURL));
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
     assert.strictEqual(people.length, 2, 'array length is correct');
@@ -1841,7 +1831,7 @@ module('Integration | serialization', function (hooks) {
       }
     });
 
-    let group2 = await createFromSerialized<any>(payload, new URL(realmURL));
+    let group2 = await createFromSerialized<any>(payload.data, payload, new URL(realmURL));
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
     assert.strictEqual(people.length, 1, 'array length is correct');
@@ -1882,7 +1872,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
 
-    let card = await createFromSerialized<typeof Person>({
+    let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
         attributes: {
@@ -1930,7 +1920,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }]
-    }, undefined);
+    };
+    let card = await createFromSerialized<typeof Person>(doc.data, doc, undefined);
 
     assert.ok(card instanceof Person, 'card is an instance of person');
     assert.strictEqual(card.firstName, 'Hassan');
@@ -1959,7 +1950,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}person`, { Person });
 
-    let person = await createFromSerialized({
+    let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
         attributes: {
@@ -1972,7 +1963,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }
-    }, new URL(realmURL)) as Person;
+    };
+    let person = await createFromSerialized<typeof Person>(doc.data, doc, new URL(realmURL));
     assert.strictEqual(person.firstName, 'Mango');
     assert.deepEqual(serializeCard(person), {
       data: {
@@ -2005,7 +1997,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}person`, { Person });
     await shimModule(`${realmURL}post`, { Post });
 
-    let post = await createFromSerialized<typeof Post>({
+    let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
         attributes: {
@@ -2021,7 +2013,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }
-    }, new URL(realmURL));
+    };
+    let post = await createFromSerialized<typeof Post>(doc.data, doc, new URL(realmURL));
     assert.strictEqual(post.title, 'Things I Want to Chew');
     assert.strictEqual(post.author.firstName, 'Mango');
     assert.deepEqual(serializeCard(post), {
@@ -2061,7 +2054,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}post`, { Post });
     await shimModule(`${realmURL}blog`, { Blog });
 
-    let blog = await createFromSerialized({
+    let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
         attributes: {
@@ -2084,7 +2077,8 @@ module('Integration | serialization', function (hooks) {
           }
         }
       }
-    }, new URL(realmURL)) as Blog;
+    };
+    let blog = await createFromSerialized<typeof Blog>(doc.data, doc, new URL(realmURL));
     let posts = blog.posts;
     assert.strictEqual(posts.length, 2, 'number of posts is correct');
     assert.strictEqual(posts[0].title, 'Things I Want to Chew');

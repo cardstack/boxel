@@ -8,9 +8,10 @@ import {
   Loader,
   baseRealm,
   type Card,
-  type CardAPI,
 } from '@cardstack/runtime-common';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
+
+type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
 export function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();

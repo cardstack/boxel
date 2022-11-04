@@ -27,11 +27,10 @@ import typescriptPlugin from "@babel/plugin-syntax-typescript";
 import type { types as t } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
 import type { ExportedCardRef } from "./search-index";
-import type { CardAPI } from "./index";
+// @ts-ignore tsc doesn't understand .gts files
+import type { FieldType } from "https://cardstack.com/base/card-api";
 
 export type { ClassReference, ExternalReference };
-
-type FieldType = CardAPI.FieldType;
 
 export class ModuleSyntax {
   declare possibleCards: PossibleCardClass[];
