@@ -36,27 +36,30 @@ export default class List extends Controller {
 
     return {
       timeline: {
-        type: 'sequence',
-        animations: [
-          {
-            sprites: keptSprites,
-            properties: {
-              position: {},
+        type: 'parallel',
+        animations: Array.from(keptSprites).map((keptSprite) => ({
+          type: 'sequence',
+          animations: [
+            {
+              sprites: new Set([keptSprite]),
+              properties: {
+                position: {},
+              },
+              timing: {
+                behavior: quickSpring,
+              },
             },
-            timing: {
-              behavior: quickSpring,
+            {
+              sprites: new Set([keptSprite]),
+              properties: {
+                size: {},
+              },
+              timing: {
+                behavior: quickSpring,
+              },
             },
-          },
-          {
-            sprites: keptSprites,
-            properties: {
-              size: {},
-            },
-            timing: {
-              behavior: quickSpring,
-            },
-          },
-        ],
+          ],
+        })),
       },
     };
   }
