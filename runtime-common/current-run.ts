@@ -30,6 +30,7 @@ import type {
   CardRef,
   CardResource,
   SingleCardDocument,
+  Relationship,
 } from "./search-index";
 // @ts-ignore tsc doesn't understand .gts files
 type CardAPI = typeof import("https://cardstack.com/base/card-api");
@@ -131,6 +132,7 @@ export class CurrentRun {
   #moduleWorkingCache = new Map<string, Promise<Module>>();
   #typesCache = new WeakMap<typeof Card, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
+  #unfinishedInstances = new Set<string>();
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
@@ -173,6 +175,7 @@ export class CurrentRun {
     this.#typesCache = new WeakMap();
     this.#indexingInstances = new Map();
     this.#ignoreMap = new URLMap();
+    this.#unfinishedInstances = new Set<string>();
     this.#loader = Loader.createLoaderFromGlobal();
     this.stats.instancesIndexed = 0;
     this.stats.instanceErrors = 0;
@@ -182,6 +185,7 @@ export class CurrentRun {
   static async fromScratch(current: CurrentRun) {
     current.resetState();
     await current.visitDirectory(new URL(current.realm.url));
+    await current.patchUnfinishedInstances();
     return current;
   }
 
@@ -214,11 +218,10 @@ export class CurrentRun {
     if (operation === "update") {
       await current.visitFile(url);
     }
-
     for (let invalidation of invalidations) {
       await current.visitFile(invalidation);
     }
-
+    await current.patchUnfinishedInstances();
     return current;
   }
 
@@ -297,6 +300,16 @@ export class CurrentRun {
     }
   }
 
+  private async patchUnfinishedInstances(): Promise<void> {
+    debugger;
+    for (let fileURL of this.#unfinishedInstances) {
+      this.#indexingInstances.delete(fileURL);
+    }
+    for (let fileURL of this.#unfinishedInstances) {
+      await this.visitFile(new URL(fileURL));
+    }
+  }
+
   private async indexCardSource(url: URL): Promise<void> {
     let module: Record<string, unknown>;
     try {
@@ -338,7 +351,7 @@ export class CurrentRun {
 
   private async recomputeCard(
     card: Card,
-    instanceURL: string,
+    fileURL: string,
     stack: string[]
   ): Promise<void> {
     let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
@@ -350,14 +363,36 @@ export class CurrentRun {
       let notLoadedErr: NotLoaded | undefined;
       if (
         isCardError(err) &&
-        (notLoadedErr = err.additionalErrors?.find((e) =>
-          isNotLoadedError(e)
+        (notLoadedErr = [err, ...(err.additionalErrors || [])].find(
+          isNotLoadedError
         ) as NotLoaded | undefined)
       ) {
         let linkURL = new URL(`${notLoadedErr.reference}.json`);
+        if (stack.includes(linkURL.href)) {
+          // break cycles
+          this.#unfinishedInstances.add(fileURL);
+          return;
+        }
         if (this.#realmPaths.inRealm(linkURL)) {
-          await this.visitFile(linkURL, [instanceURL, ...stack]);
-          await api.recompute(card, { loadFields: true });
+          await this.visitFile(linkURL, [fileURL, ...stack]);
+          try {
+            await api.recompute(card, { loadFields: true });
+          } catch (recomputeErr: any) {
+            if (
+              isCardError(recomputeErr) &&
+              (notLoadedErr = [
+                recomputeErr,
+                ...(recomputeErr.additionalErrors || []),
+              ].find(isNotLoadedError) as NotLoaded | undefined)
+            ) {
+              if (fileURL.replace(/\.json$/, "") === notLoadedErr.reference) {
+                // break cycle where we get a not loaded error on ourselves
+                // (this is the opposite side of the cycle that is detected above)
+                return;
+              }
+            }
+            throw recomputeErr;
+          }
         } else {
           // in this case the instance we are linked to is a missing instance
           // in an external realm.
@@ -373,13 +408,13 @@ export class CurrentRun {
     resource: LooseCardResource,
     stack: string[]
   ): Promise<void> {
-    // TODO handle cycles
-    let indexingInstance = this.#indexingInstances.get(path);
+    let fileURL = this.#realmPaths.fileURL(path).href;
+    let indexingInstance = this.#indexingInstances.get(fileURL);
     if (indexingInstance) {
       return await indexingInstance;
     }
     let deferred = new Deferred<void>();
-    this.#indexingInstances.set(path, deferred.promise);
+    this.#indexingInstances.set(fileURL, deferred.promise);
     let instanceURL = new URL(
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
@@ -405,14 +440,14 @@ export class CurrentRun {
         }
       )) as Card;
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
-      await this.recomputeCard(
-        card,
-        this.#realmPaths.fileURL(path).href,
-        stack
-      );
+      await this.recomputeCard(card, fileURL, stack);
       let data = api.serializeCard(card, {
         includeComputeds: true,
       });
+      // prepare the document for index serialization
+      Object.values(data.data.relationships ?? {}).forEach(
+        (rel: Relationship) => delete rel.data
+      );
       let maybeDoc = merge(data, {
         data: {
           id: instanceURL.href,
@@ -420,7 +455,7 @@ export class CurrentRun {
         },
       }) as SingleCardDocument;
       doc = maybeDoc;
-      searchData = await api.searchDoc(card);
+      searchData = api.searchDoc(card);
     } catch (err: any) {
       uncaughtError = err;
     }

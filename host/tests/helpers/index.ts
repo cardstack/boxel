@@ -1,6 +1,5 @@
 import { parse } from 'date-fns';
 import {
-  Realm,
   Kind,
   RealmAdapter,
   FileRef,
@@ -10,6 +9,7 @@ import {
   type Card,
 } from '@cardstack/runtime-common';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
+import { Realm } from '@cardstack/runtime-common/realm';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 

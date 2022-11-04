@@ -138,7 +138,7 @@ interface Field<CardT extends CardConstructor> {
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
   serialize(value: any, doc: JSONAPISingleResourceDocument): JSONAPIResource;
-  deserialize(value: any, doc: LooseSingleCardDocument | CardDocument, relationships: JSONAPIResource["relationships"] | undefined, fieldMeta: CardFields[string] | undefined, instancePromise: Promise<Card>): Promise<any>;
+  deserialize(value: any, doc: LooseSingleCardDocument | CardDocument, relationships: JSONAPIResource["relationships"] | undefined, fieldMeta: CardFields[string] | undefined, stack: string[] | undefined, instancePromise: Promise<Card>): Promise<any>;
   emptyValue(instance: Card): any;
   validate(instance: Card, value: any): void;
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
@@ -261,7 +261,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     }
   }
 
-  async deserialize(value: any[], doc: CardDocument, relationships: JSONAPIResource["relationships"] | undefined, fieldMeta: CardFields[string] | undefined, instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
+  async deserialize(value: any[], doc: CardDocument, relationships: JSONAPIResource["relationships"] | undefined, fieldMeta: CardFields[string] | undefined, _stack: undefined, instancePromise: Promise<Card>): Promise<CardInstanceType<FieldT>[]> {
     if (!Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
@@ -484,7 +484,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     };
   }
 
-  async deserialize(value: any, doc: CardDocument): Promise<CardInstanceType<CardT> | null | NotLoadedValue> {
+  async deserialize(value: any, doc: CardDocument, _relationships: undefined, _fieldMeta: undefined, stack: string[] = []): Promise<CardInstanceType<CardT> | null | NotLoadedValue> {
     if (!isRelationship(value)) {
       throw new Error(`linkTo field '${this.name}' cannot deserialize non-relationship value ${JSON.stringify(value)}`);
     }
@@ -492,13 +492,13 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       return null;
     }
     let resource = resourceFrom(doc, value.links.self);
-    if (!resource) {
+    if (!resource || stack.includes(value.links.self)) {
       return {
         type: 'not-loaded',
         reference: value.links.self
       };
     }
-    return (await cardClassFromResource(resource, this.card))[deserialize](resource, doc);
+    return (await cardClassFromResource(resource, this.card))[deserialize](resource, doc, [value.links.self, ...stack]);
   }
 
   emptyValue(_instance: Card) {
@@ -609,17 +609,27 @@ export class Card {
       }
       return Object.fromEntries(
         Object.entries(getFields(value, { includeComputeds: true }))
-          .map(([fieldName, field]) => [fieldName, getQueryableValue(field!.card, value[fieldName])])
+          .map(([fieldName, field]) => {
+            try {
+              return [fieldName, getQueryableValue(field!.card, value[fieldName])];
+            } catch (err: any) {
+              if (isNotLoadedError(err)) {
+                return [fieldName, { id: err.reference }];
+              } else {
+                throw err;
+              }
+            }
+          })
       );
     }
   }
 
-  static async [deserialize]<T extends CardConstructor>(this: T, data: any, doc?: CardDocument): Promise<CardInstanceType<T>> {
+  static async [deserialize]<T extends CardConstructor>(this: T, data: any, doc?: CardDocument, stack?: string[]): Promise<CardInstanceType<T>> {
     if (primitive in this) {
       // primitive cards can override this as need be
       return data;
     }
-    return _createFromSerialized(this, data, doc);
+    return _createFromSerialized(this, data, doc, stack);
   }
 
   static getComponent(card: Card, format: Format) {
@@ -753,6 +763,7 @@ async function getDeserializedValues<CardT extends CardConstructor>({
   resource,
   modelPromise,
   doc,
+  stack
 }: {
   card: CardT; 
   fieldName: string; 
@@ -760,12 +771,13 @@ async function getDeserializedValues<CardT extends CardConstructor>({
   resource: LooseCardResource;
   modelPromise: Promise<Card>; 
   doc: LooseSingleCardDocument | CardDocument;
+  stack: string[]
 }): Promise<any> {
   let field = getField(card, fieldName);
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
-  return await field.deserialize(value, doc, resource.relationships, resource.meta.fields?.[fieldName], modelPromise);
+  return await field.deserialize(value, doc, resource.relationships, resource.meta.fields?.[fieldName], stack, modelPromise);
 }
 
 function serializeCardResource(
@@ -808,17 +820,26 @@ export async function createFromSerialized<T extends CardConstructor>(resource: 
   let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);
   let card = module[adoptsFrom.name];
   
-  return await _createFromSerialized(card, resource as any, doc);
+  let result = await _createFromSerialized(card, resource as any, doc);
+  if (result == null) {
+    throw new Error(`bug: should never be here--we bailed because it looked like we were in a linksTo cycle`);
+  }
+  return result;
 }
 
 export async function updateFromSerialized<T extends CardConstructor>(instance: CardInstanceType<T>, doc: LooseSingleCardDocument): Promise<CardInstanceType<T>> {
-  return await _updateFromSerialized(instance, doc.data, doc);
+  let result = await _updateFromSerialized(instance, doc.data, doc);
+  if (result == null) {
+    throw new Error(`bug: should never be here--we bailed because it looked like we were in a linksTo cycle`);
+  }
+  return result;
 }
 
 async function _createFromSerialized<T extends CardConstructor>(
   card: T,
   data: T extends { [primitive]: infer P } ? P : LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument | undefined,
+  stack: string[] = []
 ): Promise<CardInstanceType<T>> {
   if (primitive in card) {
     return card[deserialize](data);
@@ -838,13 +859,14 @@ async function _createFromSerialized<T extends CardConstructor>(
   if (!doc) {
     doc = { data: resource };
   }
-  return await _updateFromSerialized(new card() as CardInstanceType<T>, resource, doc);
+  return await _updateFromSerialized(new card() as CardInstanceType<T>, resource, doc, stack);
 }
 
 async function _updateFromSerialized<T extends CardConstructor>(
   instance: CardInstanceType<T>,
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
+  stack: string[] = []
 ): Promise<CardInstanceType<T>> {
   let deferred = new Deferred<Card>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
@@ -872,11 +894,39 @@ async function _updateFromSerialized<T extends CardConstructor>(
             resource,
             modelPromise: deferred.promise,
             doc,
+            stack
           })
         ];
       }
     )
   ) as [keyof CardInstanceType<T>, any][];
+  let notLoaded: [keyof CardInstanceType<T>, NotLoadedValue] | undefined;
+  if ((notLoaded = values.find(([, value]) => isNotLoadedValue(value) && stack.includes(value.reference)))) {
+    // we are inside a deserialize linksTo cycle. in order to prevent a runaway recompute
+    // in our assignment below we will perform the assignment directly in the deserializeBucket,
+    // otherwise the recompute in the property descriptor's "set" will trigger a run away recompute.
+    // this instance represents the terminal instance that we see in the cycle
+    
+    // TODO use a special error for this
+    let cycleError = new NotLoaded(notLoaded[1].reference, notLoaded[0] as string, card.name);
+
+    let deserialized = getDataBucket(instance);
+    // TODO this is a lot of dupe code--please eliminate this
+    let wasSaved = instance[isSavedInstance];
+    let originalId = instance.id;
+    instance[isSavedInstance] = false;
+    for (let [fieldName, value] of values) {
+      if (fieldName === 'id' && wasSaved && originalId !== value) {
+        throw new Error(`cannot change the id for saved instance ${originalId}`);
+      }
+      deserialized.set(fieldName as string, value);
+    }
+    if (resource.id != null) {
+      instance[isSavedInstance] = true;
+    }
+    cycleError.instance = instance;
+    throw cycleError;
+  }
   
   // this block needs to be synchronous
   {
@@ -901,9 +951,9 @@ async function _updateFromSerialized<T extends CardConstructor>(
   return instance;
 }
 
-export async function searchDoc<CardT extends CardConstructor>(model: InstanceType<CardT>): Promise<Record<string, any>> {
-  await recompute(model);
-  return getQueryableValue(model.constructor, model) as Record<string, any>;
+// this assumes that the instance has already been recomputed
+export function searchDoc<CardT extends CardConstructor>(instance: InstanceType<CardT>): Record<string, any> {
+  return getQueryableValue(instance.constructor, instance) as Record<string, any>;
 }
 
 
@@ -1121,16 +1171,18 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
   }
 
   let loader = Loader.getLoaderFor(Reflect.getPrototypeOf(card)!.constructor);
-  async function _loadModel<T extends Card>(model: T, stack: { from: T, to: T, name: string}[] = []): Promise<void> {
+  async function _loadModel<T extends Card>(model: T, stack: { instance: Card, fieldName: string}[] = []): Promise<void> {
     for (let [fieldName, field] of Object.entries(getFields(model, { includeComputeds: true }))) {
-      let value: any = await loadField(model, fieldName as keyof T, loader, opts);
+      let value: any = await loadField(model, fieldName as keyof T, loader, stack, opts);
       if (recomputePromises.get(card) !== recomputePromise) {
         return;
       }
       if (!(primitive in field.card) && value != null &&
-        !stack.find(({ from, to, name }) => from === model && to === value && name === fieldName)
+        !stack.find(({ instance, fieldName: name }) =>
+          (instance === model && name === fieldName) ||
+          (instance.id != null && instance.id === value.id && name === fieldName))
       ) {
-        await _loadModel(value, [...stack, { from: model, to: value, name: fieldName }]);
+        await _loadModel(value, [...stack, { instance: model, fieldName }]);
       }
     }
   }
@@ -1145,7 +1197,7 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
   done!();
 }
 
-async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K, loader: Loader, opts?: RecomputeOptions): Promise<T[K]> {
+async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K, loader: Loader, stack: { instance: Card, fieldName: string}[] = [], opts?: RecomputeOptions): Promise<T[K]> {
   let result: T[K];
   let isLoaded = false;
   let deserialized = getDataBucket(model);
@@ -1167,7 +1219,18 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
           if (!isSingleCardDocument(json)) {
             throw new Error(`instance ${e.reference} is not a card document. it is: ${JSON.stringify(json, null, 2)}`);
           }
-          deserialized.set(fieldName as string, await createFromSerialized(json.data, json, undefined, { loader }));
+          try {
+            deserialized.set(fieldName as string, await createFromSerialized(json.data, json, undefined, { loader }));
+          } catch (cycleErr: any) {
+            // TODO check for specialized cycle error
+            if (stack.find(i => i.instance.id != null && i.instance.id === cycleErr.instance.id && fieldName === i.fieldName)) {
+              // we are inside a linksTo cycle, set a not loaded that points to the instance that begins the cycle
+              deserialized.set(fieldName as string, { type: 'not-loaded', reference: cycleErr.instance.id });
+              isLoaded = true;
+            } else {
+              deserialized.set(fieldName as string, cycleErr.instance);
+            }
+          }
           continue;
         } else {
           isLoaded = true;

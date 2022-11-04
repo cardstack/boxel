@@ -241,8 +241,150 @@ module('Unit | search-index', function (hooks) {
     }
   });
 
-  // How would the searchDoc look for a cycle in the fields?
-  skip('can index a field with a cycle in the linksTo field');
+  test('can index a field with a cycle in the linksTo field', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Friend/hassan.json': {
+        data: {
+          id: `${testRealmURL}Friend/hassan`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/mango`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+          },
+        },
+      },
+      'Friend/mango.json': {
+        data: {
+          id: `${testRealmURL}Friend/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/hassan`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`));
+    if (hassan?.type === 'doc') {
+      assert.deepEqual(hassan.doc.data, {
+        id: `${testRealmURL}Friend/hassan`,
+        type: 'card',
+        links: { self: `${testRealmURL}Friend/hassan` },
+        attributes: {
+          firstName: 'Hassan',
+        },
+        relationships: {
+          friend: {
+            links: {
+              self: `${testRealmURL}Friend/mango`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4201/test/friend',
+            name: 'Friend',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}Friend/hassan.json`
+          ),
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
+    }
+
+    let hassanEntry = await indexer.searchEntry(
+      new URL(`${testRealmURL}Friend/hassan`)
+    );
+    if (hassanEntry) {
+      assert.deepEqual(hassanEntry.searchData, {
+        id: `${testRealmURL}Friend/hassan`,
+        firstName: 'Hassan',
+        'friend.id': `${testRealmURL}Friend/mango`,
+        'friend.firstName': 'Mango',
+        'friend.friend.id': `${testRealmURL}Friend/hassan`,
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}Friend/hassan in the index`
+      );
+    }
+
+    let mango = await indexer.card(new URL(`${testRealmURL}Friend/mango`));
+    if (mango?.type === 'doc') {
+      assert.deepEqual(mango.doc.data, {
+        id: `${testRealmURL}Friend/mango`,
+        type: 'card',
+        links: { self: `${testRealmURL}Friend/mango` },
+        attributes: {
+          firstName: 'Mango',
+        },
+        relationships: {
+          friend: {
+            links: {
+              self: `${testRealmURL}Friend/hassan`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4201/test/friend',
+            name: 'Friend',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}Friend/mango.json`
+          ),
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
+    }
+
+    let mangoEntry = await indexer.searchEntry(
+      new URL(`${testRealmURL}Friend/mango`)
+    );
+    if (mangoEntry) {
+      assert.deepEqual(mangoEntry.searchData, {
+        id: `${testRealmURL}Friend/mango`,
+        firstName: 'Mango',
+        'friend.id': `${testRealmURL}Friend/hassan`,
+        'friend.firstName': 'Hassan',
+        'friend.friend.id': `${testRealmURL}Friend/mango`,
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}Friend/mango in the index`
+      );
+    }
+  });
 
   test("indexing identifies an instance's card references", async function (assert) {
     let realm = TestRealm.create({

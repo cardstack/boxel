@@ -405,7 +405,9 @@ export class SearchIndex {
     if (card.type === "error") {
       return card;
     }
-    let doc: SingleCardDocument = { data: card.entry.resource };
+    let doc: SingleCardDocument = {
+      data: { ...card.entry.resource, ...{ links: { self: url.href } } },
+    };
     if (opts?.loadLinks) {
       let included = await this.loadLinks(doc.data, [doc.data.id]);
       if (included.length > 0) {
