@@ -19,9 +19,7 @@ const { VOLATILE_TAG, consumeTag } =
 
 interface AnimationContextArgs {
   id?: string;
-  use:
-    | ((changeset: Changeset) => AnimationDefinition | Promise<void>)
-    | undefined;
+  use: ((changeset: Changeset) => AnimationDefinition) | undefined;
 }
 
 interface Signature {

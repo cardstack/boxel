@@ -59,6 +59,7 @@
   </p>
 </div>
 
+{{! @glint-expect-error: TODO: migrate this.outerTransition to return AnimationDefinition }}
 <AnimationContext @id="outer" @use={{this.outerTransition}}>
   <div class='flex w-full m-4'>
     <div class="flex-none w-1/2">
@@ -68,6 +69,7 @@
         <p>Here is some content before AnimationContext 1</p>
       {{/if}}
       <div class="some-container {{if this.contextHasPadding 'with-padded-animation-context'}}">
+        {{! @glint-expect-error: TODO: migrate this.innerTransition to return AnimationDefinition }}
         <AnimationContext @id="inner" @use={{this.innerTransition}}>
           <div {{sprite role="container"}}>
             {{#if this.showContentBefore}}
