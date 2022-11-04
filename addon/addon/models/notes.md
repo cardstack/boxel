@@ -37,6 +37,16 @@ unresolved questions:
 - cloning, nested? removed, nested?
 - animated counterparts with an animation context?
 
-ed: does the refactor support cloning well?
-
 - demo: planet? black hole 2x, one bigger than another
+
+
+clone moves a whole subtree
+- affects visibility to contexts
+- measurements
+- application of animations
+- clones from within clones?
+
+should counterpart handling change?
+- reduce complexity of animation state we need to handle
+
+hiding has purpose?
