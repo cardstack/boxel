@@ -21,25 +21,10 @@
     "module": "es2022",
     "experimentalDecorators": true,
     "paths": {
-      "runtime-spike/tests/*": ["host/tests/*"],
-      "runtime-spike/*": ["host/app/*"],
-      "https://cardstack.com/base/*": ["base/*"],
-      "//local-realm/*": ["cards/*"],
-      "cards": ["cards/*"],
-      "*": ["host/types/*"],
-      "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"]
+      "https://cardstack.com/base/*": ["../base/*"]
     }
   },
   "glint": {
-    "environment": ["ember-loose", "ember-template-imports"],
-    "include": ["cards/**", "base/**", "host/app/**", "host/tests/**"]
-  },
-  "include": [
-    "base/**/*",
-    "cards/**/*",
-    "realm-server/**/*",
-    "host/app/**/*",
-    "host/tests/**/*",
-    "host/types/**/*"
-  ]
+    "environment": ["ember-loose", "ember-template-imports"]
+  }
 }

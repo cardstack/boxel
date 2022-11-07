@@ -5,10 +5,9 @@ import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import { CardError, type SerializedError } from "./error";
 import flatMap from "lodash/flatMap";
-//@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
-import type { Card } from "https://cardstack.com/base/card-api";
-//@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
-type CardAPI = typeof import("https://cardstack.com/base/card-api");
+import type * as CardAPI from "https://cardstack.com/base/card-api";
+
+type Card = CardAPI.Card;
 
 export type ExportedCardRef = {
   module: string;
@@ -494,8 +493,8 @@ export class SearchIndex {
     return undefined;
   }
 
-  private loadAPI(): Promise<CardAPI> {
-    return this.loader.import<CardAPI>(`${baseRealm.url}card-api`);
+  private loadAPI(): Promise<typeof CardAPI> {
+    return this.loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
   }
 
   private cardHasType(entry: SearchEntry, ref: CardRef): boolean {
@@ -507,13 +506,11 @@ export class SearchIndex {
   private async loadFieldCard(
     ref: ExportedCardRef,
     fieldPath: string
-  ): Promise<typeof Card> {
+  ): Promise<Card> {
     let api = await this.loadAPI();
-    let module: Record<string, typeof Card>;
+    let module: Record<string, Card>;
     try {
-      module = await this.loader.import<Record<string, typeof Card>>(
-        ref.module
-      );
+      module = await this.loader.import<Record<string, Card>>(ref.module);
     } catch (err: any) {
       throw new Error(
         `Your filter refers to nonexistent type: import ${
@@ -521,7 +518,7 @@ export class SearchIndex {
         } from "${ref.module}"`
       );
     }
-    let card: typeof Card | undefined = module[ref.name];
+    let card: Card | undefined = module[ref.name];
     let segments = fieldPath.split(".");
     while (segments.length) {
       let fieldName = segments.shift()!;
@@ -631,7 +628,7 @@ export class SearchIndex {
     if ("eq" in filter) {
       let ref: CardRef = { type: "exportedCard", ...on };
 
-      let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
+      let fieldCards: { [fieldPath: string]: Card } = Object.fromEntries(
         await Promise.all(
           Object.keys(filter.eq).map(async (fieldPath) => [
             fieldPath,
@@ -670,7 +667,7 @@ export class SearchIndex {
     if ("range" in filter) {
       let ref: CardRef = { type: "exportedCard", ...on };
 
-      let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
+      let fieldCards: { [fieldPath: string]: Card } = Object.fromEntries(
         await Promise.all(
           Object.keys(filter.range).map(async (fieldPath) => [
             fieldPath,

@@ -125,9 +125,7 @@ export {
   isSingleCardDocument,
 } from "./search-index";
 
-// @ts-ignore tsc doesn't understand .gts files
-import type CardAPI from "https://cardstack.com/base/card-api";
-// @ts-ignore tsc doesn't understand .gts files
+import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { Card } from "https://cardstack.com/base/card-api";
 export { CardAPI, Card };
 
