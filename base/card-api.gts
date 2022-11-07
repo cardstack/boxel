@@ -913,9 +913,9 @@ async function _updateFromSerialized<T extends CardConstructor>(
       instance[isSavedInstance] = true;
     }
     if (values.find(([, value]) => isNotLoadedValue(value) && stack.includes(value.reference))) {
-      // we are inside a deserialize linksTo cycle. the goal here is to throw an
-      // error with the deserialized terminating instance in the cycle thus cleanly cleaving
-      // the cycle at that the point it loops around.
+      // we are inside a deserialize linksTo cycle (a NotLoaded error on ourselves). we throw an
+      // error with the deserialized terminating instance in the cycle thus cleaving the cycle at
+      // that the point it loops around.
       throw new Cycle(instance);
     }
   }
