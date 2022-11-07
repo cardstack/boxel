@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -808,6 +808,48 @@ posts/ignore-me.json
           },
         },
       },
+      'friend1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Hassan',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${paths.url}friend2`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}friend`,
+              name: 'Friend',
+            },
+          },
+        },
+      },
+      'friend2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}friend`,
+              name: 'Friend',
+            },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -857,7 +899,18 @@ posts/ignore-me.json
       );
     });
 
-    skip('can search for cards by using a linksTo field');
+    test('can search for cards by using a linksTo field', async function (assert) {
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}friend`, name: 'Friend' },
+          eq: { 'friend.firstName': 'Mango' },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}friend1`]
+      );
+    });
 
     test(`can search for cards that have custom queryableValue`, async function (assert) {
       let { data: matching } = await indexer.search({
