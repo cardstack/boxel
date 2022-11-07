@@ -821,19 +821,11 @@ export async function createFromSerialized<T extends CardConstructor>(resource: 
   let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);
   let card = module[adoptsFrom.name];
   
-  let result = await _createFromSerialized(card, resource as any, doc);
-  if (result == null) {
-    throw new Error(`bug: should never be here--we bailed because it looked like we were in a linksTo cycle`);
-  }
-  return result;
+  return await _createFromSerialized(card, resource as any, doc);
 }
 
 export async function updateFromSerialized<T extends CardConstructor>(instance: CardInstanceType<T>, doc: LooseSingleCardDocument): Promise<CardInstanceType<T>> {
-  let result = await _updateFromSerialized(instance, doc.data, doc);
-  if (result == null) {
-    throw new Error(`bug: should never be here--we bailed because it looked like we were in a linksTo cycle`);
-  }
-  return result;
+  return await _updateFromSerialized(instance, doc.data, doc);
 }
 
 async function _createFromSerialized<T extends CardConstructor>(
@@ -1157,12 +1149,7 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
       if (recomputePromises.get(card) !== recomputePromise) {
         return;
       }
-      if (!(primitive in field.card) && value != null &&
-        !stack.find((i) =>
-          (i.instance === model && i.fieldName === fieldName) ||
-          // TODO do we still need this?--i think we moved the cycle detection to inside the loadField....
-          (i.instance.id != null && i.instance.id === value.id && i.fieldName === fieldName))
-      ) {
+      if (!(primitive in field.card) && value != null && !stack.find((i) => (i.instance === model && i.fieldName === fieldName))) {
         await _loadModel(value, [...stack, { instance: model, fieldName }]);
       }
     }
@@ -1206,10 +1193,12 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
             if (isCycle(maybeCycleErr)) {
               let cycleErr = maybeCycleErr;
               if (stack.find(i => i.instance.id != null && i.instance.id === cycleErr.terminatingInstance.id && fieldName === i.fieldName)) {
-                // we are inside a linksTo cycle, set a not loaded that points to the instance that begins the cycle
+                // if we are inside a linksTo cycle and the cycle's terminating instance is an instance in our stack, then
+                // we'll break the cycle by setting a not loaded value for the field that points to the reentrant instance's id
                 deserialized.set(fieldName as string, { type: 'not-loaded', reference: cycleErr.terminatingInstance.id });
                 isLoaded = true;
               } else {
+                // otherwise, use the deserialized terminating instance as our field value
                 deserialized.set(fieldName as string, cycleErr.terminatingInstance);
               }
             } else {

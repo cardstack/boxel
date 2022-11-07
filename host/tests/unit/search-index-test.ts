@@ -109,6 +109,9 @@ module('Unit | search-index', function (hooks) {
       assert.deepEqual(mango.doc.data, {
         id: `${testRealmURL}Pet/mango`,
         type: 'card',
+        links: {
+          self: `${testRealmURL}Pet/mango`,
+        },
         attributes: {
           firstName: 'Mango',
         },
@@ -116,10 +119,6 @@ module('Unit | search-index', function (hooks) {
           owner: {
             links: {
               self: `${testRealmURL}Person/owner`,
-            },
-            data: {
-              type: 'card',
-              id: `${testRealmURL}Person/owner`,
             },
           },
         },
@@ -212,6 +211,9 @@ module('Unit | search-index', function (hooks) {
       assert.deepEqual(hassan.doc.data, {
         id: `${testRealmURL}Friend/hassan`,
         type: 'card',
+        links: {
+          self: `${testRealmURL}Friend/hassan`,
+        },
         attributes: {
           firstName: 'Hassan',
         },
@@ -219,10 +221,6 @@ module('Unit | search-index', function (hooks) {
           friend: {
             links: {
               self: `${testRealmURL}Friend/mango`,
-            },
-            data: {
-              type: 'card',
-              id: `${testRealmURL}Friend/mango`,
             },
           },
         },
@@ -289,31 +287,69 @@ module('Unit | search-index', function (hooks) {
     let realm = TestRealm.createWithAdapter(adapter);
     await realm.ready;
     let indexer = realm.searchIndex;
-    let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`));
+    let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`), {
+      loadLinks: true,
+    });
     if (hassan?.type === 'doc') {
-      assert.deepEqual(hassan.doc.data, {
-        id: `${testRealmURL}Friend/hassan`,
-        type: 'card',
-        links: { self: `${testRealmURL}Friend/hassan` },
-        attributes: {
-          firstName: 'Hassan',
-        },
-        relationships: {
-          friend: {
-            links: {
-              self: `${testRealmURL}Friend/mango`,
+      assert.deepEqual(hassan.doc, {
+        data: {
+          id: `${testRealmURL}Friend/hassan`,
+          type: 'card',
+          links: { self: `${testRealmURL}Friend/hassan` },
+          attributes: {
+            firstName: 'Hassan',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/mango`,
+              },
+              data: {
+                type: 'card',
+                id: `${testRealmURL}Friend/mango`,
+              },
             },
           },
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'http://localhost:4201/test/friend',
-            name: 'Friend',
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Friend/hassan.json`
+            ),
           },
-          lastModified: adapter.lastModified.get(
-            `${testRealmURL}Friend/hassan.json`
-          ),
         },
+        included: [
+          {
+            id: `${testRealmURL}Friend/mango`,
+            type: 'card',
+            links: { self: `${testRealmURL}Friend/mango` },
+            attributes: {
+              firstName: 'Mango',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/hassan`,
+                },
+                data: {
+                  type: 'card',
+                  id: `${testRealmURL}Friend/hassan`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4201/test/friend',
+                name: 'Friend',
+              },
+              lastModified: adapter.lastModified.get(
+                `${testRealmURL}Friend/mango.json`
+              ),
+            },
+          },
+        ],
       });
     } else {
       assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
@@ -337,31 +373,69 @@ module('Unit | search-index', function (hooks) {
       );
     }
 
-    let mango = await indexer.card(new URL(`${testRealmURL}Friend/mango`));
+    let mango = await indexer.card(new URL(`${testRealmURL}Friend/mango`), {
+      loadLinks: true,
+    });
     if (mango?.type === 'doc') {
-      assert.deepEqual(mango.doc.data, {
-        id: `${testRealmURL}Friend/mango`,
-        type: 'card',
-        links: { self: `${testRealmURL}Friend/mango` },
-        attributes: {
-          firstName: 'Mango',
-        },
-        relationships: {
-          friend: {
-            links: {
-              self: `${testRealmURL}Friend/hassan`,
+      assert.deepEqual(mango.doc, {
+        data: {
+          id: `${testRealmURL}Friend/mango`,
+          type: 'card',
+          links: { self: `${testRealmURL}Friend/mango` },
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/hassan`,
+              },
+              data: {
+                type: 'card',
+                id: `${testRealmURL}Friend/hassan`,
+              },
             },
           },
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'http://localhost:4201/test/friend',
-            name: 'Friend',
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Friend/mango.json`
+            ),
           },
-          lastModified: adapter.lastModified.get(
-            `${testRealmURL}Friend/mango.json`
-          ),
         },
+        included: [
+          {
+            id: `${testRealmURL}Friend/hassan`,
+            type: 'card',
+            links: { self: `${testRealmURL}Friend/hassan` },
+            attributes: {
+              firstName: 'Hassan',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/mango`,
+                },
+                data: {
+                  type: 'card',
+                  id: `${testRealmURL}Friend/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4201/test/friend',
+                name: 'Friend',
+              },
+              lastModified: adapter.lastModified.get(
+                `${testRealmURL}Friend/hassan.json`
+              ),
+            },
+          },
+        ],
       });
     } else {
       assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
@@ -411,6 +485,7 @@ module('Unit | search-index', function (hooks) {
       [
         'http://localhost:4201/base/attach-styles',
         'http://localhost:4201/base/card-api',
+        'http://localhost:4201/base/cycle',
         'http://localhost:4201/base/integer',
         'http://localhost:4201/base/not-ready',
         'http://localhost:4201/base/pick',
