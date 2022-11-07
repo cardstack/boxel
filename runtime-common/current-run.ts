@@ -446,7 +446,7 @@ export class CurrentRun {
       });
       // prepare the document for index serialization
       Object.values(data.data.relationships ?? {}).forEach(
-        (rel: Relationship) => delete rel.data
+        (rel) => delete (rel as Relationship).data
       );
       let maybeDoc = merge(data, {
         data: {
