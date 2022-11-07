@@ -893,6 +893,7 @@ async function _updateFromSerialized<T extends CardConstructor>(
       }
     )
   ) as [keyof CardInstanceType<T>, any][];
+
   // this block needs to be synchronous
   {
     let wasSaved = instance[isSavedInstance];
@@ -913,7 +914,7 @@ async function _updateFromSerialized<T extends CardConstructor>(
     }
     if (values.find(([, value]) => isNotLoadedValue(value) && stack.includes(value.reference))) {
       // we are inside a deserialize linksTo cycle. the goal here is to throw an
-      // error with the terminating instance in the cycle thus cleanly cleaving
+      // error with the deserialized terminating instance in the cycle thus cleanly cleaving
       // the cycle at that the point it loops around.
       throw new Cycle(instance);
     }
@@ -1149,7 +1150,7 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
       if (recomputePromises.get(card) !== recomputePromise) {
         return;
       }
-      if (!(primitive in field.card) && value != null && !stack.find((i) => (i.instance === model && i.fieldName === fieldName))) {
+      if (!(primitive in field.card) && value != null) {
         await _loadModel(value, [...stack, { instance: model, fieldName }]);
       }
     }
