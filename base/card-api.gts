@@ -1,6 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
+import { Cycle, isCycle } from './cycle';
 import { flatMap, startCase, merge } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
@@ -900,21 +901,12 @@ async function _updateFromSerialized<T extends CardConstructor>(
       }
     )
   ) as [keyof CardInstanceType<T>, any][];
-  let notLoaded: [keyof CardInstanceType<T>, NotLoadedValue] | undefined;
-  if ((notLoaded = values.find(([, value]) => isNotLoadedValue(value) && stack.includes(value.reference)))) {
-    // we are inside a deserialize linksTo cycle. in order to prevent a runaway recompute
-    // in our assignment below we will perform the assignment directly in the deserializeBucket,
-    // otherwise the recompute in the property descriptor's "set" will trigger a run away recompute.
-    // this instance represents the terminal instance that we see in the cycle
-    
-    // TODO use a special error for this
-    let cycleError = new NotLoaded(notLoaded[1].reference, notLoaded[0] as string, card.name);
-
-    let deserialized = getDataBucket(instance);
-    // TODO this is a lot of dupe code--please eliminate this
+  // this block needs to be synchronous
+  {
     let wasSaved = instance[isSavedInstance];
     let originalId = instance.id;
     instance[isSavedInstance] = false;
+    let deserialized = getDataBucket(instance);
     for (let [fieldName, value] of values) {
       if (fieldName === 'id' && wasSaved && originalId !== value) {
         throw new Error(`cannot change the id for saved instance ${originalId}`);
@@ -922,28 +914,16 @@ async function _updateFromSerialized<T extends CardConstructor>(
       deserialized.set(fieldName as string, value);
     }
     if (resource.id != null) {
-      instance[isSavedInstance] = true;
-    }
-    cycleError.instance = instance;
-    throw cycleError;
-  }
-  
-  // this block needs to be synchronous
-  {
-    let wasSaved = instance[isSavedInstance];
-    let originalId = instance.id;
-    instance[isSavedInstance] = false;
-    for (let [fieldName, value] of values) {
-      if (fieldName === 'id' && wasSaved && originalId !== value) {
-        throw new Error(`cannot change the id for saved instance ${originalId}`);
-      }
-      instance[fieldName] = value;
-    }
-    if (resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
       // fields, such that subsequent assignment of the id field when the model is
       // saved will throw
       instance[isSavedInstance] = true;
+    }
+    if (values.find(([, value]) => isNotLoadedValue(value) && stack.includes(value.reference))) {
+      // we are inside a deserialize linksTo cycle. the goal here is to throw an
+      // error with the terminating instance in the cycle thus cleanly cleaving
+      // the cycle at that the point it loops around.
+      throw new Cycle(instance);
     }
   }
 
@@ -1178,9 +1158,10 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
         return;
       }
       if (!(primitive in field.card) && value != null &&
-        !stack.find(({ instance, fieldName: name }) =>
-          (instance === model && name === fieldName) ||
-          (instance.id != null && instance.id === value.id && name === fieldName))
+        !stack.find((i) =>
+          (i.instance === model && i.fieldName === fieldName) ||
+          // TODO do we still need this?--i think we moved the cycle detection to inside the loadField....
+          (i.instance.id != null && i.instance.id === value.id && i.fieldName === fieldName))
       ) {
         await _loadModel(value, [...stack, { instance: model, fieldName }]);
       }
@@ -1221,14 +1202,18 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
           }
           try {
             deserialized.set(fieldName as string, await createFromSerialized(json.data, json, undefined, { loader }));
-          } catch (cycleErr: any) {
-            // TODO check for specialized cycle error
-            if (stack.find(i => i.instance.id != null && i.instance.id === cycleErr.instance.id && fieldName === i.fieldName)) {
-              // we are inside a linksTo cycle, set a not loaded that points to the instance that begins the cycle
-              deserialized.set(fieldName as string, { type: 'not-loaded', reference: cycleErr.instance.id });
-              isLoaded = true;
+          } catch (maybeCycleErr: any) {
+            if (isCycle(maybeCycleErr)) {
+              let cycleErr = maybeCycleErr;
+              if (stack.find(i => i.instance.id != null && i.instance.id === cycleErr.terminatingInstance.id && fieldName === i.fieldName)) {
+                // we are inside a linksTo cycle, set a not loaded that points to the instance that begins the cycle
+                deserialized.set(fieldName as string, { type: 'not-loaded', reference: cycleErr.terminatingInstance.id });
+                isLoaded = true;
+              } else {
+                deserialized.set(fieldName as string, cycleErr.terminatingInstance);
+              }
             } else {
-              deserialized.set(fieldName as string, cycleErr.instance);
+              throw maybeCycleErr;
             }
           }
           continue;

@@ -1,5 +1,5 @@
 export class NotLoaded extends Error {
-  isNotLoadedError: true = true;
+  readonly isNotLoadedError: true = true;
   constructor(
     readonly reference: string,
     readonly fieldName: string,
@@ -15,7 +15,7 @@ export function isNotLoadedError(err: any): err is NotLoaded {
   return (
     err != null &&
     typeof err === "object" &&
-    err.isNotLoadedError &&
+    err.isNotLoadedError === true &&
     "fieldName" in err &&
     "reference" in err
   );
