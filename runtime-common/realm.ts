@@ -18,7 +18,6 @@ import {
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
-  type Card,
 } from "./index";
 import merge from "lodash/merge";
 import cloneDeep from "lodash/cloneDeep";
@@ -38,14 +37,14 @@ import decoratorsProposalPlugin from "@babel/plugin-proposal-decorators";
 import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properties";
 //@ts-ignore ironically no types are available
 import typescriptPlugin from "@babel/plugin-transform-typescript";
-//@ts-ignore ironically no types are available
+//@ts-ignore no types are available
 import emberConcurrencyAsyncPlugin from "ember-concurrency-async-plugin";
 import { Router } from "./router";
 import { parseQueryString } from "./query";
 //@ts-ignore service worker can't handle this
 import type { Readable } from "stream";
-// @ts-ignore tsc doesn't understand .gts files
-type CardAPI = typeof import("https://cardstack.com/base/card-api");
+import { Card } from "https://cardstack.com/base/card-api";
+import type * as CardAPI from "https://cardstack.com/base/card-api";
 
 export interface FileRef {
   path: LocalPath;
@@ -619,7 +618,7 @@ export class Realm {
     doc: LooseSingleCardDocument,
     relativeTo: URL
   ): Promise<LooseSingleCardDocument> {
-    let api = await this.searchIndex.loader.import<CardAPI>(
+    let api = await this.searchIndex.loader.import<typeof CardAPI>(
       "https://cardstack.com/base/card-api"
     );
     let card: Card = await api.createFromSerialized(doc.data, doc, relativeTo, {

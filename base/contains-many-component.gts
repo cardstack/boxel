@@ -51,7 +51,7 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
   }
 }
 
-export function getContainsManyEditor({
+export function getContainsManyComponent({
   model,
   arrayField,
   format,
@@ -64,15 +64,27 @@ export function getContainsManyEditor({
   field: Field<typeof Card>;
   cardTypeFor(field: Field<typeof Card>, boxedElement: Box<Card>): typeof Card;
 }): ComponentLike<{ Args: {}, Blocks: {} }> {
-  return class ContainsManyEditorTemplate extends GlimmerComponent {
-    <template>
-      <ContainsManyEditor
-        @model={{model}}
-        @arrayField={{arrayField}}
-        @field={{field}}
-        @format={{format}}
-        @cardTypeFor={{cardTypeFor}}
-      />
-    </template>
-  };
+  if (format === "edit") {
+    return class ContainsManyEditorTemplate extends GlimmerComponent {
+      <template>
+        <ContainsManyEditor
+          @model={{model}}
+          @arrayField={{arrayField}}
+          @field={{field}}
+          @format={{format}}
+          @cardTypeFor={{cardTypeFor}}
+        />
+      </template>
+    };
+  } else {
+    return class ContainsMany extends GlimmerComponent {
+      <template>
+        {{#each arrayField.children as |boxedElement|}}
+          {{#let (getBoxComponent (cardTypeFor field boxedElement) format boxedElement) as |Item|}}
+            <Item/>
+          {{/let}}
+        {{/each}}
+      </template>
+    };
+  }
 }

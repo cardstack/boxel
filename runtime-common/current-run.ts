@@ -10,7 +10,6 @@ import {
   hasExecutableExtension,
   maxLinkDepth,
   type NotLoaded,
-  type Card,
 } from ".";
 import { Kind, Realm, getExportedCardContext } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
@@ -31,8 +30,8 @@ import type {
   CardResource,
   SingleCardDocument,
 } from "./search-index";
-// @ts-ignore tsc doesn't understand .gts files
-type CardAPI = typeof import("https://cardstack.com/base/card-api");
+import { Card } from "https://cardstack.com/base/card-api";
+import type * as CardAPI from "https://cardstack.com/base/card-api";
 
 // Forces callers to use URL (which avoids accidentally using relative url
 // strings without a base)
@@ -341,7 +340,9 @@ export class CurrentRun {
     instanceURL: string,
     stack: string[]
   ): Promise<void> {
-    let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+    let api = await this.#loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`
+    );
     try {
       await api.recompute(card, {
         loadFields: stack.length < maxLinkDepth ? true : undefined,
@@ -395,7 +396,9 @@ export class CurrentRun {
     let searchData: any;
     let cardType: typeof Card | undefined;
     try {
-      let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      let api = await this.#loader.import<typeof CardAPI>(
+        `${baseRealm.url}card-api`
+      );
       let card = (await api.createFromSerialized(
         resource,
         { data: { ...resource, ...{ id: instanceURL.href } } },
@@ -610,7 +613,9 @@ export class CurrentRun {
       if (!parent || !parentRef) {
         return undefined;
       }
-      let api = await this.loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      let api = await this.loader.import<typeof CardAPI>(
+        `${baseRealm.url}card-api`
+      );
       let field = api.getField(parent, ref.field);
       maybeCard = field?.card;
       let cardId = Loader.identify(maybeCard);

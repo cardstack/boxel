@@ -7,7 +7,7 @@ import { flatten } from "flat";
 import { on } from '@ember/modifier';
 import { pick } from './pick';
 import { getBoxComponent } from 'field-component';
-import { getContainsManyEditor } from 'contains-many-editor';
+import { getContainsManyComponent } from 'contains-many-component';
 import { getLinksToEditor } from 'links-to-editor';
 import {
   Deferred,
@@ -302,24 +302,13 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
     let fieldName = this.name as keyof Card;
     let arrayField = model.field(fieldName, useIndexBasedKey in this.card) as unknown as Box<Card[]>;
-    if (format === 'edit') {
-      return getContainsManyEditor({
-        model,
-        arrayField,
-        field: this,
-        format,
-        cardTypeFor
-      });
-    }
-    return class ContainsMany extends GlimmerComponent {
-      <template>
-        {{#each arrayField.children as |boxedElement|}}
-          {{#let (getBoxComponent (cardTypeFor field boxedElement) format boxedElement) as |Item|}}
-            <Item/>
-          {{/let}}
-        {{/each}}
-      </template>
-    };
+    return getContainsManyComponent({
+      model,
+      arrayField,
+      field: this,
+      format,
+      cardTypeFor
+    });
   }
 }
 

@@ -10,6 +10,7 @@ import classPropertiesPlugin from "@babel/plugin-syntax-class-properties";
 //@ts-ignore unsure where these types live
 import typescriptPlugin from "@babel/plugin-syntax-typescript";
 import { parseTemplates } from "@cardstack/ember-template-imports/lib/parse-templates";
+import * as QUnit from "qunit";
 
 declare global {
   interface Assert {
@@ -90,7 +91,7 @@ ${createPatch("", parsedExpected, parsedActual)
   } else {
     msg = message;
   }
-  this.pushResult({
+  (this as any).pushResult({
     result,
     actual,
     expected,

@@ -5,9 +5,8 @@ import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import { CardError, type SerializedError } from "./error";
 import flatMap from "lodash/flatMap";
+import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
-
-type Card = CardAPI.Card;
 
 export type ExportedCardRef = {
   module: string;
@@ -506,11 +505,13 @@ export class SearchIndex {
   private async loadFieldCard(
     ref: ExportedCardRef,
     fieldPath: string
-  ): Promise<Card> {
+  ): Promise<typeof Card> {
     let api = await this.loadAPI();
-    let module: Record<string, Card>;
+    let module: Record<string, typeof Card>;
     try {
-      module = await this.loader.import<Record<string, Card>>(ref.module);
+      module = await this.loader.import<Record<string, typeof Card>>(
+        ref.module
+      );
     } catch (err: any) {
       throw new Error(
         `Your filter refers to nonexistent type: import ${
@@ -518,7 +519,7 @@ export class SearchIndex {
         } from "${ref.module}"`
       );
     }
-    let card: Card | undefined = module[ref.name];
+    let card: typeof Card | undefined = module[ref.name];
     let segments = fieldPath.split(".");
     while (segments.length) {
       let fieldName = segments.shift()!;
@@ -628,7 +629,7 @@ export class SearchIndex {
     if ("eq" in filter) {
       let ref: CardRef = { type: "exportedCard", ...on };
 
-      let fieldCards: { [fieldPath: string]: Card } = Object.fromEntries(
+      let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
           Object.keys(filter.eq).map(async (fieldPath) => [
             fieldPath,
@@ -667,7 +668,7 @@ export class SearchIndex {
     if ("range" in filter) {
       let ref: CardRef = { type: "exportedCard", ...on };
 
-      let fieldCards: { [fieldPath: string]: Card } = Object.fromEntries(
+      let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
           Object.keys(filter.range).map(async (fieldPath) => [
             fieldPath,
@@ -746,7 +747,7 @@ function some<T>(
   list: T[],
   predicate: (t: T) => boolean | null
 ): boolean | null {
-  let result = null;
+  let result: boolean | null = null;
   for (let element of list) {
     let status = predicate(element);
     if (status === true) {
