@@ -396,9 +396,10 @@ export class CurrentRun {
     let cardType: typeof Card | undefined;
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      let res = { ...resource, ...{ id: instanceURL.href } };
       let card = (await api.createFromSerialized(
-        resource,
-        { data: { ...resource, ...{ id: instanceURL.href } } },
+        res,
+        { data: res },
         moduleURL,
         {
           loader: this.#loader,
