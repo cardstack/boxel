@@ -283,6 +283,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
           if (relationships) {
             resource.relationships = Object.fromEntries(
               Object.entries(relationships)
+                .filter(([fieldName]) => fieldName.startsWith(`${this.name}.`))
                 .map(([fieldName, relationship]) => {
                   let relName = `${this.name}.${index}`;
                   return [fieldName.startsWith(`${relName}.`) ? fieldName.substring(relName.length + 1) : fieldName, relationship]
@@ -394,6 +395,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     if (relationships) {
       resource.relationships = Object.fromEntries(
         Object.entries(relationships)
+          .filter(([fieldName]) => fieldName.startsWith(`${this.name}.`))
           .map(([fieldName, relationship]) => 
             [fieldName.startsWith(`${this.name}.`) ? fieldName.substring(this.name.length + 1) : fieldName, relationship]
           )
