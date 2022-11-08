@@ -18,8 +18,7 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",
-    "module": "CommonJS",
-    "esModuleInterop": true,
+    "module": "es2022",
     "experimentalDecorators": true,
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"]

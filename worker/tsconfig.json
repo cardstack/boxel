@@ -23,5 +23,8 @@
     "noEmit": true,
     "lib": ["ES2020", "ScriptHost", "WebWorker", "WebWorker.ImportScripts"]
   },
+  "glint": {
+    "environment": ["ember-loose", "ember-template-imports"]
+  },
   "include": ["src/**/*", "types/**/*"]
 }

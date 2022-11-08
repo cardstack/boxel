@@ -21,5 +21,10 @@
     "tracked-built-ins": "^2.0.1"
   },
   "peerDependencies": {},
+  "dependenciesMeta": {
+    "@cardstack/runtime-common": {
+      "injected": true
+    }
+  },
   "scripts": {}
 }

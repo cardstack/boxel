@@ -404,6 +404,11 @@ export class CurrentRun {
         { data: { ...resource, ...{ id: instanceURL.href } } },
         moduleURL,
         {
+          // TODO unsure how to make glint happy here--the base realm uses an
+          // injected loader, but this module uses the loader from its own
+          // workspace. the mismatch makes glint mad. we could stop injecting
+          // the loader in the base realm, but then the loader used in host
+          // would conflict with the base realm loader since it's injected too
           loader: this.#loader,
         }
       )) as Card;

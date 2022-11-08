@@ -6,7 +6,6 @@ import { getBoxComponent } from 'field-component';
 import {
   type Card,
   type Box,
-  type Format,
   type Field
 } from './card-api';
 import {

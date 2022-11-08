@@ -1,9 +1,9 @@
-import { contains, field, Component, Card, primitive } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
-import BooleanCard from 'https://cardstack.com/base/boolean';
-import CardRefCard from 'https://cardstack.com/base/card-ref';
+import { contains, field, Component, Card, primitive } from './card-api';
+import StringCard from './string';
+import BooleanCard from './boolean';
+import CardRefCard from './card-ref';
 import { baseCardRef } from "@cardstack/runtime-common";
-import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
+import { initStyleSheet, attachStyles } from './attach-styles';
 
 let css = `
   this {

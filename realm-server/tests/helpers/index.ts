@@ -1,11 +1,8 @@
 import { writeFileSync, writeJSONSync } from "fs-extra";
 import { NodeAdapter } from "../../node-realm";
 import { join } from "path";
-import {
-  Realm,
-  LooseSingleCardDocument,
-  type CardAPI,
-} from "@cardstack/runtime-common";
+import { Realm, LooseSingleCardDocument } from "@cardstack/runtime-common";
+import type * as CardAPI from "https://cardstack.com/base/card-api";
 
 export const testRealm = "http://test-realm/";
 
@@ -26,7 +23,7 @@ export function createRealm(
 
 export function setupCardLogs(
   hooks: NestedHooks,
-  apiThunk: () => Promise<CardAPI>
+  apiThunk: () => Promise<typeof CardAPI>
 ) {
   hooks.afterEach(async function () {
     let api = await apiThunk();
