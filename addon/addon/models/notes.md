@@ -50,3 +50,5 @@ should counterpart handling change?
 - reduce complexity of animation state we need to handle
 
 hiding has purpose?
+
+consider constructing domrefnodes on the fly from real DOM
