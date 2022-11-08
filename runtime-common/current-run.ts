@@ -301,7 +301,6 @@ export class CurrentRun {
   }
 
   private async patchUnfinishedInstances(): Promise<void> {
-    debugger;
     for (let fileURL of this.#unfinishedInstances) {
       this.#indexingInstances.delete(fileURL);
     }
