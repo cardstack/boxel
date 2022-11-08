@@ -13,8 +13,7 @@ import type { ResolvedURL } from '@cardstack/runtime-common/loader';
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
 import type { Card } from 'https://cardstack.com/base/card-api';
-
-type CardAPI = typeof import('https://cardstack.com/base/card-api');
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
@@ -31,7 +30,7 @@ export default class CardService extends Service {
         `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`
       );
     }
-    return this.apiModule.module as CardAPI;
+    return this.apiModule.module as typeof CardAPI;
   }
 
   private async fetchJSON(
