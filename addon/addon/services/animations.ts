@@ -80,7 +80,6 @@ export default class AnimationsService extends Service {
   @restartableTask
   *maybeTransitionTask() {
     this.didNotifyContextRendering = false;
-
     this.animationParticipantManager.updateParticipants({
       insertedContexts: this.insertedContexts,
       insertedSpriteModifiers: this.insertedSpriteModifiers,
@@ -94,7 +93,6 @@ export default class AnimationsService extends Service {
     this.removedSpriteModifiers.clear();
 
     this.animationParticipantManager.snapshotAfterRender();
-    console.log(this.animationParticipantManager.DOMRefs);
 
 
     let { sprites, animators } =
