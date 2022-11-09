@@ -2,12 +2,7 @@ import ContextAwareBounds, {
   Bounds,
   BoundsDelta,
 } from './context-aware-bounds';
-import {
-  CopiedCSS,
-  getDocumentPosition,
-  calculateBoundsVelocity,
-  Snapshot,
-} from '../utils/measurement';
+import { CopiedCSS, Snapshot } from '../utils/measurement';
 import { SpriteAnimation } from './sprite-animation';
 import Motion from '../motions/base';
 import {
@@ -101,7 +96,8 @@ export default class Sprite {
     );
 
     this._contextElementState = animator._state;
-    if (this.counterpart) this.counterpart._contextElementState = animator._state;
+    if (this.counterpart)
+      this.counterpart._contextElementState = animator._state;
   }
 
   get initialBounds(): ContextAwareBounds | undefined {
@@ -335,7 +331,12 @@ export default class Sprite {
     };
 
     // TODO: We need the animationstart callback passed in here
-    return new SpriteAnimation(this, keyframes, keyframeAnimationOptions, this.callbacks.onAnimationStart);
+    return new SpriteAnimation(
+      this,
+      keyframes,
+      keyframeAnimationOptions,
+      this.callbacks.onAnimationStart
+    );
   }
 }
 

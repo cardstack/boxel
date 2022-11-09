@@ -8,7 +8,6 @@ import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import AnimationsService from '@cardstack/boxel-motion/services/animations';
 import { assert } from '@ember/debug';
-import { getDocumentPosition } from '@cardstack/boxel-motion/utils/measurement';
 import { IContext } from '@cardstack/boxel-motion/models/sprite-tree';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 
