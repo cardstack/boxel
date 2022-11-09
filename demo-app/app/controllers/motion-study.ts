@@ -71,6 +71,7 @@ export default class MotionStudy extends Controller {
         }
       });
 
+      // TODO: running things this way will trigger some events on the animation participant?
       await runAnimations([...removedCardContentSprites]);
 
       cardSprites.forEach((s) => {

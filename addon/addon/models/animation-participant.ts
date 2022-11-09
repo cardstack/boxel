@@ -93,7 +93,7 @@ export class AnimationParticipantManager {
       // It should collect all DOMRefs to dispose, then traverse the tree and remove them at one go, preserving
       // nodes that are NOT disposed and all of their descendants
       animationParticipant._DOMRefsToDispose.forEach((DOMRef) => {
-        elementLookup.delete(DOMRef.element);
+        this.DOMRefLookup.delete(DOMRef.element);
         if (DOMRef.parent)
           DOMRef.parent.children = DOMRef.parent.children.filter(
             (v) => v !== DOMRef
@@ -104,6 +104,14 @@ export class AnimationParticipantManager {
       // TODO: DOMRefs aren't disposed yet
       if (animationParticipant.canBeCleanedUp) {
         this.participants.delete(animationParticipant);
+        let DOMRef = animationParticipant.uiState.previous?.DOMRef;
+        if (DOMRef) {
+          this.DOMRefLookup.delete(DOMRef.element);
+          if (DOMRef.parent)
+            DOMRef.parent.children = DOMRef.parent.children.filter(
+              (v) => v !== DOMRef
+            );
+        }
       }
 
       if (identifier.key) keyLookup.set(identifier.key, animationParticipant);
@@ -119,7 +127,10 @@ export class AnimationParticipantManager {
       // for removed sprite modifiers, the identifier should not matter
       // what's important is the element it matches
       let participant = elementLookup.get(modifier.element as HTMLElement);
-      if (!participant) throw new Error('Unexpected unmatched removed element');
+      if (!participant) {
+        debugger;
+        throw new Error('Unexpected unmatched removed element');
+      }
       let group = groups.get(participant);
       if (!group) throw new Error('Unexpected missing group');
       group.removedSpriteModifier = modifier;

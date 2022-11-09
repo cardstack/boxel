@@ -94,6 +94,7 @@ export default class AnimationsService extends Service {
     this.removedSpriteModifiers.clear();
 
     this.animationParticipantManager.snapshotAfterRender();
+    console.log(this.animationParticipantManager.DOMRefs);
 
 
     let { sprites, animators } =
