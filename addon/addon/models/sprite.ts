@@ -185,38 +185,6 @@ export default class Sprite {
     return this.type === SpriteType.Removed && this.hidden;
   }
 
-  /**
-   * @param contextElement
-   * @param playAnimations - Whether or not to modify animation play state while measuring.
-   */
-  captureAnimatingBounds(
-    contextElement: HTMLElement,
-    playAnimations?: boolean
-  ): ContextAwareBounds {
-    let result = new ContextAwareBounds({
-      element: getDocumentPosition(this.element, {
-        withAnimations: true,
-        playAnimations,
-      }),
-      contextElement: getDocumentPosition(contextElement, {
-        withAnimations: true,
-        playAnimations,
-      }),
-    });
-    let priorElementBounds = getDocumentPosition(this.element, {
-      withAnimationOffset: -100,
-      playAnimations,
-    });
-
-    // TODO: extract actual precalculated velocity instead of guesstimating
-    result.velocity = calculateBoundsVelocity(
-      priorElementBounds,
-      result.element,
-      100
-    );
-    return result;
-  }
-
   lockStyles(bounds: Bounds | null = null): void {
     if (!bounds) {
       if (this.initialBounds) {

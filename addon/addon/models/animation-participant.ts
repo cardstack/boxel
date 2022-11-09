@@ -45,7 +45,6 @@ export class Animator {
       insertedSprites,
     };
   }
-  // TODO: methods for applying rules and handling remaining sprites
 }
 
 interface MatchGroup {
@@ -102,6 +101,7 @@ export class AnimationParticipantManager {
       });
 
       // Clean things up each time we animate
+      // TODO: DOMRefs aren't disposed yet
       if (animationParticipant.canBeCleanedUp) {
         this.participants.delete(animationParticipant);
       }
@@ -341,13 +341,11 @@ export class AnimationParticipantManager {
         animatorList = animatorsByDOMRef.get(
           participant.uiState.current.DOMRef
         )!;
-        console.log(participant.uiState.current.DOMRef.element);
         assert('animator list is empty', animatorList);
       } else if (participant.uiState.previous) {
         animatorList = animatorsByDOMRef.get(
           participant.uiState.previous.DOMRef
         )!;
-        console.log(participant.uiState.previous.DOMRef.element);
         assert('animator list is empty', animatorList);
       } else {
         throw new Error('Unexpected uiState when animating');
@@ -548,7 +546,6 @@ class AnimationParticipant {
         );
       this.uiState.current.animation = animation;
       animation.addEventListener('cancel', () => {
-        console.log('cancel!!!');
         if (
           this.uiState.current &&
           this.uiState.current.animation === animation
@@ -556,7 +553,6 @@ class AnimationParticipant {
           this.uiState.current.animation = undefined;
       });
       animation.addEventListener('finish', () => {
-        console.log('finish!!!');
         if (
           this.uiState.current &&
           this.uiState.current.animation === animation
@@ -564,7 +560,6 @@ class AnimationParticipant {
           this.uiState.current.animation = undefined;
       });
       animation.addEventListener('remove', () => {
-        console.log('remove!!!');
         if (
           this.uiState.current &&
           this.uiState.current.animation === animation
@@ -593,7 +588,6 @@ class AnimationParticipant {
         );
       this.uiState.previous.animation = animation;
       animation.addEventListener('cancel', () => {
-        console.log('cancel!!!');
         if (
           this.uiState.previous &&
           this.uiState.previous.animation === animation
@@ -601,7 +595,6 @@ class AnimationParticipant {
           this.uiState.previous.animation = undefined;
       });
       animation.addEventListener('finish', () => {
-        console.log('finish!!!');
         if (
           this.uiState.previous &&
           this.uiState.previous.animation === animation
@@ -609,7 +602,6 @@ class AnimationParticipant {
           this.uiState.previous.animation = undefined;
       });
       animation.addEventListener('remove', () => {
-        console.log('remove!!!');
         if (
           this.uiState.previous &&
           this.uiState.previous.animation === animation
@@ -1000,12 +992,6 @@ class AnimationParticipant {
         .target as HTMLElement;
     }
     let bounds = getDocumentPosition(element, opts);
-    console.log('waw calculate', {
-      animation: target.animation,
-      effect: target.animation?.effect,
-      effectTarget: (target.animation?.effect as KeyframeEffect)?.target,
-      element,
-    });
     let styles = copyComputedStyle(element);
     return {
       bounds,

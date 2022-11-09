@@ -61,28 +61,17 @@ export default class AnimationContextComponent
 
   get renderDetector(): undefined {
     consumeTag(VOLATILE_TAG);
-    this.animations.notifyContextRendering(this);
+    this.animations.notifyContextRendering();
     return undefined;
   }
 
   @action didInsertEl(element: HTMLElement): void {
     this.element = element;
     this.animations.registerContext(this);
-    this.captureSnapshot();
   }
 
   @action didInsertOrphansEl(element: HTMLElement): void {
     this.orphansElement = element;
-  }
-
-  captureSnapshot(): void {
-    let { element } = this;
-    assert(
-      'animation context must be an HTML element',
-      element instanceof HTMLElement
-    );
-    this.lastBounds = this.currentBounds;
-    this.currentBounds = getDocumentPosition(element);
   }
 
   shouldAnimate(): boolean {
