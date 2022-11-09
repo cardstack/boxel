@@ -112,14 +112,30 @@ export class AnimationParticipantManager {
               (v) => v !== DOMRef
             );
         }
+      } else {
+        if (
+          animationParticipant.uiState.previous &&
+          (!animationParticipant.uiState.previous.animation ||
+            animationParticipant.uiState.previous.animation.playState ===
+              'finished')
+        ) {
+          let DOMRef = animationParticipant.uiState.previous?.DOMRef;
+          if (DOMRef) {
+            this.DOMRefLookup.delete(DOMRef.element);
+            if (DOMRef.parent)
+              DOMRef.parent.children = DOMRef.parent.children.filter(
+                (v) => v !== DOMRef
+              );
+          }
+          animationParticipant.uiState.previous = undefined;
+        }
+        if (identifier.key) keyLookup.set(identifier.key, animationParticipant);
+        // Element should never be null unless something wasn't cleaned up
+        if (identifier.element) {
+          elementLookup.set(identifier.element, animationParticipant);
+        }
+        groups.set(animationParticipant, {});
       }
-
-      if (identifier.key) keyLookup.set(identifier.key, animationParticipant);
-      // Element should never be null unless something wasn't cleaned up
-      if (identifier.element) {
-        elementLookup.set(identifier.element, animationParticipant);
-      }
-      groups.set(animationParticipant, {});
     }
 
     // Removed things MUST have a match in existing participants. If they don't, we should error.
@@ -128,7 +144,6 @@ export class AnimationParticipantManager {
       // what's important is the element it matches
       let participant = elementLookup.get(modifier.element as HTMLElement);
       if (!participant) {
-        debugger;
         throw new Error('Unexpected unmatched removed element');
       }
       let group = groups.get(participant);
@@ -560,11 +575,16 @@ class AnimationParticipant {
         );
       this.uiState.current.animation = animation;
       animation.addEventListener('cancel', () => {
+        // TODO: This is not reliable because
+        // We might change current to previous around the same time
+        // We've added something to prevent this in currentToPrevious
+        // But what can we do to prevent this from causing dangling animations?
         if (
           this.uiState.current &&
           this.uiState.current.animation === animation
-        )
+        ) {
           this.uiState.current.animation = undefined;
+        }
       });
       animation.addEventListener('finish', () => {
         if (
@@ -895,6 +915,7 @@ class AnimationParticipant {
 
     return {
       ...current,
+      animation: undefined, // TODO: how to make sure this gets cleaned up?
       _stage: 'BEFORE_RENDER',
       _type: 'previous',
       beforeRender: current.beforeRender,
