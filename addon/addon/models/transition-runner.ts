@@ -56,7 +56,7 @@ export default class TransitionRunner {
 
     if (animationContext.shouldAnimate()) {
       this.logChangeset(changeset, animationContext); // For debugging
-      let animationDefinition = yield animationContext.args.use?.(changeset) as any;
+      let animationDefinition = animationContext.args.use?.(changeset) as any;
 
       if (animationDefinition) {
         // TODO: compile animation
