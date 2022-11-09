@@ -6,9 +6,9 @@ import { WatchedArray } from './watched-array';
 import { flatten } from "flat";
 import { on } from '@ember/modifier';
 import { pick } from './pick';
-import { getBoxComponent } from 'field-component';
-import { getContainsManyComponent } from 'contains-many-component';
-import { getLinksToEditor } from 'links-to-editor';
+import { getBoxComponent } from './field-component';
+import { getContainsManyComponent } from './contains-many-component';
+import { getLinksToEditor } from './links-to-editor';
 import {
   Deferred,
   isCardResource,
@@ -27,6 +27,7 @@ import {
   type CardResource
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
+import type { Loader  as LoaderInterface } from "@cardstack/runtime-common";
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -775,7 +776,8 @@ export function serializeCard(
   }
   return doc;
 }
-export async function createFromSerialized<T extends CardConstructor>(resource: LooseCardResource, doc: LooseSingleCardDocument | CardDocument, relativeTo: URL | undefined, opts?: { loader?: Loader}): Promise<CardInstanceType<T>> {
+// use an interface loader and not the class Loader
+export async function createFromSerialized<T extends CardConstructor>(resource: LooseCardResource, doc: LooseSingleCardDocument | CardDocument, relativeTo: URL | undefined, opts?: { loader?: LoaderInterface}): Promise<CardInstanceType<T>> {
   let loader = opts?.loader ?? Loader;  
   let { meta: { adoptsFrom } } = resource;
   let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);

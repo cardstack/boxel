@@ -7,7 +7,7 @@ import {
   type CardConstructor,
   type FieldsTypeFor
 } from './card-api';
-import { defaultComponent } from 'default-card-component';
+import { defaultComponent } from './default-card-component';
 import ShadowDOM from './shadow-dom';
 import type { ComponentLike } from '@glint/template';
 

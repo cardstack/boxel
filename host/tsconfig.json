@@ -32,12 +32,13 @@
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
-    "include": ["../cards/**", "../base/**", "app/**", "tests/**"]
+    "transform": {
+      "include": ["../cards/**", "../base/**", "app/**", "tests/**" ]
+    }
   },
   "include": [
     "../base/**/*",
     "../cards/**/*",
-    "../realm-server/**/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"

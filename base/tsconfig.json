@@ -19,7 +19,7 @@
     "inlineSources": true,
     "baseUrl": ".",
     "module": "es2022",
-    "experimentalDecorators": true,
+    "experimentalDecorators": true
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]

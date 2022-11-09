@@ -409,7 +409,7 @@ export class CurrentRun {
           // workspace. the mismatch makes glint mad. we could stop injecting
           // the loader in the base realm, but then the loader used in host
           // would conflict with the base realm loader since it's injected too
-          loader: this.#loader,
+          loader: this.#loader, // cast to the Loader from the api.createFromSerialized params
         }
       )) as Card;
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
