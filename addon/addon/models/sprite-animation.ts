@@ -12,11 +12,13 @@ export class SpriteAnimation {
   keyframeAnimationOptions: KeyframeAnimationOptions;
 
   _finished = defer();
+  animationStartCallback: (animation: Animation) => void;
 
   constructor(
     sprite: Sprite,
     keyframes: Keyframe[],
-    keyframeAnimationOptions: KeyframeAnimationOptions
+    keyframeAnimationOptions: KeyframeAnimationOptions,
+    animationStartCallback: (animation: Animation) => void
   ) {
     this.sprite = sprite;
     this.keyframes = keyframes;
@@ -25,6 +27,7 @@ export class SpriteAnimation {
       fill: sprite.type === SpriteType.Removed ? 'forwards' : undefined,
       id: sprite.identifier.toString(),
     };
+    this.animationStartCallback = animationStartCallback;
   }
 
   play(): void {
@@ -47,6 +50,7 @@ export class SpriteAnimation {
           throw error;
         });
     }
+    this.animationStartCallback(this.animation);
     this.animation.play();
   }
 

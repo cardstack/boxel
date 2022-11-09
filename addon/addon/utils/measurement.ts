@@ -8,6 +8,11 @@ export type BoundsVelocity = {
   height: MeasuredSpeed;
 };
 
+export interface Snapshot {
+  readonly bounds: DOMRect;
+  readonly styles: CopiedCSS;
+}
+
 function runWithoutAnimations(playAnimations: boolean) {
   return (element: HTMLElement, f: () => DOMRect) => {
     let animations = element.getAnimations();

@@ -35,7 +35,8 @@ export default class TransitionRunner {
       let animation = new SpriteAnimation(
         sprite,
         keyframes,
-        keyframeAnimationOptions
+        keyframeAnimationOptions,
+        sprite.callbacks.onAnimationStart
       );
 
       result.push(animation);
@@ -55,9 +56,7 @@ export default class TransitionRunner {
 
     if (animationContext.shouldAnimate()) {
       this.logChangeset(changeset, animationContext); // For debugging
-      let animationDefinition = animationContext.args.use?.(changeset) as
-        | AnimationDefinition
-        | undefined;
+      let animationDefinition = yield animationContext.args.use?.(changeset) as any;
 
       if (animationDefinition) {
         // TODO: compile animation
@@ -90,7 +89,6 @@ export default class TransitionRunner {
     let contextId = animationContext.args.id;
     function row(type: SpriteType, sprite: Sprite) {
       return {
-        intent: changeset.intent,
         context: contextId,
         type,
         spriteRole: sprite.role,
