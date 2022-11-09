@@ -16,7 +16,9 @@ export default class RoutesController extends Controller {
   async transition(changeset: Changeset): Promise<void> {
     let { removedSprites, keptSprites, insertedSprites, context } = changeset;
 
-    magicMove({ keptSprites } as Changeset);
+    magicMove({ keptSprites } as Changeset, {
+      duration: 1000,
+    });
 
     insertedSprites.forEach((s) =>
       s.setupAnimation('position', {
