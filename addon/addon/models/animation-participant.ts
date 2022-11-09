@@ -255,6 +255,9 @@ export class AnimationParticipantManager {
   snapshotBeforeRender(): void {
     this.participants.forEach((participant) => {
       participant.snapshotBeforeRender();
+    });
+    // Canceling has to happen after all measurements. If it happens before, it risks affecting some measurements
+    this.participants.forEach((participant) => {
       participant.cancelAnimations();
     });
   }
