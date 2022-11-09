@@ -672,7 +672,7 @@ class AnimationParticipant {
           {
             final: this.uiState.current.afterRender,
           },
-          SpriteType.Kept,
+          SpriteType.Inserted,
           this.currentCallbacks()
         );
 
