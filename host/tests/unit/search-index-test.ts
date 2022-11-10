@@ -365,6 +365,14 @@ module('Unit | search-index', function (hooks) {
         'friend.id': `${testRealmURL}Friend/mango`,
         'friend.firstName': 'Mango',
         'friend.friend.id': `${testRealmURL}Friend/hassan`,
+        'friend.friend.firstName': 'Hassan',
+        'friend.friend.friend.id': `${testRealmURL}Friend/mango`,
+        'friend.friend.friend.firstName': 'Mango',
+        'friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
+        'friend.friend.friend.friend.firstName': 'Hassan',
+        'friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
+        'friend.friend.friend.friend.friend.firstName': 'Mango',
+        'friend.friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
       });
     } else {
       assert.ok(
@@ -451,6 +459,14 @@ module('Unit | search-index', function (hooks) {
         'friend.id': `${testRealmURL}Friend/hassan`,
         'friend.firstName': 'Hassan',
         'friend.friend.id': `${testRealmURL}Friend/mango`,
+        'friend.friend.firstName': 'Mango',
+        'friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
+        'friend.friend.friend.firstName': 'Hassan',
+        'friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
+        'friend.friend.friend.friend.firstName': 'Mango',
+        'friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
+        'friend.friend.friend.friend.friend.firstName': 'Hassan',
+        'friend.friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
       });
     } else {
       assert.ok(

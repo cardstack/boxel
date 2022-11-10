@@ -34,6 +34,7 @@ import type {
 } from "./search-index";
 // @ts-ignore tsc doesn't understand .gts files
 type CardAPI = typeof import("https://cardstack.com/base/card-api");
+import { type IdentityContext as IdentityContextType } from "https://cardstack.com/base/card-api";
 
 // Forces callers to use URL (which avoids accidentally using relative url
 // strings without a base)
@@ -272,7 +273,11 @@ export class CurrentRun {
     }
   }
 
-  private async visitFile(url: URL, stack: string[] = []): Promise<void> {
+  private async visitFile(
+    url: URL,
+    identityContext?: IdentityContextType,
+    stack: string[] = []
+  ): Promise<void> {
     if (this.isIgnored(url)) {
       return;
     }
@@ -290,12 +295,23 @@ export class CurrentRun {
     if (!fileRef) {
       throw new Error(`missing file ${localPath}`);
     }
+    if (!identityContext) {
+      let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      let { IdentityContext } = api;
+      identityContext = new IdentityContext();
+    }
 
     let { content, lastModified } = fileRef;
     if (url.href.endsWith(".json")) {
       let { data: resource } = JSON.parse(content);
       if (isCardResource(resource)) {
-        await this.indexCard(localPath, lastModified, resource, stack);
+        await this.indexCard(
+          localPath,
+          lastModified,
+          resource,
+          identityContext,
+          stack
+        );
       }
     }
   }
@@ -348,13 +364,30 @@ export class CurrentRun {
     }
   }
 
-  private async recomputeCard(
-    card: Card,
+  private async deserializeCard(
+    resource: LooseCardResource,
     fileURL: string,
+    identityContext: IdentityContextType,
     stack: string[]
-  ): Promise<void> {
+  ): Promise<Card> {
     let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+    let card: Card | undefined;
+    let id = fileURL.replace(/\.json$/, "");
+    let cachedCard = identityContext.get(id)?.instance;
+    if (cachedCard) {
+      return cachedCard;
+    }
     try {
+      card = await api.createFromSerialized<typeof Card>(
+        resource,
+        { data: { ...resource, ...{ id } } },
+        new URL(fileURL),
+        {
+          identityContext,
+          loader: this.#loader,
+          loadFields: stack.length < maxLinkDepth ? true : undefined,
+        }
+      );
       await api.recompute(card, {
         loadFields: stack.length < maxLinkDepth ? true : undefined,
       });
@@ -367,44 +400,38 @@ export class CurrentRun {
         ) as NotLoaded | undefined)
       ) {
         let linkURL = new URL(`${notLoadedErr.reference}.json`);
-        if (stack.includes(linkURL.href)) {
-          // break cycles
-          this.#unfinishedInstances.add(fileURL);
-          return;
-        }
         if (this.#realmPaths.inRealm(linkURL)) {
-          await this.visitFile(linkURL, [fileURL, ...stack]);
-          try {
-            await api.recompute(card, { loadFields: true });
-          } catch (recomputeErr: any) {
-            if (
-              isCardError(recomputeErr) &&
-              (notLoadedErr = [
-                recomputeErr,
-                ...(recomputeErr.additionalErrors || []),
-              ].find(isNotLoadedError) as NotLoaded | undefined)
-            ) {
-              if (fileURL.replace(/\.json$/, "") === notLoadedErr.reference) {
-                // break cycle where we get a not loaded error on ourselves
-                // (this is the opposite side of the cycle that is detected above)
-                return;
-              }
+          await this.visitFile(linkURL, identityContext, [fileURL, ...stack]);
+          card = await api.createFromSerialized<typeof Card>(
+            resource,
+            {
+              data: { ...resource, ...{ id } },
+            },
+            new URL(fileURL),
+            {
+              identityContext,
+              loader: this.#loader,
+              loadFields: true,
             }
-            throw recomputeErr;
-          }
+          );
+          await api.recompute(card, { loadFields: true });
         } else {
           // in this case the instance we are linked to is a missing instance
           // in an external realm.
           throw err;
         }
+      } else {
+        throw err;
       }
     }
+    return card;
   }
 
   private async indexCard(
     path: LocalPath,
     lastModified: number,
     resource: LooseCardResource,
+    identityContext: IdentityContextType,
     stack: string[]
   ): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
@@ -430,16 +457,32 @@ export class CurrentRun {
     let cardType: typeof Card | undefined;
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
-      let card = (await api.createFromSerialized(
+      let card = await this.deserializeCard(
         resource,
-        { data: { ...resource, ...{ id: instanceURL.href } } },
-        moduleURL,
-        {
-          loader: this.#loader,
-        }
-      )) as Card;
+        fileURL,
+        identityContext,
+        stack
+      );
+      let stillAssembling = identityContext.assemblingInstances();
+      if (stillAssembling.length > 0) {
+        this.#unfinishedInstances.add(fileURL);
+        let deps = stillAssembling.map(({ instance }) => instance.id);
+        let err = new CardError(
+          `'${fileURL}'s linked document(s) not finished assembling: ${JSON.stringify(
+            deps,
+            null,
+            2
+          )}`,
+          { status: 503 }
+        );
+        this.#instances.set(instanceURL, {
+          type: "error",
+          error: { ...serializableError(err), deps },
+        });
+        deferred.fulfill();
+        return;
+      }
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
-      await this.recomputeCard(card, fileURL, stack);
       let data = api.serializeCard(card, {
         includeComputeds: true,
       });

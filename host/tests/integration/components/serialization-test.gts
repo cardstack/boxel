@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
@@ -1017,6 +1017,8 @@ module('Integration | serialization', function (hooks) {
       assert.ok(false, 'card is not instance of Person');
     }
   });
+
+  skip('can maintain object identity when deserializing linksTo relationship');
 
   test('can serialize a date field with null value', async function(assert) {
     let { field, contains, Card, serializeCard } = cardApi;
