@@ -13,6 +13,7 @@ export default class RoutesController extends Controller {
 
     insertedSprites.forEach((s) => {
       s.setupAnimation('position', {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         startX: -s.finalBounds!.relativeToContext.width,
         duration: 1000,
       });
@@ -23,9 +24,10 @@ export default class RoutesController extends Controller {
       context.appendOrphan(s);
       s.lockStyles();
       s.setupAnimation('position', {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         endX: -s.initialBounds!.relativeToContext.width,
         duration: 1000,
-      })
+      });
     });
 
     await runAnimations([

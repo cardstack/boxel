@@ -72,10 +72,12 @@ export default class HomeReno extends Component<Signature> {
     ];
     let keptSprite = keptCompactCards.find((sprite) => sprite.counterpart);
     if (keptSprite) {
-      changeset.context.appendOrphan(keptSprite.counterpart!);
-      keptSprite.counterpart!.lockStyles();
+      if (!keptSprite.counterpart)
+        throw new Error('Expected counterpart for kept sprite');
+      changeset.context.appendOrphan(keptSprite.counterpart);
+      keptSprite.counterpart.lockStyles();
       keptSprite.element.style.visibility = 'hidden';
-      keptSprite.counterpart!.element.style.zIndex = '1';
+      keptSprite.counterpart.element.style.zIndex = '1';
       magicMove(
         {
           keptSprites: new Set([keptSprite.counterpart]),
@@ -91,7 +93,9 @@ export default class HomeReno extends Component<Signature> {
 
     if (keptSprite) {
       keptSprite.element.style.visibility = 'initial';
-      keptSprite.counterpart!.element.style.zIndex = '';
+      if (!keptSprite.counterpart)
+        throw new Error('Expected counterpart for kept sprite');
+      keptSprite.counterpart.element.style.zIndex = '';
     }
   }
 
