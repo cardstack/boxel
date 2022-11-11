@@ -303,7 +303,7 @@ export class AnimationParticipantManager {
     sprites: Sprite[]; // Sprites. No particular order
   } {
     let animators: Animator[] = [];
-    let sprites: Sprite[] = [];
+    let spriteForParticipant: Map<AnimationParticipant, Sprite> = new Map();
 
     let animatorLookup = new Map<DOMRefNode, Animator>();
     for (let participant of this.participants) {
@@ -344,7 +344,7 @@ export class AnimationParticipantManager {
       if (sprite === null) {
         continue;
       }
-      sprites.push(sprite);
+      spriteForParticipant.set(participant, sprite);
 
       let animatorList: Animator[] = [];
 
@@ -392,9 +392,44 @@ export class AnimationParticipantManager {
     }
 
     // HAX!!! actually not, but it doesn't feel great to do this
-    sprites.forEach((sprite) => {
-      sprite.setDefaultParentDimensions();
-      sprite.counterpart?.setDefaultParentDimensions();
+    spriteForParticipant.forEach((sprite, participant) => {
+      if (sprite.type === SpriteType.Removed) {
+        let parentParticipant =
+          participant.uiState.previous!.DOMRef.parent?.animationParticipant;
+        if (parentParticipant?.animator) {
+          sprite._defaultParentState = parentParticipant.animator._state;
+        } else if (parentParticipant?.sprite) {
+          sprite._defaultParentState = parentParticipant.sprite._state;
+        }
+      } else {
+        let parentParticipant =
+          participant.uiState.current!.DOMRef.parent?.animationParticipant;
+        if (parentParticipant?.animator) {
+          sprite._defaultParentState = parentParticipant.animator._state;
+        } else if (parentParticipant?.sprite) {
+          sprite._defaultParentState = parentParticipant.sprite._state;
+        }
+
+        if (sprite.counterpart) {
+          let parentParticipant =
+            participant.uiState.previous!.DOMRef.parent?.animationParticipant;
+          // Order of preference for parent:
+          // - If there's a stable context, that's the first priority
+          // - If not, then if the parent itself is removed, it should be prioritized
+          if (parentParticipant?.animator) {
+            sprite.counterpart._defaultParentState =
+              parentParticipant.animator._state;
+          } else if (parentParticipant?.sprite) {
+            if (parentParticipant.sprite.counterpart) {
+              sprite.counterpart._defaultParentState =
+                parentParticipant.sprite.counterpart._state;
+            } else {
+              sprite.counterpart._defaultParentState =
+                parentParticipant.sprite._state;
+            }
+          }
+        }
+      }
     });
 
     animators.sort((a, b) => {
@@ -415,7 +450,7 @@ export class AnimationParticipantManager {
 
     return {
       animators,
-      sprites,
+      sprites: Array.from(spriteForParticipant.values()),
     };
   }
 }
@@ -561,12 +596,6 @@ class AnimationParticipant {
   }
 
   private currentCallbacks() {
-    let defaultParentForCurrent = () => {
-      let parentParticipant =
-        this.uiState.current!.DOMRef.parent?.animationParticipant;
-      return (parentParticipant?.animator ?? parentParticipant?.sprite)!;
-    };
-
     let onCurrentAnimation = (animation: Animation) => {
       if (!this.uiState.current)
         throw new Error(
@@ -602,18 +631,11 @@ class AnimationParticipant {
     };
 
     return {
-      getDefaultParent: defaultParentForCurrent,
       onAnimationStart: onCurrentAnimation,
     };
   }
 
   private previousCallbacks() {
-    let defaultParentForPrevious = () => {
-      let parentParticipant =
-        this.uiState.previous!.DOMRef.parent?.animationParticipant;
-      return (parentParticipant?.animator ?? parentParticipant?.sprite)!;
-    };
-
     let onPreviousAnimation = (animation: Animation) => {
       if (!this.uiState.previous)
         throw new Error(
@@ -644,7 +666,6 @@ class AnimationParticipant {
     };
 
     return {
-      getDefaultParent: defaultParentForPrevious,
       onAnimationStart: onPreviousAnimation,
     };
   }

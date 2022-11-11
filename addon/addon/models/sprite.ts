@@ -53,7 +53,7 @@ export default class Sprite {
   defaultAnimator: Animator | undefined = undefined;
 
   // These ones are non-null asserted because we should have them by the time we animate
-  _defaultParentState!: { initial?: Snapshot; final?: Snapshot };
+  _defaultParentState!: { initial?: Snapshot; final?: Snapshot }; // This is set by the AnimationParticipantManager
   _contextElementState!: {
     initial: Snapshot;
     final: Snapshot;
@@ -68,7 +68,6 @@ export default class Sprite {
     },
     type: SpriteType,
     public callbacks: {
-      getDefaultParent(): Animator | Sprite;
       onAnimationStart(animation: Animation): void;
     }
   ) {
@@ -76,15 +75,6 @@ export default class Sprite {
     this.identifier = new SpriteIdentifier(metadata.id, metadata.role);
     this.type = type;
     this.time = new Date().getTime();
-  }
-
-  /**
-   *  Dirty but convenient way to set the default parent that we use if something isn't cloned
-   *  or moved somewhere else
-   */
-  setDefaultParentDimensions() {
-    // For all sprites that are animating, they should at least have a context as parent
-    this._defaultParentState = this.callbacks.getDefaultParent()?._state;
   }
 
   within(animator: Animator) {
@@ -102,7 +92,7 @@ export default class Sprite {
 
   get initialBounds(): ContextAwareBounds | undefined {
     if (this._state.initial) {
-      if (!this._defaultParentState.initial) {
+      if (!this._defaultParentState?.initial) {
         throw new Error('Unexpected missing default parent initial bounds');
       }
 
@@ -122,7 +112,7 @@ export default class Sprite {
 
   get finalBounds(): ContextAwareBounds | undefined {
     if (this._state.final) {
-      if (!this._defaultParentState.final) {
+      if (!this._defaultParentState?.final) {
         throw new Error('Unexpected missing default parent final bounds');
       }
 
