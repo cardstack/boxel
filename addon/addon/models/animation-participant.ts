@@ -33,21 +33,16 @@ export class AnimationParticipantManager {
       // It should collect all DOMRefs to dispose, then traverse the tree and remove them at one go, preserving
       // nodes that are NOT disposed and all of their descendants
       animationParticipant._DOMRefsToDispose.forEach((DOMRef) => {
-        if (DOMRef.parent)
-          DOMRef.parent.children = DOMRef.parent.children.filter(
-            (v) => v !== DOMRef
-          );
+        DOMRef.delete();
       });
 
       if (animationParticipant.canBeCleanedUp) {
+        assert(
+          'Animation participant to clean up has current uiState',
+          !animationParticipant.uiState.current
+        );
         this.participants.delete(animationParticipant);
-        let DOMRef = animationParticipant.uiState.previous?.DOMRef;
-        if (DOMRef) {
-          if (DOMRef.parent)
-            DOMRef.parent.children = DOMRef.parent.children.filter(
-              (v) => v !== DOMRef
-            );
-        }
+        animationParticipant.uiState.previous?.DOMRef?.delete();
       } else {
         if (
           animationParticipant.uiState.previous &&
@@ -55,13 +50,7 @@ export class AnimationParticipantManager {
             animationParticipant.uiState.previous.animation.playState ===
               'finished')
         ) {
-          let DOMRef = animationParticipant.uiState.previous?.DOMRef;
-          if (DOMRef) {
-            if (DOMRef.parent)
-              DOMRef.parent.children = DOMRef.parent.children.filter(
-                (v) => v !== DOMRef
-              );
-          }
+          animationParticipant.uiState.previous?.DOMRef?.delete();
           animationParticipant.uiState.previous = undefined;
         }
       }
@@ -747,6 +736,7 @@ export class AnimationParticipant {
           'Unexpectedly removing a context without also removing a sprite modifier, despite the context once having been a sprite',
           !this.latestModifier
         );
+        this.uiState.previous = this.currentToPrevious(this.uiState.current);
         this.identifier.updateElement(null);
         return;
       }
@@ -761,12 +751,6 @@ export class AnimationParticipant {
 
     if (this.uiState.current && this.uiState.previous) {
       if (insertedSpriteModifier && removedSpriteModifier) {
-        if (
-          this.uiState.current._stage !== 'BEFORE_RENDER' ||
-          this.uiState.current.beforeRender === undefined
-        ) {
-          throw new Error('Invalid attempt to convert current to previous');
-        }
         assert('inserted items did not come with a dom ref', insertedDOMRef);
 
         this._DOMRefsToDispose.add(this.uiState.previous.DOMRef);
@@ -777,13 +761,6 @@ export class AnimationParticipant {
         // this is a situation where we have 2 elements fighting to be the previous element, no clear solution
         // It might be right to limit the ways people can interact with counterparts
       } else if (removedSpriteModifier) {
-        if (
-          this.uiState.current._stage !== 'BEFORE_RENDER' ||
-          this.uiState.current.beforeRender === undefined
-        ) {
-          throw new Error('Invalid attempt to convert current to previous');
-        }
-
         this._DOMRefsToDispose.add(this.uiState.previous.DOMRef);
         this.uiState.previous = this.currentToPrevious(this.uiState.current);
         this.uiState.current = undefined;
@@ -798,12 +775,6 @@ export class AnimationParticipant {
       }
     } else if (this.uiState.current) {
       if (insertedSpriteModifier && removedSpriteModifier) {
-        if (
-          this.uiState.current._stage !== 'BEFORE_RENDER' ||
-          this.uiState.current.beforeRender === undefined
-        ) {
-          throw new Error('Invalid attempt to convert current to previous');
-        }
         assert('inserted items did not come with a dom ref', insertedDOMRef);
 
         this.uiState.previous = this.currentToPrevious(this.uiState.current);
@@ -813,13 +784,6 @@ export class AnimationParticipant {
         // this is a situation where we have 2 elements fighting to be the previous element, no clear solution
         // It might be right to limit the ways people can interact with counterparts
       } else if (removedSpriteModifier) {
-        if (
-          this.uiState.current._stage !== 'BEFORE_RENDER' ||
-          this.uiState.current.beforeRender === undefined
-        ) {
-          throw new Error('Invalid attempt to convert current to previous');
-        }
-
         this.uiState.previous = this.currentToPrevious(this.uiState.current);
         this.uiState.current = undefined;
         this.latestModifier = removedSpriteModifier;
@@ -864,9 +828,10 @@ export class AnimationParticipant {
   }
 
   currentToPrevious(
-    current: BeforeRenderCurrentState
+    current: this['uiState']['current']
   ): BeforeRenderPreviousState {
     if (
+      !current ||
       current._stage !== 'BEFORE_RENDER' ||
       current.beforeRender === undefined
     ) {
@@ -876,7 +841,7 @@ export class AnimationParticipant {
     }
 
     return {
-      ...current,
+      ...(current as BeforeRenderCurrentState),
       animation: undefined, // TODO: how to make sure this gets cleaned up?
       _stage: 'BEFORE_RENDER',
       _type: 'previous',

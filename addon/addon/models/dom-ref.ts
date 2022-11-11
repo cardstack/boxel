@@ -8,6 +8,12 @@ export class DOMRefNode {
   children: Array<DOMRefNode> = [];
 
   constructor(readonly element: HTMLElement) {}
+
+  delete(){
+    if (this.parent) {
+      this.parent.children = this.parent.children.filter((v) => v !== this);
+    }
+  }
 }
 
 export function addToDOMRefTrees(
