@@ -5,8 +5,9 @@ import { module, test } from 'qunit';
 module.skip('Unit | AnimationParticipantManager', function () {
   test('it can generate an identifier from a spriteModifier', function () {});
   test('it can clear snapshots on all participants it manages', function () {});
-  test('it can perform beforeRender snapshots on all participants it manages, then also cancel animations', function () {});
+  test('it can perform beforeRender snapshots on all participants it manages', function () {});
   test('it can perform afterRender snapshots on all participants it manages', function () {});
+  test('it can cancel animations', function () {});
   test('it can perform cleanup of disposed DOMRefs', function () {});
   test('it can perform cleanup of unused detached uiState', function () {});
   test('it can perform cleanup of AnimationParticipants that mark themselves ready for cleanup', function () {});
@@ -16,9 +17,10 @@ module.skip('Unit | AnimationParticipantManager', function () {
   test('it can create a new AnimationParticipant when insertions do not match existing AnimationParticipants', function () {});
   test('it adds a DOMRef for each insertion', function () {});
 
-  // Needs some expanding
   test('it can output Animators and Sprites', function () {});
   test('it creates Sprites which know what their defaultAnimator is', function () {});
-  test('it creates Sprites which have a list of animator ancestors', function () {});
-  test('it injects default parent state for Sprites', function () {});
+  // test('it creates Sprites which have a list of animator ancestors', function () {});
+  test('it injects default parent state for Sprites', function () {
+    // counterparts have special handling
+  });
 });
