@@ -761,16 +761,25 @@ export class AnimationParticipant {
       );
     }
 
-    if (removedSpriteModifier) {
+    if (removedSpriteModifier && insertedSpriteModifier) {
+      assert(
+        'removedSpriteModifier does not match current DOMRef',
+        removedSpriteModifier.element === this.uiState.current?.DOMRef.element
+      );
+      assert('inserted items did not come with a dom ref', insertedDOMRef);
+
+      this.currentToDetached();
+      this.createCurrent(insertedDOMRef);
+      this.latestModifier = insertedSpriteModifier;
+      this.identifier.updateElement(insertedDOMRef.element);
+    } else if (removedSpriteModifier) {
       assert(
         'removedSpriteModifier does not match current DOMRef',
         removedSpriteModifier.element === this.uiState.current?.DOMRef.element
       );
       this.currentToDetached();
       this.identifier.updateElement(null);
-    }
-
-    if (insertedSpriteModifier) {
+    } else if (insertedSpriteModifier) {
       assert('inserted items did not come with a dom ref', insertedDOMRef);
 
       this.createCurrent(insertedDOMRef);
