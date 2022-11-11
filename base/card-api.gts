@@ -247,6 +247,17 @@ function getter<CardT extends CardConstructor>(instance: Card, field: Field<Card
   }
 }
 
+function setFieldValue(instance: Card, fieldName: string, value: any) {
+  let deserialized = getDataBucket(instance);
+  let card = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
+  let field = getField(card, fieldName);
+  if (!field) {
+    throw new Error(`the field '${fieldName}' does not exist on card '${card.name}'`);
+  }
+  value = field.validate(instance, value);
+  deserialized.set(fieldName, value);
+}
+
 class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
   readonly fieldType = 'containsMany';
   constructor(
@@ -735,15 +746,8 @@ export class Card {
 
   constructor(data?: Record<string, any>) {
     if (data !== undefined) {
-      let deserialized = getDataBucket(this);
-      let card = Reflect.getPrototypeOf(this)!.constructor as typeof Card;
       for (let [fieldName, value] of Object.entries(data)) {
-        let field = getField(card, fieldName);
-        if (!field) {
-          throw new Error(`the field '${fieldName}' does not exist on card '${card.name}'`);
-        }
-        value = field.validate(this, value);
-        deserialized.set(fieldName, value);
+        setFieldValue(this, fieldName, value);
       }
     }
   }
@@ -1074,12 +1078,11 @@ async function _updateFromSerialized<T extends CardConstructor>(
     let wasSaved = instance[isSavedInstance];
     let originalId = instance.id;
     instance[isSavedInstance] = false;
-    let deserialized = getDataBucket(instance);
     for (let [fieldName, value] of values) {
       if (fieldName === 'id' && wasSaved && originalId !== value) {
         throw new Error(`cannot change the id for saved instance ${originalId}`);
       }
-      deserialized.set(fieldName as string, value);
+      setFieldValue(instance, fieldName as string, value);
     }
     if (resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
@@ -1143,10 +1146,9 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
       if (field.card as typeof Card === IDCard && this[isSavedInstance]) {
         throw new Error(`cannot assign a value to the field '${field.name}' on the saved card '${(this as any)[field.name]}' because it is the card's identifier`);
       }
-      value = field.validate(this, value);
-      let deserialized = getDataBucket(this);
-      deserialized.set(field.name, value);
+      setFieldValue(this, field.name, value)
       // invalidate all computed fields because we don't know which ones depend on this one
+      let deserialized = getDataBucket(this);
       for (let computedFieldName of Object.keys(getComputedFields(this))) {
         deserialized.delete(computedFieldName);
       }
