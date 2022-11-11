@@ -5,6 +5,7 @@ import {
   Snapshot,
 } from '../utils/measurement';
 import { Animator, IContext } from './animator';
+import { addToDOMRefTrees, DOMRefNode } from './dom-ref';
 import Sprite, { SpriteType, ISpriteModifier } from './sprite';
 
 interface MatchGroup {
@@ -14,19 +15,8 @@ interface MatchGroup {
   insertedContext?: IContext;
   removedContext?: IContext;
 }
-
-// How do we make it possible to easily move DOMRefNodes around?
-class DOMRefNode {
-  animationParticipant!: AnimationParticipant;
-  parent: DOMRefNode | undefined = undefined;
-  children: Array<DOMRefNode> = [];
-
-  constructor(readonly element: HTMLElement) {}
-}
-
 export class AnimationParticipantManager {
   DOMRefs: Array<DOMRefNode> = [];
-  DOMRefLookup: Map<HTMLElement, DOMRefNode> = new Map();
   participants: Set<AnimationParticipant> = new Set();
 
   // Class-internal utility for matching inserted sprites to participants
@@ -43,7 +33,6 @@ export class AnimationParticipantManager {
       // It should collect all DOMRefs to dispose, then traverse the tree and remove them at one go, preserving
       // nodes that are NOT disposed and all of their descendants
       animationParticipant._DOMRefsToDispose.forEach((DOMRef) => {
-        this.DOMRefLookup.delete(DOMRef.element);
         if (DOMRef.parent)
           DOMRef.parent.children = DOMRef.parent.children.filter(
             (v) => v !== DOMRef
@@ -54,7 +43,6 @@ export class AnimationParticipantManager {
         this.participants.delete(animationParticipant);
         let DOMRef = animationParticipant.uiState.previous?.DOMRef;
         if (DOMRef) {
-          this.DOMRefLookup.delete(DOMRef.element);
           if (DOMRef.parent)
             DOMRef.parent.children = DOMRef.parent.children.filter(
               (v) => v !== DOMRef
@@ -69,7 +57,6 @@ export class AnimationParticipantManager {
         ) {
           let DOMRef = animationParticipant.uiState.previous?.DOMRef;
           if (DOMRef) {
-            this.DOMRefLookup.delete(DOMRef.element);
             if (DOMRef.parent)
               DOMRef.parent.children = DOMRef.parent.children.filter(
                 (v) => v !== DOMRef
@@ -176,7 +163,7 @@ export class AnimationParticipantManager {
       }
     }
 
-    let DOMRefNodes = [];
+    let DOMRefNodes: DOMRefNode[] = [];
     for (let [element, creationAargs] of toCreateNewParticipants) {
       if (!creationAargs) throw new Error('Unexpected missing group');
       if (!creationAargs.spriteModifier && !creationAargs.context) {
@@ -218,40 +205,7 @@ export class AnimationParticipantManager {
       animationParticipant.handleMatches(matchGroup);
     }
 
-    // The DOMRef insertion code is optimizable... but I think it's fine for now
-    // We must make sure that ancestors are added before descendants
-    DOMRefNodes.sort((a, b) => {
-      let bitmask: number = a.element.compareDocumentPosition(b.element);
-
-      assert(
-        'Sorting DOMRefNode additions - Document position of two compared nodes is implementation-specific or disconnected',
-        !(
-          bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
-          bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
-        )
-      );
-
-      return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-    });
-    for (let node of DOMRefNodes) {
-      let maybeParent: DOMRefNode | undefined;
-      let searchedElement = node.element;
-      while (searchedElement.parentElement) {
-        maybeParent = this.DOMRefLookup.get(searchedElement);
-        if (maybeParent) {
-          break;
-        }
-        searchedElement = searchedElement.parentElement;
-      }
-      if (!maybeParent) {
-        this.DOMRefs.push(node);
-        this.DOMRefLookup.set(node.element, node);
-      } else {
-        maybeParent.children.push(node);
-        node.parent = maybeParent;
-        this.DOMRefLookup.set(node.element, node);
-      }
-    }
+    this.DOMRefs = addToDOMRefTrees(this.DOMRefs, DOMRefNodes);
   }
 
   // Called before snapshotBeforeRender
@@ -399,7 +353,7 @@ export class AnimationParticipantManager {
           let parentParticipant =
             participant.uiState.previous!.DOMRef.parent?.animationParticipant;
           // Order of preference for parent:
-          // - If there's a stable context, that's the first priority
+          // - If there's a stable context, that's the first priority (this precludes a removed parent)
           // - If not, then if the parent itself is removed, it should be prioritized
           if (parentParticipant?.animator) {
             sprite.counterpart._defaultParentState =
@@ -451,7 +405,7 @@ class AnimationParticipantIdentifier {
   }
 }
 
-class AnimationParticipant {
+export class AnimationParticipant {
   context: IContext | undefined = undefined;
   latestModifier: ISpriteModifier | undefined = undefined;
   identifier: AnimationParticipantIdentifier;
