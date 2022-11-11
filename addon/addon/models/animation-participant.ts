@@ -369,12 +369,12 @@ export class AnimationParticipantManager {
         animatorList = animatorsByDOMRef.get(
           participant.uiState.current.DOMRef
         )!;
-        assert('animator list is empty', animatorList);
+        assert('animator list does not exist for a DOMRef', animatorList);
       } else if (participant.uiState.previous) {
         animatorList = animatorsByDOMRef.get(
           participant.uiState.previous.DOMRef
         )!;
-        assert('animator list is empty', animatorList);
+        assert('animator list does not exist for a DOMRef', animatorList);
       } else {
         throw new Error('Unexpected uiState when animating');
       }
