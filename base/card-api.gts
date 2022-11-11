@@ -735,8 +735,15 @@ export class Card {
 
   constructor(data?: Record<string, any>) {
     if (data !== undefined) {
+      let deserialized = getDataBucket(this);
+      let card = Reflect.getPrototypeOf(this)!.constructor as typeof Card;
       for (let [fieldName, value] of Object.entries(data)) {
-        (this as any)[fieldName] = value;
+        let field = getField(card, fieldName);
+        if (!field) {
+          throw new Error(`the field '${fieldName}' does not exist on card '${card.name}'`);
+        }
+        value = field.validate(this, value);
+        deserialized.set(fieldName, value);
       }
     }
   }
@@ -1309,11 +1316,6 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
   }
 
   async function _loadModel<T extends Card>(model: T, stack: Card[] = []): Promise<void> {
-    let identityContext = identityContexts.get(model);
-    if (identityContext && card.id != null && identityContext.get(model.id)?.state === "assembling") {
-      // card is still being assembled, don't recompute yet
-      return;
-    }
     for (let fieldName of Object.keys(getFields(model, { includeComputeds: true }))) {
       let value: any = await loadField(model, fieldName as keyof T, opts);
       if (recomputePromises.get(card) !== recomputePromise) {
