@@ -26,6 +26,9 @@ export class AnimationParticipantManager {
     return modifier.id;
   }
 
+  // TODO: this should be able to inform its caller
+  // about what HTML elements can be removed from the DOM, so we can selectively
+  // pluck orphans out
   performCleanup() {
     for (let animationParticipant of this.participants) {
       // Naive cleanup for now.
