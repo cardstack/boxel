@@ -1,5 +1,5 @@
 import Controller from '@ember/controller';
-import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';

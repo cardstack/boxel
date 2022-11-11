@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
-import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import Sprite, { SpriteType } from '@cardstack/boxel-motion/models/sprite';
 import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
 

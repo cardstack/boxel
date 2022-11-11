@@ -1,5 +1,5 @@
 import Controller from '@ember/controller';
-import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
 import { SpriteType } from '@cardstack/boxel-motion/models/sprite';
 import fade from '@cardstack/boxel-motion/transitions/fade';

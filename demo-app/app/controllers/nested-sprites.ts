@@ -1,6 +1,6 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
-import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
 import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
 
