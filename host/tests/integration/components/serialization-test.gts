@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
@@ -1018,7 +1018,65 @@ module('Integration | serialization', function (hooks) {
     }
   });
 
-  skip('can maintain object identity when deserializing linksTo relationship');
+  test('can maintain object identity when deserializing linksTo relationship', async function(assert) {
+    let { field, contains, linksTo, Card, createFromSerialized } = cardApi;
+    let { default: StringCard } = string;
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field parent = linksTo(() => Person);
+      @field favorite = linksTo(() => Person);
+    }
+    await shimModule(`${realmURL}test-cards`, { Person });
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        id: `${realmURL}Person/mango`,
+        attributes: {
+          firstName: 'Mango'
+        },
+        relationships: {
+          parent: {
+            links: {
+              self: `${realmURL}Person/hassan`
+            }
+          },
+          favorite: {
+            links: {
+              self: `${realmURL}Person/hassan`
+            }
+          }
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      },
+      included: [{
+        id: `${realmURL}Person/hassan`,
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan'
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmURL}test-cards`,
+            name: 'Person'
+          }
+        }
+      }]
+    }
+    let mango = await createFromSerialized<typeof Person>(doc.data, doc, undefined);
+    if (mango instanceof Person) {
+      let { parent, favorite } = mango;
+      assert.strictEqual(parent, favorite, 'relationship values share object equality');
+      parent.firstName = 'Mariko';
+      assert.strictEqual(favorite.firstName, 'Mariko', 'instances that have object equality can be mutated');
+    } else {
+      assert.ok(false, 'mango is not a Person');
+    }
+  });
 
   test('can serialize a date field with null value', async function(assert) {
     let { field, contains, Card, serializeCard } = cardApi;
