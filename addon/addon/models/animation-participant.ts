@@ -463,11 +463,11 @@ export class AnimationParticipant {
     );
   }
 
-  isSprite(): boolean {
+  canCreateSprite(): boolean {
     return Boolean(this.latestModifier);
   }
 
-  isKept(): this is {
+  spriteIsKept(): this is {
     uiState: { current: AfterRenderCurrentState; previous: undefined };
   } {
     return Boolean(
@@ -478,7 +478,7 @@ export class AnimationParticipant {
     );
   }
 
-  isKeptWithCounterpart(): this is {
+  spriteIsKeptWithCounterpart(): this is {
     uiState: {
       current: AfterRenderCurrentState;
       previous: BeforeRenderPreviousState;
@@ -488,7 +488,8 @@ export class AnimationParticipant {
   }
 
   // Types are a bit wonky
-  isInserted(): this is {
+  // We're not including the missing beforeRender in this type
+  spriteIsInserted(): this is {
     uiState: {
       current: AfterRenderCurrentState;
       previous: undefined;
@@ -497,7 +498,7 @@ export class AnimationParticipant {
     return Boolean(this.uiState.current && !this.uiState.current.beforeRender);
   }
 
-  isRemoved(): this is {
+  spriteIsRemoved(): this is {
     uiState: { previous: BeforeRenderPreviousState; current: undefined };
   } {
     return Boolean(this.uiState.previous && !this.uiState.current);
@@ -508,10 +509,10 @@ export class AnimationParticipant {
   // things, so it might be okay to clean up
   get canBeCleanedUp(): boolean {
     return (
-      (this.isRemoved() &&
+      (this.spriteIsRemoved() &&
         (!this.uiState.previous.animation ||
           this.uiState.previous.animation?.playState === 'finished')) ||
-      (!this.isSprite() && !this.context)
+      (!this.canCreateSprite() && !this.context)
     );
   }
 
@@ -602,10 +603,10 @@ export class AnimationParticipant {
   }
 
   asSprite(): Sprite | null {
-    if (this.isSprite()) {
+    if (this.canCreateSprite()) {
       // Limit the non-null assertions
       let metadata = this.metadata!;
-      if (this.isKeptWithCounterpart()) {
+      if (this.spriteIsKeptWithCounterpart()) {
         let sprite = new Sprite(
           this.uiState.current.DOMRef.element,
           metadata,
@@ -633,7 +634,7 @@ export class AnimationParticipant {
 
         this.sprite = sprite;
         return sprite;
-      } else if (this.isKept()) {
+      } else if (this.spriteIsKept()) {
         let sprite = new Sprite(
           this.uiState.current.DOMRef.element,
           metadata,
@@ -647,7 +648,7 @@ export class AnimationParticipant {
 
         this.sprite = sprite;
         return sprite;
-      } else if (this.isInserted()) {
+      } else if (this.spriteIsInserted()) {
         let sprite = new Sprite(
           this.uiState.current.DOMRef.element,
           metadata,
@@ -660,7 +661,7 @@ export class AnimationParticipant {
 
         this.sprite = sprite;
         return sprite;
-      } else if (this.isRemoved()) {
+      } else if (this.spriteIsRemoved()) {
         let sprite = new Sprite(
           this.uiState.previous.DOMRef.element,
           metadata,
