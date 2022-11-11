@@ -268,7 +268,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Post });
 
     // initialize card data as deserialized to force us to serialize instead of using cached data
-    let firstPost =  new Post({ title: 'First Post', created: p('2022-04-22'), published: parseISO('2022-04-27T16:30+00:00') });
+    let firstPost =  new Post({ created: p('2022-04-22'), published: parseISO('2022-04-27T16:30+00:00') });
     let serialized = serializeCard(firstPost);
     assert.strictEqual(serialized.data.attributes?.created, '2022-04-22');
     assert.strictEqual(serialized.data.attributes?.published, '2022-04-27T16:30:00.000Z');
@@ -1088,7 +1088,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { Post });
 
-    let firstPost =  new Post({ title: 'First Post', created: null, published: null });
+    let firstPost =  new Post({ created: null, published: null });
     let serialized = serializeCard(firstPost);
     assert.strictEqual(serialized.data.attributes?.created, null);
     assert.strictEqual(serialized.data.attributes?.published, null);
