@@ -2,14 +2,12 @@ import Component from '@glimmer/component';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import Ember from 'ember';
-import { Changeset } from '@cardstack/boxel-motion/models/changeset';
 import Sprite from '@cardstack/boxel-motion/models/sprite';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import AnimationsService from '@cardstack/boxel-motion/services/animations';
 import { assert } from '@ember/debug';
-import { getDocumentPosition } from '@cardstack/boxel-motion/utils/measurement';
-import { IContext } from '@cardstack/boxel-motion/models/sprite-tree';
+import { IContext, Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 
 const { VOLATILE_TAG, consumeTag } =
@@ -61,28 +59,17 @@ export default class AnimationContextComponent
 
   get renderDetector(): undefined {
     consumeTag(VOLATILE_TAG);
-    this.animations.notifyContextRendering(this);
+    this.animations.notifyContextRendering();
     return undefined;
   }
 
   @action didInsertEl(element: HTMLElement): void {
     this.element = element;
     this.animations.registerContext(this);
-    this.captureSnapshot();
   }
 
   @action didInsertOrphansEl(element: HTMLElement): void {
     this.orphansElement = element;
-  }
-
-  captureSnapshot(): void {
-    let { element } = this;
-    assert(
-      'animation context must be an HTML element',
-      element instanceof HTMLElement
-    );
-    this.lastBounds = this.currentBounds;
-    this.currentBounds = getDocumentPosition(element);
   }
 
   shouldAnimate(): boolean {

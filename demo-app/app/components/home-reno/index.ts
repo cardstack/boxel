@@ -2,7 +2,7 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
-import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
 import { COMPACT_CARD_STATES } from './card/compact';
 import Sprite, { SpriteType } from '@cardstack/boxel-motion/models/sprite';
@@ -72,10 +72,12 @@ export default class HomeReno extends Component<Signature> {
     ];
     let keptSprite = keptCompactCards.find((sprite) => sprite.counterpart);
     if (keptSprite) {
-      changeset.context.appendOrphan(keptSprite.counterpart!);
-      keptSprite.counterpart!.lockStyles();
+      if (!keptSprite.counterpart)
+        throw new Error('Expected counterpart for kept sprite');
+      changeset.context.appendOrphan(keptSprite.counterpart);
+      keptSprite.counterpart.lockStyles();
       keptSprite.element.style.visibility = 'hidden';
-      keptSprite.counterpart!.element.style.zIndex = '1';
+      keptSprite.counterpart.element.style.zIndex = '1';
       magicMove(
         {
           keptSprites: new Set([keptSprite.counterpart]),
@@ -91,7 +93,9 @@ export default class HomeReno extends Component<Signature> {
 
     if (keptSprite) {
       keptSprite.element.style.visibility = 'initial';
-      keptSprite.counterpart!.element.style.zIndex = '';
+      if (!keptSprite.counterpart)
+        throw new Error('Expected counterpart for kept sprite');
+      keptSprite.counterpart.element.style.zIndex = '';
     }
   }
 

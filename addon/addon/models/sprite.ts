@@ -2,11 +2,7 @@ import ContextAwareBounds, {
   Bounds,
   BoundsDelta,
 } from './context-aware-bounds';
-import {
-  CopiedCSS,
-  getDocumentPosition,
-  calculateBoundsVelocity,
-} from '../utils/measurement';
+import { CopiedCSS, Snapshot } from '../utils/measurement';
 import { SpriteAnimation } from './sprite-animation';
 import Motion from '../motions/base';
 import {
@@ -20,7 +16,13 @@ import { FPS } from '@cardstack/boxel-motion/behaviors/base';
 import { assert } from '@ember/debug';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import { Animator } from './animator';
 
+export interface ISpriteModifier {
+  id: string;
+  role: string | null;
+  element: Element; // TODO can we change this to HTMLElement
+}
 export class SpriteIdentifier {
   id: string | null;
   role: string | null;
@@ -47,51 +49,94 @@ export default class Sprite {
   element: HTMLElement;
   identifier: SpriteIdentifier;
   type: SpriteType | null = null;
-  initialBounds: ContextAwareBounds | undefined;
-  finalBounds: ContextAwareBounds | undefined;
-  initialComputedStyle: CopiedCSS | undefined;
-  finalComputedStyle: CopiedCSS | undefined;
-  counterpart: Sprite | null = null; // the sent sprite if this is the received sprite, or vice versa
+  counterpart: Sprite | null = null;
   motions: Motion[] = [];
   time: number;
   hidden = false;
 
+  animatorAncestors: Animator[] = [];
+  defaultAnimator: Animator | undefined = undefined;
+
+  // These ones are non-null asserted because we should have them by the time we animate
+  _defaultParentState!: { initial?: Snapshot; final?: Snapshot }; // This is set by the AnimationParticipantManager
+  _contextElementState!: {
+    initial: Snapshot;
+    final: Snapshot;
+  };
+
   constructor(
     element: HTMLElement,
-    id: string | null,
-    role: string | null,
-    type: SpriteType | null
+    metadata: { id: string; role: string | null },
+    public _state: {
+      initial?: Snapshot;
+      final?: Snapshot;
+    },
+    type: SpriteType,
+    public callbacks: {
+      onAnimationStart(animation: Animation): void;
+    }
   ) {
     this.element = element;
-    this.identifier = new SpriteIdentifier(id, role);
+    this.identifier = new SpriteIdentifier(metadata.id, metadata.role);
     this.type = type;
     this.time = new Date().getTime();
   }
 
-  within(options: {
-    parent: {
-      currentBounds?: DOMRect;
-      lastBounds?: DOMRect;
-    };
-    contextElement: {
-      currentBounds?: DOMRect;
-      lastBounds?: DOMRect;
-    };
-  }) {
-    this.initialBounds = this.initialBounds?.within({
-      parent: options.parent.lastBounds,
-      contextElement: options.contextElement.lastBounds,
-    });
+  // TODO: when a sprite is placed within a context
+  // AND it's Removed
+  // AND it animates, we should move the DOMRef under the context's DOMRef
+  // Also when it clones, this is a more specific case
+  within(animator: Animator) {
+    // An Animator ALWAYS has initial and final Snapshots
+    // Otherwise it should not be eligible to animate (check definition of context.isStable)
+    assert(
+      'Animator always has initial and final Snapshots',
+      animator._state.initial && animator._state.final
+    );
 
-    this.finalBounds = this.finalBounds?.within({
-      parent: options.parent.currentBounds,
-      contextElement: options.contextElement.currentBounds,
-    });
+    this._contextElementState = animator._state;
+    if (this.counterpart)
+      this.counterpart._contextElementState = animator._state;
+  }
 
-    if (this.counterpart) {
-      this.counterpart.initialBounds = this.initialBounds;
-      this.counterpart.finalBounds = this.finalBounds;
+  get initialBounds(): ContextAwareBounds | undefined {
+    if (this._state.initial) {
+      if (!this._defaultParentState?.initial) {
+        throw new Error('Unexpected missing default parent initial bounds');
+      }
+
+      return new ContextAwareBounds({
+        element: this._state.initial.bounds,
+        parent: this._defaultParentState.initial.bounds,
+        contextElement: this._contextElementState.initial.bounds,
+      });
+    } else {
+      return undefined;
     }
+  }
+
+  get initialComputedStyle(): CopiedCSS | undefined {
+    return this._state.initial?.styles;
+  }
+
+  get finalBounds(): ContextAwareBounds | undefined {
+    if (this._state.final) {
+      if (!this._defaultParentState?.final) {
+        throw new Error('Unexpected missing default parent final bounds');
+      }
+
+      return new ContextAwareBounds({
+        element: this._state.final.bounds,
+        parent: this._defaultParentState.final.bounds,
+        contextElement: this._contextElementState.final.bounds,
+      });
+    } else {
+      return undefined;
+    }
+  }
+
+  get finalComputedStyle(): CopiedCSS | undefined {
+    return this._state.final?.styles;
   }
 
   get id(): string | null {
@@ -133,38 +178,6 @@ export default class Sprite {
 
   get canBeGarbageCollected(): boolean {
     return this.type === SpriteType.Removed && this.hidden;
-  }
-
-  /**
-   * @param contextElement
-   * @param playAnimations - Whether or not to modify animation play state while measuring.
-   */
-  captureAnimatingBounds(
-    contextElement: HTMLElement,
-    playAnimations?: boolean
-  ): ContextAwareBounds {
-    let result = new ContextAwareBounds({
-      element: getDocumentPosition(this.element, {
-        withAnimations: true,
-        playAnimations,
-      }),
-      contextElement: getDocumentPosition(contextElement, {
-        withAnimations: true,
-        playAnimations,
-      }),
-    });
-    let priorElementBounds = getDocumentPosition(this.element, {
-      withAnimationOffset: -100,
-      playAnimations,
-    });
-
-    // TODO: extract actual precalculated velocity instead of guesstimating
-    result.velocity = calculateBoundsVelocity(
-      priorElementBounds,
-      result.element,
-      100
-    );
-    return result;
   }
 
   lockStyles(bounds: Bounds | null = null): void {
@@ -316,20 +329,13 @@ export default class Sprite {
       duration,
     };
 
-    return new SpriteAnimation(this, keyframes, keyframeAnimationOptions);
-  }
-
-  startAnimation({
-    time,
-  }: {
-    time?: number;
-  } = {}): SpriteAnimation {
-    console.warn(
-      'Calling Sprite.startAnimation is deprecated, please use the runAnimations util.'
+    // TODO: We need the animationstart callback passed in here
+    return new SpriteAnimation(
+      this,
+      keyframes,
+      keyframeAnimationOptions,
+      this.callbacks.onAnimationStart
     );
-    let spriteAnimation = this.compileAnimation({ time }) as SpriteAnimation;
-    spriteAnimation.play();
-    return spriteAnimation;
   }
 }
 

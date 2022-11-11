@@ -1,5 +1,5 @@
 import Controller from '@ember/controller';
-import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';

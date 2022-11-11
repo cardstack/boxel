@@ -70,11 +70,13 @@ export default class Accordion extends Component<Signature> {
 
     let id = document.activeElement.id.replace(/-trigger$/, '');
 
-    let index = this.items.findIndex((item) => item.id === id);
-    if (index < this.items.length - 1) {
-      document.getElementById(this.items[index + 1]!.id + '-trigger')?.focus();
+    let currentIndex = this.items.findIndex((item) => item.id === id);
+    let nextIndex = currentIndex < this.items.length - 1 ? currentIndex + 1 : 0;
+    let itemAtIndex = this.items[nextIndex];
+    if (itemAtIndex) {
+      document.getElementById(itemAtIndex.id + '-trigger')?.focus();
     } else {
-      document.getElementById(this.items[0]!.id + '-trigger')?.focus();
+      throw new Error('Could not find item to focus');
     }
 
     event.preventDefault();
@@ -94,13 +96,13 @@ export default class Accordion extends Component<Signature> {
 
     let id = document.activeElement.id.replace(/-trigger$/, '');
 
-    let index = this.items.findIndex((item) => item.id === id);
-    if (index > 0) {
-      document.getElementById(this.items[index - 1]!.id + '-trigger')?.focus();
+    let currentIndex = this.items.findIndex((item) => item.id === id);
+    let nextIndex = currentIndex > 0 ? currentIndex - 1 : this.items.length - 1;
+    let itemAtIndex = this.items[nextIndex];
+    if (itemAtIndex) {
+      document.getElementById(itemAtIndex.id + '-trigger')?.focus();
     } else {
-      document
-        .getElementById(this.items[this.items.length - 1]!.id + '-trigger')
-        ?.focus();
+      throw new Error('Could not find item to focus');
     }
 
     event.preventDefault();
