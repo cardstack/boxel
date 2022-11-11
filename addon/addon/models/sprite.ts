@@ -82,6 +82,10 @@ export default class Sprite {
     this.time = new Date().getTime();
   }
 
+  // TODO: when a sprite is placed within a context
+  // AND it's Removed
+  // AND it animates, we should move the DOMRef under the context's DOMRef
+  // Also when it clones, this is a more specific case
   within(animator: Animator) {
     // An Animator ALWAYS has initial and final Snapshots
     // Otherwise it should not be eligible to animate (check definition of context.isStable)
