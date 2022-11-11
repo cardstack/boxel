@@ -1,7 +1,67 @@
-import Sprite, { SpriteType } from '@cardstack/boxel-motion/models/sprite';
 import { assert } from '@ember/debug';
-import { IContext } from '@cardstack/boxel-motion/models/sprite-tree';
-import { Animator } from './animation-participant';
+import { Snapshot } from '../utils/measurement';
+import { AnimationDefinition } from './orchestration';
+import Sprite, { SpriteType } from './sprite';
+
+export interface IContext {
+  id: string | undefined;
+  element: Element; // TODO can we change this to HTMLElement
+  isInitialRenderCompleted: boolean;
+  isStable: boolean;
+  orphans: Map<string, HTMLElement>;
+  shouldAnimate(): boolean;
+  hasOrphan(spriteOrElement: Sprite): boolean;
+  removeOrphan(spriteOrElement: Sprite): void;
+  appendOrphan(spriteOrElement: Sprite): void;
+  clearOrphans(): void;
+  args: {
+    use?(changeset: Changeset): AnimationDefinition;
+    id?: string;
+  };
+}
+
+// Currently this is just a wrapper around a context
+// We already have a first pass that kicks out unstable contexts, but cloning introduces another layer that disables contexts
+// when cloning is introduced, this can be used store state about whether this context should be allowed to animate
+// We could try to introduce that right now for counterpart-animated stuff
+export class Animator {
+  private keptSprites: Set<Sprite> = new Set();
+  private removedSprites: Set<Sprite> = new Set();
+  private insertedSprites: Set<Sprite> = new Set();
+
+  constructor(
+    //   private participant: AnimationParticipant,
+    public context: IContext,
+    public _state: {
+      initial: Snapshot;
+      final: Snapshot;
+    }
+  ) {}
+
+  handleSprites(sprites: Sprite[]) {
+    for (let sprite of sprites) {
+      if (sprite.defaultAnimator === this) {
+        sprite.within(this);
+
+        if (sprite.type === SpriteType.Inserted) {
+          this.insertedSprites.add(sprite);
+        } else if (sprite.type === SpriteType.Removed) {
+          this.removedSprites.add(sprite);
+        } else if (sprite.type === SpriteType.Kept) {
+          this.keptSprites.add(sprite);
+        } else throw new Error(`Unexpected sprite type: ${sprite.type}`);
+      }
+    }
+  }
+
+  toChangeset() {
+    let changeset = new Changeset(this.context);
+    changeset.insertedSprites = this.insertedSprites;
+    changeset.keptSprites = this.keptSprites;
+    changeset.removedSprites = this.removedSprites;
+    return changeset;
+  }
+}
 
 export type SpritesForArgs = {
   type?: SpriteType | undefined;
@@ -97,20 +157,5 @@ export class Changeset {
       return null;
     }
     return [...set][0] ?? null;
-  }
-}
-
-export class ChangesetBuilder {
-  contextToChangeset: WeakMap<IContext, Changeset> = new WeakMap();
-
-  constructor(animators: Animator[], sprites: Sprite[]) {
-    for (let animator of animators) {
-      let things = animator.handleSprites(sprites);
-      let changeset = new Changeset(animator.context);
-      changeset.insertedSprites = things.insertedSprites;
-      changeset.keptSprites = things.keptSprites;
-      changeset.removedSprites = things.removedSprites;
-      this.contextToChangeset.set(animator.context, changeset);
-    }
   }
 }

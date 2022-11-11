@@ -1,4 +1,4 @@
-import { Changeset } from '../models/changeset';
+import { Changeset } from '../models/animator';
 import { TransitionOptions } from '@cardstack/boxel-motion/transitions/magic-move';
 
 /**

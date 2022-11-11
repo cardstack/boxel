@@ -1,32 +1,17 @@
 import Service from '@ember/service';
 
-import { IContext, ISpriteModifier } from '../models/sprite-tree';
+import { ISpriteModifier } from '../models/sprite';
+import { IContext } from '../models/animator';
 import TransitionRunner from '../models/transition-runner';
 import { scheduleOnce } from '@ember/runloop';
 import { taskFor } from 'ember-concurrency-ts';
-import Sprite from '../models/sprite';
-import Motion from '../motions/base';
-import { SpriteAnimation } from '../models/sprite-animation';
-import { CopiedCSS } from '@cardstack/boxel-motion/utils/measurement';
 import {
   all,
   didCancel,
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
-import { ChangesetBuilder } from '@cardstack/boxel-motion/models/changeset';
 import { AnimationParticipantManager } from '../models/animation-participant';
-
-export type AnimateFunction = (
-  sprite: Sprite,
-  motion: Motion
-) => SpriteAnimation;
-
-export interface IntermediateSprite {
-  modifier: ISpriteModifier;
-  intermediateBounds: DOMRect;
-  intermediateStyles: CopiedCSS;
-}
 
 export default class AnimationsService extends Service {
   animationParticipantManager = new AnimationParticipantManager();
@@ -94,21 +79,20 @@ export default class AnimationsService extends Service {
 
     this.animationParticipantManager.snapshotAfterRender();
 
-
     let { sprites, animators } =
       this.animationParticipantManager.createAnimatorsAndSprites();
 
-    let changesetBuilder = new ChangesetBuilder(animators, sprites);
-
     let promises = [];
-    for (let { context } of animators) {
-      let changeset = changesetBuilder.contextToChangeset.get(context);
+    for (let animator of animators) {
+      animator.handleSprites(sprites);
+      let changeset = animator.toChangeset();
       if (changeset && changeset.hasSprites) {
-        let transitionRunner = new TransitionRunner(context);
+        let transitionRunner = new TransitionRunner(changeset.context);
         let task = taskFor(transitionRunner.maybeTransitionTask);
         promises.push(task.perform(changeset));
       }
     }
+
     yield all(promises);
   }
 }

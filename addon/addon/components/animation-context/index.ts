@@ -2,13 +2,12 @@ import Component from '@glimmer/component';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import Ember from 'ember';
-import { Changeset } from '@cardstack/boxel-motion/models/changeset';
 import Sprite from '@cardstack/boxel-motion/models/sprite';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
 import AnimationsService from '@cardstack/boxel-motion/services/animations';
 import { assert } from '@ember/debug';
-import { IContext } from '@cardstack/boxel-motion/models/sprite-tree';
+import { IContext, Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 
 const { VOLATILE_TAG, consumeTag } =

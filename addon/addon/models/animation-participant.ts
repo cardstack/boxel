@@ -4,48 +4,8 @@ import {
   copyComputedStyle,
   Snapshot,
 } from '../utils/measurement';
-import Sprite, { SpriteType } from './sprite';
-import { IContext, ISpriteModifier } from './sprite-tree';
-
-// Currently this is just a wrapper around a context
-// We already have a first pass that kicks out unstable contexts, but cloning introduces another layer that disables contexts
-// when cloning is introduced, this can be used store state about whether this context should be allowed to animate
-// We could try to introduce that right now for counterpart-animated stuff
-export class Animator {
-  constructor(
-    private participant: AnimationParticipant,
-    public context: IContext,
-    public _state: {
-      initial: Snapshot;
-      final: Snapshot;
-    }
-  ) {}
-
-  handleSprites(sprites: Sprite[]) {
-    let keptSprites = new Set<Sprite>();
-    let insertedSprites = new Set<Sprite>();
-    let removedSprites = new Set<Sprite>();
-
-    for (let sprite of sprites) {
-      if (sprite.defaultAnimator === this) {
-        sprite.within(this);
-        if (sprite.type === SpriteType.Inserted) {
-          insertedSprites.add(sprite);
-        } else if (sprite.type === SpriteType.Removed) {
-          removedSprites.add(sprite);
-        } else if (sprite.type === SpriteType.Kept) {
-          keptSprites.add(sprite);
-        } else throw new Error(`Unexpected sprite type: ${sprite.type}`);
-      }
-    }
-
-    return {
-      keptSprites,
-      removedSprites,
-      insertedSprites,
-    };
-  }
-}
+import { Animator, IContext } from './animator';
+import Sprite, { SpriteType, ISpriteModifier } from './sprite';
 
 interface MatchGroup {
   insertedSpriteModifier?: ISpriteModifier;
@@ -57,7 +17,7 @@ interface MatchGroup {
 
 // How do we make it possible to easily move DOMRefNodes around?
 class DOMRefNode {
-  animationParticipant?: AnimationParticipant;
+  animationParticipant!: AnimationParticipant;
   parent: DOMRefNode | undefined = undefined;
   children: Array<DOMRefNode> = [];
 
@@ -76,18 +36,8 @@ export class AnimationParticipantManager {
     return modifier.id;
   }
 
-  updateParticipants(changes: {
-    insertedContexts: Set<IContext>;
-    removedContexts: Set<IContext>;
-    insertedSpriteModifiers: Set<ISpriteModifier>;
-    removedSpriteModifiers: Set<ISpriteModifier>;
-  }): void {
-    let elementLookup: Map<HTMLElement, AnimationParticipant> = new Map();
-    let keyLookup: Map<string, AnimationParticipant> = new Map();
-    let groups: Map<AnimationParticipant, MatchGroup> = new Map();
-
+  performCleanup() {
     for (let animationParticipant of this.participants) {
-      let identifier = animationParticipant.identifier;
       // Naive cleanup for now.
       // This should be changed to something that can prune DOMRefs AND graft live nodes
       // It should collect all DOMRefs to dispose, then traverse the tree and remove them at one go, preserving
@@ -100,7 +50,6 @@ export class AnimationParticipantManager {
           );
       });
 
-      // Clean things up each time we animate
       if (animationParticipant.canBeCleanedUp) {
         this.participants.delete(animationParticipant);
         let DOMRef = animationParticipant.uiState.previous?.DOMRef;
@@ -128,108 +77,144 @@ export class AnimationParticipantManager {
           }
           animationParticipant.uiState.previous = undefined;
         }
-        if (identifier.key) keyLookup.set(identifier.key, animationParticipant);
-        // Element should never be null unless something wasn't cleaned up
-        if (identifier.element) {
-          elementLookup.set(identifier.element, animationParticipant);
-        }
-        groups.set(animationParticipant, {});
       }
+    }
+  }
+
+  updateParticipants(changes: {
+    insertedContexts: Set<IContext>;
+    removedContexts: Set<IContext>;
+    insertedSpriteModifiers: Set<ISpriteModifier>;
+    removedSpriteModifiers: Set<ISpriteModifier>;
+  }): void {
+    // Clean up stale removed element references each time we animate
+    this.performCleanup();
+
+    let elementLookup: Map<HTMLElement, AnimationParticipant> = new Map();
+    let keyLookup: Map<string, AnimationParticipant> = new Map();
+    let groups: Map<AnimationParticipant, MatchGroup> = new Map();
+    for (let animationParticipant of this.participants) {
+      let identifier = animationParticipant.identifier;
+      if (identifier.key) keyLookup.set(identifier.key, animationParticipant);
+      // Element should never be null unless something wasn't cleaned up
+      if (identifier.element) {
+        elementLookup.set(identifier.element, animationParticipant);
+      }
+      groups.set(animationParticipant, {});
+    }
+    function getExistingGroupByElement(element: HTMLElement): MatchGroup {
+      let participant = elementLookup.get(element as HTMLElement);
+      if (!participant) {
+        throw new Error('Unexpected unmatched removed element');
+      }
+      let group = groups.get(participant);
+      if (!group) throw new Error('Unexpected missing group');
+      return group;
+    }
+    function getExistingGroupByKey(key: string): MatchGroup | undefined {
+      let participant = keyLookup.get(key);
+      if (!participant) return undefined;
+      let group = groups.get(participant);
+      if (!group) throw new Error('Unexpected missing group');
+      return group;
     }
 
     // Removed things MUST have a match in existing participants. If they don't, we should error.
     for (let modifier of changes.removedSpriteModifiers) {
       // for removed sprite modifiers, the identifier should not matter
       // what's important is the element it matches
-      let participant = elementLookup.get(modifier.element as HTMLElement);
-      if (!participant) {
-        throw new Error('Unexpected unmatched removed element');
-      }
-      let group = groups.get(participant);
-      if (!group) throw new Error('Unexpected missing group');
-      group.removedSpriteModifier = modifier;
+      getExistingGroupByElement(
+        modifier.element as HTMLElement
+      ).removedSpriteModifier = modifier;
     }
     for (let context of changes.removedContexts) {
-      let participant = elementLookup.get(context.element as HTMLElement);
-      if (!participant) throw new Error('Unexpected unmatched removed element');
-      let group = groups.get(participant);
-      if (!group) throw new Error('Unexpected missing group');
-      group.removedContext = context;
+      getExistingGroupByElement(context.element as HTMLElement).removedContext =
+        context;
     }
 
-    // Create DOMRefNodes and then sort them by DOM position, before adding to main tree
-    let DOMRefNodes: DOMRefNode[] = [];
+    // Matching insertions can only happen via a matching identifier
+    // Contexts piggyback on SpriteModifiers that have been matched
+    // since there is no concept of matching a context on its own
+    // but it's important to recognize that a matched sprite modifier's element
+    // also belongs to an AnimationContext
     let insertedElementToGroup: Map<HTMLElement, MatchGroup> = new Map();
-    let toCreateNewParticipants: Set<HTMLElement> = new Set();
-    // Inserted things need to be grouped up and a new DOMRefNode created
+    let toCreateNewParticipants: Map<
+      HTMLElement,
+      {
+        context?: IContext;
+        spriteModifier?: ISpriteModifier;
+      }
+    > = new Map();
     for (let modifier of changes.insertedSpriteModifiers) {
-      let participant = keyLookup.get(this.generateIdentifierKey(modifier));
-      let insertedDOMRef: DOMRefNode = new DOMRefNode(
-        modifier.element as HTMLElement
-      );
-      if (!participant) {
-        insertedElementToGroup.set(modifier.element as HTMLElement, {
-          insertedDOMRef,
-          insertedSpriteModifier: modifier,
-        });
-        toCreateNewParticipants.add(modifier.element as HTMLElement);
-      } else {
-        let group = groups.get(participant);
-        if (!group) throw new Error('Unexpected missing group');
-        group.insertedDOMRef = insertedDOMRef;
+      let element = modifier.element as HTMLElement;
+      let group = getExistingGroupByKey(this.generateIdentifierKey(modifier));
+      if (group) {
         group.insertedSpriteModifier = modifier;
-        insertedElementToGroup.set(modifier.element as HTMLElement, group);
+        insertedElementToGroup.set(element, group);
+      } else {
+        toCreateNewParticipants.set(element, {
+          spriteModifier: modifier,
+        });
       }
     }
     for (let context of changes.insertedContexts) {
-      let group = insertedElementToGroup.get(context.element as HTMLElement);
-      if (!group) {
-        let insertedDOMRef = new DOMRefNode(context.element as HTMLElement);
-        insertedElementToGroup.set(context.element as HTMLElement, {
-          insertedDOMRef,
-          insertedContext: context,
-        });
-        toCreateNewParticipants.add(context.element as HTMLElement);
-      } else {
-        // insertedDOMRef already assigned, along with sprite modifier
+      let element = context.element as HTMLElement;
+      let group = insertedElementToGroup.get(element);
+      if (group) {
         group.insertedContext = context;
+        continue;
+      }
+
+      let newGroup = toCreateNewParticipants.get(element);
+      if (newGroup) {
+        newGroup.context = context;
+        continue;
+      } else {
+        toCreateNewParticipants.set(element, {
+          context,
+        });
       }
     }
 
-    for (let element of toCreateNewParticipants) {
-      let group = insertedElementToGroup.get(element);
-      if (!group) throw new Error('Unexpected missing group');
-      if (!group.insertedDOMRef) {
-        throw new Error('Missing a DOMRef for fresh inserted participant');
-      }
-      if (!group.insertedSpriteModifier && !group.insertedContext) {
+    let DOMRefNodes = [];
+    for (let [element, creationAargs] of toCreateNewParticipants) {
+      if (!creationAargs) throw new Error('Unexpected missing group');
+      if (!creationAargs.spriteModifier && !creationAargs.context) {
         throw new Error(
-          'Invalid group detected, missing either insertedSpriteModifier or insertedContext'
+          'Invalid new group detected, missing either spriteModifier or context'
         );
       }
+
       let identifier = new AnimationParticipantIdentifier(
-        group.insertedSpriteModifier
-          ? this.generateIdentifierKey(group.insertedSpriteModifier)
+        creationAargs.spriteModifier
+          ? this.generateIdentifierKey(creationAargs.spriteModifier)
           : null,
         element
       );
+      let DOMRef = new DOMRefNode(element);
       let animationParticipant = new AnimationParticipant({
         identifier,
-        spriteModifier: group.insertedSpriteModifier,
-        context: group.insertedContext,
-        DOMRef: group.insertedDOMRef,
+        spriteModifier: creationAargs.spriteModifier,
+        context: creationAargs.context,
+        DOMRef,
       });
-      DOMRefNodes.push(group.insertedDOMRef);
-      if (group.insertedDOMRef)
-        group.insertedDOMRef.animationParticipant = animationParticipant;
+      DOMRef.animationParticipant = animationParticipant;
+      DOMRefNodes.push(DOMRef);
       this.participants.add(animationParticipant);
     }
 
     for (let [animationParticipant, matchGroup] of groups) {
-      if (matchGroup.insertedDOMRef) {
-        matchGroup.insertedDOMRef.animationParticipant = animationParticipant;
+      let insertedElement: HTMLElement | undefined = (
+        matchGroup.insertedContext || matchGroup.insertedSpriteModifier
+      )?.element as HTMLElement;
+
+      if (insertedElement) {
+        let DOMRef = new DOMRefNode(insertedElement);
+        matchGroup.insertedDOMRef = DOMRef;
+        DOMRef.animationParticipant = animationParticipant;
         DOMRefNodes.push(matchGroup.insertedDOMRef);
       }
+
       animationParticipant.handleMatches(matchGroup);
     }
 
@@ -760,7 +745,7 @@ class AnimationParticipant {
         this.uiState.current?.beforeRender &&
         this.uiState.current?.afterRender
       ) {
-        let animator = new Animator(this, this.context, {
+        let animator = new Animator(this.context, {
           initial: this.uiState.current.beforeRender,
           final: this.uiState.current.afterRender,
         });

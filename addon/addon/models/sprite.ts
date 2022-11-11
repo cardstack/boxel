@@ -16,8 +16,13 @@ import { FPS } from '@cardstack/boxel-motion/behaviors/base';
 import { assert } from '@ember/debug';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
-import { Animator } from './animation-participant';
+import { Animator } from './animator';
 
+export interface ISpriteModifier {
+  id: string;
+  role: string | null;
+  element: Element; // TODO can we change this to HTMLElement
+}
 export class SpriteIdentifier {
   id: string | null;
   role: string | null;

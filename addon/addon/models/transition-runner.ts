@@ -1,8 +1,7 @@
 import { task } from 'ember-concurrency';
-import { Changeset } from '../models/changeset';
 import Sprite, { SpriteType } from '../models/sprite';
 import { assert } from '@ember/debug';
-import { IContext } from './sprite-tree';
+import { IContext, Changeset } from './animator';
 import { SpriteAnimation } from '@cardstack/boxel-motion/models/sprite-animation';
 import { FPS } from '@cardstack/boxel-motion/behaviors/base';
 import { AnimationDefinition, OrchestrationMatrix } from './orchestration';

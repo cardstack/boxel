@@ -1,4 +1,4 @@
-import { Changeset } from '../models/changeset';
+import { Changeset } from '../models/animator';
 import { assert } from '@ember/debug';
 import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import approximatelyEqual from '@cardstack/boxel-motion/utils/approximately-equal';
