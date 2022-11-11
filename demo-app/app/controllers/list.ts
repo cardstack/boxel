@@ -1,7 +1,7 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { Changeset } from '@cardstack/boxel-motion/models/changeset';
+import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import { AnimationDefinition } from '@cardstack/boxel-motion/addon/models/orchestration';
 
