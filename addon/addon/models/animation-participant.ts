@@ -203,9 +203,9 @@ export class AnimationParticipantManager {
   }
 
   // Called before snapshotBeforeRender
-  clear(): void {
+  clearSnapshots(): void {
     this.participants.forEach((participant) => {
-      participant.clear();
+      participant.clearSnapshots();
     });
   }
 
@@ -815,7 +815,7 @@ export class AnimationParticipant {
     this.uiState.current = undefined;
   }
 
-  clear(): void {
+  clearSnapshots(): void {
     this.animator = undefined;
     this.sprite = undefined;
 

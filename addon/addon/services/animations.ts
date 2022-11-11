@@ -48,7 +48,7 @@ export default class AnimationsService extends Service {
     if (!this.didNotifyContextRendering) {
       this.didNotifyContextRendering = true;
 
-      this.animationParticipantManager.clear();
+      this.animationParticipantManager.clearSnapshots();
       this.animationParticipantManager.snapshotBeforeRender();
 
       scheduleOnce('afterRender', this, this.maybeTransition);
