@@ -378,9 +378,10 @@ export class CurrentRun {
       return cachedCard;
     }
     try {
+      let res = { ...resource, ...{ id } };
       card = await api.createFromSerialized<typeof Card>(
-        resource,
-        { data: { ...resource, ...{ id } } },
+        res,
+        { data: res },
         new URL(fileURL),
         {
           identityContext,

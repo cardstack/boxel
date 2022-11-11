@@ -237,6 +237,26 @@ module('Unit | search-index', function (hooks) {
     } else {
       assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
     }
+
+    let hassanEntry = await indexer.searchEntry(
+      new URL(`${testRealmURL}Friend/hassan`)
+    );
+    if (hassanEntry) {
+      assert.deepEqual(hassanEntry.searchData, {
+        id: `${testRealmURL}Friend/hassan`,
+        firstName: 'Hassan',
+        'friend.id': `${testRealmURL}Friend/mango`,
+        'friend.firstName': 'Mango',
+        'friend.friend.id': `${testRealmURL}Friend/vanGogh`,
+        'friend.friend.firstName': 'Van Gogh',
+        'friend.friend.friend': null,
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}Friend/hassan in the index`
+      );
+    }
   });
 
   test('can index a field with a cycle in the linksTo field', async function (assert) {
@@ -501,7 +521,6 @@ module('Unit | search-index', function (hooks) {
       [
         'http://localhost:4201/base/attach-styles',
         'http://localhost:4201/base/card-api',
-        'http://localhost:4201/base/cycle',
         'http://localhost:4201/base/integer',
         'http://localhost:4201/base/not-ready',
         'http://localhost:4201/base/pick',
@@ -1063,7 +1082,7 @@ posts/ignore-me.json
       } catch (err: any) {
         assert.strictEqual(
           err.message,
-          `Your filter refers to nonexistent field \"nonExistentField\" on type {\"module\":\"${testModuleRealm}person\",\"name\":\"Person\"}`
+          `Your filter refers to nonexistent field "nonExistentField" on type {"module":"${testModuleRealm}person","name":"Person"}`
         );
       }
     });
