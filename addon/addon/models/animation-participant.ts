@@ -58,6 +58,8 @@ export class AnimationParticipantManager {
           animationParticipant.uiState.detached?.DOMRef?.delete();
           animationParticipant.uiState.detached = undefined;
         }
+        // TODO: check that canceling the animations is happening at the right place
+        animationParticipant.cancelAnimations();
       }
     }
   }
@@ -213,10 +215,6 @@ export class AnimationParticipantManager {
   snapshotBeforeRender(): void {
     this.participants.forEach((participant) => {
       participant.snapshotBeforeRender();
-    });
-    // Canceling has to happen after all measurements. If it happens before, it risks affecting some measurements
-    this.participants.forEach((participant) => {
-      participant.cancelAnimations();
     });
   }
 
@@ -696,7 +694,6 @@ export class AnimationParticipant {
     }
   }
 
-  // This is currently a bit verbose but I think it describes the match handling reasonably
   handleMatches({
     insertedSpriteModifier,
     removedSpriteModifier,
@@ -741,7 +738,11 @@ export class AnimationParticipant {
         'Invalid insertion that matches existing element without removal'
       );
     }
-    if (this.uiState.detached && removedSpriteModifier) {
+    if (
+      this.uiState.detached &&
+      !this.uiState.current &&
+      removedSpriteModifier
+    ) {
       throw new Error('Invalid removal of already removed element');
     }
     if (!this.uiState.current && !this.uiState.detached) {
@@ -799,6 +800,9 @@ export class AnimationParticipant {
         'Attempting to convert current in invalid state to detached'
       );
     }
+
+    if (current.animation)
+      throw new Error('Failed to cancel animation before handling matches');
     if (this.uiState.detached) {
       // this is a situation where we have 2 elements fighting to be the detached element, no clear solution
       // It might be right to limit the ways people can interact with counterparts
@@ -873,8 +877,14 @@ export class AnimationParticipant {
   }
 
   cancelAnimations() {
-    this.uiState.detached?.animation?.cancel();
-    this.uiState.current?.animation?.cancel();
+    if (this.uiState.detached) {
+      this.uiState.detached.animation?.cancel();
+      this.uiState.detached.animation = undefined;
+    }
+    if (this.uiState.current) {
+      this.uiState.current.animation?.cancel();
+      this.uiState.current.animation = undefined;
+    }
   }
 
   snapshotAfterRender(): void {
