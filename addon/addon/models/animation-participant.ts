@@ -738,6 +738,7 @@ export class AnimationParticipant {
           !this.latestModifier
         );
         this.uiState.detached = this.currentToDetached(this.uiState.current);
+        this.uiState.current = undefined;
         this.identifier.updateElement(null);
         return;
       }
