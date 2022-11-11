@@ -15,25 +15,30 @@ import { AnimationParticipantManager } from '../models/animation-participant';
 
 export default class AnimationsService extends Service {
   animationParticipantManager = new AnimationParticipantManager();
+
+  // Data and methods to do with insertions and removals from the DOM
+  // Data is relevant only for one render and should be cleared before the next
   insertedContexts: Set<IContext> = new Set();
   removedContexts: Set<IContext> = new Set();
   insertedSpriteModifiers: Set<ISpriteModifier> = new Set();
   removedSpriteModifiers: Set<ISpriteModifier> = new Set();
-
   registerContext(context: IContext): void {
     this.insertedContexts.add(context);
   }
-
   unregisterContext(context: IContext): void {
     this.removedContexts.add(context);
   }
-
   registerSpriteModifier(spriteModifier: ISpriteModifier): void {
     this.insertedSpriteModifiers.add(spriteModifier);
   }
-
   unregisterSpriteModifier(spriteModifier: ISpriteModifier): void {
     this.removedSpriteModifiers.add(spriteModifier);
+  }
+  clearChanges() {
+    this.insertedContexts.clear();
+    this.removedContexts.clear();
+    this.insertedSpriteModifiers.clear();
+    this.removedSpriteModifiers.clear();
   }
 
   didNotifyContextRendering = false;
@@ -71,11 +76,7 @@ export default class AnimationsService extends Service {
       removedContexts: this.removedContexts,
       removedSpriteModifiers: this.removedSpriteModifiers,
     });
-
-    this.insertedContexts.clear();
-    this.insertedSpriteModifiers.clear();
-    this.removedContexts.clear();
-    this.removedSpriteModifiers.clear();
+    this.clearChanges();
 
     this.animationParticipantManager.snapshotAfterRender();
 
