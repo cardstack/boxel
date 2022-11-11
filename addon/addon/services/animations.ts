@@ -12,6 +12,7 @@ import {
   TaskInstance,
 } from 'ember-concurrency';
 import { AnimationParticipantManager } from '../models/animation-participant';
+import { assert } from '@ember/debug';
 
 export default class AnimationsService extends Service {
   animationParticipantManager = new AnimationParticipantManager();
@@ -82,6 +83,22 @@ export default class AnimationsService extends Service {
 
     let { sprites, animators } =
       this.animationParticipantManager.createAnimatorsAndSprites();
+
+    animators.sort((a, b) => {
+      let bitmask = a.context.element.compareDocumentPosition(
+        b.context.element
+      );
+
+      assert(
+        'Sorting animators - Document position of two compared nodes is implementation-specific or disconnected',
+        !(
+          bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
+          bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
+        )
+      );
+
+      return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
 
     let promises = [];
     for (let animator of animators) {

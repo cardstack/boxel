@@ -363,22 +363,6 @@ export class AnimationParticipantManager {
       }
     });
 
-    animators.sort((a, b) => {
-      let bitmask = a.context.element.compareDocumentPosition(
-        b.context.element
-      );
-
-      assert(
-        'Sorting animators - Document position of two compared nodes is implementation-specific or disconnected',
-        !(
-          bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
-          bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
-        )
-      );
-
-      return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-    });
-
     return {
       animators,
       sprites: Array.from(spriteForParticipant.values()),
