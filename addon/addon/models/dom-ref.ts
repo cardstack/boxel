@@ -9,7 +9,7 @@ export class DOMRefNode {
 
   constructor(readonly element: HTMLElement) {}
 
-  delete(){
+  delete() {
     if (this.parent) {
       this.parent.children = this.parent.children.filter((v) => v !== this);
     }
@@ -25,7 +25,7 @@ export function addToDOMRefTrees(
   let addToDOMRefLookup = (node: DOMRefNode) => {
     DOMRefLookup.set(node.element, node);
     node.children.forEach((child) => addToDOMRefLookup(child));
-  }
+  };
   for (let node of existingNodes) {
     addToDOMRefLookup(node);
   }
