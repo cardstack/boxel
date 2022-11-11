@@ -239,7 +239,7 @@ export class AnimationParticipantManager {
       if (participant.context) {
         if (!participant.uiState.current)
           throw new Error(
-            'Unexpected missing DOMRef for context during distribution'
+            'Unexpected missing state for context during distribution'
           );
         let animator = participant.asAnimator();
         if (!animator) continue;
@@ -450,7 +450,7 @@ export class AnimationParticipant {
     this.context = options.context;
     this.latestModifier = options.spriteModifier;
     this.identifier = options.identifier;
-    this.uiState.current = this.createCurrent(options.DOMRef);
+    this.createCurrent(options.DOMRef);
   }
 
   isInvalid(): boolean {
@@ -718,7 +718,6 @@ export class AnimationParticipant {
     // Removed contexts can happen if the element matches, so we don't check for also having a sprite modifier
     // The order of insertion and removal handling is important.
     // if a context is also a sprite and happens to be in a counterpart situation, we want to replace the context
-
     if (removedContext && insertedContext) {
       this.context = insertedContext;
     } else if (insertedContext) {
@@ -737,11 +736,29 @@ export class AnimationParticipant {
           'Unexpectedly removing a context without also removing a sprite modifier, despite the context once having been a sprite',
           !this.latestModifier
         );
-        this.uiState.detached = this.currentToDetached(this.uiState.current);
-        this.uiState.current = undefined;
+        this.currentToDetached();
         this.identifier.updateElement(null);
         return;
       }
+    }
+
+    // Ensure we don't hit "impossible" conditions
+    if (
+      this.uiState.current &&
+      insertedSpriteModifier &&
+      !removedSpriteModifier
+    ) {
+      throw new Error(
+        'Invalid insertion that matches existing element without removal'
+      );
+    }
+    if (this.uiState.detached && removedSpriteModifier) {
+      throw new Error('Invalid removal of already removed element');
+    }
+    if (!this.uiState.current && !this.uiState.detached) {
+      throw new Error(
+        'While matching, detected invalid AnimationParticipant with no current or detached UI state'
+      );
     }
 
     if (removedSpriteModifier) {
@@ -749,77 +766,21 @@ export class AnimationParticipant {
         'removedSpriteModifier does not match current DOMRef',
         removedSpriteModifier.element === this.uiState.current?.DOMRef.element
       );
-    }
-
-    if (this.uiState.current && this.uiState.detached) {
-      if (insertedSpriteModifier && removedSpriteModifier) {
-        assert('inserted items did not come with a dom ref', insertedDOMRef);
-
-        this._DOMRefsToDispose.add(this.uiState.detached.DOMRef);
-        this.uiState.detached = this.currentToDetached(this.uiState.current);
-        this.uiState.current = this.createCurrent(insertedDOMRef);
-        this.latestModifier = insertedSpriteModifier;
-
-        // this is a situation where we have 2 elements fighting to be the detached element, no clear solution
-        // It might be right to limit the ways people can interact with counterparts
-      } else if (removedSpriteModifier) {
-        this._DOMRefsToDispose.add(this.uiState.detached.DOMRef);
-        this.uiState.detached = this.currentToDetached(this.uiState.current);
-        this.uiState.current = undefined;
-        this.latestModifier = removedSpriteModifier;
-
-        // this is a situation where we have 2 elements fighting to be the detached element, no clear solution
-        // It might be right to limit the ways people can interact with counterparts
-      } else if (insertedSpriteModifier) {
-        throw new Error(
-          'Invalid insertion that matches existing element without removal'
-        );
-      }
-    } else if (this.uiState.current) {
-      if (insertedSpriteModifier && removedSpriteModifier) {
-        assert('inserted items did not come with a dom ref', insertedDOMRef);
-
-        this.uiState.detached = this.currentToDetached(this.uiState.current);
-        this.uiState.current = this.createCurrent(insertedDOMRef);
-        this.latestModifier = insertedSpriteModifier;
-
-        // this is a situation where we have 2 elements fighting to be the detached element, no clear solution
-        // It might be right to limit the ways people can interact with counterparts
-      } else if (removedSpriteModifier) {
-        this.uiState.detached = this.currentToDetached(this.uiState.current);
-        this.uiState.current = undefined;
-        this.latestModifier = removedSpriteModifier;
-      } else if (insertedSpriteModifier) {
-        throw new Error(
-          'Invalid insertion that matches existing element without removal'
-        );
-      }
-    } else if (this.uiState.detached) {
-      if (removedSpriteModifier) {
-        throw new Error('Invalid removal of already removed element');
-      }
-
-      if (insertedSpriteModifier) {
-        assert('inserted items did not come with a dom ref', insertedDOMRef);
-        this.uiState.current = this.createCurrent(insertedDOMRef);
-        this.latestModifier = insertedSpriteModifier;
-      }
-    } else {
-      throw new Error(
-        'While matching, detected invalid AnimationParticipant with no current or detached UI state'
-      );
+      this.currentToDetached();
+      this.identifier.updateElement(null);
     }
 
     if (insertedSpriteModifier) {
       assert('inserted items did not come with a dom ref', insertedDOMRef);
+
+      this.createCurrent(insertedDOMRef);
+      this.latestModifier = insertedSpriteModifier;
       this.identifier.updateElement(insertedDOMRef.element);
-    } else if (removedSpriteModifier) {
-      this.identifier.updateElement(null);
     }
   }
 
-  createCurrent(DOMRef: DOMRefNode): BeforeRenderCurrentState {
-    return {
+  createCurrent(DOMRef: DOMRefNode) {
+    this.uiState.current = {
       _type: 'current',
       _stage: 'BEFORE_RENDER',
       beforeRender: undefined,
@@ -829,9 +790,8 @@ export class AnimationParticipant {
     };
   }
 
-  currentToDetached(
-    current: this['uiState']['current']
-  ): BeforeRenderDetachedState {
+  currentToDetached() {
+    let current = this.uiState.current;
     if (
       !current ||
       current._stage !== 'BEFORE_RENDER' ||
@@ -841,14 +801,20 @@ export class AnimationParticipant {
         'Attempting to convert current in invalid state to detached'
       );
     }
+    if (this.uiState.detached) {
+      // this is a situation where we have 2 elements fighting to be the detached element, no clear solution
+      // It might be right to limit the ways people can interact with counterparts
+      this._DOMRefsToDispose.add(this.uiState.detached.DOMRef);
+    }
 
-    return {
+    this.uiState.detached = {
       ...(current as BeforeRenderCurrentState),
       animation: undefined, // TODO: how to make sure this gets cleaned up?
       _stage: 'BEFORE_RENDER',
       _type: 'detached',
       beforeRender: current.beforeRender,
     };
+    this.uiState.current = undefined;
   }
 
   clear(): void {
