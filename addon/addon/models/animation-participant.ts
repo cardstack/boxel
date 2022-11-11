@@ -42,16 +42,16 @@ export class AnimationParticipantManager {
           !animationParticipant.uiState.current
         );
         this.participants.delete(animationParticipant);
-        animationParticipant.uiState.previous?.DOMRef?.delete();
+        animationParticipant.uiState.detached?.DOMRef?.delete();
       } else {
         if (
-          animationParticipant.uiState.previous &&
-          (!animationParticipant.uiState.previous.animation ||
-            animationParticipant.uiState.previous.animation.playState ===
+          animationParticipant.uiState.detached &&
+          (!animationParticipant.uiState.detached.animation ||
+            animationParticipant.uiState.detached.animation.playState ===
               'finished')
         ) {
-          animationParticipant.uiState.previous?.DOMRef?.delete();
-          animationParticipant.uiState.previous = undefined;
+          animationParticipant.uiState.detached?.DOMRef?.delete();
+          animationParticipant.uiState.detached = undefined;
         }
       }
     }
@@ -279,17 +279,17 @@ export class AnimationParticipantManager {
       let animatorList: Animator[] = [];
 
       // If there is a counterpart, the list should be the intersection of the sprite's DOMRef and its counterpart's DOMRef
-      if (participant.uiState.previous && participant.uiState.current) {
+      if (participant.uiState.detached && participant.uiState.current) {
         let current = animatorsByDOMRef.get(
           participant.uiState.current.DOMRef
         )!;
-        let previous = animatorsByDOMRef.get(
-          participant.uiState.previous.DOMRef
+        let detached = animatorsByDOMRef.get(
+          participant.uiState.detached.DOMRef
         )!;
         animatorList = [];
-        for (let i = 0; i < Math.min(current.length, previous.length); i++) {
+        for (let i = 0; i < Math.min(current.length, detached.length); i++) {
           let c = current[i]!;
-          let p = previous[i]!;
+          let p = detached[i]!;
           if (c === p) {
             animatorList.push(c);
           } else {
@@ -301,9 +301,9 @@ export class AnimationParticipantManager {
           participant.uiState.current.DOMRef
         )!;
         assert('animator list does not exist for a DOMRef', animatorList);
-      } else if (participant.uiState.previous) {
+      } else if (participant.uiState.detached) {
         animatorList = animatorsByDOMRef.get(
-          participant.uiState.previous.DOMRef
+          participant.uiState.detached.DOMRef
         )!;
         assert('animator list does not exist for a DOMRef', animatorList);
       } else {
@@ -326,7 +326,7 @@ export class AnimationParticipantManager {
     spriteForParticipant.forEach((sprite, participant) => {
       if (sprite.type === SpriteType.Removed) {
         let parentParticipant =
-          participant.uiState.previous!.DOMRef.parent?.animationParticipant;
+          participant.uiState.detached!.DOMRef.parent?.animationParticipant;
         if (parentParticipant?.animator) {
           sprite._defaultParentState = parentParticipant.animator._state;
         } else if (parentParticipant?.sprite) {
@@ -343,7 +343,7 @@ export class AnimationParticipantManager {
 
         if (sprite.counterpart) {
           let parentParticipant =
-            participant.uiState.previous!.DOMRef.parent?.animationParticipant;
+            participant.uiState.detached!.DOMRef.parent?.animationParticipant;
           // Order of preference for parent:
           // - If there's a stable context, that's the first priority (this precludes a removed parent)
           // - If not, then if the parent itself is removed, it should be prioritized
@@ -412,10 +412,10 @@ export class AnimationParticipant {
       | BeforeRenderCurrentState
       | AfterRenderCurrentState
       | undefined;
-    previous: ClearedPreviousState | BeforeRenderPreviousState | undefined;
+    detached: ClearedDetachedState | BeforeRenderDetachedState | undefined;
   } = {
     current: undefined,
-    previous: undefined,
+    detached: undefined,
   };
 
   // These references have to be cleared every render
@@ -429,8 +429,8 @@ export class AnimationParticipant {
   // So... what do we do?
   // For something to be disposed, we need to either have the entire subtree be disposable
   // Or we need to move the used descendants out (that's probably what we do)
-  // So... any previous that completes animating is moved here
-  // Any previous that is deleted (for a new previous) is moved here
+  // So... any detached that completes animating is moved here
+  // Any detached that is deleted (for a new detached) is moved here
   // Then we run cleanup at times which the manager thinks are appropriate
   // Cleanup needs to be able to do "pruning" of a tree where we can graft living nodes back on
   _DOMRefsToDispose: Set<DOMRefNode> = new Set();
@@ -455,11 +455,11 @@ export class AnimationParticipant {
 
   isInvalid(): boolean {
     return Boolean(
-      (!this.uiState.previous && !this.uiState.current) ||
+      (!this.uiState.detached && !this.uiState.current) ||
         (this.uiState.current &&
           this.uiState.current._stage !== 'AFTER_RENDER') ||
-        (this.uiState.previous &&
-          this.uiState.previous._stage !== 'BEFORE_RENDER')
+        (this.uiState.detached &&
+          this.uiState.detached._stage !== 'BEFORE_RENDER')
     );
   }
 
@@ -468,23 +468,23 @@ export class AnimationParticipant {
   }
 
   spriteIsKept(): this is {
-    uiState: { current: AfterRenderCurrentState; previous: undefined };
+    uiState: { current: AfterRenderCurrentState; detached: undefined };
   } {
     return Boolean(
       this.uiState.current &&
         this.uiState.current.beforeRender &&
         this.uiState.current.afterRender &&
-        !this.uiState.previous
+        !this.uiState.detached
     );
   }
 
   spriteIsKeptWithCounterpart(): this is {
     uiState: {
       current: AfterRenderCurrentState;
-      previous: BeforeRenderPreviousState;
+      detached: BeforeRenderDetachedState;
     };
   } {
-    return Boolean(this.uiState.current && this.uiState.previous);
+    return Boolean(this.uiState.current && this.uiState.detached);
   }
 
   // Types are a bit wonky
@@ -492,16 +492,16 @@ export class AnimationParticipant {
   spriteIsInserted(): this is {
     uiState: {
       current: AfterRenderCurrentState;
-      previous: undefined;
+      detached: undefined;
     };
   } {
     return Boolean(this.uiState.current && !this.uiState.current.beforeRender);
   }
 
   spriteIsRemoved(): this is {
-    uiState: { previous: BeforeRenderPreviousState; current: undefined };
+    uiState: { detached: BeforeRenderDetachedState; current: undefined };
   } {
-    return Boolean(this.uiState.previous && !this.uiState.current);
+    return Boolean(this.uiState.detached && !this.uiState.current);
   }
 
   // TODO: This is a bit tricky. If a removed parent is still hang around, we shouldn't clean these up, maybe
@@ -510,8 +510,8 @@ export class AnimationParticipant {
   get canBeCleanedUp(): boolean {
     return (
       (this.spriteIsRemoved() &&
-        (!this.uiState.previous.animation ||
-          this.uiState.previous.animation?.playState === 'finished')) ||
+        (!this.uiState.detached.animation ||
+          this.uiState.detached.animation?.playState === 'finished')) ||
       (!this.canCreateSprite() && !this.context)
     );
   }
@@ -536,8 +536,8 @@ export class AnimationParticipant {
       this.uiState.current.animation = animation;
       animation.addEventListener('cancel', () => {
         // TODO: This is not reliable because
-        // We might change current to previous around the same time
-        // We've added something to prevent this in currentToPrevious
+        // We might change current to detached around the same time
+        // We've added something to prevent this in currentToDetached
         // But what can we do to prevent this from causing dangling animations?
         if (
           this.uiState.current &&
@@ -567,38 +567,38 @@ export class AnimationParticipant {
     };
   }
 
-  private previousCallbacks() {
-    let onPreviousAnimation = (animation: Animation) => {
-      if (!this.uiState.previous)
+  private detachedCallbacks() {
+    let onDetachedAnimation = (animation: Animation) => {
+      if (!this.uiState.detached)
         throw new Error(
-          'Unexpected missing uiState.previous when starting Previous animation'
+          'Unexpected missing uiState.detached when starting detached animation'
         );
-      this.uiState.previous.animation = animation;
+      this.uiState.detached.animation = animation;
       animation.addEventListener('cancel', () => {
         if (
-          this.uiState.previous &&
-          this.uiState.previous.animation === animation
+          this.uiState.detached &&
+          this.uiState.detached.animation === animation
         )
-          this.uiState.previous.animation = undefined;
+          this.uiState.detached.animation = undefined;
       });
       animation.addEventListener('finish', () => {
         if (
-          this.uiState.previous &&
-          this.uiState.previous.animation === animation
+          this.uiState.detached &&
+          this.uiState.detached.animation === animation
         )
-          this.uiState.previous.animation = undefined;
+          this.uiState.detached.animation = undefined;
       });
       animation.addEventListener('remove', () => {
         if (
-          this.uiState.previous &&
-          this.uiState.previous.animation === animation
+          this.uiState.detached &&
+          this.uiState.detached.animation === animation
         )
-          this.uiState.previous.animation = undefined;
+          this.uiState.detached.animation = undefined;
       });
     };
 
     return {
-      onAnimationStart: onPreviousAnimation,
+      onAnimationStart: onDetachedAnimation,
     };
   }
 
@@ -613,22 +613,22 @@ export class AnimationParticipant {
           {
             initial:
               this.uiState.current.beforeRender ??
-              this.uiState.previous.beforeRender,
+              this.uiState.detached.beforeRender,
             final: this.uiState.current.afterRender,
           },
           SpriteType.Kept,
           this.currentCallbacks()
         );
         let counterpart = new Sprite(
-          this.uiState.previous.DOMRef.element,
+          this.uiState.detached.DOMRef.element,
           metadata,
           {
             // Counterparts can start out at a different state
-            initial: this.uiState.previous.beforeRender,
+            initial: this.uiState.detached.beforeRender,
             final: this.uiState.current.afterRender,
           },
           SpriteType.Removed,
-          this.previousCallbacks()
+          this.detachedCallbacks()
         );
         sprite.counterpart = counterpart;
 
@@ -663,13 +663,13 @@ export class AnimationParticipant {
         return sprite;
       } else if (this.spriteIsRemoved()) {
         let sprite = new Sprite(
-          this.uiState.previous.DOMRef.element,
+          this.uiState.detached.DOMRef.element,
           metadata,
           {
-            initial: this.uiState.previous.beforeRender,
+            initial: this.uiState.detached.beforeRender,
           },
           SpriteType.Removed,
-          this.previousCallbacks()
+          this.detachedCallbacks()
         );
 
         this.sprite = sprite;
@@ -737,7 +737,7 @@ export class AnimationParticipant {
           'Unexpectedly removing a context without also removing a sprite modifier, despite the context once having been a sprite',
           !this.latestModifier
         );
-        this.uiState.previous = this.currentToPrevious(this.uiState.current);
+        this.uiState.detached = this.currentToDetached(this.uiState.current);
         this.identifier.updateElement(null);
         return;
       }
@@ -750,24 +750,24 @@ export class AnimationParticipant {
       );
     }
 
-    if (this.uiState.current && this.uiState.previous) {
+    if (this.uiState.current && this.uiState.detached) {
       if (insertedSpriteModifier && removedSpriteModifier) {
         assert('inserted items did not come with a dom ref', insertedDOMRef);
 
-        this._DOMRefsToDispose.add(this.uiState.previous.DOMRef);
-        this.uiState.previous = this.currentToPrevious(this.uiState.current);
+        this._DOMRefsToDispose.add(this.uiState.detached.DOMRef);
+        this.uiState.detached = this.currentToDetached(this.uiState.current);
         this.uiState.current = this.createCurrent(insertedDOMRef);
         this.latestModifier = insertedSpriteModifier;
 
-        // this is a situation where we have 2 elements fighting to be the previous element, no clear solution
+        // this is a situation where we have 2 elements fighting to be the detached element, no clear solution
         // It might be right to limit the ways people can interact with counterparts
       } else if (removedSpriteModifier) {
-        this._DOMRefsToDispose.add(this.uiState.previous.DOMRef);
-        this.uiState.previous = this.currentToPrevious(this.uiState.current);
+        this._DOMRefsToDispose.add(this.uiState.detached.DOMRef);
+        this.uiState.detached = this.currentToDetached(this.uiState.current);
         this.uiState.current = undefined;
         this.latestModifier = removedSpriteModifier;
 
-        // this is a situation where we have 2 elements fighting to be the previous element, no clear solution
+        // this is a situation where we have 2 elements fighting to be the detached element, no clear solution
         // It might be right to limit the ways people can interact with counterparts
       } else if (insertedSpriteModifier) {
         throw new Error(
@@ -778,14 +778,14 @@ export class AnimationParticipant {
       if (insertedSpriteModifier && removedSpriteModifier) {
         assert('inserted items did not come with a dom ref', insertedDOMRef);
 
-        this.uiState.previous = this.currentToPrevious(this.uiState.current);
+        this.uiState.detached = this.currentToDetached(this.uiState.current);
         this.uiState.current = this.createCurrent(insertedDOMRef);
         this.latestModifier = insertedSpriteModifier;
 
-        // this is a situation where we have 2 elements fighting to be the previous element, no clear solution
+        // this is a situation where we have 2 elements fighting to be the detached element, no clear solution
         // It might be right to limit the ways people can interact with counterparts
       } else if (removedSpriteModifier) {
-        this.uiState.previous = this.currentToPrevious(this.uiState.current);
+        this.uiState.detached = this.currentToDetached(this.uiState.current);
         this.uiState.current = undefined;
         this.latestModifier = removedSpriteModifier;
       } else if (insertedSpriteModifier) {
@@ -793,7 +793,7 @@ export class AnimationParticipant {
           'Invalid insertion that matches existing element without removal'
         );
       }
-    } else if (this.uiState.previous) {
+    } else if (this.uiState.detached) {
       if (removedSpriteModifier) {
         throw new Error('Invalid removal of already removed element');
       }
@@ -805,7 +805,7 @@ export class AnimationParticipant {
       }
     } else {
       throw new Error(
-        'While matching, detected invalid AnimationParticipant with no current or previous UI state'
+        'While matching, detected invalid AnimationParticipant with no current or detached UI state'
       );
     }
 
@@ -828,16 +828,16 @@ export class AnimationParticipant {
     };
   }
 
-  currentToPrevious(
+  currentToDetached(
     current: this['uiState']['current']
-  ): BeforeRenderPreviousState {
+  ): BeforeRenderDetachedState {
     if (
       !current ||
       current._stage !== 'BEFORE_RENDER' ||
       current.beforeRender === undefined
     ) {
       throw new Error(
-        'Attempting to convert current in invalid state to previous'
+        'Attempting to convert current in invalid state to detached'
       );
     }
 
@@ -845,7 +845,7 @@ export class AnimationParticipant {
       ...(current as BeforeRenderCurrentState),
       animation: undefined, // TODO: how to make sure this gets cleaned up?
       _stage: 'BEFORE_RENDER',
-      _type: 'previous',
+      _type: 'detached',
       beforeRender: current.beforeRender,
     };
   }
@@ -866,13 +866,13 @@ export class AnimationParticipant {
         afterRender: undefined,
       };
     }
-    if (this.uiState.previous) {
+    if (this.uiState.detached) {
       assert(
         'UI state is not BEFORE_RENDER before clear',
-        this.uiState.previous._stage === 'BEFORE_RENDER'
+        this.uiState.detached._stage === 'BEFORE_RENDER'
       );
-      this.uiState.previous = {
-        ...this.uiState.previous,
+      this.uiState.detached = {
+        ...this.uiState.detached,
         _stage: 'CLEARED',
         beforeRender: undefined,
         afterRender: undefined,
@@ -894,21 +894,21 @@ export class AnimationParticipant {
       };
     }
 
-    if (this.uiState.previous) {
+    if (this.uiState.detached) {
       assert(
         'UI state is not CLEARED before snapshotBeforeRender',
-        this.uiState.previous._stage === 'CLEARED'
+        this.uiState.detached._stage === 'CLEARED'
       );
-      this.uiState.previous = {
-        ...this.uiState.previous,
+      this.uiState.detached = {
+        ...this.uiState.detached,
         _stage: 'BEFORE_RENDER',
-        beforeRender: this.visibleStateSnapshot(this.uiState.previous),
+        beforeRender: this.visibleStateSnapshot(this.uiState.detached),
       };
     }
   }
 
   cancelAnimations() {
-    this.uiState.previous?.animation?.cancel();
+    this.uiState.detached?.animation?.cancel();
     this.uiState.current?.animation?.cancel();
   }
 
@@ -963,16 +963,16 @@ export class AnimationParticipant {
   }
 }
 
-interface ClearedPreviousState {
-  _type: 'previous';
+interface ClearedDetachedState {
+  _type: 'detached';
   _stage: 'CLEARED';
   beforeRender: undefined;
   afterRender: undefined;
   animation: Animation | undefined;
   DOMRef: DOMRefNode;
 }
-interface BeforeRenderPreviousState {
-  _type: 'previous';
+interface BeforeRenderDetachedState {
+  _type: 'detached';
   _stage: 'BEFORE_RENDER';
   beforeRender: Snapshot;
   afterRender: undefined;
