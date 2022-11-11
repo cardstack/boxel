@@ -1,3 +1,7 @@
+* {
+  box-sizing: border-box;
+}
+
 input,
 textarea,
 button {
@@ -5,24 +9,20 @@ button {
 }
 
 .editor {
-  display: flex;
-  align-items: stretch;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
   min-height: 100vh;
 }
-.file-tree {
-  min-width: 8rem;
-}
-.file-tree + div {
-  flex-grow: 3;
-}
+
 .polling-button {
   margin-top: 3rem;
 }
+
 .preview {
   flex-grow: 2;
   min-width: 10rem;
 }
-
 .preview > * + * {
   margin-top: 1rem;
 }
@@ -62,62 +62,60 @@ button {
   background-color: #faebd769;
 }
 
-.card-catalog {
-  list-style-type: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-  gap: 1rem;
-  padding-left: 0;
-}
-
-.card-catalog li > button {
-  margin-top: 1rem;
-}
-
 .dialog-box {
-  position:absolute;
-  z-index:1;
-  top:10vh;
-  width: 50vw;
-  min-height: 50vh;
+  position: fixed;
+  z-index: 1;
+  top: 10vh;
+  width: 80vw;
+  max-width: 60rem;
+  height: 80vh;
+  padding: 0;
   overflow-y: auto;
 }
-
 .dialog-box.card-catalog-dialog {
   /* Need to overlay on top of the create card dialog when both appear */
   z-index:2;
 }
+.dialog-box__header {
+  position: sticky;
+  top: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding: 1em;
+  background-color: #ffffffcc;
+}
+.dialog-box__header > h1 {
+  margin: 0;
+}
+.dialog-box__content {
+  padding: 1em;
+}
+.dialog-box__content > * + * {
+  margin-top: 1em;
+}
 
-.dialog-box > * + * {
+.card-catalog {
+  list-style-type: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding-left: 0;
+}
+.card-catalog li > button {
   margin-top: 1rem;
 }
 
 .catalog-entry-editor {
   margin-top: 1rem;
 }
-
 .catalog-entry-editor > fieldset {
   background-color: aliceblue;
 }
-
 .catalog-entry-editor > fieldset > * + * {
   margin-top: 1rem;
 }
 
 .error {
   color: red;
-}
-
-
-/* Cards */
-.BlogPerson {
-  background-color: #87e9f6;
-}
-
-.BlogPost {
-  background-color: #ffc9d2;
-}
-
-.Employee {
-  background-color: darkgray;
 }

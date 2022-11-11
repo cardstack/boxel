@@ -274,13 +274,13 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return getter(instance, this);
   }
 
-  serialize(values: CardInstanceType<FieldT>[], doc: JSONAPISingleResourceDocument){
+  serialize(values: CardInstanceType<FieldT>[], doc: JSONAPISingleResourceDocument): JSONAPIResource {
     if (primitive in this.card) {
       return { attributes: { [this.name]:  values.map(value => callSerializeHook(this.card, value, doc)) } };
     } else {
       let relationships: Record<string, Relationship> = {};
       let serialized = values.map((value, index) => {
-        let resource: JSONAPIResource = callSerializeHook(this.card, value, doc);
+        let resource: JSONAPISingleResourceDocument['data'] = callSerializeHook(this.card, value, doc);
         if (resource.relationships) {
           for (let [fieldName, relationship] of Object.entries(resource.relationships as Record<string, Relationship>)) {
             relationships[`${this.name}.${index}.${fieldName}`] = relationship; // warning side-effect
@@ -347,6 +347,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
           if (relationships) {
             resource.relationships = Object.fromEntries(
               Object.entries(relationships)
+                .filter(([fieldName]) => fieldName.startsWith(`${this.name}.`))
                 .map(([fieldName, relationship]) => {
                   let relName = `${this.name}.${index}`;
                   return [fieldName.startsWith(`${relName}.`) ? fieldName.substring(relName.length + 1) : fieldName, relationship]
@@ -411,16 +412,19 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     return getter(instance, this);
   }
 
-  serialize(value: InstanceType<CardT>, doc: JSONAPISingleResourceDocument) {
-    let serialized = callSerializeHook(this.card, value, doc);
+  serialize(value: InstanceType<CardT>, doc: JSONAPISingleResourceDocument): JSONAPIResource {
+    let serialized: JSONAPISingleResourceDocument['data'] & { meta: Record<string, any> } = callSerializeHook(this.card, value, doc);
     if (primitive in this.card) {
       return { attributes: { [this.name]: serialized } }
     } else {
       let resource: JSONAPIResource = { 
         attributes: { 
-          [this.name]: serialized.attributes 
+          [this.name]: serialized?.attributes
         }
       };
+      if (serialized == null) {
+        return resource;
+      }
       if (serialized.relationships) {
         resource.relationships = {};
         for (let [fieldName, relationship] of Object.entries(serialized.relationships as Record<string, Relationship>)) {
@@ -463,6 +467,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     if (relationships) {
       resource.relationships = Object.fromEntries(
         Object.entries(relationships)
+          .filter(([fieldName]) => fieldName.startsWith(`${this.name}.`))
           .map(([fieldName, relationship]) => 
             [fieldName.startsWith(`${this.name}.`) ? fieldName.substring(this.name.length + 1) : fieldName, relationship]
           )
@@ -1610,7 +1615,6 @@ interface ContainsManySignature {
 class ContainsManyEditor extends GlimmerComponent<ContainsManySignature> {
   <template>
     <section data-test-contains-many={{this.args.field.name}}>
-      <header>{{this.args.field.name}}</header>
       <ul>
         {{#each @arrayField.children as |boxedElement i|}}
           <li data-test-item={{i}}>

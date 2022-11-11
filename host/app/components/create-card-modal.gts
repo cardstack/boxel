@@ -17,14 +17,18 @@ export default class CreateCardModal extends Component {
   <template>
     {{#if this.currentRequest.ref}}
       <dialog class="dialog-box" open data-test-create-new-card={{this.currentRequest.ref.name}}>
-        <button {{on "click" (fn this.save undefined)}} type="button">X Close</button>
-        <h1>Create New Card: {{this.currentRequest.ref.name}}</h1>
-        {{#if this.currentRequest.card}}
-          <CardEditor
-            @card={{this.currentRequest.card}}
-            @onSave={{this.save}}
-          />
-        {{/if}}
+        <header class="dialog-box__header">
+          <h1>Create New Card: {{this.currentRequest.ref.name}}</h1>
+          <button {{on "click" (fn this.save undefined)}} type="button">X Close</button>
+        </header>
+        <section class="dialog-box__content">
+          {{#if this.currentRequest.card}}
+            <CardEditor
+              @card={{this.currentRequest.card}}
+              @onSave={{this.save}}
+            />
+          {{/if}}
+        </section>
       </dialog>
     {{/if}}
   </template>
