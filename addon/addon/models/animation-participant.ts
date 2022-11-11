@@ -101,7 +101,6 @@ export class AnimationParticipantManager {
       });
 
       // Clean things up each time we animate
-      // TODO: DOMRefs aren't disposed yet
       if (animationParticipant.canBeCleanedUp) {
         this.participants.delete(animationParticipant);
         let DOMRef = animationParticipant.uiState.previous?.DOMRef;
