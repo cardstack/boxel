@@ -242,8 +242,9 @@ export class AnimationParticipantManager {
     sprites: Sprite[]; // Sprites. No particular order
   } {
     let animators: Animator[] = [];
-    let spriteForParticipant: Map<AnimationParticipant, Sprite> = new Map();
 
+    // Find out what animators are ancestors of each given DOMRef
+    let animatorsByDOMRef = new Map<DOMRefNode, Animator[]>();
     let animatorLookup = new Map<DOMRefNode, Animator>();
     for (let participant of this.participants) {
       if (participant.context) {
@@ -257,12 +258,10 @@ export class AnimationParticipantManager {
         animatorLookup.set(participant.uiState.current.DOMRef, animator);
       }
     }
-
-    let animatorsByDOMRef = new Map<DOMRefNode, Animator[]>();
-    function recordAnimatorsOnPath(
+    let recordAnimatorsOnPath = (
       node: DOMRefNode,
       pathNotIncludingSelf: Animator[]
-    ) {
+    ) => {
       animatorsByDOMRef.set(node, pathNotIncludingSelf);
       let animator = animatorLookup.get(node);
       let nextPath = animator
@@ -272,12 +271,14 @@ export class AnimationParticipantManager {
         let child = node.children[index]!;
         recordAnimatorsOnPath(child, nextPath);
       }
-    }
+    };
     for (let index = 0; index < this.DOMRefs.length; index++) {
       let DOMRef = this.DOMRefs[index]!;
       recordAnimatorsOnPath(DOMRef, []);
     }
 
+    // Create sprites
+    let spriteForParticipant: Map<AnimationParticipant, Sprite> = new Map();
     for (let participant of this.participants) {
       let sprite = participant.asSprite();
       if (sprite === null) {
@@ -285,8 +286,10 @@ export class AnimationParticipantManager {
       }
       spriteForParticipant.set(participant, sprite);
 
+      // Using the DOMRef, retrieve a list of animators that are ancestors of the sprite
       let animatorList: Animator[] = [];
 
+      // If there is a counterpart, the list should be the intersection of the sprite's DOMRef and its counterpart's DOMRef
       if (participant.uiState.previous && participant.uiState.current) {
         let current = animatorsByDOMRef.get(
           participant.uiState.current.DOMRef
@@ -330,7 +333,7 @@ export class AnimationParticipantManager {
       sprite.defaultAnimator = animatorList[animatorList.length - 1];
     }
 
-    // HAX!!! actually not, but it doesn't feel great to do this
+    // Inject the participant with knowledge about its parent
     spriteForParticipant.forEach((sprite, participant) => {
       if (sprite.type === SpriteType.Removed) {
         let parentParticipant =
