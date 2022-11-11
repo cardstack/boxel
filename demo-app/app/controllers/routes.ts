@@ -19,7 +19,7 @@ export default class RoutesController extends Controller {
       });
     });
 
-    removedSprites.forEach((s) =>{
+    removedSprites.forEach((s) => {
       if (context.hasOrphan(s)) context.removeOrphan(s);
       context.appendOrphan(s);
       s.lockStyles();
