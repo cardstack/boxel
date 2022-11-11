@@ -10,7 +10,6 @@ import { shadowQuerySelector, shadowQuerySelectorAll, fillIn } from '../../helpe
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
 let integer: typeof import ("https://cardstack.com/base/integer");
-let catalogEntry: typeof import ("https://cardstack.com/base/catalog-entry");
 
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
@@ -25,7 +24,6 @@ module('Integration | computeds', function (hooks) {
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
     integer = await Loader.import(`${baseRealm.url}integer`);
-    catalogEntry = await Loader.import(`${baseRealm.url}catalog-entry`);
   });
 
   test('can render a synchronous computed field', async function(assert) {
@@ -117,35 +115,6 @@ module('Integration | computeds', function (hooks) {
     await renderCard(firstPost, 'isolated');
     assert.shadowDOM('[data-test="title"]').hasText('First Post');
     assert.shadowDOM('[data-test="firstName"]').hasText('Mango');
-  });
-
-  test('can compute CatalogEntry.isPrimitive computed', async function(assert) {
-    let { field, contains, Card, recompute } = cardApi;
-    let { CatalogEntry } = catalogEntry;
-    let { default: StringCard} = string;
-
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-    }
-    await shimModule(`${testRealmURL}test-cards`, { Person });
-
-    let booleanField = new CatalogEntry({
-      ref: {
-        module: "https://cardstack.com/base/boolean",
-        name: "default"
-      }
-    });
-    await recompute(booleanField);
-    assert.strictEqual(booleanField.isPrimitive, true, 'computed detected primitive card');
-
-    let personEntry = new CatalogEntry({
-      ref: {
-        module: `${testRealmURL}test-cards`,
-        name: "Person"
-      }
-    });
-    await recompute(personEntry);
-    assert.strictEqual(personEntry.isPrimitive, false, 'computed detected composite card');
   });
 
   test('can render an asynchronous computed field', async function(assert) {
