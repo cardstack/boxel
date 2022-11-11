@@ -16,9 +16,11 @@ export default class CardCatalogModal extends Component {
   <template>
     {{#if this.currentRequest}}
       <dialog class="dialog-box card-catalog-dialog" open data-test-card-catalog-modal>
-        <button {{on "click" (fn this.pick undefined)}} type="button">X Close</button>
-        <h1>Card Catalog</h1>
-        <div>
+        <header class="dialog-box__header">
+          <h1>Card Catalog</h1>
+          <button {{on "click" (fn this.pick undefined)}} type="button">X Close</button>
+        </header>
+        <section class="dialog-box__content">
           {{#if this.currentRequest.search.isLoading}}
             Loading...
           {{else}}
@@ -35,7 +37,7 @@ export default class CardCatalogModal extends Component {
               {{/each}}
             </ul>
           {{/if}}
-        </div>
+        </section>
       </dialog>
     {{/if}}
   </template>
