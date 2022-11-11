@@ -34,6 +34,7 @@ import type {
 } from "./search-index";
 // @ts-ignore tsc doesn't understand .gts files
 type CardAPI = typeof import("https://cardstack.com/base/card-api");
+// @ts-ignore tsc doesn't understand .gts files
 import { type IdentityContext as IdentityContextType } from "https://cardstack.com/base/card-api";
 
 // Forces callers to use URL (which avoids accidentally using relative url
@@ -467,7 +468,10 @@ export class CurrentRun {
       let stillAssembling = identityContext.assemblingInstances();
       if (stillAssembling.length > 0) {
         this.#unfinishedInstances.add(fileURL);
-        let deps = stillAssembling.map(({ instance }) => instance.id);
+        // TODO refactor the type cast out after we have the server using glint for typechecking
+        let deps = stillAssembling.map(
+          ({ instance }: { instance: Card }) => instance.id
+        );
         let err = new CardError(
           `'${fileURL}'s linked document(s) not finished assembling: ${JSON.stringify(
             deps,
