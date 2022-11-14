@@ -192,7 +192,7 @@ importers:
       webpack: ^5.74.0
     devDependencies:
       '@babel/core': 7.18.10
-      '@cardstack/boxel-motion': file:addon_@babel+core@7.18.10
+      '@cardstack/boxel-motion': link:../addon
       '@ember/optional-features': 2.0.0
       '@ember/test-helpers': 2.8.1_bfwx5527ud67pz7vm5nr6nmdqq
       '@glimmer/component': 1.1.2_@babel+core@7.18.10
@@ -268,9 +268,6 @@ importers:
       qunit-dom: 2.0.0
       typescript: 4.7.4
       webpack: 5.74.0
-    dependenciesMeta:
-      '@cardstack/boxel-motion':
-        injected: true
 
   test-app:
     specifiers:
@@ -3552,11 +3549,6 @@ packages:
       babel-template: 6.26.0
     transitivePeerDependencies:
       - supports-color
-    dev: true
-
-  /babel-import-util/0.2.0:
-    resolution: {integrity: sha512-CtWYYHU/MgK88rxMrLfkD356dApswtR/kWZ/c6JifG1m10e7tBBrs/366dFzWMAoqYmG5/JSh+94tUSpIwh+ag==}
-    engines: {node: '>= 12.*'}
     dev: true
 
   /babel-import-util/1.2.2:
@@ -6870,26 +6862,6 @@ packages:
       - webpack
     dev: true
 
-  /ember-template-imports/3.3.1_ember-cli-htmlbars@6.1.0:
-    resolution: {integrity: sha512-OeOaEhKL6fz40O3OgKff8czu0d9ppX3tLV7ohvaQL0eM1Pv+Fl4bi/zvEdiCCAn+5Nu7/DFCaMElFuRhurlPJA==}
-    engines: {node: 12.* || >= 14}
-    peerDependencies:
-      ember-cli-htmlbars: ^6.0.0
-    dependencies:
-      babel-import-util: 0.2.0
-      broccoli-stew: 3.0.0
-      ember-cli-babel-plugin-helpers: 1.1.1
-      ember-cli-htmlbars: 6.1.0
-      ember-cli-version-checker: 5.1.2
-      line-column: 1.0.2
-      magic-string: 0.25.9
-      parse-static-imports: 1.1.0
-      string.prototype.matchall: 4.0.7
-      validate-peer-dependencies: 1.2.0
-    transitivePeerDependencies:
-      - supports-color
-    dev: true
-
   /ember-template-lint/4.12.0:
     resolution: {integrity: sha512-udWWclqxMc7bljIWAnR7wr1/U7R6V0wmSAWGnQ/DqKmNshnVWnzC94wixzvbdrubi/kn1SIEGsyf0bebTkS8rQ==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
@@ -9568,6 +9540,7 @@ packages:
 
   /macro-decorators/0.1.2:
     resolution: {integrity: sha512-BV5XPmCm9kPSMtgfZiv0vTjOooe5pTIPIVkdoqbC49H1B7z22KB39H50R2ZNclZDQlmVyviLozRatKnOYZkwzg==}
+    dev: false
 
   /magic-string/0.24.1:
     resolution: {integrity: sha512-YBfNxbJiixMzxW40XqJEIldzHyh5f7CZKalo1uZffevyrPEX8Qgo9s0dmcORLHdV47UyvJg8/zD+6hQG3qvJrA==}
@@ -13171,28 +13144,4 @@ packages:
   /yocto-queue/1.0.0:
     resolution: {integrity: sha512-9bnSc/HEW2uRy67wc+T8UwauLuPJVn28jb+GtJY16iiKWyvmYJRXVT4UamsAEGQfPohgr2q4Tq0sQbQlxTfi1g==}
     engines: {node: '>=12.20'}
-    dev: true
-
-  file:addon_@babel+core@7.18.10:
-    resolution: {directory: addon, type: directory}
-    id: file:addon
-    name: '@cardstack/boxel-motion'
-    version: 1.0.0
-    engines: {node: 12.* || 14.* || >= 16}
-    peerDependencies:
-      ember-source@: ^3.8 || 4
-    dependencies:
-      '@glimmer/component': 1.1.2_@babel+core@7.18.10
-      ember-cli-babel: 7.26.11
-      ember-cli-htmlbars: 6.1.0
-      ember-cli-typescript: 5.2.1
-      ember-concurrency: 2.3.7_@babel+core@7.18.10
-      ember-concurrency-decorators: 2.0.3_@babel+core@7.18.10
-      ember-concurrency-ts: 0.2.2_pbc6wuy723ewnr3j3hko3moh74
-      ember-modifier: 3.2.7_@babel+core@7.18.10
-      ember-template-imports: 3.3.1_ember-cli-htmlbars@6.1.0
-      macro-decorators: 0.1.2
-    transitivePeerDependencies:
-      - '@babel/core'
-      - supports-color
     dev: true
