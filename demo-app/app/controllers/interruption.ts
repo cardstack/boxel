@@ -1,8 +1,7 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
-import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
-import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
+import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 
 class InterruptionController extends Controller {
@@ -11,12 +10,26 @@ class InterruptionController extends Controller {
 
   ballIds = [...new Array(1)].map((_, id) => id);
 
-  async transition(changeset: Changeset): Promise<void> {
-    magicMove(changeset, {
-      behavior: new SpringBehavior({ overshootClamping: false, damping: 11 }),
-    });
+  transition(changeset: Changeset): AnimationDefinition {
+    let { keptSprites } = changeset;
 
-    await runAnimations([...changeset.keptSprites]);
+    return {
+      timeline: {
+        type: 'sequence',
+        animations: [
+          {
+            sprites: keptSprites,
+            properties: {
+              position: {},
+              size: {},
+            },
+            timing: {
+              behavior: new SpringBehavior(),
+            },
+          },
+        ],
+      },
+    };
   }
 }
 

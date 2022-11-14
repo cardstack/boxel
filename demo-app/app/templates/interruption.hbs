@@ -9,7 +9,6 @@
     </p>
 
     <p class="text-lg mt-16 mb-8">1 ball sprite</p>
-    {{! @glint-expect-error: TODO: migrate this.transition to return AnimationDefinition }}
     <AnimationContext @use={{this.transition}}>
       <div local-class="grid">
         {{#each this.ballIds as |id|}}
@@ -60,7 +59,6 @@
     </AnimationContext>
 
     <p class="text-lg mt-16">4 ball sprites</p>
-    {{! @glint-expect-error: TODO: migrate this.transition to return AnimationDefinition }}
     <AnimationContext @use={{this.transition}} class="mt-8">
       <div local-class="grid">
         {{#each this.ballIds as |id|}}
