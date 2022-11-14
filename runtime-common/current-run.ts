@@ -416,19 +416,16 @@ export class CurrentRun {
     let cardType: typeof Card | undefined;
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
-      let card: Card | undefined;
-      if (!card) {
-        let res = { ...resource, ...{ id: instanceURL.href } };
-        card = await api.createFromSerialized<typeof Card>(
-          res,
-          { data: res },
-          new URL(fileURL),
-          {
-            identityContext,
-            loader: this.#loader,
-          }
-        );
-      }
+      let res = { ...resource, ...{ id: instanceURL.href } };
+      let card = await api.createFromSerialized<typeof Card>(
+        res,
+        { data: res },
+        new URL(fileURL),
+        {
+          identityContext,
+          loader: this.#loader,
+        }
+      );
       await this.recomputeCard(card, fileURL, identityContext, stack);
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
       let data = api.serializeCard(card, {
