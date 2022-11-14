@@ -53,7 +53,11 @@ export class AnimationParticipantManager {
           animationParticipant.uiState.detached &&
           (!animationParticipant.uiState.detached.animation ||
             animationParticipant.uiState.detached.animation.playState ===
-              'finished')
+              'finished' ||
+            animationParticipant.uiState.detached.animation?.playState ===
+              'idle' ||
+            animationParticipant.uiState.detached.animation?.playState ===
+              'paused')
         ) {
           animationParticipant.uiState.detached?.DOMRef?.delete();
           animationParticipant.uiState.detached = undefined;
@@ -498,7 +502,9 @@ export class AnimationParticipant {
     return (
       (this.spriteIsRemoved() &&
         (!this.uiState.detached.animation ||
-          this.uiState.detached.animation?.playState === 'finished')) ||
+          this.uiState.detached.animation?.playState === 'finished' ||
+          this.uiState.detached.animation?.playState === 'idle' ||
+          this.uiState.detached.animation?.playState === 'paused')) ||
       (!this.canCreateSprite() && !this.context)
     );
   }
@@ -521,32 +527,6 @@ export class AnimationParticipant {
           'Unexpected missing uiState.current when starting current animation'
         );
       this.uiState.current.animation = animation;
-      animation.addEventListener('cancel', () => {
-        // TODO: This is not reliable because
-        // We might change current to detached around the same time
-        // We've added something to prevent this in currentToDetached
-        // But what can we do to prevent this from causing dangling animations?
-        if (
-          this.uiState.current &&
-          this.uiState.current.animation === animation
-        ) {
-          this.uiState.current.animation = undefined;
-        }
-      });
-      animation.addEventListener('finish', () => {
-        if (
-          this.uiState.current &&
-          this.uiState.current.animation === animation
-        )
-          this.uiState.current.animation = undefined;
-      });
-      animation.addEventListener('remove', () => {
-        if (
-          this.uiState.current &&
-          this.uiState.current.animation === animation
-        )
-          this.uiState.current.animation = undefined;
-      });
     };
 
     return {
@@ -561,27 +541,6 @@ export class AnimationParticipant {
           'Unexpected missing uiState.detached when starting detached animation'
         );
       this.uiState.detached.animation = animation;
-      animation.addEventListener('cancel', () => {
-        if (
-          this.uiState.detached &&
-          this.uiState.detached.animation === animation
-        )
-          this.uiState.detached.animation = undefined;
-      });
-      animation.addEventListener('finish', () => {
-        if (
-          this.uiState.detached &&
-          this.uiState.detached.animation === animation
-        )
-          this.uiState.detached.animation = undefined;
-      });
-      animation.addEventListener('remove', () => {
-        if (
-          this.uiState.detached &&
-          this.uiState.detached.animation === animation
-        )
-          this.uiState.detached.animation = undefined;
-      });
     };
 
     return {
