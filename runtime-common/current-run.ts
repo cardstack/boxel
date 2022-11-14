@@ -134,7 +134,6 @@ export class CurrentRun {
   #moduleWorkingCache = new Map<string, Promise<Module>>();
   #typesCache = new WeakMap<typeof Card, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
-  #unfinishedInstances = new Set<string>();
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
@@ -177,7 +176,6 @@ export class CurrentRun {
     this.#typesCache = new WeakMap();
     this.#indexingInstances = new Map();
     this.#ignoreMap = new URLMap();
-    this.#unfinishedInstances = new Set<string>();
     this.#loader = Loader.createLoaderFromGlobal();
     this.stats.instancesIndexed = 0;
     this.stats.instanceErrors = 0;
@@ -187,7 +185,6 @@ export class CurrentRun {
   static async fromScratch(current: CurrentRun) {
     current.resetState();
     await current.visitDirectory(new URL(current.realm.url));
-    await current.patchUnfinishedInstances();
     return current;
   }
 
@@ -223,7 +220,6 @@ export class CurrentRun {
     for (let invalidation of invalidations) {
       await current.visitFile(invalidation);
     }
-    await current.patchUnfinishedInstances();
     return current;
   }
 
@@ -314,15 +310,6 @@ export class CurrentRun {
           stack
         );
       }
-    }
-  }
-
-  private async patchUnfinishedInstances(): Promise<void> {
-    for (let fileURL of this.#unfinishedInstances) {
-      this.#indexingInstances.delete(fileURL);
-    }
-    for (let fileURL of this.#unfinishedInstances) {
-      await this.visitFile(new URL(fileURL));
     }
   }
 

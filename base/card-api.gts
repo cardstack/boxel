@@ -719,7 +719,7 @@ export class Card {
       deserialized.set('id', id);
     }
     // when there are no other field values to set, then don't trigger ambient recomputes
-    if (Object.keys(deserializedData).length) {
+    if (Object.keys(deserializedData).length > 0) {
       for (let [fieldName, value] of Object.entries(deserializedData)) {
         (this as any)[fieldName] = value;
       }
@@ -1073,8 +1073,8 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
       if (field.card as typeof Card === IDCard && this[isSavedInstance]) {
         throw new Error(`cannot assign a value to the field '${field.name}' on the saved card '${(this as any)[field.name]}' because it is the card's identifier`);
       }
-      let deserialized = getDataBucket(this);
       value = field.validate(this, value);
+      let deserialized = getDataBucket(this);
       deserialized.set(field.name, value);
       // invalidate all computed fields because we don't know which ones depend on this one
       for (let computedFieldName of Object.keys(getComputedFields(this))) {
