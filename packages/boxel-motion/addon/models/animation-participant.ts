@@ -28,6 +28,34 @@ export class AnimationParticipantManager {
     return modifier.id;
   }
 
+  // This is still a naive cleanup
+  // It should really probably be the pruning thing
+  cleanupDOMRef(DOMRef: DOMRefNode) {
+    let recurse = (node: DOMRefNode, callback: (node: DOMRefNode) => void) => {
+      callback(node);
+      for (let child of node.children) {
+        recurse(child, callback);
+      }
+    };
+    let deleted: DOMRefNode[] = [];
+    recurse(DOMRef, (node) => {
+      node.delete();
+      deleted.push(node);
+    });
+    this.DOMRefs = this.DOMRefs.filter((v) => v !== DOMRef);
+    for (let node of deleted) {
+      if (node.animationParticipant.uiState.detached?.DOMRef === node) {
+        node.animationParticipant.uiState.detached = undefined;
+        if (
+          !node.animationParticipant.uiState.detached &&
+          !node.animationParticipant.uiState.current
+        ) {
+          this.participants.delete(node.animationParticipant);
+        }
+      }
+    }
+  }
+
   // TODO: this should be able to inform its caller
   // about what HTML elements can be removed from the DOM, so we can selectively
   // pluck orphans out
@@ -40,8 +68,9 @@ export class AnimationParticipantManager {
       // It should collect all DOMRefs to dispose, then traverse the tree and remove them at one go, preserving
       // nodes that are NOT disposed and all of their descendants
       animationParticipant._DOMRefsToDispose.forEach((DOMRef) => {
-        DOMRef.delete();
+        this.cleanupDOMRef(DOMRef);
       });
+      animationParticipant._DOMRefsToDispose.clear();
 
       if (animationParticipant.canBeCleanedUp) {
         assert(
@@ -49,7 +78,10 @@ export class AnimationParticipantManager {
           !animationParticipant.uiState.current
         );
         this.participants.delete(animationParticipant);
-        animationParticipant.uiState.detached?.DOMRef?.delete();
+        let DOMRef = animationParticipant.uiState.detached?.DOMRef;
+        if (DOMRef) {
+          this.cleanupDOMRef(DOMRef);
+        }
       } else {
         if (
           animationParticipant.uiState.detached &&
@@ -61,8 +93,8 @@ export class AnimationParticipantManager {
             animationParticipant.uiState.detached.animation?.playState ===
               'paused')
         ) {
-          animationParticipant.uiState.detached?.DOMRef?.delete();
-          animationParticipant.uiState.detached = undefined;
+          let DOMRef = animationParticipant.uiState.detached.DOMRef;
+          this.cleanupDOMRef(DOMRef);
         }
         // TODO: check that canceling the animations is happening at the right place
         animationParticipant.cancelAnimations();
