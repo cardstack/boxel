@@ -365,31 +365,14 @@ export class CurrentRun {
     }
   }
 
-  private async deserializeCard(
-    resource: LooseCardResource,
+  private async recomputeCard(
+    card: Card,
     fileURL: string,
     identityContext: IdentityContextType,
     stack: string[]
-  ): Promise<Card> {
+  ): Promise<void> {
     let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
-    let card: Card | undefined;
-    let id = fileURL.replace(/\.json$/, "");
-    let cachedCard = identityContext.get(id)?.instance;
-    if (cachedCard) {
-      return cachedCard;
-    }
     try {
-      let res = { ...resource, ...{ id } };
-      card = await api.createFromSerialized<typeof Card>(
-        res,
-        { data: res },
-        new URL(fileURL),
-        {
-          identityContext,
-          loader: this.#loader,
-          loadFields: stack.length < maxLinkDepth ? true : undefined,
-        }
-      );
       await api.recompute(card, {
         loadFields: stack.length < maxLinkDepth ? true : undefined,
       });
@@ -404,18 +387,6 @@ export class CurrentRun {
         let linkURL = new URL(`${notLoadedErr.reference}.json`);
         if (this.#realmPaths.inRealm(linkURL)) {
           await this.visitFile(linkURL, identityContext, [fileURL, ...stack]);
-          card = await api.createFromSerialized<typeof Card>(
-            resource,
-            {
-              data: { ...resource, ...{ id } },
-            },
-            new URL(fileURL),
-            {
-              identityContext,
-              loader: this.#loader,
-              loadFields: true,
-            }
-          );
           await api.recompute(card, { loadFields: true });
         } else {
           // in this case the instance we are linked to is a missing instance
@@ -426,7 +397,6 @@ export class CurrentRun {
         throw err;
       }
     }
-    return card;
   }
 
   private async indexCard(
@@ -455,38 +425,24 @@ export class CurrentRun {
     let typesMaybeError: TypesWithErrors | undefined;
     let uncaughtError: Error | undefined;
     let doc: SingleCardDocument | undefined;
-    let searchData: any;
+    let searchData: Record<string, any> | undefined;
     let cardType: typeof Card | undefined;
     try {
       let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
-      let card = await this.deserializeCard(
-        resource,
-        fileURL,
-        identityContext,
-        stack
-      );
-      let stillAssembling = identityContext.assemblingInstances();
-      if (stillAssembling.length > 0) {
-        this.#unfinishedInstances.add(fileURL);
-        // TODO refactor the type cast out after we have the server using glint for typechecking
-        let deps = stillAssembling.map(
-          ({ instance }: { instance: Card }) => instance.id
+      let card: Card | undefined;
+      if (!card) {
+        let res = { ...resource, ...{ id: instanceURL.href } };
+        card = await api.createFromSerialized<typeof Card>(
+          res,
+          { data: res },
+          new URL(fileURL),
+          {
+            identityContext,
+            loader: this.#loader,
+          }
         );
-        let err = new CardError(
-          `'${fileURL}'s linked document(s) not finished assembling: ${JSON.stringify(
-            deps,
-            null,
-            2
-          )}`,
-          { status: 503 }
-        );
-        this.#instances.set(instanceURL, {
-          type: "error",
-          error: { ...serializableError(err), deps },
-        });
-        deferred.fulfill();
-        return;
       }
+      await this.recomputeCard(card, fileURL, identityContext, stack);
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
       let data = api.serializeCard(card, {
         includeComputeds: true,
@@ -502,7 +458,12 @@ export class CurrentRun {
         },
       }) as SingleCardDocument;
       doc = maybeDoc;
-      searchData = api.searchDoc(card);
+      searchData = await api.searchDoc(card);
+      if (!searchData) {
+        throw new Error(
+          `bug: could not derive search doc for instance ${instanceURL.href}`
+        );
+      }
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -510,7 +471,7 @@ export class CurrentRun {
     if (!uncaughtError && cardType) {
       typesMaybeError = await this.getTypes(cardType);
     }
-    if (doc && typesMaybeError?.type === "types") {
+    if (searchData && doc && typesMaybeError?.type === "types") {
       this.stats.instancesIndexed++;
       this.#instances.set(instanceURL, {
         type: "entry",

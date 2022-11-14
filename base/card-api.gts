@@ -118,40 +118,7 @@ export async function flushLogs() {
 }
 
 export class IdentityContext {
-  private identity = new Map<string, { instance: Card, state: 'assembling' | 'ready' }>();
-
-  startAssembling(id: string, instance: Card) {
-    let identity = this.identity.get(id);
-    if (identity) {
-      if (identity.instance !== instance) {
-        throw new Error(`cannot re-assign new object for existing instance in identity context for id ${id}`);
-      }
-      identity.state = 'assembling';
-    }
-    if (!identity) {
-      this.identity.set(id, { instance, state: 'assembling'});
-    }
-  }
-
-  assemblyComplete(id: string, instance: Card) {
-    let identity = this.identity.get(id);
-    if (!identity) {
-      this.identity.set(id, { instance, state: 'ready'});
-    } else {
-      if (identity.instance !== instance) {
-        throw new Error(`cannot re-assign new object for existing instance in identity context for id ${id}`);
-      }
-      identity.state = 'ready';
-    }
-  }
-
-  assemblingInstances() {
-    return [...this.identity.values()].filter(({state}) => state === 'assembling');
-  }
-
-  get(id: string) {
-    return this.identity.get(id);
-  }
+  readonly identities = new Map<string, Card>();
 }
 
 type JSONAPIResource = 
@@ -245,17 +212,6 @@ function getter<CardT extends CardConstructor>(instance: Card, field: Field<Card
     deserialized.set(field.name, value);
     return value;
   }
-}
-
-function setFieldValue(instance: Card, fieldName: string, value: any) {
-  let deserialized = getDataBucket(instance);
-  let card = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
-  let field = getField(card, fieldName);
-  if (!field) {
-    throw new Error(`the field '${fieldName}' does not exist on card '${card.name}'`);
-  }
-  value = field.validate(instance, value);
-  deserialized.set(fieldName, value);
 }
 
 class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
@@ -594,7 +550,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     if (value?.links?.self == null) {
       return null;
     }
-    let cachedInstance = identityContext.get(value.links.self)?.instance;
+    let cachedInstance = identityContext.identities.get(value.links.self);
     if (cachedInstance) {
       return cachedInstance as CardInstanceType<CardT>;
     }
@@ -750,9 +706,22 @@ export class Card {
   }
 
   constructor(data?: Record<string, any>) {
-    if (data !== undefined) {
-      for (let [fieldName, value] of Object.entries(data)) {
-        setFieldValue(this, fieldName, value);
+    // we need to be careful that we don't trigger the ambient recompute() in our setters
+    // when we are instantiating an instance that is placed in the identityMap that has
+    // not had it's field values set yet, as computeds will be run that may assume dependent
+    // fields are available when they are not (e.g. CatalogEntry.isPrimitive trying to load
+    // it's 'ref' field). In this scenario, only the 'id' field is available. the rest of the fields
+    // will be filled in later, so just set the 'id' directly in the deserialized cache to avoid
+    // triggering the recompute.
+    let { id, ...deserializedData } = data ?? {};
+    if (id != null) {
+      let deserialized = getDataBucket(this);
+      deserialized.set('id', id);
+    }
+    // when there are no other field values to set, then don't trigger ambient recomputes
+    if (Object.keys(deserializedData).length) {
+      for (let [fieldName, value] of Object.entries(deserializedData)) {
+        (this as any)[fieldName] = value;
       }
     }
   }
@@ -874,35 +843,6 @@ function serializedGet<CardT extends CardConstructor>(
   return field.serialize(peekAtField(model, fieldName), doc, visited);
 }
 
-async function loadMissingField(
-  card: typeof Card,
-  field: Field<typeof Card>,
-  notLoaded: NotLoadedValue | NotLoaded,
-  identityContext: IdentityContext,
-  loadMoreFields?: boolean,
-  loadFieldDepth = 0,
-): Promise<Card> {
-  if (field.fieldType !== "linksTo") {
-    throw new Error(`cannot load missing field for non-linksTo field ${card.name}.${field.name}`);
-  }
-  let { reference } = notLoaded;
-  let loader = Loader.getLoaderFor(createFromSerialized);
-  let response = await loader.fetch(reference, { headers: { 'Accept': 'application/vnd.api+json' } });
-  if (!response.ok) {
-    let cardError = await CardError.fromFetchResponse(reference, response);
-    cardError.deps = [reference];
-    cardError.additionalErrors = [new NotLoaded(reference, field.name, card.name)];
-    throw cardError;
-  }
-  let json = await response.json();
-  if (!isSingleCardDocument(json)) {
-    throw new Error(`instance ${reference} is not a card document. it is: ${JSON.stringify(json, null, 2)}`);
-  }
-  let loadFields = loadMoreFields && loadFieldDepth < maxLinkDepth;
-  let instance = await createFromSerialized(json.data, json, undefined, { loader, loadFields, identityContext }, loadFieldDepth++);
-  return instance;
-}
-
 async function getDeserializedValue<CardT extends CardConstructor>({
   card,
   fieldName,
@@ -911,8 +851,6 @@ async function getDeserializedValue<CardT extends CardConstructor>({
   modelPromise,
   doc,
   identityContext,
-  loadFields,
-  loadFieldDepth = 0
 }: {
   card: CardT; 
   fieldName: string; 
@@ -921,17 +859,12 @@ async function getDeserializedValue<CardT extends CardConstructor>({
   modelPromise: Promise<Card>; 
   doc: LooseSingleCardDocument | CardDocument;
   identityContext: IdentityContext;
-  loadFields: boolean,
-  loadFieldDepth: number
 }): Promise<any> {
   let field = getField(card, fieldName);
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
   let result = await field.deserialize(value, doc, resource.relationships, resource.meta.fields?.[fieldName], identityContext, modelPromise);
-  if (loadFields && isNotLoadedValue(result)) {
-    result = await loadMissingField(card, field, result, identityContext, loadFields, loadFieldDepth);
-  }
   return result;
 }
 
@@ -974,8 +907,7 @@ export async function createFromSerialized<T extends CardConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
-  opts?: { loader?: Loader, loadFields?: boolean, identityContext?: IdentityContext },
-  loadFieldDepth = 0
+  opts?: { loader?: Loader, identityContext?: IdentityContext },
 ): Promise<CardInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
   let loader = opts?.loader ?? Loader;  
@@ -983,16 +915,15 @@ export async function createFromSerialized<T extends CardConstructor>(
   let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);
   let card = module[adoptsFrom.name];
   
-  return await _createFromSerialized(card, resource as any, doc, identityContext, opts, loadFieldDepth);
+  return await _createFromSerialized(card, resource as any, doc, identityContext);
 }
 
 export async function updateFromSerialized<T extends CardConstructor>(
   instance: CardInstanceType<T>,
   doc: LooseSingleCardDocument,
-  opts?: { loadFields?: true }
 ): Promise<CardInstanceType<T>> {
   let identityContext = identityContexts.get(instance) ?? new IdentityContext();
-  return await _updateFromSerialized(instance, doc.data, doc, identityContext, opts);
+  return await _updateFromSerialized(instance, doc.data, doc, identityContext);
 }
 
 async function _createFromSerialized<T extends CardConstructor>(
@@ -1000,8 +931,6 @@ async function _createFromSerialized<T extends CardConstructor>(
   data: T extends { [primitive]: infer P } ? P : LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument | undefined,
   identityContext: IdentityContext = new IdentityContext(),
-  opts?: { loadFields?: boolean },
-  loadFieldDepth = 0
 ): Promise<CardInstanceType<T>> {
   if (primitive in card) {
     return card[deserialize](data);
@@ -1023,13 +952,13 @@ async function _createFromSerialized<T extends CardConstructor>(
   }
   let instance: CardInstanceType<T> | undefined;
   if (resource.id != null) {
-    instance = identityContext.get(resource.id)?.instance as CardInstanceType<T> | undefined;
+    instance = identityContext.identities.get(resource.id) as CardInstanceType<T> | undefined;
   }
   if (!instance) {
     instance = new card({id: resource.id }) as CardInstanceType<T>;
   }
   identityContexts.set(instance, identityContext);
-  return await _updateFromSerialized(instance, resource, doc, identityContext, opts, loadFieldDepth);
+  return await _updateFromSerialized(instance, resource, doc, identityContext);
 }
 
 async function _updateFromSerialized<T extends CardConstructor>(
@@ -1037,11 +966,9 @@ async function _updateFromSerialized<T extends CardConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   identityContext: IdentityContext,
-  opts?: { loadFields?: boolean; },
-  loadFieldDepth = 0
 ): Promise<CardInstanceType<T>> {
   if (resource.id != null) {
-    identityContext.startAssembling(resource.id, instance);
+    identityContext.identities.set(resource.id, instance);
   }
   let deferred = new Deferred<Card>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
@@ -1070,8 +997,6 @@ async function _updateFromSerialized<T extends CardConstructor>(
             modelPromise: deferred.promise,
             doc,
             identityContext,
-            loadFields: Boolean(opts?.loadFields),
-            loadFieldDepth
           })
         ];
       }
@@ -1087,7 +1012,7 @@ async function _updateFromSerialized<T extends CardConstructor>(
       if (fieldName === 'id' && wasSaved && originalId !== value) {
         throw new Error(`cannot change the id for saved instance ${originalId}`);
       }
-      setFieldValue(instance, fieldName as string, value);
+      instance[fieldName] = value;
     }
     if (resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
@@ -1095,17 +1020,14 @@ async function _updateFromSerialized<T extends CardConstructor>(
       // saved will throw
       instance[isSavedInstance] = true;
     }
-    if (instance.id != null) {
-      identityContext.assemblyComplete(instance.id, instance);
-    }
   }
 
   deferred.fulfill(instance);
   return instance;
 }
 
-// this assumes that the instance has already been recomputed
-export function searchDoc<CardT extends CardConstructor>(instance: InstanceType<CardT>): Record<string, any> {
+export async function searchDoc<CardT extends CardConstructor>(instance: InstanceType<CardT>): Promise<Record<string, any>> {
+  await recompute(instance);
   return getQueryableValue(instance.constructor, instance) as Record<string, any>;
 }
 
@@ -1151,9 +1073,10 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
       if (field.card as typeof Card === IDCard && this[isSavedInstance]) {
         throw new Error(`cannot assign a value to the field '${field.name}' on the saved card '${(this as any)[field.name]}' because it is the card's identifier`);
       }
-      setFieldValue(this, field.name, value)
-      // invalidate all computed fields because we don't know which ones depend on this one
       let deserialized = getDataBucket(this);
+      value = field.validate(this, value);
+      deserialized.set(field.name, value);
+      // invalidate all computed fields because we don't know which ones depend on this one
       for (let computedFieldName of Object.keys(getComputedFields(this))) {
         deserialized.delete(computedFieldName);
       }
@@ -1355,36 +1278,66 @@ async function loadField<T extends Card, K extends keyof T>(model: T, fieldName:
       isLoaded = true;
     } catch (e: any) {
       if (isNotLoadedError(e)) {
+        // taking advantage of the identityMap regardless of whether loadFields is set
+        let instance = identityContext.identities.get(e.reference);
+        if (instance) {
+          deserialized.set(fieldName as string, instance);
+          continue;
+        }
+
         if (opts?.loadFields) {
           let card = Reflect.getPrototypeOf(model)!.constructor as typeof Card;
           let field = getField(card, fieldName as string);
           if (!field) {
             throw new Error(`the field '${fieldName as string} does not exist in card ${card.name}'`);
           }
-          let instance = await loadMissingField(card, field, e, identityContext, opts.loadFields);
+          let instance = await loadMissingField(card, field, e, identityContext);
           deserialized.set(fieldName as string, instance);
-          continue;
         } else {
           isLoaded = true;
-          continue;
         }
-      }
-
-      if (!isNotReadyError(e)) {
-        throw e;
-      }
-
-      let { model: depModel, computeVia, fieldName: depField } = e;
-      if (typeof computeVia === 'function') {
-        deserialized.set(depField, await computeVia.bind(depModel)());
+      } else if (isNotReadyError(e)) {
+        let { model: depModel, computeVia, fieldName: depField } = e;
+        if (typeof computeVia === 'function') {
+          deserialized.set(depField, await computeVia.bind(depModel)());
+        } else {
+          deserialized.set(depField, await depModel[computeVia]());
+        }
       } else {
-        deserialized.set(depField, await depModel[computeVia]());
+        throw e;
       }
     }
   }
   // case OK because deserialized.set assigns it
   return result!;
 }
+
+async function loadMissingField(
+  card: typeof Card,
+  field: Field<typeof Card>,
+  notLoaded: NotLoadedValue | NotLoaded,
+  identityContext: IdentityContext,
+): Promise<Card> {
+  if (field.fieldType !== "linksTo") {
+    throw new Error(`cannot load missing field for non-linksTo field ${card.name}.${field.name}`);
+  }
+  let { reference } = notLoaded;
+  let loader = Loader.getLoaderFor(createFromSerialized);
+  let response = await loader.fetch(reference, { headers: { 'Accept': 'application/vnd.api+json' } });
+  if (!response.ok) {
+    let cardError = await CardError.fromFetchResponse(reference, response);
+    cardError.deps = [reference];
+    cardError.additionalErrors = [new NotLoaded(reference, field.name, card.name)];
+    throw cardError;
+  }
+  let json = await response.json();
+  if (!isSingleCardDocument(json)) {
+    throw new Error(`instance ${reference} is not a card document. it is: ${JSON.stringify(json, null, 2)}`);
+  }
+  let instance = await createFromSerialized(json.data, json, undefined, { loader, identityContext });
+  return instance;
+}
+
 
 export function getField<CardT extends CardConstructor>(card: CardT, fieldName: string): Field<CardConstructor> | undefined {
   let obj: object | null = card.prototype;
