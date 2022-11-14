@@ -11,6 +11,7 @@ module.skip('Unit | AnimationParticipant', function () {
   // Capturing state
   test('it can cancel its animations', function () {});
   test('it can clear its snapshots', function () {});
+  test('it can remove animations that are no longer running', function () {});
   test('it can capture beforeRender snapshots of unanimated existing elements', function () {});
   test('it can capture beforeRender snapshots of animated removed elements', function () {});
   test('it can capture beforeRender snapshots of animated existing elements', function () {});
@@ -70,12 +71,4 @@ module.skip('Unit | AnimationParticipant', function () {
   test('Inserted sprite animation callback updates appropriate uiState', function () {});
 
   test('it returns null when it cannot create a sprite', function () {});
-
-  test('it updates uiState.detached when a tracked animation is canceled', function () {});
-  test('it updates uiState.detached when a tracked animation is finished', function () {});
-  test('it updates uiState.detached when a tracked animation is removed', function () {});
-
-  test('it updates uiState.current when a tracked animation is canceled', function () {});
-  test('it updates uiState.current when a tracked animation is finished', function () {});
-  test('it updates uiState.current when a tracked animation is removed', function () {});
 });
