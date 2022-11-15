@@ -1,9 +1,9 @@
-import Controller from '@ember/controller';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import { Changeset } from '@cardstack/boxel-motion/models/animator';
-import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import { AnimationDefinition } from '@cardstack/boxel-motion/addon/models/orchestration';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import { Changeset } from '@cardstack/boxel-motion/models/animator';
+import Controller from '@ember/controller';
+import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
 
 let quickSpring = new SpringBehavior({
   stiffness: 100,

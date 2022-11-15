@@ -1,4 +1,5 @@
 import templateOnlyComponent from '@ember/component/template-only';
+
 import { COMPACT_CARD_STATES } from '../../card/compact';
 
 interface Signature {

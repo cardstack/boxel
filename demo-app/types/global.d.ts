@@ -2,11 +2,11 @@ import '@glint/environment-ember-loose';
 import '@cardstack/boxel-motion/glint';
 
 import { HelperLike } from '@glint/template';
-import EqHelper from 'ember-truth-helpers/helpers/eq';
-import AndHelper from 'ember-truth-helpers/helpers/and';
-import OrHelper from 'ember-truth-helpers/helpers/or';
-import NotHelper from 'ember-truth-helpers/helpers/not';
 import PickHelper from 'ember-composable-helpers/helpers/pick';
+import AndHelper from 'ember-truth-helpers/helpers/and';
+import EqHelper from 'ember-truth-helpers/helpers/eq';
+import NotHelper from 'ember-truth-helpers/helpers/not';
+import OrHelper from 'ember-truth-helpers/helpers/or';
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {

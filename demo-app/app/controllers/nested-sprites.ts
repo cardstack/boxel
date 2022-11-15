@@ -1,8 +1,8 @@
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import { Changeset } from '@cardstack/boxel-motion/models/animator';
+import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
-import { Changeset } from '@cardstack/boxel-motion/models/animator';
-import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
-import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 
 export default class NestedSprites extends Controller {
   @tracked moveOuter = false;
