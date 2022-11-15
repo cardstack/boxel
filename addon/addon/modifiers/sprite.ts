@@ -1,5 +1,6 @@
+import { registerDestructor } from '@ember/destroyable';
 import { inject as service } from '@ember/service';
-import Modifier from 'ember-modifier';
+import Modifier, { ArgsFor, NamedArgs, PositionalArgs } from 'ember-modifier';
 
 import AnimationsService from '../services/animations';
 
@@ -12,23 +13,34 @@ interface SpriteModifierArgs {
 }
 
 export interface SpriteModifierSignature {
-  Element: HTMLElement;
+  Element: Element;
   Args: SpriteModifierArgs;
 }
 
+function cleanup(instance: SpriteModifier): void {
+  instance.animations.unregisterSpriteModifier(instance);
+}
+
 export default class SpriteModifier extends Modifier<SpriteModifierSignature> {
+  element!: Element;
   id!: string;
   role: string | null = null;
 
   @service declare animations: AnimationsService;
 
-  didReceiveArguments(): void {
-    this.id = this.args.named.id;
-    this.role = this.args.named.role ?? null;
-    this.animations.registerSpriteModifier(this);
+  constructor(owner: unknown, args: ArgsFor<SpriteModifierSignature>) {
+    super(owner, args);
+    registerDestructor(this, cleanup);
   }
 
-  willRemove(): void {
-    this.animations.unregisterSpriteModifier(this);
+  modify(
+    element: Element,
+    _: PositionalArgs<SpriteModifierSignature>,
+    { id, role }: NamedArgs<SpriteModifierSignature>
+  ): void {
+    this.element = element;
+    this.id = id;
+    this.role = role ?? null;
+    this.animations.registerSpriteModifier(this);
   }
 }
