@@ -1,14 +1,14 @@
+import { IContext, Changeset } from '@cardstack/boxel-motion/models/animator';
+import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
+import Sprite from '@cardstack/boxel-motion/models/sprite';
+import AnimationsService from '@cardstack/boxel-motion/services/animations';
+import { assert } from '@ember/debug';
+import { action } from '@ember/object';
+import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import Ember from 'ember';
-import Sprite from '@cardstack/boxel-motion/models/sprite';
-import { inject as service } from '@ember/service';
-import { action } from '@ember/object';
-import AnimationsService from '@cardstack/boxel-motion/services/animations';
-import { assert } from '@ember/debug';
-import { IContext, Changeset } from '@cardstack/boxel-motion/models/animator';
-import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 
 const { VOLATILE_TAG, consumeTag } =
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment

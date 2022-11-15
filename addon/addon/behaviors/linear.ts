@@ -1,10 +1,11 @@
+import instantaneousVelocity from '@cardstack/boxel-motion/utils/instantaneous-velocity';
+
 import Behavior, {
   EasingToFramesArgument,
   FPS,
   Frame,
   timeToFrame,
 } from '../behaviors/base';
-import instantaneousVelocity from '@cardstack/boxel-motion/utils/instantaneous-velocity';
 
 export default class LinearBehavior implements Behavior {
   toFrames(options: EasingToFramesArgument): Frame[] {

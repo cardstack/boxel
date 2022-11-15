@@ -1,17 +1,18 @@
+import { scheduleOnce } from '@ember/runloop';
 import Service from '@ember/service';
 
-import { ISpriteModifier } from '../models/sprite';
-import { IContext } from '../models/animator';
-import TransitionRunner from '../models/transition-runner';
-import { scheduleOnce } from '@ember/runloop';
-import { taskFor } from 'ember-concurrency-ts';
 import {
   all,
   didCancel,
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
+import { taskFor } from 'ember-concurrency-ts';
+
 import { AnimationParticipantManager } from '../models/animation-participant';
+import { IContext } from '../models/animator';
+import { ISpriteModifier } from '../models/sprite';
+import TransitionRunner from '../models/transition-runner';
 
 export default class AnimationsService extends Service {
   animationParticipantManager = new AnimationParticipantManager();

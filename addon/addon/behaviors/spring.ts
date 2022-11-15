@@ -1,10 +1,11 @@
+import { assert } from '@ember/debug';
+
 import Behavior, {
   FPS,
   Frame,
   SpringToFramesArgument,
   timeToFrame,
 } from '../behaviors/base';
-import { assert } from '@ember/debug';
 
 type SpringOptionsArgument = {
   stiffness?: number;

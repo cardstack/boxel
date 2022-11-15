@@ -1,5 +1,6 @@
-import { Changeset } from '../models/animator';
 import { TransitionOptions } from '@cardstack/boxel-motion/transitions/magic-move';
+
+import { Changeset } from '../models/animator';
 
 /**
   Fades inserted, removed, and kept sprites.

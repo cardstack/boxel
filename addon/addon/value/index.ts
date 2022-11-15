@@ -1,5 +1,6 @@
-import Behavior, { Frame, timeToFrame } from '../behaviors/base';
 import { parse } from '@cardstack/boxel-motion/utils/css-to-unit-value';
+
+import Behavior, { Frame, timeToFrame } from '../behaviors/base';
 
 export type Value = string | number;
 export type CompositeValue = { [key: string]: Value };
