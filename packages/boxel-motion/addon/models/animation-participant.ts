@@ -52,26 +52,40 @@ export class AnimationParticipantManager {
       }
     }
 
-    interface Scope {
-      lastLiveAncestor: DOMRefNode | undefined | 'ROOT';
-      isOnDetachedBranch: boolean;
-      stop: boolean;
-    }
     let deleted: DOMRefNode[] = [];
-    let nodesToGraft = new Map<DOMRefNode, DOMRefNode | 'ROOT'>();
-    let recurse = (
+    let nodesToGraft = new Map<DOMRefNode, DOMRefNode>();
+    function recurse<T>(
       node: DOMRefNode,
-      callback: (node: DOMRefNode, scope: Scope) => Scope,
-      scope: Scope
-    ) => {
-      let nextScope = callback(node, scope);
-      if (nextScope.stop) return;
+      callback: (node: DOMRefNode, scope: T) => { nextScope: T; stop: boolean },
+      scope: T
+    ) {
+      let { nextScope, stop } = callback(node, scope);
+      if (stop) return;
       for (let child of node.children) {
         recurse(child, callback, nextScope);
       }
-    };
+    }
+    for (let node of displacedDOMRefs) {
+      recurse<undefined>(
+        node,
+        (node, _) => {
+          if (node.parent) node.delete();
+          else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
+          deleted.push(node);
+          return {
+            nextScope: undefined,
+            stop: false,
+          };
+        },
+        undefined
+      );
+    }
     for (let DOMRef of this.DOMRefs) {
-      recurse(
+      recurse<{
+        lastLiveAncestor: DOMRefNode | undefined;
+        isOnDetachedBranch: boolean;
+        stop: boolean;
+      }>(
         DOMRef,
         (node, scope) => {
           if (unanimatedDetachedDOMRefs.has(node)) {
@@ -79,31 +93,41 @@ export class AnimationParticipantManager {
             else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
             deleted.push(node);
             return {
-              ...scope,
-              isOnDetachedBranch: true,
-            };
-          } else if (displacedDOMRefs.has(node)) {
-            if (node.parent) node.delete();
-            else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
-            deleted.push(node);
-            displacedDOMRefs.delete(node);
-            return {
-              ...scope,
-              isOnDetachedBranch: true,
-              stop: true, // no need to iterate into the children of this node. it and its children are displaced (and hence replaced with another subtree)
+              nextScope: {
+                ...scope,
+                isOnDetachedBranch: true,
+              },
+              stop: false,
             };
           } else if (scope.isOnDetachedBranch) {
-            nodesToGraft.set(node, scope.lastLiveAncestor ?? 'ROOT');
-            return {
-              ...scope,
-              stop: true, // no need to iterate into the children of this node, because it is currently being used (it has animations on it)
-            };
+            if (scope.lastLiveAncestor) {
+              nodesToGraft.set(node, scope.lastLiveAncestor);
+              return {
+                nextScope: {
+                  ...scope,
+                },
+                stop: true, // no need to iterate into the children of this node, because it is currently being used (it has animations on it)
+              };
+            } else {
+              if (node.parent) node.delete();
+              else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
+              deleted.push(node);
+              return {
+                nextScope: {
+                  ...scope,
+                },
+                stop: false,
+              };
+            }
           } else {
             // We're still on a live branch, so return this node as the lastLiveAncestor
             // It will become the graft target later
             return {
-              ...scope,
-              lastLiveAncestor: node,
+              nextScope: {
+                ...scope,
+                lastLiveAncestor: node,
+              },
+              stop: false,
             };
           }
         },
@@ -115,20 +139,9 @@ export class AnimationParticipantManager {
       );
     }
 
-    for (let node of displacedDOMRefs) {
-      if (node.parent) node.delete();
-      else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
-      deleted.push(node);
-    }
-
     for (let [nodeToGraft, graftTo] of nodesToGraft) {
-      if (graftTo === 'ROOT') {
-        nodeToGraft.parent = undefined;
-        this.DOMRefs.push(nodeToGraft);
-      } else {
-        nodeToGraft.parent = graftTo;
-        graftTo.children.push(nodeToGraft);
-      }
+      nodeToGraft.parent = graftTo;
+      graftTo.children.push(nodeToGraft);
     }
 
     for (let node of deleted) {
