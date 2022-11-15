@@ -1,8 +1,8 @@
-import Controller from '@ember/controller';
-import { tracked } from '@glimmer/tracking';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
-import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import Controller from '@ember/controller';
+import { tracked } from '@glimmer/tracking';
 
 class InterruptionController extends Controller {
   @tracked ballGoWhere = 'A';

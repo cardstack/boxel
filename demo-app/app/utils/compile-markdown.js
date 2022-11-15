@@ -1,18 +1,18 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
-import marked from 'marked';
 
 import hljs from 'highlight.js/lib/core';
 
 // Installed languages
-import javascript from 'highlight.js/lib/languages/javascript';
 import css from 'highlight.js/lib/languages/css';
+import diff from 'highlight.js/lib/languages/diff';
 import handlebars from 'highlight.js/lib/languages/handlebars';
 import htmlbars from 'highlight.js/lib/languages/htmlbars';
+import javascript from 'highlight.js/lib/languages/javascript';
 import json from 'highlight.js/lib/languages/json';
-import xml from 'highlight.js/lib/languages/xml';
-import diff from 'highlight.js/lib/languages/diff';
 import shell from 'highlight.js/lib/languages/shell';
 import typescript from 'highlight.js/lib/languages/typescript';
+import xml from 'highlight.js/lib/languages/xml';
+import marked from 'marked';
 
 hljs.registerLanguage('javascript', javascript);
 hljs.registerLanguage('js', javascript);

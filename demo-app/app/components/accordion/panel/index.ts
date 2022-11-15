@@ -1,11 +1,11 @@
-import Component from '@glimmer/component';
-import { action } from '@ember/object';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import Sprite, { SpriteType } from '@cardstack/boxel-motion/models/sprite';
 import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
+import { action } from '@ember/object';
+import Component from '@glimmer/component';
 
 //import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
-import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 
 interface Signature {
   Element: HTMLDivElement;

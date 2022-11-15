@@ -1,7 +1,7 @@
-import Controller from '@ember/controller';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
 import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
+import Controller from '@ember/controller';
 
 export default class RoutesController extends Controller {
   async transition(changeset: Changeset): Promise<void> {

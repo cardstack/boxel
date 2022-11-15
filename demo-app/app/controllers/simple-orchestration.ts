@@ -1,10 +1,10 @@
-import Controller from '@ember/controller';
-import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
-import { tracked } from '@glimmer/tracking';
+import Controller from '@ember/controller';
 import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
 
 export default class SimpleOrchestration extends Controller {
   @tracked leftPosition = '0px';

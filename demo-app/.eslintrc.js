@@ -15,12 +15,25 @@ module.exports = {
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
     'plugin:ember/recommended',
+    'plugin:import/recommended',
+    'plugin:import/typescript',
     'plugin:prettier/recommended', // Enables eslint-plugin-prettier and eslint-config-prettier. This will display prettier errors as ESLint errors. Make sure this is always the last configuration in the extends array.
   ],
   env: {
     browser: true,
   },
   rules: {
+    // this doesn't work well with the monorepo. Typescript already complains if you try to import something that's not found
+    'import/no-unresolved': 'off',
+    'import/order': [
+      'error',
+      {
+        'newlines-between': 'always-and-inside-groups',
+        alphabetize: {
+          order: 'asc',
+        },
+      },
+    ],
     'prefer-let/prefer-let': 2,
     'prefer-const': 'off',
   },
