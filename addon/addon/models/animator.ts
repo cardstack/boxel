@@ -1,5 +1,7 @@
 import { assert } from '@ember/debug';
+
 import { Snapshot } from '../utils/measurement';
+
 import { AnimationDefinition } from './orchestration';
 import Sprite, { SpriteType } from './sprite';
 

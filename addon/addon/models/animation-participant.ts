@@ -1,9 +1,11 @@
 import { assert } from '@ember/debug';
+
 import {
   getDocumentPosition,
   copyComputedStyle,
   Snapshot,
 } from '../utils/measurement';
+
 import { Animator, IContext } from './animator';
 import { addToDOMRefTrees, DOMRefNode } from './dom-ref';
 import Sprite, { SpriteType, ISpriteModifier } from './sprite';

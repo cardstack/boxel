@@ -1,4 +1,5 @@
 import { assert } from '@ember/debug';
+
 import { KeyframeProvider } from '../motions/base';
 
 export default class KeyframeGenerator {

@@ -1,22 +1,26 @@
-import ContextAwareBounds, {
-  Bounds,
-  BoundsDelta,
-} from './context-aware-bounds';
-import { CopiedCSS, Snapshot } from '../utils/measurement';
-import { SpriteAnimation } from './sprite-animation';
-import Motion from '../motions/base';
+import { FPS } from '@cardstack/boxel-motion/behaviors/base';
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import {
   Opacity,
   OpacityOptions,
 } from '@cardstack/boxel-motion/motions/opacity';
+
+import { assert } from '@ember/debug';
+
+import Motion from '../motions/base';
+import { CssMotion, CssMotionOptions } from '../motions/css-motion';
 import { Move, MoveOptions } from '../motions/move';
 import { Resize, ResizeOptions } from '../motions/resize';
-import { CssMotion, CssMotionOptions } from '../motions/css-motion';
-import { FPS } from '@cardstack/boxel-motion/behaviors/base';
-import { assert } from '@ember/debug';
-import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
-import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+
+import { CopiedCSS, Snapshot } from '../utils/measurement';
+
 import { Animator } from './animator';
+import ContextAwareBounds, {
+  Bounds,
+  BoundsDelta,
+} from './context-aware-bounds';
+import { SpriteAnimation } from './sprite-animation';
 
 export interface ISpriteModifier {
   id: string;

@@ -1,8 +1,9 @@
-import { Changeset } from '../models/animator';
-import { assert } from '@ember/debug';
+import Behavior from '@cardstack/boxel-motion/behaviors/base';
 import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import approximatelyEqual from '@cardstack/boxel-motion/utils/approximately-equal';
-import Behavior from '@cardstack/boxel-motion/behaviors/base';
+import { assert } from '@ember/debug';
+
+import { Changeset } from '../models/animator';
 
 export type TransitionOptions = {
   behavior?: Behavior;

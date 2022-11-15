@@ -1,5 +1,6 @@
-import Sprite, { SpriteType } from './sprite';
 import { defer } from 'rsvp';
+
+import Sprite, { SpriteType } from './sprite';
 
 /**
  * Animates a sprite. By default, the animation is paused and must be started manually by calling `play()`.

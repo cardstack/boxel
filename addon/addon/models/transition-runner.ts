@@ -1,9 +1,12 @@
-import { task } from 'ember-concurrency';
-import Sprite, { SpriteType } from '../models/sprite';
-import { assert } from '@ember/debug';
-import { IContext, Changeset } from './animator';
-import { SpriteAnimation } from '@cardstack/boxel-motion/models/sprite-animation';
 import { FPS } from '@cardstack/boxel-motion/behaviors/base';
+import { SpriteAnimation } from '@cardstack/boxel-motion/models/sprite-animation';
+import { assert } from '@ember/debug';
+import { task } from 'ember-concurrency';
+
+import Sprite, { SpriteType } from '../models/sprite';
+
+import { IContext, Changeset } from './animator';
+
 import { AnimationDefinition, OrchestrationMatrix } from './orchestration';
 
 export default class TransitionRunner {

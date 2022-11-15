@@ -1,4 +1,5 @@
 import { assert } from '@ember/debug';
+
 import { AnimationParticipant } from './animation-participant';
 
 // How do we make it possible to easily move DOMRefNodes around?
