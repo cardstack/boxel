@@ -77,6 +77,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "isNotLoadedError",
       "chooseCard",
       "baseCardRef",
+      "maxLinkDepth",
       "NotLoaded",
       "CardError",
       "isMetaFieldItem",

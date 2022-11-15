@@ -405,7 +405,9 @@ export class SearchIndex {
     if (card.type === "error") {
       return card;
     }
-    let doc: SingleCardDocument = { data: card.entry.resource };
+    let doc: SingleCardDocument = {
+      data: { ...card.entry.resource, ...{ links: { self: url.href } } },
+    };
     if (opts?.loadLinks) {
       let included = await this.loadLinks(doc.data, [doc.data.id]);
       if (included.length > 0) {
@@ -432,7 +434,9 @@ export class SearchIndex {
       visited.push(resource.id);
     }
 
-    for (let relationship of Object.values(resource.relationships ?? {})) {
+    for (let [fieldName, relationship] of Object.entries(
+      resource.relationships ?? {}
+    )) {
       if (!relationship.links.self) {
         continue;
       }
@@ -465,6 +469,7 @@ export class SearchIndex {
         }
         linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
       }
+      let foundLinks = false;
       if (linkResource && stack.length <= maxLinkDepth) {
         for (let includedResource of await this.loadLinks(
           linkResource,
@@ -473,13 +478,23 @@ export class SearchIndex {
           visited,
           [...(resource.id != null ? [resource.id] : []), ...stack]
         )) {
+          foundLinks = true;
           if (
             !omit.includes(includedResource.id) &&
             !included.find((r) => r.id === includedResource.id)
           ) {
-            included.push(includedResource);
+            included.push({
+              ...includedResource,
+              ...{ links: { self: includedResource.id } },
+            });
           }
         }
+      }
+      if (foundLinks || omit.includes(relationship.links.self)) {
+        resource.relationships![fieldName].data = {
+          type: "card",
+          id: relationship.links.self,
+        };
       }
     }
     return included;
