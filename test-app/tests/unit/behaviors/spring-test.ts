@@ -1,5 +1,5 @@
-import { module, test } from 'qunit';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import { module, test } from 'qunit';
 
 module('Unit | Behaviors | Spring', function () {
   test('generates minimum of 2 frames', function (assert) {

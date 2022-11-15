@@ -1,5 +1,5 @@
-import { module, test } from 'qunit';
 import { parse } from '@cardstack/boxel-motion/utils/css-to-unit-value';
+import { module, test } from 'qunit';
 
 module('Unit | Util | CssToUnitValue', function () {
   test('parses integers', function (assert) {

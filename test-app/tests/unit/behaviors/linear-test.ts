@@ -1,5 +1,5 @@
-import { module, test } from 'qunit';
 import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import { module, test } from 'qunit';
 
 module('Unit | Behaviors | Linear', function () {
   test('generates minimum of 2 frames', function (assert) {
