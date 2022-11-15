@@ -1,16 +1,33 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
-import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
-import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 
 export default class NestedSprites extends Controller {
   @tracked moveOuter = false;
   @tracked moveInner = true;
 
-  async transition(changeset: Changeset) {
-    magicMove(changeset, { duration: 5000 });
-    await runAnimations([...changeset.keptSprites]);
+  transition(changeset: Changeset): AnimationDefinition {
+    let { keptSprites } = changeset;
+
+    return {
+      timeline: {
+        type: 'sequence',
+        animations: [
+          {
+            sprites: keptSprites,
+            properties: {
+              position: {},
+            },
+            timing: {
+              behavior: new LinearBehavior(),
+              duration: 5000,
+            },
+          },
+        ],
+      },
+    };
   }
 }
 
