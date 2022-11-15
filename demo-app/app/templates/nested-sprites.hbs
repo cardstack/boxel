@@ -2,18 +2,15 @@
   <button type="button" {{on "click" (fn (mut this.moveOuter) (not this.moveOuter))}}>Move Outer</button>
   <button type="button" {{on "click" (fn (mut this.moveInner) (not this.moveInner))}}>Move Inner</button>
 
-  {{! @glint-expect-error: TODO: migrate this.transition to return AnimationDefinition }}
   <AnimationContext @use={{this.transition}} local-class="context">
     <div {{sprite id="outer"}} local-class="outer {{if this.moveOuter "right"}}">
       Outer Sprite
-      {{! @glint-expect-error: TODO: migrate this.transition to return AnimationDefinition }}
       <AnimationContext @use={{this.transition}} local-class="context">
         <div {{sprite id="inner"}} local-class="inner {{if this.moveInner "right"}}">Inner Sprite</div>
       </AnimationContext>
     </div>
   </AnimationContext>
 
-  {{! @glint-expect-error: TODO: migrate this.transition to return AnimationDefinition }}
   <AnimationContext @use={{this.transition}} local-class="context">
     <div {{sprite id="outer-no-context"}} local-class="outer {{if this.moveOuter "right"}}">
       Outer Sprite
