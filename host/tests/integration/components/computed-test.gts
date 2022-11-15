@@ -177,6 +177,32 @@ module('Integration | computeds', function (hooks) {
     assert.strictEqual(root.textContent!.trim(), 'Mango');
   });
 
+  test('can render a async computed that depends on an async computed: consumer field is first', async function(assert) {
+    let { field, contains, Card, Component } = cardApi;
+    let { default: StringCard} = string;
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field verySlowName = contains(StringCard, {
+        computeVia: async function(this: Person) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          return this.slowName;
+        }
+      });
+      @field slowName = contains(StringCard, {
+        computeVia: async function(this: Person) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          return this.firstName;
+        }
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.verySlowName/></template>
+      }
+    }
+    let mango = new Person({ firstName: 'Mango' });
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(root.textContent!.trim(), 'Mango');
+  });
+
   test('can render a nested asynchronous computed field', async function(assert) {
     let { field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
@@ -397,6 +423,9 @@ module('Integration | computeds', function (hooks) {
     assert.shadowDOM('[data-test-field=alias]').containsText('Mango');
     assert.shadowDOM('[data-test-field=alias] input').doesNotExist('input field not rendered for computed')
   });
+
+  // mutate a CatalogEntry card, assert isPrimitive field rerenders
+  skip('can rerender computed field after card mutated');
 
   test('can maintain data consistency for async computed fields', async function(assert) {
     let { field, contains, Card, Component } = cardApi;

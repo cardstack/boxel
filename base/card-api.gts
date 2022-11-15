@@ -1245,15 +1245,22 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
   }
 
   async function _loadModel<T extends Card>(model: T, stack: Card[] = []): Promise<void> {
-    for (let fieldName of Object.keys(getFields(model, { includeComputeds: true }))) {
-      let value: any = await loadField(model, fieldName as keyof T, opts);
-      if (recomputePromises.get(card) !== recomputePromise) {
-        return;
+    let pendingFields = new Set<string>(Object.keys(getFields(model, { includeComputeds: true })));
+    do {
+      for (let fieldName of [...pendingFields]) {
+        let value: any = await getIfReady(model, fieldName as keyof T, undefined, opts);
+        if (!isNotReadyValue(value)) {
+          pendingFields.delete(fieldName);
+          if (recomputePromises.get(card) !== recomputePromise) {
+            return;
+          }
+          if (isCard(value) && !stack.includes(value)) {
+            await _loadModel(value, [value, ...stack]);
+          }
+        }
       }
-      if (isCard(value) && !stack.includes(value)) {
-        await _loadModel(value, [value, ...stack]);
-      }
-    }
+    // TODO should we have a timeout?
+    } while (pendingFields.size > 0);
   }
 
   await _loadModel(card);
@@ -1266,49 +1273,65 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
   done!();
 }
 
-async function loadField<T extends Card, K extends keyof T>(model: T, fieldName: K, opts?: RecomputeOptions): Promise<T[K]> {
-  let result: T[K];
-  let isLoaded = false;
-  let deserialized = getDataBucket(model);
-  let identityContext = identityContexts.get(model) ?? new IdentityContext();
-  while(!isLoaded) {
-    try {
-      result = model[fieldName];
-      isLoaded = true;
-    } catch (e: any) {
-      if (isNotLoadedError(e)) {
-        // taking advantage of the identityMap regardless of whether loadFields is set
-        let instance = identityContext.identities.get(e.reference);
-        if (instance) {
-          deserialized.set(fieldName as string, instance);
-          continue;
-        }
+interface NotReadyValue {
+  type: 'not-ready',
+  instance: Card;
+  fieldName: string;
+}
+function isNotReadyValue(value: any): value is NotReadyValue {
+  if (value && typeof value === 'object') {
+    return 'type' in value && value.type === 'not-ready' && 
+    'instance' in value && isCard(value.instance) &&
+    'fieldName' in value && typeof value.fieldName === 'string';
+  } else {
+    return false;
+  }
+}
 
-        if (opts?.loadFields) {
-          let card = Reflect.getPrototypeOf(model)!.constructor as typeof Card;
-          let field = getField(card, fieldName as string);
-          if (!field) {
-            throw new Error(`the field '${fieldName as string} does not exist in card ${card.name}'`);
-          }
-          let instance = await loadMissingField(card, field, e, identityContext);
-          deserialized.set(fieldName as string, instance);
-        } else {
-          isLoaded = true;
-        }
-      } else if (isNotReadyError(e)) {
-        let { model: depModel, computeVia, fieldName: depField } = e;
-        if (typeof computeVia === 'function') {
-          deserialized.set(depField, await computeVia.bind(depModel)());
-        } else {
-          deserialized.set(depField, await depModel[computeVia]());
-        }
-      } else {
-        throw e;
+async function getIfReady<T extends Card, K extends keyof T>(
+  instance: T,
+  fieldName: K,
+  compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
+  opts?: RecomputeOptions,
+): Promise<T[K] | NotReadyValue | undefined> {
+  let result: T[K] | undefined;
+  let deserialized = getDataBucket(instance);
+  let identityContext = identityContexts.get(instance) ?? new IdentityContext();
+  try {
+    return await compute();
+  } catch (e: any) {
+    if (isNotLoadedError(e)) {
+      // taking advantage of the identityMap regardless of whether loadFields is set
+      let fieldValue = identityContext.identities.get(e.reference);
+      if (fieldValue) {
+        deserialized.set(fieldName as string, fieldValue);
+        return fieldValue as T[K];
       }
+
+      if (opts?.loadFields) {
+        let card = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
+        let field = getField(card, fieldName as string);
+        if (!field) {
+          throw new Error(`the field '${fieldName as string} does not exist in card ${card.name}'`);
+        }
+        let fieldValue = await loadMissingField(card, field, e, identityContext);
+        deserialized.set(fieldName as string, fieldValue);
+        result = fieldValue as T[K];
+      }
+      return result;
+    } else if (isNotReadyError(e)) {
+      let { model: depModel, computeVia, fieldName: depField } = e;
+      let nestedCompute = typeof computeVia === 'function' ? computeVia.bind(depModel) : () => depModel[computeVia as string]();
+      let value = await getIfReady(depModel, depField, nestedCompute, opts);
+      if (isNotReadyValue(value)) {
+        return value;
+      }
+      deserialized.set(depField, value);
+      return { type: 'not-ready', instance, fieldName: fieldName as string };
+    } else {
+      throw e;
     }
   }
-  // case OK because deserialized.set assigns it
-  return result!;
 }
 
 async function loadMissingField(
