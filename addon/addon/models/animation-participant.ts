@@ -379,7 +379,7 @@ export class AnimationParticipantManager {
   }
 }
 
-class AnimationParticipantIdentifier {
+export class AnimationParticipantIdentifier {
   constructor(
     readonly key: string | null,
     public element: HTMLElement | null
