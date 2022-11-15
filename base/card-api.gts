@@ -706,22 +706,21 @@ export class Card {
   }
 
   constructor(data?: Record<string, any>) {
-    // we need to be careful that we don't trigger the ambient recompute() in our setters
-    // when we are instantiating an instance that is placed in the identityMap that has
-    // not had it's field values set yet, as computeds will be run that may assume dependent
-    // fields are available when they are not (e.g. CatalogEntry.isPrimitive trying to load
-    // it's 'ref' field). In this scenario, only the 'id' field is available. the rest of the fields
-    // will be filled in later, so just set the 'id' directly in the deserialized cache to avoid
-    // triggering the recompute.
-    let { id, ...deserializedData } = data ?? {};
-    if (id != null) {
-      let deserialized = getDataBucket(this);
-      deserialized.set('id', id);
-    }
-    // when there are no other field values to set, then don't trigger ambient recomputes
-    if (Object.keys(deserializedData).length > 0) {
-      for (let [fieldName, value] of Object.entries(deserializedData)) {
-        (this as any)[fieldName] = value;
+    if (data !== undefined) {
+      for (let [fieldName, value] of Object.entries(data)) {
+        if (fieldName === 'id') {
+          // we need to be careful that we don't trigger the ambient recompute() in our setters
+          // when we are instantiating an instance that is placed in the identityMap that has
+          // not had it's field values set yet, as computeds will be run that may assume dependent
+          // fields are available when they are not (e.g. CatalogEntry.isPrimitive trying to load
+          // it's 'ref' field). In this scenario, only the 'id' field is available. the rest of the fields
+          // will be filled in later, so just set the 'id' directly in the deserialized cache to avoid
+          // triggering the recompute.
+          let deserialized = getDataBucket(this);
+          deserialized.set('id', value);
+        } else {
+          (this as any)[fieldName] = value;
+        }
       }
     }
   }
