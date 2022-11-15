@@ -7,6 +7,13 @@ let styleSheet = initStyleSheet(`
   this { 
     display: grid;
     grid-template-columns: 1fr 1fr;
+    line-height: 1.5;
+  }
+  header {
+    font-weight: bold;
+  }
+  address {
+    font-style: normal;
   }
 `);
 
@@ -15,10 +22,12 @@ class VendorTemplate extends Component<typeof Vendor> {
     {{#if @model.vendorName}}
       <div {{attachStyles styleSheet}}>
         <div>
-          <div><@fields.vendorName/></div>
-          <div><@fields.addressLine/></div>
-          <div><@fields.city/>, <@fields.state/> <@fields.zipCode/></div>
-          <div><@fields.email/></div>
+          <header><@fields.vendorName/></header>
+          <address>
+            <div><@fields.addressLine/></div>
+            <@fields.city/> <@fields.state/> <@fields.zipCode/>
+          </address>
+          <@fields.email/>
         </div>
         <@fields.logo/>
       </div>

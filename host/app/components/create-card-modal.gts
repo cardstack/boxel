@@ -15,27 +15,26 @@ import CardEditor from './card-editor';
 
 export default class CreateCardModal extends Component {
   <template>
-    {{#if this.currentRequest.ref}}
-      <dialog class="dialog-box" open data-test-create-new-card={{this.currentRequest.ref.name}}>
-        <header class="dialog-box__header">
-          <h1>Create New Card: {{this.currentRequest.ref.name}}</h1>
-          <button {{on "click" (fn this.save undefined)}} type="button">X Close</button>
-        </header>
-        <section class="dialog-box__content">
-          {{#if this.currentRequest.card}}
+    {{#let this.currentRequest.card as |card|}}
+      {{#if card}}
+        <dialog class="dialog-box" open data-test-create-new-card={{card.constructor.name}}>
+          <header class="dialog-box__header">
+            <h1>Create New Card</h1>
+            <button {{on "click" (fn this.save undefined)}} type="button">X Close</button>
+          </header>
+          <section class="dialog-box__content">
             <CardEditor
-              @card={{this.currentRequest.card}}
+              @card={{card}}
               @onSave={{this.save}}
             />
-          {{/if}}
-        </section>
-      </dialog>
-    {{/if}}
+          </section>
+        </dialog>
+      {{/if}}
+    {{/let}}
   </template>
 
   @service declare cardService: CardService;
   @tracked currentRequest: {
-    ref: ExportedCardRef;
     card: Card;
     deferred: Deferred<Card | undefined>;
   } | undefined = undefined;
@@ -55,7 +54,6 @@ export default class CreateCardModal extends Component {
   @enqueueTask private async _create<T extends Card>(ref: ExportedCardRef): Promise<undefined | T> {
     let doc = { data: { meta: { adoptsFrom: ref }}};
     this.currentRequest = {
-      ref,
       card: await this.cardService.createFromSerialized(doc.data, doc),
       deferred: new Deferred(),
     };

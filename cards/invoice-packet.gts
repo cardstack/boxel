@@ -8,16 +8,6 @@ import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-
 import { balanceInCurrency, formatUSD } from './currency-format';
 
 let invoiceStyles = initStyleSheet(`
-  @font-face {
-    font-family: "Open Sans";
-    src: url("http://local-realm/fonts/OpenSans-Regular.ttf");
-    font-weight: 400;
-  }
-  @font-face {
-    font-family: "Open Sans";
-    src: url("http://local-realm/fonts/OpenSans-Bold.ttf");
-    font-weight: 700;
-  }
   this {
     max-width: 50rem;
     background-color: #fff; 
@@ -172,6 +162,74 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
   </template>
 }
 
+class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
+  <template>
+    <div {{attachStyles invoiceStyles}}>
+      <header class="header">
+        <h1>Edit Invoice</h1>
+      </header>
+      <section class="invoice">
+        <section class="vendor">
+          <h2>Vendor</h2>
+          <@fields.vendor/>
+        </section>
+        <section class="details">
+          <h2>Details</h2>
+          <@fields.details />
+        </section>
+        <section class="line-items">
+          <h2>Line Items</h2>
+          <header class="line-items__header">
+            <div class="label">Goods / services rendered</div>
+            <div class="label line-items__qty">Qty</div>
+            <div class="label line-items__amount">Amount</div>
+          </header>
+          <div class="line-items__rows">
+            <@fields.lineItems />
+          </div>
+        </section>
+        <div class="payment">
+          <section>
+            <h2>Payment Methods</h2>
+            <div class="payment-methods">
+              <div>
+                <div class="label">Primary<br> Payment Method</div>
+                {{#let @model.primaryPayment as |payment|}}
+                  {{#if payment.currency}}
+                    <div class="payment-method">
+                      <div class="payment-method__currency">{{payment.logo}} {{payment.currency}}</div>
+                      <div class="payment-method__amount">
+                        {{balanceInCurrency @model.balanceDue payment.exchangeRate payment.currency}}
+                      </div>
+                    </div>
+                  {{/if}}
+                {{/let}}
+              </div>
+              <div>
+                <div class="label">Alternate<br> Payment Methods</div>
+                {{#each @model.alternatePayments as |payment|}}
+                  {{#if payment.currency}}
+                    <div class="payment-method">
+                      <div class="payment-method__currency">{{payment.logo}} {{payment.currency}}</div>
+                      <div class="payment-method__amount">
+                        {{balanceInCurrency @model.balanceDue payment.exchangeRate payment.currency}}
+                      </div>
+                    </div>
+                  {{/if}}
+                {{/each}}
+              </div>
+            </div>
+          </section>
+          <section class="balance-due">
+            <div class="label">Balance Due</div>
+            <div class="balance-due__total">{{formatUSD @model.balanceDue}}</div>
+          </section>
+        </div>
+      </section>
+    </div>
+  </template>
+}
+
 export class InvoicePacket extends Card {
   @field vendor = linksTo(Vendor);
   @field details = contains(Details);
@@ -186,4 +244,5 @@ export class InvoicePacket extends Card {
 
   static embedded = InvoiceTemplate;
   static isolated = InvoiceTemplate;
+  static edit = EditInvoiceTemplate;
 }

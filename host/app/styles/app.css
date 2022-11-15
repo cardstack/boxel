@@ -1,3 +1,26 @@
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans-Regular.ttf");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans-SemiBold.ttf");
+  font-weight: 600;
+}
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans-Bold.ttf");
+  font-weight: 700;
+}
+
+body {
+  font-family: 'Open Sans', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -71,10 +94,6 @@ button {
   height: 80vh;
   padding: 0;
   overflow-y: auto;
-}
-.dialog-box.card-catalog-dialog {
-  /* Need to overlay on top of the create card dialog when both appear */
-  z-index:2;
 }
 .dialog-box__header {
   position: sticky;

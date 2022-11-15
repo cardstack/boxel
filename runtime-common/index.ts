@@ -137,11 +137,15 @@ export { CardAPI, Card };
 export const maxLinkDepth = 5;
 
 export interface CardChooser {
-  chooseCard<T extends Card>(query: Query): Promise<undefined | T>;
+  chooseCard<T extends Card>(
+    query: Query,
+    opts?: { offerToCreate: ExportedCardRef }
+  ): Promise<undefined | T>;
 }
 
 export async function chooseCard<T extends Card>(
-  query: Query
+  query: Query,
+  opts?: { offerToCreate: ExportedCardRef }
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
@@ -151,7 +155,7 @@ export async function chooseCard<T extends Card>(
   }
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
 
-  return await chooser.chooseCard<T>(query);
+  return await chooser.chooseCard<T>(query, opts);
 }
 
 export interface CardCreator {
