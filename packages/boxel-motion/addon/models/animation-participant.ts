@@ -40,6 +40,7 @@ export class AnimationParticipantManager {
       participant._DOMRefsToDispose.forEach((node) =>
         displacedDOMRefs.add(node)
       );
+      participant._DOMRefsToDispose.clear();
       if (
         participant.uiState.detached &&
         (!participant.uiState.detached.animation ||
