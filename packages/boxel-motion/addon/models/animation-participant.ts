@@ -28,77 +28,121 @@ export class AnimationParticipantManager {
     return modifier.id;
   }
 
-  // This is still a naive cleanup
-  // It should really probably be the pruning thing
-  cleanupDOMRef(DOMRef: DOMRefNode) {
-    let recurse = (node: DOMRefNode, callback: (node: DOMRefNode) => void) => {
-      callback(node);
-      for (let child of node.children) {
-        recurse(child, callback);
-      }
-    };
-    let deleted: DOMRefNode[] = [];
-    recurse(DOMRef, (node) => {
-      node.delete();
-      deleted.push(node);
-    });
-    this.DOMRefs = this.DOMRefs.filter((v) => v !== DOMRef);
-    for (let node of deleted) {
-      if (node.animationParticipant.uiState.detached?.DOMRef === node) {
-        node.animationParticipant.uiState.detached = undefined;
-        if (
-          !node.animationParticipant.uiState.detached &&
-          !node.animationParticipant.uiState.current
-        ) {
-          this.participants.delete(node.animationParticipant);
-        }
-      }
-    }
-  }
-
   // TODO: this should be able to inform its caller
   // about what HTML elements can be removed from the DOM, so we can selectively
   // pluck orphans out
   // In which case we don't want to call it during updateParticipants but instead
   // have the animations service call this
   performCleanup() {
-    for (let animationParticipant of this.participants) {
-      // Naive cleanup for now.
-      // This should be changed to something that can prune DOMRefs AND graft live nodes
-      // It should collect all DOMRefs to dispose, then traverse the tree and remove them at one go, preserving
-      // nodes that are NOT disposed and all of their descendants
-      animationParticipant._DOMRefsToDispose.forEach((DOMRef) => {
-        this.cleanupDOMRef(DOMRef);
-      });
-      animationParticipant._DOMRefsToDispose.clear();
-
-      if (animationParticipant.canBeCleanedUp) {
-        assert(
-          'Animation participant to clean up has current uiState',
-          !animationParticipant.uiState.current
-        );
-        this.participants.delete(animationParticipant);
-        let DOMRef = animationParticipant.uiState.detached?.DOMRef;
-        if (DOMRef) {
-          this.cleanupDOMRef(DOMRef);
-        }
-      } else {
-        if (
-          animationParticipant.uiState.detached &&
-          (!animationParticipant.uiState.detached.animation ||
-            animationParticipant.uiState.detached.animation.playState ===
-              'finished' ||
-            animationParticipant.uiState.detached.animation?.playState ===
-              'idle' ||
-            animationParticipant.uiState.detached.animation?.playState ===
-              'paused')
-        ) {
-          let DOMRef = animationParticipant.uiState.detached.DOMRef;
-          this.cleanupDOMRef(DOMRef);
-        }
-        // TODO: check that canceling the animations is happening at the right place
-        animationParticipant.cancelAnimations();
+    let unanimatedDetachedDOMRefs = new Set<DOMRefNode>();
+    let displacedDOMRefs = new Set<DOMRefNode>();
+    for (let participant of this.participants) {
+      participant._DOMRefsToDispose.forEach((node) =>
+        displacedDOMRefs.add(node)
+      );
+      if (
+        participant.uiState.detached &&
+        (!participant.uiState.detached.animation ||
+          participant.uiState.detached.animation.playState === 'finished' ||
+          participant.uiState.detached.animation?.playState === 'idle' ||
+          participant.uiState.detached.animation?.playState === 'paused')
+      ) {
+        // TODO: when cloning is implemented, add the DOMRef here
+        unanimatedDetachedDOMRefs.add(participant.uiState.detached.DOMRef);
       }
+    }
+
+    interface Scope {
+      lastLiveAncestor: DOMRefNode | undefined | 'ROOT';
+      isOnDetachedBranch: boolean;
+      stop: boolean;
+    }
+    let deleted: DOMRefNode[] = [];
+    let nodesToGraft = new Map<DOMRefNode, DOMRefNode | 'ROOT'>();
+    let recurse = (
+      node: DOMRefNode,
+      callback: (node: DOMRefNode, scope: Scope) => Scope,
+      scope: Scope
+    ) => {
+      let nextScope = callback(node, scope);
+      if (nextScope.stop) return;
+      for (let child of node.children) {
+        recurse(child, callback, nextScope);
+      }
+    };
+    for (let DOMRef of this.DOMRefs) {
+      recurse(
+        DOMRef,
+        (node, scope) => {
+          if (unanimatedDetachedDOMRefs.has(node)) {
+            if (node.parent) node.delete();
+            else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
+            deleted.push(node);
+            return {
+              ...scope,
+              isOnDetachedBranch: true,
+            };
+          } else if (displacedDOMRefs.has(node)) {
+            if (node.parent) node.delete();
+            else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
+            deleted.push(node);
+            displacedDOMRefs.delete(node);
+            return {
+              ...scope,
+              isOnDetachedBranch: true,
+              stop: true, // no need to iterate into the children of this node. it and its children are displaced (and hence replaced with another subtree)
+            };
+          } else if (scope.isOnDetachedBranch) {
+            nodesToGraft.set(node, scope.lastLiveAncestor ?? 'ROOT');
+            return {
+              ...scope,
+              stop: true, // no need to iterate into the children of this node, because it is currently being used (it has animations on it)
+            };
+          } else {
+            // We're still on a live branch, so return this node as the lastLiveAncestor
+            // It will become the graft target later
+            return {
+              ...scope,
+              lastLiveAncestor: node,
+            };
+          }
+        },
+        {
+          isOnDetachedBranch: false,
+          lastLiveAncestor: undefined,
+          stop: false,
+        }
+      );
+    }
+
+    for (let node of displacedDOMRefs) {
+      if (node.parent) node.delete();
+      else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
+      deleted.push(node);
+    }
+
+    for (let [nodeToGraft, graftTo] of nodesToGraft) {
+      if (graftTo === 'ROOT') {
+        nodeToGraft.parent = undefined;
+        this.DOMRefs.push(nodeToGraft);
+      } else {
+        nodeToGraft.parent = graftTo;
+        graftTo.children.push(nodeToGraft);
+      }
+    }
+
+    for (let node of deleted) {
+      // TODO: once we have cloning, we'll have to check the clones too
+      if (node.animationParticipant.uiState.detached?.DOMRef === node) {
+        node.animationParticipant.uiState.detached = undefined;
+      }
+    }
+
+    for (let animationParticipant of this.participants) {
+      if (animationParticipant.canBeCleanedUp) {
+        this.participants.delete(animationParticipant);
+      }
+      animationParticipant.cancelAnimations();
     }
   }
 
@@ -534,6 +578,7 @@ export class AnimationParticipant {
   // things, so it might be okay to clean up
   get canBeCleanedUp(): boolean {
     return (
+      (!this.uiState.current && !this.uiState.detached) ||
       (this.spriteIsRemoved() &&
         (!this.uiState.detached.animation ||
           this.uiState.detached.animation?.playState === 'finished' ||
