@@ -80,7 +80,35 @@ function isNotLoadedValue(val: any): val is NotLoadedValue {
   return type === "not-loaded";
 }
 
-const deserializedData = new WeakMap<object, Map<string, any>>();
+interface NotReadyValue {
+  type: 'not-ready',
+  instance: Card;
+  fieldName: string;
+}
+
+function isNotReadyValue(value: any): value is NotReadyValue {
+  if (value && typeof value === 'object') {
+    return 'type' in value && value.type === 'not-ready' && 
+    'instance' in value && isCard(value.instance) &&
+    'fieldName' in value && typeof value.fieldName === 'string';
+  } else {
+    return false;
+  }
+}
+
+interface StaleValue {
+  type: 'stale',
+  staleValue: any
+}
+
+function isStaleValue(value: any): value is StaleValue {
+  if (value && typeof value === 'object') {
+    return 'type' in value && value.type === 'stale' && 'staleValue' in value;
+  } else {
+    return false;
+  }
+}
+const deserializedData = new WeakMap<Card, Map<string, any>>();
 const recomputePromises = new WeakMap<Card, Promise<any>>();
 const componentCache = new WeakMap<Box<unknown>, ComponentLike<{ Args: {}; Blocks: {}; }>>();
 const identityContexts = new WeakMap<Card, IdentityContext>();
@@ -197,10 +225,12 @@ function getter<CardT extends CardConstructor>(instance: Card, field: Field<Card
 
   if (field.computeVia) {
     let value = deserialized.get(field.name);
-    if (value === undefined && typeof field.computeVia === 'function' && field.computeVia.constructor.name !== 'AsyncFunction') {
+    if (isStaleValue(value)) {
+      value = value.staleValue;
+    } else if (!deserialized.has(field.name) && typeof field.computeVia === 'function' && field.computeVia.constructor.name !== 'AsyncFunction') {
       value = field.computeVia.bind(instance)();
       deserialized.set(field.name, value);
-    } else if (value === undefined && (typeof field.computeVia === 'string' || typeof field.computeVia === 'function')) {
+    } else if (!deserialized.has(field.name) && (typeof field.computeVia === 'string' || typeof field.computeVia === 'function')) {
       throw new NotReady(instance, field.name, field.computeVia, instance.constructor.name);
     }
     return value;
@@ -750,7 +780,7 @@ class IDCard extends Card {
 
 export type CardConstructor = typeof Card;
 
-function getDataBucket(instance: object): Map<string, any> {
+function getDataBucket(instance: Card): Map<string, any> {
   let deserialized = deserializedData.get(instance);
   if (!deserialized) {
     deserialized = new Map();
@@ -1077,7 +1107,12 @@ function makeDescriptor<CardT extends CardConstructor, FieldT extends CardConstr
       deserialized.set(field.name, value);
       // invalidate all computed fields because we don't know which ones depend on this one
       for (let computedFieldName of Object.keys(getComputedFields(this))) {
-        deserialized.delete(computedFieldName);
+        if (deserialized.has(computedFieldName)) {
+          let currentValue = deserialized.get(computedFieldName);
+          if (!isStaleValue(currentValue)) {
+            deserialized.set(computedFieldName, { type: 'stale', staleValue: currentValue } as StaleValue);
+          }
+        }
       }
       logger.log(recompute(this));
     }
@@ -1249,7 +1284,7 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
     do {
       for (let fieldName of [...pendingFields]) {
         let value: any = await getIfReady(model, fieldName as keyof T, undefined, opts);
-        if (!isNotReadyValue(value)) {
+        if (!isNotReadyValue(value) && !isStaleValue(value)) {
           pendingFields.delete(fieldName);
           if (recomputePromises.get(card) !== recomputePromise) {
             return;
@@ -1273,32 +1308,30 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
   done!();
 }
 
-interface NotReadyValue {
-  type: 'not-ready',
-  instance: Card;
-  fieldName: string;
-}
-function isNotReadyValue(value: any): value is NotReadyValue {
-  if (value && typeof value === 'object') {
-    return 'type' in value && value.type === 'not-ready' && 
-    'instance' in value && isCard(value.instance) &&
-    'fieldName' in value && typeof value.fieldName === 'string';
-  } else {
-    return false;
-  }
-}
-
 async function getIfReady<T extends Card, K extends keyof T>(
   instance: T,
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
   opts?: RecomputeOptions,
-): Promise<T[K] | NotReadyValue | undefined> {
+): Promise<T[K] | NotReadyValue | StaleValue | undefined> {
   let result: T[K] | undefined;
   let deserialized = getDataBucket(instance);
   let identityContext = identityContexts.get(instance) ?? new IdentityContext();
+  let maybeStale = deserialized.get(fieldName as string);
+  if (isStaleValue(maybeStale)) {
+    let field = getField(Reflect.getPrototypeOf(instance)!.constructor as typeof Card, fieldName as string);
+    if (!field) {
+      throw new Error(`the field '${fieldName as string} does not exist in card ${instance.constructor.name}'`);
+    }
+    let { computeVia } = field;
+    if (!computeVia) {
+      throw new Error(`the field '${fieldName as string}' is not a computed field in card ${instance.constructor.name}`);
+    }
+    compute = typeof computeVia === 'function' ? computeVia.bind(instance) : () => (instance as any)[computeVia as string]();
+  }
+
   try {
-    return await compute();
+    result = await compute();
   } catch (e: any) {
     if (isNotLoadedError(e)) {
       // taking advantage of the identityMap regardless of whether loadFields is set
@@ -1332,6 +1365,9 @@ async function getIfReady<T extends Card, K extends keyof T>(
       throw e;
     }
   }
+
+  deserialized.set(fieldName as string, result);
+  return result;
 }
 
 async function loadMissingField(
