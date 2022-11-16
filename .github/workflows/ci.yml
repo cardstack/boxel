@@ -29,7 +29,7 @@ jobs:
       - run: pnpm glint
         working-directory: realm-server
         # this is a special script that skips the DOM errors
-      - run: glint.sh
+      - run: ./glint.sh
         working-directory: worker
   host-test:
     name: Host Tests
