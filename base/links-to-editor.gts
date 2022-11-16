@@ -86,6 +86,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     let type = Loader.identify(this.args.field.card) ?? baseCardRef;
     let chosenCard: Card | undefined = await chooseCard(
       { filter: { type }},
+      { offerToCreate: type }
     );
     if (chosenCard) {
       this.args.model.value = chosenCard;
