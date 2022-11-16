@@ -26,6 +26,8 @@ export default class SpriteModifier extends Modifier<SpriteModifierSignature> {
   id!: string;
   role: string | null = null;
 
+  #didSetup = false;
+
   @service declare animations: AnimationsService;
 
   constructor(owner: unknown, args: ArgsFor<SpriteModifierSignature>) {
@@ -41,6 +43,10 @@ export default class SpriteModifier extends Modifier<SpriteModifierSignature> {
     this.element = element;
     this.id = id;
     this.role = role ?? null;
-    this.animations.registerSpriteModifier(this);
+
+    if (!this.#didSetup) {
+      this.#didSetup = true;
+      this.animations.registerSpriteModifier(this);
+    }
   }
 }
