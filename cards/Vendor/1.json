@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "vendorName": "Smart Contract",
+      "addressLine": "50 California St Ste 1500",
+      "city": "San Francisco",
+      "state": "CA",
+      "zipCode": 94111,
+      "email": "finance@smartcontract.com",
+      "logo": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}

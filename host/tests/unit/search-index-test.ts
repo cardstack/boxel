@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -109,6 +109,9 @@ module('Unit | search-index', function (hooks) {
       assert.deepEqual(mango.doc.data, {
         id: `${testRealmURL}Pet/mango`,
         type: 'card',
+        links: {
+          self: `${testRealmURL}Pet/mango`,
+        },
         attributes: {
           firstName: 'Mango',
         },
@@ -116,10 +119,6 @@ module('Unit | search-index', function (hooks) {
           owner: {
             links: {
               self: `${testRealmURL}Person/owner`,
-            },
-            data: {
-              type: 'card',
-              id: `${testRealmURL}Person/owner`,
             },
           },
         },
@@ -212,6 +211,9 @@ module('Unit | search-index', function (hooks) {
       assert.deepEqual(hassan.doc.data, {
         id: `${testRealmURL}Friend/hassan`,
         type: 'card',
+        links: {
+          self: `${testRealmURL}Friend/hassan`,
+        },
         attributes: {
           firstName: 'Hassan',
         },
@@ -219,10 +221,6 @@ module('Unit | search-index', function (hooks) {
           friend: {
             links: {
               self: `${testRealmURL}Friend/mango`,
-            },
-            data: {
-              type: 'card',
-              id: `${testRealmURL}Friend/mango`,
             },
           },
         },
@@ -239,10 +237,264 @@ module('Unit | search-index', function (hooks) {
     } else {
       assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
     }
+
+    let hassanEntry = await indexer.searchEntry(
+      new URL(`${testRealmURL}Friend/hassan`)
+    );
+    if (hassanEntry) {
+      assert.deepEqual(hassanEntry.searchData, {
+        id: `${testRealmURL}Friend/hassan`,
+        firstName: 'Hassan',
+        'friend.id': `${testRealmURL}Friend/mango`,
+        'friend.firstName': 'Mango',
+        'friend.friend.id': `${testRealmURL}Friend/vanGogh`,
+        'friend.friend.firstName': 'Van Gogh',
+        'friend.friend.friend': null,
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}Friend/hassan in the index`
+      );
+    }
   });
 
-  // How would the searchDoc look for a cycle in the fields?
-  skip('can index a field with a cycle in the linksTo field');
+  test('can index a field with a cycle in the linksTo field', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Friend/hassan.json': {
+        data: {
+          id: `${testRealmURL}Friend/hassan`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/mango`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+          },
+        },
+      },
+      'Friend/mango.json': {
+        data: {
+          id: `${testRealmURL}Friend/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/hassan`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`), {
+      loadLinks: true,
+    });
+    if (hassan?.type === 'doc') {
+      assert.deepEqual(hassan.doc, {
+        data: {
+          id: `${testRealmURL}Friend/hassan`,
+          type: 'card',
+          links: { self: `${testRealmURL}Friend/hassan` },
+          attributes: {
+            firstName: 'Hassan',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/mango`,
+              },
+              data: {
+                type: 'card',
+                id: `${testRealmURL}Friend/mango`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Friend/hassan.json`
+            ),
+          },
+        },
+        included: [
+          {
+            id: `${testRealmURL}Friend/mango`,
+            type: 'card',
+            links: { self: `${testRealmURL}Friend/mango` },
+            attributes: {
+              firstName: 'Mango',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/hassan`,
+                },
+                data: {
+                  type: 'card',
+                  id: `${testRealmURL}Friend/hassan`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4201/test/friend',
+                name: 'Friend',
+              },
+              lastModified: adapter.lastModified.get(
+                `${testRealmURL}Friend/mango.json`
+              ),
+            },
+          },
+        ],
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
+    }
+
+    let hassanEntry = await indexer.searchEntry(
+      new URL(`${testRealmURL}Friend/hassan`)
+    );
+    if (hassanEntry) {
+      assert.deepEqual(hassanEntry.searchData, {
+        id: `${testRealmURL}Friend/hassan`,
+        firstName: 'Hassan',
+        'friend.id': `${testRealmURL}Friend/mango`,
+        'friend.firstName': 'Mango',
+        'friend.friend.id': `${testRealmURL}Friend/hassan`,
+        'friend.friend.firstName': 'Hassan',
+        'friend.friend.friend.id': `${testRealmURL}Friend/mango`,
+        'friend.friend.friend.firstName': 'Mango',
+        'friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
+        'friend.friend.friend.friend.firstName': 'Hassan',
+        'friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
+        'friend.friend.friend.friend.friend.firstName': 'Mango',
+        'friend.friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}Friend/hassan in the index`
+      );
+    }
+
+    let mango = await indexer.card(new URL(`${testRealmURL}Friend/mango`), {
+      loadLinks: true,
+    });
+    if (mango?.type === 'doc') {
+      assert.deepEqual(mango.doc, {
+        data: {
+          id: `${testRealmURL}Friend/mango`,
+          type: 'card',
+          links: { self: `${testRealmURL}Friend/mango` },
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/hassan`,
+              },
+              data: {
+                type: 'card',
+                id: `${testRealmURL}Friend/hassan`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/test/friend',
+              name: 'Friend',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Friend/mango.json`
+            ),
+          },
+        },
+        included: [
+          {
+            id: `${testRealmURL}Friend/hassan`,
+            type: 'card',
+            links: { self: `${testRealmURL}Friend/hassan` },
+            attributes: {
+              firstName: 'Hassan',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/mango`,
+                },
+                data: {
+                  type: 'card',
+                  id: `${testRealmURL}Friend/mango`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4201/test/friend',
+                name: 'Friend',
+              },
+              lastModified: adapter.lastModified.get(
+                `${testRealmURL}Friend/hassan.json`
+              ),
+            },
+          },
+        ],
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
+    }
+
+    let mangoEntry = await indexer.searchEntry(
+      new URL(`${testRealmURL}Friend/mango`)
+    );
+    if (mangoEntry) {
+      assert.deepEqual(mangoEntry.searchData, {
+        id: `${testRealmURL}Friend/mango`,
+        firstName: 'Mango',
+        'friend.id': `${testRealmURL}Friend/hassan`,
+        'friend.firstName': 'Hassan',
+        'friend.friend.id': `${testRealmURL}Friend/mango`,
+        'friend.friend.firstName': 'Mango',
+        'friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
+        'friend.friend.friend.firstName': 'Hassan',
+        'friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
+        'friend.friend.friend.friend.firstName': 'Mango',
+        'friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
+        'friend.friend.friend.friend.friend.firstName': 'Hassan',
+        'friend.friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}Friend/mango in the index`
+      );
+    }
+  });
 
   test("indexing identifies an instance's card references", async function (assert) {
     let realm = TestRealm.create({
@@ -269,7 +521,11 @@ module('Unit | search-index', function (hooks) {
       [
         'http://localhost:4201/base/attach-styles',
         'http://localhost:4201/base/card-api',
+        'http://localhost:4201/base/contains-many-component',
+        'http://localhost:4201/base/default-card-component',
+        'http://localhost:4201/base/field-component',
         'http://localhost:4201/base/integer',
+        'http://localhost:4201/base/links-to-editor',
         'http://localhost:4201/base/not-ready',
         'http://localhost:4201/base/pick',
         'http://localhost:4201/base/shadow-dom',
@@ -591,6 +847,48 @@ posts/ignore-me.json
           },
         },
       },
+      'friend1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Hassan',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${paths.url}friend2`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}friend`,
+              name: 'Friend',
+            },
+          },
+        },
+      },
+      'friend2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}friend`,
+              name: 'Friend',
+            },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -640,7 +938,18 @@ posts/ignore-me.json
       );
     });
 
-    skip('can search for cards by using a linksTo field');
+    test('can search for cards by using a linksTo field', async function (assert) {
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}friend`, name: 'Friend' },
+          eq: { 'friend.firstName': 'Mango' },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}friend1`]
+      );
+    });
 
     test(`can search for cards that have custom queryableValue`, async function (assert) {
       let { data: matching } = await indexer.search({
@@ -777,7 +1086,7 @@ posts/ignore-me.json
       } catch (err: any) {
         assert.strictEqual(
           err.message,
-          `Your filter refers to nonexistent field \"nonExistentField\" on type {\"module\":\"${testModuleRealm}person\",\"name\":\"Person\"}`
+          `Your filter refers to nonexistent field "nonExistentField" on type {"module":"${testModuleRealm}person","name":"Person"}`
         );
       }
     });

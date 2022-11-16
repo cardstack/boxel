@@ -12,6 +12,7 @@ import { testRealmURL, shimModule, setupCardLogs, TestRealmAdapter, TestRealm, s
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from 'runtime-spike/services/loader-service';
 import { Card } from "https://cardstack.com/base/card-api";
+import CreateCardModal from 'runtime-spike/components/create-card-modal';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -63,11 +64,11 @@ module('Integration | card-editor', function (hooks) {
       import StringCard from "https://cardstack.com/base/string";
 
       export class Pet extends Card {
-        @field firstName = contains(StringCard);
+        @field name = contains(StringCard);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
-            <h3 data-test-pet={{@model.firstName}}>
-              <@fields.firstName/>
+            <h3 data-test-pet={{@model.name}}>
+              <@fields.name/>
             </h3>
           </template>
         }
@@ -82,8 +83,8 @@ module('Integration | card-editor', function (hooks) {
         @field favoriteToy = contains(StringCard);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
-            <h3 data-test-pet={{@model.firstName}}>
-              <@fields.firstName/>
+            <h3 data-test-pet={{@model.name}}>
+              <@fields.name/>
               (plays with <@fields.favoriteToy/>)
             </h3>
           </template>
@@ -98,6 +99,14 @@ module('Integration | card-editor', function (hooks) {
       export class Person extends Card {
         @field firstName = contains(StringCard);
         @field pet = linksTo(Pet);
+        static isolated = class Embedded extends Component<typeof this> {
+          <template>
+            <h2 data-test-person={{@model.firstName}}>
+              <@fields.firstName/>
+            </h2>
+            Pet: <@fields.pet/>
+          </template>
+        }
       }
     `);
     await realm.write('Pet/mango.json', JSON.stringify({
@@ -105,7 +114,7 @@ module('Integration | card-editor', function (hooks) {
         type: 'card',
         id: `${testRealmURL}Pet/mango`,
         attributes: {
-          firstName: 'Mango'
+          name: 'Mango'
         },
         meta: {
           adoptsFrom: {
@@ -120,7 +129,7 @@ module('Integration | card-editor', function (hooks) {
         type: 'card',
         id: `${testRealmURL}Pet/vangogh`,
         attributes: {
-          firstName: 'Van Gogh'
+          name: 'Van Gogh'
         },
         meta: {
           adoptsFrom: {
@@ -135,7 +144,7 @@ module('Integration | card-editor', function (hooks) {
         type: 'card',
         id: `${testRealmURL}Pet/ringo`,
         attributes: {
-          firstName: 'Ringo',
+          name: 'Ringo',
           favoriteToy: 'sneaky snake',
         },
         meta: {
@@ -310,12 +319,14 @@ module('Integration | card-editor', function (hooks) {
     assert.shadowDOM('[data-test-pet="Mango"]').exists();
     assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
 
+    await click('[data-test-remove-card]');
     await click('[data-test-choose-card]');
     await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
 
-    assert.shadowDOM('[data-test-card-catalog-modal] [data-test-card-catalog-item]').exists({ count: 2});
+    assert.shadowDOM('[data-test-card-catalog-modal] [data-test-card-catalog-item]').exists({ count: 3 });
     assert.shadowDOM(`[data-test-select="${testRealmURL}Pet/vangogh"]`).exists();
     assert.shadowDOM(`[data-test-select="${testRealmURL}Pet/ringo"]`).exists();
+    assert.shadowDOM(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"`).exists();
     await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
 
     assert.shadowDOM('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
@@ -335,8 +346,7 @@ module('Integration | card-editor', function (hooks) {
     );
 
     assert.shadowDOM('[data-test-empty-link]').exists();
-    assert.shadowDOM('button[data-test-remove-card]').exists();
-    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', true, 'remove button is disabled');
+    assert.shadowDOM('button[data-test-remove-card]').doesNotExist();
 
     await click('[data-test-choose-card]');
     await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
@@ -361,14 +371,50 @@ module('Integration | card-editor', function (hooks) {
 
     assert.shadowDOM('[data-test-pet="Mango"]').exists();
     assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
+    assert.shadowDOM('[data-test-choose-card]').doesNotExist();
 
     await click('[data-test-remove-card]');
 
     assert.shadowDOM('[data-test-pet="Mango"]').doesNotExist();
     assert.shadowDOM('[data-test-empty-link]').exists();
-    assert.shadowDOM('button[data-test-remove-card]').exists();
-    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', true, 'remove button is disabled');
+    assert.shadowDOM('button[data-test-remove-card]').doesNotExist();
+    assert.shadowDOM('[data-test-choose-card]').exists();
   });
 
-  skip('can create (or specialize) a new card to populate a linksTo field');
+  test('can create a new card to populate a linksTo field', async function (assert) {
+    let card = await loadCard(`${testRealmURL}Person/mariko`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardEditor @card={{card}} />
+          <CardCatalogModal />
+          <CreateCardModal />
+        </template>
+      }
+    );
+
+    await click('[data-test-choose-card]');
+    await waitFor('[data-test-create-new]');
+    await click('[data-test-create-new]');
+
+    await waitFor('[data-test-create-new-card="Pet"]');
+
+    assert.shadowDOM('[data-test-field="name"] input').exists();
+    await fillIn('[data-test-field="name"] input', 'Simba');
+    assert.shadowDOM('[data-test-field="name"] input').hasValue('Simba');
+
+    await click('[data-test-create-new-card="Pet"] [data-test-save-card]');
+    await waitFor('[data-test-pet="Simba"]');
+    assert.shadowDOM('[data-test-create-new-card="Pet"]').doesNotExist();
+    assert.shadowDOM('[data-test-remove-card]').exists();
+
+    await click('[data-test-save-card]');
+
+    await waitFor('[data-test-person="Mariko"]');
+    assert.shadowDOM('[data-test-person="Mariko"]').hasText('Mariko');
+    assert.shadowDOM('[data-test-pet="Simba"]').exists();
+    assert.shadowDOM('[data-test-pet="Simba"]').hasText('Simba');
+  });
+
+  skip('can create a specialized a new card to populate a linksTo field');
 });
