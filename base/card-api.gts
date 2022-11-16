@@ -503,7 +503,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
 
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
     if (format === 'edit') {
-      let innerModel = model.field(this.name as keyof Card) as unknown as Box<Card>;
+      let innerModel = model.field(this.name as keyof Card) as unknown as Box<Card | null>;
       return getLinksToEditor(innerModel, this);
     }
     return fieldComponent(this, model, format);

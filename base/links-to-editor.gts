@@ -1,8 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, type EncapsulatedTaskDescriptor as Descriptor} from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
-import { getBoxComponent } from 'field-component';
+import { getBoxComponent } from './field-component';
 import {
   type Card,
   type Box,
@@ -34,7 +34,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   </template>
 
   choose = () => {
-    taskFor(this.chooseCard).perform();
+    taskFor(this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   }
 
   remove = () => {
@@ -79,7 +79,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 };
 
 export function getLinksToEditor(
-  model: Box<Card>,
+  model: Box<Card | null>,
   field: Field<typeof Card>,
 ): ComponentLike<{ Args: {}, Blocks: {} }> {
   return class LinksToEditTemplate extends GlimmerComponent {

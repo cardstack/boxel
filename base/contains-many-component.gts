@@ -9,7 +9,7 @@ import {
   type Format,
   type Field
 } from './card-api';
-import { getBoxComponent } from 'field-component';
+import { getBoxComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {

@@ -4,16 +4,15 @@ import {
   type Card,
   type Box,
   type Format,
-  type CardConstructor,
   type FieldsTypeFor
 } from './card-api';
 import { defaultComponent } from './default-card-component';
 import ShadowDOM from './shadow-dom';
 import type { ComponentLike } from '@glint/template';
 
-const componentCache = new WeakMap<Box<unknown>, ComponentLike<{ Args: {}; Blocks: {}; }>>();
+const componentCache = new WeakMap<Box<Card>, ComponentLike<{ Args: {}; Blocks: {}; }>>();
 
-export function getBoxComponent<CardT extends CardConstructor>(card: CardT, format: Format, model: Box<InstanceType<CardT>>): ComponentLike<{ Args: {}, Blocks: {} }> {
+export function getBoxComponent(card: typeof Card, format: Format, model: Box<Card>): ComponentLike<{ Args: {}, Blocks: {} }> {
   let stable = componentCache.get(model);
   if (stable) {
     return stable;
@@ -77,7 +76,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       }
       let field = maybeField;
       defaultFormat = getField(modelValue.constructor, property)?.computeVia ? 'embedded' : defaultFormat;
-      return field.component(model, defaultFormat);
+      return field.component(model as unknown as Box<Card>, defaultFormat);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
