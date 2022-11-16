@@ -1,0 +1,64 @@
+{
+  "data": {
+    "type": "card",
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "http://local-realm/Vendor/1"
+        }
+      }
+    },
+    "attributes": {
+      "details": {
+        "invoiceNo": "1868",
+        "invoiceDate": "2022-03-04",
+        "dueDate": "2022-04-04",
+        "terms": "Net 30",
+        "invoiceDocument": "Invoice_1868_-_ MatzoShoes.pdf ",
+        "memo": "Cash payment possible"
+      },
+      "lineItems": [
+        {
+          "name": "Reference Contract:ETH-USD (xDAI)",
+          "quantity": 1,
+          "amount": 132,
+          "description": "January - March Activity"
+        },
+        {
+          "name": "Reference Contract:DAI-USD (xDAI)",
+          "quantity": 1,
+          "amount": 3,
+          "description": "January - March Activity"
+        }
+      ],
+      "primaryPayment": {
+        "currency": "LINK",
+        "logo": null,
+        "exchangeRate": 0.0552
+      },
+      "alternatePayments": [
+        {
+          "currency": "USD",
+          "logo": null,
+          "exchangeRate": 1
+        },
+        {
+          "currency": "USDC",
+          "logo": null,
+          "exchangeRate": 1
+        },
+        {
+          "currency": "DAI",
+          "logo": null,
+          "exchangeRate": 1
+        }
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/invoice-packet",
+        "name": "InvoicePacket"
+      }
+    }
+  }
+}

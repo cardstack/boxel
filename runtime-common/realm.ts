@@ -256,6 +256,7 @@ export class Realm {
     }).output;
     return babel.transformSync(content, {
       filename: debugFilename,
+      compact: false, // this helps for readability when debugging
       plugins: [
         glimmerTemplatePlugin,
         emberConcurrencyAsyncPlugin,

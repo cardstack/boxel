@@ -14,6 +14,7 @@ import {
   baseCardRef,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
+import { initStyleSheet, attachStyles } from './attach-styles';
 
 
 interface Signature {
@@ -22,15 +23,43 @@ interface Signature {
     field: Field<typeof Card>;
   }
 }
+
+let linksToEditorStyles = initStyleSheet(`
+  this { 
+    background-color: #fff; 
+    border: 1px solid #ddd;
+    border-radius: 20px; 
+    padding: 1rem; 
+  }
+  button {
+    margin-top: 1rem;
+    font: inherit;
+    font-weight: 600;
+    border: none;
+    background-color: white;
+    padding: 0.5em 0;
+    text-transform: capitalize;
+  }
+  button:hover {
+    color: #00EBE5;
+  }
+`);
+
 class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
-    <button {{on "click" this.choose}} data-test-choose-card>Choose</button>
-    <button {{on "click" this.remove}} data-test-remove-card disabled={{this.isEmpty}}>Remove</button>
-    {{#if this.isEmpty}}
-      <div data-test-empty-link>[empty]</div>
-    {{else}}
-      <this.linkedCard/>
-    {{/if}}
+    <div {{attachStyles linksToEditorStyles}}>
+      {{#if this.isEmpty}}
+        <div data-test-empty-link>{{!-- PLACEHOLDER CONTENT --}}</div>
+        <button {{on "click" this.choose}} data-test-choose-card>
+          + Add {{@field.name}}
+        </button>
+      {{else}}
+        <this.linkedCard/>
+        <button {{on "click" this.remove}} data-test-remove-card disabled={{this.isEmpty}}>
+          Remove {{@field.name}}
+        </button>
+      {{/if}}
+    </div>
   </template>
 
   choose = () => {
@@ -53,24 +82,11 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     return getBoxComponent(card, 'embedded', this.args.model as Box<Card>);
   }
 
-  @restartableTask private async chooseCard(this: LinksToEditor) {
-    let currentlyChosen = !this.isEmpty ? (this.args.model.value as any)["id"] as string : undefined;
+  @restartableTask private async chooseCard() {
     let type = Loader.identify(this.args.field.card) ?? baseCardRef;
-    let chosenCard = await chooseCard(
-      {
-        filter: {
-          every: [
-            { type },
-            // omit the currently chosen card from the chooser
-            ...(currentlyChosen ? [{
-              not: {
-                eq: { id: currentlyChosen },
-                on: baseCardRef,
-              }
-            }] : [])
-          ]
-        }
-      }
+    let chosenCard: Card | undefined = await chooseCard(
+      { filter: { type }},
+      { offerToCreate: type }
     );
     if (chosenCard) {
       this.args.model.value = chosenCard;

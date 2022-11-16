@@ -29,8 +29,12 @@ import type {
   CardRef,
   CardResource,
   SingleCardDocument,
+  Relationship,
 } from "./search-index";
-import { Card } from "https://cardstack.com/base/card-api";
+import {
+  Card,
+  type IdentityContext as IdentityContextType,
+} from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 
 // Forces callers to use URL (which avoids accidentally using relative url
@@ -213,11 +217,9 @@ export class CurrentRun {
     if (operation === "update") {
       await current.visitFile(url);
     }
-
     for (let invalidation of invalidations) {
       await current.visitFile(invalidation);
     }
-
     return current;
   }
 
@@ -268,7 +270,11 @@ export class CurrentRun {
     }
   }
 
-  private async visitFile(url: URL, stack: string[] = []): Promise<void> {
+  private async visitFile(
+    url: URL,
+    identityContext?: IdentityContextType,
+    stack: string[] = []
+  ): Promise<void> {
     if (this.isIgnored(url)) {
       return;
     }
@@ -286,12 +292,25 @@ export class CurrentRun {
     if (!fileRef) {
       throw new Error(`missing file ${localPath}`);
     }
+    if (!identityContext) {
+      let api = await this.#loader.import<typeof CardAPI>(
+        `${baseRealm.url}card-api`
+      );
+      let { IdentityContext } = api;
+      identityContext = new IdentityContext();
+    }
 
     let { content, lastModified } = fileRef;
     if (url.href.endsWith(".json")) {
       let { data: resource } = JSON.parse(content);
       if (isCardResource(resource)) {
-        await this.indexCard(localPath, lastModified, resource, stack);
+        await this.indexCard(
+          localPath,
+          lastModified,
+          resource,
+          identityContext,
+          stack
+        );
       }
     }
   }
@@ -337,7 +356,8 @@ export class CurrentRun {
 
   private async recomputeCard(
     card: Card,
-    instanceURL: string,
+    fileURL: string,
+    identityContext: IdentityContextType,
     stack: string[]
   ): Promise<void> {
     let api = await this.#loader.import<typeof CardAPI>(
@@ -351,19 +371,21 @@ export class CurrentRun {
       let notLoadedErr: NotLoaded | undefined;
       if (
         isCardError(err) &&
-        (notLoadedErr = err.additionalErrors?.find((e) =>
-          isNotLoadedError(e)
+        (notLoadedErr = [err, ...(err.additionalErrors || [])].find(
+          isNotLoadedError
         ) as NotLoaded | undefined)
       ) {
         let linkURL = new URL(`${notLoadedErr.reference}.json`);
         if (this.#realmPaths.inRealm(linkURL)) {
-          await this.visitFile(linkURL, [instanceURL, ...stack]);
+          await this.visitFile(linkURL, identityContext, [fileURL, ...stack]);
           await api.recompute(card, { loadFields: true });
         } else {
           // in this case the instance we are linked to is a missing instance
           // in an external realm.
           throw err;
         }
+      } else {
+        throw err;
       }
     }
   }
@@ -372,15 +394,16 @@ export class CurrentRun {
     path: LocalPath,
     lastModified: number,
     resource: LooseCardResource,
+    identityContext: IdentityContextType,
     stack: string[]
   ): Promise<void> {
-    // TODO handle cycles
-    let indexingInstance = this.#indexingInstances.get(path);
+    let fileURL = this.#realmPaths.fileURL(path).href;
+    let indexingInstance = this.#indexingInstances.get(fileURL);
     if (indexingInstance) {
       return await indexingInstance;
     }
     let deferred = new Deferred<void>();
-    this.#indexingInstances.set(path, deferred.promise);
+    this.#indexingInstances.set(fileURL, deferred.promise);
     let instanceURL = new URL(
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
@@ -393,17 +416,19 @@ export class CurrentRun {
     let typesMaybeError: TypesWithErrors | undefined;
     let uncaughtError: Error | undefined;
     let doc: SingleCardDocument | undefined;
-    let searchData: any;
+    let searchData: Record<string, any> | undefined;
     let cardType: typeof Card | undefined;
     try {
       let api = await this.#loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`
       );
-      let card = (await api.createFromSerialized(
-        resource,
-        { data: { ...resource, ...{ id: instanceURL.href } } },
-        moduleURL,
+      let res = { ...resource, ...{ id: instanceURL.href } };
+      let card = await api.createFromSerialized<typeof Card>(
+        res,
+        { data: res },
+        new URL(fileURL),
         {
+          identityContext,
           // TODO unsure how to make glint happy here--the base realm uses an
           // injected loader, but this module uses the loader from its own
           // workspace. the mismatch makes glint mad. we could stop injecting
@@ -411,16 +436,16 @@ export class CurrentRun {
           // would conflict with the base realm loader since it's injected too
           loader: this.#loader, // cast to the Loader from the api.createFromSerialized params
         }
-      )) as Card;
-      cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
-      await this.recomputeCard(
-        card,
-        this.#realmPaths.fileURL(path).href,
-        stack
       );
+      await this.recomputeCard(card, fileURL, identityContext, stack);
+      cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
       let data = api.serializeCard(card, {
         includeComputeds: true,
       });
+      // prepare the document for index serialization
+      Object.values(data.data.relationships ?? {}).forEach(
+        (rel) => delete (rel as Relationship).data
+      );
       let maybeDoc = merge(data, {
         data: {
           id: instanceURL.href,
@@ -429,6 +454,11 @@ export class CurrentRun {
       }) as SingleCardDocument;
       doc = maybeDoc;
       searchData = await api.searchDoc(card);
+      if (!searchData) {
+        throw new Error(
+          `bug: could not derive search doc for instance ${instanceURL.href}`
+        );
+      }
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -436,7 +466,7 @@ export class CurrentRun {
     if (!uncaughtError && cardType) {
       typesMaybeError = await this.getTypes(cardType);
     }
-    if (doc && typesMaybeError?.type === "types") {
+    if (searchData && doc && typesMaybeError?.type === "types") {
       this.stats.instancesIndexed++;
       this.#instances.set(instanceURL, {
         type: "entry",
