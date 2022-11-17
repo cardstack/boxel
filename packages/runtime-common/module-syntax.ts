@@ -16,7 +16,7 @@ import startCase from "lodash/startCase";
 import camelCase from "lodash/camelCase";
 import upperFirst from "lodash/upperFirst";
 import { parseTemplates } from "@cardstack/ember-template-imports/lib/parse-templates";
-import { baseRealm } from "./index";
+import { baseRealm, ExportedCardRef } from "./index";
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from "@babel/plugin-syntax-decorators";
 //@ts-ignore unsure where these types live
@@ -26,8 +26,6 @@ import typescriptPlugin from "@babel/plugin-syntax-typescript";
 
 import type { types as t } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
-import type { ExportedCardRef } from "./search-index";
-// @ts-ignore tsc doesn't understand .gts files
 import type { FieldType } from "https://cardstack.com/base/card-api";
 
 export type { ClassReference, ExternalReference };

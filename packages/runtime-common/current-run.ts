@@ -10,7 +10,10 @@ import {
   hasExecutableExtension,
   maxLinkDepth,
   type NotLoaded,
+  ExportedCardRef,
+  CardRef,
 } from ".";
+import { loadCard } from "./card-ref";
 import { Kind, Realm, getExportedCardContext } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
 import ignore, { Ignore } from "ignore";
@@ -25,8 +28,6 @@ import {
   type SerializedError,
 } from "./error";
 import type {
-  ExportedCardRef,
-  CardRef,
   CardResource,
   SingleCardDocument,
   Relationship,
@@ -568,7 +569,7 @@ export class CurrentRun {
     let types: string[] = [];
     let fullRef: CardRef = { type: "exportedCard", ...ref };
     while (fullRef) {
-      let loadedCard = (await this.loadCard(fullRef)) as
+      let loadedCard = (await loadCard(fullRef, { loader: this.loader })) as
         | {
             card: typeof Card;
             ref: CardRef;
@@ -620,59 +621,6 @@ export class CurrentRun {
     let ignore = this.ignoreMap.get(new URL(ignoreURL))!;
     let pathname = this.#realmPaths.local(url);
     return ignore.test(pathname).ignored;
-  }
-
-  private async loadCard(
-    ref: CardRef
-  ): Promise<{ card: typeof Card; ref: CardRef } | undefined> {
-    let maybeCard: unknown;
-    let canonicalRef: CardRef | undefined;
-    if (ref.type === "exportedCard") {
-      let module = await this.loader.import<Record<string, any>>(ref.module);
-      maybeCard = module[ref.name];
-      canonicalRef = { ...ref, ...Loader.identify(maybeCard) };
-    } else if (ref.type === "ancestorOf") {
-      let { card: child, ref: childRef } =
-        (await this.loadCard(ref.card)) ?? {};
-      if (!child || !childRef) {
-        return undefined;
-      }
-      maybeCard = Reflect.getPrototypeOf(child) as typeof Card;
-      let cardId = Loader.identify(maybeCard);
-      canonicalRef = cardId
-        ? { type: "exportedCard", ...cardId }
-        : { ...ref, card: childRef };
-    } else if (ref.type === "fieldOf") {
-      let { card: parent, ref: parentRef } =
-        (await this.loadCard(ref.card)) ?? {};
-      if (!parent || !parentRef) {
-        return undefined;
-      }
-      let api = await this.loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`
-      );
-      let field = api.getField(parent, ref.field);
-      maybeCard = field?.card;
-      let cardId = Loader.identify(maybeCard);
-      canonicalRef = cardId
-        ? { type: "exportedCard", ...cardId }
-        : { ...ref, card: parentRef };
-    } else {
-      throw assertNever(ref);
-    }
-
-    if (
-      typeof maybeCard === "function" &&
-      "baseCard" in maybeCard &&
-      canonicalRef
-    ) {
-      return {
-        card: maybeCard as unknown as typeof Card,
-        ref: canonicalRef,
-      };
-    } else {
-      return undefined;
-    }
   }
 }
 
@@ -786,8 +734,4 @@ function invalidate(
   }
 
   return [...invalidationSet];
-}
-
-function assertNever(value: never) {
-  return new Error(`should never happen ${value}`);
 }

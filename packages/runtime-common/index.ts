@@ -35,21 +35,11 @@ export interface DirectoryEntryRelationship {
 }
 import { RealmPaths } from "./paths";
 import { Query } from "./query";
-export const baseRealm = new RealmPaths("https://cardstack.com/base/");
+export { baseRealm, catalogEntryRef, baseCardRef } from "./constants";
 export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from "./not-loaded";
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
-
-import type { ExportedCardRef } from "./search-index";
-export const catalogEntryRef: ExportedCardRef = {
-  module: `${baseRealm.url}catalog-entry`,
-  name: "CatalogEntry",
-};
-export const baseCardRef: ExportedCardRef = {
-  module: `${baseRealm.url}card-api`,
-  name: "Card",
-};
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
@@ -106,10 +96,12 @@ export { Realm } from "./realm";
 export { Loader } from "./loader";
 export type { Kind, RealmAdapter, FileRef } from "./realm";
 
-import type { CardRef, Saved } from "./search-index";
-export type { CardRef };
+import type { Saved } from "./search-index";
+
+import type { CardRef, ExportedCardRef } from "./card-ref";
+export type { CardRef, ExportedCardRef };
+
 export type {
-  ExportedCardRef,
   CardResource,
   CardDocument,
   CardFields,

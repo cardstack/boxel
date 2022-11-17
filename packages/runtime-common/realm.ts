@@ -1,5 +1,5 @@
 import { Deferred } from "./deferred";
-import { SearchIndex, CardRef, SingleCardDocument } from "./search-index";
+import { SearchIndex, SingleCardDocument } from "./search-index";
 import { Loader, type MaybeLocalRequest } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
 import {
@@ -15,6 +15,7 @@ import {
   executableExtensions,
   isNode,
   isSingleCardDocument,
+  type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
