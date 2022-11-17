@@ -424,9 +424,6 @@ module('Integration | computeds', function (hooks) {
     assert.shadowDOM('[data-test-field=alias] input').doesNotExist('input field not rendered for computed')
   });
 
-  // mutate a CatalogEntry card, assert isPrimitive field rerenders
-  skip('can rerender computed field after card mutated');
-
   test('can maintain data consistency for async computed fields', async function(assert) {
     let { field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
