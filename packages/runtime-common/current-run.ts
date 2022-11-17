@@ -36,6 +36,7 @@ import {
   type IdentityContext as IdentityContextType,
 } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
+import type { LoaderType } from "https://cardstack.com/base/card-api";
 
 // Forces callers to use URL (which avoids accidentally using relative url
 // strings without a base)
@@ -137,7 +138,7 @@ export class CurrentRun {
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
-  #loader: Loader;
+  #loader: LoaderType;
   private realm: Realm;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -158,7 +159,7 @@ export class CurrentRun {
     instances?: URLMap<SearchEntryWithErrors>;
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
-    loader?: Loader;
+    loader?: LoaderType;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
     this.#reader = reader;
@@ -166,7 +167,8 @@ export class CurrentRun {
     this.#instances = instances;
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
-    this.#loader = loader ?? Loader.createLoaderFromGlobal();
+    this.#loader =
+      loader ?? (Loader.createLoaderFromGlobal() as unknown as LoaderType);
   }
 
   private resetState() {
@@ -176,7 +178,7 @@ export class CurrentRun {
     this.#typesCache = new WeakMap();
     this.#indexingInstances = new Map();
     this.#ignoreMap = new URLMap();
-    this.#loader = Loader.createLoaderFromGlobal();
+    this.#loader = Loader.createLoaderFromGlobal() as unknown as LoaderType;
     this.stats.instancesIndexed = 0;
     this.stats.instanceErrors = 0;
     this.stats.moduleErrors = 0;
@@ -429,12 +431,7 @@ export class CurrentRun {
         new URL(fileURL),
         {
           identityContext,
-          // TODO unsure how to make glint happy here--the base realm uses an
-          // injected loader, but this module uses the loader from its own
-          // workspace. the mismatch makes glint mad. we could stop injecting
-          // the loader in the base realm, but then the loader used in host
-          // would conflict with the base realm loader since it's injected too
-          loader: this.#loader, // cast to the Loader from the api.createFromSerialized params
+          loader: this.#loader,
         }
       );
       await this.recomputeCard(card, fileURL, identityContext, stack);
