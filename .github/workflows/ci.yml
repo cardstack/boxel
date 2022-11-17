@@ -25,8 +25,12 @@ jobs:
       - run: pnpm --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm glint
-      - run: cd ./worker && pnpm tsc
-      - run: cd ./realm-server && pnpm tsc
+        working-directory: host
+      - run: pnpm glint
+        working-directory: realm-server
+        # this is a special script that skips the DOM errors
+      - run: ./glint.sh
+        working-directory: worker
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest

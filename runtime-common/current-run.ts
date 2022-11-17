@@ -10,7 +10,6 @@ import {
   hasExecutableExtension,
   maxLinkDepth,
   type NotLoaded,
-  type Card,
 } from ".";
 import { Kind, Realm, getExportedCardContext } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
@@ -32,10 +31,11 @@ import type {
   SingleCardDocument,
   Relationship,
 } from "./search-index";
-// @ts-ignore tsc doesn't understand .gts files
-type CardAPI = typeof import("https://cardstack.com/base/card-api");
-// @ts-ignore tsc doesn't understand .gts files
-import { type IdentityContext as IdentityContextType } from "https://cardstack.com/base/card-api";
+import {
+  Card,
+  type IdentityContext as IdentityContextType,
+} from "https://cardstack.com/base/card-api";
+import type * as CardAPI from "https://cardstack.com/base/card-api";
 
 // Forces callers to use URL (which avoids accidentally using relative url
 // strings without a base)
@@ -293,7 +293,9 @@ export class CurrentRun {
       throw new Error(`missing file ${localPath}`);
     }
     if (!identityContext) {
-      let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      let api = await this.#loader.import<typeof CardAPI>(
+        `${baseRealm.url}card-api`
+      );
       let { IdentityContext } = api;
       identityContext = new IdentityContext();
     }
@@ -358,7 +360,9 @@ export class CurrentRun {
     identityContext: IdentityContextType,
     stack: string[]
   ): Promise<void> {
-    let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+    let api = await this.#loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`
+    );
     try {
       await api.recompute(card, {
         loadFields: stack.length < maxLinkDepth ? true : undefined,
@@ -415,7 +419,9 @@ export class CurrentRun {
     let searchData: Record<string, any> | undefined;
     let cardType: typeof Card | undefined;
     try {
-      let api = await this.#loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      let api = await this.#loader.import<typeof CardAPI>(
+        `${baseRealm.url}card-api`
+      );
       let res = { ...resource, ...{ id: instanceURL.href } };
       let card = await api.createFromSerialized<typeof Card>(
         res,
@@ -423,7 +429,12 @@ export class CurrentRun {
         new URL(fileURL),
         {
           identityContext,
-          loader: this.#loader,
+          // TODO unsure how to make glint happy here--the base realm uses an
+          // injected loader, but this module uses the loader from its own
+          // workspace. the mismatch makes glint mad. we could stop injecting
+          // the loader in the base realm, but then the loader used in host
+          // would conflict with the base realm loader since it's injected too
+          loader: this.#loader, // cast to the Loader from the api.createFromSerialized params
         }
       );
       await this.recomputeCard(card, fileURL, identityContext, stack);
@@ -637,7 +648,9 @@ export class CurrentRun {
       if (!parent || !parentRef) {
         return undefined;
       }
-      let api = await this.loader.import<CardAPI>(`${baseRealm.url}card-api`);
+      let api = await this.loader.import<typeof CardAPI>(
+        `${baseRealm.url}card-api`
+      );
       let field = api.getField(parent, ref.field);
       maybeCard = field?.card;
       let cardId = Loader.identify(maybeCard);

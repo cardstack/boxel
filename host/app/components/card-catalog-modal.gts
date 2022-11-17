@@ -60,11 +60,11 @@ export default class CardCatalogModal extends Component {
     });
   }
 
-  async chooseCard<T extends Card>(query: Query, opts?: { offerToCreate: ExportedCardRef }): Promise<undefined | T> {
+  async chooseCard<T extends Card>(query: Query, opts?: { offerToCreate?: ExportedCardRef }): Promise<undefined | T> {
     return await taskFor(this._chooseCard).perform(query, opts) as T | undefined;
   }
 
-  @enqueueTask private async _chooseCard<T extends Card>(query: Query, opts?: { offerToCreate: ExportedCardRef }): Promise<undefined | T> {
+  @enqueueTask private async _chooseCard<T extends Card>(query: Query, opts: { offerToCreate?: ExportedCardRef } = {}): Promise<undefined | T> {
     this.currentRequest = {
       search: getSearchResults(this, () => query),
       deferred: new Deferred(),

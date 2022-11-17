@@ -18,21 +18,29 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",
-    "module": "CommonJS",
-    "esModuleInterop": true,
+    "module": "es2022",
     "experimentalDecorators": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"]
+      "runtime-spike/tests/*": ["tests/*"],
+      "runtime-spike/*": ["app/*"],
+      "https://cardstack.com/base/*": ["../base/*"],
+      "//local-realm/*": ["../cards/*"],
+      "cards": ["../cards/*"],
+      "*": ["types/*"],
+      "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"]
     }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
-      "include": ["../base/**", "./**" ]
+      "include": ["../cards/**", "../base/**", "app/**", "tests/**" ]
     }
   },
   "include": [
     "../base/**/*",
-    "./**/*"
+    "../cards/**/*",
+    "app/**/*",
+    "tests/**/*",
+    "types/**/*"
   ]
 }

@@ -5,10 +5,8 @@ import { LocalPath } from "./paths";
 import { Query, Filter, Sort } from "./query";
 import { CardError, type SerializedError } from "./error";
 import flatMap from "lodash/flatMap";
-//@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
-import type { Card } from "https://cardstack.com/base/card-api";
-//@ts-ignore realm server TSC doesn't know how to deal with this because it doesn't understand glint
-type CardAPI = typeof import("https://cardstack.com/base/card-api");
+import { Card } from "https://cardstack.com/base/card-api";
+import type * as CardAPI from "https://cardstack.com/base/card-api";
 
 export type ExportedCardRef = {
   module: string;
@@ -509,8 +507,8 @@ export class SearchIndex {
     return undefined;
   }
 
-  private loadAPI(): Promise<CardAPI> {
-    return this.loader.import<CardAPI>(`${baseRealm.url}card-api`);
+  private loadAPI(): Promise<typeof CardAPI> {
+    return this.loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
   }
 
   private cardHasType(entry: SearchEntry, ref: CardRef): boolean {
@@ -764,7 +762,7 @@ function some<T>(
   list: T[],
   predicate: (t: T) => boolean | null
 ): boolean | null {
-  let result = null;
+  let result: boolean | null = null;
   for (let element of list) {
     let status = predicate(element);
     if (status === true) {

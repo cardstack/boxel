@@ -18,21 +18,10 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",
-    "module": "CommonJS",
-    "esModuleInterop": true,
-    "experimentalDecorators": true,
-    "paths": {
-      "https://cardstack.com/base/*": ["../base/*"]
-    }
+    "module": "es2022",
+    "experimentalDecorators": true
   },
   "glint": {
-    "environment": ["ember-loose", "ember-template-imports"],
-    "transform": {
-      "include": ["../base/**", "./**" ]
-    }
-  },
-  "include": [
-    "../base/**/*",
-    "./**/*"
-  ]
+    "environment": ["ember-loose", "ember-template-imports"]
+  }
 }

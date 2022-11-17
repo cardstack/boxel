@@ -7,7 +7,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
 import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
-type CardAPI = typeof import('https://cardstack.com/base/card-api');
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {
@@ -60,7 +60,9 @@ export class CardType extends Resource<Args> {
       return cached;
     }
 
-    let api = await this.loader.import<CardAPI>(`${baseRealm.url}card-api`);
+    let api = await this.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`
+    );
     let { id: remove, ...fields } = api.getFields(card);
     let superCard = Reflect.getPrototypeOf(card) as typeof Card | null;
     let superType: Type | undefined;

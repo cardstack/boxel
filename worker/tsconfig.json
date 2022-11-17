@@ -21,7 +21,16 @@
     "noImplicitReturns": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "lib": ["ES2020", "ScriptHost", "WebWorker", "WebWorker.ImportScripts"]
+    "lib": ["ES2020", "ScriptHost", "WebWorker", "WebWorker.ImportScripts"],
+    "paths": {
+      "https://cardstack.com/base/*": ["../base/*"]
+    }
   },
-  "include": ["src/**/*", "types/**/*"]
+  "glint": {
+    "environment": ["ember-loose", "ember-template-imports"],
+    "transform": {
+      "include": ["../base/**", "src/**" ]
+    }
+  },
+  "include": ["../base/**/*", "src/**/*", "types/**/*"]
 }

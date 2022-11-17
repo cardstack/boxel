@@ -1,17 +1,14 @@
 import GlimmerComponent from '@glimmer/component';
-import type { ComponentLike } from '@glint/template';
 import { NotReady, isNotReadyError} from './not-ready';
-import { flatMap, startCase, merge } from 'lodash';
+import { flatMap, merge } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { flatten } from "flat";
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
 import { pick } from './pick';
-import ShadowDOM from 'https://cardstack.com/base/shadow-dom';
-import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
-import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
+import { getBoxComponent } from './field-component';
+import { getContainsManyComponent } from './contains-many-component';
+import { getLinksToEditor } from './links-to-editor';
 import {
   Deferred,
   isCardResource,
@@ -21,8 +18,6 @@ import {
   isNotLoadedError,
   CardError,
   NotLoaded,
-  chooseCard,
-  baseCardRef,
   maxLinkDepth,
   type Meta,
   type CardFields,
@@ -32,6 +27,9 @@ import {
   type CardDocument,
   type CardResource
 } from '@cardstack/runtime-common';
+import type { ComponentLike } from '@glint/template';
+import type { Loader  as LoaderInterface } from "@cardstack/runtime-common";
+
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
 export const deserialize = Symbol('cardstack-deserialize');
@@ -46,16 +44,13 @@ const isField = Symbol('cardstack-field');
 
 export type CardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P : InstanceType<T>;
 export type PartialCardInstanceType<T extends CardConstructor> = T extends { [primitive]: infer P } ? P | null : Partial<InstanceType<T>>;
-
-type FieldsTypeFor<T extends Card> = {
+export type FieldsTypeFor<T extends Card> = {
   [Field in keyof T]: (new() => GlimmerComponent<{ Args: {}, Blocks: {} }>) & (T[Field] extends Card ? FieldsTypeFor<T[Field]> : unknown);
 }
-
-type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
-
-
 export type Format = 'isolated' | 'embedded' | 'edit';
 export type FieldType = 'contains' | 'containsMany' | 'linksTo'; 
+
+type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
 
 interface Options {
   computeVia?: string | (() => unknown);
@@ -82,7 +77,6 @@ function isNotLoadedValue(val: any): val is NotLoadedValue {
 
 const deserializedData = new WeakMap<object, Map<string, any>>();
 const recomputePromises = new WeakMap<Card, Promise<any>>();
-const componentCache = new WeakMap<Box<unknown>, ComponentLike<{ Args: {}; Blocks: {}; }>>();
 const identityContexts = new WeakMap<Card, IdentityContext>();
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
@@ -138,7 +132,7 @@ interface JSONAPISingleResourceDocument {
   included?: (Partial<JSONAPIResource> & { id: string, type: string })[];
 }
 
-interface Field<CardT extends CardConstructor> {
+export interface Field<CardT extends CardConstructor> {
   card: CardT;
   name: string;
   fieldType: FieldType;
@@ -327,31 +321,16 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return new WatchedArray(() => logger.log(recompute(instance)), value);
   }
 
-  component(model: Box<Card>, format: Format) {
+  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
     let fieldName = this.name as keyof Card;
-    let field = this;
     let arrayField = model.field(fieldName, useIndexBasedKey in this.card) as unknown as Box<Card[]>;
-    if (format === 'edit') {
-      return class ContainsManyEditorTemplate extends GlimmerComponent {
-        <template>
-          <ContainsManyEditor
-            @model={{model}}
-            @arrayField={{arrayField}}
-            @field={{field}}
-            @format={{format}}
-          />
-        </template>
-      };
-    }
-    return class ContainsMany extends GlimmerComponent {
-      <template>
-        {{#each arrayField.children as |boxedElement|}}
-          {{#let (getBoxComponent (cardTypeFor field boxedElement) format boxedElement) as |Item|}}
-            <Item/>
-          {{/let}}
-        {{/each}}
-      </template>
-    };
+    return getContainsManyComponent({
+      model,
+      arrayField,
+      field: this,
+      format,
+      cardTypeFor
+    });
   }
 }
 
@@ -587,13 +566,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
 
   component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
     if (format === 'edit') {
-      let field = this;
-      let innerModel = model.field(this.name as keyof Card) as unknown as Box<Card>;
-      return class LinksToEditTemplate extends GlimmerComponent {
-        <template>
-          <LinksToEditor @model={{innerModel}} @field={{field}} />
-        </template>
-      };
+      let innerModel = model.field(this.name as keyof Card) as unknown as Box<Card | null>;
+      return getLinksToEditor(innerModel, this);
     }
     return fieldComponent(this, model, format);
   }
@@ -902,11 +876,12 @@ export function serializeCard(
   }
   return doc;
 }
+// use an interface loader and not the class Loader
 export async function createFromSerialized<T extends CardConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
-  opts?: { loader?: Loader, identityContext?: IdentityContext },
+  opts?: { loader?: LoaderInterface, identityContext?: IdentityContext }
 ): Promise<CardInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
   let loader = opts?.loader ?? Loader;  
@@ -1091,136 +1066,6 @@ function cardThunk<CardT extends CardConstructor>(cardOrThunk: CardT | (() => Ca
 }
 
 export type SignatureFor<CardT extends CardConstructor> = { Args: { model: PartialCardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; fieldName: string | undefined } }
- 
-let defaultStyles = initStyleSheet(`
-  this {
-    border: 1px solid gray;
-    border-radius: 10px;
-    background-color: #e9e7e7;
-    padding: 1rem;
-  }
-`);
-let editStyles = initStyleSheet(`
-  this {
-    border: 1px solid gray;
-    border-radius: 10px;
-    background-color: #e9e7e7;
-    padding: 1rem;
-  }
-  .edit-field {
-    display: block;
-    padding: 0.75rem;
-    text-transform: capitalize;
-    background-color: #ffffff6e;
-    border: 1px solid gray;
-    margin: 0.5rem 0;
-  }
-  input[type=text],
-  input[type=number] {
-    box-sizing: border-box;
-    background-color: transparent;
-    width: 100%;
-    margin-top: .5rem;
-    display: block;
-    padding: 0.5rem;
-    font: inherit;
-    border: inherit;
-  }
-  textarea {
-    box-sizing: border-box;
-    background-color: transparent;
-    width: 100%;
-    min-height: 5rem;
-    margin-top: .5rem;
-    display: block;
-    padding: 0.5rem;
-    font: inherit;
-    border: inherit;
-  }
-`);
-
-class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
-  <template>
-    <div {{attachStyles defaultStyles}}>
-      {{#each-in @fields as |key Field|}}
-        {{#unless (eq key 'id')}}
-          <Field />
-        {{/unless}}
-      {{/each-in}}
-    </div>
-  </template>;
-}
-
-class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
-  <template>
-    <div {{attachStyles editStyles}}>
-      {{#each-in @fields as |key Field|}}
-        {{#unless (eq key 'id')}}
-          <label class="edit-field" data-test-field={{key}}>
-            {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
-            {{startCase key}}
-            <Field />
-          </label>
-        {{/unless}}
-      {{/each-in}}
-    </div>
-  </template>;
-}
-
-const defaultComponent = {
-  embedded: <template><!-- Inherited from base card embedded view. Did your card forget to specify its embedded component? --></template>,
-  isolated: DefaultIsolated,
-  edit: DefaultEdit,
-}
-
-function defaultFieldFormat(format: Format): Format {
-  switch (format) {
-    case 'edit':
-      return 'edit';
-    case 'isolated':
-    case 'embedded':
-      return 'embedded';
-  }
-}
-
-function getBoxComponent<CardT extends CardConstructor>(card: CardT, format: Format, model: Box<InstanceType<CardT>>): ComponentLike<{ Args: {}, Blocks: {} }> {
-  let stable = componentCache.get(model);
-  if (stable) {
-    return stable;
-  }
-
-  let Implementation = (card as any)[format] ?? defaultComponent[format];
-
-  // *inside* our own component, @fields is a proxy object that looks
-  // up our fields on demand.
-  let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
-  
-  let isPrimitive = primitive in card;
-  let component: ComponentLike<{ Args: {}, Blocks: {} }> = <template>
-    {{#if isPrimitive}}
-      <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
-    {{else}}
-      <ShadowDOM>
-        <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
-      </ShadowDOM>
-    {{/if}}
-  </template>
-
-  // when viewed from *outside*, our component is both an invokable component
-  // and a proxy that makes our fields available for nested invocation, like
-  // <@fields.us.deeper />.
-  //
-  // It would be possible to use `externalFields` in place of `internalFields` above,
-  // avoiding the need for two separate Proxies. But that has the uncanny property of
-  // making `<@fields />` be an infinite recursion.
-  let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format));
-
-
-  // This cast is safe because we're returning a proxy that wraps component.
-  stable = externalFields as unknown as typeof component;
-  componentCache.set(model, stable);
-  return stable;
-}
 
 export function getComponent(model: Card, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
   let box = Box.create(model);
@@ -1389,61 +1234,6 @@ function getComputedFields<T extends Card>(card: T): { [P in keyof T]?: Field<Ca
   return Object.fromEntries(computedFields) as { [P in keyof T]?: Field<CardConstructor> };
 }
 
-function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defaultFormat: Format): FieldsTypeFor<T> {
-  return new Proxy(target, {
-    get(target, property, received) {
-      if (typeof property === 'symbol' || model == null || model.value == null) {
-        // don't handle symbols or nulls
-        return Reflect.get(target, property, received);
-      }
-      let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above
-      let maybeField = getField(modelValue.constructor, property);
-      if (!maybeField) {
-        // field doesn't exist, fall back to normal property access behavior
-        return Reflect.get(target, property, received);
-      }
-      let field = maybeField;
-      defaultFormat = getField(modelValue.constructor, property)?.computeVia ? 'embedded' : defaultFormat;
-      return field.component(model, defaultFormat);
-    },
-    getPrototypeOf() {
-      // This is necessary for Ember to be able to locate the template associated
-      // with a proxied component. Our Proxy object won't be in the template WeakMap,
-      // but we can pretend our Proxy object inherits from the true component, and
-      // Ember's template lookup respects inheritance.
-      return target;
-    },
-    ownKeys(target)  {
-      let keys = Reflect.ownKeys(target);
-      for (let name in model.value) {
-        let field = getField(model.value.constructor, name);
-        if (field) {
-          keys.push(name);
-        }
-      }
-      return keys;
-    },
-    getOwnPropertyDescriptor(target, property) {
-      if (typeof property === 'symbol' || model == null || model.value == null) {
-        // don't handle symbols, undefined, or nulls
-        return Reflect.getOwnPropertyDescriptor(target, property);
-      }
-      let field = getField(model.value.constructor, property);
-      if (!field) {
-        // field doesn't exist, fall back to normal property access behavior
-        return Reflect.getOwnPropertyDescriptor(target, property);
-      }
-      // found field: fields are enumerable properties
-      return {
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      }
-    },
-
-  }) as any;
-}
-
 export class Box<T> {
   static create<T>(model: T): Box<T> {
     return new Box({ type: 'root', model });
@@ -1549,121 +1339,4 @@ export class Box<T> {
   }
 }
 
-type ElementType<T> = T extends (infer V)[] ? V : never;  
-
-function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
-  return a === b;
-}
-
-interface ContainsManySignature {
-  Args: {
-    model: Box<Card>;
-    arrayField: Box<Card[]>;
-    format: Format;
-    field: Field<typeof Card>;
-  };
-}
-
-class ContainsManyEditor extends GlimmerComponent<ContainsManySignature> {
-  <template>
-    <section data-test-contains-many={{this.args.field.name}}>
-      <ul>
-        {{#each @arrayField.children as |boxedElement i|}}
-          <li data-test-item={{i}}>
-            {{#let (getBoxComponent (cardTypeFor @field boxedElement) @format boxedElement) as |Item|}}
-              <Item />
-            {{/let}}
-            <button {{on "click" (fn this.remove i)}} type="button" data-test-remove={{i}}>Remove</button>
-          </li>
-        {{/each}}
-      </ul>
-      <button {{on "click" this.add}} type="button" data-test-add-new>Add New</button>
-    </section>
-  </template>
-
-  add = () => {
-    // TODO probably each field card should have the ability to say what a new item should be
-    let newValue = primitive in this.args.field.card ? null : new this.args.field.card();
-    (this.args.model.value as any)[this.args.field.name].push(newValue);
-  }
-
-  remove = (index: number) => {
-    (this.args.model.value as any)[this.args.field.name].splice(index, 1);
-  }
-}
-
-interface LinksToEditorSignature {
-  Args: {
-    model: Box<Card | null>;
-    field: Field<typeof Card>;
-  }
-}
-
-let linksToEditorStyles = initStyleSheet(`
-  this { 
-    background-color: #fff; 
-    border: 1px solid #ddd;
-    border-radius: 20px; 
-    padding: 1rem; 
-  }
-  button {
-    margin-top: 1rem;
-    font: inherit;
-    font-weight: 600;
-    border: none;
-    background-color: white;
-    padding: 0.5em 0;
-    text-transform: capitalize;
-  }
-  button:hover {
-    color: #00EBE5;
-  }
-`);
-class LinksToEditor extends GlimmerComponent<LinksToEditorSignature> {
-  <template>
-    <div {{attachStyles linksToEditorStyles}}>
-      {{#if this.isEmpty}}
-        <div data-test-empty-link>{{!-- PLACEHOLDER CONTENT --}}</div>
-        <button {{on "click" this.choose}} data-test-choose-card>
-          + Add {{@field.name}}
-        </button>
-      {{else}}
-        <this.linkedCard/>
-        <button {{on "click" this.remove}} data-test-remove-card disabled={{this.isEmpty}}>
-          Remove {{@field.name}}
-        </button>
-      {{/if}}
-    </div>
-  </template>
-
-  choose = () => {
-    taskFor(this.chooseCard).perform();
-  }
-
-  remove = () => {
-    this.args.model.value = null;
-  }
-
-  get isEmpty() {
-    return this.args.model.value == null;
-  }
-
-  get linkedCard() {
-    if (this.args.model.value == null) {
-      throw new Error(`can't make field component with box value of null for field ${field.name}`);
-    }
-    let card = Reflect.getPrototypeOf(this.args.model.value)!.constructor as typeof Card;
-    return getBoxComponent(card, 'embedded', this.args.model as Box<Card>);
-  }
-
-  @restartableTask private async chooseCard(this: LinksToEditor) {
-    let type = Loader.identify(this.args.field.card) ?? baseCardRef;
-    let chosenCard = await chooseCard(
-      { filter: { type }},
-      { offerToCreate: type }
-    );
-    if (chosenCard) {
-      this.args.model.value = chosenCard;
-    }
-  }
-};
+type ElementType<T> = T extends (infer V)[] ? V : never;

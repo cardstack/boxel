@@ -1,8 +1,9 @@
 import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
-import { Loader, baseRealm, LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { baseRealm, LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { Realm } from "@cardstack/runtime-common/realm";
+import { Loader } from "@cardstack/runtime-common/loader";
 import CardEditor  from 'runtime-spike/components/card-editor';
 import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';

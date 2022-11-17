@@ -126,11 +126,7 @@ export {
   isSingleCardDocument,
 } from "./search-index";
 
-// @ts-ignore tsc doesn't understand .gts files
-import type CardAPI from "https://cardstack.com/base/card-api";
-// @ts-ignore tsc doesn't understand .gts files
 import type { Card } from "https://cardstack.com/base/card-api";
-export { CardAPI, Card };
 
 // TODO hardcoding link traversal depth to 5 for now, eventually this will be
 // based on the fields used by the card's template, and/or fields requested in

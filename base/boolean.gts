@@ -70,7 +70,7 @@ export default class BooleanCard extends Card {
   }
 }
 
-function not(val: boolean) {
+function not(val: any) {
   return !val;
 }
 

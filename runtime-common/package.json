@@ -33,10 +33,12 @@
     "json-typescript": "^1.1.2",
     "lodash": "^4.17.21",
     "qs": "^6.10.5",
+    "qunit": "^2.18.0",
     "transform-modules-amd-plugin": "workspace:*"
   },
   "devDependencies": {
     "@babel/core": "^7.17.8",
+    "@types/qunit": "^2.11.3",
     "ember-cli-htmlbars": "^6.0.1"
   },
   "peerDependencies": {

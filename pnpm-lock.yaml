@@ -356,6 +356,7 @@ importers:
       '@types/flat': ^5.0.2
       '@types/lodash': ^4.14.182
       '@types/qs': ^6.9.7
+      '@types/qunit': ^2.11.3
       babel-import-util: ^1.2.2
       babel-plugin-ember-template-compilation: ^1.0.0
       date-fns: ^2.28.0
@@ -369,6 +370,7 @@ importers:
       json-typescript: ^1.1.2
       lodash: ^4.17.21
       qs: ^6.10.5
+      qunit: ^2.18.0
       transform-modules-amd-plugin: workspace:*
     dependencies:
       '@babel/generator': 7.20.0
@@ -401,9 +403,11 @@ importers:
       json-typescript: 1.1.2
       lodash: 4.17.21
       qs: 6.11.0
+      qunit: 2.19.3
       transform-modules-amd-plugin: link:../vendor/transform-modules-amd-plugin
     devDependencies:
       '@babel/core': 7.19.6
+      '@types/qunit': 2.19.3
       ember-cli-htmlbars: 6.1.1
     dependenciesMeta:
       '@cardstack/ember-template-imports':
@@ -6866,7 +6870,6 @@ packages:
   /commander/7.2.0:
     resolution: {integrity: sha512-QrWXB+ZQSVPmIWIhtEO9H+gwHaMGYiF5ChvoJ+K9ZGHG/sVsa6yiesAD1GC/x46sET00Xlwo1u49RVVVzvcSkw==}
     engines: {node: '>= 10'}
-    dev: true
 
   /commander/8.3.0:
     resolution: {integrity: sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww==}
@@ -10940,7 +10943,6 @@ packages:
 
   /globalyzer/0.1.0:
     resolution: {integrity: sha512-40oNTM9UfG6aBmuKxk/giHn5nQ8RVz/SS4Ir6zgzOv9/qC3kKZ9v4etGTcJbEl/NyVQH7FGU7d+X1egr57Md2Q==}
-    dev: true
 
   /globby/10.0.0:
     resolution: {integrity: sha512-3LifW9M4joGZasyYPz2A1U74zbC/45fvpXUvO/9KbSa+VV0aGZarWkfdgKyR9sExNP0t0x0ss/UMJpNpcaTspw==}
@@ -10993,7 +10995,6 @@ packages:
 
   /globrex/0.1.2:
     resolution: {integrity: sha512-uHJgbwAMwNFf5mLst7IWLNg14x1CkeqglJb/K3doi4dw6q2IvAAmM/Y81kevy83wP+Sst+nutFTYOGg3d1lsxg==}
-    dev: true
 
   /got/6.7.1:
     resolution: {integrity: sha512-Y/K3EDuiQN9rTZhBvPRWMLXIKdeD1Rj0nzunfoi0Yyn5WBEbzxXKU9Ub2X41oZBagVWOBU3MuDonFMgPWQFnwg==}
@@ -13415,7 +13416,6 @@ packages:
   /node-watch/0.7.3:
     resolution: {integrity: sha512-3l4E8uMPY1HdMMryPRUAl+oIHtXtyiTlIiESNSVSNxcPfzAFzeTbXFQkZfAwBbo0B1qMSG8nUABx+Gd+YrbKrQ==}
     engines: {node: '>=6'}
-    dev: true
 
   /nopt/3.0.6:
     resolution: {integrity: sha512-4GUt3kSEYmk4ITxzB/b9vaIDfUVWN/Ml1Fwl11IlnIG2iaJ9O6WXZ9SrYM9NLI8OCBieN2Y8SWC2oJV0RQ7qYg==}
@@ -14513,7 +14513,6 @@ packages:
       commander: 7.2.0
       node-watch: 0.7.3
       tiny-glob: 0.2.9
-    dev: true
 
   /randombytes/2.1.0:
     resolution: {integrity: sha512-vYl3iOX+4CKUWuxGi9Ukhie6fsqXqS9FE2Zaic4tNFD2N2QQaXOMFbuKK4QmDHC0JO6B1Zp41J0LpT0oR68amQ==}
@@ -16429,7 +16428,6 @@ packages:
     dependencies:
       globalyzer: 0.1.0
       globrex: 0.1.2
-    dev: true
 
   /tiny-lr/2.0.0:
     resolution: {integrity: sha512-f6nh0VMRvhGx4KCeK1lQ/jaL0Zdb5WdR+Jk8q9OSUQnaSDxAEGH1fgqLZ+cMl5EW3F2MGnCsalBO1IsnnogW1Q==}
@@ -17746,6 +17744,7 @@ packages:
       json-typescript: 1.1.2
       lodash: 4.17.21
       qs: 6.11.0
+      qunit: 2.19.3
       transform-modules-amd-plugin: link:vendor/transform-modules-amd-plugin
     transitivePeerDependencies:
       - supports-color
@@ -17793,6 +17792,7 @@ packages:
       json-typescript: 1.1.2
       lodash: 4.17.21
       qs: 6.11.0
+      qunit: 2.19.3
       transform-modules-amd-plugin: link:vendor/transform-modules-amd-plugin
     transitivePeerDependencies:
       - supports-color

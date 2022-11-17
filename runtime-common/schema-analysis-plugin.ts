@@ -189,8 +189,8 @@ class CompilerError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CompilerError";
-    if (typeof Error.captureStackTrace === "function") {
-      Error.captureStackTrace(this, this.constructor);
+    if (typeof (Error as any).captureStackTrace === "function") {
+      (Error as any).captureStackTrace(this, this.constructor);
     } else if (!this.stack) {
       this.stack = new Error(message).stack;
     }

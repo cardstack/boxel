@@ -2,7 +2,7 @@ import { Resource, useResource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
-import { baseRealm, type Card } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { service } from '@ember/service';
 import LocalRealm from '../services/local-realm';
@@ -11,6 +11,7 @@ import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
 import type CardService from '../services/card-service';
 import type { Query } from '@cardstack/runtime-common/query';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {
