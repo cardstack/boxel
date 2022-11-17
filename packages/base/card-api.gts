@@ -1128,7 +1128,7 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
     let pendingFields = new Set<string>(Object.keys(getFields(model, { includeComputeds: true })));
     do {
       for (let fieldName of [...pendingFields]) {
-        let value: any = await getIfReady(model, fieldName as keyof T, undefined, opts);
+        let value = await getIfReady(model, fieldName as keyof T, undefined, opts);
         if (!isNotReadyValue(value) && !isStaleValue(value)) {
           pendingFields.delete(fieldName);
           if (recomputePromises.get(card) !== recomputePromise) {
@@ -1174,7 +1174,6 @@ async function getIfReady<T extends Card, K extends keyof T>(
     }
     compute = typeof computeVia === 'function' ? computeVia.bind(instance) : () => (instance as any)[computeVia as string]();
   }
-
   try {
     result = await compute();
   } catch (e: any) {
@@ -1200,11 +1199,7 @@ async function getIfReady<T extends Card, K extends keyof T>(
     } else if (isNotReadyError(e)) {
       let { model: depModel, computeVia, fieldName: depField } = e;
       let nestedCompute = typeof computeVia === 'function' ? computeVia.bind(depModel) : () => depModel[computeVia as string]();
-      let value = await getIfReady(depModel, depField, nestedCompute, opts);
-      if (isNotReadyValue(value)) {
-        return value;
-      }
-      deserialized.set(depField, value);
+      await getIfReady(depModel, depField, nestedCompute, opts);
       return { type: 'not-ready', instance, fieldName: fieldName as string };
     } else {
       throw e;
