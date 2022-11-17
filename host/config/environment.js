@@ -2,7 +2,7 @@
 
 module.exports = function (environment) {
   let ENV = {
-    modulePrefix: 'runtime-spike',
+    modulePrefix: '@cardstack/host',
     environment,
     rootURL: '/',
     locationType: 'history',

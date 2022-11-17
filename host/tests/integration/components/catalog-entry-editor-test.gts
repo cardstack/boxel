@@ -5,12 +5,12 @@ import { Loader } from "@cardstack/runtime-common/loader";
 import { Realm } from "@cardstack/runtime-common/realm";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import CatalogEntryEditor from 'runtime-spike/components/catalog-entry-editor';
+import CatalogEntryEditor from '@cardstack/host/components/catalog-entry-editor';
 import Service from '@ember/service';
 import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import waitUntil from '@ember/test-helpers/wait-until';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
-import type LoaderService from 'runtime-spike/services/loader-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 class MockLocalRealm extends Service {
   isAvailable = true;

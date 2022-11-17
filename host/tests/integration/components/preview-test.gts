@@ -3,12 +3,12 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
-import Preview  from 'runtime-spike/components/preview';
+import Preview  from '@cardstack/host/components/preview';
 import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
 import { testRealmURL, shimModule } from '../../helpers';
 import { waitFor } from '../../helpers/shadow-assert';
-import type LoaderService from 'runtime-spike/services/loader-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");

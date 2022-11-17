@@ -1,5 +1,5 @@
 import EmberRouter from '@ember/routing/router';
-import config from 'runtime-spike/config/environment';
+import config from '@cardstack/host/config/environment';
 
 export default class Router extends EmberRouter {
   location = config.locationType;

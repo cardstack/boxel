@@ -1,5 +1,5 @@
-import Application from 'runtime-spike/app';
-import config from 'runtime-spike/config/environment';
+import Application from '@cardstack/host/app';
+import config from '@cardstack/host/config/environment';
 import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
 import { setup } from 'qunit-dom';
