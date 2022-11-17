@@ -25,12 +25,12 @@ jobs:
       - run: pnpm --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm glint
-        working-directory: host
+        working-directory: packages/host
       - run: pnpm glint
-        working-directory: realm-server
+        working-directory: packages/realm-server
         # this is a special script that skips the DOM errors
       - run: ./glint.sh
-        working-directory: worker
+        working-directory: packages/worker
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
@@ -53,10 +53,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Start realm servers
         run: pnpm start:test-realms &
-        working-directory: realm-server
+        working-directory: packages/realm-server
       - name: host test suite
         run: pnpm test:ember
-        working-directory: host
+        working-directory: packages/host
   realm-test:
     name: Realm Server Tests
     runs-on: ubuntu-latest
@@ -79,9 +79,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Start base realm server
         run: pnpm start:test-realms &
-        working-directory: realm-server
+        working-directory: packages/realm-server
       - name: Wait for server to start
         run: sleep 5
       - name: realm server test suite
         run: pnpm test
-        working-directory: realm-server
+        working-directory: packages/realm-server

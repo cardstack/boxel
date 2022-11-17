@@ -38,7 +38,7 @@ importers:
       ember-template-imports: 3.3.1_ember-cli-htmlbars@6.1.1
       typescript: 4.8.4
 
-  base:
+  packages/base:
     specifiers:
       '@babel/core': ^7.17.8
       '@cardstack/runtime-common': workspace:*
@@ -57,7 +57,7 @@ importers:
       tracked-built-ins: ^2.0.1
     devDependencies:
       '@babel/core': 7.19.6
-      '@cardstack/runtime-common': file:runtime-common_hdmn6tglqesiuyhtw5tghw44wm
+      '@cardstack/runtime-common': file:packages/runtime-common_hdmn6tglqesiuyhtw5tghw44wm
       '@glimmer/component': 1.1.2_@babel+core@7.19.6
       '@glimmer/tracking': 1.1.2
       '@glint/template': 0.9.7_@glimmer+component@1.1.2
@@ -75,10 +75,10 @@ importers:
       '@cardstack/runtime-common':
         injected: true
 
-  cards:
+  packages/demo-cards:
     specifiers: {}
 
-  host:
+  packages/host:
     specifiers:
       '@babel/core': ^7.17.8
       '@babel/plugin-syntax-class-properties': ^7.12.13
@@ -98,13 +98,6 @@ importers:
       '@glint/core': ^0.9.1
       '@glint/environment-ember-template-imports': ^0.9.7
       '@glint/template': ^0.9.7
-      '@types/ember-data': ^4.0.0
-      '@types/ember-data__adapter': ^4.0.0
-      '@types/ember-data__model': ^4.0.0
-      '@types/ember-data__serializer': ^4.0.0
-      '@types/ember-data__store': ^4.0.0
-      '@types/ember-qunit': ^5.0.0
-      '@types/ember-resolver': ^5.0.11
       '@types/ember__application': ^4.0.0
       '@types/ember__array': ^4.0.1
       '@types/ember__component': ^4.0.4
@@ -125,6 +118,13 @@ importers:
       '@types/ember__test': ^4.0.0
       '@types/ember__test-helpers': ^2.6.1
       '@types/ember__utils': ^4.0.0
+      '@types/ember-data': ^4.0.0
+      '@types/ember-data__adapter': ^4.0.0
+      '@types/ember-data__model': ^4.0.0
+      '@types/ember-data__serializer': ^4.0.0
+      '@types/ember-data__store': ^4.0.0
+      '@types/ember-qunit': ^5.0.0
+      '@types/ember-resolver': ^5.0.11
       '@types/flat': ^5.0.2
       '@types/htmlbars-inline-precompile': ^3.0.0
       '@types/lodash': ^4.14.182
@@ -189,10 +189,10 @@ importers:
       '@babel/plugin-syntax-class-properties': 7.12.13_@babel+core@7.19.6
       '@babel/plugin-syntax-decorators': 7.19.0_@babel+core@7.19.6
       '@babel/plugin-syntax-typescript': 7.20.0_@babel+core@7.19.6
-      '@cardstack/base': file:base
+      '@cardstack/base': file:packages/base
       '@cardstack/requirejs-monaco-ember-polyfill': 0.0.1
-      '@cardstack/runtime-common': file:runtime-common_73cfycsidgwbyfbc2ddnh62rni
-      '@cardstack/worker': file:worker
+      '@cardstack/runtime-common': file:packages/runtime-common_73cfycsidgwbyfbc2ddnh62rni
+      '@cardstack/worker': file:packages/worker
       '@ember/optional-features': 2.0.0
       '@ember/test-helpers': 2.8.1_gji3jtwcc5mtaxthdeq6avgtsi
       '@embroider/compat': 1.9.0_@embroider+core@1.9.0
@@ -203,13 +203,6 @@ importers:
       '@glint/core': 0.9.7_typescript@4.8.4
       '@glint/environment-ember-template-imports': 0.9.7_kc25h3n3itkrx4fi3dkeczdw6a
       '@glint/template': 0.9.7_@glimmer+component@1.1.2
-      '@types/ember-data': 4.4.6_@babel+core@7.19.6
-      '@types/ember-data__adapter': 4.0.1_@babel+core@7.19.6
-      '@types/ember-data__model': 4.0.0_@babel+core@7.19.6
-      '@types/ember-data__serializer': 4.0.1_@babel+core@7.19.6
-      '@types/ember-data__store': 4.0.2_@babel+core@7.19.6
-      '@types/ember-qunit': 5.0.2_@babel+core@7.19.6
-      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
       '@types/ember__application': 4.0.3_@babel+core@7.19.6
       '@types/ember__array': 4.0.3_@babel+core@7.19.6
       '@types/ember__component': 4.0.11_@babel+core@7.19.6
@@ -230,6 +223,13 @@ importers:
       '@types/ember__test': 4.0.1_@babel+core@7.19.6
       '@types/ember__test-helpers': 2.8.2_@babel+core@7.19.6
       '@types/ember__utils': 4.0.2_@babel+core@7.19.6
+      '@types/ember-data': 4.4.6_@babel+core@7.19.6
+      '@types/ember-data__adapter': 4.0.1_@babel+core@7.19.6
+      '@types/ember-data__model': 4.0.0_@babel+core@7.19.6
+      '@types/ember-data__serializer': 4.0.1_@babel+core@7.19.6
+      '@types/ember-data__store': 4.0.2_@babel+core@7.19.6
+      '@types/ember-qunit': 5.0.2_@babel+core@7.19.6
+      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
       '@types/flat': 5.0.2
       '@types/htmlbars-inline-precompile': 3.0.0
       '@types/lodash': 4.14.186
@@ -297,7 +297,7 @@ importers:
       '@cardstack/worker':
         injected: true
 
-  realm-server:
+  packages/realm-server:
     specifiers:
       '@cardstack/runtime-common': workspace:*
       '@types/fs-extra': ^9.0.13
@@ -335,7 +335,7 @@ importers:
       typescript: 4.8.4
       yargs: 17.6.0
 
-  runtime-common:
+  packages/runtime-common:
     specifiers:
       '@babel/core': ^7.17.8
       '@babel/generator': ^7.17.8
@@ -395,7 +395,7 @@ importers:
       babel-plugin-ember-template-compilation: 1.0.2
       date-fns: 2.29.3
       diff: 5.1.0
-      ember-concurrency-async-plugin: link:../vendor/ember-concurrency-async-plugin
+      ember-concurrency-async-plugin: link:../../vendor/ember-concurrency-async-plugin
       ember-source: 4.2.0_@babel+core@7.19.6
       flat: 5.0.2
       http-status-codes: 2.2.0
@@ -404,7 +404,7 @@ importers:
       lodash: 4.17.21
       qs: 6.11.0
       qunit: 2.19.3
-      transform-modules-amd-plugin: link:../vendor/transform-modules-amd-plugin
+      transform-modules-amd-plugin: link:../../vendor/transform-modules-amd-plugin
     devDependencies:
       '@babel/core': 7.19.6
       '@types/qunit': 2.19.3
@@ -412,6 +412,35 @@ importers:
     dependenciesMeta:
       '@cardstack/ember-template-imports':
         injected: true
+      '@cardstack/runtime-common':
+        injected: true
+
+  packages/worker:
+    specifiers:
+      '@babel/core': ^7.17.8
+      '@cardstack/runtime-common': workspace:*
+      '@types/qs': ^6.9.7
+      assert-never: ^1.2.1
+      babel-loader: ^8.2.4
+      date-fns: ^2.28.0
+      ember-cli-htmlbars: ^6.0.1
+      path-browserify: ^1.0.1
+      qs: ^6.10.5
+      webpack: ^5.69.1
+      webpack-cli: ^4.9.2
+    devDependencies:
+      '@babel/core': 7.19.6
+      '@cardstack/runtime-common': file:packages/runtime-common_73cfycsidgwbyfbc2ddnh62rni
+      '@types/qs': 6.9.7
+      assert-never: 1.2.1
+      babel-loader: 8.2.5_6zc4kxld457avlfyhj3lzsljlm
+      date-fns: 2.29.3
+      ember-cli-htmlbars: 6.1.1
+      path-browserify: 1.0.1
+      qs: 6.11.0
+      webpack: 5.74.0_webpack-cli@4.10.0
+      webpack-cli: 4.10.0_webpack@5.74.0
+    dependenciesMeta:
       '@cardstack/runtime-common':
         injected: true
 
@@ -550,35 +579,6 @@ importers:
       '@babel/core': 7.19.6
       '@types/babel__core': 7.1.19
       '@types/babel__traverse': 7.18.2
-
-  worker:
-    specifiers:
-      '@babel/core': ^7.17.8
-      '@cardstack/runtime-common': workspace:*
-      '@types/qs': ^6.9.7
-      assert-never: ^1.2.1
-      babel-loader: ^8.2.4
-      date-fns: ^2.28.0
-      ember-cli-htmlbars: ^6.0.1
-      path-browserify: ^1.0.1
-      qs: ^6.10.5
-      webpack: ^5.69.1
-      webpack-cli: ^4.9.2
-    devDependencies:
-      '@babel/core': 7.19.6
-      '@cardstack/runtime-common': file:runtime-common_73cfycsidgwbyfbc2ddnh62rni
-      '@types/qs': 6.9.7
-      assert-never: 1.2.1
-      babel-loader: 8.2.5_6zc4kxld457avlfyhj3lzsljlm
-      date-fns: 2.29.3
-      ember-cli-htmlbars: 6.1.1
-      path-browserify: 1.0.1
-      qs: 6.11.0
-      webpack: 5.74.0_webpack-cli@4.10.0
-      webpack-cli: 4.10.0_webpack@5.74.0
-    dependenciesMeta:
-      '@cardstack/runtime-common':
-        injected: true
 
 packages:
 
@@ -3064,9 +3064,9 @@ packages:
   /@types/ember-qunit/5.0.2_@babel+core@7.19.6:
     resolution: {integrity: sha512-LXp0Ew4wPhaCMuw49cNDHWs/bROn+Msb4ypMG1t60EMBx0UaEoX0tZlkf5bQJfdD249WZTu5cCtKvl47xbQzxA==}
     dependencies:
-      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
       '@types/ember__test': 4.0.1_@babel+core@7.19.6
       '@types/ember__test-helpers': 2.8.2_@babel+core@7.19.6
+      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
       '@types/qunit': 2.19.3
     transitivePeerDependencies:
       - '@babel/core'
@@ -3113,11 +3113,11 @@ packages:
     dependencies:
       '@glimmer/component': 1.1.2_@babel+core@7.19.6
       '@types/ember': 4.0.2_@babel+core@7.19.6
-      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
       '@types/ember__engine': 4.0.3_@babel+core@7.19.6
       '@types/ember__object': 4.0.5_@babel+core@7.19.6
       '@types/ember__owner': 4.0.1
       '@types/ember__routing': 4.0.12_@babel+core@7.19.6
+      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -3161,8 +3161,8 @@ packages:
   /@types/ember__debug/4.0.2_@babel+core@7.19.6:
     resolution: {integrity: sha512-TrD47X7WQyAvXOCo003soMH6lc4X5+jg5sJ8r81Trk0I2AYVm/8Pn4YPRFECDl6TL/ceYiK3qSgeI8GnDlh7Cw==}
     dependencies:
-      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
       '@types/ember__object': 4.0.5_@babel+core@7.19.6
+      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -3175,9 +3175,9 @@ packages:
   /@types/ember__engine/4.0.3_@babel+core@7.19.6:
     resolution: {integrity: sha512-FFiqGZPvfyCWBnx9ZTO2atweIb/k7e8/DFCXhcIYgtmD9rl0xqaXs5kbOrsfvxzSaZPaDdp+FslGWNpdXiKp5w==}
     dependencies:
-      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
       '@types/ember__object': 4.0.5_@babel+core@7.19.6
       '@types/ember__owner': 4.0.1
+      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -3278,10 +3278,10 @@ packages:
   /@types/ember__test-helpers/2.8.2_@babel+core@7.19.6:
     resolution: {integrity: sha512-Ho3TTcnbjdQO9UvLwoswRMpCR2j7X6T8qSOaKehnST9s15ACb4MXHwec1NhmpCOhdvBRREYfG3YbduNeXoITMg==}
     dependencies:
-      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
       '@types/ember__application': 4.0.3_@babel+core@7.19.6
       '@types/ember__error': 4.0.1
       '@types/ember__owner': 4.0.1
+      '@types/ember-resolver': 5.0.12_@babel+core@7.19.6
       '@types/htmlbars-inline-precompile': 3.0.0
     transitivePeerDependencies:
       - '@babel/core'
@@ -4704,7 +4704,7 @@ packages:
       '@babel/core': ^7.0.0
       webpack: '>=2'
     dependencies:
-      '@babel/core': 7.19.6_supports-color@8.1.1
+      '@babel/core': 7.19.6
       find-cache-dir: 3.3.2
       loader-utils: 2.0.3
       make-dir: 3.1.0
@@ -8995,7 +8995,7 @@ packages:
       '@ember/test-helpers': ^2.4.0
       qunit: ^2.13.0
     dependencies:
-      '@ember/test-helpers': 2.8.1_gji3jtwcc5mtaxthdeq6avgtsi
+      '@ember/test-helpers': 2.8.1_ci7oxog4uwiumrniido22fwv7a
       broccoli-funnel: 3.0.8
       broccoli-merge-trees: 3.0.2
       common-tags: 1.8.2
@@ -17697,15 +17697,15 @@ packages:
     engines: {node: '>=12.20'}
     dev: true
 
-  file:base:
-    resolution: {directory: base, type: directory}
+  file:packages/base:
+    resolution: {directory: packages/base, type: directory}
     name: '@cardstack/base'
     version: 1.0.0
     dev: true
 
-  file:runtime-common_73cfycsidgwbyfbc2ddnh62rni:
-    resolution: {directory: runtime-common, type: directory}
-    id: file:runtime-common
+  file:packages/runtime-common_73cfycsidgwbyfbc2ddnh62rni:
+    resolution: {directory: packages/runtime-common, type: directory}
+    id: file:packages/runtime-common
     name: '@cardstack/runtime-common'
     version: 1.0.0
     peerDependencies:
@@ -17751,9 +17751,9 @@ packages:
       - webpack
     dev: true
 
-  file:runtime-common_hdmn6tglqesiuyhtw5tghw44wm:
-    resolution: {directory: runtime-common, type: directory}
-    id: file:runtime-common
+  file:packages/runtime-common_hdmn6tglqesiuyhtw5tghw44wm:
+    resolution: {directory: packages/runtime-common, type: directory}
+    id: file:packages/runtime-common
     name: '@cardstack/runtime-common'
     version: 1.0.0
     peerDependencies:
@@ -17799,6 +17799,12 @@ packages:
       - webpack
     dev: true
 
+  file:packages/worker:
+    resolution: {directory: packages/worker, type: directory}
+    name: '@cardstack/worker'
+    version: 1.0.0
+    dev: true
+
   file:vendor/ember-template-imports_ember-cli-htmlbars@6.1.1:
     resolution: {directory: vendor/ember-template-imports, type: directory}
     id: file:vendor/ember-template-imports
@@ -17820,9 +17826,3 @@ packages:
       validate-peer-dependencies: 1.2.0
     transitivePeerDependencies:
       - supports-color
-
-  file:worker:
-    resolution: {directory: worker, type: directory}
-    name: '@cardstack/worker'
-    version: 1.0.0
-    dev: true
