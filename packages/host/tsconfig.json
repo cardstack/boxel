@@ -24,8 +24,8 @@
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
       "https://cardstack.com/base/*": ["../base/*"],
-      "//local-realm/*": ["../cards/*"],
-      "cards": ["../cards/*"],
+      "//local-realm/*": ["../demo-cards/*"],
+      "cards": ["../demo-cards/*"],
       "*": ["types/*"],
       "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"]
     }
@@ -33,12 +33,12 @@
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
-      "include": ["../cards/**", "../base/**", "app/**", "tests/**"]
+      "include": ["../demo-cards/**", "../base/**", "app/**", "tests/**"]
     }
   },
   "include": [
     "../base/**/*",
-    "../cards/**/*",
+    "../demo-cards/**/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"
