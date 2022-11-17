@@ -28,7 +28,6 @@ import {
   type CardResource
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import type { Loader  as LoaderInterface } from "@cardstack/runtime-common";
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -906,12 +905,18 @@ export function serializeCard(
   }
   return doc;
 }
+
+// you may need to use this type for the loader passed in the opts
+export type LoaderType = NonNullable<
+  NonNullable<Parameters<typeof createFromSerialized>[3]>["loader"]
+>;
+
 // use an interface loader and not the class Loader
 export async function createFromSerialized<T extends CardConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
-  opts?: { loader?: LoaderInterface, identityContext?: IdentityContext }
+  opts?: { loader?: Loader, identityContext?: IdentityContext }
 ): Promise<CardInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
   let loader = opts?.loader ?? Loader;  
