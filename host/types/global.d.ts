@@ -5,7 +5,7 @@ import '@glint/environment-ember-loose/native-integration';
 import { ComponentLike } from '@glint/template';
 
 // Types for compiled templates
-declare module 'runtime-spike/templates/*' {
+declare module '@cardstack/host/templates/*' {
   const tmpl: TemplateFactory;
   export default tmpl;
 }

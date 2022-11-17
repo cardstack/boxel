@@ -1,7 +1,7 @@
 import Application from '@ember/application';
 import Resolver from 'ember-resolver';
 import loadInitializers from 'ember-load-initializers';
-import config from 'runtime-spike/config/environment';
+import config from '@cardstack/host/config/environment';
 import './lib/glint-embroider-workaround';
 
 /* The following modules are made available to cards as external modules.

@@ -3,18 +3,18 @@ import { TestContext } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import Module from 'runtime-spike/components/module';
-import { file, FileResource } from 'runtime-spike/resources/file';
+import Module from '@cardstack/host/components/module';
+import { file, FileResource } from '@cardstack/host/resources/file';
 import Service from '@ember/service';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm, ExportedCardRef } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { TestRealm, TestRealmAdapter, testRealmURL, setupCardLogs } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
-import CardCatalogModal from 'runtime-spike/components/card-catalog-modal';
+import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 import { waitFor, fillIn, click, shadowQuerySelector } from '../../helpers/shadow-assert';
-import type LoaderService from 'runtime-spike/services/loader-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 class MockLocalRealm extends Service {
   isAvailable = true;

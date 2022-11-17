@@ -4,9 +4,7 @@ export class LivenessWatcher {
   private isAlive = true;
   private listeners: (() => Promise<void>)[] = [];
 
-  constructor(
-    private worker: ServiceWorkerGlobalScope,
-  ) {
+  constructor(private worker: ServiceWorkerGlobalScope) {
     this.watch();
   }
 
@@ -22,7 +20,7 @@ export class LivenessWatcher {
       case 404:
         return false;
       case 200:
-        return /^runtime-spike/.test(response.headers.get('server') || '');
+        return /^@cardstack\/host/.test(response.headers.get('server') || '');
       default:
         throw new Error(`${response.status} from backend`);
     }
@@ -44,7 +42,7 @@ export class LivenessWatcher {
         console.error('shutting down service worker.');
         await Promise.all([
           this.worker.registration.unregister(),
-          ...this.listeners.map(l => l())
+          ...this.listeners.map((l) => l()),
         ]);
       }
     }

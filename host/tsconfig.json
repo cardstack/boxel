@@ -21,8 +21,8 @@
     "module": "es2022",
     "experimentalDecorators": true,
     "paths": {
-      "runtime-spike/tests/*": ["tests/*"],
-      "runtime-spike/*": ["app/*"],
+      "@cardstack/host/tests/*": ["tests/*"],
+      "@cardstack/host/*": ["app/*"],
       "https://cardstack.com/base/*": ["../base/*"],
       "//local-realm/*": ["../cards/*"],
       "cards": ["../cards/*"],
@@ -33,7 +33,7 @@
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
-      "include": ["../cards/**", "../base/**", "app/**", "tests/**" ]
+      "include": ["../cards/**", "../base/**", "app/**", "tests/**"]
     }
   },
   "include": [
