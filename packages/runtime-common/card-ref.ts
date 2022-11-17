@@ -56,7 +56,7 @@ export function isCardRef(ref: any): ref is CardRef {
 export async function loadCard(
   ref: CardRef,
   opts?: { loader?: Loader }
-): Promise<{ card: typeof Card; ref: CardRef } | undefined> {
+): Promise<typeof Card | undefined> {
   let maybeCard: unknown;
   let canonicalRef: CardRef | undefined;
   let loader = opts?.loader ?? Loader.getLoader();
@@ -104,6 +104,8 @@ export async function loadCard(
     return undefined;
   }
 }
+
+export async function identifyCard(card: typeof Card): CardRef {}
 
 function assertNever(value: never) {
   return new Error(`should never happen ${value}`);
