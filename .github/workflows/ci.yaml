@@ -84,8 +84,8 @@ jobs:
       - name: host test suite
         run: pnpm test:ember
         working-directory: packages/host
-  host-test:
-    name: Host Tests
+  realm-server-test:
+    name: Realm Server Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
