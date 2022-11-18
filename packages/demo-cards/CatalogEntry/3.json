@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Vendor",
+      "description": "Catalog entry for Vendor card",
+      "ref": {
+        "module": "http://local-realm/vendor",
+        "name": "Vendor"
+      },
+      "demo": {
+        "vendorName": "Vendor name",
+        "addressLine": "Address line 1",
+        "city": "City",
+        "state": "State",
+        "zipCode": 11111,
+        "email": "Contact email",
+        "logo": "Logo (optional)"
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://local-realm/vendor",
+            "name": "Vendor"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

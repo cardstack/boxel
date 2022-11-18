@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "vendorName": "Best Bakery",
+      "addressLine": "9019 Beacon Dr. ",
+      "city": "Myrtle Beach",
+      "state": "SC",
+      "zipCode": 29577,
+      "email": "contact@bestbakery.com",
+      "logo": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}

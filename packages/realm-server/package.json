@@ -1,0 +1,34 @@
+{
+  "name": "@cardstack/realm-server",
+  "version": "0.0.0",
+  "license": "MIT",
+  "devDependencies": {
+    "@cardstack/runtime-common": "workspace:*",
+    "@types/fs-extra": "^9.0.13",
+    "@types/node": "^18.6.0",
+    "@types/qs": "^6.9.7",
+    "@types/qunit": "^2.11.3",
+    "@types/supertest": "^2.0.12",
+    "@types/tmp": "^0.2.3",
+    "@types/yargs": "^17.0.10",
+    "fs-extra": "^10.1.0",
+    "qs": "^6.10.5",
+    "qunit": "^2.18.0",
+    "start-server-and-test": "^1.14.0",
+    "supertest": "^6.2.4",
+    "tmp": "^0.2.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.5.2",
+    "yargs": "^17.5.1"
+  },
+  "scripts": {
+    "test": "NODE_NO_WARNINGS=1 SUPPRESS_ERRORS=true qunit --require ts-node/register/transpile-only tests/index.ts",
+    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
+    "start:base": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/'",
+    "start:base-and-host-test-realms": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --path='../host/tests/cards' --fromUrl='/test/' --toUrl='/test/'",
+    "start:test-node-realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4202 --fromUrl='/node-test/' --toUrl='/node-test/' --path='./tests/cards' --fromUrl='https://cardstack.com/base/' --toUrl='http://localhost:4201/base/'",
+    "start:test-realms": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run start:base-and-host-test-realms' 'http-get://localhost:4201/base/card-api' 'pnpm run start:test-node-realm' 'http-get://localhost:4202/node-test/person' 'wait'",
+    "wait": "sleep 10000000",
+    "lint": "glint"
+  }
+}

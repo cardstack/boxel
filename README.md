@@ -1,57 +1,53 @@
-# Boxel Motion
+# Boxel Runtime
 
-This addon is designed to supply animation capabilities to Cardstack's Ember applications and potentially other Ember apps too.
+## Setup
 
-## Prerequisites
+- you will want the [Glint](https://marketplace.visualstudio.com/items?itemName=typed-ember.glint-vscode) vscode extension
+- this project uses [pnpm](https://pnpm.io/) for package management. run `pnpm install` to install the project dependencies first.
 
-You will need the following things properly installed on your computer.
+## Orientation
 
-* [Git](https://git-scm.com/)
-* [Node.js](https://nodejs.org/)
-* [pnpm](https://pnpm.io/)
-* [Ember CLI](https://ember-cli.com/)
-* [Google Chrome](https://google.com/chrome/)
+`packages/host` is the card runtime host application
 
-## Installation
+`packages/worker` is a separate build for the service worker that serves a realm
 
-* `git clone <repository-url>` this repository
-* `cd boxel-motion`
-* `pnpm i`
+`packages/realm-server` is a node app that serves the realm as an HTTP server
 
-## Running / Development
+`packages/boxel-motion` is the animation primitives ember addon.
 
-* `ember serve`
-* Visit your app at [http://localhost:4200](http://localhost:4200).
-* Visit your tests at [http://localhost:4200/tests](http://localhost:4200/tests).
+`packages/boxel-motion-test-app` is the test suite for boxel-motion
 
-### Code Generators
+`packages/boxel-motion-demo-app` is the demo app for boxel-motion
 
-Make use of the many generators for code, try `ember help generate` for more details
+## Running the App
 
-### Running Tests
+In order to run app
 
-* `ember test`
-* `ember test --server`
+1. `pnpm start` in the worker/ workspace to build the service worker
+2. `pnpm start` in the host/ workspace to serve the ember app
+3. `pnpm start:base` in the realm-server/ to serve the base realm (alternatively you can use `pnpm start:test-realms` which also serves the base realm--this is convenient if you wish to switch between the app and the tests without having to restart servers)
 
-### Linting
+The app is available at http://localhost:4200. Click on the button to connect to your Local Realm, and then select the "cards/" folder within this project. Click "Allow" on the popups that ask for the ability to read and write to the local file sytem.
 
-* `pnpm lint:hbs`
-* `pnpm lint:js`
-* `pnpm lint:js --fix`
+## Running the Tests
 
-### Building
+There are currently 3 test suites:
 
-* `ember build` (development)
-* `ember build --environment production` (production)
+### Host
 
-### Deploying
+To run the `packages/host/` workspace tests start the following servers: 2. `pnpm start:test-realms` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards 3. `pnpm start` in the `packages/host/` workspace to serve ember
 
-Specify what it takes to deploy your app.
+The tests are available at `http://localhost:4200/tests`
 
-## Further Reading / Useful Links
+### Realm Server
 
-* [ember.js](https://emberjs.com/)
-* [ember-cli](https://ember-cli.com/)
-* Development Browser Extensions
-  * [ember inspector for chrome](https://chrome.google.com/webstore/detail/ember-inspector/bmdblncegkenkacieihfhpjfppoconhi)
-  * [ember inspector for firefox](https://addons.mozilla.org/en-US/firefox/addon/ember-inspector/)
+To run the `packages/realm-server/` workspace tests start:
+
+1. `pnpm start:test-realms` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
+
+Run `pnpm test` in the `packages/realm-server/` workspace to run the realm tests
+
+### Boxel Motion
+
+`cd packages/boxel-motion-test-app`
+`pnpm test`

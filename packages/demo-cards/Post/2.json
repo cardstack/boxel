@@ -1,0 +1,29 @@
+{
+  "data": {
+    "attributes": {
+      "author": {
+        "department": "wagging",
+        "firstName": "Jackie",
+        "lastName": "Aguilar",
+        "isCool": true,
+        "isHuman": false
+      },
+      "title": "Dogs"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/post",
+        "name": "Post"
+      },
+      "fields": {
+        "author": {
+          "adoptsFrom": {
+            "module": "http://local-realm/employee",
+            "name": "Employee"
+          }
+        }
+      }
+    },
+    "type": "card"
+  }
+}

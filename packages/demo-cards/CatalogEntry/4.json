@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "InvoicePacket",
+      "description": "Catalog entry for InvoicePacket card",
+      "ref": {
+        "module": "http://local-realm/invoice-packet",
+        "name": "InvoicePacket"
+      },
+      "demo": {
+        "details": {
+          "invoiceNo": "0001",
+          "invoiceDate": "2022-01-01",
+          "dueDate": "2022-02-02",
+          "terms": null,
+          "invoiceDocument": "SampleDocument.pdf",
+          "memo": null
+        },
+        "lineItems": [
+          {
+            "name": "Name of goods/service",
+            "quantity": 1,
+            "amount": 0,
+            "description": "January - February activity"
+          }
+        ],
+        "primaryPayment": {
+          "currency": null,
+          "logo": null,
+          "exchangeRate": null
+        },
+        "alternatePayments": []
+      }
+    },
+    "relationships": {
+      "demo.vendor": {
+        "links": {
+          "self": "http://local-realm/Vendor/1"
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://local-realm/invoice-packet",
+            "name": "InvoicePacket"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
