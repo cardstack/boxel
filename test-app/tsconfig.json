@@ -69,10 +69,10 @@
       "@cardstack/boxel-motion/*": [
         "node_modules/@cardstack/boxel-motion/addon/*"
       ],
-      "test-app/tests/*": [
+      "boxel-motion-test-app/tests/*": [
         "tests/*"
       ],
-      "test-app/*": [
+      "boxel-motion-test-app/*": [
         "app/*"
       ],
       "*": [

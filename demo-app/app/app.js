@@ -1,5 +1,5 @@
 import Application from '@ember/application';
-import config from 'demo-app/config/environment';
+import config from 'boxel-motion-demo-app/config/environment';
 import loadInitializers from 'ember-load-initializers';
 import Resolver from 'ember-resolver';
 

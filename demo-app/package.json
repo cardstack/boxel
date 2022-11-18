@@ -1,5 +1,5 @@
 {
-  "name": "demo-app",
+  "name": "boxel-motion-demo-app",
   "version": "0.0.0",
   "private": true,
   "description": "Small description for animations goes here",
@@ -107,8 +107,5 @@
   },
   "ember": {
     "edition": "octane"
-  },
-  "volta": {
-    "extends": "../package.json"
   }
 }

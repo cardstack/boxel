@@ -2,7 +2,7 @@
 
 module.exports = function (environment) {
   let ENV = {
-    modulePrefix: 'test-app',
+    modulePrefix: 'boxel-motion-test-app',
     environment,
     rootURL: '/',
     locationType: 'history',

@@ -4,14 +4,6 @@
     "type": "git",
     "url": "https://github.com/cardstack/boxel-motion"
   },
-  "workspaces": [
-    "addon",
-    "demo-app",
-    "test-app"
-  ],
-  "volta": {
-    "node": "14.18.3"
-  },
   "scripts": {
     "lint": "pnpm run --if-present -r lint",
     "lint:fix": "pnpm run --if-present -r lint:fix"

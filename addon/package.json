@@ -90,8 +90,5 @@
   "ember": {
     "edition": "octane"
   },
-  "ember-addon": {},
-  "volta": {
-    "extends": "../package.json"
-  }
+  "ember-addon": {}
 }
