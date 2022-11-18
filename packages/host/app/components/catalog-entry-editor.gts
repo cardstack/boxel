@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { catalogEntryRef, type ExportedCardRef } from '@cardstack/runtime-common';
+import { catalogEntryRef, type CardRef } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -14,7 +14,7 @@ import { type Card } from "https://cardstack.com/base/card-api";
 
 interface Signature {
   Args: {
-    ref: ExportedCardRef;
+    ref: CardRef;
   }
 }
 

@@ -10,8 +10,7 @@ import {
   hasExecutableExtension,
   maxLinkDepth,
   type NotLoaded,
-  ExportedCardRef,
-  CardRef,
+  type CardRef,
 } from ".";
 import { loadCard } from "./card-ref";
 import { Kind, Realm, getExportedCardContext } from "./realm";
@@ -349,7 +348,7 @@ export class CurrentRun {
           typeof maybeCard === "function" && "baseCard" in maybeCard
       )
       .map((card) => Loader.identify(card))
-      .filter(Boolean) as ExportedCardRef[];
+      .filter(Boolean) as CardRef[];
     for (let ref of refs) {
       await this.buildModule(ref.module, url);
     }
@@ -567,7 +566,7 @@ export class CurrentRun {
     let deferred = new Deferred<TypesWithErrors>();
     this.#typesCache.set(card, deferred.promise);
     let types: string[] = [];
-    let fullRef: CardRef = { type: "exportedCard", ...ref };
+    let fullRef: CardRef = ref;
     while (fullRef) {
       let loadedCard = (await loadCard(fullRef, { loader: this.loader })) as
         | {

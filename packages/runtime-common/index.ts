@@ -35,7 +35,7 @@ export interface DirectoryEntryRelationship {
 }
 import { RealmPaths } from "./paths";
 import { Query } from "./query";
-export { baseRealm, catalogEntryRef, baseCardRef } from "./constants";
+export { baseRealm, catalogEntryRef, baseCardRef, isField } from "./constants";
 export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from "./not-loaded";
 
@@ -72,6 +72,9 @@ export const externalsMap: Map<string, string[]> = new Map([
       "CardError",
       "isMetaFieldItem",
       "createNewCard",
+      "getField",
+      "isField",
+      "identifyCard",
     ],
   ],
   ["@glimmer/component", ["default"]],
@@ -98,8 +101,9 @@ export type { Kind, RealmAdapter, FileRef } from "./realm";
 
 import type { Saved } from "./search-index";
 
-import type { CardRef, ExportedCardRef } from "./card-ref";
-export type { CardRef, ExportedCardRef };
+import type { CardRef } from "./card-ref";
+export type { CardRef };
+export { getField, identifyCard } from "./card-ref";
 
 export type {
   CardResource,
@@ -128,13 +132,13 @@ export const maxLinkDepth = 5;
 export interface CardChooser {
   chooseCard<T extends Card>(
     query: Query,
-    opts?: { offerToCreate: ExportedCardRef }
+    opts?: { offerToCreate: CardRef }
   ): Promise<undefined | T>;
 }
 
 export async function chooseCard<T extends Card>(
   query: Query,
-  opts?: { offerToCreate: ExportedCardRef }
+  opts?: { offerToCreate: CardRef }
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
@@ -148,11 +152,11 @@ export async function chooseCard<T extends Card>(
 }
 
 export interface CardCreator {
-  create<T extends Card>(ref: ExportedCardRef): Promise<undefined | T>;
+  create<T extends Card>(ref: CardRef): Promise<undefined | T>;
 }
 
 export async function createNewCard<T extends Card>(
-  ref: ExportedCardRef
+  ref: CardRef
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
@@ -187,12 +191,11 @@ export function internalKeyFor(
   ref: CardRef,
   relativeTo: URL | undefined
 ): string {
+  if (!("type" in ref)) {
+    let module = trimExecutableExtension(new URL(ref.module, relativeTo)).href;
+    return `${module}/${ref.name}`;
+  }
   switch (ref.type) {
-    case "exportedCard":
-      let module = trimExecutableExtension(
-        new URL(ref.module, relativeTo)
-      ).href;
-      return `${module}/${ref.name}`;
     case "ancestorOf":
       return `${internalKeyFor(ref.card, relativeTo)}/ancestor`;
     case "fieldOf":

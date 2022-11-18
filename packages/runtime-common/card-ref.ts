@@ -1,16 +1,13 @@
-import type { Card } from "https://cardstack.com/base/card-api";
-import type * as CardAPI from "https://cardstack.com/base/card-api";
+import {
+  type Card,
+  type CardConstructor,
+  type Field,
+} from "https://cardstack.com/base/card-api";
 import { Loader } from "./loader";
-import { baseRealm } from "./constants";
-
-export type ExportedCardRef = {
-  module: string;
-  name: string;
-};
+import { isField } from "./constants";
 
 export type CardRef =
   | {
-      type: "exportedCard";
       module: string;
       name: string;
     }
@@ -23,6 +20,8 @@ export type CardRef =
       card: CardRef;
       field: string;
     };
+
+let typesCache = new WeakMap<typeof Card, CardRef>();
 
 export function isCardRef(ref: any): ref is CardRef {
   if (typeof ref !== "object") {
@@ -60,7 +59,7 @@ export async function loadCard(
   let maybeCard: unknown;
   let canonicalRef: CardRef | undefined;
   let loader = opts?.loader ?? Loader.getLoader();
-  if (ref.type === "exportedCard") {
+  if (!("type" in ref)) {
     let module = await loader.import<Record<string, any>>(ref.module);
     maybeCard = module[ref.name];
     canonicalRef = { ...ref, ...loader.identify(maybeCard) };
@@ -80,8 +79,7 @@ export async function loadCard(
     if (!parent || !parentRef) {
       return undefined;
     }
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
-    let field = api.getField(parent, ref.field);
+    let field = getField(parent, ref.field);
     maybeCard = field?.card;
     let cardId = loader.identify(maybeCard);
     canonicalRef = cardId
@@ -105,7 +103,70 @@ export async function loadCard(
   }
 }
 
-export async function identifyCard(card: typeof Card): CardRef {}
+export function identifyCard(
+  card: typeof Card,
+  opts?: {
+    ref?: CardRef;
+    fieldName?: string;
+    context?: typeof Card;
+  }
+): CardRef | undefined {
+  let cached = typesCache.get(card);
+  if (cached) {
+    return cached;
+  }
+
+  if (opts?.ref) {
+    typesCache.set(card, opts.ref);
+    return opts.ref;
+  }
+
+  let _ref = Loader.identify(card);
+  if (_ref) {
+    typesCache.set(card, _ref);
+    return _ref;
+  }
+
+  if (opts?.context) {
+    let _ref = identifyCard(opts.context);
+    if (_ref && opts?.fieldName) {
+      typesCache.set(card, {
+        type: "fieldOf",
+        field: opts.fieldName,
+        card: _ref,
+      });
+      return {
+        type: "fieldOf",
+        field: opts.fieldName,
+        card: _ref,
+      };
+    }
+  }
+
+  console.log("no ref for", card.name, opts);
+  return undefined;
+}
+
+export function getField<CardT extends CardConstructor>(
+  card: CardT,
+  fieldName: string,
+  opts?: {
+    ref?: CardRef;
+    context?: typeof Card;
+  }
+): Field<CardConstructor> | undefined {
+  let obj: object | null = card.prototype;
+  identifyCard(card, opts);
+  while (obj) {
+    let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
+    let result = (desc?.get as any)?.[isField];
+    if (result !== undefined) {
+      return result;
+    }
+    obj = Reflect.getPrototypeOf(obj);
+  }
+  return undefined;
+}
 
 function assertNever(value: never) {
   return new Error(`should never happen ${value}`);

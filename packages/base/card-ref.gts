@@ -1,5 +1,5 @@
 import { Component, primitive, serialize, deserialize, queryableValue, Card, CardConstructor, CardInstanceType } from './card-api';
-import { type ExportedCardRef } from "@cardstack/runtime-common";
+import { type CardRef } from "@cardstack/runtime-common";
 
 class BaseView extends Component<typeof CardRefCard> {
   <template>
@@ -10,15 +10,15 @@ class BaseView extends Component<typeof CardRefCard> {
 }
 
 export default class CardRefCard extends Card {
-  static [primitive]: ExportedCardRef;
+  static [primitive]: CardRef;
 
-  static [serialize](cardRef: ExportedCardRef) {
+  static [serialize](cardRef: CardRef) {
     return {...cardRef}; // return a new object so that the model cannot be mutated from the outside
   }
-  static async [deserialize]<T extends CardConstructor>(this: T, cardRef: ExportedCardRef): Promise<CardInstanceType<T>> {
+  static async [deserialize]<T extends CardConstructor>(this: T, cardRef: CardRef): Promise<CardInstanceType<T>> {
     return {...cardRef} as CardInstanceType<T>;// return a new object so that the model cannot be mutated from the outside
   }
-  static [queryableValue](cardRef: ExportedCardRef | undefined) {
+  static [queryableValue](cardRef: CardRef | undefined) {
     if (cardRef) {
       return `${cardRef.module}/${cardRef.name}`; // this assumes the module is an absolute reference
     }

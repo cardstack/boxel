@@ -7,12 +7,12 @@ import { CardError, type SerializedError } from "./error";
 import flatMap from "lodash/flatMap";
 import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
-import { ExportedCardRef, CardRef } from "./card-ref";
+import { CardRef, getField } from "./card-ref";
 
 export type Saved = string;
 export type Unsaved = string | undefined;
 export interface Meta {
-  adoptsFrom: ExportedCardRef;
+  adoptsFrom: CardRef;
   fields?: CardFields;
 }
 export interface CardFields {
@@ -469,10 +469,9 @@ export class SearchIndex {
   }
 
   private async loadFieldCard(
-    ref: ExportedCardRef,
+    ref: CardRef,
     fieldPath: string
   ): Promise<typeof Card> {
-    let api = await this.loadAPI();
     let module: Record<string, typeof Card>;
     try {
       module = await this.loader.import<Record<string, typeof Card>>(
@@ -490,7 +489,7 @@ export class SearchIndex {
     while (segments.length) {
       let fieldName = segments.shift()!;
       let prevCard = card;
-      card = api.getField(card, fieldName)?.card;
+      card = getField(card, fieldName)?.card;
       if (!card) {
         throw new Error(
           `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(
@@ -510,11 +509,10 @@ export class SearchIndex {
     }
     let sorters = expressions.map(({ by, on, direction }) => {
       return (e1: SearchEntry, e2: SearchEntry) => {
-        let ref: CardRef = { type: "exportedCard", ...on };
-        if (!this.cardHasType(e1, ref)) {
+        if (!this.cardHasType(e1, on)) {
           return direction === "desc" ? -1 : 1;
         }
-        if (!this.cardHasType(e2, ref)) {
+        if (!this.cardHasType(e2, on)) {
           return direction === "desc" ? 1 : -1;
         }
         let a = e1.searchData[by];
@@ -552,15 +550,14 @@ export class SearchIndex {
   // (`false`)
   private async buildMatcher(
     filter: Filter | undefined,
-    onRef: ExportedCardRef
+    onRef: CardRef
   ): Promise<(entry: SearchEntry) => boolean | null> {
     if (!filter) {
       return (_entry) => true;
     }
 
     if ("type" in filter) {
-      let ref: CardRef = { type: "exportedCard", ...filter.type };
-      return (entry) => this.cardHasType(entry, ref);
+      return (entry) => this.cardHasType(entry, filter.type);
     }
 
     let on = filter?.on ?? onRef;
@@ -593,7 +590,7 @@ export class SearchIndex {
     }
 
     if ("eq" in filter) {
-      let ref: CardRef = { type: "exportedCard", ...on };
+      let ref: CardRef = on;
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
@@ -632,7 +629,7 @@ export class SearchIndex {
     }
 
     if ("range" in filter) {
-      let ref: CardRef = { type: "exportedCard", ...on };
+      let ref: CardRef = on;
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(

@@ -7,7 +7,7 @@ import parseISO from 'date-fns/parseISO';
 import { on } from '@ember/modifier';
 import { baseRealm, } from "@cardstack/runtime-common";
 import { Loader } from '@cardstack/runtime-common/loader';
-import type { ExportedCardRef } from "@cardstack/runtime-common";
+import type { CardRef } from "@cardstack/runtime-common";
 import type { SignatureFor, primitive as primitiveType, queryableValue as queryableValueType } from "https://cardstack.com/base/card-api";
 import { shadowQuerySelector, shadowQuerySelectorAll, fillIn, click } from '../../helpers/shadow-assert';
 
@@ -86,7 +86,7 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(readNumber, 42);
     let readLanguages: string[] = card.languagesSpoken;
     assert.deepEqual(readLanguages, ['english', 'japanese']);
-    let readRef: ExportedCardRef = card.ref;
+    let readRef: CardRef = card.ref;
     assert.deepEqual(readRef, { module: `${testRealmURL}person`, name: "Person" });
     let readBoolean: boolean = card.boolean;
     assert.deepEqual(readBoolean, true);

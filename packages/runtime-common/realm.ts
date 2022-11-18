@@ -642,7 +642,7 @@ export function getExportedCardContext(ref: CardRef): {
   module: string;
   name: string;
 } {
-  if (ref.type === "exportedCard") {
+  if (!("type" in ref)) {
     return { module: ref.module, name: ref.name };
   } else {
     return getExportedCardContext(ref.card);

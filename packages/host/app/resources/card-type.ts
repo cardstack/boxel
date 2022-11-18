@@ -2,7 +2,12 @@ import { Resource, useResource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
-import { CardRef, internalKeyFor, baseRealm } from '@cardstack/runtime-common';
+import {
+  identifyCard,
+  type CardRef,
+  internalKeyFor,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
@@ -42,12 +47,11 @@ export class CardType extends Resource<Args> {
     card: typeof Card,
     context?: { from: CardRef; module: string }
   ): Promise<Type> {
-    let exportedCardRef = this.loader.identify(card);
-    let ref: CardRef;
+    let ref = identifyCard(card);
     let module: string;
-    if (exportedCardRef) {
-      ref = { type: 'exportedCard', ...exportedCardRef };
-      module = exportedCardRef.module;
+    if (ref) {
+      ref = ref;
+      module = ref.module;
     } else if (context) {
       ref = context.from;
       module = context.module;
@@ -63,7 +67,9 @@ export class CardType extends Resource<Args> {
     let api = await this.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`
     );
-    let { id: remove, ...fields } = api.getFields(card);
+    let { id: remove, ...fields } = api.getFields(card, {
+      ref: context?.from,
+    });
     let superCard = Reflect.getPrototypeOf(card) as typeof Card | null;
     let superType: Type | undefined;
     if (superCard && card !== superCard) {
