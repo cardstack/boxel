@@ -156,11 +156,14 @@ export function getField<CardT extends CardConstructor>(
   }
 ): Field<CardConstructor> | undefined {
   let obj: object | null = card.prototype;
-  identifyCard(card, opts);
   while (obj) {
     let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
-    let result = (desc?.get as any)?.[isField];
+    let result: Field<CardConstructor> | undefined = (desc?.get as any)?.[
+      isField
+    ];
     if (result !== undefined) {
+      identifyCard(card, opts);
+      identifyCard(result.card, { fieldName, context: card });
       return result;
     }
     obj = Reflect.getPrototypeOf(obj);

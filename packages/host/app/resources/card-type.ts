@@ -47,10 +47,9 @@ export class CardType extends Resource<Args> {
     card: typeof Card,
     context?: { from: CardRef; module: string }
   ): Promise<Type> {
-    let ref = identifyCard(card);
+    let ref = identifyCard(card, { ref: context?.from });
     let module: string;
-    if (ref) {
-      ref = ref;
+    if (ref && !('type' in ref)) {
       module = ref.module;
     } else if (context) {
       ref = context.from;
@@ -67,9 +66,7 @@ export class CardType extends Resource<Args> {
     let api = await this.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`
     );
-    let { id: remove, ...fields } = api.getFields(card, {
-      ref: context?.from,
-    });
+    let { id: remove, ...fields } = api.getFields(card, { ref });
     let superCard = Reflect.getPrototypeOf(card) as typeof Card | null;
     let superType: Type | undefined;
     if (superCard && card !== superCard) {

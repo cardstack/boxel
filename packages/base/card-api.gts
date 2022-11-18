@@ -923,9 +923,11 @@ export async function createFromSerialized<T extends CardConstructor>(
   let identityContext = opts?.identityContext ?? new IdentityContext();
   let loader = opts?.loader ?? Loader;  
   let { meta: { adoptsFrom } } = resource;
+  if (("type" in adoptsFrom)) {
+    return console.warn('not implemented');
+  }
   let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);
   let card = module[adoptsFrom.name];
-  identifyCard(card, { ref: adoptsFrom });
   return await _createFromSerialized(card, resource as any, doc, identityContext);
 }
 
@@ -1060,7 +1062,7 @@ async function cardClassFromResource<CardT extends CardConstructor>(resource: Lo
   if (!cardIdentity) {
     throw new Error(`bug: could not determine identity for card '${fallback.name}'`);
   }
-  if (resource && (cardIdentity.module !== resource.meta.adoptsFrom.module || cardIdentity.name !== resource.meta.adoptsFrom.name)) {
+  if (resource && !("type" in resource.meta.adoptsFrom) && (cardIdentity.module !== resource.meta.adoptsFrom.module || cardIdentity.name !== resource.meta.adoptsFrom.name)) {
     let loader = Loader.getLoaderFor(fallback);
     let module = await loader.import<Record<string, CardT>>(resource.meta.adoptsFrom.module);
     return module[resource.meta.adoptsFrom.name];

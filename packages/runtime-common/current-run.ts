@@ -350,7 +350,9 @@ export class CurrentRun {
       .map((card) => Loader.identify(card))
       .filter(Boolean) as CardRef[];
     for (let ref of refs) {
-      await this.buildModule(ref.module, url);
+      if (!("type" in ref)) {
+        await this.buildModule(ref.module, url);
+      }
     }
   }
 
@@ -407,6 +409,9 @@ export class CurrentRun {
     let instanceURL = new URL(
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
+    if ("type" in resource.meta.adoptsFrom) {
+      return;
+    }
     let moduleURL = new URL(
       resource.meta.adoptsFrom.module,
       new URL(path, this.realm.url)

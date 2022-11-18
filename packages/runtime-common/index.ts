@@ -75,6 +75,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "getField",
       "isField",
       "identifyCard",
+      "loadCard",
     ],
   ],
   ["@glimmer/component", ["default"]],
@@ -103,7 +104,7 @@ import type { Saved } from "./search-index";
 
 import type { CardRef } from "./card-ref";
 export type { CardRef };
-export { getField, identifyCard } from "./card-ref";
+export { getField, identifyCard, loadCard } from "./card-ref";
 
 export type {
   CardResource,
