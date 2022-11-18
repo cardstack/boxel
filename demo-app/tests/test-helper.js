@@ -1,6 +1,6 @@
 import { setApplication } from '@ember/test-helpers';
-import Application from 'demo-app/app';
-import config from 'demo-app/config/environment';
+import Application from 'boxel-motion-demo-app/app';
+import config from 'boxel-motion-demo-app/config/environment';
 import { start } from 'ember-qunit';
 import * as QUnit from 'qunit';
 import { setup } from 'qunit-dom';
