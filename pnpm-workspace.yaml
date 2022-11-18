@@ -1,4 +1,2 @@
 packages:
-  - addon
-  - demo-app
-  - test-app
+  - packages/*

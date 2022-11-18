@@ -27,13 +27,13 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Lint Addon
         run: pnpm run lint
-        working-directory: addon
+        working-directory: packages/boxel-motion
       - name: Lint Test App
         run: pnpm run lint
-        working-directory: test-app
+        working-directory: packages/boxel-motion-test-app
       - name: Lint Demo App
         run: pnpm run lint
-        working-directory: demo-app
+        working-directory: packages/boxel-motion-demo-app
       - name: Run Tests
         run: pnpm run test:ember
-        working-directory: test-app
+        working-directory: packages/boxel-motion-test-app
