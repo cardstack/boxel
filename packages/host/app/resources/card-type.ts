@@ -47,7 +47,7 @@ export class CardType extends Resource<Args> {
     card: typeof Card,
     context?: { from: CardRef; module: string }
   ): Promise<Type> {
-    let ref = identifyCard(card, { ref: context?.from });
+    let ref = identifyCard(card);
     let module: string;
     if (ref && !('type' in ref)) {
       module = ref.module;

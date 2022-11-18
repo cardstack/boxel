@@ -28,9 +28,6 @@ export function isCardRef(ref: any): ref is CardRef {
     return false;
   }
   if (!("type" in ref)) {
-    return false;
-  }
-  if (ref.type === "exportedCard") {
     if (!("module" in ref) || !("name" in ref)) {
       return false;
     }
@@ -69,10 +66,13 @@ export async function loadCard(
       return undefined;
     }
     maybeCard = Reflect.getPrototypeOf(child) as typeof Card;
-    let cardId = loader.identify(maybeCard);
-    canonicalRef = cardId
-      ? { type: "exportedCard", ...cardId }
-      : { ...ref, card: childRef };
+    let cardId = identifyCard(maybeCard as typeof Card);
+    if (cardId) {
+      if (!typesCache.has(maybeCard as typeof Card)) {
+        typesCache.set(maybeCard as typeof Card, cardId);
+      }
+    }
+    canonicalRef = cardId ? cardId : { ...ref, card: childRef };
   } else if (ref.type === "fieldOf") {
     let { card: parent, ref: parentRef } =
       (await loadCard(ref.card, opts)) ?? {};
@@ -82,9 +82,7 @@ export async function loadCard(
     let field = getField(parent, ref.field);
     maybeCard = field?.card;
     let cardId = loader.identify(maybeCard);
-    canonicalRef = cardId
-      ? { type: "exportedCard", ...cardId }
-      : { ...ref, card: parentRef };
+    canonicalRef = cardId ? cardId : { ...ref, card: parentRef };
   } else {
     throw assertNever(ref);
   }
@@ -103,57 +101,17 @@ export async function loadCard(
   }
 }
 
-export function identifyCard(
-  card: typeof Card,
-  opts?: {
-    ref?: CardRef;
-    fieldName?: string;
-    context?: typeof Card;
-  }
-): CardRef | undefined {
+export function identifyCard(card: typeof Card): CardRef | undefined {
   let cached = typesCache.get(card);
   if (cached) {
     return cached;
   }
-
-  if (opts?.ref) {
-    typesCache.set(card, opts.ref);
-    return opts.ref;
-  }
-
-  let _ref = Loader.identify(card);
-  if (_ref) {
-    typesCache.set(card, _ref);
-    return _ref;
-  }
-
-  if (opts?.context) {
-    let _ref = identifyCard(opts.context);
-    if (_ref && opts?.fieldName) {
-      typesCache.set(card, {
-        type: "fieldOf",
-        field: opts.fieldName,
-        card: _ref,
-      });
-      return {
-        type: "fieldOf",
-        field: opts.fieldName,
-        card: _ref,
-      };
-    }
-  }
-
-  console.log("no ref for", card.name, opts);
-  return undefined;
+  return Loader.identify(card);
 }
 
 export function getField<CardT extends CardConstructor>(
   card: CardT,
-  fieldName: string,
-  opts?: {
-    ref?: CardRef;
-    context?: typeof Card;
-  }
+  fieldName: string
 ): Field<CardConstructor> | undefined {
   let obj: object | null = card.prototype;
   while (obj) {
@@ -162,8 +120,28 @@ export function getField<CardT extends CardConstructor>(
       isField
     ];
     if (result !== undefined) {
-      identifyCard(card, opts);
-      identifyCard(result.card, { fieldName, context: card });
+      let ref = identifyCard(card);
+      if (ref) {
+        // is this the right place to set typesCache?
+        // skip id and primitive fields?
+        if (!typesCache.has(card)) {
+          typesCache.set(card, ref);
+        }
+        let innerRef = identifyCard(result.card);
+        if (innerRef) {
+          if (!typesCache.has(result.card)) {
+            typesCache.set(result.card, innerRef);
+          }
+        } else {
+          typesCache.set(result.card, {
+            type: "fieldOf",
+            field: fieldName,
+            card: ref,
+          });
+        }
+      } else {
+        console.log(`could not identify card ${card.name}`);
+      }
       return result;
     }
     obj = Reflect.getPrototypeOf(obj);

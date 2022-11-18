@@ -849,7 +849,6 @@ function serializedGet<CardT extends CardConstructor>(
   if (!field) {
     throw new Error(`tried to serializedGet field ${fieldName} which does not exist in card ${model.constructor.name}`);
   }
-  identifyCard(field.card, { fieldName, context: model.constructor });
   return field.serialize(peekAtField(model, fieldName), doc, visited);
 }
 
@@ -923,9 +922,6 @@ export async function createFromSerialized<T extends CardConstructor>(
   let identityContext = opts?.identityContext ?? new IdentityContext();
   let loader = opts?.loader ?? Loader;  
   let { meta: { adoptsFrom } } = resource;
-  if (("type" in adoptsFrom)) {
-    return console.warn('not implemented');
-  }
   let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);
   let card = module[adoptsFrom.name];
   return await _createFromSerialized(card, resource as any, doc, identityContext);

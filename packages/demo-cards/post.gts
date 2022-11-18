@@ -1,4 +1,4 @@
-import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
+import { contains, field, linksTo, Component, Card } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
@@ -22,6 +22,7 @@ export class Post extends Card {
   @field title = contains(StringCard);
   @field body = contains(TextAreaCard);
   @field titleRef = contains(BasicCard);
+  @field titleLink = linksTo(BasicCard);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div {{attachStyles styles}}>
