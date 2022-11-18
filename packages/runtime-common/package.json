@@ -1,0 +1,56 @@
+{
+  "name": "@cardstack/runtime-common",
+  "version": "1.0.0",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/generator": "^7.17.8",
+    "@babel/plugin-proposal-class-properties": "^7.16.7",
+    "@babel/plugin-proposal-decorators": "^7.17.9",
+    "@babel/plugin-syntax-class-properties": "^7.12.13",
+    "@babel/plugin-syntax-decorators": "^7.17.12",
+    "@babel/plugin-syntax-typescript": "^7.17.12",
+    "@babel/plugin-transform-modules-amd": "^7.13.0",
+    "@babel/plugin-transform-typescript": "^7.16.8",
+    "@babel/traverse": "^7.17.9",
+    "@babel/types": "^7.20.0",
+    "@cardstack/ember-template-imports": "workspace:*",
+    "@types/babel__core": "^7.1.19",
+    "@types/babel__generator": "^7.6.4",
+    "@types/babel__traverse": "^7.14.2",
+    "@types/diff": "^5.0.2",
+    "@types/flat": "^5.0.2",
+    "@types/lodash": "^4.14.182",
+    "@types/qs": "^6.9.7",
+    "babel-import-util": "^1.2.2",
+    "babel-plugin-ember-template-compilation": "^1.0.0",
+    "date-fns": "^2.28.0",
+    "diff": "^5.1.0",
+    "ember-concurrency-async-plugin": "workspace:*",
+    "ember-source": "~4.2.0",
+    "flat": "^5.0.2",
+    "http-status-codes": "^2.2.0",
+    "ignore": "^5.2.0",
+    "json-typescript": "^1.1.2",
+    "lodash": "^4.17.21",
+    "qs": "^6.10.5",
+    "qunit": "^2.18.0",
+    "transform-modules-amd-plugin": "workspace:*"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.17.8",
+    "@types/qunit": "^2.11.3",
+    "ember-cli-htmlbars": "^6.0.1"
+  },
+  "peerDependencies": {
+    "@babel/core": "^7.17.8",
+    "ember-cli-htmlbars": "^6.0.1"
+  },
+  "dependenciesMeta": {
+    "@cardstack/ember-template-imports": {
+      "injected": true
+    },
+    "@cardstack/runtime-common": {
+      "injected": true
+    }
+  }
+}

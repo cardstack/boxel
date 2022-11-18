@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "allowJs": true,
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noEmitOnError": false,
+    "noEmit": true,
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "baseUrl": ".",
+    "module": "es2022",
+    "experimentalDecorators": true,
+    "paths": {
+      "@cardstack/host/tests/*": ["tests/*"],
+      "@cardstack/host/*": ["app/*"],
+      "https://cardstack.com/base/*": ["../base/*"],
+      "//local-realm/*": ["../demo-cards/*"],
+      "cards": ["../demo-cards/*"],
+      "*": ["types/*"],
+      "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"]
+    }
+  },
+  "glint": {
+    "environment": ["ember-loose", "ember-template-imports"],
+    "transform": {
+      "include": ["../demo-cards/**", "../base/**", "app/**", "tests/**"]
+    }
+  },
+  "include": [
+    "../base/**/*",
+    "../demo-cards/**/*",
+    "app/**/*",
+    "tests/**/*",
+    "types/**/*"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "ember-concurrency-async-plugin",
+  "version": "1.0.2",
+  "description": "Async task functions for ember-concurrency",
+  "repository": "https://github.com/chancancode/ember-concurrency-async",
+  "license": "MIT",
+  "author": "Godfrey Chan <godfreykfc@gmail.com>",
+  "dependencies": {
+    "@babel/types": "^7.10.2"
+  }
+}

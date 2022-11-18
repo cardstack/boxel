@@ -1,0 +1,140 @@
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans-Regular.ttf");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans-SemiBold.ttf");
+  font-weight: 600;
+}
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans-Bold.ttf");
+  font-weight: 700;
+}
+
+body {
+  font-family: 'Open Sans', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+.editor {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  min-height: 100vh;
+}
+
+.polling-button {
+  margin-top: 3rem;
+}
+
+.preview {
+  flex-grow: 2;
+  min-width: 10rem;
+}
+.preview > * + * {
+  margin-top: 1rem;
+}
+
+.item.file:hover {
+  background-color: cornflowerblue;
+  color: white;
+  cursor: pointer;
+}
+.item.file.selected,
+.item.file:active {
+  background-color: blue;
+  color: white;
+}
+
+.indent-0 {
+  padding-left: 0;
+}
+.indent-1 {
+  padding-left: 1rem;
+}
+.indent-2 {
+  padding-left: 2rem;
+}
+.indent-3 {
+  padding-left: 3rem;
+}
+.indent-4 {
+  padding-left: 4rem;
+}
+
+.schema {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid grey;
+  border-radius: 10px;
+  background-color: #faebd769;
+}
+
+.dialog-box {
+  position: fixed;
+  z-index: 1;
+  top: 10vh;
+  width: 80vw;
+  max-width: 60rem;
+  height: 80vh;
+  padding: 0;
+  overflow-y: auto;
+}
+.dialog-box__header {
+  position: sticky;
+  top: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding: 1em;
+  background-color: #ffffffcc;
+}
+.dialog-box__header > h1 {
+  margin: 0;
+}
+.dialog-box__content {
+  padding: 1em;
+}
+.dialog-box__content > * + * {
+  margin-top: 1em;
+}
+
+.card-catalog {
+  list-style-type: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding-left: 0;
+}
+.card-catalog li > button {
+  margin-top: 1rem;
+}
+
+.catalog-entry-editor {
+  margin-top: 1rem;
+}
+.catalog-entry-editor > fieldset {
+  background-color: aliceblue;
+}
+.catalog-entry-editor > fieldset > * + * {
+  margin-top: 1rem;
+}
+
+.error {
+  color: red;
+}
