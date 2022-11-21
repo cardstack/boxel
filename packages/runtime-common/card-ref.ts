@@ -59,7 +59,7 @@ export async function loadCard(
   if (!("type" in ref)) {
     let module = await loader.import<Record<string, any>>(ref.module);
     maybeCard = module[ref.name];
-    canonicalRef = { ...ref, ...loader.identify(maybeCard) };
+    canonicalRef = { ...ref, ...identifyCard(maybeCard as typeof Card) };
   } else if (ref.type === "ancestorOf") {
     let { card: child, ref: childRef } = (await loadCard(ref.card, opts)) ?? {};
     if (!child || !childRef) {
@@ -81,7 +81,7 @@ export async function loadCard(
     }
     let field = getField(parent, ref.field);
     maybeCard = field?.card;
-    let cardId = loader.identify(maybeCard);
+    let cardId = identifyCard(maybeCard as typeof Card);
     canonicalRef = cardId ? cardId : { ...ref, card: parentRef };
   } else {
     throw assertNever(ref);

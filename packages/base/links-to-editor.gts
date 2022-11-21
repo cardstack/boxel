@@ -9,9 +9,9 @@ import {
   type Field
 } from './card-api';
 import {
-  Loader,
   chooseCard,
   baseCardRef,
+  identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initStyleSheet, attachStyles } from './attach-styles';
@@ -25,11 +25,11 @@ interface Signature {
 }
 
 let linksToEditorStyles = initStyleSheet(`
-  this { 
-    background-color: #fff; 
+  this {
+    background-color: #fff;
     border: 1px solid #ddd;
-    border-radius: 20px; 
-    padding: 1rem; 
+    border-radius: 20px;
+    padding: 1rem;
   }
   button {
     margin-top: 1rem;
@@ -83,7 +83,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   }
 
   @restartableTask private async chooseCard() {
-    let type = Loader.identify(this.args.field.card) ?? baseCardRef;
+    let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let chosenCard: Card | undefined = await chooseCard(
       { filter: { type }},
       { offerToCreate: type }

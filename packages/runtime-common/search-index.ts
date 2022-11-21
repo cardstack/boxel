@@ -7,7 +7,7 @@ import { CardError, type SerializedError } from "./error";
 import flatMap from "lodash/flatMap";
 import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
-import { CardRef, getField } from "./card-ref";
+import { type CardRef, getField, identifyCard } from "./card-ref";
 
 export type Saved = string;
 export type Unsaved = string | undefined;
@@ -493,7 +493,7 @@ export class SearchIndex {
       if (!card) {
         throw new Error(
           `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(
-            this.loader.identify(prevCard)
+            identifyCard(prevCard)
           )}`
         );
       }

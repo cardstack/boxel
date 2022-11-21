@@ -2,7 +2,7 @@ import * as JSON from "json-typescript";
 import isEqual from "lodash/isEqual";
 import { assertJSONValue, assertJSONPrimitive } from "./json-validation";
 import qs from "qs";
-import type { CardRef } from "./index";
+import { type CardRef, isCardRef } from "./index";
 
 export interface Query {
   filter?: Filter;
@@ -217,11 +217,8 @@ function assertFilter(
 }
 
 function assertCardType(type: any, pointer: string[]) {
-  if (
-    Object.keys(type).length > 2 ||
-    !("module" in type) ||
-    !("name" in type)
-  ) {
+  if (!isCardRef(type)) {
+    debugger;
     throw new Error(`${pointer.join("/") || "/"}: type is not valid`);
   }
 }

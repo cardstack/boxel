@@ -12,7 +12,7 @@ import {
   type NotLoaded,
   type CardRef,
 } from ".";
-import { loadCard } from "./card-ref";
+import { loadCard, identifyCard } from "./card-ref";
 import { Kind, Realm, getExportedCardContext } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
 import ignore, { Ignore } from "ignore";
@@ -349,7 +349,7 @@ export class CurrentRun {
         (maybeCard) =>
           typeof maybeCard === "function" && "baseCard" in maybeCard
       )
-      .map((card) => Loader.identify(card))
+      .map((card) => identifyCard(card))
       .filter(Boolean) as CardRef[];
     for (let ref of refs) {
       if (!("type" in ref)) {
@@ -558,7 +558,7 @@ export class CurrentRun {
     if (cached) {
       return await cached;
     }
-    let ref = this.#loader.identify(card);
+    let ref = identifyCard(card);
     if (!ref) {
       throw new Error(`could not identify card ${card.name}`);
     }
