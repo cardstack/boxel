@@ -21,4 +21,5 @@ Router.map(function () {
   this.route('removed-sprite-interruption');
   this.route('simple-orchestration');
   this.route('list');
+  this.route('in-out');
 });
