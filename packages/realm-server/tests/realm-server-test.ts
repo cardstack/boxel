@@ -14,6 +14,7 @@ import {
   Realm,
   Loader,
   baseRealm,
+  loadCard,
 } from "@cardstack/runtime-common";
 import { stringify } from "qs";
 import { NodeAdapter } from "../node-realm";
@@ -361,22 +362,18 @@ module("Realm Server", function (hooks) {
 
   test("can dynamically load a card definition from own realm", async function (assert) {
     let loader = Loader.createLoaderFromGlobal();
-    let api = await loader.import<any>("https://cardstack.com/base/card-api");
-    let module = await loader.import<any>(`${testRealmHref}person`);
-    module.Person;
+    let ref = {
+      module: `${testRealmHref}person`,
+      name: "Person",
+    };
+    await loadCard(ref, { loader });
     let doc = {
       data: {
-        attributes: {
-          firstName: "Mango",
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealmHref}person`,
-            name: "Person",
-          },
-        },
+        attributes: { firstName: "Mango" },
+        meta: { adoptsFrom: ref },
       },
     };
+    let api = await loader.import<any>("https://cardstack.com/base/card-api");
     let person = await api.createFromSerialized(doc.data, doc, undefined, {
       loader,
     });
@@ -385,22 +382,18 @@ module("Realm Server", function (hooks) {
 
   test("can dynamically load a card definition from a different realm", async function (assert) {
     let loader = Loader.createLoaderFromGlobal();
-    let api = await loader.import<any>("https://cardstack.com/base/card-api");
-    let module = await loader.import<any>(`${testRealm2Href}person`);
-    module.Person;
+    let ref = {
+      module: `${testRealm2Href}person`,
+      name: "Person",
+    };
+    await loadCard(ref, { loader });
     let doc = {
       data: {
-        attributes: {
-          firstName: "Mango",
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealm2Href}person`,
-            name: "Person",
-          },
-        },
+        attributes: { firstName: "Mango" },
+        meta: { adoptsFrom: ref },
       },
     };
+    let api = await loader.import<any>("https://cardstack.com/base/card-api");
     let person = await api.createFromSerialized(doc.data, doc, undefined, {
       loader,
     });
@@ -409,23 +402,19 @@ module("Realm Server", function (hooks) {
 
   test("can instantiate a card that uses a card-ref field", async function (assert) {
     let loader = Loader.createLoaderFromGlobal();
-    let api = await loader.import<any>("https://cardstack.com/base/card-api");
-    let module = await loader.import<any>(`${testRealm2Href}card-ref-test`);
-    module.TestCard;
+    let adoptsFrom = {
+      module: `${testRealm2Href}card-ref-test`,
+      name: "TestCard",
+    };
+    await loadCard(adoptsFrom, { loader });
     let ref = { module: `${testRealm2Href}person`, name: "Person" };
     let doc = {
       data: {
-        attributes: {
-          ref,
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealm2Href}card-ref-test`,
-            name: "TestCard",
-          },
-        },
+        attributes: { ref },
+        meta: { adoptsFrom },
       },
     };
+    let api = await loader.import<any>("https://cardstack.com/base/card-api");
     let testCard = await api.createFromSerialized(doc.data, doc, undefined, {
       loader,
     });

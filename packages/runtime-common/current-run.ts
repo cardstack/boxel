@@ -542,9 +542,9 @@ export class CurrentRun {
         m[exportName];
       }
     }
-    let consumes = await (
-      await this.loader.getConsumedModules(url)
-    ).filter((u) => u !== url);
+    let consumes = (await this.loader.getConsumedModules(url)).filter(
+      (u) => u !== url
+    );
     let module: Module = {
       url,
       consumes,

@@ -51,12 +51,12 @@ export function isCardRef(ref: any): ref is CardRef {
 
 export async function loadCard(
   ref: CardRef,
-  opts?: { loader?: Loader }
+  opts?: { loader?: Loader, relativeTo?: URL }
 ): Promise<typeof Card | undefined> {
   let maybeCard: unknown;
   let loader = opts?.loader ?? Loader.getLoader();
   if (!("type" in ref)) {
-    let module = await loader.import<Record<string, any>>(ref.module);
+    let module = await loader.import<Record<string, any>>(new URL(ref.module, opts?.relativeTo).href);
     maybeCard = module[ref.name];
   } else if (ref.type === "ancestorOf") {
     let child = (await loadCard(ref.card, opts)) ?? {};

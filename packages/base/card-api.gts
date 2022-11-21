@@ -1,6 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { NotReady, isNotReadyError} from './not-ready';
-import { flatMap, merge } from 'lodash';
+import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { flatten } from "flat";
@@ -22,6 +22,7 @@ import {
   getField,
   isField,
   identifyCard,
+  loadCard,
   type Meta,
   type CardFields,
   type Relationship,
@@ -925,10 +926,8 @@ export async function createFromSerialized<T extends CardConstructor>(
   opts?: { loader?: Loader, identityContext?: IdentityContext }
 ): Promise<CardInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
-  let loader = opts?.loader ?? Loader;
   let { meta: { adoptsFrom } } = resource;
-  let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);
-  let card = module[adoptsFrom.name];
+  let card = await loadCard(adoptsFrom, { loader: opts?.loader, relativeTo });
   return await _createFromSerialized(card, resource as any, doc, identityContext);
 }
 
@@ -1063,10 +1062,9 @@ async function cardClassFromResource<CardT extends CardConstructor>(resource: Lo
   if (!cardIdentity) {
     throw new Error(`bug: could not determine identity for card '${fallback.name}'`);
   }
-  if (resource && !("type" in resource.meta.adoptsFrom) && (cardIdentity.module !== resource.meta.adoptsFrom.module || cardIdentity.name !== resource.meta.adoptsFrom.name)) {
+  if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
     let loader = Loader.getLoaderFor(fallback);
-    let module = await loader.import<Record<string, CardT>>(resource.meta.adoptsFrom.module);
-    return module[resource.meta.adoptsFrom.name];
+    return await loadCard(resource.meta.adoptsFrom, { loader });
   }
   return fallback;
 }
