@@ -80,7 +80,7 @@ export class CardType extends Resource<Args> {
         name,
         type: field.fieldType,
         card: await this.toType(field.card, {
-          from: { type: 'fieldOf', field: name, card: ref },
+          from: { type: 'fieldOf', field: name, card: ref! },
           module,
         }),
       }))

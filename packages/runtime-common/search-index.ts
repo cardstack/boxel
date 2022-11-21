@@ -7,7 +7,7 @@ import { CardError, type SerializedError } from "./error";
 import flatMap from "lodash/flatMap";
 import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
-import { type CardRef, getField, identifyCard } from "./card-ref";
+import { type CardRef, getField, identifyCard, loadCard } from "./card-ref";
 
 export type Saved = string;
 export type Unsaved = string | undefined;
@@ -472,19 +472,31 @@ export class SearchIndex {
     ref: CardRef,
     fieldPath: string
   ): Promise<typeof Card> {
-    let module: Record<string, typeof Card>;
+    let card: typeof Card | undefined;
     try {
-      module = await this.loader.import<Record<string, typeof Card>>(
-        ref.module
-      );
+      card = await loadCard(ref, { loader: this.loader });
     } catch (err: any) {
+      if (!("type" in ref)) {
+        throw new Error(
+          `Your filter refers to nonexistent type: import ${
+            ref.name === "default" ? "default" : `{ ${ref.name} }`
+          } from "${ref.module}"`
+        );
+      } else {
+        throw new Error(
+          `Your filter refers to nonexistent type: ${JSON.stringify(
+            ref,
+            null,
+            2
+          )}`
+        );
+      }
+    }
+    if (!card) {
       throw new Error(
-        `Your filter refers to nonexistent type: import ${
-          ref.name === "default" ? "default" : `{ ${ref.name} }`
-        } from "${ref.module}"`
+        `A card was not found for type: ${JSON.stringify(ref, null, 2)}`
       );
     }
-    let card: typeof Card | undefined = module[ref.name];
     let segments = fieldPath.split(".");
     while (segments.length) {
       let fieldName = segments.shift()!;

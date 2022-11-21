@@ -8,7 +8,11 @@ import {
 } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
-import { baseRealm, baseCardRef } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  baseCardRef,
+  type CardRef,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 const paths = new RealmPaths(testRealmURL);
@@ -1067,6 +1071,33 @@ posts/ignore-me.json
         assert.strictEqual(
           err.message,
           `Your filter refers to nonexistent type: import { Nonexistent } from "${testModuleRealm}nonexistent"`
+        );
+      }
+
+      let cardRef: CardRef = {
+        type: 'fieldOf',
+        field: 'name',
+        card: {
+          module: `${testModuleRealm}nonexistent`,
+          name: 'Nonexistent',
+        },
+      };
+      try {
+        await indexer.search({
+          filter: {
+            on: cardRef,
+            eq: { name: 'Simba' },
+          },
+        });
+        throw new Error('failed to throw expected exception');
+      } catch (err: any) {
+        assert.strictEqual(
+          err.message,
+          `Your filter refers to nonexistent type: ${JSON.stringify(
+            cardRef,
+            null,
+            2
+          )}`
         );
       }
     });
