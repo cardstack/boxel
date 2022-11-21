@@ -567,18 +567,15 @@ export class CurrentRun {
     let types: string[] = [];
     let fullRef: CardRef = ref;
     while (fullRef) {
-      let loadedCard = (await loadCard(fullRef, { loader: this.loader })) as
-        | {
-            card: typeof Card;
-            ref: CardRef;
-          }
-        | undefined;
+      let loadedCard = await loadCard(fullRef, { loader: this.loader });
       if (!loadedCard) {
         let { module } = getExportedCardContext(fullRef);
         let result: TypesWithErrors = {
           type: "error",
           error: {
-            detail: `Unable to determine card types for ${JSON.stringify(ref)}`,
+            detail: `Unable to determine card types for ${JSON.stringify(
+              fullRef
+            )}`,
             status: 500,
             additionalErrors: null,
             deps: [module],
@@ -587,9 +584,13 @@ export class CurrentRun {
         deferred.fulfill(result);
         return result;
       }
-      types.push(internalKeyFor(loadedCard.ref, undefined));
-      if (!isEqual(loadedCard.ref, baseCardRef)) {
-        fullRef = { type: "ancestorOf", card: loadedCard.ref };
+      let loadedCardRef = identifyCard(loadedCard);
+      if (!loadedCardRef) {
+        throw new Error(`could not identify card ${loadedCard.name}`);
+      }
+      types.push(internalKeyFor(loadedCardRef, undefined));
+      if (!isEqual(loadedCardRef, baseCardRef)) {
+        fullRef = { type: "ancestorOf", card: loadedCardRef };
       } else {
         break;
       }

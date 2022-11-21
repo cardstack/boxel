@@ -218,7 +218,6 @@ function assertFilter(
 
 function assertCardType(type: any, pointer: string[]) {
   if (!isCardRef(type)) {
-    debugger;
     throw new Error(`${pointer.join("/") || "/"}: type is not valid`);
   }
 }

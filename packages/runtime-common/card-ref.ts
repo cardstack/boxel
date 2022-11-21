@@ -54,15 +54,13 @@ export async function loadCard(
   opts?: { loader?: Loader }
 ): Promise<typeof Card | undefined> {
   let maybeCard: unknown;
-  let canonicalRef: CardRef | undefined;
   let loader = opts?.loader ?? Loader.getLoader();
   if (!("type" in ref)) {
     let module = await loader.import<Record<string, any>>(ref.module);
     maybeCard = module[ref.name];
-    canonicalRef = { ...ref, ...identifyCard(maybeCard as typeof Card) };
   } else if (ref.type === "ancestorOf") {
-    let { card: child, ref: childRef } = (await loadCard(ref.card, opts)) ?? {};
-    if (!child || !childRef) {
+    let child = (await loadCard(ref.card, opts)) ?? {};
+    if (!child) {
       return undefined;
     }
     maybeCard = Reflect.getPrototypeOf(child) as typeof Card;
@@ -72,30 +70,19 @@ export async function loadCard(
         typesCache.set(maybeCard as typeof Card, cardId);
       }
     }
-    canonicalRef = cardId ? cardId : { ...ref, card: childRef };
   } else if (ref.type === "fieldOf") {
-    let { card: parent, ref: parentRef } =
-      (await loadCard(ref.card, opts)) ?? {};
-    if (!parent || !parentRef) {
+    let parent = (await loadCard(ref.card, opts)) ?? {};
+    if (!parent) {
       return undefined;
     }
-    let field = getField(parent, ref.field);
+    let field = getField(parent as typeof Card, ref.field);
     maybeCard = field?.card;
-    let cardId = identifyCard(maybeCard as typeof Card);
-    canonicalRef = cardId ? cardId : { ...ref, card: parentRef };
   } else {
     throw assertNever(ref);
   }
 
-  if (
-    typeof maybeCard === "function" &&
-    "baseCard" in maybeCard &&
-    canonicalRef
-  ) {
-    return {
-      card: maybeCard as unknown as typeof Card,
-      ref: canonicalRef,
-    };
+  if (typeof maybeCard === "function" && "baseCard" in maybeCard) {
+    return maybeCard as typeof Card;
   } else {
     return undefined;
   }
