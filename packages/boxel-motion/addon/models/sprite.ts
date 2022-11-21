@@ -1,17 +1,6 @@
-import { FPS } from '@cardstack/boxel-motion/behaviors/base';
-import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
-import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
-import {
-  Opacity,
-  OpacityOptions,
-} from '@cardstack/boxel-motion/motions/opacity';
-
+import Behavior from '@cardstack/boxel-motion/behaviors/base';
+import { Value } from '@cardstack/boxel-motion/value';
 import { assert } from '@ember/debug';
-
-import Motion from '../motions/base';
-import { CssMotion, CssMotionOptions } from '../motions/css-motion';
-import { Move, MoveOptions } from '../motions/move';
-import { Resize, ResizeOptions } from '../motions/resize';
 
 import { CopiedCSS, Snapshot } from '../utils/measurement';
 
@@ -20,7 +9,6 @@ import ContextAwareBounds, {
   Bounds,
   BoundsDelta,
 } from './context-aware-bounds';
-import { SpriteAnimation } from './sprite-animation';
 
 export interface ISpriteModifier {
   id: string;
@@ -44,9 +32,29 @@ export class SpriteIdentifier {
   }
 }
 
-export type MotionProperty = 'opacity' | 'position' | 'size' | 'style';
+export type MotionProperty = string;
+
+interface InterpolatableMotionOptions {
+  from: Value;
+  to: Value;
+  behavior: Behavior;
+  velocity?: number;
+}
+
+interface NonInterpolatableMotionOptions {
+  value: Value;
+}
+
+export interface MotionTiming {
+  behavior?: Behavior;
+  delay?: number;
+  duration?: number;
+  easing?: string;
+}
+
+// TODO: this seems rather awful, let's find a better solution
 export type MotionOptions = Partial<
-  OpacityOptions | MoveOptions | ResizeOptions | CssMotionOptions
+  InterpolatableMotionOptions & NonInterpolatableMotionOptions
 >;
 
 export default class Sprite {
@@ -54,7 +62,6 @@ export default class Sprite {
   identifier: SpriteIdentifier;
   type: SpriteType | null = null;
   counterpart: Sprite | null = null;
-  motions: Motion[] = [];
   time: number;
   hidden = false;
 
@@ -180,9 +187,67 @@ export default class Sprite {
     };
   }
 
-  get canBeGarbageCollected(): boolean {
-    return this.type === SpriteType.Removed && this.hidden;
+  get initial(): { [k in string]: Value } {
+    let initialBounds = {};
+    if (this.initialBounds) {
+      let { x, y, width, height, top, right, bottom, left } =
+        this.initialBounds.relativeToParent;
+
+      initialBounds = {
+        // TODO: maybe also for top/left?
+        // TODO: figure out if we want the boundsDelta to be under these properties
+        translateX: `${-(this.boundsDelta?.x ?? 0)}px`,
+        translateY: `${-(this.boundsDelta?.y ?? 0)}px`,
+
+        x: `${x}px`,
+        y: `${y}px`,
+        width: `${width}px`,
+        height: `${height}px`,
+        top: `${top}px`,
+        right: `${right}px`,
+        bottom: `${bottom}px`,
+        left: `${left}px`,
+      };
+    }
+
+    return {
+      ...this.initialComputedStyle,
+      ...initialBounds,
+    };
   }
+
+  get final(): { [k in string]: Value } {
+    let finalBounds = {};
+    if (this.finalBounds) {
+      let { x, y, width, height, top, right, bottom, left } =
+        this.finalBounds.relativeToParent;
+
+      finalBounds = {
+        // TODO: maybe also for top/left?
+        // TODO: figure out if we want the boundsDelta to be under these properties
+        translateX: `${0}px`,
+        translateY: `${0}px`,
+
+        x: `${x}px`,
+        y: `${y}px`,
+        width: `${width}px`,
+        height: `${height}px`,
+        top: `${top}px`,
+        right: `${right}px`,
+        bottom: `${bottom}px`,
+        left: `${left}px`,
+      };
+    }
+
+    return {
+      ...this.finalComputedStyle,
+      ...finalBounds,
+    };
+  }
+
+  /*  get canBeGarbageCollected(): boolean {
+    return this.type === SpriteType.Removed && this.hidden;
+  }*/
 
   lockStyles(bounds: Bounds | null = null): void {
     if (!bounds) {
@@ -213,134 +278,12 @@ export default class Sprite {
   }
 
   // hidden things get dropped at interruption
-  hide(): void {
+  /*  hide(): void {
     this.hidden = true;
     this.element.style.opacity = '0';
     this.element.setAttribute('data-sprite-hidden', 'true');
     this.element.getAnimations().forEach((a) => a.cancel());
-    this.motions = [];
-  }
-
-  setupAnimation(property: MotionProperty, opts: MotionOptions): void {
-    // TODO: this applies to any "non-Tween" based behavior, currently only Spring
-    assert(
-      'Passing a duration is not necessary when using a Spring behavior',
-      (opts.duration === undefined &&
-        opts.behavior instanceof SpringBehavior) ||
-        !(opts.behavior instanceof SpringBehavior)
-    );
-    // TODO: this applies to any "Tween" based behavior, currently only Linear
-    assert(
-      'You must pass a duration when using a Linear behavior',
-      (opts.duration !== undefined &&
-        opts.behavior instanceof LinearBehavior) ||
-        !(opts.behavior instanceof LinearBehavior)
-    );
-
-    switch (property) {
-      case 'opacity':
-        this.motions.push(new Opacity(this, opts));
-        break;
-      case 'position':
-        this.motions.push(new Move(this, opts));
-        break;
-      case 'size':
-        this.motions.push(new Resize(this, opts));
-        break;
-      case 'style':
-        this.motions.push(new CssMotion(this, opts));
-        break;
-      default:
-        // noop
-        break;
-    }
-  }
-
-  /**
-   * Compiles the current motions setup on the Sprite into a single set of keyframes.
-   */
-  compileCurrentAnimations() {
-    if (!this.motions.length) {
-      return;
-    }
-
-    assert('Hidden sprite cannot be animated', !this.hidden);
-    let keyframes = this.motions.reduce((lastKeyframes, motion) => {
-      motion.applyBehavior(undefined);
-
-      let count = Math.max(lastKeyframes.length, motion.keyframes.length);
-      let result: Keyframe[] = [];
-      for (let i = 0; i < count; i++) {
-        // TODO: this merge algorithm is too naïve, it implies we can have only 1 of each CSS property or it will be overridden
-        // we copy the final frame of a motion if there is another motion that takes longer
-        result.push({
-          ...(lastKeyframes?.[i] ?? lastKeyframes[lastKeyframes.length - 1]),
-          ...(motion.keyframes?.[i] ??
-            motion.keyframes[motion.keyframes.length - 1]),
-        });
-      }
-      return result;
-    }, [] as Keyframe[]);
-
-    // We can clear these as we've compiled them already.
-    this.motions = [];
-
-    // calculate "real" duration based on amount of keyframes at the given FPS
-    let duration = Math.max(0, (keyframes.length - 1) / FPS);
-
-    return {
-      keyframes,
-      duration,
-    };
-  }
-
-  compileAnimation({
-    time,
-  }: {
-    time?: number;
-  } = {}): SpriteAnimation | undefined {
-    if (!this.motions.length) {
-      return;
-    }
-
-    assert('Hidden sprite cannot be animated', !this.hidden);
-    let keyframes = this.motions.reduce((previousKeyframes, motion) => {
-      motion.applyBehavior(time);
-
-      let count = Math.max(previousKeyframes.length, motion.keyframes.length);
-      let result: Keyframe[] = [];
-      for (let i = 0; i < count; i++) {
-        // TODO: this merge algorithm is too naïve, it implies we can have only 1 of each CSS property or it will be overridden
-        // we copy the final frame of a motion if there is another motion that takes longer
-        result.push({
-          ...(previousKeyframes?.[i] ??
-            previousKeyframes[previousKeyframes.length - 1]),
-          ...(motion.keyframes?.[i] ??
-            motion.keyframes[motion.keyframes.length - 1]),
-        });
-      }
-      return result;
-    }, [] as Keyframe[]);
-
-    // We can clear these as we've compiled them already.
-    this.motions = [];
-
-    // calculate "real" duration based on amount of keyframes at the given FPS
-    let duration = Math.max(0, (keyframes.length - 1) / FPS);
-
-    let keyframeAnimationOptions = {
-      easing: 'linear',
-      duration,
-    };
-
-    // TODO: We need the animationstart callback passed in here
-    return new SpriteAnimation(
-      this,
-      keyframes,
-      keyframeAnimationOptions,
-      this.callbacks.onAnimationStart
-    );
-  }
+  }*/
 }
 
 export enum SpriteType {
