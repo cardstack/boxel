@@ -4,7 +4,7 @@ import IntegerCard from 'https://cardstack.com/base/integer';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
-let css =`this { background-color: #fdfcdc; border: 1px solid gray; border-radius: 10px; padding: 1rem; }`;
+let css =`this { background-color: #fdfcdc; border: 1px solid gray; border-radius: 10px; padding: 1rem; display: table; }`;
 let styleSheet = initStyleSheet(css);
 
 export class Pet extends Card {

@@ -29,6 +29,7 @@
     "@babel/plugin-syntax-decorators": "^7.17.12",
     "@babel/plugin-syntax-typescript": "^7.17.12",
     "@cardstack/base": "workspace:*",
+    "@cardstack/boxel-motion": "workspace:*",
     "@cardstack/requirejs-monaco-ember-polyfill": "^0.0.1",
     "@cardstack/runtime-common": "workspace:*",
     "@cardstack/worker": "workspace:*",
@@ -134,6 +135,9 @@
   },
   "dependenciesMeta": {
     "@cardstack/base": {
+      "injected": true
+    },
+    "@cardstack/boxel-motion": {
       "injected": true
     },
     "@cardstack/runtime-common": {

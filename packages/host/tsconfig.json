@@ -23,6 +23,7 @@
     "paths": {
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
+      "@cardstack/boxel-motion/*": ["../boxel-motion/addon/*"],
       "https://cardstack.com/base/*": ["../base/*"],
       "//local-realm/*": ["../demo-cards/*"],
       "cards": ["../demo-cards/*"],
@@ -33,12 +34,13 @@
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
-      "include": ["../demo-cards/**", "../base/**", "app/**", "tests/**"]
+      "include": ["../demo-cards/**", "../base/**", "app/**", "tests/**", "../boxel-motion/**"]
     }
   },
   "include": [
     "../base/**/*",
     "../demo-cards/**/*",
+    "../boxel-motion/**/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"

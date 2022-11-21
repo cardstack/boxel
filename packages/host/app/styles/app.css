@@ -42,10 +42,6 @@ button {
   margin-top: 3rem;
 }
 
-.preview {
-  flex-grow: 2;
-  min-width: 10rem;
-}
 .preview > * + * {
   margin-top: 1rem;
 }

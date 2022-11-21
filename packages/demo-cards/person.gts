@@ -4,7 +4,7 @@ import BooleanCard from 'https://cardstack.com/base/boolean';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 import { Pet } from './pet';
 
-let styles = initStyleSheet(`this { background-color: #90dbf4; border: 1px solid gray; border-radius: 10px; padding: 1rem; }`);
+let styles = initStyleSheet(`this { background-color: #90dbf4; border: 1px solid gray; border-radius: 10px; padding: 1rem; display: table; }`);
 
 export class Person extends Card {
   @field firstName = contains(StringCard);
