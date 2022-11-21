@@ -66,5 +66,5 @@ export function importResource(parent: object, url: () => string) {
         ) as LoaderService
       ).loader,
     },
-  }));
+  })) as ImportResource;
 }

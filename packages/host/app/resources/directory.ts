@@ -7,7 +7,7 @@ import { taskFor } from 'ember-concurrency-ts';
 import flatMap from 'lodash/flatMap';
 import {
   DirectoryEntryRelationship,
-  isRelationship,
+  type Relationship,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import LoaderService from '../services/loader-service';
@@ -92,19 +92,19 @@ export class DirectoryResource extends Resource<Args> {
     let {
       data: { relationships: _relationships },
     } = await response.json();
-
+    let relationships = _relationships as Record<string, Relationship>;
     let newEntries: Entry[] = Object.entries(relationships).map(
       ([name, info]) => ({
         name,
-        kind: info.meta.kind,
-        path: realmPath.local(new URL(info.links.related)),
+        kind: info.meta!.kind,
+        path: realmPath.local(new URL(info.links!.related!)),
         indent:
-          new URL(info.links.related).pathname.replace(/\/$/, '').split('/')
+          new URL(info.links!.related!).pathname.replace(/\/$/, '').split('/')
             .length - 1,
       })
     );
     let nestedDirs = flatMap(
-      Object.values(relationships) as DirectoryEntryRelationship[],
+      Object.values(relationships) as unknown[] as DirectoryEntryRelationship[],
       (rel) => (rel.meta.kind === 'directory' ? [rel.links.related] : [])
     );
     let nestedEntries: Entry[] = [];
@@ -126,5 +126,5 @@ export function directory(
     () => ({
       named: { url: url(), polling: polling() },
     })
-  );
+  ) as DirectoryResource;
 }

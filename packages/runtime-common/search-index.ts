@@ -78,8 +78,10 @@ export type Relationship = {
     // there are other valid items for links in the spec, but we don't
     // anticipate using them
     self: string | null;
+    related?: string | null;
   };
   data?: ResourceID | ResourceID[] | null;
+  meta?: Record<string, any>;
 };
 
 export interface CardResource<Identity extends Unsaved = Saved> {
@@ -213,6 +215,9 @@ export function isRelationship(
   if (typeof relationship !== "object" || relationship == null) {
     return false;
   }
+  if ("meta" in relationship && typeof relationship.meta !== "object") {
+    return false;
+  }
   if ("links" in relationship) {
     let { links } = relationship;
     if (typeof links !== "object" || links == null) {
@@ -224,6 +229,11 @@ export function isRelationship(
     let { self } = links;
     if (typeof self !== "string" && self !== null) {
       return false;
+    }
+    if ("related" in links) {
+      if (typeof links.related !== "string" && links.related !== null) {
+        return false;
+      }
     }
   } else if ("data" in relationship) {
     let { data } = relationship;

@@ -59,5 +59,5 @@ export function getSearchResults(parent: object, query: () => Query) {
         ) as LoaderService
       ).loader,
     },
-  }));
+  })) as Search;
 }

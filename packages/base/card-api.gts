@@ -1173,10 +1173,11 @@ async function getIfReady<T extends Card, K extends keyof T>(
     if (!field) {
       throw new Error(`the field '${fieldName as string} does not exist in card ${instance.constructor.name}'`);
     }
-    let { computeVia } = field;
-    if (!computeVia) {
+    let { computeVia: _computeVia } = field;
+    if (!_computeVia) {
       throw new Error(`the field '${fieldName as string}' is not a computed field in card ${instance.constructor.name}`);
     }
+    let computeVia = _computeVia as (() => (T[K] | Promise<T[K]>)) | string;
     compute = typeof computeVia === 'function' ? computeVia.bind(instance) : () => (instance as any)[computeVia as string]();
   }
   try {
