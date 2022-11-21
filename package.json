@@ -1,20 +1,28 @@
 {
-  "name": "runtime-spike",
-  "version": "1.0.0",
-  "main": "index.js",
-  "license": "MIT",
-  "workspaces": [
-    "host",
-    "realm-server",
-    "worker",
-    "cards",
-    "base",
-    "runtime-common",
-    "vendor/ember-template-imports",
-    "vendor/ember-concurrency-async-plugin",
-    "vendor/transform-modules-amd-plugin"
-  ],
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel-motion"
+  },
+  "scripts": {
+    "lint": "pnpm run --if-present -r lint",
+    "lint:fix": "pnpm run --if-present -r lint:fix"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/eslint": "8.4.1",
+      "jsesc": "^3.0.0",
+      "ember-concurrency": "2.2.1"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "mustache": "3"
+      }
+    },
+    "patchedDependencies": {
+      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch"
+    }
+  },
   "devDependencies": {
     "@babel/core": "^7.17.8",
     "@glimmer/component": "^1.1.2",
@@ -25,18 +33,8 @@
     "ember-cli-htmlbars": "^6.1.0",
     "ember-resources": "^4.4.0",
     "ember-source": "~4.2.0",
+    "eslint-plugin-import": "^2.26.0",
     "ember-template-imports": "^3.0.1",
     "typescript": "^4.6.3"
-  },
-  "scripts": {},
-  "pnpm": {
-    "overrides": {
-      "jsesc": "^3.0.0",
-      "ember-concurrency": "2.2.1",
-      "@types/eslint": "^8.0.0"
-    },
-    "patchedDependencies": {
-      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch"
-    }
   }
 }

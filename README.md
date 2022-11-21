@@ -1,4 +1,4 @@
-# Rough work-in-progress
+# Boxel Runtime
 
 ## Setup
 
@@ -7,34 +7,53 @@
 
 ## Orientation
 
-`host` is the ember app
+`packages/host` is the card runtime host application
 
-`worker` is a separate build for the service worker that serves a realm
+`packages/worker` is a separate build for the service worker that serves a realm
 
-`realm-server` is a node app that serves the realm as an HTTP server
+`packages/realm-server` is a node app that serves the realm as an HTTP server
 
-The top-level of the monorepo contains typescript & glint setting for the ember app, because Glint doesn't like monorepos.
+`packages/boxel-motion` is the animation primitives ember addon.
 
-## Running the App
-In order to run app
+`packages/boxel-motion-test-app` is the test suite for boxel-motion
+
+`packages/boxel-motion-demo-app` is the demo app for boxel-motion
+
+## Running the Host App
+
+In order to run the host app:
+
 1. `pnpm start` in the worker/ workspace to build the service worker
 2. `pnpm start` in the host/ workspace to serve the ember app
 3. `pnpm start:base` in the realm-server/ to serve the base realm (alternatively you can use `pnpm start:test-realms` which also serves the base realm--this is convenient if you wish to switch between the app and the tests without having to restart servers)
 
 The app is available at http://localhost:4200. Click on the button to connect to your Local Realm, and then select the "cards/" folder within this project. Click "Allow" on the popups that ask for the ability to read and write to the local file sytem.
 
+In order to run the boxel-motion demo app:
+
+1. `cd to packages/boxel-motion-demo-app`
+2. `pnpm start`
+3. visit http://localhost:4200 in your browser
+
 ## Running the Tests
-There are currently 2 test suites: the host/ workspace tests and the realm-server/ workspace tests.
+
+There are currently 3 test suites:
 
 ### Host
-To run the `host/` workspace tests start the following servers:
-2. `pnpm start:test-realms` in the `realm-server/` to serve _both_ the base realm and the realm that serves the test cards
-3. `pnpm start` in the `host/` workspace to serve ember
+
+To run the `packages/host/` workspace tests start the following servers: 2. `pnpm start:test-realms` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards 3. `pnpm start` in the `packages/host/` workspace to serve ember
 
 The tests are available at `http://localhost:4200/tests`
 
 ### Realm Server
-To run the `realm-server/` workspace tests start:
-1. `pnpm start:test-realms` in the `realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
 
-Run `pnpm test` in the `realm-server/` workspace to run the realm tests
+To run the `packages/realm-server/` workspace tests start:
+
+1. `pnpm start:test-realms` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
+
+Run `pnpm test` in the `packages/realm-server/` workspace to run the realm tests
+
+### Boxel Motion
+
+1. `cd packages/boxel-motion-test-app`
+2. `pnpm test` (or `pnpm start` and visit http://localhost:4200/tests to run tests in the browser)

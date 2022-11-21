@@ -1,0 +1,26 @@
+.home-reno-card.maximized {
+  width: 240px;
+  height: 100%;
+  padding: 24px 12px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border: 1px solid black;
+  overflow-y: auto;
+  box-shadow: 4px 4px 4px 0px rgba(125,104,104,0.15);
+}
+
+.corner-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  justify-content: center;
+  height: min-content;
+  width: min-content;
+  align-items: center;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  font-size: 11px;
+}

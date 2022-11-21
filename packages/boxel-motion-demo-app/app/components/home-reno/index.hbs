@@ -1,0 +1,75 @@
+{{! @glint-expect-error: TODO: migrate this.transition to return AnimationDefinition }}
+<AnimationContext @use={{this.transition}} @id="outer" local-class="home-reno-list">
+  <HomeReno::Card::Maximized>
+    This is the entrypoint.
+
+    {{!-- <div local-class="compact-list"> --}}
+    {{! @glint-expect-error: TODO: migrate this.insideTransition to return AnimationDefinition }}
+    <AnimationContext @use={{this.insideTransition}} @id="inner" local-class="compact-list">
+      <HomeReno::Outline::Compact
+        @state={{this.compactCardState.outline}}
+        @toggleExpansion={{fn this.toggleExpansion "outline"}}
+        @maximize={{fn this.maximize "outline"}}
+      />
+      <HomeReno::Gallery::Compact
+        @state={{this.compactCardState.gallery}}
+        @toggleExpansion={{fn this.toggleExpansion "gallery"}}
+        @maximize={{fn this.maximize "gallery"}}
+      />
+      <HomeReno::Form::Compact
+        @state={{this.compactCardState.form}}
+        @toggleExpansion={{fn this.toggleExpansion "form"}}
+        @maximize={{fn this.maximize "form"}}
+      />
+    {{!-- </div> --}}
+    </AnimationContext>
+  </HomeReno::Card::Maximized>
+
+  {{#if (eq this.currentMaximizedItem "outline")}}
+    <HomeReno::Card::Maximized
+      @minimize={{this.minimize}}
+      local-class="outline"
+      {{sprite id="outline-card" }}
+    >
+      Outline
+      <div local-class="compact-list">
+        <HomeReno::Gallery::Compact
+          @state={{this.secondaryItemState}}
+          @toggleExpansion={{this.toggleSecondaryItemExpansion}}
+        />
+      </div>
+    </HomeReno::Card::Maximized>
+  {{/if}}
+
+  {{#if (eq this.currentMaximizedItem "gallery")}}
+    <HomeReno::Card::Maximized
+      @minimize={{this.minimize}}
+      local-class="gallery"
+      {{sprite id="gallery-card" }}
+    >
+      Gallery
+      <div local-class="compact-list">
+        <HomeReno::Outline::Compact
+          @state={{this.secondaryItemState}}
+          @toggleExpansion={{this.toggleSecondaryItemExpansion}}
+        />
+      </div>
+    </HomeReno::Card::Maximized>
+  {{/if}}
+
+  {{#if (eq this.currentMaximizedItem "form")}}
+    <HomeReno::Card::Maximized
+      @minimize={{this.minimize}}
+      local-class="form"
+      {{sprite id="form-card" }}
+    >
+      Form
+      <div local-class="compact-list">
+        <HomeReno::Outline::Compact
+          @state={{this.secondaryItemState}}
+          @toggleExpansion={{this.toggleSecondaryItemExpansion}}
+        />
+      </div>
+    </HomeReno::Card::Maximized>
+  {{/if}}
+</AnimationContext>

@@ -47,12 +47,11 @@ Check console log for more details`,
 
   get loaded(): Promise<void> {
     // TODO probably there is a more elegant way to express this in EC
-    return new Promise(async (res) => {
+    return (async () => {
       while (taskFor(this.load).isRunning) {
         await timeout(10);
       }
-      res();
-    });
+    })();
   }
 }
 

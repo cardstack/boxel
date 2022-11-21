@@ -1,0 +1,24 @@
+.grid {
+  display: flex;
+  gap: 350px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.list {
+  width: 150px;
+}
+
+.list.wide {
+  width: 250px;
+}
+
+.list > li {
+  display: block;
+  padding: 10px;
+  cursor: pointer;
+  background: #2B81AF;
+  color: #fff;
+  margin-bottom: 2px;
+  text-align: center;
+}

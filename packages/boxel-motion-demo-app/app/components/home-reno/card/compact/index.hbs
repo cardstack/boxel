@@ -1,0 +1,35 @@
+{{#if (eq @state this.STATES.EXPANDED)}}
+  <div
+    local-class="home-reno-card medium"
+    {{sprite id=@identifier }}
+    ...attributes
+  >
+    <button local-class="corner-button left" type="button" {{on "click" @toggleExpansion}}>
+      Minimize
+    </button>
+    {{#if @maximize}}
+      <button
+        local-class="corner-button"
+        type="button"
+        {{on "click" @maximize}}
+      >
+        Expand
+      </button>
+    {{/if}}
+    {{yield}}
+  </div>
+{{else if (eq @state this.STATES.MINIMIZED)}}
+  <button
+    local-class="home-reno-card small"
+    type="button"
+    {{on "click" @toggleExpansion}}
+    {{sprite id=@identifier }}
+    ...attributes
+  >
+    {{yield}}
+  </button>
+{{else if (eq @state this.STATES.MAXIMIZED_PLACEHOLDER)}}
+  <div local-class="home-reno-card placeholder" ...attributes>
+    Placeholder for maximized state
+  </div>
+{{/if}}

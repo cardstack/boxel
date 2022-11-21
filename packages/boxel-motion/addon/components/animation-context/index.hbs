@@ -1,0 +1,5 @@
+    {{this.renderDetector}}
+    <div class="animation-context" {{register-context this}} ...attributes>
+      <div {{register-context-orphans-el this}} data-animation-context-orphan-element="true"></div> {{!-- JS appends and removes here --}}
+      {{yield this}}
+    </div>

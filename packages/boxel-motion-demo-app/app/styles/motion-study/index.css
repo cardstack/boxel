@@ -1,0 +1,8 @@
+.grid {
+  display: grid;
+  grid-auto-rows: 200px;
+  grid-template-columns: calc(50% - 25px) calc(50% - 25px);
+  grid-gap: 50px;
+
+  padding: 100px;
+}

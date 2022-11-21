@@ -32,7 +32,6 @@ import {
   type CardRef
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import type { Loader as LoaderInterface } from "@cardstack/runtime-common";
 
 export const primitive = Symbol('cardstack-primitive');
 export const serialize = Symbol('cardstack-serialize');
@@ -51,7 +50,7 @@ export type FieldsTypeFor<T extends Card> = {
   [Field in keyof T]: (new() => GlimmerComponent<{ Args: {}, Blocks: {} }>) & (T[Field] extends Card ? FieldsTypeFor<T[Field]> : unknown);
 }
 export type Format = 'isolated' | 'embedded' | 'edit';
-export type FieldType = 'contains' | 'containsMany' | 'linksTo'; 
+export type FieldType = 'contains' | 'containsMany' | 'linksTo';
 
 type Setter = { setters: { [fieldName: string]: Setter }} & ((value: any) => void);
 
@@ -86,7 +85,7 @@ interface NotReadyValue {
 
 function isNotReadyValue(value: any): value is NotReadyValue {
   if (value && typeof value === 'object') {
-    return 'type' in value && value.type === 'not-ready' && 
+    return 'type' in value && value.type === 'not-ready' &&
     'instance' in value && isCard(value.instance) &&
     'fieldName' in value && typeof value.fieldName === 'string';
   } else {
@@ -146,13 +145,13 @@ export class IdentityContext {
   readonly identities = new Map<string, Card>();
 }
 
-type JSONAPIResource = 
-{ 
+type JSONAPIResource =
+{
   attributes: Record<string, any>;
   relationships?: Record<string, Relationship>;
   meta?: Record<string, any>;
-} | 
-{ 
+} |
+{
   attributes?: Record<string, any>;
   relationships: Record<string, Relationship>;
   meta?: Record<string, any>;
@@ -272,7 +271,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
         if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
           // when our implementation matches the default we don't need to include
           // meta.adoptsFrom
-          delete resource.meta?.adoptsFrom;  
+          delete resource.meta?.adoptsFrom;
         }
         if (resource.meta && Object.keys(resource.meta).length === 0) {
           delete resource.meta;
@@ -280,8 +279,8 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
         return resource;
       });
 
-      let result: JSONAPIResource = { 
-        attributes: { 
+      let result: JSONAPIResource = {
+        attributes: {
           [this.name]: serialized.map(resource => resource.attributes )
         }
       };
@@ -295,7 +294,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
             [this.name]: serialized.map(resource => resource.meta ?? {})
           }
         }
-      }        
+      }
 
       return result;
     }
@@ -370,8 +369,8 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
 class Contains<CardT extends CardConstructor> implements Field<CardT> {
   readonly fieldType = 'contains';
   constructor(
-    private cardThunk: () => CardT, 
-    readonly computeVia: undefined | string | (() => unknown), 
+    private cardThunk: () => CardT,
+    readonly computeVia: undefined | string | (() => unknown),
     readonly name: string
   ) {}
 
@@ -388,8 +387,8 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     if (primitive in this.card) {
       return { attributes: { [this.name]: serialized } }
     } else {
-      let resource: JSONAPIResource = { 
-        attributes: { 
+      let resource: JSONAPIResource = {
+        attributes: {
           [this.name]: serialized?.attributes
         }
       };
@@ -406,7 +405,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
       if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
         // when our implementation matches the default we don't need to include
         // meta.adoptsFrom
-        delete serialized.meta.adoptsFrom;  
+        delete serialized.meta.adoptsFrom;
       }
 
       if (Object.keys(serialized.meta).length > 0) {
@@ -431,7 +430,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
       throw new Error(`fieldMeta for contains field '${this.name}' is an array: ${JSON.stringify(fieldMeta, null, 2)}`);
     }
     let meta: Partial<Meta> | undefined = fieldMeta;
-    let resource: LooseCardResource = { 
+    let resource: LooseCardResource = {
       attributes: value,
       meta: makeMetaForField(meta, this.name, this.card)
     };
@@ -439,7 +438,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
       resource.relationships = Object.fromEntries(
         Object.entries(relationships)
           .filter(([fieldName]) => fieldName.startsWith(`${this.name}.`))
-          .map(([fieldName, relationship]) => 
+          .map(([fieldName, relationship]) =>
             [fieldName.startsWith(`${this.name}.`) ? fieldName.substring(this.name.length + 1) : fieldName, relationship]
           )
         );
@@ -493,8 +492,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
 
   serialize(value: InstanceType<CardT>, doc: JSONAPISingleResourceDocument, visited: Set<string>) {
     if (isNotLoadedValue(value)) {
-      return { 
-        relationships: { 
+      return {
+        relationships: {
           [this.name]: {
             links: { self: value.reference },
           }
@@ -502,8 +501,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       };
     }
     if (value == null) {
-      return { 
-        relationships: { 
+      return {
+        relationships: {
           [this.name]: {
             links: { self: null },
           }
@@ -527,8 +526,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       if (!value[isSavedInstance]) {
         throw new Error(`the linksTo field '${this.name}' cannot be serialized with an unsaved card`);
       }
-      let resource: JSONAPIResource = { 
-        relationships: { 
+      let resource: JSONAPIResource = {
+        relationships: {
           [this.name]: {
             links: { self: value.id },
             // we also write out the data form of the relationship
@@ -543,8 +542,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       }
       return resource;
     }
-    return { 
-      relationships: { 
+    return {
+      relationships: {
         [this.name]: {
           links: { self: null },
         }
@@ -861,15 +860,15 @@ async function getDeserializedValue<CardT extends CardConstructor>({
   doc,
   identityContext,
 }: {
-  card: CardT; 
-  fieldName: string; 
-  value: any; 
+  card: CardT;
+  fieldName: string;
+  value: any;
   resource: LooseCardResource;
-  modelPromise: Promise<Card>; 
+  modelPromise: Promise<Card>;
   doc: LooseSingleCardDocument | CardDocument;
   identityContext: IdentityContext;
 }): Promise<any> {
-  let field = getField(card, fieldName, { ref: resource.meta.adoptsFrom });
+  let field = getField(card, fieldName/*, { ref: resource.meta.adoptsFrom }*/);
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
@@ -912,15 +911,21 @@ export function serializeCard(
   }
   return doc;
 }
+
+// you may need to use this type for the loader passed in the opts
+export type LoaderType = NonNullable<
+  NonNullable<Parameters<typeof createFromSerialized>[3]>["loader"]
+>;
+
 // use an interface loader and not the class Loader
 export async function createFromSerialized<T extends CardConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
-  opts?: { loader?: LoaderInterface, identityContext?: IdentityContext }
+  opts?: { loader?: Loader, identityContext?: IdentityContext }
 ): Promise<CardInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
-  let loader = opts?.loader ?? Loader;  
+  let loader = opts?.loader ?? Loader;
   let { meta: { adoptsFrom } } = resource;
   let module = await loader.import<Record<string, T>>(new URL(adoptsFrom.module, relativeTo).href);
   let card = module[adoptsFrom.name];
@@ -992,7 +997,7 @@ async function _updateFromSerialized<T extends CardConstructor>(
       ...(resource.id !== undefined ? { id: resource.id } : {})
     } ?? {}).map(
       async ([fieldName, value]) => {
-        let field = getField(card, fieldName, { ref: resource.meta.adoptsFrom });
+        let field = getField(card, fieldName/*, { ref: resource.meta.adoptsFrom }*/);
         if (!field) {
           throw new Error(`could not find field '${fieldName}' in card '${card.name}'`);
         }
@@ -1133,7 +1138,7 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
     let pendingFields = new Set<string>(Object.keys(getFields(model, { includeComputeds: true })));
     do {
       for (let fieldName of [...pendingFields]) {
-        let value: any = await getIfReady(model, fieldName as keyof T, undefined, opts);
+        let value = await getIfReady(model, fieldName as keyof T, undefined, opts);
         if (!isNotReadyValue(value) && !isStaleValue(value)) {
           pendingFields.delete(fieldName);
           if (recomputePromises.get(card) !== recomputePromise) {
@@ -1179,7 +1184,6 @@ async function getIfReady<T extends Card, K extends keyof T>(
     }
     compute = typeof computeVia === 'function' ? computeVia.bind(instance) : () => (instance as any)[computeVia as string]();
   }
-
   try {
     result = await compute();
   } catch (e: any) {
@@ -1205,11 +1209,7 @@ async function getIfReady<T extends Card, K extends keyof T>(
     } else if (isNotReadyError(e)) {
       let { model: depModel, computeVia, fieldName: depField } = e;
       let nestedCompute = typeof computeVia === 'function' ? computeVia.bind(depModel) : () => depModel[computeVia as string]();
-      let value = await getIfReady(depModel, depField, nestedCompute, opts);
-      if (isNotReadyValue(value)) {
-        return value;
-      }
-      deserialized.set(depField, value);
+      await getIfReady(depModel, depField, nestedCompute, opts);
       return { type: 'not-ready', instance, fieldName: fieldName as string };
     } else {
       throw e;

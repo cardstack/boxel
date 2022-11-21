@@ -1,3 +1,6 @@
+# intentionally broken test data
+/public/test-modules/bad.js
+
 # unconventional js
 /blueprints/*/files/
 /vendor/
