@@ -8,6 +8,7 @@ import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
 import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { Constructable } from '../lib/types';
 
 interface Args {
   named: {
@@ -94,7 +95,7 @@ export class CardType extends Resource<Args> {
 }
 
 export function getCardType(parent: object, card: () => typeof Card) {
-  return useResource(parent, CardType, () => ({
+  return useResource(parent, CardType as Constructable<Resource>, () => ({
     named: {
       card: card(),
       loader: (
@@ -103,5 +104,5 @@ export function getCardType(parent: object, card: () => typeof Card) {
         ) as LoaderService
       ).loader,
     },
-  }));
+  })) as CardType;
 }

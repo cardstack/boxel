@@ -68,7 +68,7 @@ module("loader", function (hooks) {
     try {
       await loader.import<{ d(): string }>(`${testRealm}d`);
       throw new Error(`expected error was not thrown`);
-    } catch (e) {
+    } catch (e: any) {
       assert.strictEqual(e.message, "intentional error thrown");
       assert.deepEqual(await loader.getConsumedModules(`${testRealm}d`), [
         `${testRealm}d`,

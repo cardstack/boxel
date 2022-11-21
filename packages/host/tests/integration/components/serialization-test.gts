@@ -546,7 +546,7 @@ module('Integration | serialization', function (hooks) {
     try {
       hassan.pet;
       throw new Error(`expected error not thrown`);
-    } catch (err) {
+    } catch (err: any) {
       assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
       assert.ok(err.message.match(/The field Person\.pet refers to the card instance https:\/\/test-realm\/Pet\/mango which is not loaded/, 'NotLoaded error describes field not loaded'));
     }
@@ -928,7 +928,7 @@ module('Integration | serialization', function (hooks) {
     try {
       serializeCard(hassan);
       throw new Error(`expected error not thrown`);
-    } catch (err) {
+    } catch (err: any) {
       assert.ok(err.message.match(/field 'pet' cannot be serialized with an unsaved card/), 'cannot serialize a linksTo relationship to an unsaved card');
     }
   });

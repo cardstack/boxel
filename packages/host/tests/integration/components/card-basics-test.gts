@@ -257,7 +257,7 @@ module('Integration | card-basics', function (hooks) {
     try {
       new Person({ firstName: 'Hassan', pet: 'Mango' });
       throw new Error('expected error was not thrown');
-    } catch (err) {
+    } catch (err: any) {
       assert.ok(err.message.match(/linksTo field 'pet' contains a primitive card/), 'cannot have a linkTo field that uses a primitive card');
     }
 
@@ -265,7 +265,7 @@ module('Integration | card-basics', function (hooks) {
     try {
       hassan.pet = 'Mango';
       throw new Error('expected error was not thrown');
-    } catch (err) {
+    } catch (err: any) {
       assert.ok(err.message.match(/linksTo field 'pet' contains a primitive card/), 'cannot have a linkTo field that uses a primitive card');
     }
   });
@@ -290,7 +290,7 @@ module('Integration | card-basics', function (hooks) {
     try {
       new Person({ firstName: "Hassan", pet: door });
       throw new Error('expected error was not thrown');
-    } catch (err) {
+    } catch (err: any) {
       assert.ok(err.message.match(/it is not an instance of Pet/), 'cannot assign a linksTo field to a value that is not instance of the field card');
     }
 
@@ -298,7 +298,7 @@ module('Integration | card-basics', function (hooks) {
     try {
       hassan.pet = door
       throw new Error('expected error was not thrown');
-    } catch (err) {
+    } catch (err: any) {
       assert.ok(err.message.match(/it is not an instance of Pet/), 'cannot assign a linksTo field to a value that is not instance of the field card');
     }
   });

@@ -5,6 +5,7 @@ import { task, timeout } from 'ember-concurrency';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
+import type { Constructable } from '../lib/types';
 
 interface Args {
   named: { url: string; loader: Loader };
@@ -56,7 +57,7 @@ Check console log for more details`,
 }
 
 export function importResource(parent: object, url: () => string) {
-  return useResource(parent, ImportResource, () => ({
+  return useResource(parent, ImportResource as Constructable<Resource>, () => ({
     named: {
       url: url(),
       loader: (
@@ -65,5 +66,5 @@ export function importResource(parent: object, url: () => string) {
         ) as LoaderService
       ).loader,
     },
-  }));
+  })) as ImportResource;
 }
