@@ -1,4 +1,4 @@
-import instantaneousVelocity from '@cardstack/boxel-motion/utils/instantaneous-velocity';
+// import instantaneousVelocity from '@cardstack/boxel-motion/utils/instantaneous-velocity';
 
 import Behavior, {
   EasingToFramesArgument,
@@ -7,6 +7,8 @@ import Behavior, {
   timeToFrame,
 } from '../behaviors/base';
 
+// We may need a layer below behaviors (i.e. an interpolator) for specific value types
+// The below could be a numeric interpolator. We'd also need a color one etc.
 export default class LinearBehavior implements Behavior {
   toFrames(options: EasingToFramesArgument): Frame[] {
     let {
@@ -14,8 +16,10 @@ export default class LinearBehavior implements Behavior {
       to,
       duration,
       delay = 0,
+      /*
       lastFrame,
       previousFramesFromTime,
+      */
     } = options;
 
     if (from === to) {
@@ -33,6 +37,7 @@ export default class LinearBehavior implements Behavior {
       velocity: 0,
     }));
 
+    // probably only relevant for numerical values
     let velocity = (to - from) / duration / 1000;
 
     for (let i = 0; i <= frameCount; i++) {
@@ -44,6 +49,7 @@ export default class LinearBehavior implements Behavior {
       });
     }
 
+    /*
     // linearly combine if a motion was still happening
     if (previousFramesFromTime?.length) {
       let frameCount =
@@ -69,6 +75,7 @@ export default class LinearBehavior implements Behavior {
         frames[i]!.velocity = instantaneousVelocity(i, frames);
       }
     }
+    */
 
     return frames;
   }
