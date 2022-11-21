@@ -1,4 +1,7 @@
-import { AnimationDefinition } from '@cardstack/boxel-motion/addon/models/orchestration';
+import {
+  AnimationTimeline,
+  AnimationDefinition,
+} from '@cardstack/boxel-motion/addon/models/orchestration';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import Controller from '@ember/controller';
@@ -37,29 +40,33 @@ export default class List extends Controller {
     return {
       timeline: {
         type: 'parallel',
-        animations: Array.from(keptSprites).map((keptSprite) => ({
-          type: 'sequence',
-          animations: [
-            {
-              sprites: new Set([keptSprite]),
-              properties: {
-                position: {},
+        animations: [...keptSprites].map(
+          (keptSprite): AnimationTimeline => ({
+            type: 'sequence',
+            animations: [
+              {
+                sprites: new Set([keptSprite]),
+                properties: {
+                  translateX: {},
+                  translateY: {},
+                },
+                timing: {
+                  behavior: quickSpring,
+                },
               },
-              timing: {
-                behavior: quickSpring,
+              {
+                sprites: new Set([keptSprite]),
+                properties: {
+                  width: {},
+                  height: {},
+                },
+                timing: {
+                  behavior: quickSpring,
+                },
               },
-            },
-            {
-              sprites: new Set([keptSprite]),
-              properties: {
-                size: {},
-              },
-              timing: {
-                behavior: quickSpring,
-              },
-            },
-          ],
-        })),
+            ],
+          })
+        ),
       },
     };
   }
@@ -74,7 +81,8 @@ export default class List extends Controller {
           {
             sprites: keptSprites,
             properties: {
-              position: {},
+              x: {},
+              y: {},
             },
             timing: {
               behavior: quickSpring,
