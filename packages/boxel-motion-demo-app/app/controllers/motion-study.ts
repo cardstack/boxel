@@ -56,6 +56,8 @@ export default class MotionStudy extends Controller {
             properties: {
               translateX: {},
               translateY: {},
+              width: {},
+              height: {},
             },
             timing: {
               behavior: new SpringBehavior({
