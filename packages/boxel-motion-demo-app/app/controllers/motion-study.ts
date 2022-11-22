@@ -1,14 +1,87 @@
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
+import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import { SpriteType } from '@cardstack/boxel-motion/models/sprite';
-//import fade from '@cardstack/boxel-motion/transitions/fade';
-//import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
-//import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
 import Controller from '@ember/controller';
 
 export default class MotionStudy extends Controller {
-  async transition(changeset: Changeset): Promise<void> {
-    /*let { context } = changeset;
+  transition(changeset: Changeset): AnimationDefinition {
+    let fadeDuration = 300;
+
+    let cardSprites = changeset.spritesFor({
+      role: 'card',
+      type: SpriteType.Kept,
+    });
+
+    let removedCardSprites = changeset.spritesFor({
+      role: 'card',
+      type: SpriteType.Removed,
+    });
+
+    let removedCardContentSprites = changeset.spritesFor({
+      role: 'card-content',
+      type: SpriteType.Removed,
+    });
+
+    let cardContentSprites = changeset.spritesFor({
+      role: 'card-content',
+      type: SpriteType.Inserted,
+    });
+
+    // FIXME the declarative API does not currently support setting zIndex
+
+    return {
+      timeline: {
+        type: 'sequence',
+        animations: [
+          // FIXME should be able to pass an empty set without errors
+          ...(removedCardContentSprites.size
+            ? [
+                {
+                  sprites: removedCardContentSprites,
+                  properties: {
+                    opacity: { to: 0 },
+                  },
+                  timing: {
+                    behavior: new LinearBehavior(),
+                    duration: fadeDuration,
+                  },
+                },
+              ]
+            : []),
+
+          {
+            sprites: cardSprites,
+            properties: {
+              position: {},
+            },
+            timing: {
+              behavior: new SpringBehavior({
+                overshootClamping: false,
+                stiffness: 100,
+                damping: 15,
+              }),
+              delay: removedCardContentSprites.size ? fadeDuration : 0,
+            },
+          },
+          {
+            sprites: cardContentSprites,
+            properties: {
+              opacity: { to: 1 },
+            },
+            timing: {
+              behavior: new LinearBehavior(),
+              duration: fadeDuration,
+            },
+          },
+        ],
+      },
+    };
+  }
+
+  async extransition(changeset: Changeset): Promise<void> {
+    let { context } = changeset;
 
     let behavior = new SpringBehavior({
       overshootClamping: false,
@@ -124,6 +197,6 @@ export default class MotionStudy extends Controller {
 
     cardContentSprites.forEach((s) => {
       s.element.style.removeProperty('opacity');
-    });*/
+    });
   }
 }
