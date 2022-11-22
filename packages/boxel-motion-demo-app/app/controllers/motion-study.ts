@@ -50,23 +50,36 @@ export default class MotionStudy extends Controller {
                 },
               ]
             : []),
-
           {
-            sprites: cardSprites,
-            properties: {
-              translateX: {},
-              translateY: {},
-              width: {},
-              height: {},
-            },
-            timing: {
-              behavior: new SpringBehavior({
-                overshootClamping: false,
-                stiffness: 100,
-                damping: 15,
-              }),
-              delay: removedCardContentSprites.size ? fadeDuration : 0,
-            },
+            type: 'parallel',
+            animations: [
+              {
+                sprites: cardSprites,
+                properties: {
+                  zIndex: { to: 100 },
+                },
+                timing: {
+                  behavior: new LinearBehavior(),
+                },
+              },
+              {
+                sprites: cardSprites,
+                properties: {
+                  translateX: {},
+                  translateY: {},
+                  width: {},
+                  height: {},
+                },
+                timing: {
+                  behavior: new SpringBehavior({
+                    overshootClamping: false,
+                    stiffness: 100,
+                    damping: 15,
+                  }),
+                  delay: removedCardContentSprites.size ? fadeDuration : 0,
+                },
+              },
+            ],
           },
           {
             sprites: cardContentSprites,
