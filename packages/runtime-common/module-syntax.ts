@@ -16,7 +16,7 @@ import startCase from "lodash/startCase";
 import camelCase from "lodash/camelCase";
 import upperFirst from "lodash/upperFirst";
 import { parseTemplates } from "@cardstack/ember-template-imports/lib/parse-templates";
-import { baseRealm, type CardRef } from "./index";
+import { baseRealm } from "./index";
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from "@babel/plugin-syntax-decorators";
 //@ts-ignore unsure where these types live
@@ -70,7 +70,7 @@ export class ModuleSyntax {
       | { type: "exportedName"; name: string }
       | { type: "localName"; name: string },
     fieldName: string,
-    fieldRef: CardRef,
+    fieldRef: { name: string; module: string },
     fieldType: FieldType
   ) {
     let card = this.getCard(cardName);
@@ -193,7 +193,7 @@ function preprocessTemplateTags(src: string): string {
 
 function makeNewField(
   target: NodePath<t.Node>,
-  fieldRef: CardRef,
+  fieldRef: { name: string; module: string },
   fieldType: FieldType,
   fieldName: string
 ): string {
@@ -234,7 +234,7 @@ function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
   return currentPath as NodePath<t.Program>;
 }
 
-function suggestedCardName(ref: CardRef): string {
+function suggestedCardName(ref: { name: string; module: string }): string {
   if (ref.name.toLowerCase().endsWith("card")) {
     return ref.name;
   }

@@ -117,7 +117,7 @@ export default class Schema extends Component<Signature> {
     if (!ref) {
       throw new Error(`bug: unable to identify card ${this.args.card.name}`);
     }
-    return ref;
+    return ref as { module: string; name: string };
   }
 
   @cached

@@ -409,11 +409,15 @@ export class CurrentRun {
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
     let moduleURL = new URL(
-      resource.meta.adoptsFrom.module,
+      "module" in resource.meta.adoptsFrom
+        ? resource.meta.adoptsFrom.module
+        : "",
       new URL(path, this.realm.url)
     );
-    let name = resource.meta.adoptsFrom.name;
-    let cardRef = { module: moduleURL.href, name };
+    let cardRef =
+      "type" in resource.meta.adoptsFrom
+        ? resource.meta.adoptsFrom
+        : { module: moduleURL.href, name: resource.meta.adoptsFrom.name };
     let typesMaybeError: TypesWithErrors | undefined;
     let uncaughtError: Error | undefined;
     let doc: SingleCardDocument | undefined;
@@ -492,7 +496,7 @@ export class CurrentRun {
               ? serializableError(uncaughtError)
               : { detail: `${uncaughtError.message}` },
         };
-        error.error.deps = [cardRef.module];
+        error.error.deps = !("type" in cardRef) ? [cardRef.module] : [];
       } else if (typesMaybeError?.type === "error") {
         error = { type: "error", error: typesMaybeError.error };
       } else {
