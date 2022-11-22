@@ -51,12 +51,14 @@ export function isCardRef(ref: any): ref is CardRef {
 
 export async function loadCard(
   ref: CardRef,
-  opts?: { loader?: Loader, relativeTo?: URL }
+  opts?: { loader?: Loader; relativeTo?: URL }
 ): Promise<typeof Card | undefined> {
   let maybeCard: unknown;
   let loader = opts?.loader ?? Loader.getLoader();
   if (!("type" in ref)) {
-    let module = await loader.import<Record<string, any>>(new URL(ref.module, opts?.relativeTo).href);
+    let module = await loader.import<Record<string, any>>(
+      new URL(ref.module, opts?.relativeTo).href
+    );
     maybeCard = module[ref.name];
   } else if (ref.type === "ancestorOf") {
     let child = (await loadCard(ref.card, opts)) ?? {};
@@ -107,6 +109,10 @@ export function getField<CardT extends CardConstructor>(
       isField
     ];
     if (result !== undefined) {
+      const primitive = Symbol("cardstack-primitive");
+      if (primitive in card) {
+        debugger;
+      }
       let ref = identifyCard(card);
       if (ref) {
         // is this the right place to set typesCache?
