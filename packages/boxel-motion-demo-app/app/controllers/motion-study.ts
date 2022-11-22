@@ -54,7 +54,8 @@ export default class MotionStudy extends Controller {
           {
             sprites: cardSprites,
             properties: {
-              position: {},
+              translateX: {},
+              translateY: {},
             },
             timing: {
               behavior: new SpringBehavior({
@@ -68,7 +69,7 @@ export default class MotionStudy extends Controller {
           {
             sprites: cardContentSprites,
             properties: {
-              opacity: { to: 1 },
+              opacity: { from: 0 },
             },
             timing: {
               behavior: new LinearBehavior(),
