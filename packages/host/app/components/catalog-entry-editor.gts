@@ -71,8 +71,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
   async createEntry(): Promise<void> {
     let resource = {
       attributes: {
-        title: this.args.ref.name,
-        description: `Catalog entry for ${this.args.ref.name} card`,
+        title: !("type" in this.args.ref) ? this.args.ref.name : undefined,
+        description: `Catalog entry`,
         ref: this.args.ref,
         demo: undefined
       },

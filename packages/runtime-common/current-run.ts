@@ -349,7 +349,7 @@ export class CurrentRun {
         (maybeCard) =>
           typeof maybeCard === "function" && "baseCard" in maybeCard
       )
-      .map((card) => identifyCard(card))
+      .map((card: typeof Card) => identifyCard(card))
       .filter(Boolean) as CardRef[];
     for (let ref of refs) {
       if (!("type" in ref)) {

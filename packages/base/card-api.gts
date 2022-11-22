@@ -30,7 +30,6 @@ import {
   type LooseSingleCardDocument,
   type CardDocument,
   type CardResource,
-  type CardRef
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 
@@ -869,7 +868,7 @@ async function getDeserializedValue<CardT extends CardConstructor>({
   doc: LooseSingleCardDocument | CardDocument;
   identityContext: IdentityContext;
 }): Promise<any> {
-  let field = getField(card, fieldName/*, { ref: resource.meta.adoptsFrom }*/);
+  let field = getField(card, fieldName);
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
@@ -927,8 +926,11 @@ export async function createFromSerialized<T extends CardConstructor>(
 ): Promise<CardInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
   let { meta: { adoptsFrom } } = resource;
-  let card = await loadCard(adoptsFrom, { loader: opts?.loader, relativeTo });
-  return await _createFromSerialized(card, resource as any, doc, identityContext);
+  let card: typeof Card | undefined = await loadCard(adoptsFrom, { loader: opts?.loader, relativeTo });
+  if (!card) {
+    throw new Error(`could not find card for ref: ${JSON.stringify(adoptsFrom, null, 2)}`);
+  }
+  return await _createFromSerialized(card as T, resource as any, doc, identityContext);
 }
 
 export async function updateFromSerialized<T extends CardConstructor>(
@@ -996,7 +998,7 @@ async function _updateFromSerialized<T extends CardConstructor>(
       ...(resource.id !== undefined ? { id: resource.id } : {})
     } ?? {}).map(
       async ([fieldName, value]) => {
-        let field = getField(card, fieldName/*, { ref: resource.meta.adoptsFrom }*/);
+        let field = getField(card, fieldName);
         if (!field) {
           throw new Error(`could not find field '${fieldName}' in card '${card.name}'`);
         }
@@ -1064,7 +1066,11 @@ async function cardClassFromResource<CardT extends CardConstructor>(resource: Lo
   }
   if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
     let loader = Loader.getLoaderFor(fallback);
-    return await loadCard(resource.meta.adoptsFrom, { loader });
+    let card: typeof Card | undefined = await loadCard(resource.meta.adoptsFrom, { loader });
+    if (!card) {
+      throw new Error(`could not find card for ref: '${JSON.stringify(resource.meta.adoptsFrom, null, 2)}'`);
+    }
+    return card as CardT;
   }
   return fallback;
 }
@@ -1244,9 +1250,9 @@ async function loadMissingField(
   return instance;
 }
 
-export function getFields(card: typeof Card, opts?: { includeComputeds?: boolean, ref?: CardRef }): { [fieldName: string]: Field<CardConstructor> };
-export function getFields<T extends Card>(card: T, opts?: { includeComputeds?: boolean, ref?: CardRef }): { [P in keyof T]?: Field<CardConstructor> };
-export function getFields(cardInstanceOrClass: Card | typeof Card, opts?: { includeComputeds?: boolean, ref?: CardRef }): { [fieldName: string]: Field<CardConstructor> } {
+export function getFields(card: typeof Card, opts?: { includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> };
+export function getFields<T extends Card>(card: T, opts?: { includeComputeds?: boolean }): { [P in keyof T]?: Field<CardConstructor> };
+export function getFields(cardInstanceOrClass: Card | typeof Card, opts?: { includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> } {
   let obj: object | null;
   if (isCard(cardInstanceOrClass)) {
     // this is a card instance
@@ -1260,7 +1266,7 @@ export function getFields(cardInstanceOrClass: Card | typeof Card, opts?: { incl
     let descs = Object.getOwnPropertyDescriptors(obj);
     let currentFields = flatMap(Object.keys(descs), maybeFieldName => {
       if (maybeFieldName !== 'constructor') {
-        let maybeField = getField((isCard(cardInstanceOrClass) ? cardInstanceOrClass.constructor : cardInstanceOrClass) as typeof Card, maybeFieldName, { ref: opts?.ref });
+        let maybeField = getField((isCard(cardInstanceOrClass) ? cardInstanceOrClass.constructor : cardInstanceOrClass) as typeof Card, maybeFieldName);
         if (maybeField?.computeVia && !opts?.includeComputeds) {
           return [];
         }
