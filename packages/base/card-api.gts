@@ -21,6 +21,7 @@ import {
   maxLinkDepth,
   getField,
   isField,
+  primitive,
   identifyCard,
   loadCard,
   type Meta,
@@ -33,7 +34,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 
-export const primitive = Symbol('cardstack-primitive');
+export { primitive, isField };
 export const serialize = Symbol('cardstack-serialize');
 export const deserialize = Symbol('cardstack-deserialize');
 export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');

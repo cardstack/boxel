@@ -4,7 +4,7 @@ import {
   type Field,
 } from "https://cardstack.com/base/card-api";
 import { Loader } from "./loader";
-import { isField } from "./constants";
+import { isField, primitive } from "./constants";
 
 export type CardRef =
   | {
@@ -49,6 +49,10 @@ export function isCardRef(ref: any): ref is CardRef {
   return false;
 }
 
+export function isCard(card: any): card is typeof Card {
+  return typeof card === "function" && "baseCard" in card;
+}
+
 export async function loadCard(
   ref: CardRef,
   opts?: { loader?: Loader; relativeTo?: URL }
@@ -65,37 +69,37 @@ export async function loadCard(
     if (!child) {
       return undefined;
     }
-    maybeCard = Reflect.getPrototypeOf(child) as typeof Card;
-    let cardId = identifyCard(maybeCard as typeof Card);
-    if (cardId) {
-      if (!typesCache.has(maybeCard as typeof Card)) {
-        typesCache.set(maybeCard as typeof Card, cardId);
-      }
+    maybeCard = Reflect.getPrototypeOf(child);
+    if (!identifyCard(maybeCard) && isCard(maybeCard)) {
+      typesCache.set(maybeCard, ref);
     }
   } else if (ref.type === "fieldOf") {
     let parent = (await loadCard(ref.card, opts)) ?? {};
-    if (!parent) {
+    if (!parent || !isCard(parent)) {
       return undefined;
     }
-    let field = getField(parent as typeof Card, ref.field);
+    let field = getField(parent, ref.field);
     maybeCard = field?.card;
   } else {
     throw assertNever(ref);
   }
 
-  if (typeof maybeCard === "function" && "baseCard" in maybeCard) {
-    return maybeCard as typeof Card;
-  } else {
-    return undefined;
-  }
+  return isCard(maybeCard) ? maybeCard : undefined;
 }
 
-export function identifyCard(card: typeof Card): CardRef | undefined {
+export function identifyCard(card: unknown): CardRef | undefined {
+  if (!isCard(card)) {
+    return undefined;
+  }
   let cached = typesCache.get(card);
   if (cached) {
     return cached;
   }
-  return Loader.identify(card);
+  let ref = Loader.identify(card);
+  if (ref) {
+    typesCache.set(card, ref);
+  }
+  return ref;
 }
 
 export function getField<CardT extends CardConstructor>(
@@ -109,31 +113,15 @@ export function getField<CardT extends CardConstructor>(
       isField
     ];
     if (result !== undefined) {
-      const primitive = Symbol("cardstack-primitive");
-      if (primitive in card) {
-        debugger;
-      }
-      let ref = identifyCard(card);
-      if (ref) {
-        // is this the right place to set typesCache?
-        // skip id and primitive fields?
-        if (!typesCache.has(card)) {
-          typesCache.set(card, ref);
-        }
-        let innerRef = identifyCard(result.card);
-        if (innerRef) {
-          if (!typesCache.has(result.card)) {
-            typesCache.set(result.card, innerRef);
-          }
-        } else {
+      let ref = !(primitive in card) ? identifyCard(card) : undefined;
+      if (!(primitive in result.card)) {
+        if (ref && !identifyCard(result.card)) {
           typesCache.set(result.card, {
             type: "fieldOf",
             field: fieldName,
             card: ref,
           });
         }
-      } else {
-        console.log(`could not identify card ${card.name}`);
       }
       return result;
     }

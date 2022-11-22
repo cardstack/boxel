@@ -12,7 +12,7 @@ import {
   type NotLoaded,
   type CardRef,
 } from ".";
-import { loadCard, identifyCard } from "./card-ref";
+import { loadCard, identifyCard, isCard } from "./card-ref";
 import { Kind, Realm, getExportedCardContext } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
 import ignore, { Ignore } from "ignore";
@@ -345,10 +345,7 @@ export class CurrentRun {
     }
 
     let refs = Object.values(module)
-      .filter(
-        (maybeCard) =>
-          typeof maybeCard === "function" && "baseCard" in maybeCard
-      )
+      .filter((maybeCard) => isCard(maybeCard))
       .map((card: typeof Card) => identifyCard(card))
       .filter(Boolean) as CardRef[];
     for (let ref of refs) {

@@ -13,3 +13,4 @@ export const baseCardRef: CardRef = {
 };
 
 export const isField = Symbol("cardstack-field");
+export const primitive = Symbol("cardstack-primitive");

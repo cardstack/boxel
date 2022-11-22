@@ -17,12 +17,21 @@ class BasicCard extends Card {
   }
 }
 
+class VeryBasicCard extends BasicCard {
+  @field description = contains(StringCard);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      Description: <@fields.description/>
+    </template>
+  }
+}
+
 export class Post extends Card {
   @field author = contains(Person);
   @field title = contains(StringCard);
   @field body = contains(TextAreaCard);
-  @field titleRef = contains(BasicCard);
-  @field titleLink = linksTo(BasicCard);
+  @field titleRef = contains(VeryBasicCard);
+  @field titleLink = linksTo(VeryBasicCard);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div {{attachStyles styles}}>

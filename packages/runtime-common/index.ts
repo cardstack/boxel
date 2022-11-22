@@ -35,7 +35,13 @@ export interface DirectoryEntryRelationship {
 }
 import { RealmPaths } from "./paths";
 import { Query } from "./query";
-export { baseRealm, catalogEntryRef, baseCardRef, isField } from "./constants";
+export {
+  baseRealm,
+  catalogEntryRef,
+  baseCardRef,
+  isField,
+  primitive,
+} from "./constants";
 export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from "./not-loaded";
 
@@ -74,6 +80,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "createNewCard",
       "getField",
       "isField",
+      "primitive",
       "identifyCard",
       "loadCard",
     ],
@@ -104,7 +111,13 @@ import type { Saved } from "./search-index";
 
 import type { CardRef } from "./card-ref";
 export type { CardRef };
-export { getField, identifyCard, loadCard, isCardRef } from "./card-ref";
+export {
+  getField,
+  identifyCard,
+  loadCard,
+  isCardRef,
+  isCard,
+} from "./card-ref";
 
 export type {
   CardResource,

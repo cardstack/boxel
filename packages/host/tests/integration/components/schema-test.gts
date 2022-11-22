@@ -7,7 +7,7 @@ import Module from '@cardstack/host/components/module';
 import { file, FileResource } from '@cardstack/host/resources/file';
 import Service from '@ember/service';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm, CardRef } from '@cardstack/runtime-common';
+import { baseRealm, type CardRef } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { TestRealm, TestRealmAdapter, testRealmURL, setupCardLogs } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";

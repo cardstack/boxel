@@ -53,7 +53,7 @@ export class CatalogEntry extends Card {
   @field description = contains(StringCard);
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, { computeVia: async function(this: CatalogEntry) {
-    let card: typeof Card | undefined = await loadCard(this.ref, { loader: import.meta.loader });
+    let card: typeof Card | undefined = await loadCard(this.ref);
     if (!card) {
       throw new Error(`Could not load card ${JSON.stringify(this.ref, null, 2)}`);
     }

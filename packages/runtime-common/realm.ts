@@ -15,6 +15,7 @@ import {
   executableExtensions,
   isNode,
   isSingleCardDocument,
+  loadCard,
   type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -335,10 +336,19 @@ export class Realm {
     }
 
     // new instances are created in a folder named after the card
-    let dirName = `/${join(
-      new URL(this.url).pathname,
-      resource.meta.adoptsFrom.name
-    )}/`;
+    let name: string;
+    if (!("type" in resource.meta.adoptsFrom)) {
+      name = resource.meta.adoptsFrom.name;
+    } else {
+      let card = await loadCard(resource.meta.adoptsFrom);
+      if (!card) {
+        throw new Error(
+          `Card not found for ref ${JSON.stringify(resource.meta.adoptsFrom)}`
+        );
+      }
+      name = card.name;
+    }
+    let dirName = `/${join(new URL(this.url).pathname, name)}/`;
     let entries = await this.directoryEntries(new URL(dirName, this.url));
     let index = 0;
     if (entries) {

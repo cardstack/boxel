@@ -7,7 +7,13 @@ import { CardError, type SerializedError } from "./error";
 import flatMap from "lodash/flatMap";
 import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
-import { type CardRef, getField, identifyCard, loadCard } from "./card-ref";
+import {
+  type CardRef,
+  getField,
+  identifyCard,
+  loadCard,
+  isCardRef,
+} from "./card-ref";
 
 export type Saved = string;
 export type Unsaved = string | undefined;
@@ -100,12 +106,7 @@ export function isCardResource(resource: any): resource is CardResource {
     return false;
   }
   let { adoptsFrom } = meta;
-  return (
-    "module" in adoptsFrom &&
-    typeof adoptsFrom.module === "string" &&
-    "name" in adoptsFrom &&
-    typeof adoptsFrom.name === "string"
-  );
+  return isCardRef(adoptsFrom);
 }
 
 export function isCardFields(fields: any): fields is CardFields {
