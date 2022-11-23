@@ -1,5 +1,7 @@
 import { assert } from '@ember/debug';
 
+import { formatTreeString, TreeNode } from '../utils/format-tree';
+
 import {
   getDocumentPosition,
   copyComputedStyle,
@@ -466,6 +468,51 @@ export class AnimationParticipantManager {
       animators,
       sprites: Array.from(spriteForParticipant.values()),
     };
+  }
+
+  log() {
+    let participants: Record<string, AnimationParticipant> = {};
+    let keyFromParticipant: Map<
+      AnimationParticipant,
+      {
+        key: string;
+        detached: DOMRefNode | undefined;
+        current: DOMRefNode | undefined;
+      }
+    > = new Map();
+    let asTreeNode = (r: DOMRefNode): TreeNode => {
+      let things = keyFromParticipant.get(r.animationParticipant)!;
+      let state = things.current === r ? '➕' : '❌';
+      return {
+        text: things.key,
+        extra: state,
+        children: r.children.map((child) => asTreeNode(child)),
+      };
+    };
+
+    let ctxCount = 0;
+    for (let participant of this.participants) {
+      let key =
+        [
+          participant.context ? '🥡' : '',
+          participant.latestModifier ? '🥠' : '',
+        ].join('') +
+        ':' +
+        (participant.identifier.key ??
+          participant.context?.id ??
+          `ctx-${ctxCount++}`);
+      participants[key] = participant;
+      keyFromParticipant.set(participant, {
+        key,
+        detached: participant.uiState.detached?.DOMRef,
+        current: participant.uiState.current?.DOMRef,
+      });
+    }
+
+    let domRefNodeTree: TreeNode[] = this.DOMRefs.map((n) => asTreeNode(n));
+
+    console.log(formatTreeString(domRefNodeTree));
+    console.log(participants);
   }
 }
 
