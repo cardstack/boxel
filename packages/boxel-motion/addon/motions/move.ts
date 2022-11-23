@@ -67,6 +67,22 @@ export class Move extends Motion<MoveOptions> {
     if (sprite.type === SpriteType.Removed) {
       defaultEndX = boundsDelta ? boundsDelta?.x : undefined;
       defaultEndY = boundsDelta ? boundsDelta?.y : undefined;
+      if (!sprite._state.final) {
+        return {
+          x:
+            opts.endX !== undefined
+              ? opts.endX -
+                (sprite.initialBounds!.relativeToContext.x -
+                  sprite.lastAttachedBounds!.relativeToContext.x)
+              : 0,
+          y:
+            opts.endY !== undefined
+              ? opts.endY -
+                (sprite.initialBounds!.relativeToContext.y -
+                  sprite.lastAttachedBounds!.relativeToContext.y)
+              : 0,
+        };
+      }
     }
     return {
       x: opts.endX ?? defaultEndX ?? 0,

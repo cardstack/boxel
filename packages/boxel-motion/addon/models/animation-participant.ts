@@ -753,6 +753,7 @@ export class AnimationParticipant {
           metadata,
           {
             initial: this.uiState.detached.beforeRender,
+            lastAttached: this.uiState.detached.lastAttached,
           },
           SpriteType.Removed,
           this.detachedCallbacks()
@@ -911,6 +912,7 @@ export class AnimationParticipant {
     this.uiState.detached = {
       ...(current as BeforeRenderCurrentState),
       animation: undefined, // TODO: how to make sure this gets cleaned up?
+      lastAttached: current.beforeRender,
       _stage: 'BEFORE_RENDER',
       _type: 'detached',
       beforeRender: current.beforeRender,
@@ -1040,6 +1042,7 @@ export class AnimationParticipant {
 interface ClearedDetachedState {
   _type: 'detached';
   _stage: 'CLEARED';
+  lastAttached: Snapshot;
   beforeRender: undefined;
   afterRender: undefined;
   animation: Animation | undefined;
@@ -1048,6 +1051,7 @@ interface ClearedDetachedState {
 interface BeforeRenderDetachedState {
   _type: 'detached';
   _stage: 'BEFORE_RENDER';
+  lastAttached: Snapshot;
   beforeRender: Snapshot;
   afterRender: undefined;
   animation: Animation | undefined;

@@ -74,6 +74,7 @@ export default class Sprite {
     public _state: {
       initial?: Snapshot;
       final?: Snapshot;
+      lastAttached?: Snapshot;
     },
     type: SpriteType,
     public callbacks: {
@@ -139,6 +140,22 @@ export default class Sprite {
     }
   }
 
+  get lastAttachedBounds(): ContextAwareBounds | undefined {
+    if (this._state.lastAttached) {
+      if (!this._defaultParentState?.initial) {
+        throw new Error('Unexpected missing default parent initial bounds');
+      }
+
+      return new ContextAwareBounds({
+        element: this._state.lastAttached.bounds,
+        parent: this._defaultParentState.initial.bounds,
+        contextElement: this._contextElementState.initial.bounds,
+      });
+    } else {
+      return undefined;
+    }
+  }
+
   get finalComputedStyle(): CopiedCSS | undefined {
     return this._state.final?.styles;
   }
@@ -172,6 +189,7 @@ export default class Sprite {
     }
     let initialBounds = this.initialBounds.relativeToParent;
     let finalBounds = this.finalBounds.relativeToParent;
+
     return {
       x: finalBounds.left - initialBounds.left,
       y: finalBounds.top - initialBounds.top,

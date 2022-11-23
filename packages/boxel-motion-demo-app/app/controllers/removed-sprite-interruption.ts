@@ -26,7 +26,7 @@ export default class DoubleRenderController extends Controller {
 
   transition(changeset: Changeset): AnimationDefinition {
     let { removedSprites, keptSprites, insertedSprites } = changeset;
-    let duration = 3000;
+    let duration = 2000;
 
     let timing = {
       behavior: new LinearBehavior(),
@@ -43,7 +43,7 @@ export default class DoubleRenderController extends Controller {
               position: {
                 startY: 0,
                 startX: 0,
-                endY: -200,
+                endY: -100,
                 endX: 0,
               },
             },
