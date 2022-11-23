@@ -346,7 +346,7 @@ export class CurrentRun {
 
     let refs = Object.values(module)
       .filter((maybeCard) => isCard(maybeCard))
-      .map((card: typeof Card) => identifyCard(card))
+      .map((card) => identifyCard(card))
       .filter(Boolean) as CardRef[];
     for (let ref of refs) {
       if (!("type" in ref)) {
