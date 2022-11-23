@@ -21,7 +21,7 @@ export type CardRef =
       field: string;
     };
 
-let typesCache = new WeakMap<typeof Card, CardRef>();
+let identities = new WeakMap<typeof Card, CardRef>();
 
 export function isCardRef(ref: any): ref is CardRef {
   if (typeof ref !== "object") {
@@ -71,7 +71,7 @@ export async function loadCard(
     }
     maybeCard = Reflect.getPrototypeOf(child);
     if (!identifyCard(maybeCard) && isCard(maybeCard)) {
-      typesCache.set(maybeCard, ref);
+      identities.set(maybeCard, ref);
     }
   } else if (ref.type === "fieldOf") {
     let parent = (await loadCard(ref.card, opts)) ?? {};
@@ -91,13 +91,13 @@ export function identifyCard(card: unknown): CardRef | undefined {
   if (!isCard(card)) {
     return undefined;
   }
-  let cached = typesCache.get(card);
+  let cached = identities.get(card);
   if (cached) {
     return cached;
   }
   let ref = Loader.identify(card);
   if (ref) {
-    typesCache.set(card, ref);
+    identities.set(card, ref);
   }
   return ref;
 }
@@ -116,7 +116,7 @@ export function getField<CardT extends CardConstructor>(
       let ref = !(primitive in card) ? identifyCard(card) : undefined;
       if (!(primitive in result.card)) {
         if (ref && !identifyCard(result.card)) {
-          typesCache.set(result.card, {
+          identities.set(result.card, {
             type: "fieldOf",
             field: fieldName,
             card: ref,
