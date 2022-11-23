@@ -19,6 +19,7 @@
     "inlineSources": true,
     "baseUrl": ".",
     "module": "es2022",
+    "strict": true,
     "experimentalDecorators": true,
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"]

@@ -80,6 +80,7 @@ export default class AnimationsService extends Service {
     this.clearChanges();
 
     this.animationParticipantManager.snapshotAfterRender();
+    this.animationParticipantManager.log();
 
     let { sprites, animators } =
       this.animationParticipantManager.createAnimatorsAndSprites();

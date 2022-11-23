@@ -87,7 +87,7 @@ export default class Go extends Component<Signature> {
       let maybeCard: any;
       try {
         maybeCard = JSON.parse(this.args.openFile.content);
-      } catch(err) {
+      } catch(err: any) {
         this.jsonError = err.message;
         return undefined;
       }

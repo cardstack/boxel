@@ -5,6 +5,7 @@ import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import LoaderService from '../services/loader-service';
+import type { Constructable } from '../lib/types';
 
 interface Args {
   named: {
@@ -155,7 +156,7 @@ class _FileResource extends Resource<Args> {
 }
 
 export function file(parent: object, args: () => Args['named']): FileResource {
-  return useResource(parent, _FileResource, () => ({
+  return useResource(parent, _FileResource as Constructable<Resource>, () => ({
     named: args(),
-  })) as FileResource;
+  })) as unknown as FileResource;
 }

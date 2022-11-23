@@ -37,7 +37,10 @@ export default class Module extends Component<Signature> {
   }
 }
 
-function cardsFromModule(module: Record<string, any>): (typeof Card)[] {
+function cardsFromModule(
+  module: Record<string, any>,
+  _never?: never // glint insists that w/o this last param that there are actually no params
+): (typeof Card)[] {
   return Object.values(module).filter((maybeCard) =>
     typeof maybeCard === "function" && "baseCard" in maybeCard);
 }

@@ -12,6 +12,7 @@ import type LoaderService from '../services/loader-service';
 import type CardService from '../services/card-service';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { Card } from 'https://cardstack.com/base/card-api';
+import type { Constructable } from '../lib/types';
 
 interface Args {
   named: {
@@ -49,7 +50,7 @@ export class Search extends Resource<Args> {
 }
 
 export function getSearchResults(parent: object, query: () => Query) {
-  return useResource(parent, Search, () => ({
+  return useResource(parent, Search as Constructable<Resource>, () => ({
     named: {
       query: query(),
       loader: (
@@ -58,5 +59,5 @@ export function getSearchResults(parent: object, query: () => Query) {
         ) as LoaderService
       ).loader,
     },
-  }));
+  })) as Search;
 }

@@ -1,5 +1,7 @@
 import { assert } from '@ember/debug';
 
+import { formatTreeString, TreeNode } from '../utils/format-tree';
+
 import {
   getDocumentPosition,
   copyComputedStyle,
@@ -34,39 +36,129 @@ export class AnimationParticipantManager {
   // In which case we don't want to call it during updateParticipants but instead
   // have the animations service call this
   performCleanup() {
-    for (let animationParticipant of this.participants) {
-      // Naive cleanup for now.
-      // This should be changed to something that can prune DOMRefs AND graft live nodes
-      // It should collect all DOMRefs to dispose, then traverse the tree and remove them at one go, preserving
-      // nodes that are NOT disposed and all of their descendants
-      animationParticipant._DOMRefsToDispose.forEach((DOMRef) => {
-        DOMRef.delete();
-      });
-
-      if (animationParticipant.canBeCleanedUp) {
-        assert(
-          'Animation participant to clean up has current uiState',
-          !animationParticipant.uiState.current
-        );
-        this.participants.delete(animationParticipant);
-        animationParticipant.uiState.detached?.DOMRef?.delete();
-      } else {
-        if (
-          animationParticipant.uiState.detached &&
-          (!animationParticipant.uiState.detached.animation ||
-            animationParticipant.uiState.detached.animation.playState ===
-              'finished' ||
-            animationParticipant.uiState.detached.animation?.playState ===
-              'idle' ||
-            animationParticipant.uiState.detached.animation?.playState ===
-              'paused')
-        ) {
-          animationParticipant.uiState.detached?.DOMRef?.delete();
-          animationParticipant.uiState.detached = undefined;
-        }
-        // TODO: check that canceling the animations is happening at the right place
-        animationParticipant.cancelAnimations();
+    let unanimatedDetachedDOMRefs = new Set<DOMRefNode>();
+    let displacedDOMRefs = new Set<DOMRefNode>();
+    for (let participant of this.participants) {
+      participant._DOMRefsToDispose.forEach((node) =>
+        displacedDOMRefs.add(node)
+      );
+      participant._DOMRefsToDispose.clear();
+      if (
+        participant.uiState.detached &&
+        (!participant.uiState.detached.animation ||
+          participant.uiState.detached.animation.playState === 'finished' ||
+          participant.uiState.detached.animation?.playState === 'idle' ||
+          participant.uiState.detached.animation?.playState === 'paused')
+      ) {
+        // TODO: when cloning is implemented, add the DOMRef here
+        unanimatedDetachedDOMRefs.add(participant.uiState.detached.DOMRef);
       }
+    }
+
+    let deleted: DOMRefNode[] = [];
+    let nodesToGraft = new Map<DOMRefNode, DOMRefNode>();
+    function recurse<T>(
+      node: DOMRefNode,
+      callback: (node: DOMRefNode, scope: T) => { nextScope: T; stop: boolean },
+      scope: T
+    ) {
+      let { nextScope, stop } = callback(node, scope);
+      if (stop) return;
+      for (let child of node.children) {
+        recurse(child, callback, nextScope);
+      }
+    }
+    for (let node of displacedDOMRefs) {
+      recurse<undefined>(
+        node,
+        (node, _) => {
+          if (node.parent) node.delete();
+          else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
+          deleted.push(node);
+          return {
+            nextScope: undefined,
+            stop: false,
+          };
+        },
+        undefined
+      );
+    }
+    for (let DOMRef of this.DOMRefs) {
+      recurse<{
+        lastLiveAncestor: DOMRefNode | undefined;
+        isOnDetachedBranch: boolean;
+        stop: boolean;
+      }>(
+        DOMRef,
+        (node, scope) => {
+          if (unanimatedDetachedDOMRefs.has(node)) {
+            if (node.parent) node.delete();
+            else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
+            deleted.push(node);
+            return {
+              nextScope: {
+                ...scope,
+                isOnDetachedBranch: true,
+              },
+              stop: false,
+            };
+          } else if (scope.isOnDetachedBranch) {
+            if (scope.lastLiveAncestor) {
+              nodesToGraft.set(node, scope.lastLiveAncestor);
+              return {
+                nextScope: {
+                  ...scope,
+                },
+                stop: true, // no need to iterate into the children of this node, because it is currently being used (it has animations on it)
+              };
+            } else {
+              if (node.parent) node.delete();
+              else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
+              deleted.push(node);
+              return {
+                nextScope: {
+                  ...scope,
+                },
+                stop: false,
+              };
+            }
+          } else {
+            // We're still on a live branch, so return this node as the lastLiveAncestor
+            // It will become the graft target later
+            return {
+              nextScope: {
+                ...scope,
+                lastLiveAncestor: node,
+              },
+              stop: false,
+            };
+          }
+        },
+        {
+          isOnDetachedBranch: false,
+          lastLiveAncestor: undefined,
+          stop: false,
+        }
+      );
+    }
+
+    for (let [nodeToGraft, graftTo] of nodesToGraft) {
+      nodeToGraft.parent = graftTo;
+      graftTo.children.push(nodeToGraft);
+    }
+
+    for (let node of deleted) {
+      // TODO: once we have cloning, we'll have to check the clones too
+      if (node.animationParticipant.uiState.detached?.DOMRef === node) {
+        node.animationParticipant.uiState.detached = undefined;
+      }
+    }
+
+    for (let animationParticipant of this.participants) {
+      if (animationParticipant.canBeCleanedUp) {
+        this.participants.delete(animationParticipant);
+      }
+      animationParticipant.cancelAnimations();
     }
   }
 
@@ -377,6 +469,51 @@ export class AnimationParticipantManager {
       sprites: Array.from(spriteForParticipant.values()),
     };
   }
+
+  log() {
+    let participants: Record<string, AnimationParticipant> = {};
+    let keyFromParticipant: Map<
+      AnimationParticipant,
+      {
+        key: string;
+        detached: DOMRefNode | undefined;
+        current: DOMRefNode | undefined;
+      }
+    > = new Map();
+    let asTreeNode = (r: DOMRefNode): TreeNode => {
+      let things = keyFromParticipant.get(r.animationParticipant)!;
+      let state = things.current === r ? '➕' : '❌';
+      return {
+        text: things.key,
+        extra: state,
+        children: r.children.map((child) => asTreeNode(child)),
+      };
+    };
+
+    let ctxCount = 0;
+    for (let participant of this.participants) {
+      let key =
+        [
+          participant.context ? '🥡' : '',
+          participant.latestModifier ? '🥠' : '',
+        ].join('') +
+        ':' +
+        (participant.identifier.key ??
+          participant.context?.id ??
+          `ctx-${ctxCount++}`);
+      participants[key] = participant;
+      keyFromParticipant.set(participant, {
+        key,
+        detached: participant.uiState.detached?.DOMRef,
+        current: participant.uiState.current?.DOMRef,
+      });
+    }
+
+    let domRefNodeTree: TreeNode[] = this.DOMRefs.map((n) => asTreeNode(n));
+
+    console.log(formatTreeString(domRefNodeTree));
+    console.log(participants);
+  }
 }
 
 class AnimationParticipantIdentifier {
@@ -502,6 +639,7 @@ export class AnimationParticipant {
   // things, so it might be okay to clean up
   get canBeCleanedUp(): boolean {
     return (
+      (!this.uiState.current && !this.uiState.detached) ||
       (this.spriteIsRemoved() &&
         (!this.uiState.detached.animation ||
           this.uiState.detached.animation?.playState === 'finished' ||
