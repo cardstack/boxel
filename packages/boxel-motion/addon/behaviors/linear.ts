@@ -10,7 +10,11 @@ import Behavior, {
 // We may need a layer below behaviors (i.e. an interpolator) for specific value types
 // The below could be a numeric interpolator. We'd also need a color one etc.
 export default class LinearBehavior implements Behavior {
-  toFrames(options: EasingToFramesArgument): Frame[] {
+  toFrames(
+    options: EasingToFramesArgument,
+    interpolator?: (from: any, to: any, t: number) => any,
+    serializer?: (value: any) => any
+  ): Frame[] {
     let {
       from,
       to,
@@ -21,6 +25,11 @@ export default class LinearBehavior implements Behavior {
       previousFramesFromTime,
       */
     } = options;
+
+    if (interpolator) {
+      from = 0;
+      to = 1;
+    }
 
     if (from === to) {
       return [];
@@ -42,7 +51,18 @@ export default class LinearBehavior implements Behavior {
 
     for (let i = 0; i <= frameCount; i++) {
       let t = i / frameCount;
-      let value = (1 - t) * from + t * to;
+
+      let value;
+      if (interpolator) {
+        value = interpolator(options.from, options.to, t);
+      } else {
+        value = (1 - t) * from + t * to;
+      }
+
+      if (serializer) {
+        value = serializer(value);
+      }
+
       frames.push({
         value,
         velocity,
