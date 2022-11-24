@@ -30,12 +30,17 @@ function constructKeyframe(
     }
   });
 
-  keyframe['transform'] = Object.entries(transformValues)
-    .reduce((result, [key, values]) => {
+  let transformStrings = Object.entries(transformValues).reduce(
+    (result, [key, values]) => {
       result.push(...values.map((value) => `${key}(${value})`));
       return result;
-    }, [] as string[])
-    .join(' ');
+    },
+    [] as string[]
+  );
+
+  if (transformStrings.length) {
+    keyframe['transform'] = transformStrings.join(' ');
+  }
 
   return {
     ...previousKeyframe,
