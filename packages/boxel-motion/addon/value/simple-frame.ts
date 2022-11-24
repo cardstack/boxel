@@ -17,6 +17,8 @@ export default class SimpleFrame implements Frame {
   property: string;
   value: Value;
   unit: string | undefined;
+  velocity = 0;
+
   serialize: UnitValueSerializer = (value, unit) =>
     unit ? `${value}${unit}` : value;
 

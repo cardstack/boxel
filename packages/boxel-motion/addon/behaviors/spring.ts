@@ -56,24 +56,34 @@ export default class SpringBehavior implements Behavior {
     assert('Damping value must be greater than 0', this.options.damping > 0);
   }
 
-  toFrames(options: SpringToFramesArgument): Frame[] {
+  *getFrames(options: SpringToFramesArgument) {
     let { from, to, velocity = 0, delay = 0 } = options;
 
-    let delayFrameCount = timeToFrame(delay);
-    let frames = Array.from(new Array(delayFrameCount)).map(() => ({
-      value: from,
-      velocity: 0,
-    }));
-    frames = [
-      ...frames,
-      ...this.springToFrames({
-        fromValue: from,
-        toValue: to,
-        initialVelocity: velocity,
-      }),
-    ];
+    if (from === to) {
+      return [];
+    }
 
-    return frames;
+    let delayFrameCount = timeToFrame(delay);
+
+    for (let i = 0; i < delayFrameCount; i++) {
+      yield {
+        value: from,
+        velocity: 0,
+      };
+    }
+
+    let generator = this.springToFrames({
+      fromValue: from,
+      toValue: to,
+      initialVelocity: velocity,
+    });
+
+    let next = generator.next();
+    while (!next.done) {
+      yield next.value;
+
+      next = generator.next();
+    }
   }
 
   private isSpringOvershooting({
@@ -247,7 +257,7 @@ export default class SpringBehavior implements Behavior {
     }
   }
 
-  private springToFrames(values: SpringValues): Frame[] {
+  private *springToFrames(values: SpringValues) {
     let { fromValue = 0, toValue = 1, initialVelocity = 0 } = values;
 
     if (fromValue === toValue && initialVelocity === 0) {
@@ -270,20 +280,21 @@ export default class SpringBehavior implements Behavior {
     let value = fromValue;
     let velocity = initialVelocity;
     let deltaTimeMs = 1 / FPS;
-    let frames = [];
+    let i = 0;
     while (
       !this.isSpringAtRest({
         value,
         toValue,
         velocity,
-      })
+      }) &&
+      i < 10000
     ) {
+      i++;
       let frame = springFunction(time);
       time += deltaTimeMs;
       value = frame.value;
       velocity = frame.velocity;
-      frames.push(frame);
+      yield frame;
     }
-    return frames;
   }
 }

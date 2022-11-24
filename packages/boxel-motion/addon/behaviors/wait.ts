@@ -1,8 +1,11 @@
-import Behavior, { WaitToFramesArgument, Frame, timeToFrame } from './base';
+import Behavior, { WaitToFramesArgument, timeToFrame } from './base';
 
 export default class WaitBehavior implements Behavior {
-  toFrames(options: WaitToFramesArgument): Frame[] {
+  *getFrames(options: WaitToFramesArgument) {
     let frameCount = timeToFrame(options.duration) + 1;
-    return new Array(frameCount);
+
+    for (let i = 0; i < frameCount; i++) {
+      yield;
+    }
   }
 }
