@@ -10,19 +10,22 @@ export default function instantaneousVelocity(
   index: number,
   frames: Frame[]
 ): number {
-  let frame = frames[index]?.value;
-  let previousFrame = index > 0 ? frames[index - 1]?.value : undefined;
-  let nextFrame =
-    index < frames.length - 1 ? frames[index + 1]?.value : undefined;
+  let previous = index > 0 ? frames[index - 1]?.value : undefined;
+  let current = frames[index]?.value;
+  let next = index < frames.length - 1 ? frames[index + 1]?.value : undefined;
 
-  if (
-    frame !== undefined &&
-    previousFrame !== undefined &&
-    nextFrame !== undefined
-  ) {
+  return instantaneousVelocityForValues(previous, current, next);
+}
+
+export function instantaneousVelocityForValues(
+  previous: number | undefined,
+  current: number | undefined,
+  next: number | undefined
+) {
+  if (previous !== undefined && current !== undefined && next !== undefined) {
     let frameDuration = 1 / FPS;
-    let leftVelocity = (frame - previousFrame) / frameDuration / 1000;
-    let rightVelocity = (nextFrame - frame) / frameDuration / 1000;
+    let leftVelocity = (current - previous) / frameDuration / 1000;
+    let rightVelocity = (next - current) / frameDuration / 1000;
 
     return (leftVelocity + rightVelocity) / 2;
   } else {
