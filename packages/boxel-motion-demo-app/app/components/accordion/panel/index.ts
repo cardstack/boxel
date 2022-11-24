@@ -1,5 +1,5 @@
-import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import Sprite, { SpriteType } from '@cardstack/boxel-motion/models/sprite';
@@ -19,7 +19,7 @@ interface Signature {
 }
 export default class AccordionPanel extends Component<Signature> {
   @action resizePanels(changeset: Changeset) {
-    let behavior = new LinearBehavior(); //new SpringBehavior({ overshootClamping: true });
+    let behavior = new TweenBehavior(); //new SpringBehavior({ overshootClamping: true });
     let duration = behavior instanceof SpringBehavior ? undefined : 3200;
     let containers = changeset.spritesFor({
       type: SpriteType.Kept,

@@ -1,4 +1,4 @@
-import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import Controller from '@ember/controller';
@@ -29,7 +29,7 @@ export default class DoubleRenderController extends Controller {
     let duration = 3000;
 
     let timing = {
-      behavior: new LinearBehavior(),
+      behavior: new TweenBehavior(),
       duration,
     };
 
