@@ -15,13 +15,15 @@ class InterruptionController extends Controller {
 
     return {
       timeline: {
-        type: 'sequence',
+        type: 'parallel',
         animations: [
           {
             sprites: keptSprites,
             properties: {
-              position: {},
-              size: {},
+              translateX: {},
+              translateY: {},
+              width: {},
+              height: {},
             },
             timing: {
               behavior: new SpringBehavior(),

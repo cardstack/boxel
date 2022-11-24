@@ -1,5 +1,5 @@
 import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 module('Unit | Behaviors | Linear', function () {
   test('generates minimum of 2 frames', function (assert) {
@@ -127,7 +127,7 @@ module('Unit | Behaviors | Linear', function () {
     ]);
   });
 
-  test('takes previous frames into account', function (assert) {
+  skip('takes previous frames into account', function (assert) {
     let behavior = new LinearBehavior();
 
     let previousFramesFromTime = [
@@ -176,7 +176,7 @@ module('Unit | Behaviors | Linear', function () {
     ]);
   });
 
-  test('takes previous frames and delay into account', function (assert) {
+  skip('takes previous frames and delay into account', function (assert) {
     let behavior = new LinearBehavior();
 
     let previousFramesFromTime = [
@@ -238,7 +238,7 @@ module('Unit | Behaviors | Linear', function () {
     ]);
   });
 
-  test('takes last frame and previous frames into account', function (assert) {
+  skip('takes last frame and previous frames into account', function (assert) {
     let behavior = new LinearBehavior();
 
     let lastFrame = {

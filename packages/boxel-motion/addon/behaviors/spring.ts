@@ -66,7 +66,7 @@ export default class SpringBehavior implements Behavior {
     }));
     frames = [
       ...frames,
-      ...this.springToKeyframes({
+      ...this.springToFrames({
         fromValue: from,
         toValue: to,
         initialVelocity: velocity,
@@ -247,7 +247,7 @@ export default class SpringBehavior implements Behavior {
     }
   }
 
-  private springToKeyframes(values: SpringValues): Frame[] {
+  private springToFrames(values: SpringValues): Frame[] {
     let { fromValue = 0, toValue = 1, initialVelocity = 0 } = values;
 
     if (fromValue === toValue && initialVelocity === 0) {
