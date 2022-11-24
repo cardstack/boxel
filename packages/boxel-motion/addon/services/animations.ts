@@ -88,11 +88,23 @@ export default class AnimationsService extends Service {
     let promises = [];
     for (let animator of animators) {
       animator.handleSprites(sprites);
+      // Clean up all orphans since
+      // we will re-append them if necessary
+      // This does not optimize for long-running, uninterrupted animations
+      // Which may cause clones/orphans to stick around and interfere with
+      // interactive parts of an app. If we find that we have many such animations
+      // Then we should be moving towards more granular cleanup
+      let context = animator.context;
+      context.clearOrphans();
       let changeset = animator.toChangeset();
       if (changeset.hasSprites) {
         let transitionRunner = new TransitionRunner(changeset.context);
         let task = taskFor(transitionRunner.maybeTransitionTask);
-        promises.push(task.perform(changeset));
+        promises.push(
+          task.perform(changeset).then(() => {
+            context.clearOrphans();
+          })
+        );
       }
     }
 
