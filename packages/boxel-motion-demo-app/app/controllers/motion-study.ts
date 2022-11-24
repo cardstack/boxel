@@ -1,6 +1,7 @@
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import StaticBehavior from '@cardstack/boxel-motion/behaviors/static';
 import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
+import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import { SpriteType } from '@cardstack/boxel-motion/models/sprite';
@@ -79,6 +80,14 @@ export default class MotionStudy extends Controller {
                     damping: 15,
                   }),
                   delay: removedCardContentSprites.size ? fadeDuration : 0,
+                },
+              },
+              {
+                sprites: removedCardSprites,
+                properties: {},
+                timing: {
+                  behavior: new WaitBehavior(),
+                  duration: fadeDuration, // FIXME see above
                 },
               },
             ],
