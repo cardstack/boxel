@@ -18,7 +18,8 @@ export default class NestedSprites extends Controller {
           {
             sprites: keptSprites,
             properties: {
-              position: {},
+              x: {},
+              y: {},
             },
             timing: {
               behavior: new LinearBehavior(),
