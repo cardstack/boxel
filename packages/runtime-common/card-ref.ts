@@ -14,11 +14,13 @@ export type CardRef =
   | {
       type: "ancestorOf";
       card: CardRef;
+      name: string;
     }
   | {
       type: "fieldOf";
       card: CardRef;
       field: string;
+      name: string;
     };
 
 let identities = new WeakMap<typeof Card, CardRef>();
@@ -115,11 +117,12 @@ export function getField<CardT extends CardConstructor>(
     if (result !== undefined) {
       let ref = !(primitive in card) ? identifyCard(card) : undefined;
       if (!(primitive in result.card)) {
-        if (ref && !identifyCard(result.card)) {
+        if (ref && !identifyCard(result.card) && isCard(result.card)) {
           identities.set(result.card, {
             type: "fieldOf",
             field: fieldName,
             card: ref,
+            name: result.card.name,
           });
         }
       }

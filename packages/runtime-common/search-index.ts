@@ -140,12 +140,7 @@ export function isMeta(meta: any, allowPartial = false) {
   }
   if ("adoptsFrom" in meta) {
     let { adoptsFrom } = meta;
-    if (
-      !("module" in adoptsFrom) ||
-      typeof adoptsFrom.module !== "string" ||
-      !("name" in adoptsFrom) ||
-      typeof adoptsFrom.name !== "string"
-    ) {
+    if (!isCardRef(adoptsFrom)) {
       return false;
     }
   } else {

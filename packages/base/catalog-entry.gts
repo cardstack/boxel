@@ -55,7 +55,7 @@ export class CatalogEntry extends Card {
   @field isPrimitive = contains(BooleanCard, { computeVia: async function(this: CatalogEntry) {
     let card: typeof Card | undefined = await loadCard(this.ref);
     if (!card) {
-      throw new Error(`Could not load card ${JSON.stringify(this.ref, null, 2)}`);
+      throw new Error(`Could not load card '${this.ref.name}'`);
     }
     // the base card is a special case where it is technically not a primitive, but because it has no fields
     // it is not useful to treat as a composite card (for the purposes of creating new card instances).

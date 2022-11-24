@@ -21,6 +21,7 @@ class VeryBasicCard extends BasicCard {
   @field description = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
+      Title: <@fields.title/>
       Description: <@fields.description/>
     </template>
   }

@@ -72,7 +72,7 @@ export class CardType extends Resource<Args> {
     let superType: Type | undefined;
     if (superCard && card !== superCard) {
       superType = await this.toType(superCard, {
-        from: { type: 'ancestorOf', card: ref },
+        from: { type: 'ancestorOf', card: ref, name: superCard.name },
         module,
       });
     }
@@ -81,7 +81,12 @@ export class CardType extends Resource<Args> {
         name,
         type: field.fieldType,
         card: await this.toType(field.card, {
-          from: { type: 'fieldOf', field: name, card: ref! },
+          from: {
+            type: 'fieldOf',
+            field: name,
+            card: ref!,
+            name: field.card.name,
+          },
           module,
         }),
       }))

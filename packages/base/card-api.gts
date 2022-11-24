@@ -929,7 +929,7 @@ export async function createFromSerialized<T extends CardConstructor>(
   let { meta: { adoptsFrom } } = resource;
   let card: typeof Card | undefined = await loadCard(adoptsFrom, { loader: opts?.loader, relativeTo });
   if (!card) {
-    throw new Error(`could not find card for ref: ${JSON.stringify(adoptsFrom, null, 2)}`);
+    throw new Error(`could not find card: '${adoptsFrom.name}'`);
   }
   return await _createFromSerialized(card as T, resource as any, doc, identityContext);
 }
@@ -1069,7 +1069,7 @@ async function cardClassFromResource<CardT extends CardConstructor>(resource: Lo
     let loader = Loader.getLoaderFor(fallback);
     let card: typeof Card | undefined = await loadCard(resource.meta.adoptsFrom, { loader });
     if (!card) {
-      throw new Error(`could not find card for ref: '${JSON.stringify(resource.meta.adoptsFrom, null, 2)}'`);
+      throw new Error(`could not find card: '${resource.meta.adoptsFrom.name}'`);
     }
     return card as CardT;
   }

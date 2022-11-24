@@ -409,9 +409,7 @@ export class CurrentRun {
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
     let moduleURL = new URL(
-      "module" in resource.meta.adoptsFrom
-        ? resource.meta.adoptsFrom.module
-        : "",
+      getExportedCardContext(resource.meta.adoptsFrom).module,
       new URL(path, this.realm.url)
     );
     let cardRef =
@@ -591,7 +589,11 @@ export class CurrentRun {
       }
       types.push(internalKeyFor(loadedCardRef, undefined));
       if (!isEqual(loadedCardRef, baseCardRef)) {
-        fullRef = { type: "ancestorOf", card: loadedCardRef };
+        fullRef = {
+          type: "ancestorOf",
+          card: loadedCardRef,
+          name: (Reflect.getPrototypeOf(loadedCard) as typeof Card).name,
+        };
       } else {
         break;
       }
