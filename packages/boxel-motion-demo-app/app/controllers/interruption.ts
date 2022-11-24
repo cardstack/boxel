@@ -1,3 +1,4 @@
+import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
@@ -27,6 +28,17 @@ class InterruptionController extends Controller {
             },
             timing: {
               behavior: new SpringBehavior(),
+            },
+          },
+          {
+            sprites: keptSprites,
+            properties: {
+              border: {},
+              backgroundColor: {},
+            },
+            timing: {
+              behavior: new LinearBehavior(),
+              duration: 300,
             },
           },
         ],
