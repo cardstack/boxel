@@ -56,10 +56,11 @@ export default class MotionStudy extends Controller {
               {
                 sprites: cardSprites,
                 properties: {
-                  zIndex: { to: 100 },
+                  zIndex: 100,
                 },
                 timing: {
                   behavior: new LinearBehavior(),
+                  duration: fadeDuration, // FIXME this should be equivalent to the spring length, not currently possible
                 },
               },
               {
