@@ -41,15 +41,13 @@ export default interface Behavior {
    *
    * @param options
    */
-  toFrames(
+  getFrames(
     options:
       | EasingToFramesArgument
       | SpringToFramesArgument
       | StaticToFramesArgument
-      | WaitToFramesArgument,
-    interpolator?: (from: any, to: any, t: number) => any,
-    serializer?: (value: any) => any
-  ): Frame[];
+      | WaitToFramesArgument
+  ): Generator<Frame | void>;
 }
 
 export interface EasingBehavior extends Behavior {
