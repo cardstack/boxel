@@ -1,5 +1,6 @@
-import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import StaticBehavior from '@cardstack/boxel-motion/behaviors/static';
+import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import { SpriteType } from '@cardstack/boxel-motion/models/sprite';
@@ -44,7 +45,7 @@ export default class MotionStudy extends Controller {
                     opacity: { to: 0 },
                   },
                   timing: {
-                    behavior: new LinearBehavior(),
+                    behavior: new TweenBehavior(),
                     duration: fadeDuration,
                   },
                 },
@@ -59,7 +60,7 @@ export default class MotionStudy extends Controller {
                   zIndex: 100,
                 },
                 timing: {
-                  behavior: new LinearBehavior(),
+                  behavior: new StaticBehavior(),
                   duration: fadeDuration, // FIXME this should be equivalent to the spring length, not currently possible
                 },
               },
@@ -88,7 +89,7 @@ export default class MotionStudy extends Controller {
               opacity: { from: 0 },
             },
             timing: {
-              behavior: new LinearBehavior(),
+              behavior: new TweenBehavior(),
               duration: fadeDuration,
             },
           },
