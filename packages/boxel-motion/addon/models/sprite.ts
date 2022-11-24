@@ -46,7 +46,7 @@ interface NonInterpolatableMotionOptions {
 }
 
 export interface MotionTiming {
-  behavior?: Behavior;
+  behavior: Behavior;
   delay?: number;
   duration?: number;
   easing?: string;

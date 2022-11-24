@@ -19,10 +19,17 @@ export default function interpolateColor(
     }, {});
   };
 
+  // TODO: revisit the toFrames interface to take either a numeric from/to OR an interpolator
+  //  function which already has knowledge about the whatever from/to is
+
   return (timing.behavior ?? new LinearBehavior())
     .toFrames(
       {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         from,
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         to,
         ...timing,
       },

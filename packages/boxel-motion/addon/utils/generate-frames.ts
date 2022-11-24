@@ -36,9 +36,12 @@ export default function generateFrames(
   sprite: Sprite,
   property: MotionProperty,
   options: MotionOptions | Value,
-  timing: MotionTiming
+  timingArg: Partial<MotionTiming>
 ): SimpleFrame[] {
   let normalizedProperty = normalizeProperty(property);
+
+  // TODO: this is temporary, since we likely won't require to pass a behavior to generateFrames since we'll assign defaults
+  let timing = timingArg as MotionTiming;
 
   if (typeof options !== 'object' || timing.behavior instanceof WaitBehavior) {
     if (!timing.duration) {
@@ -59,7 +62,7 @@ export default function generateFrames(
         duration: timing.duration,
         value: options as Value,
       })
-      .map((f) => new SimpleFrame(normalizedProperty, f));
+      .map((f) => new SimpleFrame(normalizedProperty, f.value));
   } else {
     let { from, to } = options;
 

@@ -46,7 +46,9 @@ export default interface Behavior {
       | EasingToFramesArgument
       | SpringToFramesArgument
       | StaticToFramesArgument
-      | WaitToFramesArgument
+      | WaitToFramesArgument,
+    interpolator?: (from: any, to: any, t: number) => any,
+    serializer?: (value: any) => any
   ): Frame[];
 }
 
