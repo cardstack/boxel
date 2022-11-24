@@ -46,7 +46,7 @@ interface NonInterpolatableMotionOptions {
 }
 
 export interface MotionTiming {
-  behavior?: Behavior;
+  behavior: Behavior;
   delay?: number;
   duration?: number;
   easing?: string;
@@ -196,8 +196,8 @@ export default class Sprite {
       initialBounds = {
         // TODO: maybe also for top/left?
         // TODO: figure out if we want the boundsDelta to be under these properties
-        translateX: `${-(this.boundsDelta?.x ?? 0)}px`,
-        translateY: `${-(this.boundsDelta?.y ?? 0)}px`,
+        'translate-x': `${-(this.boundsDelta?.x ?? 0)}px`,
+        'translate-y': `${-(this.boundsDelta?.y ?? 0)}px`,
 
         x: `${x}px`,
         y: `${y}px`,
@@ -225,8 +225,8 @@ export default class Sprite {
       finalBounds = {
         // TODO: maybe also for top/left?
         // TODO: figure out if we want the boundsDelta to be under these properties
-        translateX: `${0}px`,
-        translateY: `${0}px`,
+        'translate-x': `${0}px`,
+        'translate-y': `${0}px`,
 
         x: `${x}px`,
         y: `${y}px`,

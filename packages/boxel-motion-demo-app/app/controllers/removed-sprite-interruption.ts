@@ -40,11 +40,13 @@ export default class DoubleRenderController extends Controller {
           {
             sprites: removedSprites,
             properties: {
-              position: {
-                startY: 0,
-                startX: 0,
-                endY: -200,
-                endX: 0,
+              x: {
+                from: '0px',
+                to: '0px',
+              },
+              y: {
+                from: '0px',
+                to: '-200px',
               },
             },
             timing,
@@ -52,8 +54,8 @@ export default class DoubleRenderController extends Controller {
           {
             sprites: insertedSprites,
             properties: {
-              position: {
-                startY: -200,
+              y: {
+                from: '-200px',
               },
             },
             timing,
@@ -61,7 +63,8 @@ export default class DoubleRenderController extends Controller {
           {
             sprites: keptSprites,
             properties: {
-              position: {},
+              x: {},
+              y: {},
             },
             timing,
           },

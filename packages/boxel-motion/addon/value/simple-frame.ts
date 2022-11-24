@@ -8,20 +8,35 @@ export interface Frame {
   serializeValue(): string | number;
 }
 
+export type UnitValueSerializer = (
+  value: Value,
+  unit: string | undefined
+) => Value;
+
 export default class SimpleFrame implements Frame {
   property: string;
   value: Value;
   unit: string | undefined;
+  serialize: UnitValueSerializer = (value, unit) =>
+    unit ? `${value}${unit}` : value;
 
   // value should exclude the unit if there is one
   // legal values are for example: 0.5, '100', 'block'
-  constructor(property: string, value: Value, unit?: string) {
+  constructor(
+    property: string,
+    value: Value,
+    unit?: string,
+    serialize?: UnitValueSerializer
+  ) {
     this.property = property;
     this.value = value;
     this.unit = unit;
+    if (serialize) {
+      this.serialize = serialize;
+    }
   }
 
   serializeValue(): Value {
-    return this.unit ? `${this.value}${this.unit}` : this.value;
+    return this.serialize(this.value, this.unit);
   }
 }

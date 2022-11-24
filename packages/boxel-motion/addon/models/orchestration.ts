@@ -4,12 +4,9 @@ import Sprite, {
   MotionOptions,
   MotionProperty,
 } from '@cardstack/boxel-motion/models/sprite';
-import generateFrames, {
-  consolidateFrames,
-  generateKeyframe,
-} from '@cardstack/boxel-motion/utils/generate-frames';
+import generateFrames from '@cardstack/boxel-motion/utils/generate-frames';
 
-import { Value } from '@cardstack/boxel-motion/value';
+import { Value, Keyframe } from '@cardstack/boxel-motion/value';
 import { Frame } from '@cardstack/boxel-motion/value/simple-frame';
 
 interface RowFragment {
@@ -30,7 +27,7 @@ export class OrchestrationMatrix {
   getKeyframes(
     constructKeyframe: (
       previousKeyframe: Partial<Keyframe>,
-      frames: Keyframe[] // frame order may be relevant
+      frames: Frame[] // frame order may be relevant
     ) => Keyframe
   ) {
     let result: Map<Sprite, Keyframe[]> = new Map();
@@ -48,7 +45,7 @@ export class OrchestrationMatrix {
         }
       }
 
-      let baseKeyframe = generateKeyframe(consolidateFrames(baseFrames));
+      let baseKeyframe = constructKeyframe({}, baseFrames);
       let activeFragments: RowFragment[] = [];
       let keyframesForSprite: Keyframe[] = [];
       let previousKeyframe: Keyframe = baseKeyframe;
@@ -66,9 +63,7 @@ export class OrchestrationMatrix {
           if (frame) frames.push(frame);
           else needsRemoval = true;
         }
-        let newKeyframe = constructKeyframe(previousKeyframe, [
-          generateKeyframe(consolidateFrames(frames)),
-        ]);
+        let newKeyframe = constructKeyframe(previousKeyframe, frames);
         keyframesForSprite.push(newKeyframe);
         previousKeyframe = newKeyframe;
 

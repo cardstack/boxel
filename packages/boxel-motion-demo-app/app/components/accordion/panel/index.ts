@@ -1,5 +1,6 @@
 import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import Sprite, { SpriteType } from '@cardstack/boxel-motion/models/sprite';
 import { action } from '@ember/object';
@@ -42,10 +43,9 @@ export default class AccordionPanel extends Component<Signature> {
             ? [
                 {
                   sprites: new Set([hiddenPanel]),
-                  properties: {
-                    wait: {},
-                  },
+                  properties: {},
                   timing: {
+                    behavior: new WaitBehavior(),
                     duration,
                   },
                 },

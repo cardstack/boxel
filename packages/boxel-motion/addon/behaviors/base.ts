@@ -1,3 +1,5 @@
+import { Value } from '../value';
+
 export const FPS = 60 / 1000; // 60 FPS
 export function timeToFrame(time: number): number {
   return Math.round(time * FPS);
@@ -19,6 +21,15 @@ export type SpringToFramesArgument = {
   delay?: number;
 };
 
+export type StaticToFramesArgument = {
+  value: Value;
+  duration: number;
+};
+
+export type WaitToFramesArgument = {
+  duration: number;
+};
+
 export type Frame = {
   value: number;
   velocity: number; // units per second
@@ -30,7 +41,15 @@ export default interface Behavior {
    *
    * @param options
    */
-  toFrames(options: EasingToFramesArgument | SpringToFramesArgument): Frame[];
+  toFrames(
+    options:
+      | EasingToFramesArgument
+      | SpringToFramesArgument
+      | StaticToFramesArgument
+      | WaitToFramesArgument,
+    interpolator?: (from: any, to: any, t: number) => any,
+    serializer?: (value: any) => any
+  ): Frame[];
 }
 
 export interface EasingBehavior extends Behavior {

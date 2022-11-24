@@ -1,5 +1,7 @@
 import { assert } from '@ember/debug';
 
+import { formatTreeString, TreeNode } from '../utils/format-tree';
+
 import {
   getDocumentPosition,
   copyComputedStyle,
@@ -34,12 +36,13 @@ export class AnimationParticipantManager {
   // In which case we don't want to call it during updateParticipants but instead
   // have the animations service call this
   performCleanup() {
+    let animatedDetachedDOMRefs = new Set<DOMRefNode>();
     let unanimatedDetachedDOMRefs = new Set<DOMRefNode>();
     let displacedDOMRefs = new Set<DOMRefNode>();
     for (let participant of this.participants) {
-      participant._DOMRefsToDispose.forEach((node) =>
-        displacedDOMRefs.add(node)
-      );
+      participant._DOMRefsToDispose.forEach((node) => {
+        displacedDOMRefs.add(node);
+      });
       participant._DOMRefsToDispose.clear();
       if (
         participant.uiState.detached &&
@@ -50,10 +53,12 @@ export class AnimationParticipantManager {
       ) {
         // TODO: when cloning is implemented, add the DOMRef here
         unanimatedDetachedDOMRefs.add(participant.uiState.detached.DOMRef);
+      } else if (participant.uiState.detached) {
+        animatedDetachedDOMRefs.add(participant.uiState.detached.DOMRef);
       }
     }
 
-    let deleted: DOMRefNode[] = [];
+    let deleted: Set<DOMRefNode> = new Set();
     let nodesToGraft = new Map<DOMRefNode, DOMRefNode>();
     function recurse<T>(
       node: DOMRefNode,
@@ -72,7 +77,7 @@ export class AnimationParticipantManager {
         (node, _) => {
           if (node.parent) node.delete();
           else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
-          deleted.push(node);
+          deleted.add(node);
           return {
             nextScope: undefined,
             stop: false,
@@ -84,23 +89,20 @@ export class AnimationParticipantManager {
     for (let DOMRef of this.DOMRefs) {
       recurse<{
         lastLiveAncestor: DOMRefNode | undefined;
-        isOnDetachedBranch: boolean;
-        stop: boolean;
       }>(
         DOMRef,
         (node, scope) => {
           if (unanimatedDetachedDOMRefs.has(node)) {
             if (node.parent) node.delete();
             else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
-            deleted.push(node);
+            deleted.add(node);
             return {
               nextScope: {
                 ...scope,
-                isOnDetachedBranch: true,
               },
               stop: false,
             };
-          } else if (scope.isOnDetachedBranch) {
+          } else if (animatedDetachedDOMRefs.has(node)) {
             if (scope.lastLiveAncestor) {
               nodesToGraft.set(node, scope.lastLiveAncestor);
               return {
@@ -112,10 +114,10 @@ export class AnimationParticipantManager {
             } else {
               if (node.parent) node.delete();
               else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
-              deleted.push(node);
+              deleted.add(node);
               return {
                 nextScope: {
-                  ...scope,
+                  lastLiveAncestor: undefined,
                 },
                 stop: false,
               };
@@ -125,7 +127,6 @@ export class AnimationParticipantManager {
             // It will become the graft target later
             return {
               nextScope: {
-                ...scope,
                 lastLiveAncestor: node,
               },
               stop: false,
@@ -133,9 +134,7 @@ export class AnimationParticipantManager {
           }
         },
         {
-          isOnDetachedBranch: false,
           lastLiveAncestor: undefined,
-          stop: false,
         }
       );
     }
@@ -153,7 +152,11 @@ export class AnimationParticipantManager {
     }
 
     for (let animationParticipant of this.participants) {
-      if (animationParticipant.canBeCleanedUp) {
+      if (
+        animationParticipant.canBeCleanedUp &&
+        (!animationParticipant.uiState.detached ||
+          deleted.has(animationParticipant.uiState.detached.DOMRef))
+      ) {
         this.participants.delete(animationParticipant);
       }
       animationParticipant.cancelAnimations();
@@ -466,6 +469,51 @@ export class AnimationParticipantManager {
       animators,
       sprites: Array.from(spriteForParticipant.values()),
     };
+  }
+
+  log() {
+    let participants: Record<string, AnimationParticipant> = {};
+    let keyFromParticipant: Map<
+      AnimationParticipant,
+      {
+        key: string;
+        detached: DOMRefNode | undefined;
+        current: DOMRefNode | undefined;
+      }
+    > = new Map();
+    let asTreeNode = (r: DOMRefNode): TreeNode => {
+      let things = keyFromParticipant.get(r.animationParticipant)!;
+      let state = things.current === r ? '➕' : '❌';
+      return {
+        text: things.key,
+        extra: state,
+        children: r.children.map((child) => asTreeNode(child)),
+      };
+    };
+
+    let ctxCount = 0;
+    for (let participant of this.participants) {
+      let key =
+        [
+          participant.context ? '🥡' : '',
+          participant.latestModifier ? '🥠' : '',
+        ].join('') +
+        ':' +
+        (participant.identifier.key ??
+          participant.context?.id ??
+          `ctx-${ctxCount++}`);
+      participants[key] = participant;
+      keyFromParticipant.set(participant, {
+        key,
+        detached: participant.uiState.detached?.DOMRef,
+        current: participant.uiState.current?.DOMRef,
+      });
+    }
+
+    let domRefNodeTree: TreeNode[] = this.DOMRefs.map((n) => asTreeNode(n));
+
+    console.log(formatTreeString(domRefNodeTree));
+    console.log(participants);
   }
 }
 
