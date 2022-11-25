@@ -1,5 +1,4 @@
 import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
-import resolveGenerator from 'boxel-motion-test-app/tests/helpers/resolve-generator';
 import { module, test } from 'qunit';
 
 module('Unit | Behaviors | Tween', function () {
@@ -7,7 +6,7 @@ module('Unit | Behaviors | Tween', function () {
     let behavior = new TweenBehavior();
 
     assert.deepEqual(
-      resolveGenerator(behavior.getFrames({ from: 0, to: 1, duration: 0 })),
+      Array.from(behavior.getFrames({ from: 0, to: 1, duration: 0 })),
       [
         {
           value: 0,
@@ -20,7 +19,7 @@ module('Unit | Behaviors | Tween', function () {
       ]
     );
     assert.deepEqual(
-      resolveGenerator(behavior.getFrames({ from: 1, to: 0, duration: 0 })),
+      Array.from(behavior.getFrames({ from: 1, to: 0, duration: 0 })),
       [
         {
           value: 1,
@@ -38,11 +37,11 @@ module('Unit | Behaviors | Tween', function () {
     let behavior = new TweenBehavior();
 
     assert.deepEqual(
-      resolveGenerator(behavior.getFrames({ from: 1, to: 1, duration: 0 })),
+      Array.from(behavior.getFrames({ from: 1, to: 1, duration: 0 })),
       []
     );
     assert.deepEqual(
-      resolveGenerator(behavior.getFrames({ from: 0, to: 0, duration: 0 })),
+      Array.from(behavior.getFrames({ from: 0, to: 0, duration: 0 })),
       []
     );
   });
@@ -50,7 +49,7 @@ module('Unit | Behaviors | Tween', function () {
   test('frames are generated at 60 FPS (linear easing)', function (assert) {
     let behavior = new TweenBehavior();
 
-    let frames = resolveGenerator(
+    let frames = Array.from(
       behavior.getFrames({ from: 0, to: 1, duration: 100 })
     );
 
@@ -90,7 +89,7 @@ module('Unit | Behaviors | Tween', function () {
   test('takes a delay into account (linear easing)', function (assert) {
     let behavior = new TweenBehavior();
 
-    let frames = resolveGenerator(
+    let frames = Array.from(
       behavior.getFrames({
         from: 0,
         to: 1,

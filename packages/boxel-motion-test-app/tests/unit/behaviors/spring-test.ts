@@ -1,5 +1,4 @@
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
-import resolveGenerator from 'boxel-motion-test-app/tests/helpers/resolve-generator';
 import { module, test } from 'qunit';
 
 module('Unit | Behaviors | Spring', function () {
@@ -9,7 +8,7 @@ module('Unit | Behaviors | Spring', function () {
       stiffness: 1000000,
     });
 
-    assert.deepEqual(resolveGenerator(spring.getFrames({ from: 0, to: 1 })), [
+    assert.deepEqual(Array.from(spring.getFrames({ from: 0, to: 1 })), [
       {
         value: 0,
         velocity: 0,
@@ -19,7 +18,7 @@ module('Unit | Behaviors | Spring', function () {
         velocity: 0,
       },
     ]);
-    assert.deepEqual(resolveGenerator(spring.getFrames({ from: 1, to: 0 })), [
+    assert.deepEqual(Array.from(spring.getFrames({ from: 1, to: 0 })), [
       {
         value: 1,
         velocity: 0,
@@ -34,21 +33,15 @@ module('Unit | Behaviors | Spring', function () {
   test('does nothing when from and to are the same', function (assert) {
     let behavior = new SpringBehavior();
 
-    assert.deepEqual(
-      resolveGenerator(behavior.getFrames({ from: 1, to: 1 })),
-      []
-    );
-    assert.deepEqual(
-      resolveGenerator(behavior.getFrames({ from: 0, to: 0 })),
-      []
-    );
+    assert.deepEqual(Array.from(behavior.getFrames({ from: 1, to: 1 })), []);
+    assert.deepEqual(Array.from(behavior.getFrames({ from: 0, to: 0 })), []);
   });
 
   test('handles from and to being the same with an initial velocity', function (assert) {
     let behavior = new SpringBehavior();
 
     assert.deepEqual(
-      resolveGenerator(behavior.getFrames({ from: 0, to: 0, velocity: -0.01 })),
+      Array.from(behavior.getFrames({ from: 0, to: 0, velocity: -0.01 })),
       [
         {
           value: 0,
@@ -325,7 +318,7 @@ module('Unit | Behaviors | Spring', function () {
       stiffness: 100000,
     });
     assert.deepEqual(
-      resolveGenerator(unclampedSpring.getFrames({ from: 0, to: 1 })),
+      Array.from(unclampedSpring.getFrames({ from: 0, to: 1 })),
       [
         {
           value: 0,
@@ -368,23 +361,20 @@ module('Unit | Behaviors | Spring', function () {
       stiffness: 100000,
     });
 
-    assert.deepEqual(
-      resolveGenerator(clampedSpring.getFrames({ from: 0, to: 1 })),
-      [
-        {
-          value: 0,
-          velocity: 0,
-        },
-        {
-          value: 0.8561306451232562,
-          velocity: -0.12268904506936934,
-        },
-        {
-          value: 1,
-          velocity: 0,
-        },
-      ]
-    );
+    assert.deepEqual(Array.from(clampedSpring.getFrames({ from: 0, to: 1 })), [
+      {
+        value: 0,
+        velocity: 0,
+      },
+      {
+        value: 0.8561306451232562,
+        velocity: -0.12268904506936934,
+      },
+      {
+        value: 1,
+        velocity: 0,
+      },
+    ]);
   });
 
   test('underdamped spring', function (assert) {
@@ -394,7 +384,7 @@ module('Unit | Behaviors | Spring', function () {
       mass: 1,
     });
     assert.deepEqual(
-      resolveGenerator(underdampedSpring.getFrames({ from: 0, to: 1 })),
+      Array.from(underdampedSpring.getFrames({ from: 0, to: 1 })),
       [
         {
           value: 0,
@@ -643,7 +633,7 @@ module('Unit | Behaviors | Spring', function () {
       mass: 1,
     });
     assert.deepEqual(
-      resolveGenerator(criticallydampedSpring.getFrames({ from: 0, to: 1 })),
+      Array.from(criticallydampedSpring.getFrames({ from: 0, to: 1 })),
       [
         {
           value: 0,
@@ -885,7 +875,7 @@ module('Unit | Behaviors | Spring', function () {
       allowsOverdamping: true,
     });
     assert.deepEqual(
-      resolveGenerator(overdampedSpring.getFrames({ from: 0, to: 1 })),
+      Array.from(overdampedSpring.getFrames({ from: 0, to: 1 })),
       [
         {
           value: 0,
@@ -1249,7 +1239,7 @@ module('Unit | Behaviors | Spring', function () {
       allowsOverdamping: false,
     });
     assert.deepEqual(
-      resolveGenerator(
+      Array.from(
         overdampedSpringWithoutOverdamping.getFrames({ from: 0, to: 1 })
       ),
       [
@@ -1490,10 +1480,10 @@ module('Unit | Behaviors | Spring', function () {
       mass: 1,
     });
     assert.deepEqual(
-      resolveGenerator(
+      Array.from(
         overdampedSpringWithoutOverdamping.getFrames({ from: 0, to: 1 })
       ),
-      resolveGenerator(criticallydampedSpring.getFrames({ from: 0, to: 1 }))
+      Array.from(criticallydampedSpring.getFrames({ from: 0, to: 1 }))
     );
   });
 
@@ -1501,7 +1491,7 @@ module('Unit | Behaviors | Spring', function () {
     let clampedSpring = new SpringBehavior({
       overshootClamping: true,
     });
-    let frames = resolveGenerator(
+    let frames = Array.from(
       clampedSpring.getFrames({ from: 0, to: 1, delay: 50 })
     );
 
@@ -1591,7 +1581,7 @@ module('Unit | Behaviors | Spring', function () {
       overshootClamping: true,
     });
 
-    let frames = resolveGenerator(
+    let frames = Array.from(
       clampedSpring.getFrames({ from: 0, to: 1, velocity: 0.01 })
     );
     assert.equal(frames.length, 20);
@@ -1678,7 +1668,7 @@ module('Unit | Behaviors | Spring', function () {
       },
     ]);
 
-    frames = resolveGenerator(
+    frames = Array.from(
       clampedSpring.getFrames({ from: 0, to: 1, velocity: -0.01 })
     );
     assert.equal(frames.length, 9);
@@ -1721,7 +1711,7 @@ module('Unit | Behaviors | Spring', function () {
       },
     ]);
 
-    frames = resolveGenerator(
+    frames = Array.from(
       clampedSpring.getFrames({ from: 0, to: 1, velocity: -1 })
     );
     assert.equal(frames.length, 2);
@@ -1742,7 +1732,7 @@ module('Unit | Behaviors | Spring', function () {
     let clampedSpring = new SpringBehavior({
       overshootClamping: true,
     });
-    let frames = resolveGenerator(
+    let frames = Array.from(
       clampedSpring.getFrames({
         from: 0.25,
         to: 1,
