@@ -1,4 +1,4 @@
-import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
+import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import Controller from '@ember/controller';
@@ -22,7 +22,7 @@ export default class NestedSprites extends Controller {
               y: {},
             },
             timing: {
-              behavior: new LinearBehavior(),
+              behavior: new TweenBehavior(),
               duration: 5000,
             },
           },
