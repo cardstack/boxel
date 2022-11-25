@@ -104,6 +104,8 @@ export class AnimationParticipantManager {
             };
           } else if (animatedDetachedDOMRefs.has(node)) {
             if (scope.lastLiveAncestor) {
+              if (node.parent) node.delete();
+              else this.DOMRefs = this.DOMRefs.filter((v) => v !== node);
               nodesToGraft.set(node, scope.lastLiveAncestor);
               return {
                 nextScope: {
