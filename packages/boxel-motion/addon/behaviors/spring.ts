@@ -3,6 +3,7 @@ import { assert } from '@ember/debug';
 import Behavior, {
   FPS,
   Frame,
+  FrameGenerator,
   SpringToFramesArgument,
   timeToFrame,
 } from '../behaviors/base';
@@ -258,7 +259,7 @@ export default class SpringBehavior implements Behavior {
     }
   }
 
-  private *springToFrames(values: SpringValues): Generator<Frame> {
+  private *springToFrames(values: SpringValues): FrameGenerator {
     let { fromValue, toValue, initialVelocity } = values;
 
     if (isNaN(fromValue) || isNaN(toValue)) {

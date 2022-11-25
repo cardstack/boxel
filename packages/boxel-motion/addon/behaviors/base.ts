@@ -33,6 +33,8 @@ export type Frame = {
   velocity: number; // units per second
 };
 
+export type FrameGenerator = Generator<Frame | void, void, never>;
+
 export default interface Behavior {
   /**
    * Calculates the frames for the given parameters.
@@ -45,7 +47,7 @@ export default interface Behavior {
       | SpringToFramesArgument
       | StaticToFramesArgument
       | WaitToFramesArgument
-  ): Generator<Frame | void>;
+  ): FrameGenerator;
 }
 
 export interface EasingBehavior extends Behavior {

@@ -5,7 +5,7 @@ import { instantaneousVelocityForValues } from '@cardstack/boxel-motion/utils/in
 import Behavior, {
   EasingToFramesArgument,
   FPS,
-  Frame,
+  FrameGenerator,
   timeToFrame,
 } from './base';
 
@@ -22,7 +22,7 @@ export default class TweenBehavior implements Behavior {
     this.easing = options?.easing ?? linear;
   }
 
-  *getFrames(options: EasingToFramesArgument): Generator<Frame> {
+  *getFrames(options: EasingToFramesArgument): FrameGenerator {
     let { from, to, duration, delay = 0 } = options;
 
     // early exit if there is no movement, we do not just render delay frames
