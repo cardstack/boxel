@@ -44,8 +44,6 @@ export default class MotionStudy extends Controller {
       type: SpriteType.Inserted,
     });
 
-    // FIXME the declarative API does not currently support setting zIndex
-
     return {
       timeline: {
         type: 'sequence',
