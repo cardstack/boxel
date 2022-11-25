@@ -2,6 +2,7 @@ import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import StaticBehavior from '@cardstack/boxel-motion/behaviors/static';
 import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
+import { easeInAndOut } from '@cardstack/boxel-motion/easings/cosine';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import { SpriteType } from '@cardstack/boxel-motion/models/sprite';
@@ -10,11 +11,23 @@ import Controller from '@ember/controller';
 export default class MotionStudy extends Controller {
   transition(changeset: Changeset): AnimationDefinition {
     let fadeDuration = 300;
+    let resizeAndMoveDuration = 500;
 
     let cardSprites = changeset.spritesFor({
       role: 'card',
       type: SpriteType.Kept,
     });
+
+    let nonAnimatingCardSprites = Array.from(cardSprites).filter(
+      (s) =>
+        !(
+          s.boundsDelta &&
+          (s.boundsDelta.width !== 0 ||
+            s.boundsDelta.height !== 0 ||
+            s.boundsDelta.x !== 0 ||
+            s.boundsDelta.y !== 0)
+        )
+    );
 
     let removedCardSprites = changeset.spritesFor({
       role: 'card',
@@ -37,28 +50,48 @@ export default class MotionStudy extends Controller {
       timeline: {
         type: 'sequence',
         animations: [
-          // FIXME should be able to pass an empty set without errors
-          ...(removedCardContentSprites.size
-            ? [
-                {
-                  sprites: removedCardContentSprites,
-                  properties: {
-                    opacity: { to: 0 },
-                  },
-                  timing: {
-                    behavior: new TweenBehavior(),
-                    duration: fadeDuration,
-                  },
-                },
-              ]
-            : []),
           {
             type: 'parallel',
             animations: [
               {
+                sprites: removedCardContentSprites,
+                properties: {
+                  opacity: { to: 0 },
+                },
+                timing: {
+                  behavior: new TweenBehavior(),
+                  duration: fadeDuration,
+                },
+              },
+              {
+                sprites: removedCardContentSprites,
+                properties: {
+                  zIndex: 2,
+                },
+                timing: {
+                  behavior: new StaticBehavior(),
+                  duration: fadeDuration,
+                },
+              },
+            ],
+          },
+          {
+            type: 'parallel',
+            animations: [
+              {
+                sprites: removedCardContentSprites,
+                properties: {
+                  opacity: 0,
+                },
+                timing: {
+                  behavior: new StaticBehavior(),
+                  duration: resizeAndMoveDuration,
+                },
+              },
+              {
                 sprites: cardSprites,
                 properties: {
-                  zIndex: 100,
+                  zIndex: 1,
                 },
                 timing: {
                   behavior: new StaticBehavior(),
@@ -74,12 +107,20 @@ export default class MotionStudy extends Controller {
                   height: {},
                 },
                 timing: {
-                  behavior: new SpringBehavior({
-                    overshootClamping: false,
-                    stiffness: 100,
-                    damping: 15,
+                  behavior: new TweenBehavior({
+                    easing: easeInAndOut,
                   }),
-                  delay: removedCardContentSprites.size ? fadeDuration : 0,
+                  duration: resizeAndMoveDuration,
+                },
+              },
+              {
+                sprites: new Set(nonAnimatingCardSprites),
+                properties: {
+                  zIndex: 0,
+                },
+                timing: {
+                  behavior: new StaticBehavior(),
+                  duration: resizeAndMoveDuration,
                 },
               },
               {
