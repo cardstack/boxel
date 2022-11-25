@@ -44,103 +44,117 @@ export default class MotionStudy extends Controller {
       type: SpriteType.Inserted,
     });
 
+    let fadeOutClosingCardContent = {
+      type: 'parallel',
+      animations: [
+        {
+          sprites: removedCardContentSprites,
+          properties: {
+            opacity: { to: 0 },
+          },
+          timing: {
+            behavior: new TweenBehavior(),
+            duration: fadeDuration,
+          },
+        },
+        {
+          sprites: removedCardContentSprites,
+          properties: {
+            zIndex: 2,
+          },
+          timing: {
+            behavior: new StaticBehavior(),
+            duration: fadeDuration,
+          },
+        },
+      ],
+    };
+
+    let keepClosingCardContentHidden = {
+      sprites: removedCardContentSprites,
+      properties: {
+        opacity: 0,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: resizeAndMoveDuration,
+      },
+    };
+
+    let moveAllCardsToForeground = {
+      sprites: cardSprites,
+      properties: {
+        zIndex: 1,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: fadeDuration, // FIXME this should be equivalent to the spring length, not currently possible
+      },
+    };
+
+    let moveNonAnimatingCardsToBackground = {
+      sprites: new Set(nonAnimatingCardSprites),
+      properties: {
+        zIndex: 0,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: resizeAndMoveDuration,
+      },
+    };
+
+    let resizeAnimatingCard = {
+      sprites: cardSprites,
+      properties: {
+        translateX: {},
+        translateY: {},
+        width: {},
+        height: {},
+      },
+      timing: {
+        behavior: new TweenBehavior({
+          easing: easeInAndOut,
+        }),
+        duration: resizeAndMoveDuration,
+      },
+    };
+
+    let keepCardsBeingRemovedUntilOpeningCompletes = {
+      sprites: removedCardSprites,
+      properties: {},
+      timing: {
+        behavior: new WaitBehavior(),
+        duration: fadeDuration, // FIXME see above
+      },
+    };
+
+    let fadeInOpeningCardContent = {
+      sprites: cardContentSprites,
+      properties: {
+        opacity: { from: 0 },
+      },
+      timing: {
+        behavior: new TweenBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
     return {
       timeline: {
         type: 'sequence',
         animations: [
+          fadeOutClosingCardContent,
           {
             type: 'parallel',
             animations: [
-              {
-                sprites: removedCardContentSprites,
-                properties: {
-                  opacity: { to: 0 },
-                },
-                timing: {
-                  behavior: new TweenBehavior(),
-                  duration: fadeDuration,
-                },
-              },
-              {
-                sprites: removedCardContentSprites,
-                properties: {
-                  zIndex: 2,
-                },
-                timing: {
-                  behavior: new StaticBehavior(),
-                  duration: fadeDuration,
-                },
-              },
+              keepClosingCardContentHidden,
+              moveAllCardsToForeground,
+              moveNonAnimatingCardsToBackground,
+              resizeAnimatingCard,
+              keepCardsBeingRemovedUntilOpeningCompletes,
             ],
           },
-          {
-            type: 'parallel',
-            animations: [
-              {
-                sprites: removedCardContentSprites,
-                properties: {
-                  opacity: 0,
-                },
-                timing: {
-                  behavior: new StaticBehavior(),
-                  duration: resizeAndMoveDuration,
-                },
-              },
-              {
-                sprites: cardSprites,
-                properties: {
-                  zIndex: 1,
-                },
-                timing: {
-                  behavior: new StaticBehavior(),
-                  duration: fadeDuration, // FIXME this should be equivalent to the spring length, not currently possible
-                },
-              },
-              {
-                sprites: cardSprites,
-                properties: {
-                  translateX: {},
-                  translateY: {},
-                  width: {},
-                  height: {},
-                },
-                timing: {
-                  behavior: new TweenBehavior({
-                    easing: easeInAndOut,
-                  }),
-                  duration: resizeAndMoveDuration,
-                },
-              },
-              {
-                sprites: new Set(nonAnimatingCardSprites),
-                properties: {
-                  zIndex: 0,
-                },
-                timing: {
-                  behavior: new StaticBehavior(),
-                  duration: resizeAndMoveDuration,
-                },
-              },
-              {
-                sprites: removedCardSprites,
-                properties: {},
-                timing: {
-                  behavior: new WaitBehavior(),
-                  duration: fadeDuration, // FIXME see above
-                },
-              },
-            ],
-          },
-          {
-            sprites: cardContentSprites,
-            properties: {
-              opacity: { from: 0 },
-            },
-            timing: {
-              behavior: new TweenBehavior(),
-              duration: fadeDuration,
-            },
-          },
+          fadeInOpeningCardContent,
         ],
       },
     };
