@@ -3,6 +3,7 @@ import { assert } from '@ember/debug';
 import Behavior, {
   FPS,
   Frame,
+  FrameGenerator,
   SpringToFramesArgument,
   timeToFrame,
 } from '../behaviors/base';
@@ -30,7 +31,7 @@ type SpringOptions = {
 type SpringValues = {
   fromValue: number;
   toValue: number;
-  initialVelocity?: number;
+  initialVelocity: number;
 };
 
 export default class SpringBehavior implements Behavior {
@@ -56,24 +57,35 @@ export default class SpringBehavior implements Behavior {
     assert('Damping value must be greater than 0', this.options.damping > 0);
   }
 
-  toFrames(options: SpringToFramesArgument): Frame[] {
-    let { from, to, velocity = 0, delay = 0 } = options;
+  *getFrames(options: SpringToFramesArgument) {
+    let { from = 0, to = 1, velocity = 0, delay = 0 } = options;
+
+    // early exit if there will be no movement, we do not generate any frames if there is only a delay
+    if (from === to && velocity === 0) {
+      return;
+    }
 
     let delayFrameCount = timeToFrame(delay);
-    let frames = Array.from(new Array(delayFrameCount)).map(() => ({
-      value: from,
-      velocity: 0,
-    }));
-    frames = [
-      ...frames,
-      ...this.springToFrames({
-        fromValue: from,
-        toValue: to,
-        initialVelocity: velocity,
-      }),
-    ];
 
-    return frames;
+    for (let i = 0; i < delayFrameCount; i++) {
+      yield {
+        value: from,
+        velocity: 0,
+      };
+    }
+
+    let generator = this.springToFrames({
+      fromValue: from,
+      toValue: to,
+      initialVelocity: velocity,
+    });
+
+    let next = generator.next();
+    while (!next.done) {
+      yield next.value;
+
+      next = generator.next();
+    }
   }
 
   private isSpringOvershooting({
@@ -247,12 +259,8 @@ export default class SpringBehavior implements Behavior {
     }
   }
 
-  private springToFrames(values: SpringValues): Frame[] {
-    let { fromValue = 0, toValue = 1, initialVelocity = 0 } = values;
-
-    if (fromValue === toValue && initialVelocity === 0) {
-      return [];
-    }
+  private *springToFrames(values: SpringValues): FrameGenerator {
+    let { fromValue, toValue, initialVelocity } = values;
 
     if (isNaN(fromValue) || isNaN(toValue)) {
       throw new Error(
@@ -270,20 +278,21 @@ export default class SpringBehavior implements Behavior {
     let value = fromValue;
     let velocity = initialVelocity;
     let deltaTimeMs = 1 / FPS;
-    let frames = [];
+    let i = 0;
     while (
       !this.isSpringAtRest({
         value,
         toValue,
         velocity,
-      })
+      }) &&
+      i < 10000
     ) {
+      i++;
       let frame = springFunction(time);
       time += deltaTimeMs;
       value = frame.value;
       velocity = frame.velocity;
-      frames.push(frame);
+      yield frame;
     }
-    return frames;
   }
 }

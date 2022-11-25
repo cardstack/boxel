@@ -1,3 +1,4 @@
+import { Frame, FrameGenerator } from '@cardstack/boxel-motion/behaviors/base';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import interpolateColor from '@cardstack/boxel-motion/interpolators/color';
 import Sprite, {
@@ -32,6 +33,25 @@ export function normalizeProperty(property: string): string {
   return propertyMap.get(property) ?? property;
 }
 
+function resolveFrameGenerator(property: string, generator: FrameGenerator) {
+  let frames: SimpleFrame[] = [];
+  let next = generator.next();
+  while (!next.done) {
+    let frame;
+    if (next.value) {
+      let { value, velocity } = next.value as Frame;
+
+      frame = new SimpleFrame(property, value);
+      frame.velocity = velocity ?? 0;
+    }
+    frames.push(frame as SimpleFrame);
+
+    next = generator.next();
+  }
+
+  return frames;
+}
+
 export default function generateFrames(
   sprite: Sprite,
   property: MotionProperty,
@@ -50,19 +70,20 @@ export default function generateFrames(
 
     // TODO: use a "static" behavior
     if (property === 'wait') {
-      return new WaitBehavior().toFrames({
+      let generator = new WaitBehavior().getFrames({
         duration: timing.duration,
-      }) as unknown as SimpleFrame[];
+      });
+
+      return resolveFrameGenerator(normalizedProperty, generator);
     }
 
     // todo maybe throw error if options is not numeric or string
+    let generator = new StaticBehavior().getFrames({
+      duration: timing.duration,
+      value: options as Value,
+    });
 
-    return new StaticBehavior()
-      .toFrames({
-        duration: timing.duration,
-        value: options as Value,
-      })
-      .map((f) => new SimpleFrame(normalizedProperty, f.value));
+    return resolveFrameGenerator(normalizedProperty, generator);
   } else {
     let { from, to } = options;
 
@@ -125,12 +146,23 @@ export default function generateFrames(
 
           // if from and to are identical, we use a static behavior instead of whatever is passed in
           if (fromParts[index] === toParts[index]) {
-            return new StaticBehavior()
-              .toFrames({
-                value: fromParts[index] as number,
-                duration: timing.duration as number,
-              })
-              .map((frame) => frame.value);
+            let generator = new StaticBehavior().getFrames({
+              value: fromParts[index] as number,
+              duration: timing.duration as number,
+            });
+
+            let frames: Value[] = [];
+            let next = generator.next();
+            while (!next.done) {
+              let { value } = next.value as Frame;
+              if (value) {
+                frames.push(value);
+              }
+
+              next = generator.next();
+            }
+
+            return frames;
           }
 
           return interpolateNumeric(

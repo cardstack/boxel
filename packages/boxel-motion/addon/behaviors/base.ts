@@ -9,8 +9,6 @@ export type EasingToFramesArgument = {
   from: number;
   to: number;
   duration: number;
-  lastFrame?: Frame;
-  previousFramesFromTime?: Frame[];
   delay?: number;
 };
 
@@ -35,21 +33,21 @@ export type Frame = {
   velocity: number; // units per second
 };
 
+export type FrameGenerator = Generator<Frame | void, void, never>;
+
 export default interface Behavior {
   /**
    * Calculates the frames for the given parameters.
    *
    * @param options
    */
-  toFrames(
+  getFrames(
     options:
       | EasingToFramesArgument
       | SpringToFramesArgument
       | StaticToFramesArgument
-      | WaitToFramesArgument,
-    interpolator?: (from: any, to: any, t: number) => any,
-    serializer?: (value: any) => any
-  ): Frame[];
+      | WaitToFramesArgument
+  ): FrameGenerator;
 }
 
 export interface EasingBehavior extends Behavior {
