@@ -88,7 +88,7 @@ export default class MotionStudy extends Controller {
       },
       timing: {
         behavior: new StaticBehavior(),
-        duration: fadeDuration, // FIXME this should be equivalent to the spring length, not currently possible
+        duration: fadeDuration,
       },
     };
 
@@ -112,6 +112,7 @@ export default class MotionStudy extends Controller {
         height: {},
       },
       timing: {
+        // TODO convert to SpringBehavior when its duration can be referenced by other animations
         behavior: new TweenBehavior({
           easing: easeInAndOut,
         }),
@@ -124,7 +125,7 @@ export default class MotionStudy extends Controller {
       properties: {},
       timing: {
         behavior: new WaitBehavior(),
-        duration: fadeDuration, // FIXME see above
+        duration: fadeDuration,
       },
     };
 
