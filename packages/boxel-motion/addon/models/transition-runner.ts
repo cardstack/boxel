@@ -103,9 +103,6 @@ export default class TransitionRunner {
         let promises = animations.map((animation) => animation.finished);
 
         animations.forEach((a) => {
-          if (this.animationContext.hasOrphan(a.sprite)) {
-            this.animationContext.removeOrphan(a.sprite);
-          }
           if (a.sprite.type === SpriteType.Removed) {
             this.animationContext.appendOrphan(a.sprite);
             a.sprite.lockStyles();
@@ -120,7 +117,6 @@ export default class TransitionRunner {
           throw error;
         }
       }
-      animationContext.clearOrphans();
     }
   }
 
