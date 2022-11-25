@@ -45,29 +45,25 @@ export default class MotionStudy extends Controller {
     });
 
     let fadeOutClosingCardContent = {
-      type: 'parallel',
-      animations: [
-        {
-          sprites: removedCardContentSprites,
-          properties: {
-            opacity: { to: 0 },
-          },
-          timing: {
-            behavior: new TweenBehavior(),
-            duration: fadeDuration,
-          },
-        },
-        {
-          sprites: removedCardContentSprites,
-          properties: {
-            zIndex: 2,
-          },
-          timing: {
-            behavior: new StaticBehavior(),
-            duration: fadeDuration,
-          },
-        },
-      ],
+      sprites: removedCardContentSprites,
+      properties: {
+        opacity: { to: 0 },
+      },
+      timing: {
+        behavior: new TweenBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    let moveClosingCardContentToForeground = {
+      sprites: removedCardContentSprites,
+      properties: {
+        zIndex: 2,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: fadeDuration,
+      },
     };
 
     let keepClosingCardContentHidden = {
@@ -81,7 +77,7 @@ export default class MotionStudy extends Controller {
       },
     };
 
-    let moveAllCardsToForeground = {
+    let moveAllCardsToMidground = {
       sprites: cardSprites,
       properties: {
         zIndex: 1,
@@ -144,12 +140,18 @@ export default class MotionStudy extends Controller {
       timeline: {
         type: 'sequence',
         animations: [
-          fadeOutClosingCardContent,
+          {
+            type: 'parallel',
+            animations: [
+              moveClosingCardContentToForeground,
+              fadeOutClosingCardContent,
+            ],
+          },
           {
             type: 'parallel',
             animations: [
               keepClosingCardContentHidden,
-              moveAllCardsToForeground,
+              moveAllCardsToMidground,
               moveNonAnimatingCardsToBackground,
               resizeAnimatingCard,
               keepCardsBeingRemovedUntilOpeningCompletes,
