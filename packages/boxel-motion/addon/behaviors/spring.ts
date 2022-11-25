@@ -3,6 +3,7 @@ import { assert } from '@ember/debug';
 import Behavior, {
   FPS,
   Frame,
+  FrameGenerator,
   SpringToFramesArgument,
   timeToFrame,
 } from '../behaviors/base';
@@ -30,7 +31,7 @@ type SpringOptions = {
 type SpringValues = {
   fromValue: number;
   toValue: number;
-  initialVelocity?: number;
+  initialVelocity: number;
 };
 
 export default class SpringBehavior implements Behavior {
@@ -57,10 +58,11 @@ export default class SpringBehavior implements Behavior {
   }
 
   *getFrames(options: SpringToFramesArgument) {
-    let { from, to, velocity = 0, delay = 0 } = options;
+    let { from = 0, to = 1, velocity = 0, delay = 0 } = options;
 
-    if (from === to) {
-      return [];
+    // early exit if there will be no movement, we do not generate any frames if there is only a delay
+    if (from === to && velocity === 0) {
+      return;
     }
 
     let delayFrameCount = timeToFrame(delay);
@@ -257,12 +259,8 @@ export default class SpringBehavior implements Behavior {
     }
   }
 
-  private *springToFrames(values: SpringValues) {
-    let { fromValue = 0, toValue = 1, initialVelocity = 0 } = values;
-
-    if (fromValue === toValue && initialVelocity === 0) {
-      return [];
-    }
+  private *springToFrames(values: SpringValues): FrameGenerator {
+    let { fromValue, toValue, initialVelocity } = values;
 
     if (isNaN(fromValue) || isNaN(toValue)) {
       throw new Error(

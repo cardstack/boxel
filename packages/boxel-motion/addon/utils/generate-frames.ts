@@ -1,4 +1,4 @@
-import { Frame } from '@cardstack/boxel-motion/behaviors/base';
+import { Frame, FrameGenerator } from '@cardstack/boxel-motion/behaviors/base';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import interpolateColor from '@cardstack/boxel-motion/interpolators/color';
 import Sprite, {
@@ -33,16 +33,14 @@ export function normalizeProperty(property: string): string {
   return propertyMap.get(property) ?? property;
 }
 
-function resolveFrameGenerator(
-  property: string,
-  generator: Generator<Frame | void>
-) {
+function resolveFrameGenerator(property: string, generator: FrameGenerator) {
   let frames: SimpleFrame[] = [];
   let next = generator.next();
   while (!next.done) {
-    let { value, velocity } = next.value as Frame;
     let frame;
-    if (value) {
+    if (next.value) {
+      let { value, velocity } = next.value as Frame;
+
       frame = new SimpleFrame(property, value);
       frame.velocity = velocity ?? 0;
     }

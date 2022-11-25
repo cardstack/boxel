@@ -1,6 +1,13 @@
 import linear from '@cardstack/boxel-motion/easings/linear';
 
-import Behavior, { EasingToFramesArgument, FPS, timeToFrame } from './base';
+import { instantaneousVelocityForValues } from '@cardstack/boxel-motion/utils/instantaneous-velocity';
+
+import Behavior, {
+  EasingToFramesArgument,
+  FPS,
+  FrameGenerator,
+  timeToFrame,
+} from './base';
 
 export type Easing = (t: number) => number;
 
@@ -15,11 +22,12 @@ export default class TweenBehavior implements Behavior {
     this.easing = options?.easing ?? linear;
   }
 
-  *getFrames(options: EasingToFramesArgument) {
+  *getFrames(options: EasingToFramesArgument): FrameGenerator {
     let { from, to, duration, delay = 0 } = options;
 
+    // early exit if there is no movement, we do not just render delay frames
     if (from === to) {
-      return [];
+      return;
     }
 
     // if from and to are not the same we generate at minimum 2 frames
@@ -39,7 +47,22 @@ export default class TweenBehavior implements Behavior {
       let t = i / frameCount;
 
       let value = from + (to - from) * this.easing(t);
-      let velocity = 0; // TODO
+
+      // TODO: We can possibly calculate velocity only when we need it and save some math here,
+      //  but then we need to pass the previously calculated keyframes from the interrupted animation.
+      let previousValue =
+        i > 0
+          ? from + (to - from) * this.easing((i - 1) / frameCount)
+          : undefined;
+      let nextValue =
+        i < frameCount
+          ? from + (to - from) * this.easing((i + 1) / frameCount)
+          : undefined;
+      let velocity = instantaneousVelocityForValues(
+        previousValue,
+        value,
+        nextValue
+      );
 
       yield {
         value,
