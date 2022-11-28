@@ -1,6 +1,13 @@
-import Behavior, { Frame } from '@cardstack/boxel-motion/behaviors/base';
+import Behavior from '@cardstack/boxel-motion/behaviors/base';
 
-import Sprite, { MotionOptions, MotionProperty } from './sprite';
+import Sprite, {
+  MotionOptions,
+  MotionProperty,
+} from '@cardstack/boxel-motion/models/sprite';
+import generateFrames from '@cardstack/boxel-motion/utils/generate-frames';
+
+import { Value, Keyframe } from '@cardstack/boxel-motion/value';
+import { Frame } from '@cardstack/boxel-motion/value/simple-frame';
 
 interface RowFragment {
   startColumn: number;
@@ -28,17 +35,20 @@ export class OrchestrationMatrix {
       // convenience so we do less operations to determine active fragments
       let fragmentsByColumn: Record<number, RowFragment[]> = {};
       // examine assumptions - what exactly is the frame?
-      let baseKeyframe = {};
+      let baseFrames = [];
       for (let rowFragment of rowFragments) {
         fragmentsByColumn[rowFragment.startColumn] =
           fragmentsByColumn[rowFragment.startColumn] ?? [];
         fragmentsByColumn[rowFragment.startColumn]!.push(rowFragment);
-        baseKeyframe = Object.assign({}, rowFragment.frames[0], baseKeyframe);
+        if (rowFragment.frames[0]) {
+          baseFrames.push(rowFragment.frames[0] as Frame);
+        }
       }
 
+      let baseKeyframe = constructKeyframe({}, baseFrames);
       let activeFragments: RowFragment[] = [];
       let keyframesForSprite: Keyframe[] = [];
-      let previousKeyframe = baseKeyframe;
+      let previousKeyframe: Keyframe = baseKeyframe;
       for (let i = 0; i < this.totalColumns; i++) {
         if (fragmentsByColumn[i]) {
           activeFragments = activeFragments.concat(
@@ -143,6 +153,9 @@ export class OrchestrationMatrix {
     return timelineMatrix;
   }
 
+  // We may not to rethink this bit if we want to be more clever about combining frames.
+  // Possibly we do not want keyframes on this level yet, but only afterwards, and we
+  // use the resulting OrchestrationMatrix to decide which values get merged/squished (i.e. transform).
   static fromMotionDefinition(motionDefinition: MotionDefinition) {
     let properties = motionDefinition.properties;
     let timing = motionDefinition.timing;
@@ -152,17 +165,19 @@ export class OrchestrationMatrix {
       let rowFragments: RowFragment[] = [];
       for (let property in properties) {
         let options = properties[property as MotionProperty];
-        sprite.setupAnimation(property as MotionProperty, {
-          ...options,
-          ...timing,
-        });
-        let { keyframes } = sprite.compileCurrentAnimations() ?? {};
-        if (keyframes) {
+
+        if (options === undefined) {
+          throw Error('Options cannot be undefined');
+        }
+
+        let frames = generateFrames(sprite, property, options, timing);
+
+        if (frames) {
           rowFragments.push({
-            frames: keyframes as Frame[],
+            frames,
             startColumn: 0,
           });
-          maxLength = Math.max(keyframes.length, maxLength);
+          maxLength = Math.max(frames.length, maxLength);
         }
       }
       rows.set(sprite, rowFragments);
@@ -184,7 +199,7 @@ export type AnimationTimeline = {
 export interface MotionDefinition {
   sprites: Set<Sprite>;
   properties: {
-    [k in MotionProperty]?: MotionOptions | Record<string, never>;
+    [k in MotionProperty]: MotionOptions | Value;
   };
   timing: {
     behavior: Behavior;

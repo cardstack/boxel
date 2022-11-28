@@ -152,7 +152,9 @@ export class CopiedCSS {
   'font-weight': string;
   'color': string;
   'background-color': string;
+  'border': string;
   'border-color': string;
+  'border-width': string;
   'letter-spacing': string;
   'line-height': string;
   'text-align': string;
