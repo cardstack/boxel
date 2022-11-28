@@ -163,7 +163,8 @@ export default class MotionStudy extends Controller {
     };
   }
 
-  async extransition(changeset: Changeset): Promise<void> {
+  /* imperative implementation preserved for reference
+  async transition(changeset: Changeset): Promise<void> {
     let { context } = changeset;
 
     let behavior = new SpringBehavior({
@@ -282,4 +283,5 @@ export default class MotionStudy extends Controller {
       s.element.style.removeProperty('opacity');
     });
   }
+  */
 }
