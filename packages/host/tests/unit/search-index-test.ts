@@ -1081,7 +1081,6 @@ posts/ignore-me.json
           module: `${testModuleRealm}nonexistent`,
           name: 'Nonexistent',
         },
-        name: 'NonexistentCard',
       };
       try {
         await indexer.search({

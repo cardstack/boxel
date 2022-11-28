@@ -12,8 +12,8 @@ import {
   type NotLoaded,
   type CardRef,
 } from ".";
-import { loadCard, identifyCard, isCard } from "./card-ref";
-import { Kind, Realm, getExportedCardContext } from "./realm";
+import { loadCard, identifyCard, isCard, moduleFrom } from "./card-ref";
+import { Kind, Realm } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
 import ignore, { Ignore } from "ignore";
 import isEqual from "lodash/isEqual";
@@ -409,13 +409,9 @@ export class CurrentRun {
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
     let moduleURL = new URL(
-      getExportedCardContext(resource.meta.adoptsFrom).module,
+      moduleFrom(resource.meta.adoptsFrom),
       new URL(path, this.realm.url)
-    );
-    let cardRef =
-      "type" in resource.meta.adoptsFrom
-        ? resource.meta.adoptsFrom
-        : { module: moduleURL.href, name: resource.meta.adoptsFrom.name };
+    ).href;
     let typesMaybeError: TypesWithErrors | undefined;
     let uncaughtError: Error | undefined;
     let doc: SingleCardDocument | undefined;
@@ -472,12 +468,7 @@ export class CurrentRun {
           resource: doc.data,
           searchData,
           types: typesMaybeError.types,
-          deps: new Set([
-            ...(await this.loader.getConsumedModules(moduleURL.href)).filter(
-              (u) => u !== moduleURL.href
-            ),
-            moduleURL.href,
-          ]),
+          deps: new Set(await this.loader.getConsumedModules(moduleURL)),
         },
       });
       deferred.fulfill();
@@ -494,7 +485,7 @@ export class CurrentRun {
               ? serializableError(uncaughtError)
               : { detail: `${uncaughtError.message}` },
         };
-        error.error.deps = !("type" in cardRef) ? [cardRef.module] : [];
+        error.error.deps = [moduleURL];
       } else if (typesMaybeError?.type === "error") {
         error = { type: "error", error: typesMaybeError.error };
       } else {
@@ -567,22 +558,6 @@ export class CurrentRun {
     let fullRef: CardRef = ref;
     while (fullRef) {
       let loadedCard = await loadCard(fullRef, { loader: this.loader });
-      if (!loadedCard) {
-        let { module } = getExportedCardContext(fullRef);
-        let result: TypesWithErrors = {
-          type: "error",
-          error: {
-            detail: `Unable to determine card types for ${JSON.stringify(
-              fullRef
-            )}`,
-            status: 500,
-            additionalErrors: null,
-            deps: [module],
-          },
-        };
-        deferred.fulfill(result);
-        return result;
-      }
       let loadedCardRef = identifyCard(loadedCard);
       if (!loadedCardRef) {
         throw new Error(`could not identify card ${loadedCard.name}`);
@@ -592,7 +567,6 @@ export class CurrentRun {
         fullRef = {
           type: "ancestorOf",
           card: loadedCardRef,
-          name: (Reflect.getPrototypeOf(loadedCard) as typeof Card).name,
         };
       } else {
         break;

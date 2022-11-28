@@ -24,6 +24,7 @@ import {
   primitive,
   identifyCard,
   loadCard,
+  humanReadable,
   type Meta,
   type CardFields,
   type Relationship,
@@ -929,7 +930,7 @@ export async function createFromSerialized<T extends CardConstructor>(
   let { meta: { adoptsFrom } } = resource;
   let card: typeof Card | undefined = await loadCard(adoptsFrom, { loader: opts?.loader, relativeTo });
   if (!card) {
-    throw new Error(`could not find card: '${adoptsFrom.name}'`);
+    throw new Error(`could not find card: '${humanReadable(adoptsFrom)}'`);
   }
   return await _createFromSerialized(card as T, resource as any, doc, identityContext);
 }
@@ -1069,7 +1070,7 @@ async function cardClassFromResource<CardT extends CardConstructor>(resource: Lo
     let loader = Loader.getLoaderFor(fallback);
     let card: typeof Card | undefined = await loadCard(resource.meta.adoptsFrom, { loader });
     if (!card) {
-      throw new Error(`could not find card: '${resource.meta.adoptsFrom.name}'`);
+      throw new Error(`could not find card: '${humanReadable(resource.meta.adoptsFrom)}'`);
     }
     return card as CardT;
   }

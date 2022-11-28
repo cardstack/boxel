@@ -333,8 +333,16 @@ export class Realm {
     if (!isCardResource(resource)) {
       return badRequest(`Request body is not valid card JSON-API`);
     }
-    let { name } = resource.meta.adoptsFrom;
-    // new instances are created in a folder named after the card
+
+    let name: string;
+    if ("name" in resource.meta.adoptsFrom) {
+      // new instances are created in a folder named after the card if it has an
+      // exported name
+      name = resource.meta.adoptsFrom.name;
+    } else {
+      name = "cards";
+    }
+
     let dirName = `/${join(new URL(this.url).pathname, name)}/`;
     let entries = await this.directoryEntries(new URL(dirName, this.url));
     let index = 0;
@@ -634,17 +642,6 @@ export class Realm {
 }
 
 export type Kind = "file" | "directory";
-
-export function getExportedCardContext(ref: CardRef): {
-  module: string;
-  name: string;
-} {
-  if (!("type" in ref)) {
-    return { module: ref.module, name: ref.name };
-  } else {
-    return getExportedCardContext(ref.card);
-  }
-}
 
 function lastModifiedHeader(
   card: LooseSingleCardDocument

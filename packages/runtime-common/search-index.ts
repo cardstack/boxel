@@ -498,11 +498,6 @@ export class SearchIndex {
         );
       }
     }
-    if (!card) {
-      throw new Error(
-        `A card was not found for type: ${JSON.stringify(ref, null, 2)}`
-      );
-    }
     let segments = fieldPath.split(".");
     while (segments.length) {
       let fieldName = segments.shift()!;

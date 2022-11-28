@@ -4,9 +4,10 @@ import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import {
   identifyCard,
-  type CardRef,
   internalKeyFor,
   baseRealm,
+  moduleFrom,
+  getAncestor,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
@@ -44,20 +45,12 @@ export class CardType extends Resource<Args> {
     this.type = await this.toType(card);
   }
 
-  async toType(
-    card: typeof Card,
-    context?: { from: CardRef; module: string }
-  ): Promise<Type> {
-    let ref = identifyCard(card);
-    let module: string;
-    if (ref && !('type' in ref)) {
-      module = ref.module;
-    } else if (context) {
-      ref = context.from;
-      module = context.module;
-    } else {
+  async toType(card: typeof Card): Promise<Type> {
+    let maybeRef = identifyCard(card);
+    if (!maybeRef) {
       throw new Error(`cannot identify card ${card.name}`);
     }
+    let ref = maybeRef;
     let id = internalKeyFor(ref, undefined);
     let cached = this.typeCache.get(id);
     if (cached) {
@@ -68,32 +61,21 @@ export class CardType extends Resource<Args> {
       `${baseRealm.url}card-api`
     );
     let { id: _remove, ...fields } = api.getFields(card);
-    let superCard = Reflect.getPrototypeOf(card) as typeof Card | null;
+    let superCard = getAncestor(card);
     let superType: Type | undefined;
     if (superCard && card !== superCard) {
-      superType = await this.toType(superCard, {
-        from: { type: 'ancestorOf', card: ref, name: superCard.name },
-        module,
-      });
+      superType = await this.toType(superCard);
     }
     let fieldTypes: Type['fields'] = await Promise.all(
       Object.entries(fields).map(async ([name, field]) => ({
         name,
         type: field.fieldType,
-        card: await this.toType(field.card, {
-          from: {
-            type: 'fieldOf',
-            field: name,
-            card: ref!,
-            name: field.card.name,
-          },
-          module,
-        }),
+        card: await this.toType(field.card),
       }))
     );
     let type: Type = {
       id,
-      module,
+      module: moduleFrom(ref),
       super: superType,
       fields: fieldTypes,
     };

@@ -83,6 +83,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "primitive",
       "identifyCard",
       "loadCard",
+      "humanReadable",
     ],
   ],
   ["@glimmer/component", ["default"]],
@@ -111,13 +112,8 @@ import type { Saved } from "./search-index";
 
 import type { CardRef } from "./card-ref";
 export type { CardRef };
-export {
-  getField,
-  identifyCard,
-  loadCard,
-  isCardRef,
-  isCard,
-} from "./card-ref";
+
+export * from "./card-ref";
 
 export type {
   CardResource,

@@ -4,7 +4,8 @@ import {
   type Field,
 } from "https://cardstack.com/base/card-api";
 import { Loader } from "./loader";
-import { isField, primitive } from "./constants";
+import { isField } from "./constants";
+import { CardError } from "./error";
 
 export type CardRef =
   | {
@@ -14,16 +15,19 @@ export type CardRef =
   | {
       type: "ancestorOf";
       card: CardRef;
-      name: string;
     }
   | {
       type: "fieldOf";
       card: CardRef;
       field: string;
-      name: string;
     };
 
-let identities = new WeakMap<typeof Card, CardRef>();
+// we don't track ExportedCardRef because Loader.identify already handles those
+let localIdentities = new WeakMap<
+  typeof Card,
+  | { type: "ancestorOf"; card: typeof Card }
+  | { type: "fieldOf"; card: typeof Card; field: string }
+>();
 
 export function isCardRef(ref: any): ref is CardRef {
   if (typeof ref !== "object") {
@@ -58,7 +62,7 @@ export function isCard(card: any): card is typeof Card {
 export async function loadCard(
   ref: CardRef,
   opts?: { loader?: Loader; relativeTo?: URL }
-): Promise<typeof Card | undefined> {
+): Promise<typeof Card> {
   let maybeCard: unknown;
   let loader = opts?.loader ?? Loader.getLoader();
   if (!("type" in ref)) {
@@ -67,41 +71,57 @@ export async function loadCard(
     );
     maybeCard = module[ref.name];
   } else if (ref.type === "ancestorOf") {
-    let child = (await loadCard(ref.card, opts)) ?? {};
-    if (!child) {
-      return undefined;
-    }
-    maybeCard = Reflect.getPrototypeOf(child);
-    if (!identifyCard(maybeCard) && isCard(maybeCard)) {
-      identities.set(maybeCard, ref);
-    }
+    let child = await loadCard(ref.card, opts);
+    maybeCard = getAncestor(child);
   } else if (ref.type === "fieldOf") {
-    let parent = (await loadCard(ref.card, opts)) ?? {};
-    if (!parent || !isCard(parent)) {
-      return undefined;
-    }
+    let parent = await loadCard(ref.card, opts);
     let field = getField(parent, ref.field);
     maybeCard = field?.card;
   } else {
     throw assertNever(ref);
   }
 
-  return isCard(maybeCard) ? maybeCard : undefined;
+  if (isCard(maybeCard)) {
+    return maybeCard;
+  }
+
+  let err = new CardError(`Unable to loadCard ${humanReadable(ref)}`, {
+    status: 404,
+  });
+  err.deps = [moduleFrom(ref)];
+  throw err;
 }
 
 export function identifyCard(card: unknown): CardRef | undefined {
   if (!isCard(card)) {
     return undefined;
   }
-  let cached = identities.get(card);
-  if (cached) {
-    return cached;
-  }
+
   let ref = Loader.identify(card);
   if (ref) {
-    identities.set(card, ref);
+    return ref;
   }
-  return ref;
+
+  let local = localIdentities.get(card);
+  if (!local) {
+    return undefined;
+  }
+  let innerRef = identifyCard(local.card);
+  if (!innerRef) {
+    return undefined;
+  }
+  if (local.type === "ancestorOf") {
+    return {
+      type: "ancestorOf",
+      card: innerRef,
+    };
+  } else {
+    return {
+      type: "fieldOf",
+      field: local.field,
+      card: innerRef,
+    };
+  }
 }
 
 export function getField<CardT extends CardConstructor>(
@@ -114,23 +134,49 @@ export function getField<CardT extends CardConstructor>(
     let result: Field<CardConstructor> | undefined = (desc?.get as any)?.[
       isField
     ];
-    if (result !== undefined) {
-      let ref = !(primitive in card) ? identifyCard(card) : undefined;
-      if (!(primitive in result.card)) {
-        if (ref && !identifyCard(result.card) && isCard(result.card)) {
-          identities.set(result.card, {
-            type: "fieldOf",
-            field: fieldName,
-            card: ref,
-            name: result.card.name,
-          });
-        }
-      }
+    if (result !== undefined && isCard(result.card)) {
+      localIdentities.set(result.card, {
+        type: "fieldOf",
+        field: fieldName,
+        card,
+      });
       return result;
     }
     obj = Reflect.getPrototypeOf(obj);
   }
   return undefined;
+}
+
+export function getAncestor(
+  card: CardConstructor
+): CardConstructor | undefined {
+  let superCard = Reflect.getPrototypeOf(card);
+  if (isCard(superCard)) {
+    localIdentities.set(superCard, {
+      type: "ancestorOf",
+      card,
+    });
+    return superCard;
+  }
+  return undefined;
+}
+
+export function moduleFrom(ref: CardRef): string {
+  if (!("type" in ref)) {
+    return ref.module;
+  } else {
+    return moduleFrom(ref.card);
+  }
+}
+
+export function humanReadable(ref: CardRef): string {
+  if (!("type" in ref)) {
+    return `${ref.name} from ${ref.module}`;
+  } else if (ref.type === "ancestorOf") {
+    return `Ancestor of ${humanReadable(ref)}`;
+  } else {
+    return `Field ${ref.field} of ${humanReadable(ref)}`;
+  }
 }
 
 function assertNever(value: never) {

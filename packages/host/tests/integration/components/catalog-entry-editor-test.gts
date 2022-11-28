@@ -279,8 +279,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Pet',
-            description: 'Catalog entry for Pet card',
+            title: 'Pet from http://test-realm/test/pet',
+            description: 'Catalog entry for Pet from http://test-realm/test/pet',
             ref: {
               module: `${testRealmURL}pet`,
               name: 'Pet'
@@ -359,8 +359,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
             demo: {
               firstName: null,
             },
-            title: 'Person',
-            description: 'Catalog entry for Person card',
+            title: 'Person from http://test-realm/test/person',
+            description: 'Catalog entry for Person from http://test-realm/test/person',
             ref: {
               module: `${testRealmURL}person`,
               name: 'Person'
