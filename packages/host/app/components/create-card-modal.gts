@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import type { ExportedCardRef } from '@cardstack/runtime-common';
+import type { CardRef } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -47,11 +47,11 @@ export default class CreateCardModal extends Component {
     });
   }
 
-  async create<T extends Card>(ref: ExportedCardRef): Promise<undefined | T> {
+  async create<T extends Card>(ref: CardRef): Promise<undefined | T> {
     return await taskFor(this._create).perform(ref) as T | undefined;
   }
 
-  @enqueueTask private async _create<T extends Card>(ref: ExportedCardRef): Promise<undefined | T> {
+  @enqueueTask private async _create<T extends Card>(ref: CardRef): Promise<undefined | T> {
     let doc = { data: { meta: { adoptsFrom: ref }}};
     this.currentRequest = {
       card: await this.cardService.createFromSerialized(doc.data, doc),

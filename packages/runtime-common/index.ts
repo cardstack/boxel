@@ -35,21 +35,17 @@ export interface DirectoryEntryRelationship {
 }
 import { RealmPaths } from "./paths";
 import { Query } from "./query";
-export const baseRealm = new RealmPaths("https://cardstack.com/base/");
+export {
+  baseRealm,
+  catalogEntryRef,
+  baseCardRef,
+  isField,
+  primitive,
+} from "./constants";
 export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from "./not-loaded";
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
-
-import type { ExportedCardRef } from "./search-index";
-export const catalogEntryRef: ExportedCardRef = {
-  module: `${baseRealm.url}catalog-entry`,
-  name: "CatalogEntry",
-};
-export const baseCardRef: ExportedCardRef = {
-  module: `${baseRealm.url}card-api`,
-  name: "Card",
-};
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
@@ -82,6 +78,12 @@ export const externalsMap: Map<string, string[]> = new Map([
       "CardError",
       "isMetaFieldItem",
       "createNewCard",
+      "getField",
+      "isField",
+      "primitive",
+      "identifyCard",
+      "loadCard",
+      "humanReadable",
     ],
   ],
   ["@glimmer/component", ["default"]],
@@ -106,10 +108,14 @@ export { Realm } from "./realm";
 export { Loader } from "./loader";
 export type { Kind, RealmAdapter, FileRef } from "./realm";
 
-import type { CardRef, Saved } from "./search-index";
+import type { Saved } from "./search-index";
+
+import type { CardRef } from "./card-ref";
 export type { CardRef };
+
+export * from "./card-ref";
+
 export type {
-  ExportedCardRef,
   CardResource,
   CardDocument,
   CardFields,
@@ -136,13 +142,13 @@ export const maxLinkDepth = 5;
 export interface CardChooser {
   chooseCard<T extends Card>(
     query: Query,
-    opts?: { offerToCreate: ExportedCardRef }
+    opts?: { offerToCreate: CardRef }
   ): Promise<undefined | T>;
 }
 
 export async function chooseCard<T extends Card>(
   query: Query,
-  opts?: { offerToCreate: ExportedCardRef }
+  opts?: { offerToCreate: CardRef }
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
@@ -156,11 +162,11 @@ export async function chooseCard<T extends Card>(
 }
 
 export interface CardCreator {
-  create<T extends Card>(ref: ExportedCardRef): Promise<undefined | T>;
+  create<T extends Card>(ref: CardRef): Promise<undefined | T>;
 }
 
 export async function createNewCard<T extends Card>(
-  ref: ExportedCardRef
+  ref: CardRef
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
@@ -195,12 +201,11 @@ export function internalKeyFor(
   ref: CardRef,
   relativeTo: URL | undefined
 ): string {
+  if (!("type" in ref)) {
+    let module = trimExecutableExtension(new URL(ref.module, relativeTo)).href;
+    return `${module}/${ref.name}`;
+  }
   switch (ref.type) {
-    case "exportedCard":
-      let module = trimExecutableExtension(
-        new URL(ref.module, relativeTo)
-      ).href;
-      return `${module}/${ref.name}`;
     case "ancestorOf":
       return `${internalKeyFor(ref.card, relativeTo)}/ancestor`;
     case "fieldOf":

@@ -1,5 +1,5 @@
 import { Deferred } from "./deferred";
-import { SearchIndex, CardRef, SingleCardDocument } from "./search-index";
+import { SearchIndex, SingleCardDocument } from "./search-index";
 import { Loader, type MaybeLocalRequest } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
 import {
@@ -15,6 +15,7 @@ import {
   executableExtensions,
   isNode,
   isSingleCardDocument,
+  type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
@@ -333,11 +334,16 @@ export class Realm {
       return badRequest(`Request body is not valid card JSON-API`);
     }
 
-    // new instances are created in a folder named after the card
-    let dirName = `/${join(
-      new URL(this.url).pathname,
-      resource.meta.adoptsFrom.name
-    )}/`;
+    let name: string;
+    if ("name" in resource.meta.adoptsFrom) {
+      // new instances are created in a folder named after the card if it has an
+      // exported name
+      name = resource.meta.adoptsFrom.name;
+    } else {
+      name = "cards";
+    }
+
+    let dirName = `/${join(new URL(this.url).pathname, name)}/`;
     let entries = await this.directoryEntries(new URL(dirName, this.url));
     let index = 0;
     if (entries) {
@@ -636,17 +642,6 @@ export class Realm {
 }
 
 export type Kind = "file" | "directory";
-
-export function getExportedCardContext(ref: CardRef): {
-  module: string;
-  name: string;
-} {
-  if (ref.type === "exportedCard") {
-    return { module: ref.module, name: ref.name };
-  } else {
-    return getExportedCardContext(ref.card);
-  }
-}
 
 function lastModifiedHeader(
   card: LooseSingleCardDocument

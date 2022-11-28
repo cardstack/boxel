@@ -10,8 +10,10 @@ import {
   hasExecutableExtension,
   maxLinkDepth,
   type NotLoaded,
+  type CardRef,
 } from ".";
-import { Kind, Realm, getExportedCardContext } from "./realm";
+import { loadCard, identifyCard, isCard, moduleFrom } from "./card-ref";
+import { Kind, Realm } from "./realm";
 import { RealmPaths, LocalPath } from "./paths";
 import ignore, { Ignore } from "ignore";
 import isEqual from "lodash/isEqual";
@@ -25,8 +27,6 @@ import {
   type SerializedError,
 } from "./error";
 import type {
-  ExportedCardRef,
-  CardRef,
   CardResource,
   SingleCardDocument,
   Relationship,
@@ -345,14 +345,13 @@ export class CurrentRun {
     }
 
     let refs = Object.values(module)
-      .filter(
-        (maybeCard) =>
-          typeof maybeCard === "function" && "baseCard" in maybeCard
-      )
-      .map((card) => Loader.identify(card))
-      .filter(Boolean) as ExportedCardRef[];
+      .filter((maybeCard) => isCard(maybeCard))
+      .map((card) => identifyCard(card))
+      .filter(Boolean) as CardRef[];
     for (let ref of refs) {
-      await this.buildModule(ref.module, url);
+      if (!("type" in ref)) {
+        await this.buildModule(ref.module, url);
+      }
     }
   }
 
@@ -410,11 +409,9 @@ export class CurrentRun {
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, "")
     );
     let moduleURL = new URL(
-      resource.meta.adoptsFrom.module,
+      moduleFrom(resource.meta.adoptsFrom),
       new URL(path, this.realm.url)
-    );
-    let name = resource.meta.adoptsFrom.name;
-    let cardRef = { module: moduleURL.href, name };
+    ).href;
     let typesMaybeError: TypesWithErrors | undefined;
     let uncaughtError: Error | undefined;
     let doc: SingleCardDocument | undefined;
@@ -471,12 +468,7 @@ export class CurrentRun {
           resource: doc.data,
           searchData,
           types: typesMaybeError.types,
-          deps: new Set([
-            ...(await this.loader.getConsumedModules(moduleURL.href)).filter(
-              (u) => u !== moduleURL.href
-            ),
-            moduleURL.href,
-          ]),
+          deps: new Set(await this.loader.getConsumedModules(moduleURL)),
         },
       });
       deferred.fulfill();
@@ -493,7 +485,7 @@ export class CurrentRun {
               ? serializableError(uncaughtError)
               : { detail: `${uncaughtError.message}` },
         };
-        error.error.deps = [cardRef.module];
+        error.error.deps = [moduleURL];
       } else if (typesMaybeError?.type === "error") {
         error = { type: "error", error: typesMaybeError.error };
       } else {
@@ -540,9 +532,9 @@ export class CurrentRun {
         m[exportName];
       }
     }
-    let consumes = await (
-      await this.loader.getConsumedModules(url)
-    ).filter((u) => u !== url);
+    let consumes = (await this.loader.getConsumedModules(url)).filter(
+      (u) => u !== url
+    );
     let module: Module = {
       url,
       consumes,
@@ -556,38 +548,26 @@ export class CurrentRun {
     if (cached) {
       return await cached;
     }
-    let ref = this.#loader.identify(card);
+    let ref = identifyCard(card);
     if (!ref) {
       throw new Error(`could not identify card ${card.name}`);
     }
     let deferred = new Deferred<TypesWithErrors>();
     this.#typesCache.set(card, deferred.promise);
     let types: string[] = [];
-    let fullRef: CardRef = { type: "exportedCard", ...ref };
+    let fullRef: CardRef = ref;
     while (fullRef) {
-      let loadedCard = (await this.loadCard(fullRef)) as
-        | {
-            card: typeof Card;
-            ref: CardRef;
-          }
-        | undefined;
-      if (!loadedCard) {
-        let { module } = getExportedCardContext(fullRef);
-        let result: TypesWithErrors = {
-          type: "error",
-          error: {
-            detail: `Unable to determine card types for ${JSON.stringify(ref)}`,
-            status: 500,
-            additionalErrors: null,
-            deps: [module],
-          },
-        };
-        deferred.fulfill(result);
-        return result;
+      let loadedCard = await loadCard(fullRef, { loader: this.loader });
+      let loadedCardRef = identifyCard(loadedCard);
+      if (!loadedCardRef) {
+        throw new Error(`could not identify card ${loadedCard.name}`);
       }
-      types.push(internalKeyFor(loadedCard.ref, undefined));
-      if (!isEqual(loadedCard.ref, { type: "exportedCard", ...baseCardRef })) {
-        fullRef = { type: "ancestorOf", card: loadedCard.ref };
+      types.push(internalKeyFor(loadedCardRef, undefined));
+      if (!isEqual(loadedCardRef, baseCardRef)) {
+        fullRef = {
+          type: "ancestorOf",
+          card: loadedCardRef,
+        };
       } else {
         break;
       }
@@ -617,59 +597,6 @@ export class CurrentRun {
     let ignore = this.ignoreMap.get(new URL(ignoreURL))!;
     let pathname = this.#realmPaths.local(url);
     return ignore.test(pathname).ignored;
-  }
-
-  private async loadCard(
-    ref: CardRef
-  ): Promise<{ card: typeof Card; ref: CardRef } | undefined> {
-    let maybeCard: unknown;
-    let canonicalRef: CardRef | undefined;
-    if (ref.type === "exportedCard") {
-      let module = await this.loader.import<Record<string, any>>(ref.module);
-      maybeCard = module[ref.name];
-      canonicalRef = { ...ref, ...Loader.identify(maybeCard) };
-    } else if (ref.type === "ancestorOf") {
-      let { card: child, ref: childRef } =
-        (await this.loadCard(ref.card)) ?? {};
-      if (!child || !childRef) {
-        return undefined;
-      }
-      maybeCard = Reflect.getPrototypeOf(child) as typeof Card;
-      let cardId = Loader.identify(maybeCard);
-      canonicalRef = cardId
-        ? { type: "exportedCard", ...cardId }
-        : { ...ref, card: childRef };
-    } else if (ref.type === "fieldOf") {
-      let { card: parent, ref: parentRef } =
-        (await this.loadCard(ref.card)) ?? {};
-      if (!parent || !parentRef) {
-        return undefined;
-      }
-      let api = await this.loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`
-      );
-      let field = api.getField(parent, ref.field);
-      maybeCard = field?.card;
-      let cardId = Loader.identify(maybeCard);
-      canonicalRef = cardId
-        ? { type: "exportedCard", ...cardId }
-        : { ...ref, card: parentRef };
-    } else {
-      throw assertNever(ref);
-    }
-
-    if (
-      typeof maybeCard === "function" &&
-      "baseCard" in maybeCard &&
-      canonicalRef
-    ) {
-      return {
-        card: maybeCard as unknown as typeof Card,
-        ref: canonicalRef,
-      };
-    } else {
-      return undefined;
-    }
   }
 }
 
@@ -783,8 +710,4 @@ function invalidate(
   }
 
   return [...invalidationSet];
-}
-
-function assertNever(value: never) {
-  return new Error(`should never happen ${value}`);
 }
