@@ -1,14 +1,171 @@
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import StaticBehavior from '@cardstack/boxel-motion/behaviors/static';
+import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
+import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
+import { easeInAndOut } from '@cardstack/boxel-motion/easings/cosine';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
+import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import { SpriteType } from '@cardstack/boxel-motion/models/sprite';
-//import fade from '@cardstack/boxel-motion/transitions/fade';
-//import magicMove from '@cardstack/boxel-motion/transitions/magic-move';
-//import runAnimations from '@cardstack/boxel-motion/utils/run-animations';
 import Controller from '@ember/controller';
 
 export default class MotionStudy extends Controller {
+  transition(changeset: Changeset): AnimationDefinition {
+    let fadeDuration = 300;
+    let resizeAndMoveDuration = 500;
+
+    let cardSprites = changeset.spritesFor({
+      role: 'card',
+      type: SpriteType.Kept,
+    });
+
+    let nonAnimatingCardSprites = Array.from(cardSprites).filter(
+      (s) =>
+        !(
+          s.boundsDelta &&
+          (s.boundsDelta.width !== 0 ||
+            s.boundsDelta.height !== 0 ||
+            s.boundsDelta.x !== 0 ||
+            s.boundsDelta.y !== 0)
+        )
+    );
+
+    let removedCardSprites = changeset.spritesFor({
+      role: 'card',
+      type: SpriteType.Removed,
+    });
+
+    let removedCardContentSprites = changeset.spritesFor({
+      role: 'card-content',
+      type: SpriteType.Removed,
+    });
+
+    let cardContentSprites = changeset.spritesFor({
+      role: 'card-content',
+      type: SpriteType.Inserted,
+    });
+
+    let fadeOutClosingCardContent = {
+      sprites: removedCardContentSprites,
+      properties: {
+        opacity: { to: 0 },
+      },
+      timing: {
+        behavior: new TweenBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    let moveClosingCardContentToForeground = {
+      sprites: removedCardContentSprites,
+      properties: {
+        zIndex: 2,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    let keepClosingCardContentHidden = {
+      sprites: removedCardContentSprites,
+      properties: {
+        opacity: 0,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: resizeAndMoveDuration,
+      },
+    };
+
+    let moveAllCardsToMidground = {
+      sprites: cardSprites,
+      properties: {
+        zIndex: 1,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    let moveNonAnimatingCardsToBackground = {
+      sprites: new Set(nonAnimatingCardSprites),
+      properties: {
+        zIndex: 0,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: resizeAndMoveDuration,
+      },
+    };
+
+    let resizeAnimatingCard = {
+      sprites: cardSprites,
+      properties: {
+        translateX: {},
+        translateY: {},
+        width: {},
+        height: {},
+      },
+      timing: {
+        // TODO convert to SpringBehavior when its duration can be referenced by other animations
+        behavior: new TweenBehavior({
+          easing: easeInAndOut,
+        }),
+        duration: resizeAndMoveDuration,
+      },
+    };
+
+    let keepCardsBeingRemovedUntilOpeningCompletes = {
+      sprites: removedCardSprites,
+      properties: {},
+      timing: {
+        behavior: new WaitBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    let fadeInOpeningCardContent = {
+      sprites: cardContentSprites,
+      properties: {
+        opacity: { from: 0 },
+      },
+      timing: {
+        behavior: new TweenBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    return {
+      timeline: {
+        type: 'sequence',
+        animations: [
+          {
+            type: 'parallel',
+            animations: [
+              moveClosingCardContentToForeground,
+              fadeOutClosingCardContent,
+            ],
+          },
+          {
+            type: 'parallel',
+            animations: [
+              keepClosingCardContentHidden,
+              moveAllCardsToMidground,
+              moveNonAnimatingCardsToBackground,
+              resizeAnimatingCard,
+              keepCardsBeingRemovedUntilOpeningCompletes,
+            ],
+          },
+          fadeInOpeningCardContent,
+        ],
+      },
+    };
+  }
+
+  /* imperative implementation preserved for reference
   async transition(changeset: Changeset): Promise<void> {
-    /*let { context } = changeset;
+    let { context } = changeset;
 
     let behavior = new SpringBehavior({
       overshootClamping: false,
@@ -124,6 +281,7 @@ export default class MotionStudy extends Controller {
 
     cardContentSprites.forEach((s) => {
       s.element.style.removeProperty('opacity');
-    });*/
+    });
   }
+  */
 }
