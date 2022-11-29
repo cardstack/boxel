@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-empty-function */
-// import { AnimationParticipantManager } from '@cardstack/boxel-motion/models/animation-participant';
 import { IContext } from '@cardstack/boxel-motion/addon/models/animator';
 import {
   AnimationParticipant,
