@@ -59,7 +59,9 @@ export default class PruneAndGraft extends Controller {
                   },
                 },
                 {
-                  sprites: new Set([extra.values().next().value.counterpart]),
+                  sprites: new Set(
+                    [extra.values().next().value.counterpart].filter((v) => v)
+                  ),
                   properties: {
                     opacity: 0,
                   },
