@@ -8,7 +8,7 @@ let defaultStyles = initStyleSheet(`
   this {
     border: 1px solid gray;
     border-radius: 10px;
-    background-color: #e9e7e7;
+    background-color: #fff;
     padding: 1rem;
   }
 `);
@@ -17,7 +17,7 @@ let editStyles = initStyleSheet(`
   this {
     border: 1px solid gray;
     border-radius: 10px;
-    background-color: #e9e7e7;
+    background-color: #fff;
     padding: 1rem;
   }
   .edit-field {

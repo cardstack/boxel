@@ -4,13 +4,10 @@ import IntegerCard from 'https://cardstack.com/base/integer';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 
 let styleSheet = initStyleSheet(`
-  this { 
+  this {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr auto;
     line-height: 1.5;
-  }
-  header {
-    font-weight: bold;
   }
   address {
     font-style: normal;
@@ -22,14 +19,14 @@ class VendorTemplate extends Component<typeof Vendor> {
     {{#if @model.vendorName}}
       <div {{attachStyles styleSheet}}>
         <div>
-          <header><@fields.vendorName/></header>
+          <@fields.vendorName/>
           <address>
             <div><@fields.addressLine/></div>
             <@fields.city/> <@fields.state/> <@fields.zipCode/>
           </address>
           <@fields.email/>
         </div>
-        <@fields.logo/>
+        <img src={{@model.logo}} />
       </div>
     {{/if}}
   </template>
@@ -43,7 +40,7 @@ export class Vendor extends Card {
   @field zipCode = contains(IntegerCard);
   @field email = contains(StringCard);
   @field logo = contains(StringCard);
-  
+
   static embedded = VendorTemplate;
   static isolated = VendorTemplate;
 }
