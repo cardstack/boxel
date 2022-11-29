@@ -10,7 +10,7 @@
       },
       "demo": {
         "currency": "USD",
-        "logo": null,
+        "logo": "http://local-realm/invoice-assets/currency-usd.png",
         "exchangeRate": 1,
         "balance": 150
       }
