@@ -21,6 +21,7 @@
     "module": "CommonJS",
     "esModuleInterop": true,
     "experimentalDecorators": true,
+    "strict": true,
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"]
     }

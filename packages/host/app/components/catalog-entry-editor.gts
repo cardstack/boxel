@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { catalogEntryRef, type ExportedCardRef } from '@cardstack/runtime-common';
+import { catalogEntryRef, type CardRef, humanReadable } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -14,7 +14,7 @@ import { type Card } from "https://cardstack.com/base/card-api";
 
 interface Signature {
   Args: {
-    ref: ExportedCardRef;
+    ref: CardRef;
   }
 }
 
@@ -71,8 +71,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
   async createEntry(): Promise<void> {
     let resource = {
       attributes: {
-        title: this.args.ref.name,
-        description: `Catalog entry for ${this.args.ref.name} card`,
+        title: humanReadable(this.args.ref),
+        description: `Catalog entry for ${humanReadable(this.args.ref)}`,
         ref: this.args.ref,
         demo: undefined
       },

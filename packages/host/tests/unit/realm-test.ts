@@ -1,8 +1,5 @@
 import { module, test } from 'qunit';
-import {
-  CardRef,
-  isSingleCardDocument,
-} from '@cardstack/runtime-common/search-index';
+import { isSingleCardDocument } from '@cardstack/runtime-common/search-index';
 import {
   cardSrc,
   compiledCard,
@@ -14,7 +11,7 @@ import {
   setupCardLogs,
 } from '../helpers';
 import { stringify } from 'qs';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, CardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 

@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { chooseCard, catalogEntryRef } from '@cardstack/runtime-common';
+import { chooseCard, catalogEntryRef, identifyCard } from '@cardstack/runtime-common';
 import { getCardType } from '../resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -69,11 +69,11 @@ export default class Schema extends Component<Signature> {
             />
             <label>
               contains
-              <input 
+              <input
                 data-test-new-field-contains
                 {{RadioInitializer (eq this.newFieldType "contains") true}}
-                type="radio" 
-                disabled={{this.isNewFieldDisabled}} 
+                type="radio"
+                disabled={{this.isNewFieldDisabled}}
                 checked={{eq this.newFieldType "contains"}}
                 {{on "change" (fn this.setNewFieldType "contains")}}
                 name="field-type"
@@ -81,11 +81,11 @@ export default class Schema extends Component<Signature> {
             </label>
             <label>
               containsMany
-              <input 
+              <input
                 data-test-new-field-containsMany
                 {{RadioInitializer (eq this.newFieldType "containsMany") true}}
-                type="radio" 
-                disabled={{this.isNewFieldDisabled}} 
+                type="radio"
+                disabled={{this.isNewFieldDisabled}}
                 checked={{eq this.newFieldType "containsMany"}}
                 {{on "change" (fn this.setNewFieldType "containsMany")}}
                 name="field-type"
@@ -113,11 +113,11 @@ export default class Schema extends Component<Signature> {
 
   @cached
   get ref() {
-    let ref = this.loaderService.loader.identify(this.args.card);
+    let ref = identifyCard(this.args.card);
     if (!ref) {
       throw new Error(`bug: unable to identify card ${this.args.card.name}`);
     }
-    return ref;
+    return ref as { module: string; name: string };
   }
 
   @cached
@@ -226,8 +226,8 @@ export default class Schema extends Component<Signature> {
     if (this.args.file.state !== 'ready') {
       throw new Error(`the file ${this.args.file.url} is not open`);
     }
-    // note that this write will cause the component to rerender, so 
-    // any code after this write will not be executed since the component will 
+    // note that this write will cause the component to rerender, so
+    // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
     await this.args.file.write(src, true);
   }

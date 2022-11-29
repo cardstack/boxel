@@ -26,7 +26,6 @@ import typescriptPlugin from "@babel/plugin-syntax-typescript";
 
 import type { types as t } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
-import type { ExportedCardRef } from "./search-index";
 import type { FieldType } from "https://cardstack.com/base/card-api";
 
 export type { ClassReference, ExternalReference };
@@ -71,7 +70,7 @@ export class ModuleSyntax {
       | { type: "exportedName"; name: string }
       | { type: "localName"; name: string },
     fieldName: string,
-    fieldRef: ExportedCardRef,
+    fieldRef: { name: string; module: string },
     fieldType: FieldType
   ) {
     let card = this.getCard(cardName);
@@ -194,7 +193,7 @@ function preprocessTemplateTags(src: string): string {
 
 function makeNewField(
   target: NodePath<t.Node>,
-  fieldRef: ExportedCardRef,
+  fieldRef: { name: string; module: string },
   fieldType: FieldType,
   fieldName: string
 ): string {
@@ -235,7 +234,7 @@ function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
   return currentPath as NodePath<t.Program>;
 }
 
-function suggestedCardName(ref: ExportedCardRef): string {
+function suggestedCardName(ref: { name: string; module: string }): string {
   if (ref.name.toLowerCase().endsWith("card")) {
     return ref.name;
   }

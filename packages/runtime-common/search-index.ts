@@ -7,61 +7,18 @@ import { CardError, type SerializedError } from "./error";
 import flatMap from "lodash/flatMap";
 import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
-
-export type ExportedCardRef = {
-  module: string;
-  name: string;
-};
-
-export type CardRef =
-  | {
-      type: "exportedCard";
-      module: string;
-      name: string;
-    }
-  | {
-      type: "ancestorOf";
-      card: CardRef;
-    }
-  | {
-      type: "fieldOf";
-      card: CardRef;
-      field: string;
-    };
-
-export function isCardRef(ref: any): ref is CardRef {
-  if (typeof ref !== "object") {
-    return false;
-  }
-  if (!("type" in ref)) {
-    return false;
-  }
-  if (ref.type === "exportedCard") {
-    if (!("module" in ref) || !("name" in ref)) {
-      return false;
-    }
-    return typeof ref.module === "string" && typeof ref.name === "string";
-  } else if (ref.type === "ancestorOf") {
-    if (!("card" in ref)) {
-      return false;
-    }
-    return isCardRef(ref.card);
-  } else if (ref.type === "fieldOf") {
-    if (!("card" in ref) || !("field" in ref)) {
-      return false;
-    }
-    if (typeof ref.card !== "object" || typeof ref.field !== "string") {
-      return false;
-    }
-    return isCardRef(ref.card);
-  }
-  return false;
-}
+import {
+  type CardRef,
+  getField,
+  identifyCard,
+  loadCard,
+  isCardRef,
+} from "./card-ref";
 
 export type Saved = string;
 export type Unsaved = string | undefined;
 export interface Meta {
-  adoptsFrom: ExportedCardRef;
+  adoptsFrom: CardRef;
   fields?: CardFields;
 }
 export interface CardFields {
@@ -78,8 +35,10 @@ export type Relationship = {
     // there are other valid items for links in the spec, but we don't
     // anticipate using them
     self: string | null;
+    related?: string | null;
   };
   data?: ResourceID | ResourceID[] | null;
+  meta?: Record<string, any>;
 };
 
 export interface CardResource<Identity extends Unsaved = Saved> {
@@ -149,12 +108,7 @@ export function isCardResource(resource: any): resource is CardResource {
     return false;
   }
   let { adoptsFrom } = meta;
-  return (
-    "module" in adoptsFrom &&
-    typeof adoptsFrom.module === "string" &&
-    "name" in adoptsFrom &&
-    typeof adoptsFrom.name === "string"
-  );
+  return isCardRef(adoptsFrom);
 }
 
 export function isCardFields(fields: any): fields is CardFields {
@@ -186,12 +140,7 @@ export function isMeta(meta: any, allowPartial = false) {
   }
   if ("adoptsFrom" in meta) {
     let { adoptsFrom } = meta;
-    if (
-      !("module" in adoptsFrom) ||
-      typeof adoptsFrom.module !== "string" ||
-      !("name" in adoptsFrom) ||
-      typeof adoptsFrom.name !== "string"
-    ) {
+    if (!isCardRef(adoptsFrom)) {
       return false;
     }
   } else {
@@ -213,6 +162,9 @@ export function isRelationship(
   if (typeof relationship !== "object" || relationship == null) {
     return false;
   }
+  if ("meta" in relationship && typeof relationship.meta !== "object") {
+    return false;
+  }
   if ("links" in relationship) {
     let { links } = relationship;
     if (typeof links !== "object" || links == null) {
@@ -224,6 +176,11 @@ export function isRelationship(
     let { self } = links;
     if (typeof self !== "string" && self !== null) {
       return false;
+    }
+    if ("related" in links) {
+      if (typeof links.related !== "string" && links.related !== null) {
+        return false;
+      }
     }
   } else if ("data" in relationship) {
     let { data } = relationship;
@@ -518,32 +475,38 @@ export class SearchIndex {
   }
 
   private async loadFieldCard(
-    ref: ExportedCardRef,
+    ref: CardRef,
     fieldPath: string
   ): Promise<typeof Card> {
-    let api = await this.loadAPI();
-    let module: Record<string, typeof Card>;
+    let card: typeof Card | undefined;
     try {
-      module = await this.loader.import<Record<string, typeof Card>>(
-        ref.module
-      );
+      card = await loadCard(ref, { loader: this.loader });
     } catch (err: any) {
-      throw new Error(
-        `Your filter refers to nonexistent type: import ${
-          ref.name === "default" ? "default" : `{ ${ref.name} }`
-        } from "${ref.module}"`
-      );
+      if (!("type" in ref)) {
+        throw new Error(
+          `Your filter refers to nonexistent type: import ${
+            ref.name === "default" ? "default" : `{ ${ref.name} }`
+          } from "${ref.module}"`
+        );
+      } else {
+        throw new Error(
+          `Your filter refers to nonexistent type: ${JSON.stringify(
+            ref,
+            null,
+            2
+          )}`
+        );
+      }
     }
-    let card: typeof Card | undefined = module[ref.name];
     let segments = fieldPath.split(".");
     while (segments.length) {
       let fieldName = segments.shift()!;
       let prevCard = card;
-      card = api.getField(card, fieldName)?.card;
+      card = getField(card, fieldName)?.card;
       if (!card) {
         throw new Error(
           `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(
-            this.loader.identify(prevCard)
+            identifyCard(prevCard)
           )}`
         );
       }
@@ -559,11 +522,10 @@ export class SearchIndex {
     }
     let sorters = expressions.map(({ by, on, direction }) => {
       return (e1: SearchEntry, e2: SearchEntry) => {
-        let ref: CardRef = { type: "exportedCard", ...on };
-        if (!this.cardHasType(e1, ref)) {
+        if (!this.cardHasType(e1, on)) {
           return direction === "desc" ? -1 : 1;
         }
-        if (!this.cardHasType(e2, ref)) {
+        if (!this.cardHasType(e2, on)) {
           return direction === "desc" ? 1 : -1;
         }
         let a = e1.searchData[by];
@@ -601,15 +563,14 @@ export class SearchIndex {
   // (`false`)
   private async buildMatcher(
     filter: Filter | undefined,
-    onRef: ExportedCardRef
+    onRef: CardRef
   ): Promise<(entry: SearchEntry) => boolean | null> {
     if (!filter) {
       return (_entry) => true;
     }
 
     if ("type" in filter) {
-      let ref: CardRef = { type: "exportedCard", ...filter.type };
-      return (entry) => this.cardHasType(entry, ref);
+      return (entry) => this.cardHasType(entry, filter.type);
     }
 
     let on = filter?.on ?? onRef;
@@ -642,7 +603,7 @@ export class SearchIndex {
     }
 
     if ("eq" in filter) {
-      let ref: CardRef = { type: "exportedCard", ...on };
+      let ref: CardRef = on;
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
@@ -681,7 +642,7 @@ export class SearchIndex {
     }
 
     if ("range" in filter) {
-      let ref: CardRef = { type: "exportedCard", ...on };
+      let ref: CardRef = on;
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(

@@ -8,7 +8,7 @@ import { taskFor } from 'ember-concurrency-ts';
 import { enqueueTask } from 'ember-concurrency';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import type { Query } from '@cardstack/runtime-common/query';
-import { createNewCard, type ExportedCardRef } from '@cardstack/runtime-common';
+import { createNewCard, type CardRef } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
@@ -49,7 +49,7 @@ export default class CardCatalogModal extends Component {
   @tracked currentRequest: {
     search: Search;
     deferred: Deferred<Card | undefined>;
-    opts?: { offerToCreate?: ExportedCardRef };
+    opts?: { offerToCreate?: CardRef };
   } | undefined = undefined;
 
   constructor(owner: unknown, args: {}) {
@@ -60,11 +60,11 @@ export default class CardCatalogModal extends Component {
     });
   }
 
-  async chooseCard<T extends Card>(query: Query, opts?: { offerToCreate?: ExportedCardRef }): Promise<undefined | T> {
+  async chooseCard<T extends Card>(query: Query, opts?: { offerToCreate?: CardRef }): Promise<undefined | T> {
     return await taskFor(this._chooseCard).perform(query, opts) as T | undefined;
   }
 
-  @enqueueTask private async _chooseCard<T extends Card>(query: Query, opts: { offerToCreate?: ExportedCardRef } = {}): Promise<undefined | T> {
+  @enqueueTask private async _chooseCard<T extends Card>(query: Query, opts: { offerToCreate?: CardRef } = {}): Promise<undefined | T> {
     this.currentRequest = {
       search: getSearchResults(this, () => query),
       deferred: new Deferred(),
@@ -85,7 +85,7 @@ export default class CardCatalogModal extends Component {
     }
   }
 
-  @action async createNew(ref: ExportedCardRef): Promise<void> {
+  @action async createNew(ref: CardRef): Promise<void> {
     let newCard = await createNewCard(ref);
     this.pick(newCard);
   }

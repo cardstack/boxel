@@ -1,3 +1,5 @@
+import { Value } from '../value';
+
 export const FPS = 60 / 1000; // 60 FPS
 export function timeToFrame(time: number): number {
   return Math.round(time * FPS);
@@ -7,8 +9,6 @@ export type EasingToFramesArgument = {
   from: number;
   to: number;
   duration: number;
-  lastFrame?: Frame;
-  previousFramesFromTime?: Frame[];
   delay?: number;
 };
 
@@ -19,10 +19,21 @@ export type SpringToFramesArgument = {
   delay?: number;
 };
 
+export type StaticToFramesArgument = {
+  value: Value;
+  duration: number;
+};
+
+export type WaitToFramesArgument = {
+  duration: number;
+};
+
 export type Frame = {
   value: number;
   velocity: number; // units per second
 };
+
+export type FrameGenerator = Generator<Frame | void, void, never>;
 
 export default interface Behavior {
   /**
@@ -30,7 +41,13 @@ export default interface Behavior {
    *
    * @param options
    */
-  toFrames(options: EasingToFramesArgument | SpringToFramesArgument): Frame[];
+  getFrames(
+    options:
+      | EasingToFramesArgument
+      | SpringToFramesArgument
+      | StaticToFramesArgument
+      | WaitToFramesArgument
+  ): FrameGenerator;
 }
 
 export interface EasingBehavior extends Behavior {

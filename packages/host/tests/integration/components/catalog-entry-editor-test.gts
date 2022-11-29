@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
-import { baseRealm, ExportedCardRef } from '@cardstack/runtime-common';
+import { baseRealm, CardRef } from '@cardstack/runtime-common';
 import { Loader } from "@cardstack/runtime-common/loader";
 import { Realm } from "@cardstack/runtime-common/realm";
 import { setupRenderingTest } from 'ember-qunit';
@@ -75,7 +75,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can publish new catalog entry', async function (assert) {
-    const args: ExportedCardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -189,7 +189,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     }));
 
-    const args: ExportedCardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -237,7 +237,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can create new card with missing composite field value', async function (assert) {
-    const args: ExportedCardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -279,8 +279,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Pet',
-            description: 'Catalog entry for Pet card',
+            title: 'Pet from http://test-realm/test/pet',
+            description: 'Catalog entry for Pet from http://test-realm/test/pet',
             ref: {
               module: `${testRealmURL}pet`,
               name: 'Pet'
@@ -315,7 +315,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can create new catalog entry with all demo card field values missing', async function (assert) {
-    const args: ExportedCardRef =  { module: `${testRealmURL}person`, name: 'Person' };
+    const args: CardRef =  { module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -359,8 +359,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
             demo: {
               firstName: null,
             },
-            title: 'Person',
-            description: 'Catalog entry for Person card',
+            title: 'Person from http://test-realm/test/person',
+            description: 'Catalog entry for Person from http://test-realm/test/person',
             ref: {
               module: `${testRealmURL}person`,
               name: 'Person'
@@ -466,7 +466,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     }));
 
-    const args: ExportedCardRef =  { module: `${testRealmURL}person`, name: 'Person' };
+    const args: CardRef =  { module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

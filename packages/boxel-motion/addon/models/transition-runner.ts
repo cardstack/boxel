@@ -1,5 +1,7 @@
 import { FPS } from '@cardstack/boxel-motion/behaviors/base';
 import { SpriteAnimation } from '@cardstack/boxel-motion/models/sprite-animation';
+import { Keyframe } from '@cardstack/boxel-motion/value';
+import { Frame } from '@cardstack/boxel-motion/value/simple-frame';
 import { assert } from '@ember/debug';
 import { task } from 'ember-concurrency';
 
@@ -8,6 +10,43 @@ import Sprite, { SpriteType } from '../models/sprite';
 import { IContext, Changeset } from './animator';
 
 import { AnimationDefinition, OrchestrationMatrix } from './orchestration';
+
+function constructKeyframe(
+  previousKeyframe: Partial<Keyframe>,
+  frames: Frame[]
+) {
+  let keyframe: Keyframe = {};
+
+  let transformValues: { [k: string]: string[] } = {
+    translateX: [],
+    translateY: [],
+  };
+  let transformTemplate = new Set(Object.keys(transformValues));
+  frames.forEach((frame) => {
+    if (transformTemplate.has(frame.property)) {
+      transformValues[frame.property]!.push(frame.serializeValue() as string);
+    } else {
+      keyframe[frame.property] = frame.serializeValue();
+    }
+  });
+
+  let transformStrings = Object.entries(transformValues).reduce(
+    (result, [key, values]) => {
+      result.push(...values.map((value) => `${key}(${value})`));
+      return result;
+    },
+    [] as string[]
+  );
+
+  if (transformStrings.length) {
+    keyframe['transform'] = transformStrings.join(' ');
+  }
+
+  return {
+    ...previousKeyframe,
+    ...keyframe,
+  } as Keyframe;
+}
 
 export default class TransitionRunner {
   animationContext: IContext;
@@ -24,9 +63,7 @@ export default class TransitionRunner {
     let orchestrationMatrix = OrchestrationMatrix.from(timeline);
     let result: SpriteAnimation[] = [];
     for (let [sprite, keyframes] of orchestrationMatrix
-      .getKeyframes((prev, incoming) => {
-        return Object.assign({}, prev, ...incoming);
-      })
+      .getKeyframes(constructKeyframe)
       .entries()) {
       let duration = Math.max(0, (keyframes.length - 1) / FPS);
       let keyframeAnimationOptions = {
@@ -66,9 +103,6 @@ export default class TransitionRunner {
         let promises = animations.map((animation) => animation.finished);
 
         animations.forEach((a) => {
-          if (this.animationContext.hasOrphan(a.sprite)) {
-            this.animationContext.removeOrphan(a.sprite);
-          }
           if (a.sprite.type === SpriteType.Removed) {
             this.animationContext.appendOrphan(a.sprite);
             a.sprite.lockStyles();
@@ -83,7 +117,6 @@ export default class TransitionRunner {
           throw error;
         }
       }
-      animationContext.clearOrphans();
     }
   }
 
