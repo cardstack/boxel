@@ -1,8 +1,6 @@
 import Component from '@glimmer/component';
 import AnimationContext from '@cardstack/boxel-motion/components/animation-context';
 import sprite from '@cardstack/boxel-motion/modifiers/sprite';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import type { Changeset } from '@cardstack/boxel-motion/models/animator';
 import type { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
@@ -15,22 +13,14 @@ interface Signature {
   }
 }
 
-function a(thing: any){ return [thing] }
-
 export default class Preview extends Component<Signature> {
   <template>
-    <button {{on 'click' this.toggle}}>Toggle</button>
     <AnimationContext @use={{this.transition}} >
-      {{#each (a this.renderedCard) as |Rc|}}
-        <div {{sprite id="first"}} >
-          <Rc />
-        </div>
-      {{/each}}
+      <div {{sprite id="first"}} >
+        <this.renderedCard/>
+      </div>
     </AnimationContext>
   </template>
-
-  toggle = () => this.mode = !this.mode;
-  @tracked mode = true;
 
   transition = (changeset: Changeset): AnimationDefinition => {
     return {
@@ -40,7 +30,8 @@ export default class Preview extends Component<Signature> {
           {
             sprites: changeset.keptSprites,
             properties: {
-              size: {}
+              height: {},
+              width: {},
             },
             timing: {
               behavior: new SpringBehavior()

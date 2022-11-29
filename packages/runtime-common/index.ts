@@ -102,6 +102,7 @@ export const externalsMap: Map<string, string[]> = new Map([
   ["lodash", ["flatMap", "startCase", "get", "set", "isEqual", "merge"]],
   ["tracked-built-ins", ["TrackedWeakMap"]],
   ["date-fns", ["parseISO", "format", "parse"]],
+  ["@cardstack/boxel-motion/modifiers/sprite", ["default"]],
 ]);
 
 export { Realm } from "./realm";

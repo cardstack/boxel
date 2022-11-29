@@ -79,3 +79,8 @@ import * as lodash from "lodash";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("lodash", lodash);
 import * as dateFns from "date-fns";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("date-fns", dateFns);
+
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set(
+  "@cardstack/boxel-motion/modifiers/sprite",
+  {}
+);

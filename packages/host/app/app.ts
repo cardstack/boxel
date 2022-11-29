@@ -77,6 +77,11 @@ import * as tracked from 'tracked-built-ins';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('tracked-built-ins', tracked);
 import * as dateFns from 'date-fns';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('date-fns', dateFns);
+import * as sprite from '@cardstack/boxel-motion/modifiers/sprite';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  '@cardstack/boxel-motion/modifiers/sprite',
+  sprite
+);
 
 export default class App extends Application {
   modulePrefix = config.modulePrefix;

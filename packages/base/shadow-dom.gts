@@ -21,6 +21,11 @@ interface ModifierSignature {
 export default class ShadowDOM extends Component<Signature> {
   <template>
     <div {{ShadowRootModifier this.setShadow}} data-test-shadow-component>
+      {{!-- this "if" triggers a rerender that causes the card to disappear
+      for a single frame which then creates instability in boxel motion when
+      trying to match the kept sprites. Not using a ShadowDOM does solve the
+      this issue at the cost of style encapsulation.
+      --}}
       {{#if this.shadow}}
         {{#in-element this.shadow}}
           {{yield}}
