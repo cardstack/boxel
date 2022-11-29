@@ -10,9 +10,9 @@ import { balanceInCurrency, formatUSD } from './currency-format';
 let invoiceStyles = initStyleSheet(`
   this {
     max-width: 50rem;
-    background-color: #fff; 
-    border: 1px solid gray; 
-    border-radius: 10px; 
+    background-color: #fff;
+    border: 1px solid gray;
+    border-radius: 10px;
     font-family: "Open Sans", Helvetica, Arial, sans-serif;
     font-size: 0.8125rem;
     letter-spacing: 0.01em;
@@ -52,7 +52,7 @@ let invoiceStyles = initStyleSheet(`
 
   .line-items__header {
     display: grid;
-    grid-template-columns: 3fr 1fr 2fr; 
+    grid-template-columns: 3fr 1fr 2fr;
   }
   .line-items__header > *:nth-child(2) {
     justify-self: center;
@@ -74,15 +74,8 @@ let invoiceStyles = initStyleSheet(`
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
-  .payment-method + .payment-method {
+  .payment-methods__list > * + * {
     margin-top: 1rem;
-  }
-  .payment-method__currency { 
-    font-weight: bold; 
-    font-size: 1rem; 
-  } 
-  .payment-method__amount { 
-    color: #5A586A; 
   }
 
   .balance-due {
@@ -126,29 +119,11 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
             <div class="payment-methods">
               <div>
                 <div class="label">Primary<br> Payment Method</div>
-                {{#let @model.primaryPayment as |payment|}}
-                  {{#if payment.currency}}
-                    <div class="payment-method">
-                      <div class="payment-method__currency">{{payment.logo}} {{payment.currency}}</div>
-                      <div class="payment-method__amount">
-                        {{balanceInCurrency @model.balanceDue payment.exchangeRate payment.currency}}
-                      </div>
-                    </div>
-                  {{/if}}
-                {{/let}}
+                <@fields.primaryPayment/>
               </div>
-              <div>
+              <div class="payment-methods__list">
                 <div class="label">Alternate<br> Payment Methods</div>
-                {{#each @model.alternatePayments as |payment|}}
-                  {{#if payment.currency}}
-                    <div class="payment-method">
-                      <div class="payment-method__currency">{{payment.logo}} {{payment.currency}}</div>
-                      <div class="payment-method__amount">
-                        {{balanceInCurrency @model.balanceDue payment.exchangeRate payment.currency}}
-                      </div>
-                    </div>
-                  {{/if}}
-                {{/each}}
+                <@fields.alternatePayments/>
               </div>
             </div>
           </section>
@@ -194,29 +169,11 @@ class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
             <div class="payment-methods">
               <div>
                 <div class="label">Primary<br> Payment Method</div>
-                {{#let @model.primaryPayment as |payment|}}
-                  {{#if payment.currency}}
-                    <div class="payment-method">
-                      <div class="payment-method__currency">{{payment.logo}} {{payment.currency}}</div>
-                      <div class="payment-method__amount">
-                        {{balanceInCurrency @model.balanceDue payment.exchangeRate payment.currency}}
-                      </div>
-                    </div>
-                  {{/if}}
-                {{/let}}
+                <@fields.primaryPayment/>
               </div>
-              <div>
+              <div class="payment-methods__list">
                 <div class="label">Alternate<br> Payment Methods</div>
-                {{#each @model.alternatePayments as |payment|}}
-                  {{#if payment.currency}}
-                    <div class="payment-method">
-                      <div class="payment-method__currency">{{payment.logo}} {{payment.currency}}</div>
-                      <div class="payment-method__amount">
-                        {{balanceInCurrency @model.balanceDue payment.exchangeRate payment.currency}}
-                      </div>
-                    </div>
-                  {{/if}}
-                {{/each}}
+                <@fields.alternatePayments/>
               </div>
             </div>
           </section>
@@ -236,9 +193,9 @@ export class InvoicePacket extends Card {
   @field lineItems = containsMany(LineItem);
   @field primaryPayment = contains(PaymentMethod);
   @field alternatePayments = containsMany(PaymentMethod);
-  @field balanceDue = contains(IntegerCard, { computeVia: 
-    function(this: InvoicePacket) { 
-      return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.amount * i.quantity).reduce((a, b) => (a + b)); 
+  @field balanceDue = contains(IntegerCard, { computeVia:
+    function(this: InvoicePacket) {
+      return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.amount * i.quantity).reduce((a, b) => (a + b));
     }
   });
 

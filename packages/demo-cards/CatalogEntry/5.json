@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "PaymentMethod from http://local-realm/payment-method",
+      "description": "Catalog entry for PaymentMethod from http://local-realm/payment-method",
+      "ref": {
+        "module": "http://local-realm/payment-method",
+        "name": "PaymentMethod"
+      },
+      "demo": {
+        "currency": "USD",
+        "logo": null,
+        "exchangeRate": 1,
+        "balance": 150
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://local-realm/payment-method",
+            "name": "PaymentMethod"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

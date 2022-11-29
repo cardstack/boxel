@@ -34,23 +34,27 @@
       "primaryPayment": {
         "currency": "LINK",
         "logo": null,
-        "exchangeRate": 0.0552
+        "exchangeRate": 0.0552,
+        "balance": 135
       },
       "alternatePayments": [
         {
           "currency": "USD",
           "logo": null,
-          "exchangeRate": 1
+          "exchangeRate": 1,
+          "balance": 135
         },
         {
           "currency": "USDC",
           "logo": null,
-          "exchangeRate": 1
+          "exchangeRate": 1,
+          "balance": 135
         },
         {
           "currency": "DAI",
           "logo": null,
-          "exchangeRate": 1
+          "exchangeRate": 1,
+          "balance": 135
         }
       ]
     },
