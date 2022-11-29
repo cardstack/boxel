@@ -24,8 +24,7 @@ interface Signature {
 
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <section data-test-contains-many={{this.args.field.name}}>
-      <header>{{this.args.field.name}}</header>
+    <div data-test-contains-many={{this.args.field.name}}>
       <ul>
         {{#each @arrayField.children as |boxedElement i|}}
           <li data-test-item={{i}}>
@@ -37,7 +36,7 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
         {{/each}}
       </ul>
       <button {{on "click" this.add}} type="button" data-test-add-new>Add New</button>
-    </section>
+    </div>
   </template>
 
   add = () => {
