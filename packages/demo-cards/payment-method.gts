@@ -2,7 +2,7 @@ import { contains, field, Card, Component } from 'https://cardstack.com/base/car
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
-import { balanceInCurrency, formatUSD } from './currency-format';
+import { balanceInCurrency } from './currency-format';
 
 let styles = initStyleSheet(`
   this {

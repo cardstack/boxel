@@ -6,7 +6,7 @@ import IntegerCard from 'https://cardstack.com/base/integer';
 import { Vendor } from './vendor';
 import { PaymentMethod } from './payment-method';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
-import { balanceInCurrency, formatUSD } from './currency-format';
+import { formatUSD } from './currency-format';
 
 let invoiceStyles = initStyleSheet(`
   this {
