@@ -48,7 +48,7 @@ export default class SimpleOrchestration extends Controller {
           {
             sprites: keptSprites,
             properties: {
-              position: {},
+              translateX: {},
             },
             timing: {
               behavior: new SpringBehavior(),
@@ -69,7 +69,7 @@ export default class SimpleOrchestration extends Controller {
           {
             sprites: keptSprites,
             properties: {
-              position: {},
+              translateX: {},
             },
             timing: {
               behavior: new TweenBehavior(),
