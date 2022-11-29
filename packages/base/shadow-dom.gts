@@ -1,6 +1,4 @@
-import Modifier from "ember-modifier";
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 interface Signature {
   Element: HTMLElement;
@@ -9,41 +7,22 @@ interface Signature {
   };
 }
 
-interface ModifierSignature {
-  element: HTMLElement;
-  Args: {
-    Positional: [
-      setShadow: (shadow: ShadowRoot) => void
-    ];
-  };
-}
-
 export default class ShadowDOM extends Component<Signature> {
   <template>
-    <div {{ShadowRootModifier this.setShadow}} data-test-shadow-component>
-      {{!-- this "if" triggers a rerender that causes the card to disappear
-      for a single frame which then creates instability in boxel motion when
-      trying to match the kept sprites. Not using a ShadowDOM does solve the
-      this issue at the cost of style encapsulation.
-      --}}
-      {{#if this.shadow}}
-        {{#in-element this.shadow}}
-          {{yield}}
-        {{/in-element}}
-      {{/if}}
-    </div>
+    {{ (this.createShadowRoot) }}
+    {{#in-element this.shadowRoot}}
+      {{yield}}
+    {{/in-element}}
   </template>
 
-  @tracked shadow: ShadowRoot | undefined = undefined;
+  shadowRoot!: ShadowRoot; // this is synchronously created before in-element tries to render into it
+  stableElement: HTMLElement | undefined;
 
-  setShadow = (shadow: ShadowRoot) => {
-    this.shadow = shadow;
+  createShadowRoot = () => {
+    if (!this.stableElement) {
+      this.stableElement = document.createElement('div');
+      this.shadowRoot = this.stableElement.attachShadow({ mode: 'open' });
+    }
+    return this.stableElement;
   };
-}
-
-class ShadowRootModifier extends Modifier<ModifierSignature> {
-  modify(element: HTMLElement, [setShadow]: ModifierSignature["Args"]["Positional"]) {
-    const shadow = element.attachShadow({ mode: "open" });
-    setShadow(shadow);
-  }
 }
