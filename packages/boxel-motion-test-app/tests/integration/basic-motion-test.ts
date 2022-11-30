@@ -51,42 +51,20 @@ module('Integration | basic-motion', function (hooks) {
       </AnimationContext>
     `);
 
-    assert.equal(
-      getComputedStyle(this.element.querySelector('[data-target]')!).height,
-      '50px'
-    );
-
     await click('[data-toggle]');
 
     let clock = new TestClock();
-    //assert.pixels('[data-target]', 'height', 50);
-
-    assert.equal(
-      getComputedStyle(this.element.querySelector('[data-target]')!).height,
-      '50px'
-    );
+    assert.pixels('[data-target]', { height: '50px' });
 
     clock.now = 500;
-
-    assert.equal(
-      getComputedStyle(this.element.querySelector('[data-target]')!).height,
-      '175px'
-    );
+    assert.pixels('[data-target]', { height: '175px' });
 
     clock.setToFrameBefore(1000);
 
     let expected = 50 + ((300 - 50) * (1000 - frameDurationMs)) / 1000;
-
-    assert.equal(
-      getComputedStyle(this.element.querySelector('[data-target]')!).height,
-      `${expected}px`
-    );
+    assert.pixels('[data-target]', { height: expected });
 
     clock.now = 1000;
-
-    assert.equal(
-      getComputedStyle(this.element.querySelector('[data-target]')!).height,
-      '300px'
-    );
+    assert.pixels('[data-target]', { height: '300px' });
   });
 });
