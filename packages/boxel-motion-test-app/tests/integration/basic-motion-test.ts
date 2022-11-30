@@ -6,6 +6,7 @@ import type { Changeset } from '@cardstack/boxel-motion/models/animator';
 import type { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import { tracked } from '@glimmer/tracking';
+import { TestClock, frameDuration } from '../helpers';
 
 module('Integration | basic-motion', function (hooks) {
   setupRenderingTest(hooks);
@@ -57,12 +58,7 @@ module('Integration | basic-motion', function (hooks) {
 
     await click('[data-toggle]');
 
-    //let clock = new TestClock(); // remember min of all getAnimations() startTimes as the baseline for this Clock
-    for (let a of document.getAnimations()) {
-      a.pause();
-      a.currentTime = 0;
-    }
-
+    let clock = new TestClock();
     //assert.pixels('[data-target]', 'height', 50);
 
     assert.equal(
@@ -70,34 +66,23 @@ module('Integration | basic-motion', function (hooks) {
       '50px'
     );
 
-    // clock.now = 500;
-
-    // each animation gets set relative to the baseline time, so that if any
-    // animations started later, they get a relatively smaller currentTime
-    for (let a of document.getAnimations()) {
-      a.currentTime = 500;
-    }
+    clock.now = 500;
 
     assert.equal(
       getComputedStyle(this.element.querySelector('[data-target]')!).height,
       '175px'
     );
 
-    // clock
-    for (let a of document.getAnimations()) {
-      a.currentTime = 1000 - 1 / 60;
-    }
+    clock.setToFrameBefore(1000);
 
-    let expected = 50 + ((300 - 50) * (1000 - 1 / 60)) / 1000;
+    let expected = 50 + ((300 - 50) * (1000 - frameDuration)) / 1000;
 
     assert.equal(
       getComputedStyle(this.element.querySelector('[data-target]')!).height,
       `${expected}px`
     );
 
-    for (let a of document.getAnimations()) {
-      a.currentTime = 1000;
-    }
+    clock.now = 1000;
 
     assert.equal(
       getComputedStyle(this.element.querySelector('[data-target]')!).height,
