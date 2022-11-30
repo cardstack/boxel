@@ -1,4 +1,4 @@
-export const frameDuration = 1000 /*ms*/ / 60; /*frames*/
+export const frameDurationMs = 1000 /*ms*/ / 60; /*frames*/
 
 export class TestClock {
   #clockStartTime: number;
@@ -60,12 +60,12 @@ export class TestClock {
   }
 
   setToFrameBefore(time: number): number {
-    this.now = time - frameDuration;
+    this.now = time - frameDurationMs;
     return this.now;
   }
 
   setToFrameAfter(time: number): number {
-    this.now = time + frameDuration;
+    this.now = time + frameDurationMs;
     return this.now;
   }
 }

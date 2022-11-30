@@ -6,7 +6,7 @@ import type { Changeset } from '@cardstack/boxel-motion/models/animator';
 import type { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import { tracked } from '@glimmer/tracking';
-import { TestClock, frameDuration } from '../helpers';
+import { TestClock, frameDurationMs } from '../helpers';
 
 module('Integration | basic-motion', function (hooks) {
   setupRenderingTest(hooks);
@@ -75,7 +75,7 @@ module('Integration | basic-motion', function (hooks) {
 
     clock.setToFrameBefore(1000);
 
-    let expected = 50 + ((300 - 50) * (1000 - frameDuration)) / 1000;
+    let expected = 50 + ((300 - 50) * (1000 - frameDurationMs)) / 1000;
 
     assert.equal(
       getComputedStyle(this.element.querySelector('[data-target]')!).height,
