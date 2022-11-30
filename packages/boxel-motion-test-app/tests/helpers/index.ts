@@ -1,4 +1,4 @@
-export const frameDuration = 1 / 60;
+export const frameDuration = 1000 /*ms*/ / 60; /*frames*/
 
 export class TestClock {
   #clockStartTime: number;
