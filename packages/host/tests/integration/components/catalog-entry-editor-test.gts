@@ -492,7 +492,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       import { contains, containsMany, field, linksTo, Card, Component } from "https://cardstack.com/base/card-api";
       import IntegerCard from "https://cardstack.com/base/integer";
       import StringCard from "https://cardstack.com/base/string";
-      export class Vendor extends Card {
+      class Vendor extends Card {
         @field company = contains(StringCard);
         static embedded = class Embedded extends Component<typeof this> {
           <template><div data-test-company><@fields.company/></div></template>
@@ -577,8 +577,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Invoice from http://test-realm/test/invoice',
-            description: 'Catalog entry for Invoice from http://test-realm/test/invoice',
+            title: `Invoice from ${testRealmURL}invoice`,
+            description: `Catalog entry for Invoice from ${testRealmURL}invoice`,
             ref: {
               module: `${testRealmURL}invoice`,
               name: 'Invoice'
@@ -595,7 +595,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/catalog-entry',
+              module: `${baseRealm.url}catalog-entry`,
               name: 'CatalogEntry',
             },
             fields: {
@@ -610,7 +610,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           relationships: {
             "demo.vendor": {
               links: {
-                self: "http://test-realm/test/cards/1"
+                self: `${testRealmURL}cards/1`
               }
             }
           },
@@ -618,5 +618,18 @@ module('Integration | catalog-entry-editor', function (hooks) {
       },
       'file contents are correct'
     );
+
+    let vendorfileRef = await realm.searchIndex.card(new URL(`${testRealmURL}cards/1`));
+    if (!vendorfileRef || !('doc' in vendorfileRef)) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(vendorfileRef?.doc.data.meta.adoptsFrom, {
+      type: 'fieldOf',
+      field: 'vendor',
+      card: {
+        module: `${testRealmURL}invoice`,
+        name: 'Invoice'
+      }
+    }, 'newly created vendor file has correct meta.adoptsFrom');
   });
 });
