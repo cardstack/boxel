@@ -25,17 +25,10 @@ module.exports = {
   rules: {
     // this doesn't work well with the monorepo. Typescript already complains if you try to import something that's not found
     'import/no-unresolved': 'off',
-    'import/order': [
-      'error',
-      {
-        'newlines-between': 'always-and-inside-groups',
-        alphabetize: {
-          order: 'asc',
-        },
-      },
-    ],
     'prefer-let/prefer-let': 2,
     'prefer-const': 'off',
+    '@typescript-eslint/no-non-null-assertion': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
   },
   overrides: [
     // node files
