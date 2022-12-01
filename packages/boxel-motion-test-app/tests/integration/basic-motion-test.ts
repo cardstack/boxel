@@ -30,7 +30,7 @@ module('Integration | basic-motion', function (hooks) {
                 },
                 timing: {
                   behavior: new TweenBehavior(),
-                  duration: 6000,
+                  duration: 1000,
                 },
               },
             ],
@@ -59,12 +59,12 @@ module('Integration | basic-motion', function (hooks) {
 
     assert.pixels('[data-target]', { height: 50 });
 
-    time.advanceTo(3000);
+    time.advanceTo(500);
     assert.pixels('[data-target]', { height: 175 });
 
-    time.advanceTo(5999);
+    time.advanceTo(999);
     await assert.visualContinuity('[data-target]', async () => {
-      time.advanceTo(6000);
+      time.advanceTo(1000);
     });
 
     assert.pixels('[data-target]', { height: 300 });
