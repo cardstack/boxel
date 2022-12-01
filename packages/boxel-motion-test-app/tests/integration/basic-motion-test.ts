@@ -54,10 +54,10 @@ module('Integration | basic-motion', function (hooks) {
     await click('[data-toggle]');
 
     let clock = new TestClock();
-    assert.pixels('[data-target]', { height: '50px' });
+    assert.pixels('[data-target]', { height: 50 });
 
     clock.now = 500;
-    assert.pixels('[data-target]', { height: '175px' });
+    assert.pixels('[data-target]', { height: 175 });
 
     clock.setToFrameBefore(1000);
 
@@ -65,6 +65,6 @@ module('Integration | basic-motion', function (hooks) {
     assert.pixels('[data-target]', { height: expected });
 
     clock.now = 1000;
-    assert.pixels('[data-target]', { height: '300px' });
+    assert.pixels('[data-target]', { height: 300 });
   });
 });
