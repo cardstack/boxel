@@ -6,7 +6,7 @@ import type { Changeset } from '@cardstack/boxel-motion/models/animator';
 import type { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import { tracked } from '@glimmer/tracking';
-import { TestClock, frameDurationMs } from '../helpers';
+import { TestClock } from '../helpers';
 
 module('Integration | basic-motion', function (hooks) {
   setupRenderingTest(hooks);
@@ -29,7 +29,7 @@ module('Integration | basic-motion', function (hooks) {
                 },
                 timing: {
                   behavior: new TweenBehavior(),
-                  duration: 1000,
+                  duration: 6000,
                 },
               },
             ],
@@ -51,20 +51,23 @@ module('Integration | basic-motion', function (hooks) {
       </AnimationContext>
     `);
 
-    await click('[data-toggle]');
+    let clock: TestClock;
 
-    let clock = new TestClock();
+    await assert.visualContinuity('[data-target]', async () => {
+      await click('[data-toggle]');
+      clock = new TestClock();
+    });
+
     assert.pixels('[data-target]', { height: 50 });
 
-    clock.now = 500;
+    clock!.now = 3000;
     assert.pixels('[data-target]', { height: 175 });
 
-    clock.setToFrameBefore(1000);
+    clock!.now = 5999;
+    await assert.visualContinuity('[data-target]', async () => {
+      clock.now = 6000;
+    });
 
-    let expected = 50 + ((300 - 50) * (1000 - frameDurationMs)) / 1000;
-    assert.pixels('[data-target]', { height: expected });
-
-    clock.now = 1000;
     assert.pixels('[data-target]', { height: 300 });
   });
 });

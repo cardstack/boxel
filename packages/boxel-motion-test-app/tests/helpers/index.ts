@@ -1,5 +1,3 @@
-export const frameDurationMs = 1000 /*ms*/ / 60; /*frames*/
-
 export class TestClock {
   #clockStartTime: number;
   #startTimes = new WeakMap<Animation, number | null>();
@@ -57,15 +55,5 @@ export class TestClock {
         0
       );
     }
-  }
-
-  setToFrameBefore(time: number): number {
-    this.now = time - frameDurationMs;
-    return this.now;
-  }
-
-  setToFrameAfter(time: number): number {
-    this.now = time + frameDurationMs;
-    return this.now;
   }
 }
