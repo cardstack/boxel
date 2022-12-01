@@ -17,9 +17,9 @@ importers:
       '@babel/core': ^7.17.8
       '@glimmer/component': ^1.1.2
       '@glimmer/tracking': ^1.0.4
-      '@glint/core': ^0.9.1
-      '@glint/environment-ember-loose': ^0.9.1
-      '@glint/environment-ember-template-imports': ^0.9.1
+      '@glint/core': ^0.9.7
+      '@glint/environment-ember-loose': ^0.9.7
+      '@glint/environment-ember-template-imports': ^0.9.7
       ember-cli-htmlbars: ^6.1.0
       ember-resources: ^4.4.0
       ember-source: ~4.2.0
@@ -82,7 +82,6 @@ importers:
       '@babel/core': ^7.17.10
       '@glimmer/component': ^1.1.2
       '@glint/core': ^0.9.7
-      '@glint/environment-ember-loose': ^0.9.7
       '@glint/environment-ember-template-imports': ^0.9.7
       '@glint/template': ^0.9.7
       '@types/ember-qunit': ^5.0.0
@@ -147,8 +146,7 @@ importers:
     devDependencies:
       '@babel/core': 7.20.2
       '@glint/core': 0.9.7_typescript@4.9.3
-      '@glint/environment-ember-loose': 0.9.7_q3dyqagzoarn5fdnpc2fuow56q
-      '@glint/environment-ember-template-imports': 0.9.7_bcsri5pb4wp67pnaf33w2f4jlm
+      '@glint/environment-ember-template-imports': 0.9.7_uhddnt2nkdysvmzzklqasfejmm
       '@glint/template': 0.9.7_@glimmer+component@1.1.2
       '@types/ember-qunit': 5.0.2_@babel+core@7.20.2
       '@types/ember-resolver': 5.0.13_@babel+core@7.20.2
@@ -197,7 +195,6 @@ importers:
       '@glimmer/component': ^1.1.2
       '@glimmer/tracking': ^1.1.2
       '@glint/core': ^0.9.7
-      '@glint/environment-ember-loose': ^0.9.7
       '@glint/environment-ember-template-imports': ^0.9.7
       '@glint/template': ^0.9.7
       '@types/ember-data': ^4.4.0
@@ -277,8 +274,7 @@ importers:
       '@glimmer/component': 1.1.2_@babel+core@7.20.2
       '@glimmer/tracking': 1.1.2
       '@glint/core': 0.9.7_typescript@4.9.3
-      '@glint/environment-ember-loose': 0.9.7_q3dyqagzoarn5fdnpc2fuow56q
-      '@glint/environment-ember-template-imports': 0.9.7_bcsri5pb4wp67pnaf33w2f4jlm
+      '@glint/environment-ember-template-imports': 0.9.7_uhddnt2nkdysvmzzklqasfejmm
       '@glint/template': 0.9.7_@glimmer+component@1.1.2
       '@types/ember-data': 4.4.6_@babel+core@7.20.2
       '@types/ember-qunit': 5.0.2_@babel+core@7.20.2
@@ -360,7 +356,6 @@ importers:
       '@glimmer/component': ^1.1.2
       '@glimmer/tracking': ^1.1.2
       '@glint/core': ^0.9.7
-      '@glint/environment-ember-loose': ^0.9.7
       '@glint/environment-ember-template-imports': ^0.9.7
       '@types/ember-qunit': ^5.0.0
       '@types/ember-resolver': ^5.0.11
@@ -431,8 +426,7 @@ importers:
       '@glimmer/component': 1.1.2_@babel+core@7.20.2
       '@glimmer/tracking': 1.1.2
       '@glint/core': 0.9.7_typescript@4.9.3
-      '@glint/environment-ember-loose': 0.9.7_t5ycb63yys2yccfcq5mlxlwezm
-      '@glint/environment-ember-template-imports': 0.9.7_bcsri5pb4wp67pnaf33w2f4jlm
+      '@glint/environment-ember-template-imports': 0.9.7_uhddnt2nkdysvmzzklqasfejmm
       '@types/ember-qunit': 5.0.2_@babel+core@7.20.2
       '@types/ember-resolver': 5.0.13_@babel+core@7.20.2
       '@types/ember__application': 4.0.4_@babel+core@7.20.2
@@ -3108,27 +3102,6 @@ packages:
       - supports-color
     dev: true
 
-  /@glint/environment-ember-loose/0.9.7_q3dyqagzoarn5fdnpc2fuow56q:
-    resolution: {integrity: sha512-MlCGZtB1Clp4vQWIm2APSnCm7nL8wVhFMOhVy2qzpV0nfLyg3pcN9CQHNpfdJvCydBB72cA4/ahPj7VEFL6xsg==}
-    peerDependencies:
-      '@glimmer/component': ^1.1.2
-      ember-cli-htmlbars: ^6.0.1
-      ember-modifier: ^3.2.7
-    peerDependenciesMeta:
-      ember-cli-htmlbars:
-        optional: true
-      ember-modifier:
-        optional: true
-    dependencies:
-      '@glimmer/component': 1.1.2_@babel+core@7.20.2
-      '@glint/config': 0.9.7
-      '@glint/template': 0.9.7_@glimmer+component@1.1.2
-      ember-cli-htmlbars: 6.1.1
-      ember-modifier: 3.2.7_@babel+core@7.20.2
-    transitivePeerDependencies:
-      - supports-color
-    dev: true
-
   /@glint/environment-ember-loose/0.9.7_t5ycb63yys2yccfcq5mlxlwezm:
     resolution: {integrity: sha512-MlCGZtB1Clp4vQWIm2APSnCm7nL8wVhFMOhVy2qzpV0nfLyg3pcN9CQHNpfdJvCydBB72cA4/ahPj7VEFL6xsg==}
     peerDependencies:
@@ -3155,7 +3128,7 @@ packages:
       '@glint/environment-ember-loose': ^0.9.7
       ember-template-imports: ^3.0.0
     dependencies:
-      '@glint/environment-ember-loose': 0.9.7_q3dyqagzoarn5fdnpc2fuow56q
+      '@glint/environment-ember-loose': 0.9.7_t5ycb63yys2yccfcq5mlxlwezm
       '@glint/template': 0.9.7_@glimmer+component@1.1.2
       ember-template-imports: 3.4.0_ember-cli-htmlbars@6.1.1
     transitivePeerDependencies:
@@ -4967,7 +4940,7 @@ packages:
   /axios/0.21.4_debug@4.3.2:
     resolution: {integrity: sha512-ut5vewkiu8jjGBdqpM44XxjuCjq9LAKeHVmoVfHVzy8eHgxxq8SbAVQNovDA8mVi05kP0Ea/n/UzcSHcTJQfNg==}
     dependencies:
-      follow-redirects: 1.15.2
+      follow-redirects: 1.15.2_debug@4.3.2
     transitivePeerDependencies:
       - debug
     dev: true
@@ -6971,7 +6944,7 @@ packages:
       mississippi: 3.0.0
       mkdirp: 0.5.6
       move-concurrently: 1.0.1
-      promise-inflight: 1.0.1_bluebird@3.7.2
+      promise-inflight: 1.0.1
       rimraf: 2.7.1
       ssri: 6.0.2
       unique-filename: 1.1.1
@@ -6996,7 +6969,7 @@ packages:
       mkdirp: 1.0.4
       move-concurrently: 1.0.1
       p-map: 3.0.0
-      promise-inflight: 1.0.1_bluebird@3.7.2
+      promise-inflight: 1.0.1
       rimraf: 2.7.1
       ssri: 7.1.1
       tar: 6.1.12
@@ -10059,7 +10032,7 @@ packages:
       ember-source: '>=4.2.0'
       qunit: ^2.13.0
     dependencies:
-      '@ember/test-helpers': 2.8.1_mjl3znqfqz4o673rlet2hb3jru
+      '@ember/test-helpers': 2.8.1_c3ll764h35tb7zumth7bce2v2e
       broccoli-funnel: 3.0.8
       broccoli-merge-trees: 3.0.2
       common-tags: 1.8.2
@@ -11791,7 +11764,7 @@ packages:
       readable-stream: 2.3.7
     dev: true
 
-  /follow-redirects/1.15.2:
+  /follow-redirects/1.15.2_debug@4.3.2:
     resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
     engines: {node: '>=4.0'}
     peerDependencies:
@@ -11799,6 +11772,8 @@ packages:
     peerDependenciesMeta:
       debug:
         optional: true
+    dependencies:
+      debug: 4.3.2
     dev: true
 
   /for-each/0.3.3:
@@ -12720,7 +12695,7 @@ packages:
     engines: {node: '>=8.0.0'}
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.2
+      follow-redirects: 1.15.2_debug@4.3.2
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -15692,15 +15667,13 @@ packages:
     engines: {node: '>=0.4.0'}
     dev: true
 
-  /promise-inflight/1.0.1_bluebird@3.7.2:
+  /promise-inflight/1.0.1:
     resolution: {integrity: sha512-6zWPyEOFaQBJYcGMHBKTKJ3u6TBsnMFOIZSa6ce1e/ZrrsOlnHRHbabMjLiBYKp+n44X9eUI6VUPaukCXHuG4g==}
     peerDependencies:
       bluebird: '*'
     peerDependenciesMeta:
       bluebird:
         optional: true
-    dependencies:
-      bluebird: 3.7.2
     dev: true
 
   /promise-map-series/0.2.3:

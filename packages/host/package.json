@@ -130,7 +130,7 @@
     "webpack": "^5.69.1"
   },
   "peerDependencies": {
-    "@glint/environment-ember-loose": "^0.9.1"
+    "@glint/environment-ember-loose": "^0.9.7"
   },
   "dependenciesMeta": {
     "@cardstack/base": {
