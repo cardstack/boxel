@@ -8,6 +8,7 @@ export default class Router extends EmberRouter {
 
 Router.map(function () {
   this.route('interruption');
+  this.route('prune-and-graft');
   this.route('routes', function () {
     this.route('other');
   });

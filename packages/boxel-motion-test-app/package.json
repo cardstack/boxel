@@ -35,7 +35,7 @@
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
     "@glint/core": "^0.9.7",
-    "@glint/environment-ember-loose": "^0.9.7",
+    "@glint/environment-ember-template-imports": "^0.9.7",
     "@types/ember-qunit": "^5.0.0",
     "@types/ember-resolver": "^5.0.11",
     "@types/ember__application": "^4.0.0",
@@ -80,6 +80,7 @@
     "ember-resolver": "^8.0.3",
     "ember-source": "~4.3.0",
     "ember-source-channel-url": "^3.0.0",
+    "ember-template-imports": "^3.0.1",
     "ember-template-lint": "^4.3.0",
     "ember-try": "^2.0.0",
     "eslint": "^7.32.0",
@@ -95,6 +96,9 @@
     "qunit-dom": "^2.0.0",
     "typescript": "^4.6.4",
     "webpack": "^5.70.0"
+  },
+  "peerDependencies": {
+    "@glint/environment-ember-loose": "^0.9.7"
   },
   "engines": {
     "node": "14.* || >= 16"

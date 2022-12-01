@@ -8,7 +8,7 @@ let defaultStyles = initStyleSheet(`
   this {
     border: 1px solid gray;
     border-radius: 10px;
-    background-color: #e9e7e7;
+    background-color: #fff;
     padding: 1rem;
     display: table; /* using this so that card doesn't take 100% of available width so we can see the width animations */
   }
@@ -18,7 +18,7 @@ let editStyles = initStyleSheet(`
   this {
     border: 1px solid gray;
     border-radius: 10px;
-    background-color: #e9e7e7;
+    background-color: #fff;
     padding: 1rem;
     display: table; /* using this so that card doesn't take 100% of available width so we can see the width animations */
   }
