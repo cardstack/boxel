@@ -1,3 +1,12 @@
+// @ts-expect-error no types for precompileTemplate
+import { precompileTemplate } from '@ember/template-compilation';
+import { ComponentLike } from '@glint/template';
+import { render } from '@ember/test-helpers';
+
+export async function renderComponent(C: ComponentLike) {
+  await render(precompileTemplate(`<C/>`, { scope: () => ({ C }) }));
+}
+
 export function setupAnimationTest(_hooks: NestedHooks) {
   let clock: TestClock;
 
