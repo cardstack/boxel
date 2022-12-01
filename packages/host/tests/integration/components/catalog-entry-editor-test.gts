@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
-import { baseRealm, ExportedCardRef } from '@cardstack/runtime-common';
+import { baseRealm, CardRef } from '@cardstack/runtime-common';
 import { Loader } from "@cardstack/runtime-common/loader";
 import { Realm } from "@cardstack/runtime-common/realm";
 import { setupRenderingTest } from 'ember-qunit';
@@ -11,6 +11,8 @@ import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
 import waitUntil from '@ember/test-helpers/wait-until';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import CreateCardModal from '@cardstack/host/components/create-card-modal';
+import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 
 class MockLocalRealm extends Service {
   isAvailable = true;
@@ -75,7 +77,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can publish new catalog entry', async function (assert) {
-    const args: ExportedCardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -189,7 +191,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     }));
 
-    const args: ExportedCardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -237,7 +239,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can create new card with missing composite field value', async function (assert) {
-    const args: ExportedCardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CardRef =  { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -279,8 +281,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Pet',
-            description: 'Catalog entry for Pet card',
+            title: 'Pet from http://test-realm/test/pet',
+            description: 'Catalog entry for Pet from http://test-realm/test/pet',
             ref: {
               module: `${testRealmURL}pet`,
               name: 'Pet'
@@ -315,7 +317,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can create new catalog entry with all demo card field values missing', async function (assert) {
-    const args: ExportedCardRef =  { module: `${testRealmURL}person`, name: 'Person' };
+    const args: CardRef =  { module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -359,8 +361,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
             demo: {
               firstName: null,
             },
-            title: 'Person',
-            description: 'Catalog entry for Person card',
+            title: 'Person from http://test-realm/test/person',
+            description: 'Catalog entry for Person from http://test-realm/test/person',
             ref: {
               module: `${testRealmURL}person`,
               name: 'Person'
@@ -466,7 +468,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     }));
 
-    const args: ExportedCardRef =  { module: `${testRealmURL}person`, name: 'Person' };
+    const args: CardRef =  { module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -483,5 +485,151 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await waitFor('[data-test-pet-name]');
     assert.shadowDOM('[data-test-pet-name]').hasText('Jackie');
+  });
+
+  test('can use card classes defined on the same module as fields', async function (assert) {
+    await realm.write('invoice.gts', `
+      import { contains, containsMany, field, linksTo, Card, Component } from "https://cardstack.com/base/card-api";
+      import IntegerCard from "https://cardstack.com/base/integer";
+      import StringCard from "https://cardstack.com/base/string";
+      class Vendor extends Card {
+        @field company = contains(StringCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><div data-test-company><@fields.company/></div></template>
+        };
+      }
+      class Item extends Card {
+        @field name = contains(StringCard);
+        @field price = contains(IntegerCard);
+      }
+      class LineItem extends Item {
+        @field quantity = contains(IntegerCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><div data-test-line-item="{{@model.name}}"><@fields.name/> - <@fields.quantity/> @ $<@fields.price/> USD</div></template>
+        };
+      }
+      export class Invoice extends Card {
+        @field vendor = linksTo(Vendor);
+        @field lineItems = containsMany(LineItem);
+        @field balanceDue = contains(IntegerCard, { computeVia: function(this: Invoice) {
+          return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.price * i.quantity).reduce((a, b) => (a + b));
+        }});
+        static embedded = class Embedded extends Component<typeof Invoice> {
+          <template>
+            <h3>Invoice</h3>
+            Vendor: <@fields.vendor/>
+            <@fields.lineItems/>
+            Balance Due: $<span data-test-balance-due><@fields.balanceDue/></span> USD
+          </template>
+        };
+      }
+    `);
+
+    const args: CardRef =  { module: `${testRealmURL}invoice`, name: 'Invoice' };
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CatalogEntryEditor @ref={{args}} />
+          <CardCatalogModal />
+          <CreateCardModal />
+        </template>
+      }
+    );
+
+    await waitFor('button[data-test-catalog-entry-publish]');
+    await click('[data-test-catalog-entry-publish]');
+    await waitFor('[data-test-ref]');
+
+    await click('[data-test-add-new]');
+    await fillIn('[data-test-field="name"] input', 'Keyboard');
+    await fillIn('[data-test-field="quantity"] input', '2');
+    await fillIn('[data-test-field="price"] input', '150');
+
+    await click('[data-test-choose-card]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await click('[data-test-card-catalog-modal] [data-test-create-new]');
+    await waitFor('[data-test-create-new-card="Vendor"]');
+    await fillIn('[data-test-field="company"] input', 'Big Tech');
+
+    await click('[data-test-create-new-card="Vendor"] [data-test-save-card]');
+    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
+
+    await click('button[data-test-save-card]');
+    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
+
+    assert.shadowDOM('[data-test-company]').exists();
+    assert.shadowDOM('[data-test-company]').hasText('Big Tech');
+    assert.shadowDOM('[data-test-line-item="Keyboard"]').exists();
+    assert.shadowDOM('[data-test-line-item="Keyboard"]').hasText('Keyboard - 2 @ $ 150 USD');
+    assert.shadowDOM('[data-test-balance-due]').exists();
+    assert.shadowDOM('[data-test-balance-due]').hasText('300');
+
+    let entry = await realm.searchIndex.card(new URL(`${testRealmURL}CatalogEntry/1`));
+    assert.ok(entry, 'the new catalog entry was created');
+
+    let fileRef = await adapter.openFile('CatalogEntry/1.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      JSON.parse(fileRef.content as string),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            title: `Invoice from ${testRealmURL}invoice`,
+            description: `Catalog entry for Invoice from ${testRealmURL}invoice`,
+            ref: {
+              module: `${testRealmURL}invoice`,
+              name: 'Invoice'
+            },
+            demo: {
+              lineItems: [
+                {
+                  name: 'Keyboard',
+                  quantity: 2,
+                  price: 150
+                }
+              ],
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry',
+            },
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: `${testRealmURL}invoice`,
+                  name: 'Invoice',
+                }
+              }
+            },
+          },
+          relationships: {
+            "demo.vendor": {
+              links: {
+                self: `${testRealmURL}cards/1`
+              }
+            }
+          },
+        },
+      },
+      'file contents are correct'
+    );
+
+    let vendorfileRef = await realm.searchIndex.card(new URL(`${testRealmURL}cards/1`));
+    if (!vendorfileRef || !('doc' in vendorfileRef)) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(vendorfileRef?.doc.data.meta.adoptsFrom, {
+      type: 'fieldOf',
+      field: 'vendor',
+      card: {
+        module: `${testRealmURL}invoice`,
+        name: 'Invoice'
+      }
+    }, 'newly created vendor file has correct meta.adoptsFrom');
   });
 });

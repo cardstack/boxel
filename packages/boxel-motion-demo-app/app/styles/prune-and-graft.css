@@ -1,0 +1,27 @@
+.page {
+  padding: 25px;
+}
+
+.context {
+  margin-top: 25px;
+}
+
+.outer {
+  padding: 25px;
+  border: 2px solid #000;
+  width: 50%;
+}
+
+.inner {
+  padding: 25px;
+  border: 2px solid #000;
+  width: 50%;
+}
+
+.outer.right {
+  margin-left: 50%;
+}
+
+.inner.right {
+  margin-left: 50%;
+}

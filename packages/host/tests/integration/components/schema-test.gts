@@ -7,7 +7,7 @@ import Module from '@cardstack/host/components/module';
 import { file, FileResource } from '@cardstack/host/resources/file';
 import Service from '@ember/service';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm, ExportedCardRef } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { TestRealm, TestRealmAdapter, testRealmURL, setupCardLogs } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
@@ -361,7 +361,7 @@ module('Integration | schema', function (hooks) {
   });
 });
 
-async function getFileResource(context: TestContext, adapter: TestRealmAdapter, ref: ExportedCardRef): Promise<FileResource> {
+async function getFileResource(context: TestContext, adapter: TestRealmAdapter, ref: { name: string; module: string; }): Promise<FileResource> {
   let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
   let paths = new RealmPaths(testRealmURL);
   let content = (await adapter.openFile(paths.local(new URL(fileURL))))?.content as string | undefined;

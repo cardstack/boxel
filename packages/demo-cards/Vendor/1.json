@@ -8,7 +8,7 @@
       "state": "CA",
       "zipCode": 94111,
       "email": "finance@smartcontract.com",
-      "logo": null
+      "logo": "http://local-realm/invoice-assets/vendor-logo-smart-contract.png"
     },
     "meta": {
       "adoptsFrom": {

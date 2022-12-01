@@ -8,6 +8,7 @@ export default class Router extends EmberRouter {
 
 Router.map(function () {
   this.route('interruption');
+  this.route('prune-and-graft');
   this.route('routes', function () {
     this.route('other');
   });
@@ -16,9 +17,9 @@ Router.map(function () {
   });
   this.route('accordion');
   this.route('nested-contexts');
-  this.route('context-selection');
   this.route('nested-sprites');
   this.route('removed-sprite-interruption');
   this.route('simple-orchestration');
   this.route('list');
+  this.route('in-out');
 });

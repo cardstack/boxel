@@ -1,5 +1,5 @@
-import LinearBehavior from '@cardstack/boxel-motion/behaviors/linear';
 import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
+import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import { Changeset } from '@cardstack/boxel-motion/models/animator';
 import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import Controller from '@ember/controller';
@@ -31,7 +31,7 @@ export default class SimpleOrchestration extends Controller {
               opacity: { to: 0 },
             },
             timing: {
-              behavior: new LinearBehavior(),
+              behavior: new TweenBehavior(),
               duration: 300,
             },
           },
@@ -41,14 +41,14 @@ export default class SimpleOrchestration extends Controller {
               opacity: { from: 0, to: 1 },
             },
             timing: {
-              behavior: new LinearBehavior(),
+              behavior: new TweenBehavior(),
               duration: 500,
             },
           },
           {
             sprites: keptSprites,
             properties: {
-              position: {},
+              translateX: {},
             },
             timing: {
               behavior: new SpringBehavior(),
@@ -69,10 +69,10 @@ export default class SimpleOrchestration extends Controller {
           {
             sprites: keptSprites,
             properties: {
-              position: {},
+              translateX: {},
             },
             timing: {
-              behavior: new LinearBehavior(),
+              behavior: new TweenBehavior(),
               duration: 2400,
             },
           },
@@ -94,7 +94,7 @@ export default class SimpleOrchestration extends Controller {
                   opacity: { to: 1, from: 0.1 },
                 },
                 timing: {
-                  behavior: new LinearBehavior(),
+                  behavior: new TweenBehavior(),
                   duration: 1200,
                 },
               },

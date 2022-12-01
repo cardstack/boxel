@@ -2,14 +2,15 @@ import { contains, field, Component, Card, primitive } from './card-api';
 import StringCard from './string';
 import BooleanCard from './boolean';
 import CardRefCard from './card-ref';
-import { baseCardRef } from "@cardstack/runtime-common";
+import { baseCardRef, loadCard } from "@cardstack/runtime-common";
 import { initStyleSheet, attachStyles } from './attach-styles';
+import { isEqual } from 'lodash';
 
 let css = `
   this {
     background-color: #cbf3f0;
-    border: 1px solid gray; 
-    border-radius: 10px; 
+    border: 1px solid gray;
+    border-radius: 10px;
     padding: 1rem;
   }
   .demo {
@@ -20,8 +21,8 @@ let css = `
 let editCSS = `
   this {
     background-color: #cbf3f0;
-    border: 1px solid gray; 
-    border-radius: 10px; 
+    border: 1px solid gray;
+    border-radius: 10px;
     padding: 1rem;
   }
   .edit-field {
@@ -52,12 +53,13 @@ export class CatalogEntry extends Card {
   @field description = contains(StringCard);
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, { computeVia: async function(this: CatalogEntry) {
-    let module: Record<string, any> = await import(this.ref.module);
-    let Clazz: typeof Card = module[this.ref.name];
-    return primitive in Clazz ||
-      // the base card is a special case where it is technically not a primitive, but because it has no fields
-      // it is not useful to treat as a composite card (for the purposes of creating new card instances).
-      (baseCardRef.module === this.ref.module && baseCardRef.name === this.ref.name);
+    let card: typeof Card | undefined = await loadCard(this.ref);
+    if (!card) {
+      throw new Error(`Could not load card '${this.ref.name}'`);
+    }
+    // the base card is a special case where it is technically not a primitive, but because it has no fields
+    // it is not useful to treat as a composite card (for the purposes of creating new card instances).
+    return primitive in card || isEqual(baseCardRef, this.ref);
   }});
   @field demo = contains(Card);
 
@@ -98,7 +100,7 @@ export class CatalogEntry extends Card {
       </div>
     </template>
   }
-  
+
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div {{attachStyles styles}}>

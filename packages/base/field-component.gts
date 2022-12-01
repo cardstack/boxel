@@ -1,6 +1,5 @@
 import {
   primitive,
-  getField,
   type Card,
   type Box,
   type Format,
@@ -8,6 +7,7 @@ import {
 } from './card-api';
 import { defaultComponent } from './default-card-component';
 import ShadowDOM from './shadow-dom';
+import { getField } from "@cardstack/runtime-common";
 import type { ComponentLike } from '@glint/template';
 
 const componentCache = new WeakMap<Box<Card>, ComponentLike<{ Args: {}; Blocks: {}; }>>();
