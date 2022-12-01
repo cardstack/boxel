@@ -6,10 +6,11 @@ import type { Changeset } from '@cardstack/boxel-motion/models/animator';
 import type { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
 import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import { tracked } from '@glimmer/tracking';
-import { TestClock } from '../helpers';
+import { setupAnimationTest } from '../helpers';
 
 module('Integration | basic-motion', function (hooks) {
   setupRenderingTest(hooks);
+  let time = setupAnimationTest(hooks);
 
   test('it renders', async function (assert) {
     class Example {
@@ -51,21 +52,19 @@ module('Integration | basic-motion', function (hooks) {
       </AnimationContext>
     `);
 
-    let clock: TestClock;
-
     await assert.visualContinuity('[data-target]', async () => {
       await click('[data-toggle]');
-      clock = new TestClock();
+      time.pauseAt(0);
     });
 
     assert.pixels('[data-target]', { height: 50 });
 
-    clock!.now = 3000;
+    time.advanceTo(3000);
     assert.pixels('[data-target]', { height: 175 });
 
-    clock!.now = 5999;
+    time.advanceTo(5999);
     await assert.visualContinuity('[data-target]', async () => {
-      clock.now = 6000;
+      time.advanceTo(6000);
     });
 
     assert.pixels('[data-target]', { height: 300 });

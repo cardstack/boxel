@@ -1,9 +1,22 @@
-export class TestClock {
+export function setupAnimationTest(_hooks: NestedHooks) {
+  let clock: TestClock;
+
+  return {
+    pauseAt(ms: number) {
+      clock = new TestClock(ms);
+    },
+    advanceTo(ms: number) {
+      clock.now = ms;
+    },
+  };
+}
+
+class TestClock {
   #clockStartTime: number;
   #startTimes = new WeakMap<Animation, number | null>();
   #now = 0;
 
-  constructor() {
+  constructor(initialTime: number) {
     let clockStartTime = document.timeline.currentTime;
     if (clockStartTime == null) {
       throw new Error(`document timeline doesn't have a currentTime`);
@@ -17,7 +30,7 @@ export class TestClock {
       // this minor delta of time.
       this.#startTimes.set(animation, clockStartTime);
       animation.pause();
-      animation.currentTime = 0;
+      animation.currentTime = initialTime;
     }
   }
 
