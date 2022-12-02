@@ -43,7 +43,8 @@ export class OrchestrationMatrix {
         fragmentsByColumn[rowFragment.startColumn] =
           fragmentsByColumn[rowFragment.startColumn] ?? [];
         fragmentsByColumn[rowFragment.startColumn]!.push(rowFragment);
-        if (rowFragment.frames[0]) {
+        // don't backfill static frames, they're intended to only be set for their duration
+        if (rowFragment.static === false && rowFragment.frames[0]) {
           baseFrames.push(rowFragment.frames[0] as Frame);
         }
       }
