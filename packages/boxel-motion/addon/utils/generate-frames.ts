@@ -96,6 +96,12 @@ export default function generateFrames(
       to = sprite.final[dasherize(normalizedProperty)] as Value;
     }
 
+    // TODO: this is naïve as we may be getting from/to defined in
+    //  different manners, but it should catch most things for now.
+    if (from === to) {
+      return [];
+    }
+
     if (
       numberValueType.test(from) ||
       (typeof from === 'string' && from.split(' ').length === 1)
@@ -112,6 +118,7 @@ export default function generateFrames(
       if (!color.test(to)) {
         throw new Error('From is a color, but to is not');
       }
+      // TODO: guard against from/to being different color types of color definitions (RGBA, HSLA etc.)
 
       let fromParts = color.parse(from);
       let toParts = color.parse(to);
