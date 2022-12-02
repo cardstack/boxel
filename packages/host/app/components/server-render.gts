@@ -17,8 +17,8 @@ interface Signature {
 export default class ServerRender extends Component<Signature> {
   <template>
     {{#if this.error}}
-      <!--Card Not Found-->
-      <h2>Could not find card {{@url}}</h2>
+      <!--Card Error-->
+      <span style="white-space: pre-wrap">{{this.error}}</span>
     {{else}}
       {{#if this.renderedCard}}
         <!--Server Side Rendered Card START-->
@@ -43,7 +43,7 @@ export default class ServerRender extends Component<Signature> {
     try {
       card = await this.cardService.loadModel(url, { absoluteURL: true });
     } catch (e: any) {
-      this.error = e.message;
+      this.error = e.message.replace(/\\n/g, '\n');
       return;
     }
     if (!card) {
