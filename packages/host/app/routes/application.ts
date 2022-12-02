@@ -6,18 +6,35 @@ import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import LocalRealm from '../services/local-realm';
 import { RealmPaths } from '@cardstack/runtime-common';
+import type { Format } from 'https://cardstack.com/base/card-api';
 
-interface Model {
+type Model = BrowserRenderCardModel | ServerRenderCardModel;
+
+interface BrowserRenderCardModel {
+  isServerRender: false;
   path: string | undefined;
   openFile: FileResource | undefined;
   polling: 'off' | undefined;
 }
+
+interface ServerRenderCardModel {
+  isServerRender: true;
+  url: string;
+  format: Format;
+}
+
 export default class Application extends Route<Model> {
   queryParams = {
     path: {
       refreshModel: true,
     },
     polling: {
+      refreshModel: true,
+    },
+    url: {
+      refreshModel: true,
+    },
+    format: {
       refreshModel: true,
     },
   };
@@ -27,19 +44,24 @@ export default class Application extends Route<Model> {
   @service declare localRealm: LocalRealm;
 
   async model(args: {
-    path: string | undefined;
-    polling: 'off' | undefined;
+    path?: string;
+    polling?: 'off';
+    url?: string;
+    format?: Format;
   }): Promise<Model> {
-    let { path, polling } = args;
+    let { path, polling, url: renderURL, format } = args;
+    if (renderURL && format) {
+      return { isServerRender: true, format, url: renderURL };
+    }
 
     let openFile: FileResource | undefined;
     if (!path) {
-      return { path, openFile, polling };
+      return { isServerRender: false, path, openFile, polling };
     }
 
     await this.localRealm.startedUp;
     if (!this.localRealm.isAvailable) {
-      return { path, openFile, polling };
+      return { isServerRender: false, path, openFile, polling };
     }
 
     let realmPath = new RealmPaths(this.localRealm.url);
@@ -54,7 +76,7 @@ export default class Application extends Route<Model> {
       console.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
-      return { path, openFile, polling };
+      return { isServerRender: false, path, openFile, polling };
     }
     if (response.url !== url) {
       this.router.transitionTo('application', {
@@ -81,7 +103,7 @@ export default class Application extends Route<Model> {
       await openFile.loading;
     }
 
-    return { path, openFile, polling };
+    return { isServerRender: false, path, openFile, polling };
   }
 
   @action

@@ -1,12 +1,16 @@
-{{page-title 'RuntimeSpike'}}
+{{#if this.model.isServerRender}}
+  <ServerRender @url={{this.model.url}} @format={{this.model.format}}/>
+{{else}}
+  {{page-title 'RuntimeSpike'}}
 
-<CardCatalogModal />
-<CreateCardModal />
+  <CardCatalogModal />
+  <CreateCardModal />
 
-<Go
-  @path={{this.model.path}}
-  @openFile={{this.model.openFile}}
-  @polling={{this.model.polling}}
-/>
+  <Go
+    @path={{this.model.path}}
+    @openFile={{this.model.openFile}}
+    @polling={{this.model.polling}}
+  />
 
-{{outlet}}
+  {{outlet}}
+{{/if}}
