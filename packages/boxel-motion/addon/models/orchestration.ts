@@ -174,7 +174,7 @@ export class OrchestrationMatrix {
           rowFragments.push({
             frames,
             startColumn: 0,
-            static: false,
+            static: true,
           });
           maxLength = Math.max(frames.length, maxLength);
         }
