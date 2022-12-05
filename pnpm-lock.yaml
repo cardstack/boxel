@@ -43,6 +43,7 @@ importers:
   packages/base:
     specifiers:
       '@babel/core': ^7.17.8
+      '@cardstack/boxel-ui': workspace:*
       '@cardstack/runtime-common': workspace:*
       '@glimmer/component': ^1.1.2
       '@glimmer/tracking': ^1.0.4
@@ -59,6 +60,7 @@ importers:
       tracked-built-ins: ^2.0.1
     devDependencies:
       '@babel/core': 7.20.2
+      '@cardstack/boxel-ui': file:packages/boxel-ui
       '@cardstack/runtime-common': file:packages/runtime-common_o67wns7flslqvbh5rqg5ncvdta
       '@glimmer/component': 1.1.2_@babel+core@7.20.2
       '@glimmer/tracking': 1.1.2
@@ -74,6 +76,8 @@ importers:
       ember-modifier: 3.2.7_@babel+core@7.20.2
       tracked-built-ins: 2.0.1
     dependenciesMeta:
+      '@cardstack/boxel-ui':
+        injected: true
       '@cardstack/runtime-common':
         injected: true
 
@@ -487,6 +491,30 @@ importers:
       qunit-dom: 2.0.0
       typescript: 4.9.3
       webpack: 5.75.0
+
+  packages/boxel-ui:
+    specifiers:
+      '@babel/core': ^7.17.10
+      '@glimmer/component': ^1.1.2
+      '@glint/core': ^0.9.7
+      '@glint/environment-ember-loose': ^0.9.7
+      '@glint/environment-ember-template-imports': ^0.9.7
+      '@glint/template': ^0.9.7
+      '@types/ember__modifier': ^4.0.0
+      ember-cli-htmlbars: ^6.0.1
+      ember-template-imports: ^3.0.0
+      typescript: ^4.7.0
+    devDependencies:
+      '@babel/core': 7.20.2
+      '@glimmer/component': 1.1.2_@babel+core@7.20.2
+      '@glint/core': 0.9.7_typescript@4.9.3
+      '@glint/environment-ember-loose': 0.9.7_t5ycb63yys2yccfcq5mlxlwezm
+      '@glint/environment-ember-template-imports': 0.9.7_bcsri5pb4wp67pnaf33w2f4jlm
+      '@glint/template': 0.9.7_@glimmer+component@1.1.2
+      '@types/ember__modifier': 4.0.3_@babel+core@7.20.2
+      ember-cli-htmlbars: 6.1.1
+      ember-template-imports: 3.4.0_ember-cli-htmlbars@6.1.1
+      typescript: 4.9.3
 
   packages/demo-cards:
     specifiers: {}
@@ -19133,6 +19161,14 @@ packages:
     version: 1.0.0
     dev: true
 
+  file:packages/boxel-ui:
+    resolution: {directory: packages/boxel-ui, type: directory}
+    name: '@cardstack/boxel-ui'
+    version: 1.0.0
+    peerDependencies:
+      '@glint/environment-ember-loose': ^0.9.7
+    dev: true
+
   file:packages/runtime-common_o67wns7flslqvbh5rqg5ncvdta:
     resolution: {directory: packages/runtime-common, type: directory}
     id: file:packages/runtime-common
@@ -19153,6 +19189,7 @@ packages:
       '@babel/plugin-transform-typescript': 7.20.2_@babel+core@7.20.2
       '@babel/traverse': 7.20.1
       '@babel/types': 7.20.2
+      '@cardstack/boxel-ui': file:packages/boxel-ui
       '@cardstack/ember-template-imports': file:vendor/ember-template-imports_ember-cli-htmlbars@6.1.1
       '@types/babel__core': 7.1.20
       '@types/babel__generator': 7.6.4
@@ -19201,6 +19238,7 @@ packages:
       '@babel/plugin-transform-typescript': 7.20.2_@babel+core@7.20.2
       '@babel/traverse': 7.20.1
       '@babel/types': 7.20.2
+      '@cardstack/boxel-ui': file:packages/boxel-ui
       '@cardstack/ember-template-imports': file:vendor/ember-template-imports_ember-cli-htmlbars@6.1.1
       '@types/babel__core': 7.1.20
       '@types/babel__generator': 7.6.4
