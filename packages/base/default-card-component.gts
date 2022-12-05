@@ -3,6 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { initStyleSheet, attachStyles } from './attach-styles';
 import { startCase } from 'lodash';
 import type { Card } from './card-api';
+import BoxelField from './components/boxel-field';
 
 let defaultStyles = initStyleSheet(`
   this {
@@ -19,25 +20,6 @@ let editStyles = initStyleSheet(`
     border-radius: 10px;
     background-color: #fff;
     padding: 1rem;
-  }
-  .edit-field {
-    display: block;
-    padding: 0.75rem;
-    text-transform: capitalize;
-    background-color: #ffffff6e;
-    border: 1px solid gray;
-    margin: 0.5rem 0;
-  }
-  input[type=text],
-  input[type=number] {
-    box-sizing: border-box;
-    background-color: transparent;
-    width: 100%;
-    margin-top: .5rem;
-    display: block;
-    padding: 0.5rem;
-    font: inherit;
-    border: inherit;
   }
   textarea {
     box-sizing: border-box;
@@ -69,11 +51,9 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
     <div {{attachStyles editStyles}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
-          <label class="edit-field" data-test-field={{key}}>
-            {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
-            {{startCase key}}
+          <BoxelField @label={{startCase key}} class="edit-field" data-test-field={{key}}>
             <Field />
-          </label>
+          </BoxelField>
         {{/unless}}
       {{/each-in}}
     </div>
