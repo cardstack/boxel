@@ -11,6 +11,7 @@ import { getField } from "@cardstack/runtime-common";
 import type { ComponentLike } from '@glint/template';
 
 const componentCache = new WeakMap<Box<Card>, ComponentLike<{ Args: {}; Blocks: {}; }>>();
+const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 export function getBoxComponent(card: typeof Card, format: Format, model: Box<Card>): ComponentLike<{ Args: {}, Blocks: {} }> {
   let stable = componentCache.get(model);
@@ -28,6 +29,10 @@ export function getBoxComponent(card: typeof Card, format: Format, model: Box<Ca
   let component: ComponentLike<{ Args: {}, Blocks: {} }> = <template>
     {{#if isPrimitive}}
       <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
+    {{else if isFastBoot}}
+      <template shadowroot="open">
+        <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
+      </template>
     {{else}}
       <ShadowDOM>
         <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />

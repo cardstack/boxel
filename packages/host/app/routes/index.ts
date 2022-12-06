@@ -8,22 +8,14 @@ import LocalRealm from '../services/local-realm';
 import { RealmPaths } from '@cardstack/runtime-common';
 import type { Format } from 'https://cardstack.com/base/card-api';
 
-type Model = BrowserRenderCardModel | ServerRenderCardModel;
-
-interface BrowserRenderCardModel {
-  isServerRender: false;
+interface Model {
   path: string | undefined;
   openFile: FileResource | undefined;
   polling: 'off' | undefined;
+  isFastBoot: boolean;
 }
 
-interface ServerRenderCardModel {
-  isServerRender: true;
-  url: string;
-  format: Format;
-}
-
-export default class Application extends Route<Model> {
+export default class Index extends Route<Model> {
   queryParams = {
     path: {
       refreshModel: true,
@@ -31,17 +23,12 @@ export default class Application extends Route<Model> {
     polling: {
       refreshModel: true,
     },
-    url: {
-      refreshModel: true,
-    },
-    format: {
-      refreshModel: true,
-    },
   };
 
   @service declare router: RouterService;
   @service declare loaderService: LoaderService;
   @service declare localRealm: LocalRealm;
+  @service declare fastboot: { isFastBoot: boolean };
 
   async model(args: {
     path?: string;
@@ -49,19 +36,17 @@ export default class Application extends Route<Model> {
     url?: string;
     format?: Format;
   }): Promise<Model> {
-    let { path, polling, url: renderURL, format } = args;
-    if (renderURL && format) {
-      return { isServerRender: true, format, url: renderURL };
-    }
+    let { path, polling } = args;
+    let { isFastBoot } = this.fastboot;
 
     let openFile: FileResource | undefined;
     if (!path) {
-      return { isServerRender: false, path, openFile, polling };
+      return { path, openFile, polling, isFastBoot };
     }
 
     await this.localRealm.startedUp;
     if (!this.localRealm.isAvailable) {
-      return { isServerRender: false, path, openFile, polling };
+      return { path, openFile, polling, isFastBoot };
     }
 
     let realmPath = new RealmPaths(this.localRealm.url);
@@ -76,7 +61,7 @@ export default class Application extends Route<Model> {
       console.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
-      return { isServerRender: false, path, openFile, polling };
+      return { path, openFile, polling, isFastBoot };
     }
     if (response.url !== url) {
       this.router.transitionTo('application', {
@@ -103,7 +88,7 @@ export default class Application extends Route<Model> {
       await openFile.loading;
     }
 
-    return { isServerRender: false, path, openFile, polling };
+    return { path, openFile, polling, isFastBoot };
   }
 
   @action
