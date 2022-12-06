@@ -1,12 +1,11 @@
 import { Component } from './card-api';
 import StringCard from './string';
-import { on } from '@ember/modifier';
-import { pick } from './pick';
+import BoxelInput from './boxel-ui/components/input';
 
 export default class TextAreaCard extends StringCard {
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <textarea value={{@model}} {{on "input" (pick "target.value" @set) }} />
+      <BoxelInput @value={{@model}} @onInput={{@set}} @multiline={{true}} />
     </template>
   }
 }

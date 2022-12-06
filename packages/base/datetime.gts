@@ -1,8 +1,7 @@
 import { Component, primitive, serialize, deserialize, queryableValue, CardInstanceType, CardConstructor, Card } from './card-api';
 import { format, parseISO } from 'date-fns';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { pick } from './pick';
+import BoxelInput from './boxel-ui/components/input';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -49,8 +48,7 @@ export default class DatetimeCard extends Card {
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      {{!-- template-lint-disable require-input-label --}}
-      <input type="datetime-local" value={{this.formatted}} {{on "input" (pick "target.value" (fn this.parseInput @set))}} />
+      <BoxelInput type="datetime-local" @value={{this.formatted}} @onInput={{fn this.parseInput @set}} />
     </template>
 
     parseInput(set: Function, date: string) {

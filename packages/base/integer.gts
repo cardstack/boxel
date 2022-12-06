@@ -1,6 +1,6 @@
 import { primitive, Component, Card, useIndexBasedKey } from './card-api';
 import { fn } from '@ember/helper';
-import BoxelInput from './components/boxel-input';
+import BoxelInput from './boxel-ui/components/input';
 
 export default class IntegerCard extends Card {
   static [primitive]: number;

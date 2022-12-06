@@ -237,11 +237,6 @@ class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
         </section>
         <section class="line-items">
           <h2>Line Items</h2>
-          <header class="line-items__header">
-            <div class="label">Goods / services rendered</div>
-            <div class="label line-items__qty">Qty</div>
-            <div class="label line-items__amount">Amount</div>
-          </header>
           <div class="line-items__rows">
             <@fields.lineItems />
           </div>
