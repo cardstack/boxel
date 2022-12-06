@@ -20,12 +20,7 @@ export default class Application extends Route<Model> {
 
   @service declare cardService: CardService;
 
-  async model(args: {
-    path?: string;
-    polling?: 'off';
-    url?: string;
-    format?: Format;
-  }): Promise<Model> {
+  async model(args: { url: string; format: Format }): Promise<Model> {
     let { url, format } = args;
     await this.cardService.isReady();
     let card = await this.cardService.loadModel(url, { absoluteURL: true });
