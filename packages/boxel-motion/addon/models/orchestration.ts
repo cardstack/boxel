@@ -1,5 +1,7 @@
 import Behavior from '@cardstack/boxel-motion/behaviors/base';
 
+import StaticBehavior from '@cardstack/boxel-motion/behaviors/static';
+import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
 import Sprite, {
   MotionOptions,
   MotionProperty,
@@ -12,6 +14,7 @@ import { Frame } from '@cardstack/boxel-motion/value/simple-frame';
 interface RowFragment {
   startColumn: number;
   frames: Frame[];
+  static: boolean;
 }
 
 export class OrchestrationMatrix {
@@ -40,7 +43,8 @@ export class OrchestrationMatrix {
         fragmentsByColumn[rowFragment.startColumn] =
           fragmentsByColumn[rowFragment.startColumn] ?? [];
         fragmentsByColumn[rowFragment.startColumn]!.push(rowFragment);
-        if (rowFragment.frames[0]) {
+        // don't backfill static frames, they're intended to only be set for their duration
+        if (rowFragment.static === false && rowFragment.frames[0]) {
           baseFrames.push(rowFragment.frames[0] as Frame);
         }
       }
@@ -163,21 +167,35 @@ export class OrchestrationMatrix {
     let maxLength = 0;
     for (let sprite of motionDefinition.sprites) {
       let rowFragments: RowFragment[] = [];
-      for (let property in properties) {
-        let options = properties[property as MotionProperty];
 
-        if (options === undefined) {
-          throw Error('Options cannot be undefined');
-        }
-
-        let frames = generateFrames(sprite, property, options, timing);
-
-        if (frames) {
+      if (timing.behavior instanceof WaitBehavior) {
+        let frames = generateFrames(sprite, 'wait', {}, timing);
+        if (frames?.length) {
           rowFragments.push({
             frames,
             startColumn: 0,
+            static: true,
           });
           maxLength = Math.max(frames.length, maxLength);
+        }
+      } else {
+        for (let property in properties) {
+          let options = properties[property as MotionProperty];
+
+          if (options === undefined) {
+            throw Error('Options cannot be undefined');
+          }
+
+          let frames = generateFrames(sprite, property, options, timing);
+
+          if (frames?.length) {
+            rowFragments.push({
+              frames,
+              startColumn: 0,
+              static: timing.behavior instanceof StaticBehavior,
+            });
+            maxLength = Math.max(frames.length, maxLength);
+          }
         }
       }
       rows.set(sprite, rowFragments);
