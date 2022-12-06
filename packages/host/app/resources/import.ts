@@ -1,7 +1,7 @@
 import { Resource, useResource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
 import { taskFor } from 'ember-concurrency-ts';
-import { task, timeout } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
@@ -14,11 +14,12 @@ interface Args {
 export class ImportResource extends Resource<Args> {
   @tracked module: object | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
+  readonly loaded: Promise<void>;
 
   constructor(owner: unknown, args: Args) {
     super(owner, args);
     let { url, loader } = args.named;
-    taskFor(this.load).perform(url, loader);
+    this.loaded = taskFor(this.load).perform(url, loader);
   }
 
   @task private async load(url: string, loader: Loader): Promise<void> {
@@ -44,15 +45,6 @@ Check console log for more details`,
         console.error(err);
       }
     }
-  }
-
-  get loaded(): Promise<void> {
-    // TODO probably there is a more elegant way to express this in EC
-    return (async () => {
-      while (taskFor(this.load).isRunning) {
-        await timeout(10);
-      }
-    })();
   }
 }
 

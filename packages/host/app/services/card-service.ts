@@ -54,6 +54,10 @@ export default class CardService extends Service {
     return await response.json();
   }
 
+  async isReady() {
+    await this.apiModule.loaded;
+  }
+
   async createFromSerialized(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
