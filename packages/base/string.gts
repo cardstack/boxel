@@ -8,6 +8,6 @@ export default class StringCard extends Card {
     <template>{{@model}}</template>
   }
   static edit = class Edit extends Component<typeof this> {
-    <template><BoxelInput @value={{@model}} @onInput={{@set}}/></template>
+    <template><BoxelInput @value={{@model}} @onInput={{@set}} /></template>
   };
 }

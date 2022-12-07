@@ -22,6 +22,7 @@ import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
+import BoxelInput from '@cardstack/boxel-ui/components/input';
 
 interface Signature {
   Args: {
@@ -61,11 +62,11 @@ export default class Schema extends Component<Signature> {
             {{#if this.errorMsg}}
               <div class="error" data-test-error-msg>{{this.errorMsg}}</div>
             {{/if}}
-            <input
+            <BoxelInput
               data-test-new-field-name
               type="text"
-              value={{this.newFieldName}}
-              {{on "input" this.setNewFieldName}}
+              @value={{this.newFieldName}}
+              @onInput={{this.setNewFieldName}}
             />
             <label>
               contains

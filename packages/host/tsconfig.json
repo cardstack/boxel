@@ -28,7 +28,9 @@
       "//local-realm/*": ["../demo-cards/*"],
       "cards": ["../demo-cards/*"],
       "*": ["types/*"],
-      "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"]
+      "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"],
+      "@cardstack/boxel-ui": ["node_modules/@cardstack/boxel-ui/addon"],
+      "@cardstack/boxel-ui/*": ["node_modules/@cardstack/boxel-ui/addon/*"]
     }
   },
   "glint": {
