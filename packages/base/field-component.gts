@@ -30,9 +30,11 @@ export function getBoxComponent(card: typeof Card, format: Format, model: Box<Ca
     {{#if isPrimitive}}
       <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
     {{else if isFastBoot}}
-      <template shadowroot="open">
-        <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
-      </template>
+      <div data-test-shadow-component>
+        <template shadowroot="open">
+          <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
+        </template>
+      </div>
     {{else}}
       <ShadowDOM>
         <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />

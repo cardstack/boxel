@@ -1,5 +1,6 @@
 import { Deferred } from "./deferred";
-import { SearchIndex, SingleCardDocument } from "./search-index";
+import { SearchIndex } from "./search-index";
+import { type SingleCardDocument } from "./card-document";
 import { Loader, type MaybeLocalRequest } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
 import {
@@ -46,6 +47,7 @@ import { parseQueryString } from "./query";
 import type { Readable } from "stream";
 import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
+import type { LoaderType } from "https://cardstack.com/base/card-api";
 
 export interface FileRef {
   path: LocalPath;
@@ -55,6 +57,32 @@ export interface FileRef {
 
 interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
+}
+
+interface FastBootOptions {
+  resilient?: boolean;
+  request?: {
+    headers?: {
+      host?: string;
+    };
+  };
+}
+
+type DOMContents = () => {
+  head: string;
+  body: string;
+};
+
+interface FastBootVisitResult {
+  html(): string;
+  domContents(): DOMContents;
+  analytics: {
+    usedPrebuiltSandbox: boolean;
+  };
+}
+
+export interface FastBootInstance {
+  visit(url: string, opts?: FastBootOptions): Promise<FastBootVisitResult>;
 }
 
 export interface RealmAdapter {
@@ -79,15 +107,24 @@ export class Realm {
   readonly paths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
+  readonly visit: (url: string, fastboot: FastBootInstance) => Promise<string>;
+  readonly makeFastBoot?: (loader: Loader) => FastBootInstance;
 
   get url(): string {
     return this.paths.url;
   }
 
-  constructor(url: string, adapter: RealmAdapter) {
+  constructor(
+    url: string,
+    adapter: RealmAdapter,
+    visit: (url: string, fastboot: FastBootInstance) => Promise<string>,
+    makeFastBoot?: (loader: Loader) => FastBootInstance
+  ) {
     this.paths = new RealmPaths(url);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
+    this.visit = visit;
+    this.makeFastBoot = makeFastBoot;
     this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
       this,
@@ -598,7 +635,7 @@ export class Realm {
 
       // we're in a node-only branch, so this code isn't relevant to the worker
       // build, but the worker build will try to resolve the buffer polyfill and
-      // blow up sinc we don't include that library. So we're hiding from
+      // blow up since we don't include that library. So we're hiding from
       // webpack.
       const B = (globalThis as any)["Buffer"];
 
@@ -629,7 +666,7 @@ export class Realm {
       "https://cardstack.com/base/card-api"
     );
     let card: Card = await api.createFromSerialized(doc.data, doc, relativeTo, {
-      loader: this.searchIndex.loader,
+      loader: this.searchIndex.loader as unknown as LoaderType,
     });
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk

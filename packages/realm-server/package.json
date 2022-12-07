@@ -11,6 +11,7 @@
     "@types/supertest": "^2.0.12",
     "@types/tmp": "^0.2.3",
     "@types/yargs": "^17.0.10",
+    "fastboot": "^3.3.2",
     "fs-extra": "^10.1.0",
     "qs": "^6.10.5",
     "qunit": "^2.18.0",

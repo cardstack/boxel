@@ -1,4 +1,4 @@
-import { module, test } from "qunit";
+import { module, test, skip } from "qunit";
 import { dirSync, setGracefulCleanup } from "tmp";
 import {
   Loader,
@@ -136,6 +136,10 @@ module("indexing", function (hooks) {
     });
     await realm.ready;
   });
+
+  // TODO will need to incorporate a fastboot build as part of test setup (maybe
+  // just in CI though unless it gets trolly)
+  skip("TODO: can store card rendered html in the index");
 
   test("can incrementally index updated instance", async function (assert) {
     await realm.write(

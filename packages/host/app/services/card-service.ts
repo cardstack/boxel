@@ -29,6 +29,11 @@ export default class CardService extends Service {
   );
 
   private get api() {
+    if (this.apiModule.error) {
+      throw new Error(
+        `Error loading Card API: ${JSON.stringify(this.apiModule.error)}`
+      );
+    }
     if (!this.apiModule.module) {
       throw new Error(
         `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`
@@ -84,6 +89,7 @@ export default class CardService extends Service {
     if (!url) {
       return;
     }
+    await this.apiModule.loaded;
     let json = await this.fetchJSON(url);
     if (!isSingleCardDocument(json)) {
       throw new Error(

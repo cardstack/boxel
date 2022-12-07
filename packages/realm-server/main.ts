@@ -1,9 +1,11 @@
-import { Realm } from "@cardstack/runtime-common";
+import { Realm, type FastBootInstance } from "@cardstack/runtime-common";
 import { Loader } from "@cardstack/runtime-common/loader";
 import { NodeAdapter } from "./node-realm";
 import yargs from "yargs";
 import { createRealmServer } from "./server";
 import { resolve } from "path";
+//@ts-expect-error no types for fastboot
+import FastBoot from "fastboot";
 
 let {
   port,
@@ -58,7 +60,12 @@ for (let [from, to] of urlMappings) {
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let realms: Realm[] = paths.map((path, i) => {
-  return new Realm(hrefs[i][0], new NodeAdapter(resolve(String(path))));
+  return new Realm(
+    hrefs[i][0],
+    new NodeAdapter(resolve(String(path))),
+    visit,
+    makeFastBoot
+  );
 });
 
 let server = createRealmServer(realms);
@@ -73,4 +80,39 @@ if (additionalMappings.length) {
   for (let [from, to] of additionalMappings) {
     console.log(`    ${from} => ${to}`);
   }
+}
+
+function makeFastBoot(loader: Loader) {
+  // TODO this should be a CLI argument (perhaps ../host/dist can be the default value)
+  let distPath = resolve(__dirname, "..", "host", "dist");
+  return new FastBoot({
+    distPath,
+    resilient: false,
+    buildSandboxGlobals(defaultGlobals: any) {
+      return Object.assign({}, defaultGlobals, {
+        URL: globalThis.URL,
+        Request: globalThis.Request,
+        fetch: loader.fetch.bind(loader),
+        btoa,
+      });
+    },
+  }) as FastBootInstance;
+}
+
+async function visit(url: string, fastboot: FastBootInstance) {
+  let page = await fastboot.visit(url, {
+    request: { headers: { host: "localhost:4200" } },
+  });
+  let html = page.html();
+  return html;
+}
+
+function btoa(str: string | Buffer) {
+  let buffer;
+  if (str instanceof Buffer) {
+    buffer = str;
+  } else {
+    buffer = Buffer.from(str.toString(), "binary");
+  }
+  return buffer.toString("base64");
 }

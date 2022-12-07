@@ -11,6 +11,7 @@ import {
   maxLinkDepth,
   type NotLoaded,
   type CardRef,
+  type FastBootInstance,
 } from ".";
 import { loadCard, identifyCard, isCard, moduleFrom } from "./card-ref";
 import { Kind, Realm } from "./realm";
@@ -26,17 +27,30 @@ import {
   serializableError,
   type SerializedError,
 } from "./error";
-import type {
-  CardResource,
-  SingleCardDocument,
-  Relationship,
-} from "./search-index";
+import {
+  isSingleCardDocument,
+  type CardResource,
+  type SingleCardDocument,
+  type Relationship,
+  type Saved,
+} from "./card-document";
 import {
   Card,
   type IdentityContext as IdentityContextType,
 } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
+
+const renderedCardTokens = {
+  success: {
+    start: "<!--Server Side Rendered Card START-->",
+    end: "<!--Server Side Rendered Card END-->",
+  },
+  error: {
+    start: "<!--Server Side Rendered Card Error START-->",
+    end: "<!--Server Side Rendered Card Error END-->",
+  },
+};
 
 // Forces callers to use URL (which avoids accidentally using relative url
 // strings without a base)
@@ -94,6 +108,8 @@ class URLMap<T> {
 export interface SearchEntry {
   resource: CardResource;
   searchData: Record<string, any>;
+  // TODO after we have a worker form of card rendering this should not be undefined
+  html: string | undefined;
   types: string[];
   deps: Set<string>;
 }
@@ -138,7 +154,8 @@ export class CurrentRun {
   #reader: Reader | undefined;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
-  #loader: LoaderType;
+  #loader: Loader;
+  #fastboot: FastBootInstance | undefined;
   private realm: Realm;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -159,7 +176,7 @@ export class CurrentRun {
     instances?: URLMap<SearchEntryWithErrors>;
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
-    loader?: LoaderType;
+    loader?: Loader;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
     this.#reader = reader;
@@ -167,8 +184,10 @@ export class CurrentRun {
     this.#instances = instances;
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
-    this.#loader =
-      loader ?? (Loader.createLoaderFromGlobal() as unknown as LoaderType);
+    this.#loader = loader ?? Loader.createLoaderFromGlobal();
+    this.#fastboot = realm.makeFastBoot
+      ? realm.makeFastBoot(this.#loader as unknown as Loader)
+      : undefined;
   }
 
   private resetState() {
@@ -178,7 +197,10 @@ export class CurrentRun {
     this.#typesCache = new WeakMap();
     this.#indexingInstances = new Map();
     this.#ignoreMap = new URLMap();
-    this.#loader = Loader.createLoaderFromGlobal() as unknown as LoaderType;
+    this.#loader = Loader.createLoaderFromGlobal();
+    this.#fastboot = this.realm.makeFastBoot
+      ? this.realm.makeFastBoot(this.#loader as unknown as Loader)
+      : undefined;
     this.stats.instancesIndexed = 0;
     this.stats.instanceErrors = 0;
     this.stats.moduleErrors = 0;
@@ -416,6 +438,7 @@ export class CurrentRun {
     let uncaughtError: Error | undefined;
     let doc: SingleCardDocument | undefined;
     let searchData: Record<string, any> | undefined;
+    let html: string | undefined;
     let cardType: typeof Card | undefined;
     try {
       let api = await this.#loader.import<typeof CardAPI>(
@@ -428,7 +451,7 @@ export class CurrentRun {
         new URL(fileURL),
         {
           identityContext,
-          loader: this.#loader,
+          loader: this.#loader as unknown as LoaderType,
         }
       );
       await this.recomputeCard(card, fileURL, identityContext, stack);
@@ -440,19 +463,46 @@ export class CurrentRun {
       Object.values(data.data.relationships ?? {}).forEach(
         (rel) => delete (rel as Relationship).data
       );
-      let maybeDoc = merge(data, {
+      doc = merge(data, {
         data: {
           id: instanceURL.href,
           meta: { lastModified: lastModified },
         },
       }) as SingleCardDocument;
-      doc = maybeDoc;
       searchData = await api.searchDoc(card);
       if (!searchData) {
         throw new Error(
           `bug: could not derive search doc for instance ${instanceURL.href}`
         );
       }
+      // TODO this is the logic from search-index#card, refactor to DRY
+      let cachedDoc: SingleCardDocument = merge({}, doc, {
+        data: {
+          links: { self: instanceURL.href },
+        },
+      });
+      // TODO this is the response that will feed the card rendering, but how
+      // will we know how deep to load links before we have actually rendered
+      // the card?
+      let included = await this.loadLinks(cachedDoc.data, [cachedDoc.data.id]);
+      if (included.length > 0) {
+        cachedDoc.included = included;
+      }
+      this.loader.setJSONAPIResponseBody(
+        instanceURL,
+        JSON.stringify(cachedDoc, null, 2)
+      );
+      let rawHtml: string | undefined;
+      // TODO This guard is temporary until we have a worker form of a card render
+      if (this.#fastboot) {
+        rawHtml = await this.realm.visit(
+          `/render?url=${encodeURIComponent(instanceURL.href)}&format=isolated`,
+          this.#fastboot
+        );
+        html = parseRenderedCard(rawHtml);
+      }
+      // TODO delete this
+      console.log(`${instanceURL.href} html: ${html}`);
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -467,6 +517,7 @@ export class CurrentRun {
         entry: {
           resource: doc.data,
           searchData,
+          html,
           types: typesMaybeError.types,
           deps: new Set(await this.loader.getConsumedModules(moduleURL)),
         },
@@ -598,6 +649,87 @@ export class CurrentRun {
     let pathname = this.#realmPaths.local(url);
     return ignore.test(pathname).ignored;
   }
+
+  // TODO The caller should provide a list of fields to be included via JSONAPI
+  // request. currently we just use the maxLinkDepth to control how deep to load
+  // links
+  async loadLinks(
+    resource: LooseCardResource,
+    omit: string[] = [],
+    included: CardResource<Saved>[] = [],
+    visited: string[] = [],
+    stack: string[] = []
+  ): Promise<CardResource<Saved>[]> {
+    if (resource.id != null) {
+      if (visited.includes(resource.id)) {
+        return [];
+      }
+      visited.push(resource.id);
+    }
+
+    for (let [fieldName, relationship] of Object.entries(
+      resource.relationships ?? {}
+    )) {
+      if (!relationship.links.self) {
+        continue;
+      }
+      let linkURL = new URL(relationship.links.self);
+      let linkResource: CardResource<Saved> | undefined;
+      if (this.realm.paths.inRealm(linkURL)) {
+        let maybeEntry = this.instances.get(new URL(relationship.links.self));
+        linkResource =
+          maybeEntry?.type === "entry" ? maybeEntry.entry.resource : undefined;
+      } else {
+        let response = await this.loader.fetch(linkURL, {
+          headers: { Accept: "application/vnd.api+json" },
+        });
+        if (!response.ok) {
+          let cardError = await CardError.fromFetchResponse(
+            linkURL.href,
+            response
+          );
+          throw cardError;
+        }
+        let json = await response.json();
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `instance ${
+              linkURL.href
+            } is not a card document. it is: ${JSON.stringify(json, null, 2)}`
+          );
+        }
+        linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
+      }
+      let foundLinks = false;
+      if (linkResource && stack.length <= maxLinkDepth) {
+        for (let includedResource of await this.loadLinks(
+          linkResource,
+          omit,
+          [...included, linkResource],
+          visited,
+          [...(resource.id != null ? [resource.id] : []), ...stack]
+        )) {
+          foundLinks = true;
+          if (
+            !omit.includes(includedResource.id) &&
+            !included.find((r) => r.id === includedResource.id)
+          ) {
+            included.push({
+              ...includedResource,
+              ...{ links: { self: includedResource.id } },
+            });
+          }
+        }
+      }
+      if (foundLinks || omit.includes(relationship.links.self)) {
+        resource.relationships![fieldName].data = {
+          type: "card",
+          id: relationship.links.self,
+        };
+      }
+    }
+    return included;
+  }
 }
 
 function invalidate(
@@ -710,4 +842,25 @@ function invalidate(
   }
 
   return [...invalidationSet];
+}
+
+function parseRenderedCard(html: string): string {
+  if (html.includes(renderedCardTokens.success.start)) {
+    return html.substring(
+      html.indexOf(renderedCardTokens.success.start) +
+        renderedCardTokens.success.start.length,
+      html.indexOf(renderedCardTokens.success.end)
+    );
+  } else if (html.includes(renderedCardTokens.error.start)) {
+    let errorMsg = html.substring(
+      html.indexOf(renderedCardTokens.error.start) +
+        renderedCardTokens.error.start.length,
+      html.indexOf(renderedCardTokens.error.end)
+    );
+    throw new CardError(`encountered error when rendering card:\n${errorMsg}`);
+  } else {
+    throw new CardError(
+      `do not know how to handle rendered card output:\n${html}`
+    );
+  }
 }
