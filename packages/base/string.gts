@@ -1,5 +1,5 @@
 import { primitive, Component, Card, useIndexBasedKey } from './card-api';
-import BoxelInput from './boxel-ui/components/input';
+import { BoxelInput } from '@cardstack/boxel-ui';
 
 export default class StringCard extends Card {
   static [primitive]: string;
@@ -8,6 +8,6 @@ export default class StringCard extends Card {
     <template>{{@model}}</template>
   }
   static edit = class Edit extends Component<typeof this> {
-    <template><BoxelInput @value={{@model}} @onInput={{@set}} /></template>
+    <template><BoxelInput @value={{@model}} @onInput={{@set}}/></template>
   };
 }

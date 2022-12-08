@@ -1,7 +1,7 @@
 import { Component, primitive, serialize, deserialize, queryableValue, Card, CardInstanceType, CardConstructor } from './card-api';
 import { parse, format } from 'date-fns';
 import { fn } from '@ember/helper';
-import BoxelInput from './boxel-ui/components/input';
+import { BoxelInput } from '@cardstack/boxel-ui';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.

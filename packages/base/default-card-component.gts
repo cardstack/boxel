@@ -2,8 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { initStyleSheet, attachStyles } from './attach-styles';
 import { startCase } from 'lodash';
 import type { Card } from './card-api';
-import BoxelField from './boxel-ui/components/field';
-import { eq } from './boxel-ui/helpers/truth-helpers';
+import { BoxelField } from '@cardstack/boxel-ui';
 
 let styles = initStyleSheet(`
   this {
@@ -45,4 +44,8 @@ export const defaultComponent = {
   embedded: <template><!-- Inherited from base card embedded view. Did your card forget to specify its embedded component? --></template>,
   isolated: DefaultIsolated,
   edit: DefaultEdit,
+}
+
+function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
+  return a === b;
 }

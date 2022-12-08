@@ -43,6 +43,7 @@ importers:
   packages/base:
     specifiers:
       '@babel/core': ^7.17.8
+      '@cardstack/boxel-ui': workspace:*
       '@cardstack/runtime-common': workspace:*
       '@glimmer/component': ^1.1.2
       '@glimmer/tracking': ^1.0.4
@@ -60,6 +61,7 @@ importers:
       tracked-built-ins: ^2.0.1
     devDependencies:
       '@babel/core': 7.20.2
+      '@cardstack/boxel-ui': link:../boxel-ui
       '@cardstack/runtime-common': file:packages/runtime-common_o67wns7flslqvbh5rqg5ncvdta
       '@glimmer/component': 1.1.2_@babel+core@7.20.2
       '@glimmer/tracking': 1.1.2
@@ -904,6 +906,7 @@ importers:
       '@babel/plugin-transform-typescript': ^7.16.8
       '@babel/traverse': ^7.17.9
       '@babel/types': ^7.20.0
+      '@cardstack/boxel-ui': workspace:*
       '@cardstack/ember-template-imports': workspace:*
       '@types/babel__core': ^7.1.19
       '@types/babel__generator': ^7.6.4
@@ -939,6 +942,7 @@ importers:
       '@babel/plugin-transform-typescript': 7.20.2_@babel+core@7.20.2
       '@babel/traverse': 7.20.1
       '@babel/types': 7.20.2
+      '@cardstack/boxel-ui': link:../boxel-ui
       '@cardstack/ember-template-imports': file:vendor/ember-template-imports_ember-cli-htmlbars@6.1.1
       '@types/babel__core': 7.1.20
       '@types/babel__generator': 7.6.4
@@ -8951,7 +8955,7 @@ packages:
       ember-cli: ^3.2.0 || ^4.0.0
     dependencies:
       chalk: 2.4.2
-      ember-cli: 4.6.0_lodash@4.17.21
+      ember-cli: 4.6.0
       find-yarn-workspace-root: 1.2.1
       is-git-url: 1.0.0
       resolve: 1.22.1
@@ -19493,50 +19497,6 @@ packages:
     version: 1.0.0
     dev: true
 
-  file:packages/boxel-ui_@babel+core@7.20.2:
-    resolution: {directory: packages/boxel-ui, type: directory}
-    id: file:packages/boxel-ui
-    name: '@cardstack/boxel-ui'
-    version: 0.0.0
-    engines: {node: 14.* || >= 16}
-    peerDependencies:
-      '@glint/environment-ember-loose': ^0.9.7
-    dependencies:
-      '@cardstack/runtime-common': file:packages/runtime-common_o67wns7flslqvbh5rqg5ncvdta
-      ember-auto-import: 2.4.3
-      ember-cli-babel: 7.26.11
-      ember-cli-htmlbars: 6.1.1
-      ember-cli-typescript: 5.2.1
-      ember-template-imports: 3.4.0_ember-cli-htmlbars@6.1.1
-      lodash: 4.17.21
-    transitivePeerDependencies:
-      - '@babel/core'
-      - supports-color
-      - webpack
-    dev: true
-
-  file:packages/boxel-ui_npabyccmuonwo2rku4k53xo3hi:
-    resolution: {directory: packages/boxel-ui, type: directory}
-    id: file:packages/boxel-ui
-    name: '@cardstack/boxel-ui'
-    version: 0.0.0
-    engines: {node: 14.* || >= 16}
-    peerDependencies:
-      '@glint/environment-ember-loose': ^0.9.7
-    dependencies:
-      '@cardstack/runtime-common': file:packages/runtime-common_xsg5ed77smhudxvbo2fc34zs6m
-      ember-auto-import: 2.4.3_webpack@5.75.0
-      ember-cli-babel: 7.26.11
-      ember-cli-htmlbars: 6.1.1
-      ember-cli-typescript: 5.2.1
-      ember-template-imports: 3.4.0_ember-cli-htmlbars@6.1.1
-      lodash: 4.17.21
-    transitivePeerDependencies:
-      - '@babel/core'
-      - supports-color
-      - webpack
-    dev: true
-
   file:packages/runtime-common_o67wns7flslqvbh5rqg5ncvdta:
     resolution: {directory: packages/runtime-common, type: directory}
     id: file:packages/runtime-common
@@ -19557,7 +19517,7 @@ packages:
       '@babel/plugin-transform-typescript': 7.20.2_@babel+core@7.20.2
       '@babel/traverse': 7.20.1
       '@babel/types': 7.20.2
-      '@cardstack/boxel-ui': file:packages/boxel-ui_@babel+core@7.20.2
+      '@cardstack/boxel-ui': link:packages/boxel-ui
       '@cardstack/ember-template-imports': file:vendor/ember-template-imports_ember-cli-htmlbars@6.1.1
       '@types/babel__core': 7.1.20
       '@types/babel__generator': 7.6.4
@@ -19610,7 +19570,7 @@ packages:
       '@babel/plugin-transform-typescript': 7.20.2_@babel+core@7.20.2
       '@babel/traverse': 7.20.1
       '@babel/types': 7.20.2
-      '@cardstack/boxel-ui': file:packages/boxel-ui_npabyccmuonwo2rku4k53xo3hi
+      '@cardstack/boxel-ui': link:packages/boxel-ui
       '@cardstack/ember-template-imports': file:vendor/ember-template-imports_ember-cli-htmlbars@6.1.1
       '@types/babel__core': 7.1.20
       '@types/babel__generator': 7.6.4

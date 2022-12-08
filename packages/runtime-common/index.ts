@@ -86,6 +86,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "humanReadable",
     ],
   ],
+  ["@cardstack/boxel-ui", ["BoxelInput", "BoxelField"]],
   ["@glimmer/component", ["default"]],
   ["@ember/component", ["setComponentTemplate", "default"]],
   ["@ember/component/template-only", ["default"]],

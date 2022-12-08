@@ -5,6 +5,7 @@
   "license": "MIT",
   "devDependencies": {
     "@babel/core": "^7.17.8",
+    "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.0.4",

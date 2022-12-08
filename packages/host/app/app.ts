@@ -26,6 +26,8 @@ import * as runtime from '@cardstack/runtime-common';
   '@cardstack/runtime-common',
   runtime
 );
+import * as boxelUI from '@cardstack/boxel-ui';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set('@cardstack/boxel-ui', boxelUI);
 import * as glimmerComponent from '@glimmer/component';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   '@glimmer/component',

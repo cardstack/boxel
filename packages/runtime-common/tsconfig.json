@@ -22,7 +22,9 @@
     "strict": true,
     "experimentalDecorators": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"]
+      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/boxel-ui": ["node_modules/@cardstack/boxel-ui/addon"],
+      "@cardstack/boxel-ui/*": ["node_modules/@cardstack/boxel-ui/addon/*"]
     }
   },
   "glint": {
