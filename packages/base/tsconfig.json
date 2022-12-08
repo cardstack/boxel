@@ -22,8 +22,8 @@
     "strict": true,
     "experimentalDecorators": true,
     "paths": {
-      "@cardstack/boxel-ui": ["node_modules/@cardstack/boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["node_modules/@cardstack/boxel-ui/addon/*"]
+      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
     }
   },
   "glint": {

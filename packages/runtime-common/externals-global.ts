@@ -12,10 +12,8 @@ import * as runtime from "./index";
   "@cardstack/runtime-common",
   runtime
 );
-// import * as boxelUI from "@cardstack/boxel-ui";
-(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@cardstack/boxel-ui", {
-  default() {},
-});
+import * as boxelUI from "@cardstack/boxel-ui";
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@cardstack/boxel-ui", boxelUI);
 // import * as glimmerComponent from "@glimmer/component";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@glimmer/component", {
   default: class {},

@@ -29,19 +29,26 @@
       "cards": ["../demo-cards/*"],
       "*": ["types/*"],
       "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"],
-      "@cardstack/boxel-ui": ["node_modules/@cardstack/boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["node_modules/@cardstack/boxel-ui/addon/*"]
+      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
     }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
-      "include": ["../demo-cards/**", "../base/**", "app/**", "tests/**"]
+      "include": [
+        "../demo-cards/**",
+        "../base/**",
+        "../boxel-ui/addon/**",
+        "app/**",
+        "tests/**"
+      ]
     }
   },
   "include": [
     "../base/**/*",
     "../demo-cards/**/*",
+    "../boxel-ui/addon/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"

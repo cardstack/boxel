@@ -500,7 +500,6 @@ importers:
       '@glimmer/component': ^1.1.2
       '@glimmer/tracking': ^1.1.2
       '@glint/core': ^0.9.7
-      '@glint/environment-ember-loose': ^0.9.7
       '@glint/environment-ember-template-imports': ^0.9.7
       '@glint/template': ^0.9.7
       '@types/ember-qunit': ^5.0.0
@@ -575,8 +574,7 @@ importers:
       '@glimmer/component': 1.1.2_@babel+core@7.20.2
       '@glimmer/tracking': 1.1.2
       '@glint/core': 0.9.7_typescript@4.9.3
-      '@glint/environment-ember-loose': 0.9.7_q3dyqagzoarn5fdnpc2fuow56q
-      '@glint/environment-ember-template-imports': 0.9.7_bcsri5pb4wp67pnaf33w2f4jlm
+      '@glint/environment-ember-template-imports': 0.9.7_uhddnt2nkdysvmzzklqasfejmm
       '@glint/template': 0.9.7_@glimmer+component@1.1.2
       '@types/ember-qunit': 5.0.2_@babel+core@7.20.2
       '@types/ember-resolver': 5.0.13_@babel+core@7.20.2
@@ -3249,27 +3247,6 @@ packages:
       - supports-color
     dev: true
 
-  /@glint/environment-ember-loose/0.9.7_q3dyqagzoarn5fdnpc2fuow56q:
-    resolution: {integrity: sha512-MlCGZtB1Clp4vQWIm2APSnCm7nL8wVhFMOhVy2qzpV0nfLyg3pcN9CQHNpfdJvCydBB72cA4/ahPj7VEFL6xsg==}
-    peerDependencies:
-      '@glimmer/component': ^1.1.2
-      ember-cli-htmlbars: ^6.0.1
-      ember-modifier: ^3.2.7
-    peerDependenciesMeta:
-      ember-cli-htmlbars:
-        optional: true
-      ember-modifier:
-        optional: true
-    dependencies:
-      '@glimmer/component': 1.1.2_@babel+core@7.20.2
-      '@glint/config': 0.9.7
-      '@glint/template': 0.9.7_@glimmer+component@1.1.2
-      ember-cli-htmlbars: 6.1.1
-      ember-modifier: 3.2.7_@babel+core@7.20.2
-    transitivePeerDependencies:
-      - supports-color
-    dev: true
-
   /@glint/environment-ember-loose/0.9.7_t5ycb63yys2yccfcq5mlxlwezm:
     resolution: {integrity: sha512-MlCGZtB1Clp4vQWIm2APSnCm7nL8wVhFMOhVy2qzpV0nfLyg3pcN9CQHNpfdJvCydBB72cA4/ahPj7VEFL6xsg==}
     peerDependencies:
@@ -3296,7 +3273,7 @@ packages:
       '@glint/environment-ember-loose': ^0.9.7
       ember-template-imports: ^3.0.0
     dependencies:
-      '@glint/environment-ember-loose': 0.9.7_q3dyqagzoarn5fdnpc2fuow56q
+      '@glint/environment-ember-loose': 0.9.7_t5ycb63yys2yccfcq5mlxlwezm
       '@glint/template': 0.9.7_@glimmer+component@1.1.2
       ember-template-imports: 3.4.0_ember-cli-htmlbars@6.1.1
     transitivePeerDependencies:
