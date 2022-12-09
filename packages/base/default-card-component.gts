@@ -31,6 +31,7 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
     <div {{attachStyles styles}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
+          {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
           <BoxelField @label={{startCase key}} data-test-field={{key}}>
             <Field />
           </BoxelField>

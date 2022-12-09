@@ -188,8 +188,8 @@ export default class Schema extends Component<Signature> {
   }
 
   @action
-  setNewFieldName(event: any) {
-    this.newFieldName = event.target.value;
+  setNewFieldName(value: string) {
+    this.newFieldName = value;
   }
 
   @action
