@@ -42,6 +42,7 @@ export type SpriteSet = KeptSpriteSet | RemovedSpriteSet | InsertedSpriteSet;
 export interface KeptSpriteSet {
   withRole(role: string): KeptSpriteSet;
   cloned(): KeptSpriteSet;
+  counterparts(): KeptSpriteSet;
 }
 
 export interface RemovedSpriteSet {
@@ -66,6 +67,8 @@ export interface PrimitiveEffect<SpriteSetType extends SpriteSet> {
       ? Value
       : undefined
   ): Frame[];
+
+  velocity(offset: number): number;
 }
 
 export type Effect = PrimitiveEffect<SpriteSet> | ParallelEffect | SeriesEffect;
@@ -101,15 +104,8 @@ export class EaseInEffect implements PrimitiveEffect<KeptSpriteSet> {
 
 export class ParallelEffect {
   constructor(private children: PrimitiveEffect<SpriteSet>[]) {}
-
-  keyFrames(defaultDurationMS: number) {
-    return this.children.flatMap((child) => child.keyFrames(defaultDurationMS));
-  }
 }
 
 export class SeriesEffect {
   constructor(private children: PrimitiveEffect<SpriteSet>[]) {}
-  keyFrames(_defaultDurationMS: number) {
-    return [];
-  }
 }
