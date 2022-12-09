@@ -1,7 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
 import { initStyleSheet, attachStyles } from '../attach-styles';
-import { boxelCssVariables } from '../boxel-css-variables';
 
 export interface Signature {
   Element: HTMLElement;
@@ -12,15 +11,11 @@ export interface Signature {
     icon?: string;
   };
   Blocks: {
-    'default': [],
+    default: [],
   };
 }
 
 let styles = initStyleSheet(`
-  this {
-    ${boxelCssVariables};
-  }
-
   .boxel-field {
     display: grid;
     gap: var(--boxel-sp-xs) 0;
@@ -78,7 +73,7 @@ let styles = initStyleSheet(`
 
 const BoxelField: TemplateOnlyComponent<Signature> = <template>
   <label
-    class="boxel-field {{if @display (concat "boxel-field--" @display) "boxel-field--horizontal"}}"
+    class="boxel-field {{if @display (concat "boxel-field--" @display) "boxel-field--vertical"}}"
     data-test-boxel-field
     data-test-boxel-field-id={{@fieldId}}
     {{attachStyles styles}}

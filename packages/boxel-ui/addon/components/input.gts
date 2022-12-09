@@ -7,7 +7,6 @@ import pick from '../helpers/pick';
 import optional from '../helpers/optional';
 import { and, not } from '../helpers/truth-helpers';
 import { initStyleSheet, attachStyles } from '../attach-styles';
-import { boxelCssVariables } from '../boxel-css-variables';
 
 export interface Signature {
   Element: HTMLInputElement | HTMLTextAreaElement;
@@ -28,10 +27,6 @@ export interface Signature {
 }
 
 let styles = initStyleSheet(`
-  this {
-    ${boxelCssVariables};
-  }
-
   .boxel-input {
     --boxel-form-control-border-color: #afafb7;
     --boxel-form-control-border-radius: 5px;
@@ -41,6 +36,7 @@ let styles = initStyleSheet(`
     border: 1px solid var(--boxel-form-control-border-color);
     border-radius: var(--boxel-form-control-border-radius);
     font: inherit;
+    font-weight: 400;
     letter-spacing: var(--boxel-lsp-sm);
     transition: border-color var(--boxel-transition);
   }

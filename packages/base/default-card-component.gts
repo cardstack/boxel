@@ -1,34 +1,23 @@
 import GlimmerComponent from '@glimmer/component';
-import { initStyleSheet, attachStyles } from './attach-styles';
 import { startCase } from 'lodash';
 import type { Card } from './card-api';
-import { BoxelField } from '@cardstack/boxel-ui';
-
-let styles = initStyleSheet(`
-  this {
-    --boxel-field-label-align: center;
-    border: 1px solid gray;
-    border-radius: 10px;
-    background-color: #fff;
-    padding: 1rem;
-  }
-`);
+import { CardContainer, BoxelField } from '@cardstack/boxel-ui';
 
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <div {{attachStyles styles}}>
+    <CardContainer>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <Field />
         {{/unless}}
       {{/each-in}}
-    </div>
+    </CardContainer>
   </template>;
 }
 
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <div {{attachStyles styles}}>
+    <CardContainer>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
@@ -37,7 +26,7 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
           </BoxelField>
         {{/unless}}
       {{/each-in}}
-    </div>
+    </CardContainer>
   </template>;
 }
 
