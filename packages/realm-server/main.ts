@@ -3,12 +3,13 @@ import { Loader } from "@cardstack/runtime-common/loader";
 import { NodeAdapter } from "./node-realm";
 import yargs from "yargs";
 import { createRealmServer } from "./server";
-import { resolve } from "path";
+import { resolve, join } from "path";
 //@ts-expect-error no types for fastboot
 import FastBoot from "fastboot";
 
 let {
   port,
+  dist = join(__dirname, "..", "host", "dist"),
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -35,6 +36,11 @@ let {
       demandOption: true,
       type: "array",
     },
+    dist: {
+      description:
+        "the dist/ folder of the host app. Defaults to '../host/dist'",
+      type: "string",
+    },
   })
   .parseSync();
 
@@ -51,6 +57,7 @@ if (fromUrls.length < paths.length) {
   process.exit(-1);
 }
 
+let distPath = resolve(dist);
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),
   new URL(String(toUrls[i]), `http://localhost:${port}`),
@@ -82,13 +89,12 @@ if (additionalMappings.length) {
   }
 }
 
+console.log(`Using host dist path: '${distPath}' for card pre-rendering`);
 function makeFastBoot(
   urlHandlers: Map<string, (req: Request) => Promise<Response>>,
   urlMappings: Map<string, string>,
   staticResponses: Map<string, string>
 ) {
-  // TODO this should be a CLI argument (perhaps ../host/dist can be the default value)
-  let distPath = resolve(__dirname, "..", "host", "dist");
   return new FastBoot({
     distPath,
     resilient: false,

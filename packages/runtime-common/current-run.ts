@@ -512,8 +512,6 @@ export class CurrentRun {
         );
         html = parseRenderedCard(rawHtml);
       }
-      // TODO delete this
-      console.log(`${instanceURL.href} html: ${html}`);
     } catch (err: any) {
       uncaughtError = err;
     }
