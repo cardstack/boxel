@@ -23,13 +23,20 @@
     "noEmit": true,
     "lib": ["ES2020", "ScriptHost", "WebWorker", "WebWorker.ImportScripts"],
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"]
+      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
     }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
-      "include": ["../base/**", "src/**" ]
+      "include": [
+        "../base/**",
+        "src/**",
+        "../boxel-ui/addon",
+        "../boxel-ui/addon/**"
+      ]
     }
   },
   "include": ["../base/**/*", "src/**/*", "types/**/*"]
