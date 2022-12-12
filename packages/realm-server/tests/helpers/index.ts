@@ -18,7 +18,9 @@ export function createRealm(
       writeJSONSync(join(dir, filename), contents);
     }
   }
-  return new Realm(realmURL, new NodeAdapter(dir));
+  return new Realm(realmURL, new NodeAdapter(dir), async () => {
+    return `card render is not implemented`;
+  });
 }
 
 export function setupCardLogs(

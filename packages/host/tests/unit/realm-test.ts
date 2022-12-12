@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { isSingleCardDocument } from '@cardstack/runtime-common/search-index';
+import { isSingleCardDocument } from '@cardstack/runtime-common/card-document';
 import {
   cardSrc,
   compiledCard,
