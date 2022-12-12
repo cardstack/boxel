@@ -77,6 +77,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+      - uses: actions/checkout@v2
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Build host dist/ for fastboot
