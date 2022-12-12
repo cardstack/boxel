@@ -2,7 +2,14 @@ import { contains, field, Card, Component } from 'https://cardstack.com/base/car
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import BooleanCard from 'https://cardstack.com/base/boolean';
+import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 import { CardContainer } from '@cardstack/boxel-ui';
+
+let styles = initStyleSheet(`
+  this {
+    padding: var(--boxel-spacing);
+  }
+`);
 
 export class Pet extends Card {
   @field firstName = contains(StringCard);
@@ -12,7 +19,7 @@ export class Pet extends Card {
   @field sleepsOnTheCouch = contains(BooleanCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer>
+      <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h3><@fields.firstName/></h3>
         <div><@fields.sleepsOnTheCouch/></div>
       </CardContainer>
@@ -20,8 +27,8 @@ export class Pet extends Card {
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CardContainer>
-        <h1><@fields.firstName/></h1>
+      <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
+        <h2><@fields.firstName/></h2>
         <div><@fields.sleepsOnTheCouch/></div>
         <div>Favorite Toy: <@fields.favoriteToy/></div>
         <div>Favorite Treat: <@fields.favoriteTreat/></div>
@@ -29,4 +36,5 @@ export class Pet extends Card {
       </CardContainer>
     </template>
   };
+
 }

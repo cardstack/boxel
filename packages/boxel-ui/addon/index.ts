@@ -1,5 +1,6 @@
 import BoxelInput from './components/input';
-import Label from './components/label';
+import FieldContainer from './components/field-container';
 import CardContainer from './components/card-container';
+import Header from './components/header';
 
-export { BoxelInput, Label, CardContainer };
+export { BoxelInput, FieldContainer, CardContainer, Header };

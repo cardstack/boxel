@@ -26,6 +26,9 @@ interface Signature {
 }
 
 let linksToEditorStyles = initStyleSheet(`
+  this {
+    padding: var(--boxel-spacing);
+  }
   button {
     margin-top: 1rem;
     font: inherit;
@@ -42,7 +45,7 @@ let linksToEditorStyles = initStyleSheet(`
 
 class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
-    <CardContainer {{attachStyles linksToEditorStyles}}>
+    <CardContainer @displayBoundaries={{true}} {{attachStyles linksToEditorStyles}}>
       {{#if this.isEmpty}}
         <div data-test-empty-link>{{!-- PLACEHOLDER CONTENT --}}</div>
         <button {{on "click" this.choose}} data-test-choose-card>

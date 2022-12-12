@@ -4,7 +4,17 @@ import BooleanCard from './boolean';
 import CardRefCard from './card-ref';
 import { baseCardRef, loadCard } from "@cardstack/runtime-common";
 import { isEqual } from 'lodash';
-import { CardContainer, Label } from '@cardstack/boxel-ui';
+import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
+import { initStyleSheet, attachStyles } from './attach-styles';
+
+let styles = initStyleSheet(`
+  this {
+    padding: var(--boxel-spacing);
+  }
+  .demo {
+    margin-top: var(--boxel-spacing);
+  }
+`);
 
 export class CatalogEntry extends Card {
   @field title = contains(StringCard);
@@ -30,26 +40,26 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer>
-        <Label @label="Title" data-test-field="title">
+      <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
+        <FieldContainer @label="Title" data-test-field="title">
           <@fields.title/>
-        </Label>
-        <Label @label="Description" data-test-field="description">
+        </FieldContainer>
+        <FieldContainer @label="Description" data-test-field="description">
           <@fields.description/>
-        </Label>
-        <Label @label="ref" data-test-field="ref">
+        </FieldContainer>
+        <FieldContainer @label="Ref" data-test-field="ref">
           <@fields.ref/>
-        </Label>
-        <Label @label="Demo" data-test-field="demo">
+        </FieldContainer>
+        <FieldContainer @label="Demo" data-test-field="demo">
           <@fields.demo/>
-        </Label>
+        </FieldContainer>
       </CardContainer>
     </template>
   }
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer>
+      <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h2><@fields.title/></h2>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
@@ -61,7 +71,7 @@ export class CatalogEntry extends Card {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CardContainer>
+      <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h1 data-test-title><@fields.title/></h1>
         <p data-test-description><em><@fields.description/></em></p>
         <div><@fields.ref/></div>

@@ -1,11 +1,12 @@
 import GlimmerComponent from '@glimmer/component';
 import { startCase } from 'lodash';
 import type { Card } from './card-api';
-import { CardContainer, Label } from '@cardstack/boxel-ui';
+import { initStyleSheet, attachStyles } from './attach-styles';
+import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <CardContainer>
+    <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <Field />
@@ -15,15 +16,21 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Re
   </template>;
 }
 
+let styles = initStyleSheet(`
+  this {
+    padding: var(--boxel-sp);
+  }
+`);
+
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <CardContainer>
+    <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
-          {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
-          <Label @label={{startCase key}} data-test-field={{key}}>
+          {{!-- @glint-ignore glint is arriving at an incorrect type signature for 'startCase' --}}
+          <FieldContainer @label={{startCase key}} data-test-field={{key}}>
             <Field />
-          </Label>
+          </FieldContainer>
         {{/unless}}
       {{/each-in}}
     </CardContainer>
