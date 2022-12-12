@@ -79,7 +79,7 @@ jobs:
           cache: pnpm
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
-      - name: build host dist for fastboot
+      - name: Build host dist/ for fastboot
         run: pnpm build
         working-directory: packages/host
       - name: Start realm servers
@@ -102,7 +102,7 @@ jobs:
           cache: pnpm
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
-      - name: build host dist for fastboot
+      - name: Build host dist/ for fastboot
         run: pnpm build
         working-directory: packages/host
       - name: Start base realm server
