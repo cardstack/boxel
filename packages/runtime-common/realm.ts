@@ -108,7 +108,11 @@ export class Realm {
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
   readonly visit: (url: string, fastboot: FastBootInstance) => Promise<string>;
-  readonly makeFastBoot?: (loader: Loader) => FastBootInstance;
+  readonly makeFastBoot?: (
+    urlHandlers: Map<string, (req: Request) => Promise<Response>>,
+    urlMappings: Map<string, string>,
+    staticResponses: Map<string, string>
+  ) => FastBootInstance;
 
   get url(): string {
     return this.paths.url;
@@ -118,7 +122,11 @@ export class Realm {
     url: string,
     adapter: RealmAdapter,
     visit: (url: string, fastboot: FastBootInstance) => Promise<string>,
-    makeFastBoot?: (loader: Loader) => FastBootInstance
+    makeFastBoot?: (
+      urlHandlers: Map<string, (req: Request) => Promise<Response>>,
+      urlMappings: Map<string, string>,
+      staticResponses: Map<string, string>
+    ) => FastBootInstance
   ) {
     this.paths = new RealmPaths(url);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));

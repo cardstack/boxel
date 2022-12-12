@@ -155,7 +155,9 @@ export class CurrentRun {
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
   #loader: Loader;
+  // TODO after the worker supports fastboot, remove the undefined type
   #fastboot: FastBootInstance | undefined;
+  #staticResponses = new Map<string, string>();
   private realm: Realm;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -186,7 +188,11 @@ export class CurrentRun {
     this.#ignoreMap = ignoreMap;
     this.#loader = loader ?? Loader.createLoaderFromGlobal();
     this.#fastboot = realm.makeFastBoot
-      ? realm.makeFastBoot(this.#loader as unknown as Loader)
+      ? realm.makeFastBoot(
+          this.loader.getUrlHandlers(),
+          this.loader.getUrlMappings(),
+          this.#staticResponses
+        )
       : undefined;
   }
 
@@ -198,8 +204,13 @@ export class CurrentRun {
     this.#indexingInstances = new Map();
     this.#ignoreMap = new URLMap();
     this.#loader = Loader.createLoaderFromGlobal();
+    this.#staticResponses = new Map();
     this.#fastboot = this.realm.makeFastBoot
-      ? this.realm.makeFastBoot(this.#loader as unknown as Loader)
+      ? this.realm.makeFastBoot(
+          this.loader.getUrlHandlers(),
+          this.loader.getUrlMappings(),
+          this.#staticResponses
+        )
       : undefined;
     this.stats.instancesIndexed = 0;
     this.stats.instanceErrors = 0;
@@ -488,8 +499,8 @@ export class CurrentRun {
       if (included.length > 0) {
         cachedDoc.included = included;
       }
-      this.loader.setJSONAPIResponseBody(
-        instanceURL,
+      this.#staticResponses.set(
+        instanceURL.href,
         JSON.stringify(cachedDoc, null, 2)
       );
       let rawHtml: string | undefined;

@@ -82,7 +82,11 @@ if (additionalMappings.length) {
   }
 }
 
-function makeFastBoot(loader: Loader) {
+function makeFastBoot(
+  urlHandlers: Map<string, (req: Request) => Promise<Response>>,
+  urlMappings: Map<string, string>,
+  staticResponses: Map<string, string>
+) {
   // TODO this should be a CLI argument (perhaps ../host/dist can be the default value)
   let distPath = resolve(__dirname, "..", "host", "dist");
   return new FastBoot({
@@ -92,8 +96,12 @@ function makeFastBoot(loader: Loader) {
       return Object.assign({}, defaultGlobals, {
         URL: globalThis.URL,
         Request: globalThis.Request,
-        fetch: loader.fetch.bind(loader),
+        Response: globalThis.Response,
+        fetch: globalThis.fetch,
         btoa,
+        urlHandlers,
+        urlMappings,
+        staticResponses,
       });
     },
   }) as FastBootInstance;

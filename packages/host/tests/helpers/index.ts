@@ -36,10 +36,18 @@ export const TestRealm = {
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
     realmURL?: string
   ): Realm {
-    return new Realm(realmURL ?? testRealmURL, new TestRealmAdapter(flatFiles));
+    return new Realm(
+      realmURL ?? testRealmURL,
+      new TestRealmAdapter(flatFiles),
+      async () => {
+        return `card render is not implemented`;
+      }
+    );
   },
   createWithAdapter(adapter: RealmAdapter, realmURL?: string): Realm {
-    return new Realm(realmURL ?? testRealmURL, adapter);
+    return new Realm(realmURL ?? testRealmURL, adapter, async () => {
+      return `card render is not implemented`;
+    });
   },
 };
 

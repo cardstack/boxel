@@ -4,7 +4,8 @@ import { Deferred } from "./deferred";
 import { trimExecutableExtension } from "./index";
 import { RealmPaths } from "./paths";
 import { CardError } from "./error";
-import { formatRFC7231 } from "date-fns";
+
+const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -78,12 +79,17 @@ export class Loader {
     { module: string; name: string }
   >();
   private consumptionCache = new WeakMap<object, string[]>();
-  private responseCache = new Map<
-    string,
-    { body: string; lastModified: number }
-  >();
 
-  constructor() {}
+  constructor() {
+    if (isFastBoot) {
+      if ((globalThis as any).urlHandlers) {
+        this.urlHandlers = (globalThis as any).urlHandlers;
+      }
+      if ((globalThis as any).urlMappings) {
+        this.urlMappings = (globalThis as any).urlMappings;
+      }
+    }
+  }
 
   static #instance: Loader | undefined;
   static loaders = new WeakMap<Function, Loader>();
@@ -155,6 +161,10 @@ export class Loader {
     this.urlMappings.set(from.href, to.href);
   }
 
+  getUrlMappings() {
+    return this.urlMappings;
+  }
+
   static registerURLHandler(
     url: URL,
     handler: (req: Request) => Promise<Response>
@@ -167,6 +177,10 @@ export class Loader {
     this.urlHandlers.set(url.href, handler);
   }
 
+  getUrlHandlers() {
+    return this.urlHandlers;
+  }
+
   static shimModule(moduleIdentifier: string, module: Record<string, any>) {
     let loader = Loader.getLoader();
     loader.shimModule(moduleIdentifier, module);
@@ -177,10 +191,6 @@ export class Loader {
       moduleIdentifier,
       this.createModuleProxy(module, moduleIdentifier)
     );
-  }
-
-  setJSONAPIResponseBody(url: URL, body: string) {
-    this.responseCache.set(url.href, { body, lastModified: Date.now() });
   }
 
   async getConsumedModules(
@@ -294,12 +304,16 @@ export class Loader {
         : typeof urlOrRequest === "string"
         ? urlOrRequest
         : urlOrRequest.href;
-    let cachedResponse = this.responseCache.get(requestURL);
-    if (cachedResponse != null) {
-      return makeJSONAPIResponse(
-        cachedResponse.body,
-        cachedResponse.lastModified
-      );
+    let cachedJSONAPI = isFastBoot
+      ? (globalThis as any).staticResponses?.get(requestURL)
+      : undefined;
+    if (cachedJSONAPI != null) {
+      return new Response(cachedJSONAPI, {
+        status: 200,
+        headers: {
+          "content-type": "application/vnd.api+json",
+        },
+      });
     }
 
     if (urlOrRequest instanceof Request) {
@@ -590,14 +604,4 @@ export class Loader {
 
 function assertNever(value: never) {
   throw new Error(`should never happen ${value}`);
-}
-
-function makeJSONAPIResponse(body: string, lastModified: number): Response {
-  return new Response(body, {
-    status: 200,
-    headers: {
-      "last-modified": formatRFC7231(lastModified),
-      "content-type": "application/vnd.api+json",
-    },
-  });
 }
