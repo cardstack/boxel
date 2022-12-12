@@ -7,11 +7,11 @@ import {
   Realm,
 } from "@cardstack/runtime-common";
 import { createRealm, testRealm, setupCardLogs } from "./helpers";
-import "./helpers/html-equality-assertion";
 
-export function cleanWhiteSpace(text: string) {
+function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, " ").trim();
 }
+
 setGracefulCleanup();
 // Using the node tests for indexing as it is much easier to support the dynamic
 // loading of cards necessary for indexing and the ability to manipulate the
