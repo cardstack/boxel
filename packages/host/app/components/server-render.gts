@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+import { service } from '@ember/service';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
@@ -15,8 +16,9 @@ export default class ServerRender extends Component<Signature> {
     <!--Server Side Rendered Card END-->
   </template>
 
+  @service declare fastboot: { isFastBoot: boolean };
   get renderedCard() {
-    return this.args.card.constructor.getComponent(this.args.card, this.args.format);
+    return this.args.card.constructor.getComponent(this.args.card, this.args.format, this.fastboot.isFastBoot);
   }
 }
 
