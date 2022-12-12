@@ -77,9 +77,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-      - uses: actions/checkout@v2
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
+      # - uses: actions/checkout@v2
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Build host dist/ for fastboot
@@ -88,6 +88,8 @@ jobs:
       - name: Start realm servers
         run: pnpm start:test-realms &
         working-directory: packages/realm-server
+      - name: Wait for server to start (1 min)
+        run: sleep 60
       - name: host test suite
         run: pnpm test:ember
         working-directory: packages/host
@@ -111,8 +113,8 @@ jobs:
       - name: Start base realm server
         run: pnpm start:test-realms &
         working-directory: packages/realm-server
-      - name: Wait for server to start
-        run: sleep 5
+      - name: Wait for server to start (1 min)
+        run: sleep 60
       - name: realm server test suite
         run: pnpm test
         working-directory: packages/realm-server
