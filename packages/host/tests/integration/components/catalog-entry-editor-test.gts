@@ -536,6 +536,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     );
 
+
     await waitFor('button[data-test-catalog-entry-publish]');
     await click('[data-test-catalog-entry-publish]');
     await waitFor('[data-test-ref]');
@@ -547,6 +548,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await click('[data-test-choose-card]');
     await waitFor('[data-test-card-catalog-modal]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-create-new]');
+
     await click('[data-test-card-catalog-modal] [data-test-create-new]');
     await waitFor('[data-test-create-new-card="Vendor"]');
     await fillIn('[data-test-field="company"] input', 'Big Tech');
