@@ -7,6 +7,24 @@
     {
       "type": "node",
       "request": "launch",
+      "name": "node test",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "./node_modules/.bin/../../../../node_modules/.pnpm/qunit@2.19.3/node_modules/qunit/bin/qunit.js",
+      "args": [
+        "--require",
+        "ts-node/register/transpile-only",
+        "tests/index.ts"
+      ],
+      "cwd": "${workspaceFolder}/packages/realm-server",
+      "outFiles": ["${workspaceFolder}/**/*.js"],
+      "env": {
+        "NODE_NO_WARNINGS": "1",
+        "SUPPRESS_ERRORS": "true"
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
       "name": "start base realm",
       "skipFiles": ["<node_internals>/**"],
       "program": "./node_modules/.bin/../../../../node_modules/.pnpm/ts-node@10.9.1_wup25etrarvlqkprac7h35hj7u/node_modules/ts-node/dist/bin.js",
@@ -19,7 +37,10 @@
         "--toUrl='/base/'"
       ],
       "cwd": "${workspaceFolder}/packages/realm-server",
-      "outFiles": ["${workspaceFolder}/**/*.js"]
+      "outFiles": ["${workspaceFolder}/**/*.js"],
+      "env": {
+        "NODE_NO_WARNINGS": "1"
+      }
     },
     {
       "type": "node",
@@ -39,7 +60,10 @@
         "--toUrl='/test/'"
       ],
       "cwd": "${workspaceFolder}/packages/realm-server",
-      "outFiles": ["${workspaceFolder}/**/*.js"]
+      "outFiles": ["${workspaceFolder}/**/*.js"],
+      "env": {
+        "NODE_NO_WARNINGS": "1"
+      }
     },
     {
       "type": "node",
@@ -58,7 +82,10 @@
         "--toUrl='http://localhost:4201/base/'"
       ],
       "cwd": "${workspaceFolder}/packages/realm-server",
-      "outFiles": ["${workspaceFolder}/**/*.js"]
+      "outFiles": ["${workspaceFolder}/**/*.js"],
+      "env": {
+        "NODE_NO_WARNINGS": "1"
+      }
     }
   ]
 }

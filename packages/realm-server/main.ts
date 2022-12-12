@@ -1,11 +1,10 @@
-import { Realm, type FastBootInstance } from "@cardstack/runtime-common";
+import { Realm } from "@cardstack/runtime-common";
 import { Loader } from "@cardstack/runtime-common/loader";
 import { NodeAdapter } from "./node-realm";
 import yargs from "yargs";
 import { createRealmServer } from "./server";
 import { resolve, join } from "path";
-//@ts-expect-error no types for fastboot
-import FastBoot from "fastboot";
+import { makeFastBoot, visit } from "./fastboot";
 
 let {
   port,
@@ -57,7 +56,6 @@ if (fromUrls.length < paths.length) {
   process.exit(-1);
 }
 
-let distPath = resolve(dist);
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),
   new URL(String(toUrls[i]), `http://localhost:${port}`),
@@ -66,12 +64,14 @@ for (let [from, to] of urlMappings) {
   Loader.addURLMapping(from, to);
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
+let distPath = resolve(dist);
+let fastBootMaker = makeFastBoot(distPath);
 let realms: Realm[] = paths.map((path, i) => {
   return new Realm(
     hrefs[i][0],
     new NodeAdapter(resolve(String(path))),
     visit,
-    makeFastBoot
+    fastBootMaker
   );
 });
 
@@ -88,45 +88,4 @@ if (additionalMappings.length) {
     console.log(`    ${from} => ${to}`);
   }
 }
-
 console.log(`Using host dist path: '${distPath}' for card pre-rendering`);
-function makeFastBoot(
-  urlHandlers: Map<string, (req: Request) => Promise<Response>>,
-  urlMappings: Map<string, string>,
-  staticResponses: Map<string, string>
-) {
-  return new FastBoot({
-    distPath,
-    resilient: false,
-    buildSandboxGlobals(defaultGlobals: any) {
-      return Object.assign({}, defaultGlobals, {
-        URL: globalThis.URL,
-        Request: globalThis.Request,
-        Response: globalThis.Response,
-        fetch: globalThis.fetch,
-        btoa,
-        urlHandlers,
-        urlMappings,
-        staticResponses,
-      });
-    },
-  }) as FastBootInstance;
-}
-
-async function visit(url: string, fastboot: FastBootInstance) {
-  let page = await fastboot.visit(url, {
-    request: { headers: { host: "localhost:4200" } },
-  });
-  let html = page.html();
-  return html;
-}
-
-function btoa(str: string | Buffer) {
-  let buffer;
-  if (str instanceof Buffer) {
-    buffer = str;
-  } else {
-    buffer = Buffer.from(str.toString(), "binary");
-  }
-  return buffer.toString("base64");
-}
