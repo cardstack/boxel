@@ -3,50 +3,8 @@ import StringCard from './string';
 import BooleanCard from './boolean';
 import CardRefCard from './card-ref';
 import { baseCardRef, loadCard } from "@cardstack/runtime-common";
-import { initStyleSheet, attachStyles } from './attach-styles';
 import { isEqual } from 'lodash';
-
-let css = `
-  this {
-    background-color: #cbf3f0;
-    border: 1px solid gray;
-    border-radius: 10px;
-    padding: 1rem;
-  }
-  .demo {
-    margin-top: 1rem;
-  }
-`;
-
-let editCSS = `
-  this {
-    background-color: #cbf3f0;
-    border: 1px solid gray;
-    border-radius: 10px;
-    padding: 1rem;
-  }
-  .edit-field {
-    display: block;
-    padding: 0.75rem;
-    text-transform: capitalize;
-    background-color: #ffffff6e;
-    border: 1px solid gray;
-    margin: 0.5rem 0;
-  }
-  input[type=text] {
-    box-sizing: border-box;
-    background-color: transparent;
-    width: 100%;
-    margin-top: .5rem;
-    display: block;
-    padding: 0.5rem;
-    font: inherit;
-    border: inherit;
-  }
-`;
-
-let styles = initStyleSheet(css);
-let editStyles = initStyleSheet(editCSS);
+import { CardContainer, Label } from '@cardstack/boxel-ui';
 
 export class CatalogEntry extends Card {
   @field title = contains(StringCard);
@@ -72,45 +30,45 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div {{attachStyles editStyles}}>
-        <label class="edit-field" data-test-field="title">Title
+      <CardContainer>
+        <Label @label="Title" data-test-field="title">
           <@fields.title/>
-        </label>
-        <label class="edit-field" data-test-field="description">Description
+        </Label>
+        <Label @label="Description" data-test-field="description">
           <@fields.description/>
-        </label>
-        <div class="edit-field" data-test-field="ref">Ref
+        </Label>
+        <Label @label="ref" data-test-field="ref">
           <@fields.ref/>
-        </div>
-        <div class="edit-field" data-test-field="demo">Demo
+        </Label>
+        <Label @label="Demo" data-test-field="demo">
           <@fields.demo/>
-        </div>
-      </div>
+        </Label>
+      </CardContainer>
     </template>
   }
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div {{attachStyles styles}}>
+      <CardContainer>
         <h2><@fields.title/></h2>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
           <div class="demo" data-test-demo-embedded><@fields.demo/></div>
         {{/if}}
-      </div>
+      </CardContainer>
     </template>
   }
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div {{attachStyles styles}}>
+      <CardContainer>
         <h1 data-test-title><@fields.title/></h1>
         <p data-test-description><em><@fields.description/></em></p>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
           <div class="demo" data-test-demo><@fields.demo/></div>
         {{/if}}
-      </div>
+      </CardContainer>
     </template>
   }
 }

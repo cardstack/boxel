@@ -2,11 +2,9 @@ import { contains, field, linksTo, Component, Card } from 'https://cardstack.com
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
-import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
+import { CardContainer } from '@cardstack/boxel-ui';
 
 let imageURL = new URL('./logo.png', import.meta.url).href;
-
-let styles = initStyleSheet(`this { background-color: #ffcad4; border: 1px solid gray; border-radius: 10px; padding: 1rem; }`);
 
 class BasicCard extends Card {
   @field title = contains(StringCard);
@@ -35,18 +33,18 @@ export class Post extends Card {
   @field titleLink = linksTo(VeryBasicCard);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div {{attachStyles styles}}>
+      <CardContainer>
         <h1><@fields.title/><img src="{{imageURL}}"></h1>
         <h3>by <@fields.author.firstName/> <@fields.author.lastName/></h3>
         <p><@fields.body/></p>
-      </div>
+      </CardContainer>
     </template>
   }
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div {{attachStyles styles}}>
+      <CardContainer>
         <em><@fields.title/></em> by <@fields.author.firstName/> <@fields.author.lastName/>
-      </div>
+      </CardContainer>
     </template>
   }
 }

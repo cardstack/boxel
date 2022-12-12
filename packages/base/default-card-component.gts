@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { startCase } from 'lodash';
 import type { Card } from './card-api';
-import { CardContainer, BoxelField } from '@cardstack/boxel-ui';
+import { CardContainer, Label } from '@cardstack/boxel-ui';
 
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
@@ -21,9 +21,9 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
-          <BoxelField @label={{startCase key}} data-test-field={{key}}>
+          <Label @label={{startCase key}} data-test-field={{key}}>
             <Field />
-          </BoxelField>
+          </Label>
         {{/unless}}
       {{/each-in}}
     </CardContainer>
