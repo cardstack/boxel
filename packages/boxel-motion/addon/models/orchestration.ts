@@ -53,6 +53,7 @@ export class OrchestrationMatrix {
       let activeFragments: RowFragment[] = [];
       let keyframesForSprite: Keyframe[] = [];
       let previousKeyframe: Keyframe = baseKeyframe;
+      let propertiesToRemoveFromPreviousKeyframe: string[] = [];
       for (let i = 0; i < this.totalColumns; i++) {
         if (fragmentsByColumn[i]) {
           activeFragments = activeFragments.concat(
@@ -60,12 +61,34 @@ export class OrchestrationMatrix {
           );
         }
 
+        // TODO: This is (understatement) not ideal, we'll refactor later once we know the other requirements. It would
+        //  be better if we could receive the previous frame as SimpleFrame instances, rather than a compiled keyframe.
+        // TODO: this probably also doesn't work with `transform` (or other properties we give special treatment) since
+        //  the frames will still contain the parts, rather than the compiled property.
+        // Prevent static behaviors from being forward-filled
+        previousKeyframe = Object.entries(previousKeyframe).reduce(
+          (result, [key, value]) => {
+            if (!propertiesToRemoveFromPreviousKeyframe.includes(key)) {
+              result[key] = value;
+            }
+            return result;
+          },
+          {} as Keyframe
+        );
+        propertiesToRemoveFromPreviousKeyframe = [];
+
         let needsRemoval = false;
         let frames: Frame[] = [];
         for (let fragment of activeFragments) {
           let frame = fragment.frames.shift();
-          if (frame) frames.push(frame);
-          else needsRemoval = true;
+          if (frame) {
+            frames.push(frame);
+
+            // Detect the final frame for static behaviors, so we can exclude it from future frames (no forward-fill).
+            if (!fragment.frames.length && fragment.static) {
+              propertiesToRemoveFromPreviousKeyframe.push(frame.property);
+            }
+          } else needsRemoval = true;
         }
         let newKeyframe = constructKeyframe(previousKeyframe, frames);
         keyframesForSprite.push(newKeyframe);
