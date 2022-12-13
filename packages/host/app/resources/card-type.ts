@@ -1,4 +1,4 @@
-import { Resource, useResource } from 'ember-resources';
+import { Resource } from 'ember-resources/core';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
@@ -14,7 +14,6 @@ import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
 import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { Constructable } from '../lib/types';
 
 interface Args {
   named: {
@@ -31,12 +30,11 @@ export interface Type {
 
 export class CardType extends Resource<Args> {
   @tracked type: Type | undefined;
-  loader: Loader;
+  declare loader: Loader;
   typeCache: Map<string, Type> = new Map();
 
-  constructor(owner: unknown, args: Args) {
-    super(owner, args);
-    let { card, loader } = args.named;
+  modify(_positional: never[], named: Args['named']) {
+    let { card, loader } = named;
     this.loader = loader;
     taskFor(this.assembleType).perform(card);
   }
@@ -85,7 +83,7 @@ export class CardType extends Resource<Args> {
 }
 
 export function getCardType(parent: object, card: () => typeof Card) {
-  return useResource(parent, CardType as Constructable<Resource>, () => ({
+  return CardType.from(parent, () => ({
     named: {
       card: card(),
       loader: (
