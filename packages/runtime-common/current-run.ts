@@ -486,7 +486,6 @@ export class CurrentRun {
           `bug: could not derive search doc for instance ${instanceURL.href}`
         );
       }
-      // TODO this is the logic from search-index#card, refactor to DRY
       let cachedDoc: SingleCardDocument = merge({}, doc, {
         data: {
           links: { self: instanceURL.href },
