@@ -712,8 +712,8 @@ export class Card {
     return _createFromSerialized(this, data, doc, identityContext);
   }
 
-  static getComponent(card: Card, format: Format, isFastBoot = false) {
-    return getComponent(card, format, isFastBoot);
+  static getComponent(card: Card, format: Format) {
+    return getComponent(card, format);
   }
 
   constructor(data?: Record<string, any>) {
@@ -1118,9 +1118,9 @@ function cardThunk<CardT extends CardConstructor>(cardOrThunk: CardT | (() => Ca
 
 export type SignatureFor<CardT extends CardConstructor> = { Args: { model: PartialCardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; fieldName: string | undefined } }
 
-export function getComponent(model: Card, format: Format, isFastBoot = false): ComponentLike<{ Args: {}, Blocks: {} }> {
+export function getComponent(model: Card, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
   let box = Box.create(model);
-  let component = getBoxComponent(model.constructor as CardConstructor, format, box, isFastBoot);
+  let component = getBoxComponent(model.constructor as CardConstructor, format, box);
   return component;
 }
 

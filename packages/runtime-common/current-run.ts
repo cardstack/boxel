@@ -189,8 +189,7 @@ export class CurrentRun {
     this.#loader = loader ?? Loader.createLoaderFromGlobal();
     this.#fastboot = realm.makeFastBoot
       ? realm.makeFastBoot(
-          this.loader.getUrlHandlers(),
-          this.loader.getUrlMappings(),
+          this.loader.fetch.bind(this.loader),
           this.#staticResponses
         )
       : undefined;
@@ -207,8 +206,7 @@ export class CurrentRun {
     this.#staticResponses = new Map();
     this.#fastboot = this.realm.makeFastBoot
       ? this.realm.makeFastBoot(
-          this.loader.getUrlHandlers(),
-          this.loader.getUrlMappings(),
+          this.loader.fetch.bind(this.loader),
           this.#staticResponses
         )
       : undefined;

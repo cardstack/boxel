@@ -2,12 +2,13 @@
 import FastBoot from "fastboot";
 import { type FastBootInstance } from "@cardstack/runtime-common";
 
-export function makeFastBoot(distPath: string) {
-  return (
-    urlHandlers: Map<string, (req: Request) => Promise<Response>>,
-    urlMappings: Map<string, string>,
-    staticResponses: Map<string, string>
-  ) => {
+export function makeFastBoot(
+  distPath: string
+): (
+  _fetch: typeof fetch,
+  staticResponses: Map<string, string>
+) => FastBootInstance {
+  return (_fetch: typeof fetch, staticResponses: Map<string, string>) => {
     return new FastBoot({
       distPath,
       resilient: false,
@@ -16,10 +17,8 @@ export function makeFastBoot(distPath: string) {
           URL: globalThis.URL,
           Request: globalThis.Request,
           Response: globalThis.Response,
-          fetch: globalThis.fetch,
+          fetch: _fetch,
           btoa,
-          urlHandlers,
-          urlMappings,
           staticResponses,
         });
       },

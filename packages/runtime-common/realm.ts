@@ -109,8 +109,7 @@ export class Realm {
   #cardSourceRouter: Router;
   readonly visit: (url: string, fastboot: FastBootInstance) => Promise<string>;
   readonly makeFastBoot?: (
-    urlHandlers: Map<string, (req: Request) => Promise<Response>>,
-    urlMappings: Map<string, string>,
+    _fetch: typeof fetch,
     staticResponses: Map<string, string>
   ) => FastBootInstance;
 
@@ -123,8 +122,7 @@ export class Realm {
     adapter: RealmAdapter,
     visit: (url: string, fastboot: FastBootInstance) => Promise<string>,
     makeFastBoot?: (
-      urlHandlers: Map<string, (req: Request) => Promise<Response>>,
-      urlMappings: Map<string, string>,
+      _fetch: typeof fetch,
       staticResponses: Map<string, string>
     ) => FastBootInstance
   ) {
