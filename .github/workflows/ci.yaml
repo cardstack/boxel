@@ -85,8 +85,8 @@ jobs:
       - name: Start realm servers
         run: pnpm start:test-realms &
         working-directory: packages/realm-server
-      - name: Wait for server to start (30 secs)
-        run: sleep 30
+      - name: Wait for server to start (60 secs)
+        run: sleep 60
       - name: host test suite
         run: pnpm test:ember
         working-directory: packages/host
@@ -110,8 +110,8 @@ jobs:
       - name: Start base realm server
         run: pnpm start:test-realms &
         working-directory: packages/realm-server
-      - name: Wait for server to start (30 secs)
-        run: sleep 30
+      - name: Wait for server to start (60 secs)
+        run: sleep 60
       - name: realm server test suite
         run: pnpm test
         working-directory: packages/realm-server
