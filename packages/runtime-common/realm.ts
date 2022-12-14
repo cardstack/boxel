@@ -76,9 +76,6 @@ type DOMContents = () => {
 interface FastBootVisitResult {
   html(): string;
   domContents(): DOMContents;
-  analytics: {
-    usedPrebuiltSandbox: boolean;
-  };
 }
 
 export interface FastBootInstance {
