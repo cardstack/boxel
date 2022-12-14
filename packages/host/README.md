@@ -39,7 +39,7 @@ Make use of the many generators for code, try `ember help generate` for more det
 ### Building
 
 - `pnpm build` (development)
-- `pnpm build --environment production` (production)
+- `pnpm build:production` (production)
 
 ### Deploying
 

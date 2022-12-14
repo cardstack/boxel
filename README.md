@@ -33,7 +33,7 @@ The app is available at http://localhost:4200. Click on the button to connect to
 In order to support server-side rendered cards, this project incorporates FastBoot. By default `pnpm start` in the `packages/host` workspace will serve server-side rendered cards. Specifically, the route `/render?url=card_url&format=isolated` will serve pre-rendered cards. There is additional build overhead required to serve pre-rendered cards. If you are not working on the `/render` route in the host, then you would likely benefit from disabling FastBoot when starting up the host server so that you can have faster rebuilds. To do so, you can start the host server using:
 `FASTBOOT_DISABLED=true pnpm start`.
 
-The realm server also uses FastBoot to pre-render card html. The realm server boots up the host app in a FastBoot container. The realm server will automatically look for the host app's `dist/` output to use when booting up the infrastructure for pre-rendering cards. Make sure to run `pnpm build` in the `packages/host` directory first before starting the realm server. If you are making changes that effect the `/render` route in the host app, you'll want to run `pnpm build` in order for the realm server to pick up your changes.
+The realm server also uses FastBoot to pre-render card html. The realm server boots up the host app in a FastBoot container. The realm server will automatically look for the host app's `dist/` output to use when booting up the infrastructure for pre-rendering cards. Make sure to start to the host app first before starting the realm server so that the host app's `dist/` output will be generated. If you are making changes that effect the `/render` route in the host app, you'll want to restart the host app (or run `pnpm build`) in order for the realm server to pick up your changes.
 
 ## Boxel Motion Demo App
 
@@ -55,9 +55,7 @@ The tests are available at `http://localhost:4200/tests`
 
 ### Realm Server
 
-First make sure to generate the host app's `dist/` output in order to support card pre-rendering:
-1. cd to `packages/host`
-2. run `pnpm build`
+First make sure to generate the host app's `dist/` output in order to support card pre-rendering by first starting the host app (instructions above). If you want to make the host app's `dist/` output without starting the host app, you can run `pnpm build` in the host app's workspace.
 
 To run the `packages/realm-server/` workspace tests start:
 
