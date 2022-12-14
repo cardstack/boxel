@@ -536,7 +536,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     );
 
-
     await waitFor('button[data-test-catalog-entry-publish]');
     await click('[data-test-catalog-entry-publish]');
     await waitFor('[data-test-ref]');

@@ -80,17 +80,6 @@ export class Loader {
   >();
   private consumptionCache = new WeakMap<object, string[]>();
 
-  constructor() {
-    if (isFastBoot) {
-      if ((globalThis as any).urlHandlers) {
-        this.urlHandlers = (globalThis as any).urlHandlers;
-      }
-      if ((globalThis as any).urlMappings) {
-        this.urlMappings = (globalThis as any).urlMappings;
-      }
-    }
-  }
-
   static #instance: Loader | undefined;
   static loaders = new WeakMap<Function, Loader>();
 
@@ -161,10 +150,6 @@ export class Loader {
     this.urlMappings.set(from.href, to.href);
   }
 
-  getUrlMappings() {
-    return this.urlMappings;
-  }
-
   static registerURLHandler(
     url: URL,
     handler: (req: Request) => Promise<Response>
@@ -175,10 +160,6 @@ export class Loader {
 
   registerURLHandler(url: URL, handler: (req: Request) => Promise<Response>) {
     this.urlHandlers.set(url.href, handler);
-  }
-
-  getUrlHandlers() {
-    return this.urlHandlers;
   }
 
   static shimModule(moduleIdentifier: string, module: Record<string, any>) {
