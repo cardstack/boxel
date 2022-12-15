@@ -105,10 +105,7 @@ export class Realm {
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
   readonly visit: (url: string, fastboot: FastBootInstance) => Promise<string>;
-  readonly makeFastBoot?: (
-    _fetch: typeof fetch,
-    staticResponses: Map<string, string>
-  ) => FastBootInstance;
+  readonly makeFastBoot?: (_fetch: typeof fetch) => FastBootInstance;
 
   get url(): string {
     return this.paths.url;
@@ -118,10 +115,7 @@ export class Realm {
     url: string,
     adapter: RealmAdapter,
     visit: (url: string, fastboot: FastBootInstance) => Promise<string>,
-    makeFastBoot?: (
-      _fetch: typeof fetch,
-      staticResponses: Map<string, string>
-    ) => FastBootInstance
+    makeFastBoot?: (_fetch: typeof fetch) => FastBootInstance
   ) {
     this.paths = new RealmPaths(url);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));

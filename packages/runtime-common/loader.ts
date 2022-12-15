@@ -5,8 +5,6 @@ import { trimExecutableExtension } from "./index";
 import { RealmPaths } from "./paths";
 import { CardError } from "./error";
 
-const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
-
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
 export interface ResolvedURL extends URL {
@@ -285,18 +283,6 @@ export class Loader {
         : typeof urlOrRequest === "string"
         ? urlOrRequest
         : urlOrRequest.href;
-    let cachedJSONAPI = isFastBoot
-      ? (globalThis as any).staticResponses?.get(requestURL)
-      : undefined;
-    if (cachedJSONAPI != null) {
-      return new Response(cachedJSONAPI, {
-        status: 200,
-        headers: {
-          "content-type": "application/vnd.api+json",
-        },
-      });
-    }
-
     if (urlOrRequest instanceof Request) {
       for (let [url, handle] of this.urlHandlers) {
         let path = new RealmPaths(new URL(url));

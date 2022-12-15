@@ -8,7 +8,7 @@ export function makeFastBoot(
   _fetch: typeof fetch,
   staticResponses: Map<string, string>
 ) => FastBootInstance {
-  return (_fetch: typeof fetch, staticResponses: Map<string, string>) => {
+  return (_fetch: typeof fetch) => {
     return new FastBoot({
       distPath,
       resilient: false,
@@ -19,7 +19,6 @@ export function makeFastBoot(
           Response: globalThis.Response,
           fetch: _fetch,
           btoa,
-          staticResponses,
         });
       },
     }) as FastBootInstance;

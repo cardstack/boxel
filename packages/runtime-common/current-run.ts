@@ -188,11 +188,32 @@ export class CurrentRun {
     this.#ignoreMap = ignoreMap;
     this.#loader = loader ?? Loader.createLoaderFromGlobal();
     this.#fastboot = realm.makeFastBoot
-      ? realm.makeFastBoot(
-          this.loader.fetch.bind(this.loader),
-          this.#staticResponses
-        )
+      ? realm.makeFastBoot(this.fetch.bind(this))
       : undefined;
+  }
+
+  private fetch(
+    urlOrRequest: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> {
+    let requestURL =
+      urlOrRequest instanceof Request
+        ? urlOrRequest.url
+        : typeof urlOrRequest === "string"
+        ? urlOrRequest
+        : urlOrRequest.href;
+    let cachedJSONAPI = this.#staticResponses.get(requestURL);
+    if (cachedJSONAPI != null) {
+      return Promise.resolve(
+        new Response(cachedJSONAPI, {
+          status: 200,
+          headers: {
+            "content-type": "application/vnd.api+json",
+          },
+        })
+      );
+    }
+    return this.loader.fetch(urlOrRequest, init);
   }
 
   private resetState() {
@@ -205,10 +226,7 @@ export class CurrentRun {
     this.#loader = Loader.createLoaderFromGlobal();
     this.#staticResponses = new Map();
     this.#fastboot = this.realm.makeFastBoot
-      ? this.realm.makeFastBoot(
-          this.loader.fetch.bind(this.loader),
-          this.#staticResponses
-        )
+      ? this.realm.makeFastBoot(this.fetch.bind(this))
       : undefined;
     this.stats.instancesIndexed = 0;
     this.stats.instanceErrors = 0;
