@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { initStyleSheet, attachStyles } from '../attach-styles';
-// import cn from '@cardstack/boxel/helpers/cn';
+import cn from '../helpers/cn';
 
 interface Signature {
   Element: HTMLElement;
@@ -65,12 +65,11 @@ let styles = initStyleSheet(`
 
 const Header: TemplateOnlyComponent<Signature> = <template>
   <header
-    class="boxel-header"
-    {{!-- class={{cn
+    class={{cn
       "boxel-header"
       boxel-header--no-background=@noBackground
       boxel-header--highlighted=@isHighlighted
-    }} --}}
+    }}
     {{attachStyles styles}}
     data-test-boxel-header
     ...attributes

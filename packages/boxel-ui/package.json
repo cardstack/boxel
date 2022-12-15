@@ -26,10 +26,12 @@
     "test:ember": "ember test"
   },
   "dependencies": {
+    "classnames": "^2.3.2",
     "ember-auto-import": "^2.4.3",
     "ember-cli-babel": "^7.26.11",
     "ember-cli-htmlbars": "^6.1.0",
     "ember-cli-typescript": "^5.2.1",
+    "ember-svg-jar": "^2.4.2",
     "ember-template-imports": "^3.1.2",
     "lodash": "^4.17.21"
   },
@@ -37,6 +39,7 @@
     "@babel/core": "^7.17.10",
     "@ember/optional-features": "^2.0.0",
     "@ember/test-helpers": "^2.8.1",
+    "@embroider/macros": "^1.10.0",
     "@embroider/util": "^1.9.0",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
