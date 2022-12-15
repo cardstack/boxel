@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-// import cn from '@cardstack/boxel/helpers/cn';
-// import element from 'ember-element-helper/helpers/element';
+// import cn from '@cardstack/boxel-ui/helpers/cn';
+import element from '../helpers/element';
 // import { eq, not, or } from '../helpers/truth-helpers';
 // import { svgJar } from '@cardstack/boxel/utils/svg-jar';
 import { initStyleSheet, attachStyles } from '../attach-styles';
@@ -17,7 +17,7 @@ export interface Signature {
     vertical?: boolean;
   };
   Blocks: {
-    'default': [],
+    default: [],
   }
 }
 
@@ -80,12 +80,12 @@ let styles = initStyleSheet(`
   }
 `);
 
-// const DIV: keyof HTMLElementTagNameMap = "div";
+const DIV: keyof HTMLElementTagNameMap = "div";
 const FieldContainer: TemplateOnlyComponent<Signature> = <template>
-  {{!-- {{#let (or @tag DIV) as |tag|}} --}}
-    {{!-- {{#let (element tag) as |Tag|}} --}}
-      {{!-- <Tag --}}
-      <div
+  {{#let (if @tag @tag DIV) as |tag|}}
+    {{#let (element tag) as |Tag|}}
+      {{! @glint-expect-error couldn't quite figure out how to type ember-element-helper properly }}
+      <Tag
         class="boxel-field boxel-field--vertical"
         {{!-- class={{cn "boxel-field"
           boxel-field--vertical=(or @vertical @centeredDisplay)
@@ -112,10 +112,9 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
         {{else}}
           {{yield}}
         {{/if}}
-      </div>
-      {{!-- </Tag> --}}
-    {{!-- {{/let}} --}}
-  {{!-- {{/let}} --}}
+      </Tag>
+    {{/let}}
+  {{/let}}
 </template>;
 
 export default FieldContainer;
