@@ -24,6 +24,7 @@
   },
   "scripts": {
     "test": "NODE_NO_WARNINGS=1 SUPPRESS_ERRORS=true qunit --require ts-node/register/transpile-only tests/index.ts",
+    "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/card-api' 'pnpm run wait' 'http-get://localhost:4202/node-test/person' 'test'",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/'",
     "start:base-and-host-test-realms": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --path='../host/tests/cards' --fromUrl='/test/' --toUrl='/test/'",
