@@ -20,7 +20,8 @@
       }
     },
     "patchedDependencies": {
-      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch"
+      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
+      "start-server-and-test@1.15.2": "patches/start-server-and-test@1.15.2.patch"
     }
   },
   "devDependencies": {
@@ -33,8 +34,8 @@
     "ember-cli-htmlbars": "^6.1.0",
     "ember-resources": "^4.4.0",
     "ember-source": "~4.2.0",
-    "eslint-plugin-import": "^2.26.0",
     "ember-template-imports": "^3.0.1",
+    "eslint-plugin-import": "^2.26.0",
     "typescript": "^4.6.3"
   }
 }

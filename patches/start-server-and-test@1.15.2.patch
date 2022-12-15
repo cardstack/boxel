@@ -1,0 +1,13 @@
+diff --git a/src/index.js b/src/index.js
+index 86c5d383226b4c6bc9ced82965455cb494106e8f..acc1dff3e773177e87f8cbf236d9a86062722002 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -92,7 +92,7 @@ function waitAndRun ({ start, url, runFn, namedArguments }) {
+       strictSSL: !isInsecure(),
+       log: isDebug(),
+       headers: {
+-        Accept: 'text/html, application/json, text/plain, */*'
++        Accept: 'application/vnd.api+json', 'text/html, application/json, text/plain, */*'
+       },
+       validateStatus
+     }

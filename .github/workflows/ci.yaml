@@ -90,8 +90,8 @@ jobs:
       # we really want to wait on card instances being available, but the
       # start-server-and-test pkg doesn't let us set JSON-API content types that
       # would allow us to check for that the instances are ready.
-      - name: Wait for server to start (60 secs)
-        run: sleep 60
+      # - name: Wait for server to start (60 secs)
+      #   run: sleep 60
       - name: host test suite
         run: pnpm test
         working-directory: packages/host
