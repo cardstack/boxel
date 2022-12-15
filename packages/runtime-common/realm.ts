@@ -492,7 +492,7 @@ export class Realm {
     }
     if (maybeError.type === "error") {
       return systemError(
-        `cannot return card from index`,
+        `cannot return card from index: ${maybeError.error.title} - ${maybeError.error.detail}`,
         CardError.fromSerializableError(maybeError.error)
       );
     }
