@@ -22,7 +22,6 @@ export default class Application extends Route<Model> {
 
   async model(args: { url: string; format: Format }): Promise<Model> {
     let { url, format } = args;
-    await this.cardService.isReady();
     let card = await this.cardService.loadModel(url, { absoluteURL: true });
     if (!card) {
       throw new Error(`could not load card for url ${url}`);
