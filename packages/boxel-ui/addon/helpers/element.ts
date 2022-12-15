@@ -1,33 +1,26 @@
-import { ComponentLike } from '@glint/template';
 import EmberComponent from '@ember/component';
 import { ensureSafeComponent } from '@embroider/util';
+import { ComponentLike } from '@glint/template';
 
-export interface Signature {
-  Element: HTMLElement;
-  Args: {
-    tagName: keyof HTMLElementTagNameMap;
-  };
-  Blocks: {
-    default: [];
-  };
-}
+export default function element(
+  tagName: keyof HTMLElementTagNameMap
+): ComponentLike<{ Element: HTMLElement; Blocks: { default: [] } }> {
+  if (!tagName) {
+    throw new Error(
+      'The `element` helper requires a tag name as its first argument'
+    );
+  }
 
-export default function element<T extends keyof HTMLElementTagNameMap>(
-  tagName: T
-): ComponentLike<Signature> {
-  let componentClass: ComponentLike<Signature> | null = null;
-  if (typeof tagName === 'string') {
-    componentClass = ensureSafeComponent(
-      class DynamicElement extends EmberComponent {
-        tagName = tagName;
-      },
-      this as ComponentLike<Signature>
-    ) as ComponentLike<Signature>;
-  } else {
-    componentClass = null;
+  if (typeof tagName !== 'string') {
     throw new Error(
       'The `element` helper only accepts strings as its first argument'
     );
   }
-  return componentClass;
+
+  return ensureSafeComponent(
+    class DynamicElement extends EmberComponent {
+      tagName = tagName;
+    },
+    undefined
+  ) as ComponentLike<{ Element: HTMLElement; Blocks: { default: [] } }>;
 }

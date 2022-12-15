@@ -84,7 +84,6 @@ const DIV: keyof HTMLElementTagNameMap = "div";
 const FieldContainer: TemplateOnlyComponent<Signature> = <template>
   {{#let (if @tag @tag DIV) as |tag|}}
     {{#let (element tag) as |Tag|}}
-      {{! @glint-expect-error couldn't quite figure out how to type ember-element-helper properly }}
       <Tag
         class="boxel-field boxel-field--vertical"
         {{!-- class={{cn "boxel-field"
