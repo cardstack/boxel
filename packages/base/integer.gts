@@ -1,7 +1,6 @@
 import { primitive, Component, Card, useIndexBasedKey } from './card-api';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { pick } from './pick';
+import { BoxelInput } from '@cardstack/boxel-ui';
 
 export default class IntegerCard extends Card {
   static [primitive]: number;
@@ -13,8 +12,7 @@ export default class IntegerCard extends Card {
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      {{!-- template-lint-disable require-input-label --}}
-      <input type="text" value={{@model}} {{on "input" (pick "target.value" (fn this.parseInput @set))}} />
+      <BoxelInput @value={{@model}} @onInput={{fn this.parseInput @set}} />
     </template>
 
     parseInput(set: Function, value: string) {

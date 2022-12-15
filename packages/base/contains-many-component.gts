@@ -11,6 +11,7 @@ import {
 } from './card-api';
 import { getBoxComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
+import { CardContainer } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
@@ -24,7 +25,7 @@ interface Signature {
 
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <div data-test-contains-many={{this.args.field.name}}>
+    <CardContainer data-test-contains-many={{this.args.field.name}}>
       <ul>
         {{#each @arrayField.children as |boxedElement i|}}
           <li data-test-item={{i}}>
@@ -36,7 +37,7 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
         {{/each}}
       </ul>
       <button {{on "click" this.add}} type="button" data-test-add-new>Add New</button>
-    </div>
+    </CardContainer>
   </template>
 
   add = () => {

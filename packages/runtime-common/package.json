@@ -13,6 +13,7 @@
     "@babel/plugin-transform-typescript": "^7.16.8",
     "@babel/traverse": "^7.17.9",
     "@babel/types": "^7.20.0",
+    "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/ember-template-imports": "workspace:*",
     "@types/babel__core": "^7.1.19",
     "@types/babel__generator": "^7.6.4",

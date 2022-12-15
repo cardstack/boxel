@@ -775,8 +775,8 @@ module('Integration | card-basics', function (hooks) {
     const TRUE = 0;
     const FALSE = 1;
     await renderCard(mango, 'edit');
-    let isCoolRadios: HTMLInputElement[] = [...shadowQuerySelector('[data-test-field="isCool"]').children].map(el => el.children[0] as HTMLInputElement);
-    let isHumanRadios: HTMLInputElement[] = [...shadowQuerySelector('[data-test-field="isHuman"]').children].map(el => el.children[0] as HTMLInputElement);
+    let isCoolRadios: HTMLInputElement[] = [...shadowQuerySelector('[data-test-radio-group="isCool"]').children].map(el => el.children[0] as HTMLInputElement);
+    let isHumanRadios: HTMLInputElement[] = [...shadowQuerySelector('[data-test-radio-group="isHuman"]').children].map(el => el.children[0] as HTMLInputElement);
     assert.strictEqual(isCoolRadios[TRUE].checked, true, 'the isCool true radio has correct state');
     assert.strictEqual(isCoolRadios[FALSE].checked, false, 'the isCool false radio has correct state');
     assert.strictEqual(isHumanRadios[TRUE].checked, false, 'the isHuman true radio has correct state');

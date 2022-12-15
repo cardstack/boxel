@@ -535,6 +535,7 @@ module('Unit | search-index', function (hooks) {
         'http://localhost:4201/base/shadow-dom',
         'http://localhost:4201/base/string',
         'http://localhost:4201/base/watched-array',
+        'http://localhost:4201/externals/@cardstack/boxel-ui',
         'http://localhost:4201/externals/@cardstack/runtime-common',
         'http://localhost:4201/externals/@ember/component',
         'http://localhost:4201/externals/@ember/component/template-only',
