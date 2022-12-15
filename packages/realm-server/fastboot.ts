@@ -7,12 +7,14 @@ export function makeFastBootVisitor(
 ): (_fetch: typeof fetch) => (url: string) => Promise<string> {
   return (_fetch: typeof fetch) => {
     // something to think about--if there is a dramatic performance hit for
-    // creating a new fastboot instance, maybe we can look at reusing an
-    // existing one? we could use the loader service in the ember app within the
-    // fastboot VM to reset the loader instead of making a new fastboot
-    // instance. Although we'd need to be careful about fastboot instances
-    // shared by different current runs. we wouldn't want loader state to bleed
-    // into different current runs.
+    // creating a new fastboot instance for each current run, maybe we can look
+    // at reusing an existing fastboot instances? we could use the loader
+    // service in the ember app within the fastboot VM to reset the loader
+    // instead of making a new fastboot instance. Although we'd need to be
+    // careful about fastboot instances shared by different current runs. we
+    // wouldn't want loader state to bleed into different current runs. maybe
+    // the idea is that we could lazily create a pool of fastboot instances that
+    // we reuse after the current run's lifetime.
     let fastboot = new FastBoot({
       distPath,
       resilient: false,

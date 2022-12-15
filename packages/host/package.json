@@ -22,7 +22,7 @@
     "lint:glint": "glint",
     "start": "ember serve",
     "test": "npm-run-all lint test:*",
-    "test:ember": "ember test"
+    "test:pre-built-ember": "ember test --path ./dist"
   },
   "devDependencies": {
     "@babel/core": "^7.17.8",
