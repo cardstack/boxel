@@ -200,7 +200,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     );
 
-    await waitFor('[data-test-ref]');
+    await waitFor('[data-test-format-button="edit"]');
     await click('[data-test-format-button="edit"]');
 
     assert.dom('[data-test-catalog-entry-id]').hasText(`${testRealmURL}pet-catalog-entry`);
