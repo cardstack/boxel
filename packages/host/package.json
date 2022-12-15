@@ -22,7 +22,9 @@
     "lint:glint": "glint",
     "start": "ember serve",
     "test": "npm-run-all lint test:*",
-    "test:pre-built-ember": "ember test --path ./dist"
+    "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/card-api' 'pnpm run wait' 'http-get://localhost:4201/test/hassan' 'ember-test-pre-built'",
+    "ember-test-pre-built": "ember test --path ./dist",
+    "wait": "sleep 10000000"
   },
   "devDependencies": {
     "@babel/core": "^7.17.8",
@@ -126,6 +128,7 @@
     "qs": "^6.10.5",
     "qunit": "^2.18.0",
     "qunit-dom": "^2.0.0",
+    "start-server-and-test": "^1.14.0",
     "tracked-built-ins": "^2.0.1",
     "typescript": "^4.6.3",
     "webpack": "^5.69.1"

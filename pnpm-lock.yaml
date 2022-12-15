@@ -594,6 +594,7 @@ importers:
       qs: ^6.10.5
       qunit: ^2.18.0
       qunit-dom: ^2.0.0
+      start-server-and-test: ^1.14.0
       tracked-built-ins: ^2.0.1
       typescript: ^4.6.3
       webpack: ^5.69.1
@@ -699,6 +700,7 @@ importers:
       qs: 6.11.0
       qunit: 2.19.3
       qunit-dom: 2.0.0
+      start-server-and-test: 1.14.0
       tracked-built-ins: 2.0.1
       typescript: 4.9.3
       webpack: 5.75.0
