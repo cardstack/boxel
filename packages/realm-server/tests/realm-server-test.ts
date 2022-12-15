@@ -48,7 +48,7 @@ module("Realm Server", function (hooks) {
     let testRealm = new Realm(
       testRealmHref,
       new NodeAdapter(resolve(dir.name)),
-      async () => {
+      (_fetch: typeof fetch) => async (_url: string) => {
         return `card render is not implemented`;
       }
     );

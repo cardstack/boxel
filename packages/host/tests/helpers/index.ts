@@ -39,15 +39,19 @@ export const TestRealm = {
     return new Realm(
       realmURL ?? testRealmURL,
       new TestRealmAdapter(flatFiles),
-      async () => {
+      (_fetch: typeof fetch) => async (_url: string) => {
         return `card render is not implemented`;
       }
     );
   },
   createWithAdapter(adapter: RealmAdapter, realmURL?: string): Realm {
-    return new Realm(realmURL ?? testRealmURL, adapter, async () => {
-      return `card render is not implemented`;
-    });
+    return new Realm(
+      realmURL ?? testRealmURL,
+      adapter,
+      (_fetch: typeof fetch) => async (_url: string) => {
+        return `card render is not implemented`;
+      }
+    );
   },
 };
 

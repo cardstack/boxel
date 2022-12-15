@@ -2,7 +2,7 @@ import { writeFileSync, writeJSONSync } from "fs-extra";
 import { NodeAdapter } from "../../node-realm";
 import { resolve, join } from "path";
 import { Realm, LooseSingleCardDocument } from "@cardstack/runtime-common";
-import { makeFastBoot, visit } from "../../fastboot";
+import { makeFastBootVisitor } from "../../fastboot";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 
 export const testRealm = "http://test-realm/";
@@ -22,8 +22,7 @@ export function createRealm(
   return new Realm(
     realmURL,
     new NodeAdapter(dir),
-    visit,
-    makeFastBoot(resolve(__dirname, "..", "..", "..", "host", "dist"))
+    makeFastBootVisitor(resolve(__dirname, "..", "..", "..", "host", "dist"))
   );
 }
 

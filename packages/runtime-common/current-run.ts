@@ -11,7 +11,6 @@ import {
   maxLinkDepth,
   type NotLoaded,
   type CardRef,
-  type FastBootInstance,
 } from ".";
 import { loadCard, identifyCard, isCard, moduleFrom } from "./card-ref";
 import { Kind, Realm } from "./realm";
@@ -156,7 +155,11 @@ export class CurrentRun {
   #ignoreMap: URLMap<Ignore>;
   #loader: Loader;
   // TODO after the worker supports fastboot, remove the undefined type
-  #fastboot: FastBootInstance | undefined;
+  #visit: ((url: string) => Promise<string>) | undefined;
+  // TODO after the worker supports fastboot, remove the undefined type
+  #getVisitor:
+    | ((_fetch: typeof fetch) => (url: string) => Promise<string>)
+    | undefined;
   #staticResponses = new Map<string, string>();
   private realm: Realm;
   readonly stats: Stats = {
@@ -172,6 +175,7 @@ export class CurrentRun {
     modules = new Map(),
     ignoreMap = new URLMap(),
     loader,
+    getVisitor,
   }: {
     realm: Realm;
     reader: Reader;
@@ -179,6 +183,7 @@ export class CurrentRun {
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
     loader?: Loader;
+    getVisitor?: (_fetch: typeof fetch) => (url: string) => Promise<string>;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
     this.#reader = reader;
@@ -187,9 +192,8 @@ export class CurrentRun {
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
     this.#loader = loader ?? Loader.createLoaderFromGlobal();
-    this.#fastboot = realm.makeFastBoot
-      ? realm.makeFastBoot(this.fetch.bind(this))
-      : undefined;
+    this.#getVisitor = getVisitor;
+    this.#visit = getVisitor ? getVisitor(this.fetch.bind(this)) : undefined;
   }
 
   private fetch(
@@ -225,8 +229,8 @@ export class CurrentRun {
     this.#ignoreMap = new URLMap();
     this.#loader = Loader.createLoaderFromGlobal();
     this.#staticResponses = new Map();
-    this.#fastboot = this.realm.makeFastBoot
-      ? this.realm.makeFastBoot(this.fetch.bind(this))
+    this.#visit = this.#getVisitor
+      ? this.#getVisitor(this.fetch.bind(this))
       : undefined;
     this.stats.instancesIndexed = 0;
     this.stats.instanceErrors = 0;
@@ -260,6 +264,7 @@ export class CurrentRun {
     let current = new this({
       realm: prev.realm,
       reader: prev.reader,
+      getVisitor: prev.#getVisitor,
       instances,
       modules,
       ignoreMap,
@@ -520,10 +525,9 @@ export class CurrentRun {
       );
       let rawHtml: string | undefined;
       // TODO This guard is temporary until we have a worker form of a card render
-      if (this.#fastboot) {
-        rawHtml = await this.realm.visit(
-          `/render?url=${encodeURIComponent(instanceURL.href)}&format=isolated`,
-          this.#fastboot
+      if (this.#visit) {
+        rawHtml = await this.#visit(
+          `/render?url=${encodeURIComponent(instanceURL.href)}&format=isolated`
         );
         html = parseRenderedCard(rawHtml);
       }
@@ -869,6 +873,11 @@ function invalidate(
 }
 
 function parseRenderedCard(html: string): string {
+  // TODO this is just scaffolding until we have a worker pre-render
+  if (html.includes("not implemented")) {
+    return html;
+  }
+
   if (html.includes(renderedCardTokens.success.start)) {
     return html.substring(
       html.indexOf(renderedCardTokens.success.start) +

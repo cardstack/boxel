@@ -34,7 +34,7 @@ Loader.addURLMapping(
       new Realm(
         'http://local-realm/',
         new LocalRealm(messageHandler.fs),
-        async () => {
+        (_fetch: typeof fetch) => async (_url: string) => {
           return `card render is not implemented`;
         }
       )

@@ -4,7 +4,7 @@ import { NodeAdapter } from "./node-realm";
 import yargs from "yargs";
 import { createRealmServer } from "./server";
 import { resolve, join } from "path";
-import { makeFastBoot, visit } from "./fastboot";
+import { makeFastBootVisitor } from "./fastboot";
 
 let {
   port,
@@ -65,13 +65,12 @@ for (let [from, to] of urlMappings) {
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let distPath = resolve(dist);
-let fastBootMaker = makeFastBoot(distPath);
+let getVisitor = makeFastBootVisitor(distPath);
 let realms: Realm[] = paths.map((path, i) => {
   return new Realm(
     hrefs[i][0],
     new NodeAdapter(resolve(String(path))),
-    visit,
-    fastBootMaker
+    getVisitor
   );
 });
 

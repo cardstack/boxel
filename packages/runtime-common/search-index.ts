@@ -40,11 +40,13 @@ export class SearchIndex {
     readFileAsText: (
       path: LocalPath,
       opts?: { withFallbacks?: true }
-    ) => Promise<{ content: string; lastModified: number } | undefined>
+    ) => Promise<{ content: string; lastModified: number } | undefined>,
+    getVisitor?: (_fetch: typeof fetch) => (url: string) => Promise<string>
   ) {
     this.#currentRun = new CurrentRun({
       realm,
       reader: { readdir, readFileAsText },
+      getVisitor,
     });
   }
 
