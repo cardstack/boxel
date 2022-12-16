@@ -8,8 +8,11 @@ import {
 } from "@cardstack/runtime-common";
 import { createRealm, testRealm, setupCardLogs } from "./helpers";
 
-setGracefulCleanup();
+function cleanWhiteSpace(text: string) {
+  return text.replace(/\s+/g, " ").trim();
+}
 
+setGracefulCleanup();
 // Using the node tests for indexing as it is much easier to support the dynamic
 // loading of cards necessary for indexing and the ability to manipulate the
 // underlying filesystem in a manner that doesn't leak into other tests (as well
@@ -33,11 +36,16 @@ module("indexing", function (hooks) {
 
     realm = createRealm(dir, {
       "person.gts": `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
         export class Person extends Card {
           @field firstName = contains(StringCard);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/></h1>
+            </template>
+          }
         }
       `,
       "pet.gts": `
@@ -135,6 +143,23 @@ module("indexing", function (hooks) {
       },
     });
     await realm.ready;
+  });
+
+  test("can store card pre-rendered html in the index", async function (assert) {
+    let entry = await realm.searchIndex.searchEntry(
+      new URL(`${testRealm}mango`)
+    );
+    assert.strictEqual(
+      cleanWhiteSpace(entry!.html!),
+      cleanWhiteSpace(`
+          <div data-test-shadow-component>
+            <template shadowroot="open">
+              <h1> Mango </h1>
+            </template>
+          </div>
+        `),
+      "pre-rendered html is correct"
+    );
   });
 
   test("can incrementally index updated instance", async function (assert) {

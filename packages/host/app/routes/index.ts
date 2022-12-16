@@ -6,13 +6,16 @@ import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import LocalRealm from '../services/local-realm';
 import { RealmPaths } from '@cardstack/runtime-common';
+import type { Format } from 'https://cardstack.com/base/card-api';
 
 interface Model {
   path: string | undefined;
   openFile: FileResource | undefined;
   polling: 'off' | undefined;
+  isFastBoot: boolean;
 }
-export default class Application extends Route<Model> {
+
+export default class Index extends Route<Model> {
   queryParams = {
     path: {
       refreshModel: true,
@@ -25,21 +28,25 @@ export default class Application extends Route<Model> {
   @service declare router: RouterService;
   @service declare loaderService: LoaderService;
   @service declare localRealm: LocalRealm;
+  @service declare fastboot: { isFastBoot: boolean };
 
   async model(args: {
-    path: string | undefined;
-    polling: 'off' | undefined;
+    path?: string;
+    polling?: 'off';
+    url?: string;
+    format?: Format;
   }): Promise<Model> {
     let { path, polling } = args;
+    let { isFastBoot } = this.fastboot;
 
     let openFile: FileResource | undefined;
     if (!path) {
-      return { path, openFile, polling };
+      return { path, openFile, polling, isFastBoot };
     }
 
     await this.localRealm.startedUp;
     if (!this.localRealm.isAvailable) {
-      return { path, openFile, polling };
+      return { path, openFile, polling, isFastBoot };
     }
 
     let realmPath = new RealmPaths(this.localRealm.url);
@@ -54,7 +61,7 @@ export default class Application extends Route<Model> {
       console.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
-      return { path, openFile, polling };
+      return { path, openFile, polling, isFastBoot };
     }
     if (response.url !== url) {
       this.router.transitionTo('application', {
@@ -81,7 +88,7 @@ export default class Application extends Route<Model> {
       await openFile.loading;
     }
 
-    return { path, openFile, polling };
+    return { path, openFile, polling, isFastBoot };
   }
 
   @action

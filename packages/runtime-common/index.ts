@@ -1,4 +1,4 @@
-import { CardResource } from "./search-index";
+import { CardResource } from "./card-document";
 
 // a card resource but with optional "id" and "type" props
 export type LooseCardResource = Omit<CardResource, "id" | "type"> & {
@@ -111,9 +111,9 @@ export const externalsMap: Map<string, string[]> = new Map([
 
 export { Realm } from "./realm";
 export { Loader } from "./loader";
-export type { Kind, RealmAdapter, FileRef } from "./realm";
+export type { Kind, RealmAdapter, FileRef, FastBootInstance } from "./realm";
 
-import type { Saved } from "./search-index";
+import type { Saved } from "./card-document";
 
 import type { CardRef } from "./card-ref";
 export type { CardRef };
@@ -127,7 +127,7 @@ export type {
   SingleCardDocument,
   Relationship,
   Meta,
-} from "./search-index";
+} from "./card-document";
 export {
   isMeta,
   isCardResource,
@@ -135,7 +135,7 @@ export {
   isRelationship,
   isCardCollectionDocument,
   isSingleCardDocument,
-} from "./search-index";
+} from "./card-document";
 
 import type { Card } from "https://cardstack.com/base/card-api";
 

@@ -15,6 +15,10 @@ import { importResource } from '../resources/import';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
+interface Options {
+  absoluteURL?: true;
+}
+
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
   @service declare localRealm: LocalRealm;
@@ -25,6 +29,11 @@ export default class CardService extends Service {
   );
 
   private get api() {
+    if (this.apiModule.error) {
+      throw new Error(
+        `Error loading Card API: ${JSON.stringify(this.apiModule.error)}`
+      );
+    }
     if (!this.apiModule.module) {
       throw new Error(
         `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`
@@ -52,13 +61,15 @@ export default class CardService extends Service {
 
   async createFromSerialized(
     resource: LooseCardResource,
-    doc: LooseSingleCardDocument | CardDocument
+    doc: LooseSingleCardDocument | CardDocument,
+    opts?: Options
   ): Promise<Card> {
     await this.apiModule.loaded;
     let card = await this.api.createFromSerialized(
       resource,
       doc,
-      this.localRealm.url,
+      // we don't want to touch the local realm for server side rendering
+      opts?.absoluteURL ? undefined : this.localRealm.url,
       {
         loader: this.loaderService.loader,
       }
@@ -67,10 +78,14 @@ export default class CardService extends Service {
     return card;
   }
 
-  async loadModel(url: string | URL | undefined): Promise<Card | undefined> {
+  async loadModel(
+    url: string | URL | undefined,
+    opts?: Options
+  ): Promise<Card | undefined> {
     if (!url) {
       return;
     }
+    await this.apiModule.loaded;
     let json = await this.fetchJSON(url);
     if (!isSingleCardDocument(json)) {
       throw new Error(
@@ -78,7 +93,7 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`
       );
     }
-    return await this.createFromSerialized(json.data, json);
+    return await this.createFromSerialized(json.data, json, opts);
   }
 
   async saveModel(card: Card): Promise<Card> {

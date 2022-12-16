@@ -1,0 +1,10 @@
+{{!-- template-lint-disable no-html-comments --}}
+{{!-- template-lint-disable no-inline-styles --}}
+
+<!--Server Side Rendered Card Error START-->
+An error was encountered loading the card
+{{!-- @glint-ignore the route template types do not
+      seem to understand that this.model is legit for error templates
+--}}
+<div style="white-space: pre-wrap">{{this.model.message}}</div>
+<!--Server Side Rendered Card Error END-->

@@ -3,10 +3,12 @@ import { Loader } from "@cardstack/runtime-common/loader";
 import { NodeAdapter } from "./node-realm";
 import yargs from "yargs";
 import { createRealmServer } from "./server";
-import { resolve } from "path";
+import { resolve, join } from "path";
+import { makeFastBootVisitor } from "./fastboot";
 
 let {
   port,
+  dist = join(__dirname, "..", "host", "dist"),
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -33,6 +35,11 @@ let {
       demandOption: true,
       type: "array",
     },
+    dist: {
+      description:
+        "the dist/ folder of the host app. Defaults to '../host/dist'",
+      type: "string",
+    },
   })
   .parseSync();
 
@@ -57,8 +64,14 @@ for (let [from, to] of urlMappings) {
   Loader.addURLMapping(from, to);
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
+let distPath = resolve(dist);
+let getVisitor = makeFastBootVisitor(distPath);
 let realms: Realm[] = paths.map((path, i) => {
-  return new Realm(hrefs[i][0], new NodeAdapter(resolve(String(path))));
+  return new Realm(
+    hrefs[i][0],
+    new NodeAdapter(resolve(String(path))),
+    getVisitor
+  );
 });
 
 let server = createRealmServer(realms);
@@ -74,3 +87,4 @@ if (additionalMappings.length) {
     console.log(`    ${from} => ${to}`);
   }
 }
+console.log(`Using host dist path: '${distPath}' for card pre-rendering`);

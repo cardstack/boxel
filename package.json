@@ -33,8 +33,8 @@
     "ember-cli-htmlbars": "^6.1.0",
     "ember-resources": "^4.4.0",
     "ember-source": "~4.2.0",
-    "eslint-plugin-import": "^2.26.0",
     "ember-template-imports": "^3.0.1",
+    "eslint-plugin-import": "^2.26.0",
     "typescript": "^4.6.3"
   }
 }

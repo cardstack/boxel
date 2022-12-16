@@ -222,7 +222,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { DriverCard });
 
-    let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
+    let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
     let resource = {
       attributes: {
         ref
@@ -250,7 +250,7 @@ module('Integration | serialization', function (hooks) {
     }
     await shimModule(`${realmURL}test-cards`, { DriverCard });
 
-    let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
+    let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
     let serializedRef = serializeCard(driver).data.attributes?.ref;
     assert.ok(serializedRef !== ref, 'the card ref value is not strict equals to its serialized counter part');

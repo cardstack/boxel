@@ -1,11 +1,10 @@
-import { Resource, useResource } from 'ember-resources';
+import { Resource } from 'ember-resources/core';
 import { tracked } from '@glimmer/tracking';
 import { taskFor } from 'ember-concurrency-ts';
-import { task, timeout } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
-import type { Constructable } from '../lib/types';
 
 interface Args {
   named: { url: string; loader: Loader };
@@ -14,11 +13,15 @@ interface Args {
 export class ImportResource extends Resource<Args> {
   @tracked module: object | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
+  #loaded!: Promise<void>; // modifier runs at init so we will always have a value
 
-  constructor(owner: unknown, args: Args) {
-    super(owner, args);
-    let { url, loader } = args.named;
-    taskFor(this.load).perform(url, loader);
+  modify(_positional: never[], named: Args['named']) {
+    let { url, loader } = named;
+    this.#loaded = taskFor(this.load).perform(url, loader);
+  }
+
+  get loaded() {
+    return this.#loaded;
   }
 
   @task private async load(url: string, loader: Loader): Promise<void> {
@@ -45,19 +48,10 @@ Check console log for more details`,
       }
     }
   }
-
-  get loaded(): Promise<void> {
-    // TODO probably there is a more elegant way to express this in EC
-    return (async () => {
-      while (taskFor(this.load).isRunning) {
-        await timeout(10);
-      }
-    })();
-  }
 }
 
 export function importResource(parent: object, url: () => string) {
-  return useResource(parent, ImportResource as Constructable<Resource>, () => ({
+  return ImportResource.from(parent, () => ({
     named: {
       url: url(),
       loader: (
