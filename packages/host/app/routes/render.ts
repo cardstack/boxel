@@ -8,6 +8,15 @@ interface Model {
   format: Format;
 }
 
+interface ModelArgs {
+  url: string;
+  format: Format;
+}
+
+interface RouteInfoModelArgs {
+  queryParams: ModelArgs;
+}
+
 export default class Application extends Route<Model> {
   queryParams = {
     url: {
@@ -20,8 +29,16 @@ export default class Application extends Route<Model> {
 
   @service declare cardService: CardService;
 
-  async model(args: { url: string; format: Format }): Promise<Model> {
-    let { url, format } = args;
+  async model(args: ModelArgs | RouteInfoModelArgs): Promise<Model> {
+    let url: string;
+    let format: Format;
+    if ('queryParams' in args) {
+      url = args.queryParams.url;
+      format = args.queryParams.format;
+    } else {
+      url = args.url;
+      format = args.format;
+    }
     let card = await this.cardService.loadModel(url, { absoluteURL: true });
     if (!card) {
       throw new Error(`could not load card for url ${url}`);

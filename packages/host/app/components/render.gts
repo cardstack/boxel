@@ -8,7 +8,7 @@ interface Signature {
   }
 }
 
-export default class ServerRender extends Component<Signature> {
+export default class Render extends Component<Signature> {
   <template>
     <!--Server Side Rendered Card START-->
     <this.renderedCard/>
@@ -22,6 +22,6 @@ export default class ServerRender extends Component<Signature> {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
-    ServerRender: typeof ServerRender;
+    Render: typeof Render;
    }
 }

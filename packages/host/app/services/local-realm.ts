@@ -1,9 +1,8 @@
-import Service from '@ember/service';
+import Service, { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
-import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
 
 import {
