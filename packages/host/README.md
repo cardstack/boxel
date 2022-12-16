@@ -28,18 +28,18 @@ Make use of the many generators for code, try `ember help generate` for more det
 
 ### Running Tests
 
-- `ember test`
-- `ember test --server`
+- `pnpm test`
+- `pnpm test --server`
 
 ### Linting
 
-- `npm run lint`
-- `npm run lint:fix`
+- `pnpm run lint`
+- `pnpm run lint:fix`
 
 ### Building
 
-- `ember build` (development)
-- `ember build --environment production` (production)
+- `pnpm build` (development)
+- `pnpm build:production` (production)
 
 ### Deploying
 

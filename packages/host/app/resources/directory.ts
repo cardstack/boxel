@@ -1,4 +1,4 @@
-import { Resource, useResource } from 'ember-resources';
+import { Resource } from 'ember-resources/core';
 import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
@@ -12,7 +12,6 @@ import {
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import LoaderService from '../services/loader-service';
 import LocalRealm from '../services/local-realm';
-import type { Constructable } from '../lib/types';
 
 interface Args {
   named: { url: string | undefined; polling: 'off' | undefined };
@@ -29,25 +28,28 @@ export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
   private interval: ReturnType<typeof setInterval> | undefined;
   private url: string | undefined;
-  private realmPath: RealmPaths;
+  private declare realmPath: RealmPaths;
 
   @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
 
-  constructor(owner: unknown, args: Args) {
-    super(owner, args);
+  constructor(owner: unknown) {
+    super(owner);
     if (!this.localRealm.isAvailable) {
       throw new Error('Local realm is not available');
     }
+  }
+
+  modify(_positional: never[], named: Args['named']) {
     this.realmPath = new RealmPaths(this.localRealm.url);
-    if (args.named.url) {
-      if (!args.named.url.endsWith('/')) {
+    if (named.url) {
+      if (!named.url.endsWith('/')) {
         throw new Error(`A directory URL must end with a "/"`);
       }
-      this.url = args.named.url;
+      this.url = named.url;
       taskFor(this.readdir).perform();
     }
-    if (args.named.polling !== 'off') {
+    if (named.polling !== 'off') {
       this.interval = setInterval(() => taskFor(this.readdir).perform(), 1000);
       registerDestructor(this, () => clearInterval(this.interval!));
     } else if (this.interval) {
@@ -120,11 +122,7 @@ export function directory(
   url: () => string | undefined,
   polling: () => 'off' | undefined
 ) {
-  return useResource(
-    parent,
-    DirectoryResource as Constructable<Resource>,
-    () => ({
-      named: { url: url(), polling: polling() },
-    })
-  ) as DirectoryResource;
+  return DirectoryResource.from(parent, () => ({
+    named: { url: url(), polling: polling() },
+  })) as DirectoryResource;
 }

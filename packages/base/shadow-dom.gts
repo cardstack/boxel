@@ -18,15 +18,25 @@ interface ModifierSignature {
   };
 }
 
+const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
+
 export default class ShadowDOM extends Component<Signature> {
   <template>
-    <div {{ShadowRootModifier this.setShadow}} data-test-shadow-component>
-      {{#if this.shadow}}
-        {{#in-element this.shadow}}
+    {{#if isFastBoot}}
+      <div data-test-shadow-component>
+        <template shadowroot="open">
           {{yield}}
-        {{/in-element}}
-      {{/if}}
-    </div>
+        </template>
+      </div>
+    {{else}}
+      <div {{ShadowRootModifier this.setShadow}} data-test-shadow-component>
+        {{#if this.shadow}}
+          {{#in-element this.shadow}}
+            {{yield}}
+          {{/in-element}}
+        {{/if}}
+      </div>
+    {{/if}}
   </template>
 
   @tracked shadow: ShadowRoot | undefined = undefined;

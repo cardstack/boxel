@@ -20,11 +20,13 @@ export default class LocalRealm extends Service {
 
   constructor(properties: object) {
     super(properties);
-    let handler = (event: MessageEvent) => this.handleMessage(event);
-    navigator.serviceWorker.addEventListener('message', handler);
-    registerDestructor(this, () =>
-      navigator.serviceWorker.removeEventListener('message', handler)
-    );
+    if (!this.fastboot.isFastBoot) {
+      let handler = (event: MessageEvent) => this.handleMessage(event);
+      navigator.serviceWorker.addEventListener('message', handler);
+      registerDestructor(this, () =>
+        navigator.serviceWorker.removeEventListener('message', handler)
+      );
+    }
   }
 
   private handleMessage(event: MessageEvent) {
@@ -50,6 +52,10 @@ export default class LocalRealm extends Service {
   }
 
   @restartableTask private async setup(): Promise<void> {
+    if (this.fastboot.isFastBoot) {
+      this.state = { type: 'fastboot', worker: undefined };
+      return;
+    }
     await Promise.resolve();
     this.state = { type: 'checking-worker' };
     let worker = await this.ensureWorker();
@@ -88,6 +94,7 @@ export default class LocalRealm extends Service {
         response: Deferred<DirectoryHandleResponse>;
       }
     | { type: 'empty'; worker: ServiceWorker }
+    | { type: 'fastboot'; worker: undefined }
     | {
         type: 'available';
         handle: FileSystemDirectoryHandle;
@@ -102,6 +109,7 @@ export default class LocalRealm extends Service {
       } = { type: 'starting-up' };
 
   @service declare router: RouterService;
+  @service declare fastboot: { isFastBoot: boolean };
 
   get isAvailable(): boolean {
     this.maybeSetup();

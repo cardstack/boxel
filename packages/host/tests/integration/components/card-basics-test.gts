@@ -214,12 +214,12 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
+    let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
 
     await renderCard(driver, 'embedded');
     assert.shadowDOM('[data-test-ref]').exists();
-    assert.shadowDOM('[data-test-ref]').containsText(`Module: http://localhost:4201/test/person Name: Person`);
+    assert.shadowDOM('[data-test-ref]').containsText(`Module: http://localhost:4202/test/person Name: Person`);
 
     // is this worth an assertion? or is it just obvious?
     assert.strictEqual(driver.ref, ref, 'The deserialized card ref constructor param is strict equal to the deserialized card ref value');
@@ -235,13 +235,13 @@ module('Integration | card-basics', function (hooks) {
       }
     }
 
-    let ref = { module: `http://localhost:4201/test/person`, name: 'Person' };
+    let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
 
     await renderCard(driver, 'edit');
     assert.shadowDOM('input').doesNotExist('no input fields exist');
     assert.shadowDOM('[data-test-ref').exists();
-    assert.shadowDOM('[data-test-ref').containsText(`Module: http://localhost:4201/test/person Name: Person`);
+    assert.shadowDOM('[data-test-ref').containsText(`Module: http://localhost:4202/test/person Name: Person`);
   });
 
   test('throws when assigning a value to a linksTo field with a primitive card', async function (assert) {

@@ -1,4 +1,4 @@
-import { Resource, useResource } from 'ember-resources';
+import { Resource } from 'ember-resources/core';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
@@ -12,7 +12,6 @@ import type LoaderService from '../services/loader-service';
 import type CardService from '../services/card-service';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { Card } from 'https://cardstack.com/base/card-api';
-import type { Constructable } from '../lib/types';
 
 interface Args {
   named: {
@@ -26,9 +25,8 @@ export class Search extends Resource<Args> {
   @service declare localRealm: LocalRealm;
   @service declare cardService: CardService;
 
-  constructor(owner: unknown, args: Args) {
-    super(owner, args);
-    let { query, loader } = args.named;
+  modify(_positional: never[], named: Args['named']) {
+    let { query, loader } = named;
     taskFor(this.search).perform(query, loader);
   }
 
@@ -50,7 +48,7 @@ export class Search extends Resource<Args> {
 }
 
 export function getSearchResults(parent: object, query: () => Query) {
-  return useResource(parent, Search as Constructable<Resource>, () => ({
+  return Search.from(parent, () => ({
     named: {
       query: query(),
       loader: (

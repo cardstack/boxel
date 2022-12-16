@@ -79,11 +79,14 @@ jobs:
           cache: pnpm
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build host dist/ for fastboot
+        run: pnpm build
+        working-directory: packages/host
       - name: Start realm servers
-        run: pnpm start:test-realms &
+        run: pnpm start:all &
         working-directory: packages/realm-server
       - name: host test suite
-        run: pnpm test:ember
+        run: pnpm test
         working-directory: packages/host
   realm-server-test:
     name: Realm Server Tests
@@ -99,11 +102,12 @@ jobs:
           cache: pnpm
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build host dist/ for fastboot
+        run: pnpm build
+        working-directory: packages/host
       - name: Start base realm server
-        run: pnpm start:test-realms &
+        run: pnpm start:all &
         working-directory: packages/realm-server
-      - name: Wait for server to start
-        run: sleep 5
       - name: realm server test suite
-        run: pnpm test
+        run: pnpm test:wait-for-servers
         working-directory: packages/realm-server

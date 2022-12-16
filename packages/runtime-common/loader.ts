@@ -11,6 +11,16 @@ export interface ResolvedURL extends URL {
   _isResolved: undefined;
 }
 
+function isResolvedURL(url: URL | ResolvedURL): url is ResolvedURL {
+  return "_isResolved" in url;
+}
+
+function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
+  let resolvedURL = new URL(unresolvedURL) as ResolvedURL;
+  resolvedURL._isResolved = undefined;
+  return resolvedURL;
+}
+
 type RegisteredModule = {
   state: "registered";
   dependencyList: string[];
@@ -67,8 +77,6 @@ export class Loader {
     { module: string; name: string }
   >();
   private consumptionCache = new WeakMap<object, string[]>();
-
-  constructor() {}
 
   static #instance: Loader | undefined;
   static loaders = new WeakMap<Function, Loader>();
@@ -269,35 +277,46 @@ export class Loader {
     urlOrRequest: string | URL | Request,
     init?: RequestInit
   ): Promise<Response> {
+    let requestURL =
+      urlOrRequest instanceof Request
+        ? urlOrRequest.url
+        : typeof urlOrRequest === "string"
+        ? urlOrRequest
+        : urlOrRequest.href;
     if (urlOrRequest instanceof Request) {
       for (let [url, handle] of this.urlHandlers) {
         let path = new RealmPaths(new URL(url));
-        if (path.inRealm(new URL(urlOrRequest.url))) {
+        if (path.inRealm(new URL(requestURL))) {
           let request = urlOrRequest as MaybeLocalRequest;
           request.isLocal = true;
           return await handle(request);
         }
       }
-      let request = new Request(this.resolve(urlOrRequest.url).href, {
+      let request = new Request(this.resolve(requestURL).href, {
         method: urlOrRequest.method,
         headers: urlOrRequest.headers,
         body: urlOrRequest.body,
       });
       return fetch(request);
     } else {
+      let unresolvedURL =
+        typeof urlOrRequest === "string"
+          ? new URL(urlOrRequest)
+          : isResolvedURL(urlOrRequest)
+          ? this.reverseResolution(urlOrRequest)
+          : urlOrRequest;
       for (let [url, handle] of this.urlHandlers) {
         let path = new RealmPaths(new URL(url));
-        if (path.inRealm(new URL(urlOrRequest))) {
+        if (path.inRealm(unresolvedURL)) {
           let request = new Request(
-            typeof urlOrRequest === "string" ? urlOrRequest : urlOrRequest.href,
+            unresolvedURL.href,
             init
           ) as MaybeLocalRequest;
           request.isLocal = true;
           return await handle(request);
         }
       }
-      let resolvedURL = this.resolve(urlOrRequest);
-      return fetch(resolvedURL.href, init);
+      return fetch(this.resolve(unresolvedURL).href, init);
     }
   }
 
@@ -306,10 +325,10 @@ export class Loader {
     for (let [sourceURL, to] of this.urlMappings) {
       let sourcePath = new RealmPaths(new URL(sourceURL));
       if (sourcePath.inRealm(absoluteURL)) {
-        return new URL(sourcePath.local(absoluteURL), to) as ResolvedURL;
+        return makeResolvedURL(new URL(sourcePath.local(absoluteURL), to));
       }
     }
-    return absoluteURL as ResolvedURL;
+    return makeResolvedURL(absoluteURL);
   }
 
   reverseResolution(
@@ -441,7 +460,7 @@ export class Loader {
     await Promise.all(
       dependencyList!.map(async (depId) => {
         if (depId !== "exports" && depId !== "__import_meta__") {
-          return await this.fetchModule(new URL(depId) as ResolvedURL, [
+          return await this.fetchModule(makeResolvedURL(depId), [
             ...stack,
             moduleIdentifier,
           ]);

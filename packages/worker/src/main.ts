@@ -31,7 +31,13 @@ Loader.addURLMapping(
       throw new Error(`could not get FileSystem`);
     }
     fetchHandler.addRealm(
-      new Realm('http://local-realm/', new LocalRealm(messageHandler.fs))
+      new Realm(
+        'http://local-realm/',
+        new LocalRealm(messageHandler.fs),
+        (_fetch: typeof fetch) => async (_url: string) => {
+          return `card render is not implemented`;
+        }
+      )
     );
   } catch (err) {
     console.log(err);

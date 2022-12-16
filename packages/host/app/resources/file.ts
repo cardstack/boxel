@@ -1,11 +1,10 @@
-import { Resource, useResource } from 'ember-resources';
+import { Resource } from 'ember-resources/core';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import LoaderService from '../services/loader-service';
-import type { Constructable } from '../lib/types';
 
 interface Args {
   named: {
@@ -40,16 +39,15 @@ export type FileResource =
 
 class _FileResource extends Resource<Args> {
   private interval: ReturnType<typeof setInterval> | undefined;
-  private _url: string;
+  private declare _url: string;
   private lastModified: string | undefined;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   @tracked content: string | undefined;
   @tracked state: FileResource['state'] = 'ready';
   @service declare loaderService: LoaderService;
 
-  constructor(owner: unknown, args: Args) {
-    super(owner, args);
-    let { url, content, lastModified, onStateChange, polling } = args.named;
+  modify(_positional: never[], named: Args['named']) {
+    let { url, content, lastModified, onStateChange, polling } = named;
     this._url = url;
     this.onStateChange = onStateChange;
     if (content !== undefined) {
@@ -156,7 +154,7 @@ class _FileResource extends Resource<Args> {
 }
 
 export function file(parent: object, args: () => Args['named']): FileResource {
-  return useResource(parent, _FileResource as Constructable<Resource>, () => ({
+  return _FileResource.from(parent, () => ({
     named: args(),
   })) as unknown as FileResource;
 }

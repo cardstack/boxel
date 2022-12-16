@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { isSingleCardDocument } from '@cardstack/runtime-common/search-index';
+import { isSingleCardDocument } from '@cardstack/runtime-common/card-document';
 import {
   cardSrc,
   compiledCard,
@@ -87,7 +87,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
           },
@@ -108,7 +108,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/pet',
+              module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
           },
@@ -147,7 +147,7 @@ module('Unit | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'http://localhost:4201/test/pet',
+            module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(
@@ -171,7 +171,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
             lastModified: adapter.lastModified.get(
@@ -197,13 +197,13 @@ module('Unit | realm', function (hooks) {
           relationships: {
             owner: {
               links: {
-                self: `http://localhost:4201/test/hassan`,
+                self: `http://localhost:4202/test/hassan`,
               },
             },
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/pet',
+              module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
           },
@@ -234,17 +234,17 @@ module('Unit | realm', function (hooks) {
         relationships: {
           owner: {
             links: {
-              self: `http://localhost:4201/test/hassan`,
+              self: `http://localhost:4202/test/hassan`,
             },
             data: {
               type: 'card',
-              id: `http://localhost:4201/test/hassan`,
+              id: `http://localhost:4202/test/hassan`,
             },
           },
         },
         meta: {
           adoptsFrom: {
-            module: 'http://localhost:4201/test/pet',
+            module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(
@@ -258,7 +258,7 @@ module('Unit | realm', function (hooks) {
       included: [
         {
           type: 'card',
-          id: `http://localhost:4201/test/hassan`,
+          id: `http://localhost:4202/test/hassan`,
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
@@ -268,12 +268,12 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
           },
           links: {
-            self: `http://localhost:4201/test/hassan`,
+            self: `http://localhost:4202/test/hassan`,
           },
         },
       ],
@@ -476,7 +476,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
           },
@@ -506,7 +506,7 @@ module('Unit | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'http://localhost:4201/test/pet',
+                  module: 'http://localhost:4202/test/pet',
                   name: 'Pet',
                 },
               },
@@ -539,7 +539,7 @@ module('Unit | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'http://localhost:4201/test/pet',
+            module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(`${testRealmURL}Pet/1.json`),
@@ -561,7 +561,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
             lastModified: adapter.lastModified.get(
@@ -595,7 +595,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/pet',
+              module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
           },
@@ -615,7 +615,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
           },
@@ -639,7 +639,7 @@ module('Unit | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'http://localhost:4201/test/person',
+                  module: 'http://localhost:4202/test/person',
                   name: 'Person',
                 },
               },
@@ -690,7 +690,7 @@ module('Unit | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4201/test/person',
+                module: 'http://localhost:4202/test/person',
                 name: 'Person',
               },
             },
@@ -727,7 +727,7 @@ module('Unit | realm', function (hooks) {
 
     let { data: cards } = await searchIndex.search({
       filter: {
-        on: { module: `http://localhost:4201/test/person`, name: 'Person' },
+        on: { module: `http://localhost:4202/test/person`, name: 'Person' },
         eq: { firstName: 'Van Gogh' },
       },
     });
@@ -746,7 +746,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
           },
@@ -761,7 +761,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
           },
@@ -782,7 +782,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/pet',
+              module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
           },
@@ -810,7 +810,7 @@ module('Unit | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'http://localhost:4201/test/person',
+                  module: 'http://localhost:4202/test/person',
                   name: 'Person',
                 },
               },
@@ -844,7 +844,7 @@ module('Unit | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'http://localhost:4201/test/pet',
+            module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(
@@ -868,7 +868,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
             lastModified: adapter.lastModified.get(
@@ -902,7 +902,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/pet',
+              module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
           },
@@ -1207,7 +1207,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
           },
@@ -1228,7 +1228,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/pet',
+              module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
           },
@@ -1243,13 +1243,13 @@ module('Unit | realm', function (hooks) {
           relationships: {
             owner: {
               links: {
-                self: `http://localhost:4201/test/hassan`,
+                self: `http://localhost:4202/test/hassan`,
               },
             },
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/pet',
+              module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
           },
@@ -1299,7 +1299,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/pet',
+              module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
             lastModified: adapter.lastModified.get(
@@ -1322,7 +1322,7 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
             lastModified: adapter.lastModified.get(
@@ -1342,17 +1342,17 @@ module('Unit | realm', function (hooks) {
           relationships: {
             owner: {
               links: {
-                self: `http://localhost:4201/test/hassan`,
+                self: `http://localhost:4202/test/hassan`,
               },
               data: {
                 type: 'card',
-                id: `http://localhost:4201/test/hassan`,
+                id: `http://localhost:4202/test/hassan`,
               },
             },
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/pet',
+              module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
             lastModified: adapter.lastModified.get(
@@ -1367,7 +1367,7 @@ module('Unit | realm', function (hooks) {
       included: [
         {
           type: 'card',
-          id: `http://localhost:4201/test/hassan`,
+          id: `http://localhost:4202/test/hassan`,
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
@@ -1377,12 +1377,12 @@ module('Unit | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
           },
           links: {
-            self: `http://localhost:4201/test/hassan`,
+            self: `http://localhost:4202/test/hassan`,
           },
         },
       ],
