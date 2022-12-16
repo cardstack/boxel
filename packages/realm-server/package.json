@@ -27,9 +27,8 @@
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/card-api' 'pnpm run wait' 'http-get://localhost:4202/node-test/person' 'test'",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/'",
-    "start:base-and-host-test-realms": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --path='../host/tests/cards' --fromUrl='/test/' --toUrl='/test/'",
-    "start:test-node-realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4202 --fromUrl='/node-test/' --toUrl='/node-test/' --path='./tests/cards' --fromUrl='https://cardstack.com/base/' --toUrl='http://localhost:4201/base/'",
-    "start:test-realms": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run start:base-and-host-test-realms' 'http-get://localhost:4201/base/card-api' 'pnpm run start:test-node-realm' 'http-get://localhost:4202/node-test/person' 'wait'",
+    "start:test-realms": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4202 --path='./tests/cards' --fromUrl='/node-test/' --toUrl='/node-test/' --path='../host/tests/cards' --fromUrl='/test/' --toUrl='/test/' --fromUrl='https://cardstack.com/base/' --toUrl='http://localhost:4201/base/'",
+    "start:all": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run start:base' 'http-get://localhost:4201/base/card-api' 'pnpm run start:test-realms' 'http-get://localhost:4202/node-test/person' 'wait'",
     "wait": "sleep 10000000",
     "lint": "glint"
   }

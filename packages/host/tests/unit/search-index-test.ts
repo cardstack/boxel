@@ -16,7 +16,7 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 
 const paths = new RealmPaths(testRealmURL);
-const testModuleRealm = 'http://localhost:4201/test/';
+const testModuleRealm = 'http://localhost:4202/test/';
 
 module('Unit | search-index', function (hooks) {
   setupCardLogs(
@@ -77,7 +77,7 @@ module('Unit | search-index', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
           },
@@ -98,7 +98,7 @@ module('Unit | search-index', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/pet',
+              module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
           },
@@ -128,7 +128,7 @@ module('Unit | search-index', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'http://localhost:4201/test/pet',
+            module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(
@@ -158,7 +158,7 @@ module('Unit | search-index', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/friend',
+              module: 'http://localhost:4202/test/friend',
               name: 'Friend',
             },
           },
@@ -179,7 +179,7 @@ module('Unit | search-index', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/friend',
+              module: 'http://localhost:4202/test/friend',
               name: 'Friend',
             },
           },
@@ -200,7 +200,7 @@ module('Unit | search-index', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/friend',
+              module: 'http://localhost:4202/test/friend',
               name: 'Friend',
             },
           },
@@ -230,7 +230,7 @@ module('Unit | search-index', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'http://localhost:4201/test/friend',
+            module: 'http://localhost:4202/test/friend',
             name: 'Friend',
           },
           lastModified: adapter.lastModified.get(
@@ -280,7 +280,7 @@ module('Unit | search-index', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/friend',
+              module: 'http://localhost:4202/test/friend',
               name: 'Friend',
             },
           },
@@ -301,7 +301,7 @@ module('Unit | search-index', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/friend',
+              module: 'http://localhost:4202/test/friend',
               name: 'Friend',
             },
           },
@@ -336,7 +336,7 @@ module('Unit | search-index', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/friend',
+              module: 'http://localhost:4202/test/friend',
               name: 'Friend',
             },
             lastModified: adapter.lastModified.get(
@@ -365,7 +365,7 @@ module('Unit | search-index', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4201/test/friend',
+                module: 'http://localhost:4202/test/friend',
                 name: 'Friend',
               },
               lastModified: adapter.lastModified.get(
@@ -430,7 +430,7 @@ module('Unit | search-index', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4201/test/friend',
+              module: 'http://localhost:4202/test/friend',
               name: 'Friend',
             },
             lastModified: adapter.lastModified.get(
@@ -459,7 +459,7 @@ module('Unit | search-index', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4201/test/friend',
+                module: 'http://localhost:4202/test/friend',
                 name: 'Friend',
               },
               lastModified: adapter.lastModified.get(
@@ -549,7 +549,7 @@ module('Unit | search-index', function (hooks) {
         'http://localhost:4201/externals/flat',
         'http://localhost:4201/externals/lodash',
         'http://localhost:4201/externals/tracked-built-ins',
-        'http://localhost:4201/test/person',
+        'http://localhost:4202/test/person',
       ],
       'the card references for the instance are correct'
     );

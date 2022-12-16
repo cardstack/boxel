@@ -83,15 +83,15 @@ jobs:
         run: pnpm build
         working-directory: packages/host
       - name: Start realm servers
-        run: pnpm start:test-realms &
+        run: pnpm start:all &
         working-directory: packages/realm-server
       # TODO there seems to be a couple indexing errors in the unit tests that
       # we only see in CI without this pause. One of the challenges here is that
       # we really want to wait on card instances being available, but the
       # start-server-and-test pkg doesn't let us set JSON-API content types that
       # would allow us to check for that the instances are ready.
-      - name: Wait for server to start (60 secs)
-        run: sleep 60
+      # - name: Wait for server to start (60 secs)
+      #   run: sleep 60
       - name: host test suite
         run: pnpm test
         working-directory: packages/host
@@ -113,7 +113,7 @@ jobs:
         run: pnpm build
         working-directory: packages/host
       - name: Start base realm server
-        run: pnpm start:test-realms &
+        run: pnpm start:all &
         working-directory: packages/realm-server
       - name: realm server test suite
         run: pnpm test:wait-for-servers
