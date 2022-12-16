@@ -7,7 +7,7 @@ import { Vendor } from './vendor';
 import { PaymentMethod } from './payment-method';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 import { formatUSD } from './currency-format';
-import { CardContainer } from '@cardstack/boxel-ui';
+import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
 let invoiceStyles = initStyleSheet(`
   this {
@@ -34,9 +34,8 @@ let invoiceStyles = initStyleSheet(`
   }
   h2 {
     margin-top: 0;
-    font-size: 1rem;
-    letter-spacing: 0.03em;
-    line-height: 1.375;
+    margin-bottom: var(--boxel-sp);
+    font: 700 var(--boxel-font);
   }
   .label {
     margin-bottom: 1rem;
@@ -88,25 +87,17 @@ let invoiceStyles = initStyleSheet(`
 
 let detailsStyles = initStyleSheet(`
   this {
+    --boxel-field-label-size: 35%;
+    --boxel-field-label-align: center;
     display: grid;
     grid-template-columns: 1fr 1fr;
+    gap: var(--boxel-sp-xl);
   }
   .details__fields {
     display: grid;
-    grid-template-columns: 1fr 2fr;
-    grid-gap: 0 1em;
-  }
-  .label {
-    margin-bottom: 1rem;
-    color: #A0A0A0;
-    font-size: 0.6875rem;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    line-height: 1.25;
+    grid-gap: var(--boxel-sp) 0;
   }
 `);
-
 class Details extends Card {
   @field invoiceNo = contains(StringCard);
   @field invoiceDate = contains(DateCard);
@@ -114,19 +105,34 @@ class Details extends Card {
   @field terms = contains(StringCard);
   @field invoiceDocument = contains(StringCard);
   @field memo = contains(TextAreaCard);
-
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer {{attachStyles detailsStyles}}>
         <div class="details__fields">
-          <div class="label">Invoice No.</div><div><@fields.invoiceNo/></div>
-          <div class="label">Invoice Date</div><div><@fields.invoiceDate/></div>
-          <div class="label">Due Date</div><div><@fields.dueDate/></div>
-          <div class="label">Terms</div> <div><@fields.terms/></div>
-          <div class="label">Invoice Document</div> <div><@fields.invoiceDocument/></div>
+          <FieldContainer @label="Invoice No."><@fields.invoiceNo/></FieldContainer>
+          <FieldContainer @label="Invoice Date"><@fields.invoiceDate/></FieldContainer>
+          <FieldContainer @label="Due Date"><@fields.dueDate/></FieldContainer>
+          <FieldContainer @label="Terms"><@fields.terms/></FieldContainer>
+          <FieldContainer @label="Invoice Document"><@fields.invoiceDocument/></FieldContainer>
         </div>
+        <div>
+          <FieldContainer @label="Memo"><@fields.memo/></FieldContainer>
+        </div>
+      </CardContainer>
+    </template>
+  };
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <CardContainer {{attachStyles detailsStyles}}>
         <div class="details__fields">
-          <div class="label">Memo</div> <div><@fields.memo/></div>
+          <FieldContainer @tag="label" @label="Invoice No."><@fields.invoiceNo/></FieldContainer>
+          <FieldContainer @tag="label" @label="Invoice Date"><@fields.invoiceDate/></FieldContainer>
+          <FieldContainer @tag="label" @label="Due Date"><@fields.dueDate/></FieldContainer>
+          <FieldContainer @tag="label" @label="Terms"><@fields.terms/></FieldContainer>
+          <FieldContainer @tag="label" @label="Invoice Document"><@fields.invoiceDocument/></FieldContainer>
+        </div>
+        <div>
+          <FieldContainer @tag="label" @vertical={{true}} @label="Memo"><@fields.memo/></FieldContainer>
         </div>
       </CardContainer>
     </template>

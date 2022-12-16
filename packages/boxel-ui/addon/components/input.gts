@@ -30,9 +30,9 @@ export interface Signature {
 
 let styles = initStyleSheet(`
   .boxel-input {
-    --boxel-form-control-border-color: #afafb7;
-    --boxel-form-control-border-radius: 5px;
+    --boxel-input-height: var(--boxel-form-control-height);
 
+    box-sizing: border-box;
     min-height: var(--boxel-input-height);
     padding: var(--boxel-sp-xxs) 0 var(--boxel-sp-xxs) var(--boxel-sp-xxs);
     border: 1px solid var(--boxel-form-control-border-color);
@@ -41,6 +41,11 @@ let styles = initStyleSheet(`
     font-weight: 400;
     letter-spacing: var(--boxel-lsp-xs);
     transition: border-color var(--boxel-transition);
+    overflow: auto;
+  }
+
+  .boxel-input--textarea {
+    min-height: calc(2 * var(--boxel-input-height));
   }
 
   .boxel-input:disabled {
@@ -116,7 +121,7 @@ export default class BoxelInput extends Component<Signature> {
     {{#let (and @invalid @errorMessage) as |shouldShowErrorMessage|}}
       {{#let (element (if @multiline "textarea" "input")) as |InputTag|}}
         <InputTag
-          class={{cn "boxel-input" boxel-input--invalid=@invalid}}
+          class={{cn "boxel-input" boxel-input--invalid=@invalid boxel-input--textarea=@multiline}}
           id={{this.id}}
           value={{@value}}
           required={{@required}}

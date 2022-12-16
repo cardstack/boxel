@@ -52,9 +52,9 @@ let styles = initStyleSheet(`
   }
 
   .boxel-field__label {
-    color: var(--boxel-purple-400);
-    font: 600 var(--boxel-font-xs);
-    letter-spacing: var(--boxel-lsp-xl);
+    color: var(--boxel-label-color);
+    font: 700 var(--boxel-font-xs);
+    letter-spacing: var(--boxel-lsp-xxl);
     text-transform: uppercase;
     display: flex;
     align-items: var(--boxel-field-label-align);
