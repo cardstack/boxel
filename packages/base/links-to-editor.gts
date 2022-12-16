@@ -14,7 +14,7 @@ import {
   identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { initStyleSheet, attachStyles } from './attach-styles';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer } from '@cardstack/boxel-ui';
 
 

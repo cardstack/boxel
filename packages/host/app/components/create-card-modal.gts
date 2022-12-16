@@ -12,23 +12,47 @@ import { service } from '@ember/service';
 import type CardService from '../services/card-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
+import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
+
+let modalStyles = initStyleSheet(`
+  .dialog-box {
+    height: 100%;
+  }
+  .dialog-box__content {
+    padding: var(--boxel-sp);
+    height: 100%;
+    overflow: auto;
+  }
+  .dialog-box__content > * + * {
+    margin-top: 1em;
+  }
+`);
 
 export default class CreateCardModal extends Component {
   <template>
     {{#let this.currentRequest.card as |card|}}
       {{#if card}}
-        <dialog class="dialog-box" open data-test-create-new-card={{card.constructor.name}}>
-          <header class="dialog-box__header">
-            <h1>Create New Card</h1>
-            <button {{on "click" (fn this.save undefined)}} type="button">X Close</button>
-          </header>
-          <section class="dialog-box__content">
-            <CardEditor
-              @card={{card}}
-              @onSave={{this.save}}
-            />
-          </section>
-        </dialog>
+        <Modal
+          @size="large"
+          @isOpen={{true}}
+          @onClose={{fn this.save undefined}}
+          open
+          {{attachStyles modalStyles}}
+          data-test-create-new-card={{card.constructor.name}}
+        >
+          <CardContainer class="dialog-box" @displayBoundaries={{true}}>
+            <Header @label="Create New Card" @large={{true}}>
+              <button {{on "click" (fn this.save undefined)}} type="button">X Close</button>
+            </Header>
+            <section class="dialog-box__content">
+              <CardEditor
+                @card={{card}}
+                @onSave={{this.save}}
+              />
+            </section>
+          </CardContainer>
+        </Modal>
       {{/if}}
     {{/let}}
   </template>

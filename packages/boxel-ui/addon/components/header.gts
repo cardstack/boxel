@@ -5,9 +5,10 @@ import cn from '../helpers/cn';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    header?: string;
+    label?: string;
     noBackground?: boolean;
     isHighlighted?: boolean;
+    large?: boolean;
   };
   Blocks: {
     'default': [],
@@ -22,7 +23,7 @@ let styles = initStyleSheet(`
     justify-content: space-between;
     padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
     min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
-    background-color: var(--boxel-header-background-color, var(--boxel-purple-100));
+    background-color: var(--boxel-header-background-color, var(--boxel-100));
     color: var(--boxel-header-text-color, var(--boxel-dark));
     border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
     border-top-left-radius: calc(var(--boxel-border-radius) - 1px);
@@ -32,6 +33,13 @@ let styles = initStyleSheet(`
     transition:
       background-color var(--boxel-transition),
       color var(--boxel-transition);
+  }
+
+  .boxel-header--large {
+    padding: var(--boxel-sp-xl);
+    font: 700 var(--boxel-font-lg);
+    letter-spacing: normal;
+    text-transform: none;
   }
 
   .boxel-header--no-background {
@@ -69,14 +77,15 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       "boxel-header"
       boxel-header--no-background=@noBackground
       boxel-header--highlighted=@isHighlighted
+      boxel-header--large=@large
     }}
     {{attachStyles styles}}
     data-test-boxel-header
     ...attributes
   >
-    {{#if @header}}
+    {{#if @label}}
       <span data-test-boxel-header-label>
-        {{@header}}
+        {{@label}}
       </span>
     {{/if}}
 

@@ -85,35 +85,6 @@ button {
   background-color: #faebd769;
 }
 
-.dialog-box {
-  position: fixed;
-  z-index: 1;
-  top: 10vh;
-  width: 80vw;
-  max-width: 60rem;
-  height: 80vh;
-  padding: 0;
-  overflow-y: auto;
-}
-.dialog-box__header {
-  position: sticky;
-  top: 0;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  padding: 1em;
-  background-color: #ffffffcc;
-}
-.dialog-box__header > h1 {
-  margin: 0;
-}
-.dialog-box__content {
-  padding: 1em;
-}
-.dialog-box__content > * + * {
-  margin-top: 1em;
-}
-
 .card-catalog {
   list-style-type: none;
   display: grid;
@@ -140,7 +111,23 @@ button {
 }
 
 
-/* Boxel Root styles */
+/* Boxel styles */
+
+/* Hides content visually only
+  (accessible via screen readers) */
+.boxel-sr-only:not(:focus):not(:active) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 :root {
   --boxel-font-family: "Open Sans", helvetica, arial, sans-serif;
   --boxel-monospace-font-family: "Roboto Mono", "Courier New", courier, monospace;

@@ -12,37 +12,61 @@ import { createNewCard, type CardRef } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
+import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
+
+let modalStyles = initStyleSheet(`
+  .dialog-box {
+    height: 100%;
+  }
+  .dialog-box__content {
+    padding: var(--boxel-sp);
+    height: 100%;
+    overflow: auto;
+  }
+  .dialog-box__content > * + * {
+    margin-top: var(--boxel-sp);
+  }
+`);
 
 export default class CardCatalogModal extends Component {
   <template>
     {{#if this.currentRequest}}
-      <dialog class="dialog-box card-catalog-dialog" open data-test-card-catalog-modal>
-        <header class="dialog-box__header">
-          <h1>Card Catalog</h1>
-          <button {{on "click" (fn this.pick undefined)}} type="button">X Close</button>
-        </header>
-        <section class="dialog-box__content">
-          {{#if this.currentRequest.search.isLoading}}
-            Loading...
-          {{else}}
-            {{#if this.currentRequest.opts.offerToCreate}}
-              <button {{on "click" (fn this.createNew this.currentRequest.opts.offerToCreate)}} data-test-create-new>Create New</button>
+      <Modal
+        @size="large"
+        @isOpen={{true}}
+        @onClose={{fn this.pick undefined}}
+        @layer={{unless this.isCreatingNew "urgent"}}
+        {{attachStyles modalStyles}}
+        data-test-card-catalog-modal
+      >
+        <CardContainer class="dialog-box" @displayBoundaries={{true}}>
+          <Header @label="Card Catalog" @large={{true}}>
+            <button {{on "click" (fn this.pick undefined)}} type="button">X Close</button>
+          </Header>
+          <section class="dialog-box__content">
+            {{#if this.currentRequest.search.isLoading}}
+              Loading...
+            {{else}}
+              {{#if this.currentRequest.opts.offerToCreate}}
+                <button {{on "click" (fn this.createNew this.currentRequest.opts.offerToCreate)}} data-test-create-new>Create New</button>
+              {{/if}}
+              <ul class="card-catalog" data-test-card-catalog>
+                {{#each this.currentRequest.search.instances as |card|}}
+                  <li data-test-card-catalog-item={{card.id}}>
+                    <Preview @card={{card}} @format="embedded" />
+                    <button {{on "click" (fn this.pick card)}} type="button" data-test-select={{card.id}}>
+                      Select
+                    </button>
+                  </li>
+                {{else}}
+                  <p>No cards available</p>
+                {{/each}}
+              </ul>
             {{/if}}
-            <ul class="card-catalog" data-test-card-catalog>
-              {{#each this.currentRequest.search.instances as |card|}}
-                <li data-test-card-catalog-item={{card.id}}>
-                  <Preview @card={{card}} @format="embedded" />
-                  <button {{on "click" (fn this.pick card)}} type="button" data-test-select={{card.id}}>
-                    Select
-                  </button>
-                </li>
-              {{else}}
-                <p>No cards available</p>
-              {{/each}}
-            </ul>
-          {{/if}}
-        </section>
-      </dialog>
+          </section>
+        </CardContainer>
+      </Modal>
     {{/if}}
   </template>
 
@@ -51,6 +75,7 @@ export default class CardCatalogModal extends Component {
     deferred: Deferred<Card | undefined>;
     opts?: { offerToCreate?: CardRef };
   } | undefined = undefined;
+  @tracked isCreatingNew = false;
 
   constructor(owner: unknown, args: {}) {
     super(owner, args);
@@ -86,6 +111,7 @@ export default class CardCatalogModal extends Component {
   }
 
   @action async createNew(ref: CardRef): Promise<void> {
+    this.isCreatingNew = true;
     let newCard = await createNewCard(ref);
     this.pick(newCard);
   }

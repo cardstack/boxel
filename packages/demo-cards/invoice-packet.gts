@@ -5,9 +5,9 @@ import DateCard from 'https://cardstack.com/base/date';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { Vendor } from './vendor';
 import { PaymentMethod } from './payment-method';
-import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { formatUSD } from './currency-format';
-import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
+import { CardContainer, FieldContainer, Header } from '@cardstack/boxel-ui';
 
 let invoiceStyles = initStyleSheet(`
   this {
@@ -17,20 +17,10 @@ let invoiceStyles = initStyleSheet(`
     line-height: 1.25;
     overflow: hidden;
   }
-  .header {
-    padding: 2rem;
-    background-color: #F8F7FA;
-  }
   .invoice {
     padding: 2rem;
     display: grid;
     gap: 3rem 0;
-  }
-  h1 {
-    margin: 0;
-    font-size: 1.275rem;
-    letter-spacing: 0;
-    line-height: 1.875;
   }
   h2 {
     margin-top: 0;
@@ -177,9 +167,7 @@ class LineItem extends Card {
 class InvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
     <CardContainer @displayBoundaries={{true}} {{attachStyles invoiceStyles}}>
-      <header class="header">
-        <h1>Invoice</h1>
-      </header>
+      <Header @large={{true}}>Invoice</Header>
       <section class="invoice">
         <section class="vendor">
           <h2>Vendor</h2>
@@ -227,9 +215,7 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
 class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
     <CardContainer @displayBoundaries={{true}} {{attachStyles invoiceStyles}}>
-      <header class="header">
-        <h1>Edit Invoice</h1>
-      </header>
+      <Header @large={{true}}>Edit Invoice</Header>
       <section class="invoice">
         <section class="vendor">
           <h2>Vendor</h2>

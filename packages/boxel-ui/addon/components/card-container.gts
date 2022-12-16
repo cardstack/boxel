@@ -1,14 +1,17 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { initStyleSheet, attachStyles } from '../attach-styles';
+import element from '../helpers/element';
 import cn from '../helpers/cn';
-import BoxelHeader from './header';
+import Header from './header';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
+    tag?: keyof HTMLElementTagNameMap;
     header?: string;
     isHighlighted?: boolean;
     displayBoundaries?: boolean;
+    largeHeader?: boolean;
   };
   Blocks: {
     'default': [],
@@ -36,24 +39,26 @@ let styles = initStyleSheet(`
 `);
 
 const CardContainer: TemplateOnlyComponent<Signature> = <template>
-  <div
-    class={{cn
-      "boxel-card-container"
-      boxel-card-container--highlighted=@isHighlighted
-      boxel-card-container--boundaries=@displayBoundaries
-    }}
-    {{attachStyles styles}}
-    data-test-boxel-card-container
-    ...attributes
-  >
-    {{#if (has-block "header")}}
-      <BoxelHeader @header={{@header}}>
-        {{yield to="header"}}
-      </BoxelHeader>
-    {{/if}}
+  {{#let (element @tag) as |Tag|}}
+    <Tag
+      class={{cn
+        "boxel-card-container"
+        boxel-card-container--highlighted=@isHighlighted
+        boxel-card-container--boundaries=@displayBoundaries
+      }}
+      {{attachStyles styles}}
+      data-test-boxel-card-container
+      ...attributes
+    >
+      {{#if (has-block "header")}}
+        <Header @label={{@header}} @large={{@largeHeader}}>
+          {{yield to="header"}}
+        </Header>
+      {{/if}}
 
-    {{yield}}
-  </div>
+      {{yield}}
+    </Tag>
+  {{/let}}
 </template>;
 
 export default CardContainer;

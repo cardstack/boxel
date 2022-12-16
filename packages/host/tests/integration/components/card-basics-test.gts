@@ -4,12 +4,12 @@ import waitUntil from '@ember/test-helpers/wait-until';
 import { renderCard } from '../../helpers/render-component';
 import { cleanWhiteSpace, p, testRealmURL, shimModule, setupCardLogs, saveCard } from '../../helpers';
 import parseISO from 'date-fns/parseISO';
-import { on } from '@ember/modifier';
 import { baseRealm, } from "@cardstack/runtime-common";
 import { Loader } from '@cardstack/runtime-common/loader';
 import type { CardRef } from "@cardstack/runtime-common";
 import type { SignatureFor, primitive as primitiveType, queryableValue as queryableValueType } from "https://cardstack.com/base/card-api";
 import { shadowQuerySelector, shadowQuerySelectorAll, fillIn, click } from '../../helpers/shadow-assert';
+import BoxelInput from '@cardstack/boxel-ui/components/input';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -19,7 +19,6 @@ let datetime: typeof import ("https://cardstack.com/base/datetime");
 let boolean: typeof import ("https://cardstack.com/base/boolean");
 let cardRef: typeof import ("https://cardstack.com/base/card-ref");
 let catalogEntry: typeof import ("https://cardstack.com/base/catalog-entry");
-let pickModule: typeof import ("https://cardstack.com/base/pick");
 let primitive: typeof primitiveType;
 let queryableValue: typeof queryableValueType;
 
@@ -43,7 +42,6 @@ module('Integration | card-basics', function (hooks) {
     boolean = await Loader.import(`${baseRealm.url}boolean`);
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
     catalogEntry = await Loader.import(`${baseRealm.url}catalog-entry`);
-    pickModule = await Loader.import(`${baseRealm.url}pick`);
   });
 
   test('primitive field type checking', async function (assert) {
@@ -871,7 +869,6 @@ module('Integration | card-basics', function (hooks) {
   test('component stability when editing containsMany primitive field', async function(assert) {
     let {field, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { pick } = pickModule;
     let counter = 0;
     class TestString extends StringCard {
       static edit = class Edit extends Component<typeof this> {
@@ -881,7 +878,7 @@ module('Integration | card-basics', function (hooks) {
           this.counter = counter++;
         }
         <template>
-          <input data-counter={{this.counter}} type="text" value={{@model}} {{on "input" (pick "target.value" @set) }} />
+          <BoxelInput data-counter={{this.counter}} type="text" @value={{@model}} @onInput={{@set}} />
         </template>
       }
     }

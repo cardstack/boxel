@@ -1,7 +1,7 @@
 import { contains, field, Card, Component } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
-import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer } from '@cardstack/boxel-ui';
 
 let styleSheet = initStyleSheet(`

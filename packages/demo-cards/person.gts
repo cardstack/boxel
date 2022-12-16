@@ -2,7 +2,7 @@ import { contains, linksTo, field, Component, Card } from 'https://cardstack.com
 import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import { CardContainer } from '@cardstack/boxel-ui';
-import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { Pet } from './pet';
 
 let styles = initStyleSheet(`

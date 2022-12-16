@@ -5,7 +5,7 @@ import CardRefCard from './card-ref';
 import { baseCardRef, loadCard } from "@cardstack/runtime-common";
 import { isEqual } from 'lodash';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
-import { initStyleSheet, attachStyles } from './attach-styles';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 
 let styles = initStyleSheet(`
   this {
