@@ -37,9 +37,9 @@ let styles = initStyleSheet(`
     padding: var(--boxel-sp-xxs) 0 var(--boxel-sp-xxs) var(--boxel-sp-xxs);
     border: 1px solid var(--boxel-form-control-border-color);
     border-radius: var(--boxel-form-control-border-radius);
-    font: inherit;
+    font: var(--boxel-font-sm);
     font-weight: 400;
-    letter-spacing: var(--boxel-lsp-sm);
+    letter-spacing: var(--boxel-lsp-xs);
     transition: border-color var(--boxel-transition);
   }
 
