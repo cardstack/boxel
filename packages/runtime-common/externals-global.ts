@@ -12,6 +12,8 @@ import * as runtime from "./index";
   "@cardstack/runtime-common",
   runtime
 );
+import * as boxelUI from "@cardstack/boxel-ui";
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@cardstack/boxel-ui", boxelUI);
 // import * as glimmerComponent from "@glimmer/component";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@glimmer/component", {
   default: class {},
@@ -39,10 +41,15 @@ import * as runtime from "./index";
   action() {},
   get() {},
 });
+// import * as emberObjectInternals from "ember-source/dist/packages/@ember/object/internals";
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@ember/object/internals", {
+  guidFor() {},
+});
 // import * as emberHelper from "ember-source/dist/packages/@ember/helper";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@ember/helper", {
   get() {},
   fn() {},
+  concat() {},
 });
 // import * as emberModifier from "ember-source/dist/packages/@ember/modifier";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@ember/modifier", {

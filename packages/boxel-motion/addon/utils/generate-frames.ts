@@ -63,18 +63,27 @@ export default function generateFrames(
   // TODO: this is temporary, since we likely won't require to pass a behavior to generateFrames since we'll assign defaults
   let timing = timingArg as MotionTiming;
 
-  if (typeof options !== 'object' || timing.behavior instanceof WaitBehavior) {
+  if (timing.behavior instanceof WaitBehavior) {
     if (!timing.duration) {
-      throw new Error('Static behavior requires a duration');
+      throw new Error('Wait behavior requires a duration');
     }
 
-    // TODO: use a "static" behavior
-    if (property === 'wait') {
-      let generator = new WaitBehavior().getFrames({
-        duration: timing.duration,
-      });
+    let generator = new WaitBehavior().getFrames({
+      duration: timing.duration,
+    });
 
-      return resolveFrameGenerator(normalizedProperty, generator);
+    return resolveFrameGenerator(normalizedProperty, generator);
+  }
+
+  if (typeof options !== 'object') {
+    if (!(timing.behavior instanceof StaticBehavior)) {
+      throw new Error(
+        'Behavior must be StaticBehavior when passing a Value instead of MotionOptions'
+      );
+    }
+
+    if (!timing.duration) {
+      throw new Error('Static behavior requires a duration');
     }
 
     // todo maybe throw error if options is not numeric or string
@@ -96,6 +105,12 @@ export default function generateFrames(
       to = sprite.final[dasherize(normalizedProperty)] as Value;
     }
 
+    // TODO: this is naïve as we may be getting from/to defined in
+    //  different manners, but it should catch most things for now.
+    if (from === to) {
+      return [];
+    }
+
     if (
       numberValueType.test(from) ||
       (typeof from === 'string' && from.split(' ').length === 1)
@@ -112,6 +127,7 @@ export default function generateFrames(
       if (!color.test(to)) {
         throw new Error('From is a color, but to is not');
       }
+      // TODO: guard against from/to being different color types of color definitions (RGBA, HSLA etc.)
 
       let fromParts = color.parse(from);
       let toParts = color.parse(to);

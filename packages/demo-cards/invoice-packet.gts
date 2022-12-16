@@ -7,14 +7,11 @@ import { Vendor } from './vendor';
 import { PaymentMethod } from './payment-method';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 import { formatUSD } from './currency-format';
+import { CardContainer } from '@cardstack/boxel-ui';
 
 let invoiceStyles = initStyleSheet(`
   this {
     max-width: 50rem;
-    background-color: #fff;
-    border: 1px solid gray;
-    border-radius: 10px;
-    font-family: "Open Sans", Helvetica, Arial, sans-serif;
     font-size: 0.8125rem;
     letter-spacing: 0.01em;
     line-height: 1.25;
@@ -74,6 +71,7 @@ let invoiceStyles = initStyleSheet(`
   .payment-methods {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    gap: var(--boxel-sp-xs);
   }
   .payment-methods__list > * + * {
     margin-top: 1rem;
@@ -119,7 +117,7 @@ class Details extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div {{attachStyles detailsStyles}}>
+      <CardContainer {{attachStyles detailsStyles}}>
         <div class="details__fields">
           <div class="label">Invoice No.</div><div><@fields.invoiceNo/></div>
           <div class="label">Invoice Date</div><div><@fields.invoiceDate/></div>
@@ -130,7 +128,7 @@ class Details extends Card {
         <div class="details__fields">
           <div class="label">Memo</div> <div><@fields.memo/></div>
         </div>
-      </div>
+      </CardContainer>
     </template>
   };
 }
@@ -156,7 +154,7 @@ class LineItem extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div {{attachStyles lineItemStyles}}>
+      <CardContainer {{attachStyles lineItemStyles}}>
         <div>
           <div><strong><@fields.name/></strong></div>
           <@fields.description/>
@@ -165,14 +163,14 @@ class LineItem extends Card {
         <div class="line-item__amount">
           <strong>{{formatUSD @model.amount}}</strong>
         </div>
-      </div>
+      </CardContainer>
     </template>
   };
 }
 
 class InvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
-    <div {{attachStyles invoiceStyles}}>
+    <CardContainer @displayBoundaries={{true}} {{attachStyles invoiceStyles}}>
       <header class="header">
         <h1>Invoice</h1>
       </header>
@@ -216,13 +214,13 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
           </section>
         </div>
       </section>
-    </div>
+    </CardContainer>
   </template>
 }
 
 class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
-    <div {{attachStyles invoiceStyles}}>
+    <CardContainer @displayBoundaries={{true}} {{attachStyles invoiceStyles}}>
       <header class="header">
         <h1>Edit Invoice</h1>
       </header>
@@ -237,11 +235,6 @@ class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
         </section>
         <section class="line-items">
           <h2>Line Items</h2>
-          <header class="line-items__header">
-            <div class="label">Goods / services rendered</div>
-            <div class="label line-items__qty">Qty</div>
-            <div class="label line-items__amount">Amount</div>
-          </header>
           <div class="line-items__rows">
             <@fields.lineItems />
           </div>
@@ -266,7 +259,7 @@ class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
           </section>
         </div>
       </section>
-    </div>
+    </CardContainer>
   </template>
 }
 

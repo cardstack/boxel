@@ -1,5 +1,7 @@
 import Behavior from '@cardstack/boxel-motion/behaviors/base';
 
+import StaticBehavior from '@cardstack/boxel-motion/behaviors/static';
+import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
 import Sprite, {
   MotionOptions,
   MotionProperty,
@@ -12,6 +14,7 @@ import { Frame } from '@cardstack/boxel-motion/value/simple-frame';
 interface RowFragment {
   startColumn: number;
   frames: Frame[];
+  static: boolean;
 }
 
 export class OrchestrationMatrix {
@@ -40,7 +43,8 @@ export class OrchestrationMatrix {
         fragmentsByColumn[rowFragment.startColumn] =
           fragmentsByColumn[rowFragment.startColumn] ?? [];
         fragmentsByColumn[rowFragment.startColumn]!.push(rowFragment);
-        if (rowFragment.frames[0]) {
+        // don't backfill static frames, they're intended to only be set for their duration
+        if (rowFragment.static === false && rowFragment.frames[0]) {
           baseFrames.push(rowFragment.frames[0] as Frame);
         }
       }
@@ -49,6 +53,7 @@ export class OrchestrationMatrix {
       let activeFragments: RowFragment[] = [];
       let keyframesForSprite: Keyframe[] = [];
       let previousKeyframe: Keyframe = baseKeyframe;
+      let propertiesToRemoveFromPreviousKeyframe: string[] = [];
       for (let i = 0; i < this.totalColumns; i++) {
         if (fragmentsByColumn[i]) {
           activeFragments = activeFragments.concat(
@@ -56,12 +61,34 @@ export class OrchestrationMatrix {
           );
         }
 
+        // TODO: This is (understatement) not ideal, we'll refactor later once we know the other requirements. It would
+        //  be better if we could receive the previous frame as SimpleFrame instances, rather than a compiled keyframe.
+        // TODO: this probably also doesn't work with `transform` (or other properties we give special treatment) since
+        //  the frames will still contain the parts, rather than the compiled property.
+        // Prevent static behaviors from being forward-filled
+        previousKeyframe = Object.entries(previousKeyframe).reduce(
+          (result, [key, value]) => {
+            if (!propertiesToRemoveFromPreviousKeyframe.includes(key)) {
+              result[key] = value;
+            }
+            return result;
+          },
+          {} as Keyframe
+        );
+        propertiesToRemoveFromPreviousKeyframe = [];
+
         let needsRemoval = false;
         let frames: Frame[] = [];
         for (let fragment of activeFragments) {
           let frame = fragment.frames.shift();
-          if (frame) frames.push(frame);
-          else needsRemoval = true;
+          if (frame) {
+            frames.push(frame);
+
+            // Detect the final frame for static behaviors, so we can exclude it from future frames (no forward-fill).
+            if (!fragment.frames.length && fragment.static) {
+              propertiesToRemoveFromPreviousKeyframe.push(frame.property);
+            }
+          } else needsRemoval = true;
         }
         let newKeyframe = constructKeyframe(previousKeyframe, frames);
         keyframesForSprite.push(newKeyframe);
@@ -163,21 +190,35 @@ export class OrchestrationMatrix {
     let maxLength = 0;
     for (let sprite of motionDefinition.sprites) {
       let rowFragments: RowFragment[] = [];
-      for (let property in properties) {
-        let options = properties[property as MotionProperty];
 
-        if (options === undefined) {
-          throw Error('Options cannot be undefined');
-        }
-
-        let frames = generateFrames(sprite, property, options, timing);
-
-        if (frames) {
+      if (timing.behavior instanceof WaitBehavior) {
+        let frames = generateFrames(sprite, 'wait', {}, timing);
+        if (frames?.length) {
           rowFragments.push({
             frames,
             startColumn: 0,
+            static: true,
           });
           maxLength = Math.max(frames.length, maxLength);
+        }
+      } else {
+        for (let property in properties) {
+          let options = properties[property as MotionProperty];
+
+          if (options === undefined) {
+            throw Error('Options cannot be undefined');
+          }
+
+          let frames = generateFrames(sprite, property, options, timing);
+
+          if (frames?.length) {
+            rowFragments.push({
+              frames,
+              startColumn: 0,
+              static: timing.behavior instanceof StaticBehavior,
+            });
+            maxLength = Math.max(frames.length, maxLength);
+          }
         }
       }
       rows.set(sprite, rowFragments);

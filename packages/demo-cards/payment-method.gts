@@ -3,6 +3,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
 import { balanceInCurrency } from './currency-format';
+import { CardContainer } from '@cardstack/boxel-ui';
 
 let styles = initStyleSheet(`
   this {
@@ -25,13 +26,13 @@ export class PaymentMethod extends Card {
   static embedded = class Embedded extends Component<typeof PaymentMethod> {
     <template>
     {{#if @model.currency}}
-      <div {{attachStyles styles}}>
+      <CardContainer {{attachStyles styles}}>
         <img src={{@model.logo}} width="20" height="20"/>
         <div>
           <div class="payment-method__currency"><@fields.currency/></div>
           {{balanceInCurrency @model.balance @model.exchangeRate @model.currency}}
         </div>
-      </div>
+      </CardContainer>
     {{/if}}
     </template>
   }

@@ -11,7 +11,7 @@ import { IContext, Changeset } from './animator';
 
 import { AnimationDefinition, OrchestrationMatrix } from './orchestration';
 
-function constructKeyframe(
+export function constructKeyframe(
   previousKeyframe: Partial<Keyframe>,
   frames: Frame[]
 ) {

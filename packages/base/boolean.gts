@@ -10,9 +10,9 @@ let groupNumber = 0;
 
 class View extends Component<typeof BooleanCard> {
   <template>{{this.fieldName}}: {{@model}}</template>
-  
+
   get fieldName() {
-    if (typeof this.args.fieldName === 'string') { 
+    if (typeof this.args.fieldName === 'string') {
       return this.args.fieldName;
     }
     return undefined;
@@ -37,26 +37,28 @@ export default class BooleanCard extends Card {
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <label for="{{this.radioGroup}}_true">
-        true
-        <input type="radio" 
-          {{RadioInitializer @model true}}
-          id="{{this.radioGroup}}_true"
-          name="{{this.radioGroup}}" 
-          checked={{@model}}
-          {{on "change" (pick "target.value" (fn @set true))}}
-        />
-      </label>
-      <label for="{{this.radioGroup}}_false">
-        false
-        <input type="radio" 
-          {{RadioInitializer @model false}}
-          id="{{this.radioGroup}}_false"
-          name="{{this.radioGroup}}" 
-          checked={{not @model}}
-          {{on "change" (pick "target.value" (fn @set false))}}
-        />
-      </label>
+      <div data-test-radio-group={{@fieldName}}>
+        <label for="{{this.radioGroup}}_true">
+          True
+          <input type="radio"
+            {{RadioInitializer @model true}}
+            id="{{this.radioGroup}}_true"
+            name="{{this.radioGroup}}"
+            checked={{@model}}
+            {{on "change" (pick "target.value" (fn @set true))}}
+          />
+        </label>
+        <label for="{{this.radioGroup}}_false">
+          False
+          <input type="radio"
+            {{RadioInitializer @model false}}
+            id="{{this.radioGroup}}_false"
+            name="{{this.radioGroup}}"
+            checked={{not @model}}
+            {{on "change" (pick "target.value" (fn @set false))}}
+          />
+        </label>
+      </div>
     </template>
 
     private radioGroup = `__cardstack_bool${groupNumber++}__`;

@@ -2,6 +2,7 @@ import { contains, field, Card, Component } from 'https://cardstack.com/base/car
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
+import { CardContainer } from '@cardstack/boxel-ui';
 
 let styleSheet = initStyleSheet(`
   this {
@@ -17,7 +18,7 @@ let styleSheet = initStyleSheet(`
 class VendorTemplate extends Component<typeof Vendor> {
   <template>
     {{#if @model.vendorName}}
-      <div {{attachStyles styleSheet}}>
+      <CardContainer {{attachStyles styleSheet}}>
         <div>
           <@fields.vendorName/>
           <address>
@@ -27,7 +28,7 @@ class VendorTemplate extends Component<typeof Vendor> {
           <@fields.email/>
         </div>
         <img src={{@model.logo}} />
-      </div>
+      </CardContainer>
     {{/if}}
   </template>
 }

@@ -143,6 +143,7 @@ export default class MotionStudy extends Controller {
           {
             type: 'parallel',
             animations: [
+              moveAllCardsToMidground,
               moveClosingCardContentToForeground,
               fadeOutClosingCardContent,
             ],

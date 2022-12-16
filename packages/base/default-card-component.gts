@@ -1,82 +1,39 @@
-
 import GlimmerComponent from '@glimmer/component';
-import { initStyleSheet, attachStyles } from './attach-styles';
 import { startCase } from 'lodash';
 import type { Card } from './card-api';
-
-let defaultStyles = initStyleSheet(`
-  this {
-    border: 1px solid gray;
-    border-radius: 10px;
-    background-color: #fff;
-    padding: 1rem;
-  }
-`);
-
-let editStyles = initStyleSheet(`
-  this {
-    border: 1px solid gray;
-    border-radius: 10px;
-    background-color: #fff;
-    padding: 1rem;
-  }
-  .edit-field {
-    display: block;
-    padding: 0.75rem;
-    text-transform: capitalize;
-    background-color: #ffffff6e;
-    border: 1px solid gray;
-    margin: 0.5rem 0;
-  }
-  input[type=text],
-  input[type=number] {
-    box-sizing: border-box;
-    background-color: transparent;
-    width: 100%;
-    margin-top: .5rem;
-    display: block;
-    padding: 0.5rem;
-    font: inherit;
-    border: inherit;
-  }
-  textarea {
-    box-sizing: border-box;
-    background-color: transparent;
-    width: 100%;
-    min-height: 5rem;
-    margin-top: .5rem;
-    display: block;
-    padding: 0.5rem;
-    font: inherit;
-    border: inherit;
-  }
-`);
+import { initStyleSheet, attachStyles } from './attach-styles';
+import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <div {{attachStyles defaultStyles}}>
+    <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <Field />
         {{/unless}}
       {{/each-in}}
-    </div>
+    </CardContainer>
   </template>;
 }
 
+let styles = initStyleSheet(`
+  this {
+    padding: var(--boxel-sp);
+  }
+`);
+
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <div {{attachStyles editStyles}}>
+    <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
-          <label class="edit-field" data-test-field={{key}}>
-            {{!-- @glint-ignore glint is arriving at an incorrect type signature --}}
-            {{startCase key}}
+          {{!-- @glint-ignore glint is arriving at an incorrect type signature for 'startCase' --}}
+          <FieldContainer @label={{startCase key}} data-test-field={{key}}>
             <Field />
-          </label>
+          </FieldContainer>
         {{/unless}}
       {{/each-in}}
-    </div>
+    </CardContainer>
   </template>;
 }
 
