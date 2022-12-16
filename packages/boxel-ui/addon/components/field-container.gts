@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import cn from '../helpers/cn';
 import element from '../helpers/element';
 import { eq, not, or } from '../helpers/truth-helpers';
-// import { svgJar } from '../helpers/svg-jar';
+import { svgJar } from '../helpers/svg-jar';
 import { initStyleSheet, attachStyles } from '../attach-styles';
 
 export interface Signature {
@@ -100,7 +100,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
       {{#if @icon}}
         <div class="boxel-field--with-icon">
-          {{!-- {{svgJar @icon class="boxel-field__icon" role="presentation"}} --}}
+          {{svgJar @icon class="boxel-field__icon" role="presentation"}}
           <div class="boxel-field__yield--with-icon">
             {{yield}}
           </div>

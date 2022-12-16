@@ -50,7 +50,7 @@ export class CatalogEntry extends Card {
         <FieldContainer @label="Ref" data-test-field="ref">
           <@fields.ref/>
         </FieldContainer>
-        <FieldContainer @label="Demo" data-test-field="demo">
+        <FieldContainer @vertical={{true}} @label="Demo" data-test-field="demo">
           <@fields.demo/>
         </FieldContainer>
       </CardContainer>
