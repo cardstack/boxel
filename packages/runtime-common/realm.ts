@@ -112,7 +112,10 @@ export class Realm {
   constructor(
     url: string,
     adapter: RealmAdapter,
-    getVisitor?: (_fetch: typeof fetch) => (url: string) => Promise<string>
+    getVisitor?: (
+      _fetch: typeof fetch,
+      staticResponses: Map<string, string>
+    ) => (url: string) => Promise<string>
   ) {
     this.paths = new RealmPaths(url);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));

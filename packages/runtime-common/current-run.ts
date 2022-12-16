@@ -158,7 +158,10 @@ export class CurrentRun {
   #visit: ((url: string) => Promise<string>) | undefined;
   // TODO after the worker supports fastboot, remove the undefined type
   #getVisitor:
-    | ((_fetch: typeof fetch) => (url: string) => Promise<string>)
+    | ((
+        _fetch: typeof fetch,
+        staticResponses: Map<string, string>
+      ) => (url: string) => Promise<string>)
     | undefined;
   #staticResponses = new Map<string, string>();
   private realm: Realm;
@@ -183,7 +186,10 @@ export class CurrentRun {
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
     loader?: Loader;
-    getVisitor?: (_fetch: typeof fetch) => (url: string) => Promise<string>;
+    getVisitor?: (
+      _fetch: typeof fetch,
+      staticResponses: Map<string, string>
+    ) => (url: string) => Promise<string>;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
     this.#reader = reader;
@@ -193,7 +199,9 @@ export class CurrentRun {
     this.#ignoreMap = ignoreMap;
     this.#loader = loader ?? Loader.createLoaderFromGlobal();
     this.#getVisitor = getVisitor;
-    this.#visit = getVisitor ? getVisitor(this.fetch.bind(this)) : undefined;
+    this.#visit = getVisitor
+      ? getVisitor(this.fetch.bind(this), this.#staticResponses)
+      : undefined;
   }
 
   private fetch(
@@ -230,7 +238,7 @@ export class CurrentRun {
     this.#loader = Loader.createLoaderFromGlobal();
     this.#staticResponses = new Map();
     this.#visit = this.#getVisitor
-      ? this.#getVisitor(this.fetch.bind(this))
+      ? this.#getVisitor(this.fetch.bind(this), this.#staticResponses)
       : undefined;
     this.stats.instancesIndexed = 0;
     this.stats.instanceErrors = 0;
