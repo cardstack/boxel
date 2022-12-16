@@ -1,8 +1,8 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-// import cn from '@cardstack/boxel/helpers/cn';
-// import element from 'ember-element-helper/helpers/element';
-// import { eq, not, or } from '../helpers/truth-helpers';
-// import { svgJar } from '@cardstack/boxel/utils/svg-jar';
+import cn from '../helpers/cn';
+import element from '../helpers/element';
+import { eq, not, or } from '../helpers/truth-helpers';
+import { svgJar } from '../helpers/svg-jar';
 import { initStyleSheet, attachStyles } from '../attach-styles';
 
 export interface Signature {
@@ -17,7 +17,7 @@ export interface Signature {
     vertical?: boolean;
   };
   Blocks: {
-    'default': [],
+    default: [],
   }
 }
 
@@ -80,42 +80,36 @@ let styles = initStyleSheet(`
   }
 `);
 
-// const DIV: keyof HTMLElementTagNameMap = "div";
 const FieldContainer: TemplateOnlyComponent<Signature> = <template>
-  {{!-- {{#let (or @tag DIV) as |tag|}} --}}
-    {{!-- {{#let (element tag) as |Tag|}} --}}
-      {{!-- <Tag --}}
-      <div
-        class="boxel-field boxel-field--vertical"
-        {{!-- class={{cn "boxel-field"
-          boxel-field--vertical=(or @vertical @centeredDisplay)
-          boxel-field--horizontal=(not (or @vertical @centeredDisplay))
-          boxel-field--small-label=(eq @horizontalLabelSize "small")
-          boxel-field--centered-display=@centeredDisplay
-        }} --}}
-        {{attachStyles styles}}
-        data-test-boxel-field
-        data-test-boxel-field-id={{@fieldId}}
-        ...attributes
-      >
-        <div class="boxel-field__label" data-test-boxel-field-label>
-          <span>{{@label}}</span>
-        </div>
-
-        {{#if @icon}}
-          <div class="boxel-field--with-icon">
-            {{!-- {{svgJar @icon class="boxel-field__icon" role="presentation"}} --}}
-            <div class="boxel-field__yield--with-icon">
-              {{yield}}
-            </div>
-          </div>
-        {{else}}
-          {{yield}}
-        {{/if}}
+  {{#let (element @tag) as |Tag|}}
+    <Tag
+      class={{cn "boxel-field"
+        boxel-field--vertical=(or @vertical @centeredDisplay)
+        boxel-field--horizontal=(not (or @vertical @centeredDisplay))
+        boxel-field--small-label=(eq @horizontalLabelSize "small")
+        boxel-field--centered-display=@centeredDisplay
+      }}
+      {{attachStyles styles}}
+      data-test-boxel-field
+      data-test-boxel-field-id={{@fieldId}}
+      ...attributes
+    >
+      <div class="boxel-field__label" data-test-boxel-field-label>
+        <span>{{@label}}</span>
       </div>
-      {{!-- </Tag> --}}
-    {{!-- {{/let}} --}}
-  {{!-- {{/let}} --}}
+
+      {{#if @icon}}
+        <div class="boxel-field--with-icon">
+          {{svgJar @icon class="boxel-field__icon" role="presentation"}}
+          <div class="boxel-field__yield--with-icon">
+            {{yield}}
+          </div>
+        </div>
+      {{else}}
+        {{yield}}
+      {{/if}}
+    </Tag>
+  {{/let}}
 </template>;
 
 export default FieldContainer;

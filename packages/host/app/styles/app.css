@@ -36,6 +36,10 @@ button {
   display: grid;
   grid-template-columns: auto 1fr 1fr;
   min-height: 100vh;
+  font-family: 'Open Sans', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
 }
 
 .polling-button {
