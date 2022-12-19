@@ -538,6 +538,9 @@ export class CurrentRun {
           `/render?url=${encodeURIComponent(instanceURL.href)}&format=isolated`
         );
         html = parseRenderedCard(rawHtml);
+        // TODO i've been using this as a manual test to see the service worker
+        // index card html, unsure how to test this tho....
+        // console.log(`rendered ${instanceURL.href}:\n${html}`);
       }
     } catch (err: any) {
       uncaughtError = err;

@@ -6,7 +6,7 @@ import { WatchedArray } from './watched-array';
 import { flatten } from "flat";
 import { on } from '@ember/modifier';
 import { pick } from './pick';
-import { getBoxComponent } from './field-component';
+import { getBoxComponent, type ComponentOptions } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { getLinksToEditor } from './links-to-editor';
 import {
@@ -712,8 +712,8 @@ export class Card {
     return _createFromSerialized(this, data, doc, identityContext);
   }
 
-  static getComponent(card: Card, format: Format) {
-    return getComponent(card, format);
+  static getComponent(card: Card, format: Format, opts?: ComponentOptions) {
+    return getComponent(card, format, opts);
   }
 
   constructor(data?: Record<string, any>) {
@@ -1118,9 +1118,9 @@ function cardThunk<CardT extends CardConstructor>(cardOrThunk: CardT | (() => Ca
 
 export type SignatureFor<CardT extends CardConstructor> = { Args: { model: PartialCardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; fieldName: string | undefined } }
 
-export function getComponent(model: Card, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
+export function getComponent(model: Card, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
   let box = Box.create(model);
-  let component = getBoxComponent(model.constructor as CardConstructor, format, box);
+  let component = getBoxComponent(model.constructor as CardConstructor, format, box, opts);
   return component;
 }
 
