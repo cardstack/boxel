@@ -93,6 +93,9 @@ module('Integration | worker-renderer', function (hooks) {
         },
       } as LooseSingleCardDocument)
     );
+
+    // the staticResponses map emulates how the current-run requests a visit.
+    // there is a good chance this will change as we refactor the current-run
     staticResponses = new Map();
     {
       let result = await realm.searchIndex.card(
@@ -122,6 +125,7 @@ module('Integration | worker-renderer', function (hooks) {
         JSON.stringify(result.doc, null, 2)
       );
     }
+
     service = this.owner.lookup(
       'service:worker-renderer'
     ) as WorkerRenderer;
@@ -145,8 +149,6 @@ module('Integration | worker-renderer', function (hooks) {
         `/render?url=${encodeURIComponent(
           testRealmURL + 'Pet/mango'
         )}&format=isolated`,
-        // the staticResponses map emulates how the current-run requests a visit.
-        // there is a good chance this will change as we refactor the current-run
         staticResponses,
         (html: string) => deferred.fulfill(html)
       );
@@ -163,14 +165,13 @@ module('Integration | worker-renderer', function (hooks) {
         'the pre-rendered HTML is correct'
       );
     }
+    // Testing thru a re-render
     {
       let deferred = new Deferred<string>();
       await service.visit(
         `/render?url=${encodeURIComponent(
           testRealmURL + 'Pet/vangogh'
         )}&format=isolated`,
-        // the staticResponses map emulates how the current-run requests a visit.
-        // there is a good chance this will change as we refactor the current-run
         staticResponses,
         (html: string) => deferred.fulfill(html)
       );
