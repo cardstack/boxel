@@ -24,12 +24,6 @@ export default class WorkerRenderer extends Service {
     this.card = card;
     this.format = format;
     let html = await this.deferred.promise;
-
-    // let html = `
-    // <!--Server Side Rendered Card START-->
-    // <h1>Hello World!</h1>
-    // <!--Server Side Rendered Card END-->
-    // `;
     send(html);
   }
 

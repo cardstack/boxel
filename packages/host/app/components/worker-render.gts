@@ -52,7 +52,7 @@ class HTMLSnapshot extends Modifier<Signature> {
     [card, format]: Signature["Args"]["Positional"]
   ) {
     consume(card, format);
-    let html = element.outerHTML;
+    let html = element.innerHTML;
     this.workerRenderer.captureSnapshot(html);
   }
 }
