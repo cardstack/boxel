@@ -112,7 +112,7 @@ export class Realm {
   constructor(
     url: string,
     adapter: RealmAdapter,
-    getVisitor?: (
+    getVisitor: (
       _fetch: typeof fetch,
       staticResponses: Map<string, string>
     ) => (url: string) => Promise<string>

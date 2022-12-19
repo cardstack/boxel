@@ -41,7 +41,7 @@ export class SearchIndex {
       path: LocalPath,
       opts?: { withFallbacks?: true }
     ) => Promise<{ content: string; lastModified: number } | undefined>,
-    getVisitor?: (
+    getVisitor: (
       _fetch: typeof fetch,
       staticResponses: Map<string, string>
     ) => (url: string) => Promise<string>
