@@ -79,9 +79,6 @@ jobs:
           cache: pnpm
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build worker
-        run: pnpm prepare
-        working-directory: packages/worker
       - name: Build host dist/ for fastboot
         run: pnpm build
         working-directory: packages/host
