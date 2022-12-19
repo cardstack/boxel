@@ -7,7 +7,7 @@ import { Pet } from './pet';
 
 let styles = initStyleSheet(`
   this {
-    padding: var(--boxel-spacing);
+    padding: var(--boxel-sp);
   }
 `);
 

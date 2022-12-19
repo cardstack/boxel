@@ -49,12 +49,12 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       {{#if this.isEmpty}}
         <div data-test-empty-link>{{!-- PLACEHOLDER CONTENT --}}</div>
         <button {{on "click" this.choose}} data-test-choose-card>
-          + Add {{@field.name}}
+          + Add New
         </button>
       {{else}}
         <this.linkedCard/>
         <button {{on "click" this.remove}} data-test-remove-card disabled={{this.isEmpty}}>
-          Remove {{@field.name}}
+          Remove
         </button>
       {{/if}}
     </CardContainer>

@@ -1,6 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { initStyleSheet, attachStyles } from '../attach-styles';
 import cn from '../helpers/cn';
+import { eq } from '../helpers/truth-helpers';
 
 interface Signature {
   Element: HTMLElement;
@@ -8,11 +9,11 @@ interface Signature {
     label?: string;
     noBackground?: boolean;
     isHighlighted?: boolean;
-    large?: boolean;
+    size?: 'medium' | 'large';
   };
   Blocks: {
-    'default': [],
-    'actions': [],
+    default: [],
+    actions: [],
   }
 }
 
@@ -34,29 +35,29 @@ let styles = initStyleSheet(`
       background-color var(--boxel-transition),
       color var(--boxel-transition);
   }
-
   .boxel-header--large {
     padding: var(--boxel-sp-xl);
     font: 700 var(--boxel-font-lg);
     letter-spacing: normal;
     text-transform: none;
   }
-
+  .boxel-header--medium {
+    padding: 0;
+    margin-bottom: var(--boxel-sp);
+    font: 700 var(--boxel-font);
+    letter-spacing: normal;
+    text-transform: none;
+  }
   .boxel-header--no-background {
     background-color: transparent;
-    color: var(--boxel-header-text-color, var(--boxel-purple-400));
   }
-
   .boxel-header--highlighted {
     background-color: var(--boxel-highlight);
-    color: var(--boxel-dark);
   }
-
   .boxel-header__content {
     display: flex;
     align-items: center;
   }
-
   .boxel-header__content button {
     --boxel-icon-button-width: var(--boxel-header-min-height, 1.875rem);
     --boxel-icon-button-height: var(--boxel-header-min-height, 1.875rem);
@@ -77,7 +78,8 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       "boxel-header"
       boxel-header--no-background=@noBackground
       boxel-header--highlighted=@isHighlighted
-      boxel-header--large=@large
+      boxel-header--large=(eq @size "large")
+      boxel-header--medium=(eq @size "medium")
     }}
     {{attachStyles styles}}
     data-test-boxel-header

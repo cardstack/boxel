@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "currency": "USDC",
+      "logo": "http://local-realm/invoice-assets/currency-usdc.png",
+      "exchangeRate": 1
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/payment-method",
+        "name": "PaymentMethod"
+      }
+    }
+  }
+}

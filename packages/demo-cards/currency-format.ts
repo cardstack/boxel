@@ -1,7 +1,7 @@
 export function balanceInCurrency(
   balance: number | null | undefined,
   exchangeRate: number | null | undefined,
-  currency: string
+  currency: string = ""
 ) {
   if (balance == null || exchangeRate == null) {
     return 0;

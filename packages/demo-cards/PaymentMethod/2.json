@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "currency": "LINK",
+      "logo": "http://local-realm/invoice-assets/currency-link.png",
+      "exchangeRate": 0.0552
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/payment-method",
+        "name": "PaymentMethod"
+      }
+    }
+  }
+}

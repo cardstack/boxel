@@ -7,7 +7,7 @@ import { CardContainer } from '@cardstack/boxel-ui';
 
 let styles = initStyleSheet(`
   this {
-    padding: var(--boxel-spacing);
+    padding: var(--boxel-sp);
   }
 `);
 

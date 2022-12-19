@@ -2,6 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { initStyleSheet, attachStyles } from '../attach-styles';
 import element from '../helpers/element';
 import cn from '../helpers/cn';
+import { or } from '../helpers/truth-helpers';
 import Header from './header';
 
 interface Signature {
@@ -11,11 +12,11 @@ interface Signature {
     header?: string;
     isHighlighted?: boolean;
     displayBoundaries?: boolean;
-    largeHeader?: boolean;
+    headerSize?: 'medium' | 'large';
   };
   Blocks: {
-    'default': [],
-    'header': [],
+    default: [],
+    header: [],
   };
 }
 
@@ -28,11 +29,9 @@ let styles = initStyleSheet(`
       max-width var(--boxel-transition),
       box-shadow var(--boxel-transition);
   }
-
   .boxel-card-container--boundaries {
     box-shadow: 0 0 0 1px var(--boxel-light-500);
   }
-
   .boxel-card-container--highlighted {
     box-shadow: 0 0 0 2px var(--boxel-highlight);
   }
@@ -50,8 +49,8 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       data-test-boxel-card-container
       ...attributes
     >
-      {{#if (has-block "header")}}
-        <Header @label={{@header}} @large={{@largeHeader}}>
+      {{#if (or (has-block "header") @header)}}
+        <Header @label={{@header}} @size={{@headerSize}}>
           {{yield to="header"}}
         </Header>
       {{/if}}

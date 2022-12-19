@@ -6,72 +6,62 @@ import IntegerCard from 'https://cardstack.com/base/integer';
 import { Vendor } from './vendor';
 import { PaymentMethod } from './payment-method';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
-import { formatUSD } from './currency-format';
-import { CardContainer, FieldContainer, Header } from '@cardstack/boxel-ui';
+import { formatUSD, balanceInCurrency } from './currency-format';
+import { CardContainer, FieldContainer, Section, Label } from '@cardstack/boxel-ui';
 
 let invoiceStyles = initStyleSheet(`
   this {
-    max-width: 50rem;
-    font-size: 0.8125rem;
-    letter-spacing: 0.01em;
-    line-height: 1.25;
+    max-width: 60rem;
+    font: var(--boxel-font-sm);
+    letter-spacing: var(--boxel-lsp-xs);
     overflow: hidden;
   }
   .invoice {
-    padding: 2rem;
+    padding: var(--boxel-sp-xl);
     display: grid;
-    gap: 3rem 0;
-  }
-  h2 {
-    margin-top: 0;
-    margin-bottom: var(--boxel-sp);
-    font: 700 var(--boxel-font);
-  }
-  .label {
-    margin-bottom: 1rem;
-    color: #A0A0A0;
-    font-size: 0.6875rem;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    line-height: 1.25;
+    gap: var(--boxel-sp-xxl) 0;
   }
 
-  .line-items__header {
+  .line-items__title-row {
     display: grid;
     grid-template-columns: 3fr 1fr 2fr;
+    margin-bottom: var(--boxel-sp-xxxs);
   }
-  .line-items__header > *:nth-child(2) {
+  .line-items__title-row > *:nth-child(2) {
     justify-self: center;
   }
-  .line-items__header > *:last-child {
+  .line-items__title-row > *:last-child {
     justify-self: end;
   }
   .line-items__rows {
-    padding: 2rem 0;
-    border-top: 1px solid #E8E8E8;
-    border-bottom: 1px solid #E8E8E8;
+    padding: var(--boxel-sp-lg) 0;
+    border-top: 1px solid var(--boxel-200);
+    border-bottom: 1px solid var(--boxel-200);
   }
   .line-items__rows > * + * {
-    margin-top: 1.25rem;
+    margin-top: var(--boxel-sp-xs);
   }
 
-  .payment,
+  .payment {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 0 var(--boxel-sp-xs);
+  }
   .payment-methods {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: var(--boxel-sp-xs);
+    gap: 0 var(--boxel-sp-xs);
   }
-  .payment-methods__list > * + * {
-    margin-top: 1rem;
+  .payment-methods__bal {
+    margin-left: var(--boxel-sp-lg);
   }
 
   .balance-due {
+    justify-items: end;
     text-align: right;
   }
   .balance-due__total {
-    font-size: 1.625rem;
-    font-weight: bold;
+    font: 700 var(--boxel-font-lg);
   }
 `);
 
@@ -82,6 +72,9 @@ let detailsStyles = initStyleSheet(`
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--boxel-sp-xl);
+  }
+  .details--edit {
+    padding: var(--boxel-sp);
   }
   .details__fields {
     display: grid;
@@ -99,31 +92,27 @@ class Details extends Card {
     <template>
       <CardContainer {{attachStyles detailsStyles}}>
         <div class="details__fields">
-          <FieldContainer @label="Invoice No."><@fields.invoiceNo/></FieldContainer>
-          <FieldContainer @label="Invoice Date"><@fields.invoiceDate/></FieldContainer>
-          <FieldContainer @label="Due Date"><@fields.dueDate/></FieldContainer>
-          <FieldContainer @label="Terms"><@fields.terms/></FieldContainer>
-          <FieldContainer @label="Invoice Document"><@fields.invoiceDocument/></FieldContainer>
+          <FieldContainer @label="Invoice No." @horizontal={{true}}><@fields.invoiceNo/></FieldContainer>
+          <FieldContainer @label="Invoice Date" @horizontal={{true}}><@fields.invoiceDate/></FieldContainer>
+          <FieldContainer @label="Due Date" @horizontal={{true}}><@fields.dueDate/></FieldContainer>
+          <FieldContainer @label="Terms" @horizontal={{true}}><@fields.terms/></FieldContainer>
+          <FieldContainer @label="Invoice Document" @horizontal={{true}}><@fields.invoiceDocument/></FieldContainer>
         </div>
-        <div>
-          <FieldContainer @label="Memo"><@fields.memo/></FieldContainer>
-        </div>
+        <FieldContainer @label="Memo" @horizontal={{true}}><@fields.memo/></FieldContainer>
       </CardContainer>
     </template>
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles detailsStyles}}>
+      <CardContainer class="details--edit" @displayBoundaries={{true}} {{attachStyles detailsStyles}}>
         <div class="details__fields">
-          <FieldContainer @tag="label" @label="Invoice No."><@fields.invoiceNo/></FieldContainer>
-          <FieldContainer @tag="label" @label="Invoice Date"><@fields.invoiceDate/></FieldContainer>
-          <FieldContainer @tag="label" @label="Due Date"><@fields.dueDate/></FieldContainer>
-          <FieldContainer @tag="label" @label="Terms"><@fields.terms/></FieldContainer>
-          <FieldContainer @tag="label" @label="Invoice Document"><@fields.invoiceDocument/></FieldContainer>
+          <FieldContainer @tag="label" @label="Invoice No." @horizontal={{true}}><@fields.invoiceNo/></FieldContainer>
+          <FieldContainer @tag="label" @label="Invoice Date" @horizontal={{true}}><@fields.invoiceDate/></FieldContainer>
+          <FieldContainer @tag="label" @label="Due Date" @horizontal={{true}}><@fields.dueDate/></FieldContainer>
+          <FieldContainer @tag="label" @label="Terms" @horizontal={{true}}><@fields.terms/></FieldContainer>
+          <FieldContainer @tag="label" @label="Invoice Document" @horizontal={{true}}><@fields.invoiceDocument/></FieldContainer>
         </div>
-        <div>
-          <FieldContainer @tag="label" @vertical={{true}} @label="Memo"><@fields.memo/></FieldContainer>
-        </div>
+        <FieldContainer @tag="label" @vertical={{true}} @label="Memo"><@fields.memo/></FieldContainer>
       </CardContainer>
     </template>
   };
@@ -139,6 +128,18 @@ let lineItemStyles = initStyleSheet(`
   }
   .line-item__amount {
     justify-self: end;
+  }
+`);
+let lineItemEditStyles = initStyleSheet(`
+  this {
+    display: grid;
+    gap: var(--boxel-sp-sm);
+  }
+  .line-item__row {
+    display: grid;
+    grid-template-columns: 3fr 1fr 2fr;
+    gap: var(--boxel-sp);
+    align-items: end;
   }
 `);
 
@@ -162,50 +163,64 @@ class LineItem extends Card {
       </CardContainer>
     </template>
   };
+
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <CardContainer {{attachStyles lineItemEditStyles}}>
+        <div class="line-item__row">
+          <FieldContainer class="line-item__field" @tag="label" @label="Goods / Services Rendered"><@fields.name/></FieldContainer>
+          <FieldContainer class="line-item__field" @tag="label" @label="Qty"><@fields.quantity/></FieldContainer>
+          <FieldContainer class="line-item__field" @tag="label" @label="Amount"><@fields.amount/></FieldContainer>
+        </div>
+        <FieldContainer @tag="label" @label="Description"><@fields.description/></FieldContainer>
+      </CardContainer>
+    </template>
+  };
 }
 
 class InvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
-    <CardContainer @displayBoundaries={{true}} {{attachStyles invoiceStyles}}>
-      <Header @large={{true}}>Invoice</Header>
+    <CardContainer
+      @displayBoundaries={{true}}
+      @header="Invoice"
+      @headerSize="large"
+      {{attachStyles invoiceStyles}}
+    >
       <section class="invoice">
-        <section class="vendor">
-          <h2>Vendor</h2>
+        <Section @header="Vendor">
           <@fields.vendor/>
-        </section>
-        <section class="details">
-          <h2>Details</h2>
+        </Section>
+        <Section @header="Details">
           <@fields.details />
-        </section>
-        <section class="line-items">
-          <h2>Line Items</h2>
-          <header class="line-items__header">
-            <div class="label">Goods / services rendered</div>
-            <div class="label line-items__qty">Qty</div>
-            <div class="label line-items__amount">Amount</div>
-          </header>
+        </Section>
+        <Section @header="Line Items">
+          <div class="line-items__title-row">
+            <Label>Goods / services rendered</Label>
+            <Label>Qty</Label>
+            <Label>Amount</Label>
+          </div>
           <div class="line-items__rows">
             <@fields.lineItems />
           </div>
-        </section>
+        </Section>
         <div class="payment">
-          <section>
-            <h2>Payment Methods</h2>
-            <div class="payment-methods">
+          <Section @header="Payment Methods" class="payment-methods">
+            <FieldContainer @label="Primary Payment Method">
               <div>
-                <div class="label">Primary<br> Payment Method</div>
                 <@fields.primaryPayment/>
+                <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.primaryPayment.exchangeRate @model.primaryPayment.currency}}</div>
               </div>
-              <div class="payment-methods__list">
-                <div class="label">Alternate<br> Payment Methods</div>
-                <@fields.alternatePayments/>
+            </FieldContainer>
+            <FieldContainer @label="Alternate Payment Methods">
+              <div>
+                <@fields.alternatePayment/>
+                <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.alternatePayment.exchangeRate @model.alternatePayment.currency}}</div>
               </div>
-            </div>
-          </section>
-          <section class="balance-due">
-            <div class="label">Balance Due</div>
-            <div class="balance-due__total">{{formatUSD @model.balanceDue}}</div>
-          </section>
+            </FieldContainer>
+          </Section>
+          <FieldContainer @vertical={{true}} @label="Balance Due" class="balance-due">
+            <span class="balance-due__total">{{formatUSD @model.balanceDue}}</span>
+          </FieldContainer>
         </div>
       </section>
     </CardContainer>
@@ -214,42 +229,33 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
 
 class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
-    <CardContainer @displayBoundaries={{true}} {{attachStyles invoiceStyles}}>
-      <Header @large={{true}}>Edit Invoice</Header>
+    <CardContainer
+      @displayBoundaries={{true}}
+      @header="Edit Invoice"
+      @headerSize="large"
+      {{attachStyles invoiceStyles}}
+    >
       <section class="invoice">
-        <section class="vendor">
-          <h2>Vendor</h2>
+        <Section @header="Vendor">
           <@fields.vendor/>
-        </section>
-        <section class="details">
-          <h2>Details</h2>
+        </Section>
+        <Section @header="Details">
           <@fields.details />
-        </section>
-        <section class="line-items">
-          <h2>Line Items</h2>
-          <div class="line-items__rows">
-            <@fields.lineItems />
-          </div>
-        </section>
-        <div class="payment">
-          <section>
-            <h2>Payment Methods</h2>
-            <div class="payment-methods">
-              <div>
-                <div class="label">Primary<br> Payment Method</div>
-                <@fields.primaryPayment/>
-              </div>
-              <div class="payment-methods__list">
-                <div class="label">Alternate<br> Payment Methods</div>
-                <@fields.alternatePayments/>
-              </div>
-            </div>
-          </section>
-          <section class="balance-due">
-            <div class="label">Balance Due</div>
-            <div class="balance-due__total">{{formatUSD @model.balanceDue}}</div>
-          </section>
-        </div>
+        </Section>
+        <Section @header="Line Items">
+          <@fields.lineItems />
+        </Section>
+        <Section @header="Payment Methods" class="payment-methods">
+          <FieldContainer @tag="label" @label="Primary Payment Method">
+            <@fields.primaryPayment/>
+          </FieldContainer>
+          <FieldContainer @tag="label" @label="Alternate Payment Methods">
+            <@fields.alternatePayment/>
+          </FieldContainer>
+        </Section>
+        <FieldContainer @vertical={{true}} @label="Balance Due" class="balance-due">
+          <span class="balance-due__total">{{formatUSD @model.balanceDue}}</span>
+        </FieldContainer>
       </section>
     </CardContainer>
   </template>
@@ -259,8 +265,8 @@ export class InvoicePacket extends Card {
   @field vendor = linksTo(Vendor);
   @field details = contains(Details);
   @field lineItems = containsMany(LineItem);
-  @field primaryPayment = contains(PaymentMethod);
-  @field alternatePayments = containsMany(PaymentMethod);
+  @field primaryPayment = linksTo(PaymentMethod);
+  @field alternatePayment = linksTo(PaymentMethod);
   @field balanceDue = contains(IntegerCard, { computeVia:
     function(this: InvoicePacket) {
       return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.amount * i.quantity).reduce((a, b) => (a + b));

@@ -33,7 +33,7 @@ let styles = initStyleSheet(`
     --boxel-input-height: var(--boxel-form-control-height);
 
     box-sizing: border-box;
-    min-height: var(--boxel-input-height);
+    height: var(--boxel-input-height);
     padding: var(--boxel-sp-xxs) 0 var(--boxel-sp-xxs) var(--boxel-sp-xxs);
     border: 1px solid var(--boxel-form-control-border-color);
     border-radius: var(--boxel-form-control-border-radius);

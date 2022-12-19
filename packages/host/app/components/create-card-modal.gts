@@ -18,6 +18,8 @@ import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles'
 let modalStyles = initStyleSheet(`
   .dialog-box {
     height: 100%;
+    display: grid;
+    grid-template-rows: auto 1fr;
   }
   .dialog-box__content {
     padding: var(--boxel-sp);

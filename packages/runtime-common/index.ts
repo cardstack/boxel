@@ -88,7 +88,15 @@ export const externalsMap: Map<string, string[]> = new Map([
   ],
   [
     "@cardstack/boxel-ui",
-    ["BoxelInput", "CardContainer", "FieldContainer", "Header", "Modal"],
+    [
+      "BoxelInput",
+      "CardContainer",
+      "FieldContainer",
+      "Header",
+      "Modal",
+      "Section",
+      "Label",
+    ],
   ],
   ["@cardstack/boxel-ui/attach-styles", ["attachStyles", "initStyleSheet"]],
   ["@cardstack/boxel-ui/helpers/pick", ["default"]],

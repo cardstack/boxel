@@ -29,8 +29,7 @@
           "currency": null,
           "logo": null,
           "exchangeRate": null
-        },
-        "alternatePayments": []
+        }
       }
     },
     "relationships": {
