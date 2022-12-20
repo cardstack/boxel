@@ -21,21 +21,26 @@
           {
             "name": "Name of goods/service",
             "quantity": 1,
-            "amount": 0,
+            "amount": 100,
             "description": "January - February activity"
           }
-        ],
-        "primaryPayment": {
-          "currency": null,
-          "logo": null,
-          "exchangeRate": null
-        }
+        ]
       }
     },
     "relationships": {
       "demo.vendor": {
         "links": {
           "self": "http://local-realm/Vendor/1"
+        }
+      },
+      "demo.primaryPayment": {
+        "links": {
+          "self": "http://local-realm/PaymentMethod/3"
+        }
+      },
+      "demo.alternatePayment": {
+        "links": {
+          "self": "http://local-realm/PaymentMethod/1"
         }
       }
     },

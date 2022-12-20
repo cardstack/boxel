@@ -7,7 +7,7 @@ import { Vendor } from './vendor';
 import { PaymentMethod } from './payment-method';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { formatUSD, balanceInCurrency } from './currency-format';
-import { CardContainer, FieldContainer, Section, Label } from '@cardstack/boxel-ui';
+import { CardContainer, FieldContainer, Label } from '@cardstack/boxel-ui';
 
 let invoiceStyles = initStyleSheet(`
   this {
@@ -20,6 +20,11 @@ let invoiceStyles = initStyleSheet(`
     padding: var(--boxel-sp-xl);
     display: grid;
     gap: var(--boxel-sp-xxl) 0;
+  }
+  h2 {
+    margin-top: 0;
+    margin-bottom: var(--boxel-sp);
+    font: 700 var(--boxel-font);
   }
 
   .line-items__title-row {
@@ -92,13 +97,13 @@ class Details extends Card {
     <template>
       <CardContainer {{attachStyles detailsStyles}}>
         <div class="details__fields">
-          <FieldContainer @label="Invoice No." @horizontal={{true}}><@fields.invoiceNo/></FieldContainer>
-          <FieldContainer @label="Invoice Date" @horizontal={{true}}><@fields.invoiceDate/></FieldContainer>
-          <FieldContainer @label="Due Date" @horizontal={{true}}><@fields.dueDate/></FieldContainer>
-          <FieldContainer @label="Terms" @horizontal={{true}}><@fields.terms/></FieldContainer>
-          <FieldContainer @label="Invoice Document" @horizontal={{true}}><@fields.invoiceDocument/></FieldContainer>
+          <FieldContainer @label="Invoice No."><@fields.invoiceNo/></FieldContainer>
+          <FieldContainer @label="Invoice Date"><@fields.invoiceDate/></FieldContainer>
+          <FieldContainer @label="Due Date"><@fields.dueDate/></FieldContainer>
+          <FieldContainer @label="Terms"><@fields.terms/></FieldContainer>
+          <FieldContainer @label="Invoice Document"><@fields.invoiceDocument/></FieldContainer>
         </div>
-        <FieldContainer @label="Memo" @horizontal={{true}}><@fields.memo/></FieldContainer>
+        <FieldContainer @label="Memo"><@fields.memo/></FieldContainer>
       </CardContainer>
     </template>
   };
@@ -106,11 +111,11 @@ class Details extends Card {
     <template>
       <CardContainer class="details--edit" @displayBoundaries={{true}} {{attachStyles detailsStyles}}>
         <div class="details__fields">
-          <FieldContainer @tag="label" @label="Invoice No." @horizontal={{true}}><@fields.invoiceNo/></FieldContainer>
-          <FieldContainer @tag="label" @label="Invoice Date" @horizontal={{true}}><@fields.invoiceDate/></FieldContainer>
-          <FieldContainer @tag="label" @label="Due Date" @horizontal={{true}}><@fields.dueDate/></FieldContainer>
-          <FieldContainer @tag="label" @label="Terms" @horizontal={{true}}><@fields.terms/></FieldContainer>
-          <FieldContainer @tag="label" @label="Invoice Document" @horizontal={{true}}><@fields.invoiceDocument/></FieldContainer>
+          <FieldContainer @tag="label" @label="Invoice No."><@fields.invoiceNo/></FieldContainer>
+          <FieldContainer @tag="label" @label="Invoice Date"><@fields.invoiceDate/></FieldContainer>
+          <FieldContainer @tag="label" @label="Due Date"><@fields.dueDate/></FieldContainer>
+          <FieldContainer @tag="label" @label="Terms"><@fields.terms/></FieldContainer>
+          <FieldContainer @tag="label" @label="Invoice Document"><@fields.invoiceDocument/></FieldContainer>
         </div>
         <FieldContainer @tag="label" @vertical={{true}} @label="Memo"><@fields.memo/></FieldContainer>
       </CardContainer>
@@ -168,11 +173,11 @@ class LineItem extends Card {
     <template>
       <CardContainer {{attachStyles lineItemEditStyles}}>
         <div class="line-item__row">
-          <FieldContainer class="line-item__field" @tag="label" @label="Goods / Services Rendered"><@fields.name/></FieldContainer>
-          <FieldContainer class="line-item__field" @tag="label" @label="Qty"><@fields.quantity/></FieldContainer>
-          <FieldContainer class="line-item__field" @tag="label" @label="Amount"><@fields.amount/></FieldContainer>
+          <FieldContainer class="line-item__field" @tag="label" @label="Goods / Services Rendered" @vertical={{true}}><@fields.name/></FieldContainer>
+          <FieldContainer class="line-item__field" @tag="label" @label="Qty" @vertical={{true}}><@fields.quantity/></FieldContainer>
+          <FieldContainer class="line-item__field" @tag="label" @label="Amount" @vertical={{true}}><@fields.amount/></FieldContainer>
         </div>
-        <FieldContainer @tag="label" @label="Description"><@fields.description/></FieldContainer>
+        <FieldContainer @tag="label" @label="Description" @vertical={{true}}><@fields.description/></FieldContainer>
       </CardContainer>
     </template>
   };
@@ -182,18 +187,20 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
     <CardContainer
       @displayBoundaries={{true}}
-      @header="Invoice"
-      @headerSize="large"
+      @title="Invoice"
       {{attachStyles invoiceStyles}}
     >
       <section class="invoice">
-        <Section @header="Vendor">
+        <section>
+          <h2>Vendor</h2>
           <@fields.vendor/>
-        </Section>
-        <Section @header="Details">
-          <@fields.details />
-        </Section>
-        <Section @header="Line Items">
+        </section>
+        <section>
+          <h2>Details</h2>
+          <@fields.details/>
+        </section>
+        <section>
+          <h2>Line Items</h2>
           <div class="line-items__title-row">
             <Label>Goods / services rendered</Label>
             <Label>Qty</Label>
@@ -202,22 +209,25 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
           <div class="line-items__rows">
             <@fields.lineItems />
           </div>
-        </Section>
+        </section>
         <div class="payment">
-          <Section @header="Payment Methods" class="payment-methods">
-            <FieldContainer @label="Primary Payment Method">
-              <div>
-                <@fields.primaryPayment/>
-                <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.primaryPayment.exchangeRate @model.primaryPayment.currency}}</div>
-              </div>
-            </FieldContainer>
-            <FieldContainer @label="Alternate Payment Methods">
-              <div>
-                <@fields.alternatePayment/>
-                <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.alternatePayment.exchangeRate @model.alternatePayment.currency}}</div>
-              </div>
-            </FieldContainer>
-          </Section>
+          <section>
+            <h2>Payment Methods</h2>
+            <div class="payment-methods">
+              <FieldContainer @label="Primary Payment Method" @vertical={{true}}>
+                <div>
+                  <@fields.primaryPayment/>
+                  <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.primaryPayment.exchangeRate @model.primaryPayment.currency}}</div>
+                </div>
+              </FieldContainer>
+              <FieldContainer @label="Alternate Payment Methods" @vertical={{true}}>
+                <div>
+                  <@fields.alternatePayment/>
+                  <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.alternatePayment.exchangeRate @model.alternatePayment.currency}}</div>
+                </div>
+              </FieldContainer>
+            </div>
+          </section>
           <FieldContainer @vertical={{true}} @label="Balance Due" class="balance-due">
             <span class="balance-due__total">{{formatUSD @model.balanceDue}}</span>
           </FieldContainer>
@@ -231,29 +241,34 @@ class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
     <CardContainer
       @displayBoundaries={{true}}
-      @header="Edit Invoice"
-      @headerSize="large"
+      @title="Edit Invoice"
       {{attachStyles invoiceStyles}}
     >
       <section class="invoice">
-        <Section @header="Vendor">
+        <section>
+          <h2>Vendor</h2>
           <@fields.vendor/>
-        </Section>
-        <Section @header="Details">
+        </section>
+        <section>
+          <h2>Details</h2>
           <@fields.details />
-        </Section>
-        <Section @header="Line Items">
+        </section>
+        <section>
+          <h2>Line Items</h2>
           <@fields.lineItems />
-        </Section>
-        <Section @header="Payment Methods" class="payment-methods">
-          <FieldContainer @tag="label" @label="Primary Payment Method">
-            <@fields.primaryPayment/>
-          </FieldContainer>
-          <FieldContainer @tag="label" @label="Alternate Payment Methods">
-            <@fields.alternatePayment/>
-          </FieldContainer>
-        </Section>
-        <FieldContainer @vertical={{true}} @label="Balance Due" class="balance-due">
+        </section>
+        <section>
+          <h2>Payment Methods</h2>
+          <div class="payment-methods">
+            <FieldContainer @tag="label" @label="Primary Payment Method" @vertical={{true}}>
+              <@fields.primaryPayment/>
+            </FieldContainer>
+            <FieldContainer @tag="label" @label="Alternate Payment Methods" @vertical={{true}}>
+              <@fields.alternatePayment/>
+            </FieldContainer>
+          </div>
+        </section>
+        <FieldContainer @label="Balance Due" class="balance-due" @vertical={{true}}>
           <span class="balance-due__total">{{formatUSD @model.balanceDue}}</span>
         </FieldContainer>
       </section>

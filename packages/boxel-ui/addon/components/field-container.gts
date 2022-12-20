@@ -13,7 +13,6 @@ export interface Signature {
     centeredDisplay?: boolean;
     fieldId?: string;
     label: string;
-    horizontal?: boolean;
     horizontalLabelSize?: string;
     icon?: string;
     vertical?: boolean;
@@ -79,7 +78,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
     <Tag
       class={{cn "boxel-field"
         boxel-field--vertical=(or @vertical @centeredDisplay)
-        boxel-field--horizontal=@horizontal
+        boxel-field--horizontal=(not (or @vertical @centeredDisplay))
         boxel-field--small-label=(eq @horizontalLabelSize "small")
         boxel-field--centered-display=@centeredDisplay
       }}

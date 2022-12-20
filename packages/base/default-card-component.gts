@@ -28,7 +28,7 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
     <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
-          {{!-- @glint-ignore glint is arriving at an incorrect type signature for 'startCase' --}}
+          {{!-- @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') --}}
           <FieldContainer @vertical={{true}} @label={{startCase key}} data-test-field={{key}}>
             <Field />
           </FieldContainer>

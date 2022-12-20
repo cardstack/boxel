@@ -39,7 +39,7 @@ let linksToEditorStyles = initStyleSheet(`
     text-transform: capitalize;
   }
   button:hover {
-    color: #00EBE5;
+    color: var(--boxel-highlight);
   }
 `);
 

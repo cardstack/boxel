@@ -16,18 +16,32 @@ import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 
 let modalStyles = initStyleSheet(`
-  .dialog-box {
+  .create-card-modal {
     height: 100%;
     display: grid;
     grid-template-rows: auto 1fr;
   }
-  .dialog-box__content {
+  .create-card-modal__content {
     padding: var(--boxel-sp);
     height: 100%;
     overflow: auto;
   }
-  .dialog-box__content > * + * {
-    margin-top: 1em;
+  .create-card-modal__content > * + * {
+    margin-top: var(--boxel-sp);
+  }
+  .create-card-modal__close {
+    border: none;
+    background: none;
+    font: var(--boxel-font-lg);
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 50px;
+    height: 50px;
+    padding: 0;
+  }
+  .create-card-modal__close:hover {
+    color: var(--boxel-highlight);
   }
 `);
 
@@ -43,11 +57,11 @@ export default class CreateCardModal extends Component {
           {{attachStyles modalStyles}}
           data-test-create-new-card={{card.constructor.name}}
         >
-          <CardContainer class="dialog-box" @displayBoundaries={{true}}>
-            <Header @label="Create New Card" @large={{true}}>
-              <button {{on "click" (fn this.save undefined)}} type="button">X Close</button>
+          <CardContainer class="create-card-modal" @displayBoundaries={{true}}>
+            <Header @title="Create New Card">
+              <button {{on "click" (fn this.save undefined)}} class="create-card-modal__close">x</button>
             </Header>
-            <section class="dialog-box__content">
+            <section class="create-card-modal__content">
               <CardEditor
                 @card={{card}}
                 @onSave={{this.save}}

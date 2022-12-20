@@ -94,7 +94,6 @@ export const externalsMap: Map<string, string[]> = new Map([
       "FieldContainer",
       "Header",
       "Modal",
-      "Section",
       "Label",
     ],
   ],

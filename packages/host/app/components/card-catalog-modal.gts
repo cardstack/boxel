@@ -16,18 +16,32 @@ import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 
 let modalStyles = initStyleSheet(`
-  .dialog-box {
+  .card-catalog-modal {
     height: 100%;
     display: grid;
     grid-template-rows: auto 1fr;
   }
-  .dialog-box__content {
+  .card-catalog-modal__content {
     padding: var(--boxel-sp);
     height: 100%;
     overflow: auto;
   }
-  .dialog-box__content > * + * {
+  .card-catalog-modal__content > * + * {
     margin-top: var(--boxel-sp);
+  }
+  .card-catalog-modal__close {
+    border: none;
+    background: none;
+    font: var(--boxel-font-lg);
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 50px;
+    height: 50px;
+    padding: 0;
+  }
+  .card-catalog-modal__close:hover {
+    color: var(--boxel-highlight);
   }
 `);
 
@@ -42,11 +56,11 @@ export default class CardCatalogModal extends Component {
         {{attachStyles modalStyles}}
         data-test-card-catalog-modal
       >
-        <CardContainer class="dialog-box" @displayBoundaries={{true}}>
-          <Header @label="Card Catalog" @large={{true}}>
-            <button {{on "click" (fn this.pick undefined)}} type="button">X Close</button>
+        <CardContainer class="card-catalog-modal" @displayBoundaries={{true}}>
+          <Header @title="Card Catalog">
+            <button {{on "click" (fn this.pick undefined)}} class="card-catalog-modal__close">x</button>
           </Header>
-          <section class="dialog-box__content">
+          <section class="card-catalog-modal__content">
             {{#if this.currentRequest.search.isLoading}}
               Loading...
             {{else}}
@@ -57,7 +71,7 @@ export default class CardCatalogModal extends Component {
                 {{#each this.currentRequest.search.instances as |card|}}
                   <li data-test-card-catalog-item={{card.id}}>
                     <Preview @card={{card}} @format="embedded" />
-                    <button {{on "click" (fn this.pick card)}} type="button" data-test-select={{card.id}}>
+                    <button {{on "click" (fn this.pick card)}} data-test-select={{card.id}}>
                       Select
                     </button>
                   </li>

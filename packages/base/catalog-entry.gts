@@ -41,13 +41,13 @@ export class CatalogEntry extends Card {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
-        <FieldContainer @tag="label" @label="Title" @horizontal={{true}} data-test-field="title">
+        <FieldContainer @tag="label" @label="Title" data-test-field="title">
           <@fields.title/>
         </FieldContainer>
-        <FieldContainer @tag="label" @label="Description" @horizontal={{true}} data-test-field="description">
+        <FieldContainer @tag="label" @label="Description" data-test-field="description">
           <@fields.description/>
         </FieldContainer>
-        <FieldContainer @label="Ref" @horizontal={{true}} data-test-field="ref">
+        <FieldContainer @label="Ref" data-test-field="ref">
           <@fields.ref/>
         </FieldContainer>
         <FieldContainer @vertical={{true}} @label="Demo" data-test-field="demo">

@@ -1,15 +1,17 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { initStyleSheet, attachStyles } from '../attach-styles';
 import cn from '../helpers/cn';
-import { eq } from '../helpers/truth-helpers';
+import { or, eq } from '../helpers/truth-helpers';
+import Label from './label';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     label?: string;
+    title?: string;
+    size?: 'large';
     noBackground?: boolean;
     isHighlighted?: boolean;
-    size?: 'medium' | 'large';
   };
   Blocks: {
     default: [],
@@ -38,13 +40,6 @@ let styles = initStyleSheet(`
   .boxel-header--large {
     padding: var(--boxel-sp-xl);
     font: 700 var(--boxel-font-lg);
-    letter-spacing: normal;
-    text-transform: none;
-  }
-  .boxel-header--medium {
-    padding: 0;
-    margin-bottom: var(--boxel-sp);
-    font: 700 var(--boxel-font);
     letter-spacing: normal;
     text-transform: none;
   }
@@ -78,17 +73,17 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       "boxel-header"
       boxel-header--no-background=@noBackground
       boxel-header--highlighted=@isHighlighted
-      boxel-header--large=(eq @size "large")
-      boxel-header--medium=(eq @size "medium")
+      boxel-header--large=(or @title (eq @size "large"))
     }}
     {{attachStyles styles}}
     data-test-boxel-header
     ...attributes
   >
-    {{#if @label}}
-      <span data-test-boxel-header-label>
-        {{@label}}
-      </span>
+    {{#if (or @label @title)}}
+      <div>
+        {{#if @label}}<Label data-test-boxel-header-label>{{@label}}</Label>{{/if}}
+        {{#if @title}}{{@title}}{{/if}}
+      </div>
     {{/if}}
 
     {{yield}}

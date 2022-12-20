@@ -9,10 +9,10 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     tag?: keyof HTMLElementTagNameMap;
-    header?: string;
+    label?: string;
+    title?: string;
     isHighlighted?: boolean;
     displayBoundaries?: boolean;
-    headerSize?: 'medium' | 'large';
   };
   Blocks: {
     default: [],
@@ -49,8 +49,8 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       data-test-boxel-card-container
       ...attributes
     >
-      {{#if (or (has-block "header") @header)}}
-        <Header @label={{@header}} @size={{@headerSize}}>
+      {{#if (or (has-block "header") @label @title)}}
+        <Header @label={{@label}} @title={{@title}}>
           {{yield to="header"}}
         </Header>
       {{/if}}
