@@ -77,8 +77,6 @@ export class MessageHandler {
       id,
       staticResponses,
     });
-
-    // TODO implement a timeout
     return await deferred.promise;
   }
 }
