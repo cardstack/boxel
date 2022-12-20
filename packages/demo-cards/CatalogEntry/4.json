@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "InvoicePacket",
-      "description": "Catalog entry for InvoicePacket card",
+      "title": "Invoice Packet",
+      "description": "Catalog entry for Invoice Packet card",
       "ref": {
         "module": "http://local-realm/invoice-packet",
         "name": "InvoicePacket"
@@ -24,7 +24,9 @@
             "amount": 100,
             "description": "January - February activity"
           }
-        ]
+        ],
+        "notes": [],
+        "history": []
       }
     },
     "relationships": {
@@ -41,6 +43,11 @@
       "demo.alternatePayment": {
         "links": {
           "self": "http://local-realm/PaymentMethod/1"
+        }
+      },
+      "demo.notes.0.author": {
+        "links": {
+          "self": null
         }
       }
     },

@@ -17,12 +17,14 @@ export class Person extends Card {
   @field isCool = contains(BooleanCard);
   @field isHuman = contains(BooleanCard);
   @field pet = linksTo(Pet);
+  @field username = contains(StringCard);
+  @field imageURL = contains(StringCard);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h3><@fields.firstName/> <@fields.lastName/></h3>
-        <div><@fields.pet/></div>
+        {{#if @model.pet}}<div><@fields.pet/></div>{{/if}}
       </CardContainer>
     </template>
   }
@@ -33,7 +35,7 @@ export class Person extends Card {
         <h2><@fields.firstName/> <@fields.lastName /></h2>
         <div><@fields.isCool/></div>
         <div><@fields.isHuman/></div>
-        <@fields.pet/>
+        {{#if @model.pet}}<@fields.pet/>{{/if}}
       </CardContainer>
     </template>
   }

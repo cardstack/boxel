@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Elena",
+      "lastName": "Hopkins",
+      "isCool": false,
+      "isHuman": false,
+      "username": "Elena Hopkins",
+      "imageURL": null
+    },
+    "relationships": {
+      "pet": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/person",
+        "name": "Person"
+      }
+    }
+  }
+}

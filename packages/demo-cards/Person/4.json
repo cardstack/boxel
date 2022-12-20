@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Jane",
+      "lastName": "Appleseed",
+      "isCool": false,
+      "isHuman": false,
+      "username": "Jane Appleseed",
+      "imageURL": null
+    },
+    "relationships": {
+      "pet": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/person",
+        "name": "Person"
+      }
+    }
+  }
+}

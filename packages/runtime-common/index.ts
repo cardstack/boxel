@@ -95,6 +95,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "Header",
       "Modal",
       "Label",
+      "Message",
     ],
   ],
   ["@cardstack/boxel-ui/attach-styles", ["attachStyles", "initStyleSheet"]],

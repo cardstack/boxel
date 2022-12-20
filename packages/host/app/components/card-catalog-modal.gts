@@ -52,7 +52,6 @@ export default class CardCatalogModal extends Component {
         @size="large"
         @isOpen={{true}}
         @onClose={{fn this.pick undefined}}
-        @layer={{unless this.isCreatingNew "urgent"}}
         {{attachStyles modalStyles}}
         data-test-card-catalog-modal
       >
@@ -91,7 +90,6 @@ export default class CardCatalogModal extends Component {
     deferred: Deferred<Card | undefined>;
     opts?: { offerToCreate?: CardRef };
   } | undefined = undefined;
-  @tracked isCreatingNew = false;
 
   constructor(owner: unknown, args: {}) {
     super(owner, args);
@@ -127,7 +125,6 @@ export default class CardCatalogModal extends Component {
   }
 
   @action async createNew(ref: CardRef): Promise<void> {
-    this.isCreatingNew = true;
     let newCard = await createNewCard(ref);
     this.pick(newCard);
   }

@@ -2,19 +2,24 @@ import { contains, containsMany, linksTo, field, Card, Component } from 'https:/
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import DateCard from 'https://cardstack.com/base/date';
+import DatetimeCard from "https://cardstack.com/base/datetime";
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { Vendor } from './vendor';
+import { Person } from "./person";
 import { PaymentMethod } from './payment-method';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { formatUSD, balanceInCurrency } from './currency-format';
-import { CardContainer, FieldContainer, Label } from '@cardstack/boxel-ui';
+import { CardContainer, FieldContainer, Label, Message } from '@cardstack/boxel-ui';
 
 let invoiceStyles = initStyleSheet(`
   this {
-    max-width: 60rem;
+    max-width: 50rem;
     font: var(--boxel-font-sm);
     letter-spacing: var(--boxel-lsp-xs);
     overflow: hidden;
+  }
+  .invoice-template-editor {
+    --boxel-label-color: var(--boxel-dark);
   }
   .invoice {
     padding: var(--boxel-sp-xl);
@@ -47,11 +52,7 @@ let invoiceStyles = initStyleSheet(`
     margin-top: var(--boxel-sp-xs);
   }
 
-  .payment {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 0 var(--boxel-sp-xs);
-  }
+  .payment,
   .payment-methods {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -67,6 +68,25 @@ let invoiceStyles = initStyleSheet(`
   }
   .balance-due__total {
     font: 700 var(--boxel-font-lg);
+  }
+
+  .extras {
+    padding: var(--boxel-sp-xl);
+    display: grid;
+    gap: var(--boxel-sp-xxl) 0;
+    background-color: var(--boxel-100);
+  }
+
+  .notes,
+  .history {
+    --boxel-border-radius: 20px;
+    padding: var(--boxel-sp);
+  }
+  .notes > * + *,
+  .history > * + * {
+    margin-top: var(--boxel-sp);
+    padding-top: var(--boxel-sp);
+    border-top: 1px solid var(--boxel-200);
   }
 `);
 
@@ -147,7 +167,6 @@ let lineItemEditStyles = initStyleSheet(`
     align-items: end;
   }
 `);
-
 class LineItem extends Card {
   @field name = contains(StringCard);
   @field quantity = contains(IntegerCard);
@@ -168,7 +187,6 @@ class LineItem extends Card {
       </CardContainer>
     </template>
   };
-
   static edit = class Edit extends Component<typeof this> {
     <template>
       <CardContainer {{attachStyles lineItemEditStyles}}>
@@ -181,6 +199,24 @@ class LineItem extends Card {
       </CardContainer>
     </template>
   };
+}
+
+class Note extends Card {
+  @field author = linksTo(Person); /* computed */
+  @field text = contains(TextAreaCard);
+  @field timestamp = contains(DatetimeCard); /* computed */
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <Message
+        @name={{@model.author.username}}
+        @imgURL={{@model.author.imageURL}}
+        @datetime={{@model.timestamp}}
+      >
+        <@fields.text/>
+      </Message>
+    </template>
+  }
 }
 
 class InvoiceTemplate extends Component<typeof InvoicePacket> {
@@ -233,15 +269,28 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
           </FieldContainer>
         </div>
       </section>
+      <section class="extras">
+        <section>
+          <h2>Notes</h2>
+          <CardContainer class="notes">
+            <@fields.notes/>
+          </CardContainer>
+        </section>
+        <section>
+          <h2>History</h2>
+          <@fields.history/>
+        </section>
+      </section>
     </CardContainer>
   </template>
 }
 
-class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
+class EditTemplate extends Component<typeof InvoicePacket> {
   <template>
     <CardContainer
       @displayBoundaries={{true}}
       @title="Edit Invoice"
+      class="invoice-template-editor"
       {{attachStyles invoiceStyles}}
     >
       <section class="invoice">
@@ -287,8 +336,10 @@ export class InvoicePacket extends Card {
       return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.amount * i.quantity).reduce((a, b) => (a + b));
     }
   });
+  @field notes = containsMany(Note);
+  @field history = containsMany(StringCard); /* computed */
 
   static embedded = InvoiceTemplate;
   static isolated = InvoiceTemplate;
-  static edit = EditInvoiceTemplate;
+  static edit = EditTemplate;
 }

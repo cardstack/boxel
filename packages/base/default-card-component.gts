@@ -5,6 +5,12 @@ import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles'
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
+let styles = initStyleSheet(`
+  this {
+    padding: var(--boxel-sp);
+  }
+`);
+
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
     <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
@@ -17,15 +23,17 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Re
   </template>;
 }
 
-let styles = initStyleSheet(`
+let editStyles = initStyleSheet(`
   this {
     padding: var(--boxel-sp);
+    display: grid;
+    gap: var(--boxel-sp);
   }
 `);
 
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
+    <CardContainer @displayBoundaries={{true}} {{attachStyles editStyles}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           {{!-- @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') --}}

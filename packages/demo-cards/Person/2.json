@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Lucas",
+      "lastName": "Forbes",
+      "isCool": false,
+      "isHuman": false,
+      "username": "Lucas Forbes"
+    },
+    "relationships": {
+      "pet": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/person",
+        "name": "Person"
+      }
+    }
+  }
+}
