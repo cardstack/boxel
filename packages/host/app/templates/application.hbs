@@ -1,1 +1,7 @@
 {{outlet}}
+
+{{#unless this.model.isFastBoot}}
+  <template shadowroot="open">
+    <WorkerRender/>
+  </template>
+{{/unless}}

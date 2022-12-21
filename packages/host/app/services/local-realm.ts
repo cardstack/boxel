@@ -1,9 +1,8 @@
-import Service from '@ember/service';
+import Service, { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
-import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
 
 import {
@@ -14,6 +13,7 @@ import {
 import { timeout } from '@cardstack/worker/src/util';
 import { Deferred } from '@cardstack/runtime-common';
 import { TaskInstance } from 'ember-resources';
+import WorkerRenderer from './worker-renderer';
 
 export default class LocalRealm extends Service {
   realmMappings = new Map<string, string>();
@@ -47,6 +47,16 @@ export default class LocalRealm extends Service {
           return;
         }
         break;
+      case 'available':
+        if (data.type === 'visitRequest') {
+          let { id, path, staticResponses } = data;
+          let worker = this.state.worker;
+          // might want to keep track of these promises for orderly tear down...
+          this.workerRenderer.visit(path, staticResponses, (html) =>
+            send(worker, { type: 'visitResponse', id, path, html })
+          );
+          return;
+        }
     }
     console.log(`did not handle worker message`, data);
   }
@@ -110,6 +120,7 @@ export default class LocalRealm extends Service {
 
   @service declare router: RouterService;
   @service declare fastboot: { isFastBoot: boolean };
+  @service declare workerRenderer: WorkerRenderer;
 
   get isAvailable(): boolean {
     this.maybeSetup();

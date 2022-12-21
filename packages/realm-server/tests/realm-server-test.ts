@@ -49,7 +49,11 @@ module("Realm Server", function (hooks) {
       testRealmHref,
       new NodeAdapter(resolve(dir.name)),
       (_fetch: typeof fetch) => async (_url: string) => {
-        return `card render is not implemented`;
+        return `
+          <!--Server Side Rendered Card START-->
+            <h1>Test card HTML</h1>
+          <!--Server Side Rendered Card END-->
+        `;
       }
     );
     await testRealm.ready;

@@ -107,8 +107,7 @@ class URLMap<T> {
 export interface SearchEntry {
   resource: CardResource;
   searchData: Record<string, any>;
-  // TODO after we have a worker form of card rendering this should not be undefined
-  html: string | undefined;
+  html: string;
   types: string[];
   deps: Set<string>;
 }
@@ -154,12 +153,11 @@ export class CurrentRun {
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
   #loader: Loader;
-  // TODO after the worker supports fastboot, remove the undefined type
-  #visit: ((url: string) => Promise<string>) | undefined;
-  // TODO after the worker supports fastboot, remove the undefined type
-  #getVisitor:
-    | ((_fetch: typeof fetch) => (url: string) => Promise<string>)
-    | undefined;
+  #visit: (url: string) => Promise<string>;
+  #getVisitor: (
+    _fetch: typeof fetch,
+    staticResponses: Map<string, string>
+  ) => (url: string) => Promise<string>;
   #staticResponses = new Map<string, string>();
   private realm: Realm;
   readonly stats: Stats = {
@@ -183,7 +181,10 @@ export class CurrentRun {
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
     loader?: Loader;
-    getVisitor?: (_fetch: typeof fetch) => (url: string) => Promise<string>;
+    getVisitor: (
+      _fetch: typeof fetch,
+      staticResponses: Map<string, string>
+    ) => (url: string) => Promise<string>;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
     this.#reader = reader;
@@ -193,7 +194,7 @@ export class CurrentRun {
     this.#ignoreMap = ignoreMap;
     this.#loader = loader ?? Loader.createLoaderFromGlobal();
     this.#getVisitor = getVisitor;
-    this.#visit = getVisitor ? getVisitor(this.fetch.bind(this)) : undefined;
+    this.#visit = getVisitor(this.fetch.bind(this), this.#staticResponses);
   }
 
   private fetch(
@@ -229,9 +230,10 @@ export class CurrentRun {
     this.#ignoreMap = new URLMap();
     this.#loader = Loader.createLoaderFromGlobal();
     this.#staticResponses = new Map();
-    this.#visit = this.#getVisitor
-      ? this.#getVisitor(this.fetch.bind(this))
-      : undefined;
+    this.#visit = this.#getVisitor(
+      this.fetch.bind(this),
+      this.#staticResponses
+    );
     this.stats.instancesIndexed = 0;
     this.stats.instanceErrors = 0;
     this.stats.moduleErrors = 0;
@@ -524,13 +526,10 @@ export class CurrentRun {
         JSON.stringify(cachedDoc, null, 2)
       );
       let rawHtml: string | undefined;
-      // TODO This guard is temporary until we have a worker form of a card render
-      if (this.#visit) {
-        rawHtml = await this.#visit(
-          `/render?url=${encodeURIComponent(instanceURL.href)}&format=isolated`
-        );
-        html = parseRenderedCard(rawHtml);
-      }
+      rawHtml = await this.#visit(
+        `/render?url=${encodeURIComponent(instanceURL.href)}&format=isolated`
+      );
+      html = parseRenderedCard(rawHtml);
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -538,7 +537,7 @@ export class CurrentRun {
     if (!uncaughtError && cardType) {
       typesMaybeError = await this.getTypes(cardType);
     }
-    if (searchData && doc && typesMaybeError?.type === "types") {
+    if (html && searchData && doc && typesMaybeError?.type === "types") {
       this.stats.instancesIndexed++;
       this.#instances.set(instanceURL, {
         type: "entry",
@@ -873,11 +872,6 @@ function invalidate(
 }
 
 function parseRenderedCard(html: string): string {
-  // TODO this is just scaffolding until we have a worker pre-render
-  if (html.includes("not implemented")) {
-    return html;
-  }
-
   if (html.includes(renderedCardTokens.success.start)) {
     return html.substring(
       html.indexOf(renderedCardTokens.success.start) +
