@@ -9,6 +9,9 @@ patchedDependencies:
   magic-string@0.25.9:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
+  start-server-and-test@1.14.0:
+    hash: mmy4gucttlhphfhhygv6ocao3q
+    path: patches/start-server-and-test@1.14.0.patch
 
 importers:
 
@@ -851,7 +854,7 @@ importers:
       qs: 6.11.0
       qunit: 2.19.3
       qunit-dom: 2.0.0
-      start-server-and-test: 1.14.0
+      start-server-and-test: 1.14.0_mmy4gucttlhphfhhygv6ocao3q
       tracked-built-ins: 2.0.1
       typescript: 4.9.3
       webpack: 5.75.0
@@ -896,7 +899,7 @@ importers:
       fs-extra: 10.1.0
       qs: 6.11.0
       qunit: 2.19.3
-      start-server-and-test: 1.14.0
+      start-server-and-test: 1.14.0_mmy4gucttlhphfhhygv6ocao3q
       supertest: 6.3.1
       tmp: 0.2.1
       ts-node: 10.9.1_wup25etrarvlqkprac7h35hj7u
@@ -3875,7 +3878,7 @@ packages:
   /@types/ember__controller/4.0.3:
     resolution: {integrity: sha512-7+Lpgcsa/gjGZtUN0JfQoLzUStCT68p8o6t1e4LBXyC+a5DHg2NJYFZ0U3f8F8TgQJcgtFoUAuv8p77XY6FxwQ==}
     dependencies:
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
     dev: true
 
   /@types/ember__controller/4.0.3_@babel+core@7.20.2:
@@ -5465,7 +5468,7 @@ packages:
       '@babel/core': ^7.0.0
       webpack: '>=2'
     dependencies:
-      '@babel/core': 7.20.2_supports-color@8.1.1
+      '@babel/core': 7.20.2
       find-cache-dir: 3.3.2
       loader-utils: 2.0.4
       make-dir: 3.1.0
@@ -7223,7 +7226,7 @@ packages:
       mississippi: 3.0.0
       mkdirp: 0.5.6
       move-concurrently: 1.0.1
-      promise-inflight: 1.0.1_bluebird@3.7.2
+      promise-inflight: 1.0.1
       rimraf: 2.7.1
       ssri: 6.0.2
       unique-filename: 1.1.1
@@ -16496,17 +16499,6 @@ packages:
         optional: true
     dev: true
 
-  /promise-inflight/1.0.1_bluebird@3.7.2:
-    resolution: {integrity: sha512-6zWPyEOFaQBJYcGMHBKTKJ3u6TBsnMFOIZSa6ce1e/ZrrsOlnHRHbabMjLiBYKp+n44X9eUI6VUPaukCXHuG4g==}
-    peerDependencies:
-      bluebird: '*'
-    peerDependenciesMeta:
-      bluebird:
-        optional: true
-    dependencies:
-      bluebird: 3.7.2
-    dev: true
-
   /promise-map-series/0.2.3:
     resolution: {integrity: sha512-wx9Chrutvqu1N/NHzTayZjE1BgIwt6SJykQoCOic4IZ9yUDjKyVYrpLa/4YCNsV61eRENfs29hrEquVuB13Zlw==}
     dependencies:
@@ -17985,7 +17977,7 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  /start-server-and-test/1.14.0:
+  /start-server-and-test/1.14.0_mmy4gucttlhphfhhygv6ocao3q:
     resolution: {integrity: sha512-on5ELuxO2K0t8EmNj9MtVlFqwBMxfWOhu4U7uZD1xccVpFlOQKR93CSe0u98iQzfNxRyaNTb/CdadbNllplTsw==}
     engines: {node: '>=6'}
     hasBin: true
@@ -18000,6 +17992,7 @@ packages:
     transitivePeerDependencies:
       - supports-color
     dev: true
+    patched: true
 
   /static-extend/0.1.2:
     resolution: {integrity: sha512-72E9+uLc27Mt718pMHt9VMNiAL4LMsmDbBva8mxWUCkT07fSzEGMYUCk0XWY6lp0j6RBAG4cJ3mWuZv2OE3s0g==}

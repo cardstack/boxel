@@ -22,7 +22,7 @@
     "lint:glint": "glint",
     "start": "ember serve",
     "test": "npm-run-all lint test:*",
-    "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/card-api' 'pnpm run wait' 'http-get://localhost:4202/test/person' 'ember-test-pre-built'",
+    "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field' 'pnpm run wait' 'http-get://localhost:4202/test/hassan' 'ember-test-pre-built'",
     "ember-test-pre-built": "ember test --path ./dist",
     "wait": "sleep 10000000"
   },
