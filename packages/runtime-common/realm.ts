@@ -435,7 +435,10 @@ export class Realm {
   }
 
   private async patchCard(request: Request): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
+    // strip off query params
+    let localPath = this.paths.local(
+      new URL(new URL(request.url).pathname, request.url)
+    );
     if (localPath.startsWith("_")) {
       return methodNotAllowed(request);
     }
@@ -495,7 +498,10 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
+    // strip off query params
+    let localPath = this.paths.local(
+      new URL(new URL(request.url).pathname, request.url)
+    );
     let url = this.paths.fileURL(localPath);
     let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
@@ -519,7 +525,8 @@ export class Realm {
   }
 
   private async removeCard(request: Request): Promise<Response> {
-    let url = new URL(request.url);
+    // strip off query params
+    let url = new URL(new URL(request.url).pathname, request.url);
     let result = await this.#searchIndex.card(url);
     if (!result) {
       return notFound(request);
