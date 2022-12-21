@@ -28,7 +28,7 @@ class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           {{!-- @glint-ignore glint is arriving at an incorrect type signature for 'startCase' --}}
-          <FieldContainer @label={{startCase key}} data-test-field={{key}}>
+          <FieldContainer @vertical={{true}} @label={{startCase key}} data-test-field={{key}}>
             <Field />
           </FieldContainer>
         {{/unless}}

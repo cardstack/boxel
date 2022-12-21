@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { initStyleSheet, attachStyles } from '../attach-styles';
-// import cn from '@cardstack/boxel/helpers/cn';
+import cn from '../helpers/cn';
 import BoxelHeader from './header';
 
 interface Signature {
@@ -36,13 +36,12 @@ let styles = initStyleSheet(`
 `);
 
 const CardContainer: TemplateOnlyComponent<Signature> = <template>
-  <article
-    class="boxel-card-container {{if @displayBoundaries "boxel-card-container--boundaries"}}"
-    {{!-- class={{cn
+  <div
+    class={{cn
       "boxel-card-container"
       boxel-card-container--highlighted=@isHighlighted
       boxel-card-container--boundaries=@displayBoundaries
-    }} --}}
+    }}
     {{attachStyles styles}}
     data-test-boxel-card-container
     ...attributes
@@ -54,7 +53,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     {{/if}}
 
     {{yield}}
-  </article>
+  </div>
 </template>;
 
 export default CardContainer;
