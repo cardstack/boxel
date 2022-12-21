@@ -17,11 +17,11 @@ export default class LoaderService extends Service {
   }
 
   private makeInstance() {
-    let loader = new Loader();
     if (this.fastboot.isFastBoot) {
-      return loader;
+      return new Loader((globalThis as any).resolver);
     }
 
+    let loader = new Loader();
     loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')

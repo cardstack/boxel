@@ -114,7 +114,8 @@ export class Realm {
     adapter: RealmAdapter,
     getVisitor: (
       _fetch: typeof fetch,
-      staticResponses: Map<string, string>
+      staticResponses: Map<string, string>,
+      resolver: (moduleIdentifier: string | URL, relativeTo?: URL) => URL
     ) => (url: string) => Promise<string>
   ) {
     this.paths = new RealmPaths(url);

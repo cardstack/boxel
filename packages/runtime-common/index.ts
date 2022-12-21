@@ -202,10 +202,6 @@ export function trimExecutableExtension(url: URL): URL {
   return url;
 }
 
-export function ownAPI(card: Card): typeof Card["api"] {
-  return (Reflect.getPrototypeOf(card)!.constructor as typeof Card).api;
-}
-
 export function internalKeyFor(
   ref: CardRef,
   relativeTo: URL | undefined

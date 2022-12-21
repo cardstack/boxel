@@ -2,10 +2,12 @@
 import FastBoot from "fastboot";
 import { type FastBootInstance } from "@cardstack/runtime-common";
 
-export function makeFastBootVisitor(
-  distPath: string
-): (_fetch: typeof fetch) => (url: string) => Promise<string> {
-  return (_fetch: typeof fetch) => {
+export function makeFastBootVisitor(distPath: string) {
+  return (
+    _fetch: typeof fetch,
+    _staticResponses: Map<string, string>,
+    resolver: (moduleIdentifier: string | URL, relativeTo?: URL) => URL
+  ) => {
     // something to think about--if there is a dramatic performance hit for
     // creating a new fastboot instance for each current run, maybe we can look
     // at reusing an existing fastboot instances? we could use the loader
@@ -25,6 +27,7 @@ export function makeFastBootVisitor(
           Response: globalThis.Response,
           fetch: _fetch,
           btoa,
+          resolver,
         });
       },
     }) as FastBootInstance;

@@ -43,7 +43,8 @@ export class SearchIndex {
     ) => Promise<{ content: string; lastModified: number } | undefined>,
     getVisitor: (
       _fetch: typeof fetch,
-      staticResponses: Map<string, string>
+      staticResponses: Map<string, string>,
+      resolver: (moduleIdentifier: string | URL, relativeTo?: URL) => URL
     ) => (url: string) => Promise<string>
   ) {
     this.#currentRun = new CurrentRun({

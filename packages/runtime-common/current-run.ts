@@ -160,7 +160,8 @@ export class CurrentRun {
   #visit: (url: string) => Promise<string>;
   #getVisitor: (
     _fetch: typeof fetch,
-    staticResponses: Map<string, string>
+    staticResponses: Map<string, string>,
+    resolver: (moduleIdentifier: string | URL, relativeTo?: URL) => URL
   ) => (url: string) => Promise<string>;
   #staticResponses = new Map<string, string>();
   private realm: Realm;
@@ -187,7 +188,8 @@ export class CurrentRun {
     loader?: Loader;
     getVisitor: (
       _fetch: typeof fetch,
-      staticResponses: Map<string, string>
+      staticResponses: Map<string, string>,
+      resolver: (moduleIdentifier: string | URL, relativeTo?: URL) => URL
     ) => (url: string) => Promise<string>;
   }) {
     this.#realmPaths = new RealmPaths(realm.url);
@@ -198,7 +200,11 @@ export class CurrentRun {
     this.#ignoreMap = ignoreMap;
     this.#loader = loader ?? Loader.createLoaderFromGlobal();
     this.#getVisitor = getVisitor;
-    this.#visit = getVisitor(this.fetch.bind(this), this.#staticResponses);
+    this.#visit = getVisitor(
+      this.fetch.bind(this),
+      this.#staticResponses,
+      this.loader.resolve.bind(this.loader)
+    );
   }
 
   private fetch(
@@ -236,7 +242,8 @@ export class CurrentRun {
     this.#staticResponses = new Map();
     this.#visit = this.#getVisitor(
       this.fetch.bind(this),
-      this.#staticResponses
+      this.#staticResponses,
+      this.loader.resolve.bind(this.loader)
     );
     this.stats.instancesIndexed = 0;
     this.stats.instanceErrors = 0;

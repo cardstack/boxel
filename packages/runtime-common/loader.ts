@@ -82,6 +82,10 @@ export class Loader {
   private consumptionCache = new WeakMap<object, string[]>();
   nonce = nonce++;
 
+  constructor(
+    private resolver?: (moduleIdentifier: string | URL, relativeTo?: URL) => URL
+  ) {}
+
   static #instance: Loader | undefined;
   static loaders = new WeakMap<Function, Loader>();
 
@@ -186,7 +190,7 @@ export class Loader {
     consumed.add(moduleIdentifier);
 
     let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
-    let module = this.modules.get(resolvedModuleIdentifier.href);
+    let module = this.getModule(resolvedModuleIdentifier.href);
     if (!module || module.state === "fetching") {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
@@ -350,6 +354,20 @@ export class Loader {
     return absoluteURL;
   }
 
+  private getModule(moduleIdentifier: string): Module | undefined {
+    if (this.resolver) {
+      moduleIdentifier = this.resolver(moduleIdentifier).href;
+    }
+    return this.modules.get(moduleIdentifier);
+  }
+
+  private setModule(moduleIdentifier: string, module: Module) {
+    if (this.resolver) {
+      moduleIdentifier = this.resolver(moduleIdentifier).href;
+    }
+    this.modules.set(moduleIdentifier, module);
+  }
+
   private createModuleProxy(module: any, moduleIdentifier: string) {
     return new Proxy(module, {
       get: (target, property, received) => {
@@ -376,7 +394,7 @@ export class Loader {
     stack: string[] = []
   ): Promise<Module> {
     let moduleIdentifier = moduleURL.href;
-    let module = this.modules.get(moduleIdentifier);
+    let module = this.getModule(moduleIdentifier);
     if (module) {
       // in the event of a cycle, we have already evaluated the
       // define() since we recurse into our deps after the evaluation of the
@@ -407,13 +425,13 @@ export class Loader {
       state: "fetching",
       deferred: new Deferred<Module>(),
     };
-    this.modules.set(moduleIdentifier, module);
+    this.setModule(moduleIdentifier, module);
 
     let src: string;
     try {
       src = await this.load(moduleURL);
     } catch (exception) {
-      this.modules.set(moduleIdentifier, {
+      this.setModule(moduleIdentifier, {
         state: "broken",
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
@@ -453,7 +471,7 @@ export class Loader {
     try {
       eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
     } catch (exception) {
-      this.modules.set(moduleIdentifier, {
+      this.setModule(moduleIdentifier, {
         state: "broken",
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
@@ -484,13 +502,13 @@ export class Loader {
       ),
     };
 
-    this.modules.set(moduleIdentifier, registeredModule);
+    this.setModule(moduleIdentifier, registeredModule);
     module.deferred.fulfill(registeredModule);
     return registeredModule;
   }
 
   private evaluateModule<T extends object>(moduleIdentifier: string): T {
-    let module = this.modules.get(moduleIdentifier);
+    let module = this.getModule(moduleIdentifier);
     if (!module) {
       throw new Error(
         `bug in module loader: can't find module. ${moduleIdentifier} should have been registered before entering evaluateModule`
@@ -519,7 +537,7 @@ export class Loader {
       privateModuleInstance,
       moduleIdentifier
     );
-    this.modules.set(moduleIdentifier, {
+    this.setModule(moduleIdentifier, {
       state: "preparing",
       implementation: module.implementation,
       moduleInstance,
@@ -538,14 +556,14 @@ export class Loader {
       });
 
       module.implementation(...dependencies);
-      this.modules.set(moduleIdentifier, {
+      this.setModule(moduleIdentifier, {
         state: "evaluated",
         moduleInstance,
         consumedModules: module.consumedModules,
       });
       return moduleInstance;
     } catch (exception) {
-      this.modules.set(moduleIdentifier, {
+      this.setModule(moduleIdentifier, {
         state: "broken",
         exception,
         consumedModules: module.consumedModules,
