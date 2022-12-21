@@ -4,7 +4,8 @@ import type { ComponentOptions } from 'https://cardstack.com/base/field-componen
 
 interface Signature {
   Args: {
-    card: Card
+    searchDoc: Record<string, any>;
+    card: Card;
     format: Format;
     opts?: ComponentOptions
   }
@@ -12,13 +13,23 @@ interface Signature {
 
 export default class Render extends Component<Signature> {
   <template>
-    <!--Server Side Rendered Card START-->
+    <!--Server Side Rendered Card HTML START-->
     <this.renderedCard/>
-    <!--Server Side Rendered Card END-->
+    <!--Server Side Rendered Card HTML END-->
+
+    <pre>
+      <!--Server Side Rendered Card SearchDoc START-->
+      {{this.searchDoc}}
+      <!--Server Side Rendered Card SearchDoc END-->
+    </pre>
   </template>
 
   get renderedCard() {
     return this.args.card.constructor.getComponent(this.args.card, this.args.format, this.args.opts);
+  }
+
+  get searchDoc() {
+    return JSON.stringify(this.args.searchDoc, null, 2);
   }
 }
 

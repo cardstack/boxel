@@ -1,9 +1,12 @@
 import Route from '@ember/routing/route';
 import { service } from '@ember/service';
 import CardService from '../services/card-service';
+import { Loader } from '@cardstack/runtime-common/loader';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 interface Model {
+  searchDoc: Record<string, any>;
   card: Card;
   format: Format;
 }
@@ -43,6 +46,11 @@ export default class Application extends Route<Model> {
     if (!card) {
       throw new Error(`could not load card for url ${url}`);
     }
-    return { card, format: format as Format };
+    let loader = Loader.getLoaderFor(Reflect.getPrototypeOf(card)!.constructor);
+    let api = await loader.import<typeof CardAPI>(
+      'https://cardstack.com/base/card-api'
+    );
+    let searchDoc = await api.searchDoc(card);
+    return { card, format: format as Format, searchDoc };
   }
 }

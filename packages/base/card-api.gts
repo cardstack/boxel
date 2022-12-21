@@ -656,6 +656,113 @@ export function linksTo<CardT extends CardConstructor>(cardOrThunk: CardT | (() 
 }
 linksTo[fieldType] = 'linksTo' as FieldType;
 
+export class Component<CardT extends CardConstructor> extends GlimmerComponent<SignatureFor<CardT>> {}
+
+export class Box<T> {
+  static create<T>(model: T): Box<T> {
+    return new Box({ type: 'root', model });
+  }
+
+  private state:
+    {
+      type: 'root';
+      model: any
+    } |
+    {
+      type: 'derived';
+      containingBox: Box<any>;
+      fieldName: string | number| symbol;
+      useIndexBasedKeys: boolean;
+    };
+
+  private constructor(state: Box<T>["state"]) {
+    this.state = state;
+  }
+
+  get value(): T {
+    if (this.state.type === 'root') {
+      return this.state.model;
+    } else {
+      return this.state.containingBox.value[this.state.fieldName];
+    }
+  }
+
+  get name() {
+    return this.state.type === 'derived' ? this.state.fieldName : undefined;
+  }
+
+  set value(v: T) {
+    if (this.state.type === 'root') {
+      throw new Error(`can't set topmost model`);
+    } else {
+      let value = this.state.containingBox.value;
+      if (Array.isArray(value) && typeof this.state.fieldName !== 'number') {
+        throw new Error(`Cannot set a value on an array item with non-numeric index '${String(this.state.fieldName)}'`);
+      }
+      this.state.containingBox.value[this.state.fieldName] = v;
+    }
+  }
+
+  set = (value: T): void => { this.value = value; }
+
+  private fieldBoxes = new Map<string, Box<unknown>>();
+
+  field<K extends keyof T>(fieldName: K, useIndexBasedKeys = false): Box<T[K]> {
+    let box = this.fieldBoxes.get(fieldName as string);
+    if (!box) {
+      box = new Box({
+        type: 'derived',
+        containingBox: this,
+        fieldName,
+        useIndexBasedKeys,
+      });
+      this.fieldBoxes.set(fieldName as string, box);
+    }
+    return box as Box<T[K]>;
+  }
+
+  private prevChildren: Box<ElementType<T>>[] = [];
+
+  get children(): Box<ElementType<T>>[] {
+    if (this.state.type === 'root') {
+      throw new Error('tried to call children() on root box');
+    }
+    let value = this.value;
+    if (!Array.isArray(value)) {
+      throw new Error(`tried to call children() on Boxed non-array value ${value} for ${String(this.state.fieldName)}`);
+    }
+
+    let { prevChildren, state } = this;
+    let newChildren: Box<ElementType<T>>[] = value.map((element, index) => {
+      let found = prevChildren.find((oldBox, i) => (state.useIndexBasedKeys ? index === i : oldBox.value === element));
+      if (found) {
+        if (state.useIndexBasedKeys) {
+          // note that the underlying box already has the correct value so there
+          // is nothing to do in this case. also, we are currently inside a rerender.
+          // mutating a watched array in a rerender will spawn another rerender which
+          // infinitely recurses.
+        } else {
+          prevChildren.splice(prevChildren.indexOf(found), 1);
+          if (found.state.type === 'root') {
+            throw new Error('bug');
+          }
+          found.state.fieldName = index;
+        }
+        return found;
+      } else {
+        return new Box({
+          type: 'derived',
+          containingBox: this,
+          fieldName: index,
+          useIndexBasedKeys: false,
+        });
+      }
+    });
+    this.prevChildren = newChildren;
+    return newChildren;
+  }
+}
+
 export class Card {
   // this is here because Card has no public instance methods, so without it
   // typescript considers everything a valid card.
@@ -664,6 +771,36 @@ export class Card {
   declare ["constructor"]: CardConstructor;
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
+  static api = {
+    primitive,
+    isField,
+    serialize,
+    deserialize,
+    useIndexBasedKey,
+    fieldDecorator,
+    fieldType,
+    queryableValue,
+    flushLogs,
+    IdentityContext,
+    field,
+    containsMany,
+    contains,
+    linksTo,
+    Card,
+    isCard,
+    Component,
+    isSaved,
+    getQueryableValue,
+    relationshipMeta,
+    serializeCard,
+    createFromSerialized,
+    updateFromSerialized,
+    searchDoc,
+    getComponent,
+    recompute,
+    getFields,
+    Box
+  };
 
   static [serialize](value: any, doc: JSONAPISingleResourceDocument, visited?: Set<string>, opts?: { includeComputeds?: boolean}): any {
     if (primitive in this) {
@@ -743,7 +880,6 @@ export function isCard(card: any): card is Card {
   return card && typeof card === 'object' && isBaseCard in card;
 }
 
-export class Component<CardT extends CardConstructor> extends GlimmerComponent<SignatureFor<CardT>> {}
 
 class IDCard extends Card {
   static [primitive]: string;
@@ -1291,109 +1427,5 @@ function getComputedFields<T extends Card>(card: T): { [P in keyof T]?: Field<Ca
   return Object.fromEntries(computedFields) as { [P in keyof T]?: Field<CardConstructor> };
 }
 
-export class Box<T> {
-  static create<T>(model: T): Box<T> {
-    return new Box({ type: 'root', model });
-  }
-
-  private state:
-    {
-      type: 'root';
-      model: any
-    } |
-    {
-      type: 'derived';
-      containingBox: Box<any>;
-      fieldName: string | number| symbol;
-      useIndexBasedKeys: boolean;
-    };
-
-  private constructor(state: Box<T>["state"]) {
-    this.state = state;
-  }
-
-  get value(): T {
-    if (this.state.type === 'root') {
-      return this.state.model;
-    } else {
-      return this.state.containingBox.value[this.state.fieldName];
-    }
-  }
-
-  get name() {
-    return this.state.type === 'derived' ? this.state.fieldName : undefined;
-  }
-
-  set value(v: T) {
-    if (this.state.type === 'root') {
-      throw new Error(`can't set topmost model`);
-    } else {
-      let value = this.state.containingBox.value;
-      if (Array.isArray(value) && typeof this.state.fieldName !== 'number') {
-        throw new Error(`Cannot set a value on an array item with non-numeric index '${String(this.state.fieldName)}'`);
-      }
-      this.state.containingBox.value[this.state.fieldName] = v;
-    }
-  }
-
-  set = (value: T): void => { this.value = value; }
-
-  private fieldBoxes = new Map<string, Box<unknown>>();
-
-  field<K extends keyof T>(fieldName: K, useIndexBasedKeys = false): Box<T[K]> {
-    let box = this.fieldBoxes.get(fieldName as string);
-    if (!box) {
-      box = new Box({
-        type: 'derived',
-        containingBox: this,
-        fieldName,
-        useIndexBasedKeys,
-      });
-      this.fieldBoxes.set(fieldName as string, box);
-    }
-    return box as Box<T[K]>;
-  }
-
-  private prevChildren: Box<ElementType<T>>[] = [];
-
-  get children(): Box<ElementType<T>>[] {
-    if (this.state.type === 'root') {
-      throw new Error('tried to call children() on root box');
-    }
-    let value = this.value;
-    if (!Array.isArray(value)) {
-      throw new Error(`tried to call children() on Boxed non-array value ${value} for ${String(this.state.fieldName)}`);
-    }
-
-    let { prevChildren, state } = this;
-    let newChildren: Box<ElementType<T>>[] = value.map((element, index) => {
-      let found = prevChildren.find((oldBox, i) => (state.useIndexBasedKeys ? index === i : oldBox.value === element));
-      if (found) {
-        if (state.useIndexBasedKeys) {
-          // note that the underlying box already has the correct value so there
-          // is nothing to do in this case. also, we are currently inside a rerender.
-          // mutating a watched array in a rerender will spawn another rerender which
-          // infinitely recurses.
-        } else {
-          prevChildren.splice(prevChildren.indexOf(found), 1);
-          if (found.state.type === 'root') {
-            throw new Error('bug');
-          }
-          found.state.fieldName = index;
-        }
-        return found;
-      } else {
-        return new Box({
-          type: 'derived',
-          containingBox: this,
-          fieldName: index,
-          useIndexBasedKeys: false,
-        });
-      }
-    });
-    this.prevChildren = newChildren;
-    return newChildren;
-  }
-}
 
 type ElementType<T> = T extends (infer V)[] ? V : never;

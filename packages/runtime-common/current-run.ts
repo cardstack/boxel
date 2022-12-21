@@ -41,9 +41,13 @@ import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
 
 const renderedCardTokens = {
-  success: {
-    start: "<!--Server Side Rendered Card START-->",
-    end: "<!--Server Side Rendered Card END-->",
+  html: {
+    start: "<!--Server Side Rendered Card HTML START-->",
+    end: "<!--Server Side Rendered Card HTML END-->",
+  },
+  searchDoc: {
+    start: "<!--Server Side Rendered Card SearchDoc START-->",
+    end: "<!--Server Side Rendered Card SearchDoc END-->",
   },
   error: {
     start: "<!--Server Side Rendered Card Error START-->",
@@ -503,12 +507,6 @@ export class CurrentRun {
           meta: { lastModified: lastModified },
         },
       }) as SingleCardDocument;
-      searchData = await api.searchDoc(card);
-      if (!searchData) {
-        throw new Error(
-          `bug: could not derive search doc for instance ${instanceURL.href}`
-        );
-      }
       let cachedDoc: SingleCardDocument = merge({}, doc, {
         data: {
           links: { self: instanceURL.href },
@@ -529,7 +527,7 @@ export class CurrentRun {
       rawHtml = await this.#visit(
         `/render?url=${encodeURIComponent(instanceURL.href)}&format=isolated`
       );
-      html = parseRenderedCard(rawHtml);
+      ({ html, searchData } = parseRenderedCard(rawHtml));
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -871,13 +869,28 @@ function invalidate(
   return [...invalidationSet];
 }
 
-function parseRenderedCard(html: string): string {
-  if (html.includes(renderedCardTokens.success.start)) {
-    return html.substring(
-      html.indexOf(renderedCardTokens.success.start) +
-        renderedCardTokens.success.start.length,
-      html.indexOf(renderedCardTokens.success.end)
-    );
+function parseRenderedCard(html: string): {
+  html: string;
+  searchData: Record<string, any>;
+} {
+  if (
+    html.includes(renderedCardTokens.html.start) &&
+    html.includes(renderedCardTokens.searchDoc.start)
+  ) {
+    return {
+      html: html.substring(
+        html.indexOf(renderedCardTokens.html.start) +
+          renderedCardTokens.html.start.length,
+        html.indexOf(renderedCardTokens.html.end)
+      ),
+      searchData: JSON.parse(
+        html.substring(
+          html.indexOf(renderedCardTokens.searchDoc.start) +
+            renderedCardTokens.searchDoc.start.length,
+          html.indexOf(renderedCardTokens.searchDoc.end)
+        )
+      ),
+    };
   } else if (html.includes(renderedCardTokens.error.start)) {
     let errorMsg = html.substring(
       html.indexOf(renderedCardTokens.error.start) +

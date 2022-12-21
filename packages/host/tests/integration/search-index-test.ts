@@ -7,6 +7,7 @@ import {
   type CardDocFiles,
 } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { setupRenderingTest } from 'ember-qunit';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import {
   baseRealm,
@@ -18,7 +19,8 @@ import { Loader } from '@cardstack/runtime-common/loader';
 const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4202/test/';
 
-module('Unit | search-index', function (hooks) {
+module('Integration | search-index', function (hooks) {
+  setupRenderingTest(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
@@ -45,7 +47,7 @@ module('Unit | search-index', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let { data: cards } = await indexer.search({});
@@ -105,7 +107,7 @@ module('Unit | search-index', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
@@ -207,7 +209,7 @@ module('Unit | search-index', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`));
@@ -308,7 +310,7 @@ module('Unit | search-index', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`), {
@@ -501,21 +503,24 @@ module('Unit | search-index', function (hooks) {
   });
 
   test("indexing identifies an instance's card references", async function (assert) {
-    let realm = TestRealm.create({
-      'person-1.json': {
-        data: {
-          attributes: {
-            firstName: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}person`,
-              name: 'Person',
+    let realm = await TestRealm.create(
+      {
+        'person-1.json': {
+          data: {
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}person`,
+                name: 'Person',
+              },
             },
           },
         },
       },
-    });
+      this.owner
+    );
     await realm.ready;
     let indexer = realm.searchIndex;
     let refs = (await indexer.searchEntry(new URL(`${testRealmURL}person-1`)))
@@ -557,21 +562,26 @@ module('Unit | search-index', function (hooks) {
   });
 
   test('search index does not contain entries that match patterns in ignore files', async function (assert) {
-    let realm = TestRealm.create({
-      'ignore-me-1.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-      'posts/nested.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-      'posts/please-ignore-me.json': {
-        data: { meta: { adoptsFrom: baseCardRef } },
-      },
-      'posts/ignore-me-2.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-      'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-      'dir/card.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-      '.gitignore': `
+    let realm = await TestRealm.create(
+      {
+        'ignore-me-1.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'posts/nested.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'posts/please-ignore-me.json': {
+          data: { meta: { adoptsFrom: baseCardRef } },
+        },
+        'posts/ignore-me-2.json': {
+          data: { meta: { adoptsFrom: baseCardRef } },
+        },
+        'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'dir/card.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        '.gitignore': `
 ignore-me*.json
 dir/
 posts/please-ignore-me.json
       `,
-    });
+      },
+      this.owner
+    );
 
     await realm.ready;
     let indexer = realm.searchIndex;
@@ -623,12 +633,15 @@ posts/please-ignore-me.json
   });
 
   test("incremental indexing doesn't process ignored files", async function (assert) {
-    let realm = TestRealm.create({
-      'posts/ignore-me.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-      '.gitignore': `
+    let realm = await TestRealm.create(
+      {
+        'posts/ignore-me.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        '.gitignore': `
 posts/ignore-me.json
       `,
-    });
+      },
+      this.owner
+    );
 
     await realm.ready;
     let indexer = realm.searchIndex;
@@ -899,7 +912,7 @@ posts/ignore-me.json
     let indexer: SearchIndex;
 
     hooks.beforeEach(async function () {
-      let realm = TestRealm.create(sampleCards);
+      let realm = await TestRealm.create(sampleCards, this.owner);
       await realm.ready;
       indexer = realm.searchIndex;
     });

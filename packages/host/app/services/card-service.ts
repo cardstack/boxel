@@ -6,6 +6,7 @@ import {
   type LooseCardResource,
   isSingleCardDocument,
   isCardCollectionDocument,
+  ownAPI,
   type CardDocument,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -74,7 +75,7 @@ export default class CardService extends Service {
         loader: this.loaderService.loader,
       }
     );
-    await this.api.recompute(card);
+    await ownAPI(card).recompute(card);
     return card;
   }
 

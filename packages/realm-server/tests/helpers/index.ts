@@ -9,7 +9,7 @@ export const testRealm = "http://test-realm/";
 
 export function createRealm(
   dir: string,
-  flatFiles: Record<string, string | LooseSingleCardDocument>,
+  flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   realmURL = testRealm
 ): Realm {
   for (let [filename, contents] of Object.entries(flatFiles)) {

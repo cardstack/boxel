@@ -5,6 +5,9 @@ import { trimExecutableExtension } from "./index";
 import { RealmPaths } from "./paths";
 import { CardError } from "./error";
 
+// TODO remove this
+let nonce = 0;
+
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
 export interface ResolvedURL extends URL {
@@ -77,6 +80,7 @@ export class Loader {
     { module: string; name: string }
   >();
   private consumptionCache = new WeakMap<object, string[]>();
+  nonce = nonce++;
 
   static #instance: Loader | undefined;
   static loaders = new WeakMap<Function, Loader>();

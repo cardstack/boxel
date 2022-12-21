@@ -1,7 +1,7 @@
 import { module, test } from "qunit";
 import supertest, { Test, SuperTest } from "supertest";
 import { createRealmServer } from "../server";
-import { join, resolve } from "path";
+import { join } from "path";
 import { Server } from "http";
 import { dirSync, setGracefulCleanup, DirResult } from "tmp";
 import { copySync, existsSync, readFileSync, readJSONSync } from "fs-extra";
@@ -11,15 +11,13 @@ import {
 } from "@cardstack/runtime-common/etc/test-fixtures";
 import {
   isSingleCardDocument,
-  Realm,
   Loader,
   baseRealm,
   loadCard,
 } from "@cardstack/runtime-common";
 import { stringify } from "qs";
-import { NodeAdapter } from "../node-realm";
 import { Query } from "@cardstack/runtime-common/query";
-import { setupCardLogs } from "./helpers";
+import { setupCardLogs, createRealm } from "./helpers";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 
 setGracefulCleanup();
@@ -45,17 +43,18 @@ module("Realm Server", function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
 
-    let testRealm = new Realm(
-      testRealmHref,
-      new NodeAdapter(resolve(dir.name)),
-      (_fetch: typeof fetch) => async (_url: string) => {
-        return `
-          <!--Server Side Rendered Card START-->
-            <h1>Test card HTML</h1>
-          <!--Server Side Rendered Card END-->
-        `;
-      }
-    );
+    let testRealm = createRealm(dir.name);
+    // new Realm(
+    //   testRealmHref,
+    //   new NodeAdapter(resolve(dir.name)),
+    //   (_fetch: typeof fetch) => async (_url: string) => {
+    //     return `
+    //       <!--Server Side Rendered Card HTML START-->
+    //         <h1>Test card HTML</h1>
+    //       <!--Server Side Rendered Card HTML END-->
+    //     `;
+    //   }
+    // );
     await testRealm.ready;
     server = createRealmServer([testRealm]);
     server.listen(testRealmURL.port);

@@ -55,7 +55,7 @@ module('Integration | card-editor', function (hooks) {
     this.owner.register('service:local-realm', MockLocalRealm);
 
     adapter = new TestRealmAdapter({});
-    realm = TestRealm.createWithAdapter(adapter);
+    realm = await TestRealm.createWithAdapter(adapter, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
 

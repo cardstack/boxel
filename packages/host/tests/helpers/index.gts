@@ -6,9 +6,15 @@ import {
   LooseSingleCardDocument,
   baseRealm,
 } from '@cardstack/runtime-common';
+import GlimmerComponent from '@glimmer/component';
+import { Deferred } from '@cardstack/runtime-common/deferred';
+import { TestContext } from '@ember/test-helpers';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
+import { renderComponent } from './render-component';
+import WorkerRenderer from '@cardstack/host/services/worker-renderer';
+import WorkerRender from '@cardstack/host/components/worker-render';
 import { type Card } from 'https://cardstack.com/base/card-api';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -31,37 +37,63 @@ export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
 }
 
+// We use a rendered component to facilitate our indexing (this emulates
+// the work that the service worker renderer is doing), which means that the
+// `setupRenderingTest(hooks)` from ember-qunit must be used in your tests. 
 export const TestRealm = {
-  create(
+  async create(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
+    owner: TestContext['owner'],
     realmURL?: string
-  ): Realm {
-    return new Realm(
-      realmURL ?? testRealmURL,
-      new TestRealmAdapter(flatFiles),
-      (_fetch: typeof fetch) => async (_url: string) => {
-        return `
-          <!--Server Side Rendered Card START-->
-            <h1>Test card HTML</h1>
-          <!--Server Side Rendered Card END-->
-        `;
-      }
-    );
+  ): Promise<Realm> {
+    await makeRenderer();
+    return makeRealm(new TestRealmAdapter(flatFiles), owner, realmURL);
   },
-  createWithAdapter(adapter: RealmAdapter, realmURL?: string): Realm {
-    return new Realm(
-      realmURL ?? testRealmURL,
-      adapter,
-      (_fetch: typeof fetch) => async (_url: string) => {
-        return `
-          <!--Server Side Rendered Card START-->
-            <h1>Test card HTML</h1>
-          <!--Server Side Rendered Card END-->
-        `;
-      }
-    );
+
+  async createWithAdapter(
+    adapter: RealmAdapter,
+    owner: TestContext['owner'],
+    realmURL?: string
+  ): Promise<Realm> {
+    await makeRenderer();
+    return makeRealm(adapter, owner, realmURL);
   },
 };
+
+async function makeRenderer() {
+  // This emulates the application.hbs
+  await renderComponent(
+    class TestDriver extends GlimmerComponent {
+      <template>
+        <template shadowroot="open">
+          <WorkerRender/>
+        </template>
+      </template>
+    }
+  );
+}
+
+function makeRealm(
+  adapter: RealmAdapter,
+  owner: TestContext['owner'],
+  realmURL = testRealmURL
+) {
+  let renderService = owner.lookup('service:worker-renderer') as WorkerRenderer;
+  return new Realm(
+    realmURL ?? testRealmURL,
+    adapter,
+    (_fetch: typeof fetch, staticResponses: Map<string, string>) =>
+      async (url: string) => {
+        let deferred = new Deferred<string>();
+        await renderService.visit(
+          `/render?url=${encodeURIComponent(url)}&format=isolated`,
+          staticResponses,
+          (html: string) => deferred.fulfill(html)
+        );
+        return await deferred.promise;
+      }
+  );
+}
 
 export async function saveCard(
   instance: Card,

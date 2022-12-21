@@ -1,11 +1,8 @@
 import { module, test } from 'qunit';
-import GlimmerComponent from '@glimmer/component';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { baseRealm, LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { renderComponent } from '../../helpers/render-component';
-import WorkerRender from '@cardstack/host/components/worker-render';
 import {
   testRealmURL,
   setupCardLogs,
@@ -37,7 +34,7 @@ module('Integration | worker-renderer', function (hooks) {
       .loader;
 
     adapter = new TestRealmAdapter({});
-    realm = TestRealm.createWithAdapter(adapter);
+    realm = await TestRealm.createWithAdapter(adapter, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
 
@@ -130,16 +127,16 @@ module('Integration | worker-renderer', function (hooks) {
       'service:worker-renderer'
     ) as WorkerRenderer;
 
-    // This emulates the application.hbs
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <template shadowroot="open">
-            <WorkerRender/>
-          </template>
-        </template>
-      }
-    );
+    // // This emulates the application.hbs
+    // await renderComponent(
+    //   class TestDriver extends GlimmerComponent {
+    //     <template>
+    //       <template shadowroot="open">
+    //         <WorkerRender/>
+    //       </template>
+    //     </template>
+    //   }
+    // );
   });
 
   test("can generate the card's rendered HTML", async function (assert) {
@@ -156,11 +153,11 @@ module('Integration | worker-renderer', function (hooks) {
       assert.strictEqual(
         cleanWhiteSpace(html),
         cleanWhiteSpace(`
-          <!--Server Side Rendered Card START-->
+          <!--Server Side Rendered Card HTML START-->
           <div data-test-shadow-component="">
             <h3> Mango </h3>
           </div>
-          <!--Server Side Rendered Card END-->
+          <!--Server Side Rendered Card HTML END-->
         `),
         'the pre-rendered HTML is correct'
       );
@@ -179,11 +176,11 @@ module('Integration | worker-renderer', function (hooks) {
       assert.strictEqual(
         cleanWhiteSpace(html),
         cleanWhiteSpace(`
-          <!--Server Side Rendered Card START-->
+          <!--Server Side Rendered Card HTML START-->
           <div data-test-shadow-component="">
             <h3> Van Gogh </h3>
           </div>
-          <!--Server Side Rendered Card END-->
+          <!--Server Side Rendered Card HTML END-->
         `),
         'the pre-rendered HTML is correct'
       );

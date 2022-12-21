@@ -10,12 +10,14 @@ import {
   testRealmURL,
   setupCardLogs,
 } from '../helpers';
+import { setupRenderingTest } from 'ember-qunit';
 import { stringify } from 'qs';
 import { baseRealm, CardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module('Unit | realm', function (hooks) {
+module('Integration | realm', function (hooks) {
+  setupRenderingTest(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
@@ -42,7 +44,7 @@ module('Unit | realm', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -115,7 +117,7 @@ module('Unit | realm', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -210,7 +212,7 @@ module('Unit | realm', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -281,7 +283,7 @@ module('Unit | realm', function (hooks) {
   });
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
-    let realm = TestRealm.create(
+    let realm = await TestRealm.create(
       {
         'dir/empty.json': {
           data: {
@@ -294,6 +296,7 @@ module('Unit | realm', function (hooks) {
           },
         },
       },
+      this.owner,
       `${testRealmURL}root/`
     );
     await realm.ready;
@@ -337,7 +340,7 @@ module('Unit | realm', function (hooks) {
 
   test('realm can serve create card requests', async function (assert) {
     let adapter = new TestRealmAdapter({});
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
     {
       let response = await realm.handle(
@@ -483,7 +486,7 @@ module('Unit | realm', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(testRealmURL, {
@@ -622,7 +625,7 @@ module('Unit | realm', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/card`, {
@@ -789,7 +792,7 @@ module('Unit | realm', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/mango`, {
@@ -935,7 +938,7 @@ module('Unit | realm', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
 
     let searchIndex = realm.searchIndex;
@@ -985,9 +988,12 @@ module('Unit | realm', function (hooks) {
   });
 
   test('realm can serve card source file', async function (assert) {
-    let realm = TestRealm.create({
-      'dir/person.gts': cardSrc,
-    });
+    let realm = await TestRealm.create(
+      {
+        'dir/person.gts': cardSrc,
+      },
+      this.owner
+    );
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/person.gts`, {
@@ -1006,9 +1012,12 @@ module('Unit | realm', function (hooks) {
   });
 
   test('realm provide redirect for card source', async function (assert) {
-    let realm = TestRealm.create({
-      'dir/person.gts': cardSrc,
-    });
+    let realm = await TestRealm.create(
+      {
+        'dir/person.gts': cardSrc,
+      },
+      this.owner
+    );
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/person`, {
@@ -1026,7 +1035,7 @@ module('Unit | realm', function (hooks) {
   });
 
   test('realm returns 404 when no card source can be found', async function (assert) {
-    let realm = TestRealm.create({});
+    let realm = await TestRealm.create({}, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/person`, {
@@ -1040,7 +1049,7 @@ module('Unit | realm', function (hooks) {
 
   test('realm can serve card source post request', async function (assert) {
     let adapter = new TestRealmAdapter({});
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
 
     {
@@ -1075,8 +1084,9 @@ module('Unit | realm', function (hooks) {
   });
 
   test('realm can serve card source delete request', async function (assert) {
-    let realm = TestRealm.create({
-      'person.gts': `
+    let realm = await TestRealm.create(
+      {
+        'person.gts': `
         import { contains, field, Card } from 'https://cardstack.com/base/card-api';
         import StringCard from 'https://cardstack.com/base/string';
 
@@ -1085,7 +1095,9 @@ module('Unit | realm', function (hooks) {
           @field lastName = contains(StringCard);
         }
       `,
-    });
+      },
+      this.owner
+    );
     await realm.ready;
 
     let response = await realm.handle(
@@ -1118,9 +1130,12 @@ module('Unit | realm', function (hooks) {
   });
 
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {
-    let realm = TestRealm.create({
-      'dir/person.gts': cardSrc,
-    });
+    let realm = await TestRealm.create(
+      {
+        'dir/person.gts': cardSrc,
+      },
+      this.owner
+    );
     await realm.ready;
     let response = await realm.handle(new Request(`${testRealmURL}dir/person`));
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
@@ -1129,9 +1144,12 @@ module('Unit | realm', function (hooks) {
   });
 
   test('realm can serve compiled js file when requested with file extension ', async function (assert) {
-    let realm = TestRealm.create({
-      'dir/person.gts': cardSrc,
-    });
+    let realm = await TestRealm.create(
+      {
+        'dir/person.gts': cardSrc,
+      },
+      this.owner
+    );
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/person.gts`)
@@ -1149,9 +1167,12 @@ module('Unit | realm', function (hooks) {
         </body>
       </html>
     `.trim();
-    let realm = TestRealm.create({
-      'dir/index.html': html,
-    });
+    let realm = await TestRealm.create(
+      {
+        'dir/index.html': html,
+      },
+      this.owner
+    );
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/index.html`)
@@ -1162,19 +1183,22 @@ module('Unit | realm', function (hooks) {
   });
 
   test('realm can serve search requests', async function (assert) {
-    let realm = TestRealm.create({
-      'dir/empty.json': {
-        data: {
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
-              name: 'Card',
+    let realm = await TestRealm.create(
+      {
+        'dir/empty.json': {
+          data: {
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'Card',
+              },
             },
           },
         },
       },
-    });
+      this.owner
+    );
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}_search`, {
@@ -1256,7 +1280,7 @@ module('Unit | realm', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -1390,20 +1414,23 @@ module('Unit | realm', function (hooks) {
   });
 
   test('realm can serve directory requests', async function (assert) {
-    let realm = TestRealm.create({
-      'dir/empty.json': {
-        data: {
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
-              name: 'Card',
+    let realm = await TestRealm.create(
+      {
+        'dir/empty.json': {
+          data: {
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'Card',
+              },
             },
           },
         },
+        'dir/subdir/file.txt': '',
       },
-      'dir/subdir/file.txt': '',
-    });
+      this.owner
+    );
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/`, {
@@ -1450,20 +1477,23 @@ module('Unit | realm', function (hooks) {
       export class Post extends Card {}
     `;
 
-    let realm = TestRealm.create({
-      'sample-post.json': '',
-      'posts/1.json': '',
-      'posts/nested.gts': cardSource,
-      'posts/ignore-me.gts': cardSource,
-      'posts/2.json': '',
-      'post.gts': cardSource,
-      'dir/card.gts': cardSource,
-      '.gitignore': `
+    let realm = await TestRealm.create(
+      {
+        'sample-post.json': '',
+        'posts/1.json': '',
+        'posts/nested.gts': cardSource,
+        'posts/ignore-me.gts': cardSource,
+        'posts/2.json': '',
+        'post.gts': cardSource,
+        'dir/card.gts': cardSource,
+        '.gitignore': `
 *.json
 /dir
 posts/ignore-me.gts
 `,
-    });
+      },
+      this.owner
+    );
     await realm.ready;
 
     {
