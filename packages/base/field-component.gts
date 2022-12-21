@@ -6,13 +6,16 @@ import {
   type FieldsTypeFor
 } from './card-api';
 import { defaultComponent } from './default-card-component';
-import ShadowDOM from './shadow-dom';
+import ShadowDOM, { type ShadowDOMOptions } from './shadow-dom';
 import { getField } from "@cardstack/runtime-common";
 import type { ComponentLike } from '@glint/template';
 
 const componentCache = new WeakMap<Box<Card>, ComponentLike<{ Args: {}; Blocks: {}; }>>();
 
-export function getBoxComponent(card: typeof Card, format: Format, model: Box<Card>): ComponentLike<{ Args: {}, Blocks: {} }> {
+// union with any other future options
+export type ComponentOptions = ShadowDOMOptions;
+
+export function getBoxComponent(card: typeof Card, format: Format, model: Box<Card>, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
   let stable = componentCache.get(model);
   if (stable) {
     return stable;
@@ -29,7 +32,7 @@ export function getBoxComponent(card: typeof Card, format: Format, model: Box<Ca
     {{#if isPrimitive}}
       <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
     {{else}}
-      <ShadowDOM>
+      <ShadowDOM @opts={{opts}}>
         <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
       </ShadowDOM>
     {{/if}}

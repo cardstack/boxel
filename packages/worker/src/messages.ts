@@ -20,10 +20,28 @@ export interface SetDirectoryHandle {
   handle: FileSystemDirectoryHandle | null;
 }
 
-export type ClientMessage = RequestDirectoryHandle | SetDirectoryHandle;
+export interface VisitRequest {
+  type: 'visitRequest';
+  id: string;
+  path: string;
+  staticResponses: Map<string, string>;
+}
+
+export interface VisitResponse {
+  type: 'visitResponse';
+  id: string;
+  html: string;
+  path: string;
+}
+
+export type ClientMessage =
+  | RequestDirectoryHandle
+  | SetDirectoryHandle
+  | VisitResponse;
 export type WorkerMessage =
   | DirectoryHandleResponse
-  | SetDirectoryHandleAcknowledged;
+  | SetDirectoryHandleAcknowledged
+  | VisitRequest;
 export type Message = ClientMessage | WorkerMessage;
 
 function isMessageLike(
@@ -50,6 +68,15 @@ export function isClientMessage(message: unknown): message is ClientMessage {
         ((message as any).handle === null ||
           (message as any).handle instanceof FileSystemDirectoryHandle)
       );
+    case 'visitResponse':
+      return (
+        'id' in message &&
+        typeof message.id === 'string' &&
+        'html' in message &&
+        typeof message.html === 'string' &&
+        'path' in message &&
+        typeof message.path === 'string'
+      );
     default:
       return false;
   }
@@ -64,11 +91,22 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
       return (
         'handle' in message &&
         ((message as any).handle === null ||
-          (message as any).handle instanceof FileSystemDirectoryHandle)
-          && 'url' in message && ((message as any).url === null || typeof (message as any).url === 'string' ) 
+          (message as any).handle instanceof FileSystemDirectoryHandle) &&
+        'url' in message &&
+        ((message as any).url === null ||
+          typeof (message as any).url === 'string')
       );
     case 'setDirectoryHandleAcknowledged':
       return 'url' in message && typeof (message as any).url === 'string';
+    case 'visitRequest':
+      return (
+        'id' in message &&
+        typeof message.id === 'string' &&
+        'path' in message &&
+        typeof message.path === 'string' &&
+        'staticResponses' in message &&
+        message.staticResponses instanceof Map
+      );
     default:
       return false;
   }

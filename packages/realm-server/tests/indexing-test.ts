@@ -153,9 +153,7 @@ module("indexing", function (hooks) {
       cleanWhiteSpace(entry!.html!),
       cleanWhiteSpace(`
           <div data-test-shadow-component>
-            <template shadowroot="open">
-              <h1> Mango </h1>
-            </template>
+            <h1> Mango </h1>
           </div>
         `),
       "pre-rendered html is correct"
