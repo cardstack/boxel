@@ -9,9 +9,6 @@ patchedDependencies:
   magic-string@0.25.9:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
-  start-server-and-test@1.14.0:
-    hash: mmy4gucttlhphfhhygv6ocao3q
-    path: patches/start-server-and-test@1.14.0.patch
 
 importers:
 
@@ -854,7 +851,7 @@ importers:
       qs: 6.11.0
       qunit: 2.19.3
       qunit-dom: 2.0.0
-      start-server-and-test: 1.14.0_mmy4gucttlhphfhhygv6ocao3q
+      start-server-and-test: 1.14.0
       tracked-built-ins: 2.0.1
       typescript: 4.9.3
       webpack: 5.75.0
@@ -899,7 +896,7 @@ importers:
       fs-extra: 10.1.0
       qs: 6.11.0
       qunit: 2.19.3
-      start-server-and-test: 1.14.0_mmy4gucttlhphfhhygv6ocao3q
+      start-server-and-test: 1.14.0
       supertest: 6.3.1
       tmp: 0.2.1
       ts-node: 10.9.1_wup25etrarvlqkprac7h35hj7u
@@ -17977,7 +17974,7 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  /start-server-and-test/1.14.0_mmy4gucttlhphfhhygv6ocao3q:
+  /start-server-and-test/1.14.0:
     resolution: {integrity: sha512-on5ELuxO2K0t8EmNj9MtVlFqwBMxfWOhu4U7uZD1xccVpFlOQKR93CSe0u98iQzfNxRyaNTb/CdadbNllplTsw==}
     engines: {node: '>=6'}
     hasBin: true
@@ -17992,7 +17989,6 @@ packages:
     transitivePeerDependencies:
       - supports-color
     dev: true
-    patched: true
 
   /static-extend/0.1.2:
     resolution: {integrity: sha512-72E9+uLc27Mt718pMHt9VMNiAL4LMsmDbBva8mxWUCkT07fSzEGMYUCk0XWY6lp0j6RBAG4cJ3mWuZv2OE3s0g==}

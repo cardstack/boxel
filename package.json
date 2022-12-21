@@ -20,8 +20,7 @@
       }
     },
     "patchedDependencies": {
-      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
-      "start-server-and-test@1.14.0": "patches/start-server-and-test@1.14.0.patch"
+      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch"
     }
   },
   "devDependencies": {

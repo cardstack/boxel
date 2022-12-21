@@ -22,6 +22,7 @@ import {
   type DirectoryEntryRelationship,
 } from "./index";
 import merge from "lodash/merge";
+import qs from "qs";
 import cloneDeep from "lodash/cloneDeep";
 import { webStreamToText } from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
@@ -177,7 +178,14 @@ export class Realm {
 
   async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
-    if (request.headers.get("Accept")?.includes("application/vnd.api+json")) {
+    let accept = request.headers.get("Accept");
+    if (url.search.length > 0) {
+      let { acceptHeader } = qs.parse(url.search, { ignoreQueryPrefix: true });
+      if (acceptHeader && typeof acceptHeader === "string") {
+        accept = acceptHeader;
+      }
+    }
+    if (accept?.includes("application/vnd.api+json")) {
       // local requests are allowed to query the realm as the index is being built up
       if (!request.isLocal) {
         await this.ready;
