@@ -2,9 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "currency": "USDC",
-      "logo": "http://local-realm/invoice-assets/currency-usdc.png",
-      "exchangeRate": 1
+      "name": "USDC",
+      "logo": "http://local-realm/invoice-assets/currency-usdc.png"
     },
     "meta": {
       "adoptsFrom": {

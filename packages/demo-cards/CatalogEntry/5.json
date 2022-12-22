@@ -2,17 +2,15 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "PaymentMethod from http://local-realm/payment-method",
-      "description": "Catalog entry for PaymentMethod from http://local-realm/payment-method",
+      "title": "Payment Method",
+      "description": "Catalog entry for Payment Method",
       "ref": {
         "module": "http://local-realm/payment-method",
         "name": "PaymentMethod"
       },
       "demo": {
-        "currency": "USD",
-        "logo": "http://local-realm/invoice-assets/currency-usd.png",
-        "exchangeRate": 1,
-        "balance": 150
+        "name": "USD",
+        "logo": "http://local-realm/invoice-assets/currency-usd.png"
       }
     },
     "meta": {

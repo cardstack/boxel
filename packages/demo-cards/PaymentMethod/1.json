@@ -2,9 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "currency": "DAI",
-      "logo": "http://local-realm/invoice-assets/currency-dai.png",
-      "exchangeRate": 1
+      "name": "DAI",
+      "logo": "http://local-realm/invoice-assets/currency-dai.png"
     },
     "meta": {
       "adoptsFrom": {

@@ -2,9 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "currency": "USD",
-      "logo": "http://local-realm/invoice-assets/currency-usd.png",
-      "exchangeRate": 1
+      "name": "USD",
+      "logo": "http://local-realm/invoice-assets/currency-usd.png"
     },
     "meta": {
       "adoptsFrom": {

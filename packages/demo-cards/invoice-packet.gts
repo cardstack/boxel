@@ -253,13 +253,13 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
               <FieldContainer @label="Primary Payment Method" @vertical={{true}}>
                 <div>
                   <@fields.primaryPayment/>
-                  <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.primaryPayment.exchangeRate @model.primaryPayment.currency}}</div>
+                  <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.primaryPayment}}</div>
                 </div>
               </FieldContainer>
               <FieldContainer @label="Alternate Payment Methods" @vertical={{true}}>
                 <div>
                   <@fields.alternatePayment/>
-                  <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.alternatePayment.exchangeRate @model.alternatePayment.currency}}</div>
+                  <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.alternatePayment}}</div>
                 </div>
               </FieldContainer>
             </div>

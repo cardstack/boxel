@@ -2,7 +2,14 @@ import { contains, field, Card, Component } from 'https://cardstack.com/base/car
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
-import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
+import { CardContainer } from '@cardstack/boxel-ui';
+
+export const EXCHANGE_RATES: Record<string, number> = {
+  "USD": 1,
+  "USDC": 1,
+  "DAI": 1,
+  "LINK": 0.0552,
+}
 
 let styles = initStyleSheet(`
   this {
@@ -19,38 +26,18 @@ class PaymentMethodView extends Component<typeof PaymentMethod> {
   <template>
     <CardContainer {{attachStyles styles}}>
       <img src={{@model.logo}} width="20" height="20"/>
-      <div class="payment-method__currency"><@fields.currency/></div>
+      <div class="payment-method__currency"><@fields.name/></div>
     </CardContainer>
   </template>
 }
 
-let editStyles = initStyleSheet(`
-  this {
-    padding: var(--boxel-sp);
-    display: grid;
-    gap: var(--boxel-sp);
-  }
-`);
-
 export class PaymentMethod extends Card {
-  @field currency = contains(StringCard);
+  @field name = contains(StringCard);
   @field logo = contains(StringCard);
-  @field exchangeRate = contains(IntegerCard);
-  @field balance = contains(IntegerCard);
+  @field exchangeRate = contains(IntegerCard, { computeVia:
+    function(this: PaymentMethod) { return EXCHANGE_RATES[this.name]; }
+  });
 
   static embedded = PaymentMethodView;
   static isolated = PaymentMethodView;
-
-  static edit = class Edit extends Component<typeof PaymentMethod> {
-    <template>
-      <CardContainer @displayBoundaries={{true}} {{attachStyles editStyles}}>
-        <FieldContainer @tag="label" @label="Currency">
-          <@fields.currency/>
-        </FieldContainer>
-        <FieldContainer @tag="label" @label="Logo">
-          <@fields.logo/>
-        </FieldContainer>
-      </CardContainer>
-    </template>
-  }
 }
