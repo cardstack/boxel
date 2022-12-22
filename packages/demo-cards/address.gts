@@ -1,0 +1,23 @@
+import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
+import StringCard from 'https://cardstack.com/base/string';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
+
+let styles = initStyleSheet(`this { font-style: normal; }`);
+
+export class Address extends Card {
+  @field streetAddress = contains(StringCard); // required
+  @field city = contains(StringCard); // required
+  @field region = contains(StringCard);
+  @field postalCode = contains(StringCard);
+  @field poBoxNumber = contains(StringCard);
+  @field country = contains(StringCard); // required // Dropdown of countries
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <address {{attachStyles styles}}>
+        <div><@fields.streetAddress/></div>
+        <@fields.city/> <@fields.region/> <@fields.postalCode/><@fields.poBoxNumber/> <@fields.country/>
+      </address>
+    </template>
+  }
+}

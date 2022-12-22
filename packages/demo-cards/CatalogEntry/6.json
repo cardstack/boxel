@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Contact",
+      "description": "Catalog entry for Contact",
+      "ref": {
+        "module": "http://local-realm/contact",
+        "name": "Contact"
+      },
+      "demo": {
+        "fullName": null,
+        "preferredName": null,
+        "jobTitle": null,
+        "email": null,
+        "phone": null,
+        "cardXYZ": null,
+        "notes": null,
+        "imageURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://local-realm/contact",
+            "name": "Contact"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

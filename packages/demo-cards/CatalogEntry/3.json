@@ -9,14 +9,27 @@
         "name": "Vendor"
       },
       "demo": {
-        "vendorName": "",
-        "addressLine": "",
-        "city": "",
-        "state": "",
-        "zipCode": "",
-        "country": null,
-        "email": "",
-        "logo": ""
+        "name": "",
+        "description": null,
+        "logoURL": null,
+        "cardXYZ": null,
+        "email": null,
+        "contactMethod": [],
+        "mailingAddress": {
+          "streetAddress": null,
+          "city": null,
+          "region": null,
+          "postalCode": null,
+          "poBoxNumber": null,
+          "country": null
+        }
+      }
+    },
+    "relationships": {
+      "demo.contact": {
+        "links": {
+          "self": null
+        }
       }
     },
     "meta": {
