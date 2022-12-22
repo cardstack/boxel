@@ -5,10 +5,10 @@ import DateCard from 'https://cardstack.com/base/date';
 import DatetimeCard from "https://cardstack.com/base/datetime";
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { Vendor } from './vendor';
-import { PaymentMethod } from './payment-method';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { formatUSD, balanceInCurrency } from './currency-format';
 import { CardContainer, FieldContainer, Label, Message } from '@cardstack/boxel-ui';
+import { Token } from './token';
 
 let invoiceStyles = initStyleSheet(`
   this {
@@ -253,19 +253,29 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
               <FieldContainer @label="Primary Payment Method" @vertical={{true}}>
                 <div>
                   <@fields.primaryPayment/>
-                  <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.primaryPayment}}</div>
+                  {{#if @model.primaryPayment}}
+                    <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.primaryPayment}}</div>
+                  {{/if}}
                 </div>
               </FieldContainer>
               <FieldContainer @label="Alternate Payment Methods" @vertical={{true}}>
                 <div>
                   <@fields.alternatePayment/>
-                  <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.alternatePayment}}</div>
+                  {{#if @model.alternatePayment}}
+                    <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.alternatePayment}}</div>
+                  {{/if}}
                 </div>
               </FieldContainer>
             </div>
           </section>
           <FieldContainer @vertical={{true}} @label="Balance Due" class="balance-due">
-            <span class="balance-due__total">{{formatUSD @model.balanceDue}}</span>
+            <span class="balance-due__total">
+              {{#if @model.primaryPayment}}
+                {{balanceInCurrency @model.balanceDue @model.primaryPayment}}
+              {{else}}
+                {{formatUSD @model.balanceDue}}
+              {{/if}}
+            </span>
           </FieldContainer>
         </div>
       </section>
@@ -316,7 +326,13 @@ class EditTemplate extends Component<typeof InvoicePacket> {
           </div>
         </section>
         <FieldContainer @label="Balance Due" class="balance-due" @vertical={{true}}>
-          <span class="balance-due__total">{{formatUSD @model.balanceDue}}</span>
+          <span class="balance-due__total">
+            {{#if @model.primaryPayment}}
+              {{balanceInCurrency @model.balanceDue @model.primaryPayment}}
+            {{else}}
+              {{formatUSD @model.balanceDue}}
+            {{/if}}
+          </span>
         </FieldContainer>
       </section>
     </CardContainer>
@@ -327,8 +343,10 @@ export class InvoicePacket extends Card {
   @field vendor = linksTo(Vendor);
   @field details = contains(Details);
   @field lineItems = containsMany(LineItem);
-  @field primaryPayment = linksTo(PaymentMethod);
-  @field alternatePayment = linksTo(PaymentMethod);
+  @field primaryPayment = linksTo(Token, { computeVia: function(this: InvoicePacket) {
+    return this.vendor?.token;
+  }});
+  @field alternatePayment = linksTo(Token);
   @field balanceDue = contains(IntegerCard, { computeVia:
     function(this: InvoicePacket) {
       return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.amount * i.quantity).reduce((a, b) => (a + b));

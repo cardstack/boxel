@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "typeId": "crypto",
+      "name": "Crypto Payment"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/payment-type",
+        "name": "PaymentType"
+      }
+    }
+  }
+}

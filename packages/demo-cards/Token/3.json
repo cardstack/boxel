@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "relationships": {
+      "chainId": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "attributes": {
+      "name": "USDC",
+      "symbol": "USDC",
+      "address": null,
+      "logoURL": "http://local-realm/invoice-assets/currency-usdc.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/token",
+        "name": "Token"
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "U.S. Dollar",
+      "symbol": "USD",
+      "sign": "$",
+      "logoURL": "http://local-realm/invoice-assets/currency-usd.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/asset",
+        "name": "Currency"
+      }
+    }
+  }
+}

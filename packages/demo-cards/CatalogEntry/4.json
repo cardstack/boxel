@@ -31,17 +31,12 @@
     "relationships": {
       "demo.vendor": {
         "links": {
-          "self": "http://local-realm/Vendor/1"
-        }
-      },
-      "demo.primaryPayment": {
-        "links": {
-          "self": "http://local-realm/PaymentMethod/3"
+          "self": null
         }
       },
       "demo.alternatePayment": {
         "links": {
-          "self": "http://local-realm/PaymentMethod/1"
+          "self": null
         }
       }
     },

@@ -1,8 +1,8 @@
-import { PaymentMethod } from "./payment-method";
+import { Token } from "./token";
 
 export function balanceInCurrency(
   balance: number | null | undefined,
-  payment: PaymentMethod | null | undefined
+  payment: Token | null | undefined
 ) {
   if (balance == null || payment?.exchangeRate == null) {
     return 0;
@@ -12,7 +12,7 @@ export function balanceInCurrency(
     return formatUSD(total);
   } else {
     return `${Number.isInteger(total) ? total : total.toFixed(2)} ${
-      payment.name
+      payment.symbol
     }`;
   }
 }

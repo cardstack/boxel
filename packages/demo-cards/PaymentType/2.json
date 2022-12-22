@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "typeId": "wire",
+      "name": "Wire Transfer"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/payment-type",
+        "name": "PaymentType"
+      }
+    }
+  }
+}

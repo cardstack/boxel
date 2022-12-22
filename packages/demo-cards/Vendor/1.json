@@ -20,12 +20,34 @@
         "postalCode": "94111",
         "poBoxNumber": null,
         "country": "USA"
+      },
+      "preferredPaymentMethod": {
+        "wireTransfer": {
+          "currency": null,
+          "iban": null,
+          "bic": null
+        }
       }
     },
     "relationships": {
       "contact": {
         "links": {
           "self": "http://local-realm/Contact/1"
+        }
+      },
+      "preferredPaymentMethod.typeId": {
+        "links": {
+          "self": "http://local-realm/PaymentType/1"
+        }
+      },
+      "preferredPaymentMethod.cryptoPayment": {
+        "links": {
+          "self": "http://local-realm/Chain/1"
+        }
+      },
+      "token": {
+        "links": {
+          "self": "http://local-realm/Token/2"
         }
       }
     },

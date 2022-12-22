@@ -7,14 +7,9 @@
           "self": "http://local-realm/Vendor/1"
         }
       },
-      "primaryPayment": {
+      "demo.alternatePayment": {
         "links": {
-          "self": "http://local-realm/PaymentMethod/3"
-        }
-      },
-      "alternatePayment": {
-        "links": {
-          "self": "http://local-realm/PaymentMethod/2"
+          "self": null
         }
       }
     },
