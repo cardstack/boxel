@@ -12,37 +12,44 @@ import { createNewCard, type CardRef } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
+import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
 
 export default class CardCatalogModal extends Component {
   <template>
     {{#if this.currentRequest}}
-      <dialog class="dialog-box card-catalog-dialog" open data-test-card-catalog-modal>
-        <header class="dialog-box__header">
-          <h1>Card Catalog</h1>
-          <button {{on "click" (fn this.pick undefined)}} type="button">X Close</button>
-        </header>
-        <section class="dialog-box__content">
-          {{#if this.currentRequest.search.isLoading}}
-            Loading...
-          {{else}}
-            {{#if this.currentRequest.opts.offerToCreate}}
-              <button {{on "click" (fn this.createNew this.currentRequest.opts.offerToCreate)}} data-test-create-new>Create New</button>
+      <Modal
+        @size="large"
+        @isOpen={{true}}
+        @onClose={{fn this.pick undefined}}
+        data-test-card-catalog-modal
+      >
+        <CardContainer class="dialog-box" @displayBoundaries={{true}}>
+          <Header @title="Card Catalog">
+            <button {{on "click" (fn this.pick undefined)}} class="dialog-box__close">x</button>
+          </Header>
+          <div class="dialog-box__content">
+            {{#if this.currentRequest.search.isLoading}}
+              Loading...
+            {{else}}
+              {{#if this.currentRequest.opts.offerToCreate}}
+                <button {{on "click" (fn this.createNew this.currentRequest.opts.offerToCreate)}} data-test-create-new>Create New</button>
+              {{/if}}
+              <ul class="card-catalog" data-test-card-catalog>
+                {{#each this.currentRequest.search.instances as |card|}}
+                  <li data-test-card-catalog-item={{card.id}}>
+                    <Preview @card={{card}} @format="embedded" />
+                    <button {{on "click" (fn this.pick card)}} data-test-select={{card.id}}>
+                      Select
+                    </button>
+                  </li>
+                {{else}}
+                  <p>No cards available</p>
+                {{/each}}
+              </ul>
             {{/if}}
-            <ul class="card-catalog" data-test-card-catalog>
-              {{#each this.currentRequest.search.instances as |card|}}
-                <li data-test-card-catalog-item={{card.id}}>
-                  <Preview @card={{card}} @format="embedded" />
-                  <button {{on "click" (fn this.pick card)}} type="button" data-test-select={{card.id}}>
-                    Select
-                  </button>
-                </li>
-              {{else}}
-                <p>No cards available</p>
-              {{/each}}
-            </ul>
-          {{/if}}
-        </section>
-      </dialog>
+          </div>
+        </CardContainer>
+      </Modal>
     {{/if}}
   </template>
 

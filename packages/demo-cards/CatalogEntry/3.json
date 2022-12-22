@@ -9,13 +9,14 @@
         "name": "Vendor"
       },
       "demo": {
-        "vendorName": "Vendor name",
-        "addressLine": "Address line 1",
-        "city": "City",
-        "state": "State",
-        "zipCode": 11111,
-        "email": "Contact email",
-        "logo": "Logo (optional)"
+        "vendorName": "",
+        "addressLine": "",
+        "city": "",
+        "state": "",
+        "zipCode": "",
+        "country": null,
+        "email": "",
+        "logo": ""
       }
     },
     "meta": {

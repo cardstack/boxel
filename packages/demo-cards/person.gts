@@ -2,12 +2,15 @@ import { contains, linksTo, field, Component, Card } from 'https://cardstack.com
 import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import { CardContainer } from '@cardstack/boxel-ui';
-import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { Pet } from './pet';
 
 let styles = initStyleSheet(`
   this {
-    padding: var(--boxel-spacing);
+    min-width: 20rem;
+    padding: var(--boxel-sp);
+    display: grid;
+    gap: var(--boxel-sp);
   }
 `);
 
@@ -22,7 +25,7 @@ export class Person extends Card {
     <template>
       <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h3><@fields.firstName/> <@fields.lastName/></h3>
-        <div><@fields.pet/></div>
+        {{#if @model.pet}}<div><@fields.pet/></div>{{/if}}
       </CardContainer>
     </template>
   }
@@ -31,9 +34,11 @@ export class Person extends Card {
     <template>
       <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h2><@fields.firstName/> <@fields.lastName /></h2>
-        <div><@fields.isCool/></div>
-        <div><@fields.isHuman/></div>
-        <@fields.pet/>
+        <div>
+          <div><@fields.isCool/></div>
+          <div><@fields.isHuman/></div>
+        </div>
+        {{#if @model.pet}}<@fields.pet/>{{/if}}
       </CardContainer>
     </template>
   }

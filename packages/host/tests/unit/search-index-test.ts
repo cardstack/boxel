@@ -523,7 +523,6 @@ module('Unit | search-index', function (hooks) {
     assert.deepEqual(
       [...refs!.keys()].sort(),
       [
-        'http://localhost:4201/base/attach-styles',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/contains-many-component',
         'http://localhost:4201/base/default-card-component',
@@ -531,11 +530,13 @@ module('Unit | search-index', function (hooks) {
         'http://localhost:4201/base/integer',
         'http://localhost:4201/base/links-to-editor',
         'http://localhost:4201/base/not-ready',
-        'http://localhost:4201/base/pick',
         'http://localhost:4201/base/shadow-dom',
         'http://localhost:4201/base/string',
         'http://localhost:4201/base/watched-array',
         'http://localhost:4201/externals/@cardstack/boxel-ui',
+        'http://localhost:4201/externals/@cardstack/boxel-ui/attach-styles',
+        'http://localhost:4201/externals/@cardstack/boxel-ui/helpers/pick',
+        'http://localhost:4201/externals/@cardstack/boxel-ui/helpers/truth-helpers',
         'http://localhost:4201/externals/@cardstack/runtime-common',
         'http://localhost:4201/externals/@ember/component',
         'http://localhost:4201/externals/@ember/component/template-only',

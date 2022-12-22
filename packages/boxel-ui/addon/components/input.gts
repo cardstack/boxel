@@ -30,9 +30,10 @@ export interface Signature {
 
 let styles = initStyleSheet(`
   .boxel-input {
-    --boxel-form-control-border-color: #afafb7;
-    --boxel-form-control-border-radius: 5px;
+    --boxel-input-height: var(--boxel-form-control-height);
 
+    box-sizing: border-box;
+    width: 100%;
     min-height: var(--boxel-input-height);
     padding: var(--boxel-sp-xxs) 0 var(--boxel-sp-xxs) var(--boxel-sp-xxs);
     border: 1px solid var(--boxel-form-control-border-color);

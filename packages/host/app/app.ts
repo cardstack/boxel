@@ -28,6 +28,21 @@ import * as runtime from '@cardstack/runtime-common';
 );
 import * as boxelUI from '@cardstack/boxel-ui';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set('@cardstack/boxel-ui', boxelUI);
+import * as boxelAttachStyles from '@cardstack/boxel-ui/attach-styles';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  '@cardstack/boxel-ui/attach-styles',
+  boxelAttachStyles
+);
+import * as boxelPickHelper from '@cardstack/boxel-ui/helpers/pick';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  '@cardstack/boxel-ui/helpers/pick',
+  boxelPickHelper
+);
+import * as boxelTruthHelpers from '@cardstack/boxel-ui/helpers/truth-helpers';
+(window as any).RUNTIME_SPIKE_EXTERNALS.set(
+  '@cardstack/boxel-ui/helpers/truth-helpers',
+  boxelTruthHelpers
+);
 import * as glimmerComponent from '@glimmer/component';
 (window as any).RUNTIME_SPIKE_EXTERNALS.set(
   '@glimmer/component',

@@ -5,7 +5,7 @@ import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { flatten } from "flat";
 import { on } from '@ember/modifier';
-import { pick } from './pick';
+import pick from '@cardstack/boxel-ui/helpers/pick';
 import { getBoxComponent, type ComponentOptions } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { getLinksToEditor } from './links-to-editor';

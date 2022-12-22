@@ -14,6 +14,28 @@ import * as runtime from "./index";
 );
 import * as boxelUI from "@cardstack/boxel-ui";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@cardstack/boxel-ui", boxelUI);
+// import * as attachStyles from "@cardstack/boxel-ui/attach-styles";
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set(
+  "@cardstack/boxel-ui/attach-styles",
+  {
+    attachStyles() {},
+    initStyleSheet() {},
+  }
+);
+// import * as boxelPickHelper from "@cardstack/boxel-ui/helpers/pick";
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set(
+  "@cardstack/boxel-ui/helpers/pick",
+  {
+    default() {},
+  }
+);
+// import * as boxelTruthHelpers from "@cardstack/boxel-ui/helpers/truth-helpers";
+(globalThis as any).RUNTIME_SPIKE_EXTERNALS.set(
+  "@cardstack/boxel-ui/helpers/truth-helpers",
+  {
+    eq() {},
+  }
+);
 // import * as glimmerComponent from "@glimmer/component";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set("@glimmer/component", {
   default: class {},

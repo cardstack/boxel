@@ -30,7 +30,7 @@ const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
 // TODO when encountering this component as part of card pre-render,
 // we'll need to think about how the consumers of this HTML fragment
 // will operate. Declarative shadow roots probably won't cut it. Rather
-// we'll need to attach shadow roots to these html fragments on the 
+// we'll need to attach shadow roots to these html fragments on the
 // fly as we consume them.
 export default class ShadowDOM extends Component<Signature> {
   <template>

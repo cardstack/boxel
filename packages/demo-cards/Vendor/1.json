@@ -6,7 +6,7 @@
       "addressLine": "50 California St Ste 1500",
       "city": "San Francisco",
       "state": "CA",
-      "zipCode": 94111,
+      "zipCode": "94111",
       "email": "finance@smartcontract.com",
       "logo": "http://local-realm/invoice-assets/vendor-logo-smart-contract.png"
     },

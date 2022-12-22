@@ -1,8 +1,8 @@
 import { primitive, serialize, queryableValue, Component, Card, useIndexBasedKey } from './card-api';
-import { on, } from '@ember/modifier';
+import { on } from '@ember/modifier';
 import Modifier from 'ember-modifier';
 import { fn } from '@ember/helper';
-import { pick } from './pick';
+import pick from '@cardstack/boxel-ui/helpers/pick';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.

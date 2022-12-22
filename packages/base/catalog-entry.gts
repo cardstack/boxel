@@ -5,15 +5,15 @@ import CardRefCard from './card-ref';
 import { baseCardRef, loadCard } from "@cardstack/runtime-common";
 import { isEqual } from 'lodash';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
-import { initStyleSheet, attachStyles } from './attach-styles';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 
 let styles = initStyleSheet(`
   this {
-    padding: var(--boxel-spacing);
+    padding: var(--boxel-sp);
+    display: grid;
+    gap: var(--boxel-sp);
   }
-  .demo {
-    margin-top: var(--boxel-spacing);
-  }
+  h1, h2 { margin: 0; }
 `);
 
 export class CatalogEntry extends Card {
@@ -63,7 +63,7 @@ export class CatalogEntry extends Card {
         <h2><@fields.title/></h2>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
-          <div class="demo" data-test-demo-embedded><@fields.demo/></div>
+          <div data-test-demo-embedded><@fields.demo/></div>
         {{/if}}
       </CardContainer>
     </template>
@@ -73,10 +73,10 @@ export class CatalogEntry extends Card {
     <template>
       <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h1 data-test-title><@fields.title/></h1>
-        <p data-test-description><em><@fields.description/></em></p>
+        <em data-test-description><@fields.description/></em>
         <div><@fields.ref/></div>
         {{#if @model.showDemo}}
-          <div class="demo" data-test-demo><@fields.demo/></div>
+          <div data-test-demo><@fields.demo/></div>
         {{/if}}
       </CardContainer>
     </template>
