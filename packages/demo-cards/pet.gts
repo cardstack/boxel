@@ -7,8 +7,12 @@ import { CardContainer } from '@cardstack/boxel-ui';
 
 let styles = initStyleSheet(`
   this {
+    min-width: 20rem;
     padding: var(--boxel-sp);
+    display: grid;
+    gap: var(--boxel-sp);
   }
+  h2, h3 { margin: 0; }
 `);
 
 export class Pet extends Card {
@@ -29,10 +33,12 @@ export class Pet extends Card {
     <template>
       <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h2><@fields.firstName/></h2>
-        <div><@fields.sleepsOnTheCouch/></div>
-        <div>Favorite Toy: <@fields.favoriteToy/></div>
-        <div>Favorite Treat: <@fields.favoriteTreat/></div>
-        <div>Cuteness Rating: <@fields.cutenessRating/></div>
+        <div>
+          <div><@fields.sleepsOnTheCouch/></div>
+          <div>Favorite Toy: <@fields.favoriteToy/></div>
+          <div>Favorite Treat: <@fields.favoriteTreat/></div>
+          <div>Cuteness Rating: <@fields.cutenessRating/></div>
+        </div>
       </CardContainer>
     </template>
   };

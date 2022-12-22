@@ -24,6 +24,14 @@ class PaymentMethodView extends Component<typeof PaymentMethod> {
   </template>
 }
 
+let editStyles = initStyleSheet(`
+  this {
+    padding: var(--boxel-sp);
+    display: grid;
+    gap: var(--boxel-sp);
+  }
+`);
+
 export class PaymentMethod extends Card {
   @field currency = contains(StringCard);
   @field logo = contains(StringCard);
@@ -35,7 +43,7 @@ export class PaymentMethod extends Card {
 
   static edit = class Edit extends Component<typeof PaymentMethod> {
     <template>
-      <CardContainer>
+      <CardContainer @displayBoundaries={{true}} {{attachStyles editStyles}}>
         <FieldContainer @tag="label" @label="Currency">
           <@fields.currency/>
         </FieldContainer>

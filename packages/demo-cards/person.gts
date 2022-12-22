@@ -7,7 +7,10 @@ import { Pet } from './pet';
 
 let styles = initStyleSheet(`
   this {
+    min-width: 20rem;
     padding: var(--boxel-sp);
+    display: grid;
+    gap: var(--boxel-sp);
   }
 `);
 
@@ -17,8 +20,6 @@ export class Person extends Card {
   @field isCool = contains(BooleanCard);
   @field isHuman = contains(BooleanCard);
   @field pet = linksTo(Pet);
-  @field username = contains(StringCard);
-  @field imageURL = contains(StringCard);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -33,8 +34,10 @@ export class Person extends Card {
     <template>
       <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h2><@fields.firstName/> <@fields.lastName /></h2>
-        <div><@fields.isCool/></div>
-        <div><@fields.isHuman/></div>
+        <div>
+          <div><@fields.isCool/></div>
+          <div><@fields.isHuman/></div>
+        </div>
         {{#if @model.pet}}<@fields.pet/>{{/if}}
       </CardContainer>
     </template>

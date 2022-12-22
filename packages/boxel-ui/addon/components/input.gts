@@ -33,7 +33,8 @@ let styles = initStyleSheet(`
     --boxel-input-height: var(--boxel-form-control-height);
 
     box-sizing: border-box;
-    height: var(--boxel-input-height);
+    width: 100%;
+    min-height: var(--boxel-input-height);
     padding: var(--boxel-sp-xxs) 0 var(--boxel-sp-xxs) var(--boxel-sp-xxs);
     border: 1px solid var(--boxel-form-control-border-color);
     border-radius: var(--boxel-form-control-border-radius);
@@ -41,11 +42,6 @@ let styles = initStyleSheet(`
     font-weight: 400;
     letter-spacing: var(--boxel-lsp-xs);
     transition: border-color var(--boxel-transition);
-    overflow: auto;
-  }
-
-  .boxel-input--textarea {
-    min-height: calc(2 * var(--boxel-input-height));
   }
 
   .boxel-input:disabled {
@@ -121,7 +117,7 @@ export default class BoxelInput extends Component<Signature> {
     {{#let (and @invalid @errorMessage) as |shouldShowErrorMessage|}}
       {{#let (element (if @multiline "textarea" "input")) as |InputTag|}}
         <InputTag
-          class={{cn "boxel-input" boxel-input--invalid=@invalid boxel-input--textarea=@multiline}}
+          class={{cn "boxel-input" boxel-input--invalid=@invalid}}
           id={{this.id}}
           value={{@value}}
           required={{@required}}

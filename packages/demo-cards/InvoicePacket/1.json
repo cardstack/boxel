@@ -16,21 +16,6 @@
         "links": {
           "self": "http://local-realm/PaymentMethod/2"
         }
-      },
-      "notes.0.author": {
-        "links": {
-          "self": "http://local-realm/Person/2"
-        }
-      },
-      "notes.1.author": {
-        "links": {
-          "self": "http://local-realm/Person/3"
-        }
-      },
-      "notes.2.author": {
-        "links": {
-          "self": "http://local-realm/Person/4"
-        }
       }
     },
     "attributes": {
@@ -58,19 +43,16 @@
       ],
       "notes": [
         {
+          "authorName": "Lucas Forbes",
           "text": "@Elena please check the invoice for accuracy",
           "timestamp": "2022-04-09T16:13:00.000Z"
         },
         {
+          "authorName": "Elena Hopkins",
           "text": "Looks good to me",
           "timestamp": "2022-04-10T20:51:00.000Z"
-        },
-        {
-          "text": "Example of a very long note lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
-          "timestamp": null
         }
-      ],
-      "history": []
+      ]
     },
     "meta": {
       "adoptsFrom": {

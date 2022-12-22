@@ -13,37 +13,6 @@ import type CardService from '../services/card-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
 import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
-
-let modalStyles = initStyleSheet(`
-  .create-card-modal {
-    height: 100%;
-    display: grid;
-    grid-template-rows: auto 1fr;
-  }
-  .create-card-modal__content {
-    padding: var(--boxel-sp);
-    height: 100%;
-    overflow: auto;
-  }
-  .create-card-modal__content > * + * {
-    margin-top: var(--boxel-sp);
-  }
-  .create-card-modal__close {
-    border: none;
-    background: none;
-    font: var(--boxel-font-lg);
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 50px;
-    height: 50px;
-    padding: 0;
-  }
-  .create-card-modal__close:hover {
-    color: var(--boxel-highlight);
-  }
-`);
 
 export default class CreateCardModal extends Component {
   <template>
@@ -53,20 +22,18 @@ export default class CreateCardModal extends Component {
           @size="large"
           @isOpen={{true}}
           @onClose={{fn this.save undefined}}
-          open
-          {{attachStyles modalStyles}}
           data-test-create-new-card={{card.constructor.name}}
         >
-          <CardContainer class="create-card-modal" @displayBoundaries={{true}}>
+          <CardContainer class="dialog-box" @displayBoundaries={{true}}>
             <Header @title="Create New Card">
-              <button {{on "click" (fn this.save undefined)}} class="create-card-modal__close">x</button>
+              <button {{on "click" (fn this.save undefined)}} class="dialog-box__close">x</button>
             </Header>
-            <section class="create-card-modal__content">
+            <div class="dialog-box__content">
               <CardEditor
                 @card={{card}}
                 @onSave={{this.save}}
               />
-            </section>
+            </div>
           </CardContainer>
         </Modal>
       {{/if}}

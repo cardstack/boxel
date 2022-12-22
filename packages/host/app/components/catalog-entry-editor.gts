@@ -11,6 +11,7 @@ import { getSearchResults } from '../resources/search';
 import type CardService from '../services/card-service';
 import CardEditor from './card-editor';
 import { type Card } from "https://cardstack.com/base/card-api";
+import CardContainer from '@cardstack/boxel-ui/components/card-container';
 
 interface Signature {
   Args: {
@@ -20,28 +21,30 @@ interface Signature {
 
 export default class CatalogEntryEditor extends Component<Signature> {
   <template>
-    <div class="catalog-entry-editor" data-test-catalog-entry-editor>
+    <div data-test-catalog-entry-editor>
       {{#if this.card}}
-        <fieldset>
-          <legend>Edit Catalog Entry</legend>
-          <LinkTo @route="application" @query={{hash path=(ensureJsonExtension this.card.id)}} data-test-catalog-entry-id>
-            {{this.card.id}}
-          </LinkTo>
-          <CardEditor
-            @format="embedded"
-            @card={{this.card}}
-            @onSave={{this.onSave}}
-          />
-        </fieldset>
+        <CardContainer @title="Edit Catalog Entry" @displayBoundaries={{true}}>
+          <div class="catalog-entry-editor">
+            <LinkTo @route="application" @query={{hash path=(ensureJsonExtension this.card.id)}} data-test-catalog-entry-id>
+              {{this.card.id}}
+            </LinkTo>
+            <CardEditor
+              @format="embedded"
+              @card={{this.card}}
+              @onSave={{this.onSave}}
+            />
+          </div>
+        </CardContainer>
       {{else if this.newEntry}}
-        <fieldset>
-          <legend>Publish New Card Type</legend>
-          <CardEditor
-            @card={{this.newEntry}}
-            @onSave={{this.onSave}}
-            @onCancel={{this.onCancel}}
-          />
-        </fieldset>
+        <CardContainer @title="Create Catalog Entry" @displayBoundaries={{true}}>
+          <div class="catalog-entry-editor">
+            <CardEditor
+              @card={{this.newEntry}}
+              @onSave={{this.onSave}}
+              @onCancel={{this.onCancel}}
+            />
+          </div>
+        </CardContainer>
       {{else}}
         <button {{on "click" this.createEntry}} type="button" data-test-catalog-entry-publish>
           Publish Card Type

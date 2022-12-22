@@ -7,7 +7,11 @@ import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
 let styles = initStyleSheet(`
   this {
+    --boxel-label-color: var(--boxel-dark);
+    min-width: 20rem;
     padding: var(--boxel-sp);
+    display: grid;
+    gap: var(--boxel-sp);
   }
 `);
 
@@ -23,17 +27,9 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Re
   </template>;
 }
 
-let editStyles = initStyleSheet(`
-  this {
-    padding: var(--boxel-sp);
-    display: grid;
-    gap: var(--boxel-sp);
-  }
-`);
-
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <CardContainer @displayBoundaries={{true}} {{attachStyles editStyles}}>
+    <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           {{!-- @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') --}}

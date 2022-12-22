@@ -13,37 +13,6 @@ import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
 import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
-
-let modalStyles = initStyleSheet(`
-  .card-catalog-modal {
-    height: 100%;
-    display: grid;
-    grid-template-rows: auto 1fr;
-  }
-  .card-catalog-modal__content {
-    padding: var(--boxel-sp);
-    height: 100%;
-    overflow: auto;
-  }
-  .card-catalog-modal__content > * + * {
-    margin-top: var(--boxel-sp);
-  }
-  .card-catalog-modal__close {
-    border: none;
-    background: none;
-    font: var(--boxel-font-lg);
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 50px;
-    height: 50px;
-    padding: 0;
-  }
-  .card-catalog-modal__close:hover {
-    color: var(--boxel-highlight);
-  }
-`);
 
 export default class CardCatalogModal extends Component {
   <template>
@@ -52,14 +21,13 @@ export default class CardCatalogModal extends Component {
         @size="large"
         @isOpen={{true}}
         @onClose={{fn this.pick undefined}}
-        {{attachStyles modalStyles}}
         data-test-card-catalog-modal
       >
-        <CardContainer class="card-catalog-modal" @displayBoundaries={{true}}>
+        <CardContainer class="dialog-box" @displayBoundaries={{true}}>
           <Header @title="Card Catalog">
-            <button {{on "click" (fn this.pick undefined)}} class="card-catalog-modal__close">x</button>
+            <button {{on "click" (fn this.pick undefined)}} class="dialog-box__close">x</button>
           </Header>
-          <section class="card-catalog-modal__content">
+          <div class="dialog-box__content">
             {{#if this.currentRequest.search.isLoading}}
               Loading...
             {{else}}
@@ -79,7 +47,7 @@ export default class CardCatalogModal extends Component {
                 {{/each}}
               </ul>
             {{/if}}
-          </section>
+          </div>
         </CardContainer>
       </Modal>
     {{/if}}

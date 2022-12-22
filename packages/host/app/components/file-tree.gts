@@ -25,31 +25,30 @@ export default class FileTree extends Component<Args> {
   <template>
     {{#if @localRealm.isAvailable}}
       <button {{on "click" this.closeRealm}} type="button">Close local realm</button>
-      {{#each this.listing.entries key="path" as |entry|}}
-        {{#if (eq entry.kind 'file')}}
-          <div class="item file {{if (eq entry.path @path) 'selected'}} indent-{{entry.indent}}"
-            {{on "click" (fn this.open entry)}} role="button">
-          {{entry.name}}
-          </div>
-        {{else}}
-          <div class="item directory indent-{{entry.indent}}">
+      <nav>
+        {{#each this.listing.entries key="path" as |entry|}}
+          {{#if (eq entry.kind 'file')}}
+            <div role="button" {{on "click" (fn this.open entry)}} class="file {{if (eq entry.path @path) "selected"}} indent-{{entry.indent}}">
             {{entry.name}}
-          </div>
-        {{/if}}
-      {{/each}}
-
+            </div>
+          {{else}}
+            <div class="directory indent-{{entry.indent}}">
+              {{entry.name}}
+            </div>
+          {{/if}}
+        {{/each}}
+      </nav>
       <button {{on "click" this.createNew}} type="button" data-test-create-new-card-button>
         Create New Card
       </button>
-
-      <div class="polling-button">
-        <button {{on "click" this.togglePolling}} type="button">{{if this.isPolling "Stop" "Start"}} Polling</button>
+      <div>
+        <button {{on "click" this.togglePolling}}>{{if this.isPolling "Stop" "Start"}} Polling</button>
         {{#unless this.isPolling}}<p><strong>Status: Polling is off!</strong></p>{{/unless}}
       </div>
-    {{else if @localRealm.isLoading }}
+    {{else if @localRealm.isLoading}}
       ...
     {{else if @localRealm.isEmpty}}
-      <button {{on "click" this.openRealm}} type="button">Open a local realm</button>
+      <button {{on "click" this.openRealm}}>Open a local realm</button>
     {{/if}}
   </template>
 

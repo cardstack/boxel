@@ -5,7 +5,6 @@ import DateCard from 'https://cardstack.com/base/date';
 import DatetimeCard from "https://cardstack.com/base/datetime";
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { Vendor } from './vendor';
-import { Person } from "./person";
 import { PaymentMethod } from './payment-method';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { formatUSD, balanceInCurrency } from './currency-format';
@@ -202,15 +201,16 @@ class LineItem extends Card {
 }
 
 class Note extends Card {
-  @field author = linksTo(Person); /* computed */
   @field text = contains(TextAreaCard);
+  @field authorName = contains(StringCard); /* computed */
+  @field authorImage = contains(StringCard); /* computed */
   @field timestamp = contains(DatetimeCard); /* computed */
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <Message
-        @name={{@model.author.username}}
-        @imgURL={{@model.author.imageURL}}
+        @name={{@model.authorName}}
+        @imgURL={{@model.authorImage}}
         @datetime={{@model.timestamp}}
       >
         <@fields.text/>
@@ -269,18 +269,16 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
           </FieldContainer>
         </div>
       </section>
-      <section class="extras">
-        <section>
-          <h2>Notes</h2>
-          <CardContainer class="notes">
-            <@fields.notes/>
-          </CardContainer>
+      {{#if @model.notes.length}}
+        <section class="extras">
+          <section>
+            <h2>Notes</h2>
+            <CardContainer class="notes">
+              <@fields.notes/>
+            </CardContainer>
+          </section>
         </section>
-        <section>
-          <h2>History</h2>
-          <@fields.history/>
-        </section>
-      </section>
+      {{/if}}
     </CardContainer>
   </template>
 }
@@ -337,7 +335,6 @@ export class InvoicePacket extends Card {
     }
   });
   @field notes = containsMany(Note);
-  @field history = containsMany(StringCard); /* computed */
 
   static embedded = InvoiceTemplate;
   static isolated = InvoiceTemplate;
