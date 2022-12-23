@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "relationships": {
+      "paymentType": {
+        "links": {
+          "self": null
+        }
+      },
+      "cryptoPayment.chain": {
+        "links": {
+          "self": "http://local-realm/Chain/3"
+        }
+      },
+      "cryptoPayment.token": {
+        "links": {
+          "self": null
+        }
+      },
+      "wireTransfer.currency": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "attributes": {
+      "cryptoPayment": {
+        "toAddress": null
+      },
+      "wireTransfer": {
+        "iban": null,
+        "bic": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/payment-method",
+        "name": "PaymentMethod"
+      }
+    }
+  }
+}

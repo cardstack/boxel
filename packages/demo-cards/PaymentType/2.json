@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "typeId": "wire",
+      "type": "wire-transfer",
       "name": "Wire Transfer"
     },
     "meta": {

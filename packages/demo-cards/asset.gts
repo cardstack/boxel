@@ -1,14 +1,16 @@
-import { contains, field, Card, Component } from 'https://cardstack.com/base/card-api';
+import { contains, field, Card, Component, linksTo } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer } from '@cardstack/boxel-ui';
+import { Chain } from "./chain";
 
 let EXCHANGE_RATES: Record<string, number> = {
   "USD": 1,
   "USDC": 1,
   "DAI": 1,
   "LINK": 0.16995055,
+  "EUR": 0.94
 }
 
 let styles = initStyleSheet(`
@@ -32,15 +34,22 @@ export class Asset extends Card {
   static embedded = class Embedded extends Component<typeof Asset> {
     <template>
       <CardContainer {{attachStyles styles}}>
-        <img src={{@model.logoURL}} width="20" height="20"/>
+        {{#if @model.logoURL}}
+          <img src={{@model.logoURL}} width="20" height="20"/>
+        {{/if}}
         <div class="payment-method__currency"><@fields.symbol/></div>
       </CardContainer>
     </template>
   };
-  static isolated = this.embedded;
 }
 
 // For fiat money
 export class Currency extends Asset {
   @field sign = contains(StringCard); // $, €, £, ¥, ₽, ₿ etc.
+}
+
+// For crypto
+export class Token extends Asset {
+  @field chainId = linksTo(Chain);
+  @field address = contains(StringCard);
 }

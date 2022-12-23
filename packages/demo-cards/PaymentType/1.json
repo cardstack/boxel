@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "typeId": "crypto",
+      "type": "crypto-payment",
       "name": "Crypto Payment"
     },
     "meta": {

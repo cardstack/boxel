@@ -9,14 +9,14 @@
       }
     },
     "attributes": {
-      "name": "DAI",
+      "name": "Dai Stablecoin",
       "symbol": "DAI",
-      "address": null,
+      "address": "eth:0x6b175474e89094c44da98b954eedeac495271d0f",
       "logoURL": "http://local-realm/invoice-assets/currency-dai.png"
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/token",
+        "module": "http://local-realm/asset",
         "name": "Token"
       }
     }

@@ -261,7 +261,7 @@ textarea:focus {
   --boxel-form-control-height: 2.5rem;  /* 40px */
   --boxel-form-control-placeholder-color: var(--boxel-400);
   --boxel-form-control-border-color: var(--boxel-400);
-  --boxel-form-control-border-radius: var(--boxel-border-radius);
+  --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
 }
 
 
@@ -275,14 +275,10 @@ textarea:focus {
   min-height: 100vh;
 }
 .main__column {
-  min-width: 10rem;
-  justify-self: start;
-  align-self: start;
   padding: var(--boxel-sp);
-  display: grid;
-  align-items: start;
-  justify-items: start;
-  gap: var(--boxel-sp);
+}
+.main__column > * + * {
+  margin-top: var(--boxel-sp);
 }
 
 /* FileTree template */
@@ -341,7 +337,6 @@ textarea:focus {
 .schema,
 .catalog-entry-editor {
   --boxel-label-color: var(--boxel-dark);
-  min-width: 20rem;
   display: grid;
   gap: var(--boxel-sp);
   padding: var(--boxel-sp);

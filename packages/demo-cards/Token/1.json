@@ -16,7 +16,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/token",
+        "module": "http://local-realm/asset",
         "name": "Token"
       }
     }

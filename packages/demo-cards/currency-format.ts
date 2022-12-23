@@ -1,8 +1,8 @@
-import { Token } from "./token";
+import { Asset } from "./asset";
 
 export function balanceInCurrency(
   balance: number | null | undefined,
-  payment: Token | null | undefined
+  payment: Asset | null | undefined
 ) {
   if (balance == null || payment?.exchangeRate == null) {
     return 0;

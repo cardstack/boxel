@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Ethereum Mainnet",
-      "chainId": "1"
+      "name": "Polygon",
+      "chainId": "137"
     },
     "meta": {
       "adoptsFrom": {

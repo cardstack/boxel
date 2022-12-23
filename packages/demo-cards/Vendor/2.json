@@ -2,11 +2,23 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Best Bakery",
-      "description": null,
-      "logoURL": "http://local-realm/invoice-assets/vendor-logo-best-bakery.png",
-      "cardXYZ": null,
-      "email": "contact@bestbakery.com",
+      "vendor": {
+        "name": "Best Bakery",
+        "description": null,
+        "logoURL": "http://local-realm/invoice-assets/vendor-logo-best-bakery.png",
+        "email": "contact@bestbakery.com",
+        "cardXYZ": null
+      },
+      "contact": {
+        "fullName": null,
+        "preferredName": null,
+        "jobTitle": null,
+        "email": null,
+        "phone": null,
+        "cardXYZ": null,
+        "notes": null,
+        "imageURL": null
+      },
       "contactMethod": [],
       "mailingAddress": {
         "streetAddress": "9019 Beacon Dr.",
@@ -17,32 +29,65 @@
         "country": null
       },
       "preferredPaymentMethod": {
+        "cryptoPayment": {
+          "toAddress": null
+        },
         "wireTransfer": {
-          "currency": null,
           "iban": null,
           "bic": null
         }
-      }
+      },
+      "alternatePaymentMethod": [
+        {
+          "cryptoPayment": {
+            "toAddress": null
+          },
+          "wireTransfer": {
+            "iban": null,
+            "bic": null
+          }
+        }
+      ]
     },
     "relationships": {
-      "contact": {
+      "preferredPaymentMethod.paymentType": {
         "links": {
-          "self": null
+          "self": "http://local-realm/PaymentType/2"
         }
       },
-      "preferredPaymentMethod.typeId": {
-        "links": {
-          "self": "http://local-realm/PaymentType/1"
-        }
-      },
-      "preferredPaymentMethod.cryptoPayment": {
+      "preferredPaymentMethod.cryptoPayment.chain": {
         "links": {
           "self": "http://local-realm/Chain/1"
         }
       },
-      "token": {
+      "preferredPaymentMethod.cryptoPayment.token": {
         "links": {
-          "self": "http://local-realm/Token/2"
+          "self": null
+        }
+      },
+      "preferredPaymentMethod.wireTransfer.currency": {
+        "links": {
+          "self": "http://local-realm/Currency/2"
+        }
+      },
+      "alternatePaymentMethod.0.paymentType": {
+        "links": {
+          "self": "http://local-realm/PaymentType/2"
+        }
+      },
+      "alternatePaymentMethod.0.cryptoPayment.chain": {
+        "links": {
+          "self": null
+        }
+      },
+      "alternatePaymentMethod.0.cryptoPayment.token": {
+        "links": {
+          "self": null
+        }
+      },
+      "alternatePaymentMethod.0.wireTransfer.currency": {
+        "links": {
+          "self": "http://local-realm/Currency/1"
         }
       }
     },

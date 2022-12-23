@@ -1,64 +1,29 @@
-import { contains, field, linksTo, Card, Component, containsMany } from 'https://cardstack.com/base/card-api';
+import { contains, field, Card, Component, containsMany } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
-import { Contact } from './contact';
 import { Address } from './address';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { startCase } from 'lodash';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { Payment } from './payment';
-import { Token } from './token';
+import { PaymentMethod } from './payment-method';
 
-class ContactMethod extends Card {
-  @field platform = contains(StringCard); // Dropdown (Telegram, Discord, Facebook, LinkedIn, Twitter)
-  @field username = contains(StringCard);
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <@fields.platform/>: <@fields.username/>
-    </template>
-  };
-  static isolated = this.embedded;
-}
-
-let embedded = initStyleSheet(`
-  this {
-    display: grid;
-    grid-template-columns: 1fr auto;
+let styles = initStyleSheet(`
+  .boxel-field + .boxel-field {
+    margin-top: var(--boxel-sp);
   }
 `);
-let isolated = initStyleSheet(`
-  this {
-    display: grid;
-    gap: var(--boxel-sp);
-  }
-`);
-export class Vendor extends Card {
+
+class VendorDetails extends Card {
   @field name = contains(StringCard); // required
   @field description = contains(TextAreaCard);
   @field logoURL = contains(StringCard); // url format
-  @field cardXYZ = contains(StringCard);
   @field email = contains(StringCard); // email format
-  @field contact = linksTo(Contact); // required
-  @field contactMethod = containsMany(ContactMethod);
-  @field mailingAddress = contains(Address); // required
-  @field preferredPaymentMethod = contains(Payment); // required // dropdown of PaymentTypes (CryptoPayment or WireTransfer)
-  @field token = linksTo(Token);
-  static embedded = class Embedded extends Component<typeof Vendor> {
+  @field cardXYZ = contains(StringCard);
+
+  static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles embedded}}>
-        <div>
-          <@fields.name/>
-          <@fields.mailingAddress/>
-          <@fields.email/>
-        </div>
-        <img src={{@model.logoURL}} />
-      </CardContainer>
-    </template>
-  };
-  static isolated = class Isolated extends Component<typeof Vendor> {
-    <template>
-      <CardContainer {{attachStyles isolated}}>
+      <CardContainer {{attachStyles styles}}>
         {{#each-in @fields as |key value|}}
           {{#unless (eq key 'id')}}
             <FieldContainer
@@ -72,37 +37,130 @@ export class Vendor extends Card {
       </CardContainer>
     </template>
   };
-  static edit = class Edit extends Component<typeof Vendor> {
+}
+
+class Contact extends Card {
+  @field fullName = contains(StringCard);
+  @field preferredName = contains(StringCard);
+  @field jobTitle = contains(StringCard);
+  @field email = contains(StringCard); // email format
+  @field phone = contains(StringCard); // phone number format
+  @field cardXYZ = contains(StringCard);
+  @field notes = contains(TextAreaCard);
+  @field imageURL = contains(StringCard);
+
+  static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles isolated}}>
-        <FieldContainer @label="Name">
-          <@fields.name/>
-        </FieldContainer>
-        <FieldContainer @label="Mailing Address">
+      <CardContainer {{attachStyles styles}}>
+        {{#each-in @fields as |key value|}}
+          {{#unless (eq key 'id')}}
+            <FieldContainer
+              {{!-- @glint-ignore --}}
+              @label={{startCase key}}
+              @vertical={{true}}>
+                {{value}}
+              </FieldContainer>
+          {{/unless}}
+        {{/each-in}}
+      </CardContainer>
+    </template>
+  }
+}
+
+class ContactMethod extends Card {
+  @field platform = contains(StringCard); // Dropdown (Telegram, Discord, Facebook, LinkedIn, Twitter)
+  @field username = contains(StringCard);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <@fields.platform/>: <@fields.username/>
+    </template>
+  };
+}
+
+let embeddedVendorStyles = initStyleSheet(`
+  this {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+`);
+export class Vendor extends Card {
+  @field vendor = contains(VendorDetails); // required
+  @field contact = contains(Contact); // required
+  @field contactMethod = containsMany(ContactMethod);
+  @field mailingAddress = contains(Address); // required
+  @field preferredPaymentMethod = contains(PaymentMethod); // required
+  @field alternatePaymentMethod = containsMany(PaymentMethod);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <CardContainer {{attachStyles embeddedVendorStyles}}>
+        <div>
+          <@fields.vendor.name/>
           <@fields.mailingAddress/>
-        </FieldContainer>
-        <FieldContainer @label="Email">
-          <@fields.email/>
-        </FieldContainer>
-        <FieldContainer @label="Payment Method">
-          <@fields.preferredPaymentMethod/>
-        </FieldContainer>
-        {{#if @model.preferredPaymentMethod}}
-          {{#if (eq @model.preferredPaymentMethod.typeId.typeId "crypto")}}
-            <FieldContainer @label="Chain ID">
-              <@fields.preferredPaymentMethod.cryptoPayment/>
-            </FieldContainer>
-            {{#if @model.preferredPaymentMethod.cryptoPayment}}
-              {{#if (eq @model.preferredPaymentMethod.cryptoPayment.chainId "1")}}
-                <FieldContainer @label="Token">
-                  <@fields.token/>
-                </FieldContainer>
-              {{/if}}
-            {{/if}}
-          {{else if (eq @model.preferredPaymentMethod.typeId.typeId "wire")}}
-            Wire Transfer: <@fields.preferredPaymentMethod.wireTransfer/>
-          {{/if}}
+          <@fields.vendor.email/>
+        </div>
+        <img src={{@model.vendor.logoURL}} />
+      </CardContainer>
+    </template>
+  };
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <CardContainer {{attachStyles styles}}>
+        <section>
+          <h2>Vendor</h2>
+          <@fields.vendor/>
+        </section>
+        <section>
+          <h2>Contact</h2>
+          <@fields.contact/>
+        </section>
+        {{#if @model.contactMethod.length}}
+          <section>
+            <h2>Contact Method</h2>
+            <@fields.contactMethod/>
+          </section>
         {{/if}}
+        <section>
+          <h2>Mailing Address</h2>
+          <@fields.mailingAddress/>
+        </section>
+        <section>
+          <h2>Preferred Payment Method</h2>
+          <@fields.preferredPaymentMethod/>
+          {{#if @model.alternatePaymentMethod.length}}
+            <h2>Alternate Payment Method</h2>
+            <@fields.alternatePaymentMethod/>
+          {{/if}}
+        </section>
+      </CardContainer>
+    </template>
+  };
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <CardContainer {{attachStyles styles}}>
+        <section>
+          <h2>Vendor</h2>
+          <@fields.vendor/>
+        </section>
+        <section>
+          <h2>Contact</h2>
+          <@fields.contact/>
+        </section>
+        {{#if @model.contactMethod.length}}
+          <section>
+            <h2>Contact Method</h2>
+            <@fields.contactMethod/>
+          </section>
+        {{/if}}
+        <section>
+          <h2>Mailing Address</h2>
+          <@fields.mailingAddress/>
+        </section>
+        <section>
+          <h2>Preferred Payment Method</h2>
+          <@fields.preferredPaymentMethod/>
+          <h2>Alternate Payment Method</h2>
+          <@fields.alternatePaymentMethod/>
+        </section>
       </CardContainer>
     </template>
   };

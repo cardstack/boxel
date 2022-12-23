@@ -2,15 +2,31 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Smart Contract",
-      "description": "SmartContract is the leading provider of secure and reliable open-source oracle solutions, enabling smart contracts to access anything outside their native blockchain, such off-chain data feeds, web APIs, and traditional bank payments. We are dedicated to the development and integration of Chainlink as the standard decentralized oracle framework used by smart contracts across numerous blockchains. We empower the Chainlink community and build world-class Chainlink-based solutions for large enterprises such as Google and Oracle, as well as leading smart contract development teams such as Synthetix, Loopring, Aave, OpenLaw, Conflux, Polkadot and many more.",
-      "logoURL": "http://local-realm/invoice-assets/vendor-logo-smart-contract.png",
-      "cardXYZ": "smartcontractinc",
-      "email": "finance@smartcontract.com",
+      "vendor": {
+        "name": "Smart Contract",
+        "description": "SmartContract is the leading provider of secure and reliable open-source oracle solutions, enabling smart contracts to access anything outside their native blockchain, such off-chain data feeds, web APIs, and traditional bank payments. We are dedicated to the development and integration of Chainlink as the standard decentralized oracle framework used by smart contracts across numerous blockchains. We empower the Chainlink community and build world-class Chainlink-based solutions for large enterprises such as Google and Oracle, as well as leading smart contract development teams such as Synthetix, Loopring, Aave, OpenLaw, Conflux, Polkadot and many more.",
+        "logoURL": "http://local-realm/invoice-assets/vendor-logo-smart-contract.png",
+        "email": "finance@smartcontract.com",
+        "cardXYZ": "smartcontractinc"
+      },
+      "contact": {
+        "fullName": "Mason Gilbert",
+        "preferredName": "Mace",
+        "jobTitle": "Head of Operations",
+        "email": "mason.gilbert@smartcontract.com",
+        "phone": "+1 415-394-8172",
+        "cardXYZ": "masongilbert.card.xyz",
+        "notes": "Alternative email address: mgilbert@gmail.com",
+        "imageURL": null
+      },
       "contactMethod": [
         {
           "platform": "Telegram",
           "username": "@masongilbert"
+        },
+        {
+          "platform": "Email",
+          "username": "mason.gilbert@gmail.com"
         }
       ],
       "mailingAddress": {
@@ -22,32 +38,65 @@
         "country": "USA"
       },
       "preferredPaymentMethod": {
+        "cryptoPayment": {
+          "toAddress": null
+        },
         "wireTransfer": {
-          "currency": null,
           "iban": null,
           "bic": null
         }
-      }
+      },
+      "alternatePaymentMethod": [
+        {
+          "cryptoPayment": {
+            "toAddress": null
+          },
+          "wireTransfer": {
+            "iban": null,
+            "bic": null
+          }
+        }
+      ]
     },
     "relationships": {
-      "contact": {
-        "links": {
-          "self": "http://local-realm/Contact/1"
-        }
-      },
-      "preferredPaymentMethod.typeId": {
+      "preferredPaymentMethod.paymentType": {
         "links": {
           "self": "http://local-realm/PaymentType/1"
         }
       },
-      "preferredPaymentMethod.cryptoPayment": {
+      "preferredPaymentMethod.cryptoPayment.chain": {
         "links": {
           "self": "http://local-realm/Chain/1"
         }
       },
-      "token": {
+      "preferredPaymentMethod.cryptoPayment.token": {
+        "links": {
+          "self": "http://local-realm/Token/1"
+        }
+      },
+      "preferredPaymentMethod.wireTransfer.currency": {
+        "links": {
+          "self": null
+        }
+      },
+      "alternatePaymentMethod.0.paymentType": {
+        "links": {
+          "self": "http://local-realm/PaymentType/1"
+        }
+      },
+      "alternatePaymentMethod.0.cryptoPayment.chain": {
+        "links": {
+          "self": "http://local-realm/Chain/3"
+        }
+      },
+      "alternatePaymentMethod.0.cryptoPayment.token": {
         "links": {
           "self": "http://local-realm/Token/2"
+        }
+      },
+      "alternatePaymentMethod.0.wireTransfer.currency": {
+        "links": {
+          "self": null
         }
       }
     },

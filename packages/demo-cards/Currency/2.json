@@ -2,10 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "sign": "$",
-      "name": "U.S. Dollar",
-      "symbol": "USD",
-      "logoURL": "http://local-realm/invoice-assets/currency-usd.png"
+      "sign": "€",
+      "name": "Euro",
+      "symbol": "EUR",
+      "logoURL": null
     },
     "meta": {
       "adoptsFrom": {
