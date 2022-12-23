@@ -33,11 +33,21 @@ class InterruptionController extends Controller {
             sprites: keptSprites,
             properties: {
               border: {},
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 'infer',
+            },
+          },
+          {
+            sprites: keptSprites,
+            properties: {
               backgroundColor: {},
             },
             timing: {
               behavior: new TweenBehavior(),
-              duration: 300,
+              duration: 1000,
+              anchor: 'center',
             },
           },
         ],

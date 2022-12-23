@@ -1,4 +1,4 @@
-import Behavior from '@cardstack/boxel-motion/behaviors/base';
+import Behavior, { FPS } from '@cardstack/boxel-motion/behaviors/base';
 
 import StaticBehavior from '@cardstack/boxel-motion/behaviors/static';
 import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
@@ -10,6 +10,7 @@ import generateFrames from '@cardstack/boxel-motion/utils/generate-frames';
 
 import { Value, Keyframe } from '@cardstack/boxel-motion/value';
 import { Frame } from '@cardstack/boxel-motion/value/simple-frame';
+import { assert } from '@ember/debug';
 
 interface RowFragment {
   startColumn: number;
@@ -129,7 +130,8 @@ export class OrchestrationMatrix {
   }
 
   static from(
-    animationDefinitionPart: AnimationTimeline | MotionDefinition
+    animationDefinitionPart: AnimationTimeline | MotionDefinition,
+    maxLength?: number
   ): OrchestrationMatrix {
     if (isAnimationTimeline(animationDefinitionPart)) {
       if (animationDefinitionPart.type === 'sequence') {
@@ -142,7 +144,10 @@ export class OrchestrationMatrix {
         );
       }
     } else {
-      return OrchestrationMatrix.fromMotionDefinition(animationDefinitionPart);
+      return OrchestrationMatrix.fromMotionDefinition(
+        animationDefinitionPart,
+        maxLength
+      );
     }
   }
 
@@ -164,12 +169,17 @@ export class OrchestrationMatrix {
   ): OrchestrationMatrix {
     let timelineMatrix = OrchestrationMatrix.empty();
     let submatrices = [];
-    // maxLength is for anchoring to the end. not using yet
-    // let maxLength = 0;
-    for (let item of timeline.animations) {
-      let submatrix = OrchestrationMatrix.from(item);
 
-      // maxLength = Math.max(maxLength, submatrix.totalColumns);
+    // TODO: sort timeline.animations to have `duration: 'infer'` at the end of the list.
+    // maxLength is for anchoring to the end.
+    let maxLength = 0;
+    for (let item of timeline.animations) {
+      // TODO: do we want a different option or more flexibility here? We could for example search for the longest
+      //  non-inferred duration already compiled rather than picking the first one. Another option is to explicitly
+      //  have to link to a MotionDefinition to infer from.
+      let submatrix = OrchestrationMatrix.from(item, maxLength);
+
+      maxLength = Math.max(maxLength, submatrix.totalColumns);
       submatrices.push(submatrix);
     }
 
@@ -183,20 +193,47 @@ export class OrchestrationMatrix {
   // We may not to rethink this bit if we want to be more clever about combining frames.
   // Possibly we do not want keyframes on this level yet, but only afterwards, and we
   // use the resulting OrchestrationMatrix to decide which values get merged/squished (i.e. transform).
-  static fromMotionDefinition(motionDefinition: MotionDefinition) {
+  static fromMotionDefinition(
+    motionDefinition: MotionDefinition,
+    maxLength = 0
+  ) {
     let properties = motionDefinition.properties;
     let timing = motionDefinition.timing;
     let rows = new Map<Sprite, RowFragment[]>();
-    let maxLength = 0;
     for (let sprite of motionDefinition.sprites) {
       let rowFragments: RowFragment[] = [];
+      let startColumn = 0;
+
+      if (timing.duration === 'infer') {
+        assert(
+          'No MotionDefinition to infer from found. Does your parallel timeline definition have MotionDefinition with an inferrible duration?',
+          maxLength > 0
+        );
+
+        timing.duration = Math.max((maxLength - 1) / FPS, 0);
+      }
+
+      assert(
+        'There is no MotionDefinition to anchor to',
+        !(timing.anchor && maxLength === 0)
+      );
+      if (timing.anchor && maxLength) {
+        if (timing.anchor === 'center') {
+          startColumn =
+            Math.round(maxLength / 2) - (timing!.duration! * FPS + 1);
+        }
+
+        if (timing.anchor === 'end') {
+          startColumn = maxLength - (timing!.duration! * FPS + 1);
+        }
+      }
 
       if (timing.behavior instanceof WaitBehavior) {
         let frames = generateFrames(sprite, 'wait', {}, timing);
         if (frames?.length) {
           rowFragments.push({
             frames,
-            startColumn: 0,
+            startColumn,
             static: true,
           });
           maxLength = Math.max(frames.length, maxLength);
@@ -214,7 +251,7 @@ export class OrchestrationMatrix {
           if (frames?.length) {
             rowFragments.push({
               frames,
-              startColumn: 0,
+              startColumn,
               static: timing.behavior instanceof StaticBehavior,
             });
             maxLength = Math.max(frames.length, maxLength);
@@ -244,8 +281,9 @@ export interface MotionDefinition {
   };
   timing: {
     behavior: Behavior;
-    duration?: number;
+    duration?: number | 'infer';
     delay?: number;
+    anchor?: 'start' | 'center' | 'end';
   };
 }
 
