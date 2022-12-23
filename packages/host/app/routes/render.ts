@@ -20,7 +20,7 @@ interface RouteInfoModelArgs {
   queryParams: ModelArgs;
 }
 
-export default class Application extends Route<Model> {
+export default class Render extends Route<Model> {
   queryParams = {
     url: {
       refreshModel: true,

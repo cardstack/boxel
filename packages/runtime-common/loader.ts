@@ -83,7 +83,16 @@ export class Loader {
   nonce = nonce++;
 
   constructor(
-    private resolver?: (moduleIdentifier: string | URL, relativeTo?: URL) => URL
+    private resolver?: {
+      resolve: (
+        moduleIdentifier: string | URL,
+        relativeTo?: URL
+      ) => ResolvedURL;
+      reverseResolution: (
+        moduleIdentifier: string | ResolvedURL,
+        relativeTo?: URL
+      ) => URL;
+    }
   ) {}
 
   static #instance: Loader | undefined;
@@ -356,14 +365,14 @@ export class Loader {
 
   private getModule(moduleIdentifier: string): Module | undefined {
     if (this.resolver) {
-      moduleIdentifier = this.resolver(moduleIdentifier).href;
+      moduleIdentifier = this.resolver.resolve(moduleIdentifier).href;
     }
     return this.modules.get(moduleIdentifier);
   }
 
   private setModule(moduleIdentifier: string, module: Module) {
     if (this.resolver) {
-      moduleIdentifier = this.resolver(moduleIdentifier).href;
+      moduleIdentifier = this.resolver.resolve(moduleIdentifier).href;
     }
     this.modules.set(moduleIdentifier, module);
   }
@@ -375,7 +384,9 @@ export class Loader {
         if (typeof value === "function" && typeof property === "string") {
           this.identities.set(value, {
             module: trimExecutableExtension(
-              this.reverseResolution(moduleIdentifier)
+              this.resolver
+                ? this.resolver.reverseResolution(moduleIdentifier)
+                : this.reverseResolution(moduleIdentifier)
             ).href,
             name: property,
           });

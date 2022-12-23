@@ -1,13 +1,10 @@
 //@ts-expect-error no types for fastboot
 import FastBoot from "fastboot";
 import { type FastBootInstance } from "@cardstack/runtime-common";
+import { type GetVisitor } from "@cardstack/runtime-common/search-index";
 
-export function makeFastBootVisitor(distPath: string) {
-  return (
-    _fetch: typeof fetch,
-    _staticResponses: Map<string, string>,
-    resolver: (moduleIdentifier: string | URL, relativeTo?: URL) => URL
-  ) => {
+export function makeFastBootVisitor(distPath: string): GetVisitor {
+  return ({ _fetch, resolver, reader, setRunState, getRunState }) => {
     // something to think about--if there is a dramatic performance hit for
     // creating a new fastboot instance for each current run, maybe we can look
     // at reusing an existing fastboot instances? we could use the loader
@@ -28,10 +25,13 @@ export function makeFastBootVisitor(distPath: string) {
           fetch: _fetch,
           btoa,
           resolver,
+          reader,
+          setRunState,
+          getRunState,
         });
       },
     }) as FastBootInstance;
-    return async (url: string) => {
+    return async (url) => {
       let page = await fastboot.visit(url, {
         request: { headers: { host: "localhost:4200" } },
       });

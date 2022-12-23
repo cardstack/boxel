@@ -43,18 +43,7 @@ module("Realm Server", function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, "cards"), dir.name);
 
-    let testRealm = createRealm(dir.name);
-    // new Realm(
-    //   testRealmHref,
-    //   new NodeAdapter(resolve(dir.name)),
-    //   (_fetch: typeof fetch) => async (_url: string) => {
-    //     return `
-    //       <!--Server Side Rendered Card HTML START-->
-    //         <h1>Test card HTML</h1>
-    //       <!--Server Side Rendered Card HTML END-->
-    //     `;
-    //   }
-    // );
+    let testRealm = createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
     server = createRealmServer([testRealm]);
     server.listen(testRealmURL.port);

@@ -119,6 +119,7 @@
     "eslint-plugin-qunit": "^7.2.0",
     "fast-json-stable-stringify": "^2.1.0",
     "flat": "^5.0.2",
+    "ignore": "^5.2.0",
     "loader.js": "^4.7.0",
     "lodash": "^4.17.21",
     "monaco-editor": "^0.33.0",
