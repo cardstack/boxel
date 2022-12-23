@@ -13,6 +13,7 @@ let styles = initStyleSheet(`
   }
 `);
 
+// TODO: card catalog does not show payment types when the class is not externally loaded
 // export class PaymentType extends Card {
 //   @field type = contains(StringCard);
 //   @field name = contains(StringCard);
@@ -82,23 +83,25 @@ export class WireTransfer extends Card {
   static embedded = this.edit;
 }
 
+class EditPaymentMethod extends Component<typeof PaymentMethod> {
+  <template>
+    <div {{attachStyles styles}}>
+      <FieldContainer @label="Payment Method">
+        <@fields.paymentType/>
+      </FieldContainer>
+      {{#if (eq @model.paymentType.type "crypto-payment")}}
+        <@fields.cryptoPayment/>
+      {{else if (eq @model.paymentType.type "wire-transfer")}}
+        {{!-- TODO: deserialization error "wireTransfer.currency not loaded" --}}
+        {{!-- <@fields.wireTransfer/> --}}
+      {{/if}}
+    </div>
+  </template>
+};
 export class PaymentMethod extends Card {
   @field paymentType = linksTo(PaymentType); // dropdown
   @field cryptoPayment = contains(CryptoPayment);
   @field wireTransfer = contains(WireTransfer);
-  static edit = class Edit extends Component<typeof this> {
-    <template>
-      <div {{attachStyles styles}}>
-        <FieldContainer @label="Payment Method">
-          <@fields.paymentType/>
-        </FieldContainer>
-        {{#if (eq @model.paymentType.type "crypto-payment")}}
-          <@fields.cryptoPayment/>
-        {{else if (eq @model.paymentType.type "wire-transfer")}}
-          <@fields.wireTransfer/>
-        {{/if}}
-      </div>
-    </template>
-  };
-  static embedded = this.edit;
+  static edit = EditPaymentMethod;
+  static embedded = EditPaymentMethod;
 }

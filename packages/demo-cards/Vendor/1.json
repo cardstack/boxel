@@ -39,7 +39,7 @@
       },
       "preferredPaymentMethod": {
         "cryptoPayment": {
-          "toAddress": null
+          "toAddress": "eth:0xA40886B7bC97C62d01458Ce60000EfC257598e19"
         },
         "wireTransfer": {
           "iban": null,
@@ -50,6 +50,24 @@
         {
           "cryptoPayment": {
             "toAddress": null
+          },
+          "wireTransfer": {
+            "iban": "GB26 MIDL 401525 83716293",
+            "bic": "MIDL GB 22 918"
+          }
+        },
+        {
+          "cryptoPayment": {
+            "toAddress": "eth:0xA40886B7bC97C62d01458Ce60000EfC257598e19"
+          },
+          "wireTransfer": {
+            "iban": null,
+            "bic": null
+          }
+        },
+        {
+          "cryptoPayment": {
+            "toAddress": "matic:0x0879b539a243e418591e962f5ff97e3c47db2614"
           },
           "wireTransfer": {
             "iban": null,
@@ -81,20 +99,60 @@
       },
       "alternatePaymentMethod.0.paymentType": {
         "links": {
-          "self": "http://local-realm/PaymentType/1"
+          "self": "http://local-realm/PaymentType/2"
         }
       },
       "alternatePaymentMethod.0.cryptoPayment.chain": {
         "links": {
-          "self": "http://local-realm/Chain/3"
+          "self": null
         }
       },
       "alternatePaymentMethod.0.cryptoPayment.token": {
         "links": {
-          "self": "http://local-realm/Token/2"
+          "self": null
         }
       },
       "alternatePaymentMethod.0.wireTransfer.currency": {
+        "links": {
+          "self": "http://local-realm/Currency/1"
+        }
+      },
+      "alternatePaymentMethod.1.paymentType": {
+        "links": {
+          "self": "http://local-realm/PaymentType/1"
+        }
+      },
+      "alternatePaymentMethod.1.cryptoPayment.chain": {
+        "links": {
+          "self": "http://local-realm/Chain/1"
+        }
+      },
+      "alternatePaymentMethod.1.cryptoPayment.token": {
+        "links": {
+          "self": "http://local-realm/Token/2"
+        }
+      },
+      "alternatePaymentMethod.1.wireTransfer.currency": {
+        "links": {
+          "self": null
+        }
+      },
+      "alternatePaymentMethod.2.paymentType": {
+        "links": {
+          "self": "http://local-realm/PaymentType/1"
+        }
+      },
+      "alternatePaymentMethod.2.cryptoPayment.chain": {
+        "links": {
+          "self": "http://local-realm/Chain/3"
+        }
+      },
+      "alternatePaymentMethod.2.cryptoPayment.token": {
+        "links": {
+          "self": "http://local-realm/Token/3"
+        }
+      },
+      "alternatePaymentMethod.2.wireTransfer.currency": {
         "links": {
           "self": null
         }
