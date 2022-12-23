@@ -20,6 +20,16 @@ class InterruptionController extends Controller {
           {
             sprites: keptSprites,
             properties: {
+              border: {},
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 'infer',
+            },
+          },
+          {
+            sprites: keptSprites,
+            properties: {
               translateX: {},
               translateY: {},
               width: {},
@@ -27,16 +37,6 @@ class InterruptionController extends Controller {
             },
             timing: {
               behavior: new SpringBehavior(),
-            },
-          },
-          {
-            sprites: keptSprites,
-            properties: {
-              border: {},
-            },
-            timing: {
-              behavior: new TweenBehavior(),
-              duration: 'infer',
             },
           },
           {

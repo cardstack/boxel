@@ -170,7 +170,17 @@ export class OrchestrationMatrix {
     let timelineMatrix = OrchestrationMatrix.empty();
     let submatrices = [];
 
-    // TODO: sort timeline.animations to have `duration: 'infer'` at the end of the list.
+    // TODO: add support for nested timelines
+    timeline.animations.sort((a, b) => {
+      if ('timing' in b && b.timing.duration === 'infer') {
+        return -1;
+      } else if ('timing' in a && a.timing.duration === 'infer') {
+        return 1;
+      }
+
+      return 0;
+    });
+
     // maxLength is for anchoring to the end.
     let maxLength = 0;
     for (let item of timeline.animations) {
