@@ -92,8 +92,7 @@ class EditPaymentMethod extends Component<typeof PaymentMethod> {
       {{#if (eq @model.paymentType.type "crypto-payment")}}
         <@fields.cryptoPayment/>
       {{else if (eq @model.paymentType.type "wire-transfer")}}
-        {{!-- TODO: deserialization error "wireTransfer.currency not loaded" --}}
-        {{!-- <@fields.wireTransfer/> --}}
+        <@fields.wireTransfer/>
       {{/if}}
     </div>
   </template>
