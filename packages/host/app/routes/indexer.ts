@@ -43,15 +43,15 @@ export default class Indexer extends Route<Model> {
   async model(args: ModelArgs | RouteInfoModelArgs): Promise<Model> {
     let realmURL: string;
     let url: string | undefined;
-    let op: 'update' | 'delete' | undefined;
+    let operation: 'update' | 'delete' | undefined;
     if ('queryParams' in args) {
       realmURL = args.queryParams.realmURL;
       url = args.queryParams.url;
-      op = args.queryParams.op;
+      operation = args.queryParams.op;
     } else {
       realmURL = args.realmURL;
       url = args.url;
-      op = args.op;
+      operation = args.op;
     }
     let reader: Reader;
     let prev: RunState | undefined;
@@ -69,12 +69,18 @@ export default class Indexer extends Route<Model> {
           `cannot perform incremental index without specifying the URL of changed instance`
         );
       }
-      if (!op) {
+      if (!operation) {
         throw new Error(
           `cannot perform incremental index without specifying the operation (op = 'update' | 'delete')`
         );
       }
-      current = await CurrentRun.incremental(new URL(url), op, prev, reader);
+      current = await CurrentRun.incremental({
+        url: new URL(url),
+        operation,
+        prev,
+        reader,
+        loader: this.loaderService.loader,
+      });
     } else {
       current = await CurrentRun.fromScratch(
         new CurrentRun({

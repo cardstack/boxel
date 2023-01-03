@@ -128,7 +128,7 @@ export class CurrentRun {
     instances?: URLMap<SearchEntryWithErrors>;
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
-    loader?: Loader;
+    loader: Loader;
     // getVisitor: (
     //   _fetch: typeof fetch,
     //   staticResponses: Map<string, string>,
@@ -141,7 +141,7 @@ export class CurrentRun {
     this.#instances = instances;
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
-    this.#loader = loader ?? Loader.createLoaderFromGlobal();
+    this.#loader = loader;
     // this.#getVisitor = getVisitor;
     // this.#visit = getVisitor(
     //   this.fetch.bind(this),
@@ -179,12 +179,19 @@ export class CurrentRun {
     return current;
   }
 
-  static async incremental(
-    url: URL,
-    operation: 'update' | 'delete',
-    prev: RunState,
-    reader: Reader
-  ) {
+  static async incremental({
+    url,
+    operation,
+    prev,
+    reader,
+    loader,
+  }: {
+    url: URL;
+    operation: 'update' | 'delete';
+    prev: RunState;
+    reader: Reader;
+    loader: Loader;
+  }) {
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
     let modules = new Map(prev.modules);
@@ -205,6 +212,7 @@ export class CurrentRun {
       instances,
       modules,
       ignoreMap,
+      loader,
     });
 
     if (operation === 'update') {
