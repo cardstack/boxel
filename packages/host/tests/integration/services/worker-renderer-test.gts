@@ -142,7 +142,7 @@ module('Integration | worker-renderer', function (hooks) {
   test("can generate the card's rendered HTML", async function (assert) {
     {
       let deferred = new Deferred<string>();
-      await service.visit(
+      await service.visitCard(
         `/render?url=${encodeURIComponent(
           testRealmURL + 'Pet/mango'
         )}&format=isolated`,
@@ -165,7 +165,7 @@ module('Integration | worker-renderer', function (hooks) {
     // Testing thru a re-render
     {
       let deferred = new Deferred<string>();
-      await service.visit(
+      await service.visitCard(
         `/render?url=${encodeURIComponent(
           testRealmURL + 'Pet/vangogh'
         )}&format=isolated`,

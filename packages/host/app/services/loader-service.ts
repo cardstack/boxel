@@ -32,7 +32,7 @@ export default class LoaderService extends Service {
       );
     }
 
-    let loader = new Loader();
+    let loader = Loader.createLoaderFromGlobal();
     loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')

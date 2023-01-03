@@ -1,11 +1,10 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import Render from './render';
-import Modifier from 'ember-modifier';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
-import type WorkerRenderer from '../services/worker-renderer';
-import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import { HTMLSnapshot } from '../modifiers/html-snapshot';
+import type IndexerService from '../services/indexer-service';
 
 export default class WorkerRender extends Component {
   <template>
@@ -16,52 +15,27 @@ export default class WorkerRender extends Component {
     {{/if}}
   </template>
 
-  @service declare workerRenderer: WorkerRenderer;
+  @service declare indexerService: IndexerService;
 
   get needsRender() {
-    return this.workerRenderer.card != null && this.workerRenderer.format != null;
+    return this.indexerService.card != null && this.indexerService.format != null;
   }
   get card() {
-    if (!this.workerRenderer.card) {
+    if (!this.indexerService.card) {
       throw new Error('bug: should never be here');
     }
-    return this.workerRenderer.card;
+    return this.indexerService.card;
   }
   get format() {
-    if (!this.workerRenderer.format) {
+    if (!this.indexerService.format) {
       throw new Error('bug: should never be here');
     }
-    return this.workerRenderer.format;
+    return this.indexerService.format;
   }
 }
 
-interface Signature {
-  element: HTMLInputElement;
-  Args: {
-    Positional: [
-      Card,
-      Format
-    ]
-  }
-}
-
-class HTMLSnapshot extends Modifier<Signature> {
-  @service declare workerRenderer: WorkerRenderer;
-  modify(
-    element: HTMLElement,
-    [card, format]: Signature["Args"]["Positional"]
-  ) {
-    consume(card, format);
-    let html = element.innerHTML;
-    this.workerRenderer.captureSnapshot(html);
-  }
-}
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
     WorkerRender: typeof WorkerRender;
    }
-}
-
-function consume(..._obj: any[]) {
-  // this is a no-op to facilitate glimmer consumption of the parameters
 }

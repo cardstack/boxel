@@ -53,6 +53,7 @@ export type GetVisitor = ({
   staticResponses,
   setRunState,
   getRunState,
+  entrySetter,
 }: {
   _fetch: typeof fetch;
   resolver: {
@@ -66,6 +67,7 @@ export type GetVisitor = ({
   staticResponses: Map<string, string>;
   setRunState: (state: RunState) => void;
   getRunState: () => RunState | undefined; // this always returns the previous run--undefined if there is no previous run
+  entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
 }) => (url: string) => Promise<string>;
 
 // TODO this can probably live in its own module
@@ -200,11 +202,15 @@ export class SearchIndex {
       },
       reader: this.#reader,
       getRunState: () => undefined,
+      // TODO this overlaps with the entrySetter--clean this up
       setRunState: (state) => {
         this.index = {
           ...state,
           loader: Loader.createLoaderFromGlobal(),
         };
+      },
+      entrySetter: (url: URL, entry: SearchEntryWithErrors) => {
+        this.index.instances.set(url, entry);
       },
     });
   }
@@ -233,11 +239,15 @@ export class SearchIndex {
       },
       reader: this.#reader,
       getRunState: () => this.index,
+      // TODO this overlaps with the entrySetter--clean this up
       setRunState: (state) => {
         this.index = {
           ...state,
           loader: Loader.createLoaderFromGlobal(),
         };
+      },
+      entrySetter: (url: URL, entry: SearchEntryWithErrors) => {
+        this.index.instances.set(url, entry);
       },
     });
     await this.visit(

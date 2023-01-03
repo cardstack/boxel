@@ -13,7 +13,7 @@ import {
 import { timeout } from '@cardstack/worker/src/util';
 import { Deferred } from '@cardstack/runtime-common';
 import { TaskInstance } from 'ember-resources';
-import WorkerRenderer from './worker-renderer';
+import IndexerService from './indexer-service';
 
 export default class LocalRealm extends Service {
   realmMappings = new Map<string, string>();
@@ -48,11 +48,13 @@ export default class LocalRealm extends Service {
         }
         break;
       case 'available':
+        // TODO Add messages for getting/setting the index run state
+        // TODO need to also make sure that we can pass the loader's resolution map
         if (data.type === 'visitRequest') {
           let { id, path, staticResponses } = data;
           let worker = this.state.worker;
           // might want to keep track of these promises for orderly tear down...
-          this.workerRenderer.visit(path, staticResponses, (html) =>
+          this.indexerService.visitCard(path, staticResponses, (html) =>
             send(worker, { type: 'visitResponse', id, path, html })
           );
           return;
@@ -120,7 +122,7 @@ export default class LocalRealm extends Service {
 
   @service declare router: RouterService;
   @service declare fastboot: { isFastBoot: boolean };
-  @service declare workerRenderer: WorkerRenderer;
+  @service declare indexerService: IndexerService;
 
   get isAvailable(): boolean {
     this.maybeSetup();

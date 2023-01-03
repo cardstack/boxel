@@ -100,6 +100,7 @@ export class CurrentRun {
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
   #loader: Loader;
+  #entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
   // #visit: (url: string) => Promise<string>;
   // #getVisitor: (
   //   _fetch: typeof fetch,
@@ -121,6 +122,7 @@ export class CurrentRun {
     modules = new Map(),
     ignoreMap = new URLMap(),
     loader,
+    entrySetter,
   }: // getVisitor, // TODO ignore this for now...
   {
     realmURL: URL;
@@ -129,6 +131,7 @@ export class CurrentRun {
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
     loader: Loader;
+    entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
     // getVisitor: (
     //   _fetch: typeof fetch,
     //   staticResponses: Map<string, string>,
@@ -142,6 +145,7 @@ export class CurrentRun {
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
     this.#loader = loader;
+    this.#entrySetter = entrySetter;
     // this.#getVisitor = getVisitor;
     // this.#visit = getVisitor(
     //   this.fetch.bind(this),
@@ -185,12 +189,14 @@ export class CurrentRun {
     prev,
     reader,
     loader,
+    entrySetter,
   }: {
     url: URL;
     operation: 'update' | 'delete';
     prev: RunState;
     reader: Reader;
     loader: Loader;
+    entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
   }) {
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
@@ -213,6 +219,7 @@ export class CurrentRun {
       modules,
       ignoreMap,
       loader,
+      entrySetter,
     });
 
     if (operation === 'update') {
@@ -480,8 +487,7 @@ export class CurrentRun {
       typesMaybeError = await this.getTypes(cardType);
     }
     if (searchData && doc && typesMaybeError?.type === 'types') {
-      this.stats.instancesIndexed++;
-      this.#instances.set(instanceURL, {
+      this.setInstance(instanceURL, {
         type: 'entry',
         entry: {
           resource: doc.data,
@@ -495,7 +501,6 @@ export class CurrentRun {
     }
 
     if (uncaughtError || typesMaybeError?.type === 'error') {
-      this.stats.instanceErrors++;
       let error: SearchEntryWithErrors;
       if (uncaughtError) {
         error = {
@@ -518,8 +523,18 @@ export class CurrentRun {
           `encountered error indexing card instance ${path}: ${error.error.detail}`
         );
       }
-      this.#instances.set(instanceURL, error);
+      this.setInstance(instanceURL, error);
       deferred.fulfill();
+    }
+  }
+
+  private setInstance(instanceURL: URL, entry: SearchEntryWithErrors) {
+    this.#instances.set(instanceURL, entry);
+    this.#entrySetter(instanceURL, entry);
+    if (entry.type === 'entry') {
+      this.stats.instancesIndexed++;
+    } else {
+      this.stats.instanceErrors++;
     }
   }
 

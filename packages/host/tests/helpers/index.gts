@@ -13,7 +13,7 @@ import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { renderComponent } from './render-component';
-import WorkerRenderer from '@cardstack/host/services/worker-renderer';
+import Indexer from '@cardstack/host/services/indexer-service';
 import WorkerRender from '@cardstack/host/components/worker-render';
 import { type Card } from 'https://cardstack.com/base/card-api';
 
@@ -78,20 +78,28 @@ function makeRealm(
   owner: TestContext['owner'],
   realmURL = testRealmURL
 ) {
-  let renderService = owner.lookup('service:worker-renderer') as WorkerRenderer;
+  let indexerService = owner.lookup('service:indexer-service') as Indexer;
   return new Realm(
     realmURL ?? testRealmURL,
     adapter,
-    (_fetch: typeof fetch, staticResponses: Map<string, string>) =>
-      async (url: string) => {
-        let deferred = new Deferred<string>();
-        await renderService.visit(
-          `/render?url=${encodeURIComponent(url)}&format=isolated`,
-          staticResponses,
-          (html: string) => deferred.fulfill(html)
-        );
-        return await deferred.promise;
+    ({ _fetch, staticResponses, resolver, reader, setRunState, getRunState, entrySetter }) => {
+      indexerService.setup(reader, setRunState, entrySetter, getRunState());
+      return async (path: string) => {
+        if (path.startsWith('/indexer?')) {
+          await indexerService.index(path);
+          let current = getRunState();
+          return JSON.stringify(current?.stats);
+        } else {
+          let deferred = new Deferred<string>();
+          await indexerService.visitCard(
+            `/render?url=${encodeURIComponent(path)}&format=isolated`,
+            staticResponses,
+            (html: string) => deferred.fulfill(html)
+          )
+          return await deferred.promise;
+        }
       }
+    }
   );
 }
 

@@ -2,9 +2,11 @@ import Route from '@ember/routing/route';
 import { service } from '@ember/service';
 import { CurrentRun } from '../lib/current-run';
 import type LoaderService from '../services/loader-service';
+import type IndexerService from '../services/indexer-service';
 import {
   type Reader,
   type RunState,
+  type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
 
 interface Stats {
@@ -39,6 +41,7 @@ export default class Indexer extends Route<Model> {
   };
   @service declare fastboot: { isFastBoot: boolean };
   @service declare loaderService: LoaderService;
+  @service declare indexerService: IndexerService;
 
   async model(args: ModelArgs | RouteInfoModelArgs): Promise<Model> {
     let realmURL: string;
@@ -56,11 +59,18 @@ export default class Indexer extends Route<Model> {
     let reader: Reader;
     let prev: RunState | undefined;
     let current: CurrentRun;
+    let entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
     if (this.fastboot.isFastBoot) {
       reader = (globalThis as any).reader as Reader;
       prev = ((globalThis as any).getRunState as () => RunState | undefined)();
+      entrySetter = (globalThis as any).entrySetter as (
+        url: URL,
+        entry: SearchEntryWithErrors
+      ) => void;
     } else {
-      throw new Error('not implemented');
+      reader = this.indexerService.reader;
+      prev = this.indexerService.prevRunState;
+      entrySetter = this.indexerService.entrySetter;
     }
 
     if (prev) {
@@ -80,6 +90,7 @@ export default class Indexer extends Route<Model> {
         prev,
         reader,
         loader: this.loaderService.loader,
+        entrySetter,
       });
     } else {
       current = await CurrentRun.fromScratch(
@@ -87,6 +98,7 @@ export default class Indexer extends Route<Model> {
           realmURL: new URL(realmURL),
           loader: this.loaderService.loader,
           reader,
+          entrySetter,
         })
       );
     }
@@ -100,7 +112,13 @@ export default class Indexer extends Route<Model> {
         stats: current.stats,
       });
     } else {
-      throw new Error('not implemented');
+      this.indexerService.setRunState({
+        realmURL: new URL(realmURL),
+        instances: current.instances,
+        ignoreMap: current.ignoreMap,
+        modules: current.modules,
+        stats: current.stats,
+      });
     }
 
     let { stats } = current;

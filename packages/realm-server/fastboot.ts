@@ -4,7 +4,14 @@ import { type FastBootInstance } from "@cardstack/runtime-common";
 import { type GetVisitor } from "@cardstack/runtime-common/search-index";
 
 export function makeFastBootVisitor(distPath: string): GetVisitor {
-  return ({ _fetch, resolver, reader, setRunState, getRunState }) => {
+  return ({
+    _fetch,
+    resolver,
+    reader,
+    setRunState,
+    getRunState,
+    entrySetter,
+  }) => {
     // something to think about--if there is a dramatic performance hit for
     // creating a new fastboot instance for each current run, maybe we can look
     // at reusing an existing fastboot instances? we could use the loader
@@ -28,6 +35,7 @@ export function makeFastBootVisitor(distPath: string): GetVisitor {
           reader,
           setRunState,
           getRunState,
+          entrySetter,
         });
       },
     }) as FastBootInstance;
