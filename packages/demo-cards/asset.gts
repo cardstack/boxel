@@ -1,9 +1,8 @@
-import { contains, field, Card, Component, linksTo } from 'https://cardstack.com/base/card-api';
+import { contains, field, Card, Component } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer } from '@cardstack/boxel-ui';
-import { Chain } from "./chain";
 
 let EXCHANGE_RATES: Record<string, number> = {
   "USD": 1,
@@ -50,6 +49,5 @@ export class Currency extends Asset {
 
 // For crypto
 export class Token extends Asset {
-  @field chainId = linksTo(Chain);
   @field address = contains(StringCard);
 }

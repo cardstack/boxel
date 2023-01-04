@@ -2,8 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Ethereum Mainnet",
-      "chainId": "1"
+      "name": "Ethereum Mainnet"
     },
     "meta": {
       "adoptsFrom": {

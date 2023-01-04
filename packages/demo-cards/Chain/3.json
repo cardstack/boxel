@@ -2,8 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Polygon",
-      "chainId": "137"
+      "name": "Gnosis Chain"
     },
     "meta": {
       "adoptsFrom": {
