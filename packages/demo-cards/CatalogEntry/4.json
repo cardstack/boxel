@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Chain from http://local-realm/chain",
+      "description": "Catalog entry for Chain from http://local-realm/chain",
+      "ref": {
+        "module": "http://local-realm/chain",
+        "name": "Chain"
+      },
+      "demo": {
+        "name": "Ethereum Mainnet",
+        "chainId": "1"
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://local-realm/chain",
+            "name": "Chain"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
