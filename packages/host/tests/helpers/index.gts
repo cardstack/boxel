@@ -82,14 +82,16 @@ function makeRealm(
   return new Realm(
     realmURL ?? testRealmURL,
     adapter,
-    ({ _fetch, staticResponses, resolver, reader, setRunState, getRunState, entrySetter }) => {
+    ({ staticResponses, reader, setRunState, getRunState, entrySetter }) => {
       indexerService.setup(reader, setRunState, entrySetter, getRunState());
       return async (path: string) => {
         if (path.startsWith('/indexer?')) {
           await indexerService.index(path);
           let current = getRunState();
           return JSON.stringify(current?.stats);
+          // TODO this needs to return the HTML for the indexer route template
         } else {
+          // TODO we no longer need this anymore
           let deferred = new Deferred<string>();
           await indexerService.visitCard(
             `/render?url=${encodeURIComponent(path)}&format=isolated`,

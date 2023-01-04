@@ -1,4 +1,4 @@
-import { module, test, skip } from "qunit";
+import { module, test } from "qunit";
 import { dirSync, setGracefulCleanup } from "tmp";
 import {
   Loader,
@@ -146,7 +146,7 @@ module("indexing", function (hooks) {
     await realm.ready;
   });
 
-  skip("can store card pre-rendered html in the index", async function (assert) {
+  test("can store card pre-rendered html in the index", async function (assert) {
     let entry = await realm.searchIndex.searchEntry(
       new URL(`${testRealm}mango`)
     );

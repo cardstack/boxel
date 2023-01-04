@@ -32,7 +32,6 @@ import {
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 import {
-  type CardResource,
   type SingleCardDocument,
   type Relationship,
 } from '@cardstack/runtime-common/card-document';
@@ -43,6 +42,9 @@ import {
   type Reader,
   type RunState,
   type Stats,
+  type Module,
+  type SearchEntryWithErrors,
+  type ModuleWithErrors,
 } from '@cardstack/runtime-common/search-index';
 import {
   Card,
@@ -51,44 +53,9 @@ import {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 
-// const renderedCardTokens = {
-//   html: {
-//     start: '<!--Server Side Rendered Card HTML START-->',
-//     end: '<!--Server Side Rendered Card HTML END-->',
-//   },
-//   searchDoc: {
-//     start: '<!--Server Side Rendered Card SearchDoc START-->',
-//     end: '<!--Server Side Rendered Card SearchDoc END-->',
-//   },
-//   error: {
-//     start: '<!--Server Side Rendered Card Error START-->',
-//     end: '<!--Server Side Rendered Card Error END-->',
-//   },
-// };
-
-export interface SearchEntry {
-  resource: CardResource;
-  searchData: Record<string, any>;
-  // TODO make this required
-  html?: string;
-  types: string[];
-  deps: Set<string>;
-}
-
-export type SearchEntryWithErrors =
-  | { type: 'entry'; entry: SearchEntry }
-  | { type: 'error'; error: SerializedError };
 type TypesWithErrors =
   | { type: 'types'; types: string[] }
   | { type: 'error'; error: SerializedError };
-
-interface Module {
-  url: string;
-  consumes: string[];
-}
-type ModuleWithErrors =
-  | { type: 'module'; module: Module }
-  | { type: 'error'; moduleURL: string; error: SerializedError };
 
 export class CurrentRun {
   #instances: URLMap<SearchEntryWithErrors>;
@@ -101,13 +68,8 @@ export class CurrentRun {
   #ignoreMap: URLMap<Ignore>;
   #loader: Loader;
   #entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
-  // #visit: (url: string) => Promise<string>;
-  // #getVisitor: (
-  //   _fetch: typeof fetch,
-  //   staticResponses: Map<string, string>,
-  //   resolver: (moduleIdentifier: string | URL, relativeTo?: URL) => URL
-  // ) => (url: string) => Promise<string>;
   #staticResponses = new Map<string, string>();
+  #addVisitedCard: (url: string, card: Card) => void;
   private realmURL: URL;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -123,8 +85,8 @@ export class CurrentRun {
     ignoreMap = new URLMap(),
     loader,
     entrySetter,
-  }: // getVisitor, // TODO ignore this for now...
-  {
+    addVisitedCard,
+  }: {
     realmURL: URL;
     reader: Reader;
     instances?: URLMap<SearchEntryWithErrors>;
@@ -132,11 +94,7 @@ export class CurrentRun {
     ignoreMap?: URLMap<Ignore>;
     loader: Loader;
     entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
-    // getVisitor: (
-    //   _fetch: typeof fetch,
-    //   staticResponses: Map<string, string>,
-    //   resolver: (moduleIdentifier: string | URL, relativeTo?: URL) => URL
-    // ) => (url: string) => Promise<string>;
+    addVisitedCard: (url: string, card: Card) => void;
   }) {
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
@@ -146,36 +104,7 @@ export class CurrentRun {
     this.#ignoreMap = ignoreMap;
     this.#loader = loader;
     this.#entrySetter = entrySetter;
-    // this.#getVisitor = getVisitor;
-    // this.#visit = getVisitor(
-    //   this.fetch.bind(this),
-    //   this.#staticResponses,
-    //   this.loader.resolve.bind(this.loader)
-    // );
-  }
-
-  private fetch(
-    urlOrRequest: string | URL | Request,
-    init?: RequestInit
-  ): Promise<Response> {
-    let requestURL =
-      urlOrRequest instanceof Request
-        ? urlOrRequest.url
-        : typeof urlOrRequest === 'string'
-        ? urlOrRequest
-        : urlOrRequest.href;
-    let cachedJSONAPI = this.#staticResponses.get(requestURL);
-    if (cachedJSONAPI != null) {
-      return Promise.resolve(
-        new Response(cachedJSONAPI, {
-          status: 200,
-          headers: {
-            'content-type': 'application/vnd.api+json',
-          },
-        })
-      );
-    }
-    return this.loader.fetch(urlOrRequest, init);
+    this.#addVisitedCard = addVisitedCard;
   }
 
   static async fromScratch(current: CurrentRun) {
@@ -190,6 +119,7 @@ export class CurrentRun {
     reader,
     loader,
     entrySetter,
+    addVisitedCard,
   }: {
     url: URL;
     operation: 'update' | 'delete';
@@ -197,6 +127,7 @@ export class CurrentRun {
     reader: Reader;
     loader: Loader;
     entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
+    addVisitedCard: (url: string, card: Card) => void;
   }) {
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
@@ -214,12 +145,12 @@ export class CurrentRun {
     let current = new this({
       realmURL: prev.realmURL,
       reader,
-      // getVisitor: prev.#getVisitor,
       instances,
       modules,
       ignoreMap,
       loader,
       entrySetter,
+      addVisitedCard,
     });
 
     if (operation === 'update') {
@@ -415,14 +346,14 @@ export class CurrentRun {
     let uncaughtError: Error | undefined;
     let doc: SingleCardDocument | undefined;
     let searchData: Record<string, any> | undefined;
-    let html: string | undefined;
     let cardType: typeof Card | undefined;
+    let card: Card | undefined;
     try {
       let api = await this.#loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`
       );
       let res = { ...resource, ...{ id: instanceURL.href } };
-      let card = await api.createFromSerialized<typeof Card>(
+      card = await api.createFromSerialized<typeof Card>(
         res,
         { data: res },
         new URL(fileURL),
@@ -474,11 +405,6 @@ export class CurrentRun {
         instanceURL.href,
         JSON.stringify(cachedDoc, null, 2)
       );
-      // // let rawHtml: string | undefined;
-      // // rawHtml = await this.#visit(
-      //   `/render?url=${encodeURIComponent(instanceURL.href)}&format=isolated`
-      // );
-      // ({ html, searchData } = parseRenderedCard(rawHtml));
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -486,13 +412,13 @@ export class CurrentRun {
     if (!uncaughtError && cardType) {
       typesMaybeError = await this.getTypes(cardType);
     }
-    if (searchData && doc && typesMaybeError?.type === 'types') {
+    if (card && searchData && doc && typesMaybeError?.type === 'types') {
+      this.#addVisitedCard(instanceURL.href, card);
       this.setInstance(instanceURL, {
         type: 'entry',
         entry: {
           resource: doc.data,
           searchData,
-          html,
           types: typesMaybeError.types,
           deps: new Set(await this.loader.getConsumedModules(moduleURL)),
         },
@@ -724,39 +650,3 @@ function invalidate(
 
   return [...invalidationSet];
 }
-
-// function parseRenderedCard(html: string): {
-//   html: string;
-//   searchData: Record<string, any>;
-// } {
-//   if (
-//     html.includes(renderedCardTokens.html.start) &&
-//     html.includes(renderedCardTokens.searchDoc.start)
-//   ) {
-//     return {
-//       html: html.substring(
-//         html.indexOf(renderedCardTokens.html.start) +
-//           renderedCardTokens.html.start.length,
-//         html.indexOf(renderedCardTokens.html.end)
-//       ),
-//       searchData: JSON.parse(
-//         html.substring(
-//           html.indexOf(renderedCardTokens.searchDoc.start) +
-//             renderedCardTokens.searchDoc.start.length,
-//           html.indexOf(renderedCardTokens.searchDoc.end)
-//         )
-//       ),
-//     };
-//   } else if (html.includes(renderedCardTokens.error.start)) {
-//     let errorMsg = html.substring(
-//       html.indexOf(renderedCardTokens.error.start) +
-//         renderedCardTokens.error.start.length,
-//       html.indexOf(renderedCardTokens.error.end)
-//     );
-//     throw new CardError(`encountered error when rendering card:\n${errorMsg}`);
-//   } else {
-//     throw new CardError(
-//       `do not know how to handle rendered card output:\n${html}`
-//     );
-//   }
-// }

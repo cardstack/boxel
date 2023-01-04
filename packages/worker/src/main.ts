@@ -30,6 +30,7 @@ Loader.addURLMapping(
     if (!messageHandler.fs) {
       throw new Error(`could not get FileSystem`);
     }
+    // TODO this will look very similar to the host/test/helpers/index realm creation, but use the worker renderer component...
     fetchHandler.addRealm(
       new Realm(
         'http://local-realm/',

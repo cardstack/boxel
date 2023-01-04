@@ -18,17 +18,19 @@ export default class LoaderService extends Service {
 
   private makeInstance() {
     if (this.fastboot.isFastBoot) {
-      return new Loader(
-        (globalThis as any).resolver as {
-          resolve: (
-            moduleIdentifier: string | URL,
-            relativeTo?: URL
-          ) => ResolvedURL;
-          reverseResolution: (
-            moduleIdentifier: string | ResolvedURL,
-            relativeTo?: URL
-          ) => URL;
-        }
+      return this.makeProxiedLoader(
+        new Loader(
+          (globalThis as any).resolver as {
+            resolve: (
+              moduleIdentifier: string | URL,
+              relativeTo?: URL
+            ) => ResolvedURL;
+            reverseResolution: (
+              moduleIdentifier: string | ResolvedURL,
+              relativeTo?: URL
+            ) => URL;
+          }
+        )
       );
     }
 
@@ -37,7 +39,10 @@ export default class LoaderService extends Service {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+    return this.makeProxiedLoader(loader);
+  }
 
+  private makeProxiedLoader(loader: Loader) {
     return new Proxy(loader, {
       get: (target, property, received) => {
         let maybeFetch = Reflect.get(target, property, received);

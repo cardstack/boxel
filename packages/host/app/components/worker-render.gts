@@ -1,9 +1,9 @@
 import Component from '@glimmer/component';
+import Modifier from 'ember-modifier';
 import { service } from '@ember/service';
 import Render from './render';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
-import { HTMLSnapshot } from '../modifiers/html-snapshot';
 import type IndexerService from '../services/indexer-service';
 
 export default class WorkerRender extends Component {
@@ -32,6 +32,26 @@ export default class WorkerRender extends Component {
     }
     return this.indexerService.format;
   }
+}
+
+interface Signature {
+  element: HTMLInputElement;
+  Args: {
+    Positional: [...any];
+  };
+}
+
+class HTMLSnapshot extends Modifier<Signature> {
+  @service declare indexerService: IndexerService;
+  modify(element: HTMLElement, [model]: Signature['Args']['Positional']) {
+    consume(model);
+    let html = element.innerHTML;
+    this.indexerService.captureSnapshot(html);
+  }
+}
+
+function consume(..._obj: any[]) {
+  // this is a no-op to facilitate glimmer consumption of the parameters
 }
 
 declare module '@glint/environment-ember-loose/registry' {

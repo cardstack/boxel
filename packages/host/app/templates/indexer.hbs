@@ -1,6 +1,8 @@
-{{!-- template-lint-disable no-html-comments --}}
-<pre>
-  <!--Indexer Results START-->
-  {{this.model.stringifiedStats}}
-  <!--Indexer Results END-->
-</pre>
+{{#each this.model.cards as |cardEntry|}}
+  {{#let (get cardEntry 0) as |url|}}
+    <span data-internal-card-url__>{{url}}</span>
+  {{/let}}
+  {{#let (get cardEntry 1) as |card|}}
+    <Render @card={{card}} @format="isolated" @opts={{hash disableShadowDOM=true}}/>
+  {{/let}}
+{{/each}}
