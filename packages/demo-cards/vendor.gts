@@ -6,7 +6,7 @@ import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles'
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { startCase } from 'lodash';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { PaymentMethod } from './payment-method';
+// import { PaymentMethod } from './payment-method';
 
 let styles = initStyleSheet(`
   .boxel-field + .boxel-field {
@@ -88,8 +88,8 @@ export class Vendor extends Card {
   @field contact = contains(Contact); // required
   @field contactMethod = containsMany(ContactMethod);
   @field mailingAddress = contains(Address); // required
-  @field preferredPaymentMethod = contains(PaymentMethod); // required
-  @field alternatePaymentMethod = containsMany(PaymentMethod);
+  // @field preferredPaymentMethod = contains(PaymentMethod); // required
+  // @field alternatePaymentMethod = containsMany(PaymentMethod);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer {{attachStyles embeddedVendorStyles}}>
@@ -123,14 +123,14 @@ export class Vendor extends Card {
           <h2>Mailing Address</h2>
           <@fields.mailingAddress/>
         </section>
-        <section>
+        {{!-- <section>
           <h2>Preferred Payment Method</h2>
           <@fields.preferredPaymentMethod/>
           {{#if @model.alternatePaymentMethod.length}}
             <h2>Alternate Payment Method</h2>
             <@fields.alternatePaymentMethod/>
           {{/if}}
-        </section>
+        </section> --}}
       </CardContainer>
     </template>
   };
@@ -155,12 +155,12 @@ export class Vendor extends Card {
           <h2>Mailing Address</h2>
           <@fields.mailingAddress/>
         </section>
-        <section>
+        {{!-- <section>
           <h2>Preferred Payment Method</h2>
           <@fields.preferredPaymentMethod/>
           <h2>Alternate Payment Method</h2>
           <@fields.alternatePaymentMethod/>
-        </section>
+        </section> --}}
       </CardContainer>
     </template>
   };

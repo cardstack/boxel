@@ -6,9 +6,9 @@ import DatetimeCard from "https://cardstack.com/base/datetime";
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { Vendor } from './vendor';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
-import { formatUSD, balanceInCurrency } from './currency-format';
+import { formatUSD/*, balanceInCurrency*/ } from './currency-format';
 import { CardContainer, FieldContainer, Label, Message } from '@cardstack/boxel-ui';
-import { Asset } from './asset';
+// import { Asset } from './asset';
 
 let invoiceStyles = initStyleSheet(`
   this {
@@ -258,13 +258,13 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
             <div class="payment-methods">
               <FieldContainer @label="Primary Payment Method" @vertical={{true}}>
                 <div>
-                  <@fields.primaryPayment/>
+                  {{!-- <@fields.primaryPayment/>
                   {{#if @model.primaryPayment}}
                     <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.primaryPayment}}</div>
-                  {{/if}}
+                  {{/if}} --}}
                 </div>
               </FieldContainer>
-              {{#if @model.alternatePayment.length}}
+              {{!-- {{#if @model.alternatePayment.length}}
                 <FieldContainer @label="Alternate Payment Methods" @vertical={{true}}>
                   <div>
                     {{#each @model.alternatePayment as |payment|}}
@@ -273,7 +273,7 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
                     {{/each}}
                   </div>
                 </FieldContainer>
-              {{/if}}
+              {{/if}} --}}
             </div>
           </section>
           <FieldContainer @vertical={{true}} @label="Balance Due" class="balance-due">
@@ -322,10 +322,10 @@ class EditTemplate extends Component<typeof InvoicePacket> {
           <h2>Payment Methods</h2>
           <div class="payment-methods">
             <FieldContainer @tag="label" @label="Primary Payment Method" @vertical={{true}}>
-              <@fields.primaryPayment/>
+              {{!-- <@fields.primaryPayment/> --}}
             </FieldContainer>
             <FieldContainer @tag="label" @label="Alternate Payment Methods" @vertical={{true}}>
-              <@fields.alternatePayment/>
+              {{!-- <@fields.alternatePayment/> --}}
             </FieldContainer>
           </div>
         </section>
@@ -343,12 +343,12 @@ export class InvoicePacket extends Card {
   @field vendor = linksTo(Vendor);
   @field details = contains(Details);
   @field lineItems = containsMany(LineItem);
-  @field primaryPayment = contains(Asset, { computeVia: function(this: InvoicePacket) {
-    return this.vendor?.preferredPaymentMethod?.cryptoPayment?.token ?? this.vendor?.preferredPaymentMethod?.wireTransfer?.currency;
-  }});
-  @field alternatePayment = containsMany(Asset, { computeVia: function(this: InvoicePacket) {
-    return this.vendor?.alternatePaymentMethod?.length ?  this.vendor.alternatePaymentMethod.map(p =>  p.cryptoPayment?.token ?? p.wireTransfer?.currency) : [];
-  }});
+  // @field primaryPayment = contains(Asset, { computeVia: function(this: InvoicePacket) {
+  //   return this.vendor?.preferredPaymentMethod?.cryptoPayment?.token ?? this.vendor?.preferredPaymentMethod?.wireTransfer?.currency;
+  // }});
+  // @field alternatePayment = containsMany(Asset, { computeVia: function(this: InvoicePacket) {
+  //   return this.vendor?.alternatePaymentMethod?.length ?  this.vendor.alternatePaymentMethod.map(p =>  p.cryptoPayment?.token ?? p.wireTransfer?.currency) : [];
+  // }});
   @field balanceDue = contains(IntegerCard, { computeVia:
     function(this: InvoicePacket) {
       return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.amount * i.quantity).reduce((a, b) => (a + b));

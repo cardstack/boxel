@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "InvoicePacket from http://local-realm/invoice-packet",
+      "description": "Catalog entry for InvoicePacket from http://local-realm/invoice-packet",
+      "ref": {
+        "module": "http://local-realm/invoice-packet",
+        "name": "InvoicePacket"
+      },
+      "demo": {
+        "details": {
+          "invoiceNo": null,
+          "invoiceDate": null,
+          "dueDate": null,
+          "terms": null,
+          "invoiceDocument": null,
+          "memo": null
+        },
+        "lineItems": [],
+        "notes": []
+      }
+    },
+    "relationships": {
+      "demo.vendor": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://local-realm/invoice-packet",
+            "name": "InvoicePacket"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

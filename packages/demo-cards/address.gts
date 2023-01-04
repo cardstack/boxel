@@ -10,7 +10,7 @@ export class Address extends Card {
   @field region = contains(StringCard);
   @field postalCode = contains(StringCard);
   @field poBoxNumber = contains(StringCard);
-  @field country = contains(StringCard); // required // Dropdown of countries
+  @field country = contains(StringCard); // required // dropdown
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

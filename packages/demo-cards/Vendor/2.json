@@ -27,68 +27,6 @@
         "postalCode": "29577",
         "poBoxNumber": null,
         "country": null
-      },
-      "preferredPaymentMethod": {
-        "cryptoPayment": {
-          "toAddress": null
-        },
-        "wireTransfer": {
-          "iban": null,
-          "bic": null
-        }
-      },
-      "alternatePaymentMethod": [
-        {
-          "cryptoPayment": {
-            "toAddress": null
-          },
-          "wireTransfer": {
-            "iban": null,
-            "bic": null
-          }
-        }
-      ]
-    },
-    "relationships": {
-      "preferredPaymentMethod.paymentType": {
-        "links": {
-          "self": "http://local-realm/PaymentType/2"
-        }
-      },
-      "preferredPaymentMethod.cryptoPayment.chain": {
-        "links": {
-          "self": "http://local-realm/Chain/1"
-        }
-      },
-      "preferredPaymentMethod.cryptoPayment.token": {
-        "links": {
-          "self": null
-        }
-      },
-      "preferredPaymentMethod.wireTransfer.currency": {
-        "links": {
-          "self": "http://local-realm/Currency/2"
-        }
-      },
-      "alternatePaymentMethod.0.paymentType": {
-        "links": {
-          "self": "http://local-realm/PaymentType/2"
-        }
-      },
-      "alternatePaymentMethod.0.cryptoPayment.chain": {
-        "links": {
-          "self": null
-        }
-      },
-      "alternatePaymentMethod.0.cryptoPayment.token": {
-        "links": {
-          "self": null
-        }
-      },
-      "alternatePaymentMethod.0.wireTransfer.currency": {
-        "links": {
-          "self": "http://local-realm/Currency/1"
-        }
       }
     },
     "meta": {
