@@ -2,29 +2,22 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Vendor",
-      "description": "Catalog entry for Vendor card",
+      "title": "Chain from http://local-realm/chain",
+      "description": "Catalog entry for Chain from http://local-realm/chain",
       "ref": {
-        "module": "http://local-realm/vendor",
-        "name": "Vendor"
+        "module": "http://local-realm/chain",
+        "name": "Chain"
       },
       "demo": {
-        "vendorName": "",
-        "addressLine": "",
-        "city": "",
-        "state": "",
-        "zipCode": "",
-        "country": null,
-        "email": "",
-        "logo": ""
+        "name": "Ethereum Mainnet"
       }
     },
     "meta": {
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://local-realm/vendor",
-            "name": "Vendor"
+            "module": "http://local-realm/chain",
+            "name": "Chain"
           }
         }
       },

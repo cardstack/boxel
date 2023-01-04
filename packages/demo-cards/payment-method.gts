@@ -1,56 +1,96 @@
-import { contains, field, Card, Component } from 'https://cardstack.com/base/card-api';
+import { contains, field, Card, Component, linksTo } from "https://cardstack.com/base/card-api";
 import StringCard from 'https://cardstack.com/base/string';
-import IntegerCard from 'https://cardstack.com/base/integer';
+import { Chain } from './chain';
+import { Token, Currency } from './asset';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
-import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { FieldContainer } from '@cardstack/boxel-ui';
 
 let styles = initStyleSheet(`
-  this {
-    display: inline-grid;
-    grid-template-columns: var(--boxel-sp) 1fr;
-    gap: var(--boxel-sp-xxxs);
-  }
-  .payment-method__currency {
-    font: 700 var(--boxel-font);
+  .boxel-field {
+    margin-top: var(--boxel-sp);
   }
 `);
 
-class PaymentMethodView extends Component<typeof PaymentMethod> {
-  <template>
-    <CardContainer {{attachStyles styles}}>
-      <img src={{@model.logo}} width="20" height="20"/>
-      <div class="payment-method__currency"><@fields.currency/></div>
-    </CardContainer>
-  </template>
-}
-
-let editStyles = initStyleSheet(`
-  this {
-    padding: var(--boxel-sp);
-    display: grid;
-    gap: var(--boxel-sp);
-  }
-`);
-
-export class PaymentMethod extends Card {
-  @field currency = contains(StringCard);
-  @field logo = contains(StringCard);
-  @field exchangeRate = contains(IntegerCard);
-  @field balance = contains(IntegerCard);
-
-  static embedded = PaymentMethodView;
-  static isolated = PaymentMethodView;
-
-  static edit = class Edit extends Component<typeof PaymentMethod> {
+class CryptoPayment extends Card {
+  @field chain = linksTo(Chain); // dropdown
+  @field token = linksTo(Token); // filtered dropdown
+  @field toAddress = contains(StringCard);
+  static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer @displayBoundaries={{true}} {{attachStyles editStyles}}>
-        <FieldContainer @tag="label" @label="Currency">
-          <@fields.currency/>
+      <div {{attachStyles styles}}>
+        <FieldContainer @label="Chain">
+          <@fields.chain/>
         </FieldContainer>
-        <FieldContainer @tag="label" @label="Logo">
-          <@fields.logo/>
-        </FieldContainer>
-      </CardContainer>
+        {{#if @model.chain.chainId}}
+          <FieldContainer @label="Token">
+            <@fields.token/>
+          </FieldContainer>
+          {{#if @model.token}}
+            <FieldContainer @label="Token Name">
+              {{@model.token.name}}
+            </FieldContainer>
+            <FieldContainer @label="Token Address">
+              {{@model.token.address}}
+            </FieldContainer>
+            <FieldContainer @label="To Address">
+              <@fields.toAddress/>
+            </FieldContainer>
+          {{/if}}
+        {{/if}}
+      </div>
     </template>
   }
+  static embedded = this.edit;
+}
+
+class WireTransfer extends Card {
+  @field currency = linksTo(Currency); // dropdown
+  @field iban = contains(StringCard); // IBAN format
+  @field bic = contains(StringCard); // BIC format
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <div><@fields.iban/></div>
+      <div><@fields.bic/></div>
+    </template>
+  }
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <div {{attachStyles styles}}>
+        <FieldContainer @label="Currency">
+          <@fields.currency/>
+        </FieldContainer>
+        <FieldContainer @label="IBAN">
+          <@fields.iban/>
+        </FieldContainer>
+        <FieldContainer @label="BIC">
+          <@fields.bic/>
+        </FieldContainer>
+      </div>
+    </template>
+  }
+  static embedded = this.edit;
+}
+
+class EditPaymentMethod extends Component<typeof PaymentMethod> {
+  <template>
+    <div {{attachStyles styles}}>
+      <FieldContainer @label="Payment Method">
+        <@fields.type/>
+      </FieldContainer>
+      {{#if (eq @model.type "Crypto Payment")}}
+        <@fields.cryptoPayment/>
+      {{else if (eq @model.type "Wire Transfer")}}
+        <@fields.wireTransfer/>
+      {{/if}}
+    </div>
+  </template>
+};
+export class PaymentMethod extends Card {
+  @field type = contains(StringCard); // dropdown
+  @field cryptoPayment = contains(CryptoPayment);
+  @field wireTransfer = contains(WireTransfer);
+  static edit = EditPaymentMethod;
+  static embedded = EditPaymentMethod;
+  static isolated = EditPaymentMethod;
 }

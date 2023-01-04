@@ -8,7 +8,6 @@ import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 let styles = initStyleSheet(`
   this {
     --boxel-label-color: var(--boxel-dark);
-    min-width: 20rem;
     padding: var(--boxel-sp);
     display: grid;
     gap: var(--boxel-sp);

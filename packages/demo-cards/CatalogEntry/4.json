@@ -2,55 +2,25 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Invoice Packet",
-      "description": "Catalog entry for Invoice Packet card",
+      "title": "Token from http://local-realm/asset",
+      "description": "Catalog entry for Token from http://local-realm/asset",
       "ref": {
-        "module": "http://local-realm/invoice-packet",
-        "name": "InvoicePacket"
+        "module": "http://local-realm/asset",
+        "name": "Token"
       },
       "demo": {
-        "details": {
-          "invoiceNo": "0001",
-          "invoiceDate": "2022-01-01",
-          "dueDate": "2022-02-02",
-          "terms": null,
-          "invoiceDocument": "SampleDocument.pdf",
-          "memo": null
-        },
-        "lineItems": [
-          {
-            "name": "Name of goods/service",
-            "quantity": 1,
-            "amount": 100,
-            "description": "January - February activity"
-          }
-        ],
-        "notes": []
-      }
-    },
-    "relationships": {
-      "demo.vendor": {
-        "links": {
-          "self": "http://local-realm/Vendor/1"
-        }
-      },
-      "demo.primaryPayment": {
-        "links": {
-          "self": "http://local-realm/PaymentMethod/3"
-        }
-      },
-      "demo.alternatePayment": {
-        "links": {
-          "self": "http://local-realm/PaymentMethod/1"
-        }
+        "address": "eth:0x514910771af9ca656af840dff83e8264ecf986ca",
+        "name": "ChainLink Token",
+        "symbol": "LINK",
+        "logoURL": "http://local-realm/invoice-assets/currency-link.png"
       }
     },
     "meta": {
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://local-realm/invoice-packet",
-            "name": "InvoicePacket"
+            "module": "http://local-realm/asset",
+            "name": "Token"
           }
         }
       },

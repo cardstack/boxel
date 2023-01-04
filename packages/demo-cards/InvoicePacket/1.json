@@ -6,16 +6,6 @@
         "links": {
           "self": "http://local-realm/Vendor/1"
         }
-      },
-      "primaryPayment": {
-        "links": {
-          "self": "http://local-realm/PaymentMethod/3"
-        }
-      },
-      "alternatePayment": {
-        "links": {
-          "self": "http://local-realm/PaymentMethod/2"
-        }
       }
     },
     "attributes": {
@@ -43,13 +33,15 @@
       ],
       "notes": [
         {
-          "authorName": "Lucas Forbes",
           "text": "@Elena please check the invoice for accuracy",
+          "authorName": "Lucas Forbes",
+          "authorImage": null,
           "timestamp": "2022-04-09T16:13:00.000Z"
         },
         {
-          "authorName": "Elena Hopkins",
           "text": "Looks good to me",
+          "authorName": "Elena Hopkins",
+          "authorImage": null,
           "timestamp": "2022-04-10T20:51:00.000Z"
         }
       ]

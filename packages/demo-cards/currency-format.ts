@@ -1,16 +1,19 @@
+import { Token, Currency } from "./asset";
+
 export function balanceInCurrency(
   balance: number | null | undefined,
-  exchangeRate: number | null | undefined,
-  currency: string = ""
+  payment: Token | Currency | null | undefined
 ) {
-  if (balance == null || exchangeRate == null) {
+  if (balance == null || payment?.exchangeRate == null) {
     return 0;
   }
-  let total = balance * exchangeRate;
-  if (currency === "USD") {
+  let total = balance * payment.exchangeRate;
+  if (payment.name === "USD") {
     return formatUSD(total);
   } else {
-    return `${Number.isInteger(total) ? total : total.toFixed(2)} ${currency}`;
+    return `${Number.isInteger(total) ? total : total.toFixed(2)} ${
+      payment.symbol
+    }`;
   }
 }
 
