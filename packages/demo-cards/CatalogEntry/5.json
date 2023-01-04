@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Currency from http://local-realm/asset",
+      "description": "Catalog entry for Currency from http://local-realm/asset",
+      "ref": {
+        "module": "http://local-realm/asset",
+        "name": "Currency"
+      },
+      "demo": {
+        "sign": "$",
+        "name": "U.S. Dollar",
+        "symbol": "USD",
+        "logoURL": "http://local-realm/invoice-assets/currency-usd.png"
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://local-realm/asset",
+            "name": "Currency"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
