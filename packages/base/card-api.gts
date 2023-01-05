@@ -122,7 +122,14 @@ class Logger {
 
   log(promise: Promise<any>) {
     this.promises.push(promise);
-    (async () => await promise)(); // make an effort to resolve the promise at the time it is logged
+    // make an effort to resolve the promise at the time it is logged
+    (async () => {
+      try {
+        await promise;
+      } catch (e: any) {
+        console.error(`encountered error performing recompute on card`, e);
+      }
+    })();
   }
 
   async flush() {
