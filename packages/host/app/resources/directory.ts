@@ -11,7 +11,6 @@ import {
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import LoaderService from '../services/loader-service';
-import LocalRealm from '../services/local-realm';
 
 interface Args {
   named: { url: string | undefined; polling: 'off' | undefined };
@@ -30,19 +29,11 @@ export class DirectoryResource extends Resource<Args> {
   private url: string | undefined;
   private declare realmPath: RealmPaths;
 
-  @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
 
-  constructor(owner: unknown) {
-    super(owner);
-    if (!this.localRealm.isAvailable) {
-      throw new Error('Local realm is not available');
-    }
-  }
-
   modify(_positional: never[], named: Args['named']) {
-    this.realmPath = new RealmPaths(this.localRealm.url);
     if (named.url) {
+      this.realmPath = new RealmPaths(named.url);
       if (!named.url.endsWith('/')) {
         throw new Error(`A directory URL must end with a "/"`);
       }
