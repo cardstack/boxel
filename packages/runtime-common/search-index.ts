@@ -215,6 +215,7 @@ export class SearchIndex {
   }
 
   async run() {
+    //TODO make the index update atomic
     let html = await this.visit(
       `/indexer?realmURL=${encodeURIComponent(this.index.realmURL.href)}`
     );
@@ -243,6 +244,7 @@ export class SearchIndex {
   }
 
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
+    //TODO make the index update atomic
     this.visit = this.#getVisitor({
       _fetch: this.loader.fetch.bind(this.loader),
       staticResponses: new Map(),

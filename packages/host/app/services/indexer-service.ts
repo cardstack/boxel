@@ -34,6 +34,8 @@ export default class IndexerService extends Service {
   }
 
   async index(indexerPath: string) {
+    // TODO this needs to work like visitCard
+    // the visited urls/cards should be added as a tracked property in this service...
     await this.router.recognizeAndLoad(indexerPath);
   }
 
@@ -62,6 +64,7 @@ export default class IndexerService extends Service {
     return this.#entrySetter;
   }
 
+  // TODO this can go away...
   async visitCard(
     path: string,
     staticResponses: Map<string, string>,
