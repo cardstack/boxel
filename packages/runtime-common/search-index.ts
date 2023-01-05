@@ -215,11 +215,9 @@ export class SearchIndex {
   }
 
   async run() {
-    //TODO make the index update atomic
-    let html = await this.visit(
+    await this.visit(
       `/indexer?realmURL=${encodeURIComponent(this.index.realmURL.href)}`
     );
-    this.processCardHtml(html);
   }
 
   get stats() {
@@ -230,21 +228,7 @@ export class SearchIndex {
     return this.index.loader;
   }
 
-  private processCardHtml(html: string) {
-    let results = parseCardHtml(html);
-    for (let [url, html] of results) {
-      let instance = this.index.instances.get(url);
-      if (!instance) {
-        throw new Error(`bug: could not find ${url.href} in index`);
-      }
-      if (instance.type === "entry") {
-        instance.entry.html = html;
-      }
-    }
-  }
-
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
-    //TODO make the index update atomic
     this.visit = this.#getVisitor({
       _fetch: this.loader.fetch.bind(this.loader),
       staticResponses: new Map(),
@@ -265,14 +249,13 @@ export class SearchIndex {
         this.index.instances.set(url, entry);
       },
     });
-    let html = await this.visit(
+    await this.visit(
       `/indexer?realmURL=${encodeURIComponent(
         this.index.realmURL.href
       )}&url=${encodeURIComponent(url.href)}&op=${
         opts?.delete ? "delete" : "update"
       }`
     );
-    this.processCardHtml(html);
   }
 
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
@@ -746,16 +729,4 @@ function some<T>(
     }
   }
   return result;
-}
-
-function parseCardHtml(html: string): [URL, string][] {
-  let matches = html.matchAll(
-    /<span data-internal-card-url__>(?<url>[^<].*)<\/span>[\n\s]*<!--Server Side Rendered Card HTML START-->[\n\s]*(?<html>[\W\w\n\s]*?)[\s\n]*<!--Server Side Rendered Card HTML END-->/gm
-  );
-  let results: [URL, string][] = [];
-  for (let match of matches) {
-    let { url, html } = match.groups as { url: string; html: string };
-    results.push([new URL(url), html]);
-  }
-  return results;
 }

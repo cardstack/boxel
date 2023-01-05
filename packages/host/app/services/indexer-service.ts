@@ -3,7 +3,8 @@ import { tracked } from '@glimmer/tracking';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import type RouterService from '@ember/routing/router-service';
 import type LoaderService from './loader-service';
-import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import CardService from './card-service';
+import type { Card } from 'https://cardstack.com/base/card-api';
 import {
   type Reader,
   type RunState,
@@ -13,8 +14,8 @@ import {
 export default class IndexerService extends Service {
   @service declare router: RouterService;
   @service declare loaderService: LoaderService;
+  @service declare cardService: CardService;
   @tracked card: Card | undefined;
-  @tracked format: Format | undefined;
   #reader: Reader | undefined;
   #setRunState: ((state: RunState) => void) | undefined;
   #entrySetter: ((url: URL, entry: SearchEntryWithErrors) => void) | undefined;
@@ -64,20 +65,22 @@ export default class IndexerService extends Service {
     return this.#entrySetter;
   }
 
-  // TODO this can go away...
   async visitCard(
-    path: string,
+    url: string,
     staticResponses: Map<string, string>,
-    send: (html: string) => void
+    send: (html: string) => void // we use a callback here because it works well for the message channel--reconsider this if we stop doing that...
   ) {
     this.loaderService.setStaticResponses(staticResponses);
-    let { attributes } = await this.router.recognizeAndLoad(path);
-    let { card, format } = attributes as { card: Card; format: Format };
-    this.deferred = new Deferred();
-    this.card = card;
-    this.format = format;
-    let html = await this.deferred.promise;
-    send(html);
+    let card = await this.cardService.loadModel(url, { absoluteURL: true });
+    if (!card) {
+      send(`card ${url} not found`); // TODO make this better...
+    } else {
+      this.deferred = new Deferred();
+      debugger;
+      this.card = card;
+      let html = await this.deferred.promise;
+      send(html);
+    }
   }
 
   captureSnapshot(html: string) {

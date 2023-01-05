@@ -8,10 +8,9 @@ import {
   type RunState,
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
-import { type Card } from 'https://cardstack.com/base/card-api';
 
 interface Model {
-  cards: [string, Card][];
+  // cards: [string, Card][];
 }
 interface ModelArgs {
   realmURL: string;
@@ -42,7 +41,6 @@ export default class Indexer extends Route<Model> {
     let realmURL: string;
     let url: string | undefined;
     let operation: 'update' | 'delete' | undefined;
-    let visitedCards = new Map<string, Card>();
     if ('queryParams' in args) {
       realmURL = args.queryParams.realmURL;
       url = args.queryParams.url;
@@ -87,7 +85,7 @@ export default class Indexer extends Route<Model> {
         reader,
         loader: this.loaderService.loader,
         entrySetter,
-        addVisitedCard: (url, card) => visitedCards.set(url, card),
+        visitCard: this.indexerService.visitCard.bind(this.indexerService),
       });
     } else {
       current = await CurrentRun.fromScratch(
@@ -96,7 +94,7 @@ export default class Indexer extends Route<Model> {
           loader: this.loaderService.loader,
           reader,
           entrySetter,
-          addVisitedCard: (url, card) => visitedCards.set(url, card),
+          visitCard: this.indexerService.visitCard.bind(this.indexerService),
         })
       );
     }
@@ -119,6 +117,6 @@ export default class Indexer extends Route<Model> {
       });
     }
 
-    return { cards: [...visitedCards] };
+    return {};
   }
 }

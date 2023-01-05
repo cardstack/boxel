@@ -69,7 +69,11 @@ export class CurrentRun {
   #loader: Loader;
   #entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
   #staticResponses = new Map<string, string>();
-  #addVisitedCard: (url: string, card: Card) => void;
+  #visitCard: (
+    path: string,
+    staticResponses: Map<string, string>,
+    send: (html: string) => void
+  ) => Promise<void>;
   private realmURL: URL;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -85,7 +89,7 @@ export class CurrentRun {
     ignoreMap = new URLMap(),
     loader,
     entrySetter,
-    addVisitedCard,
+    visitCard,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -94,7 +98,11 @@ export class CurrentRun {
     ignoreMap?: URLMap<Ignore>;
     loader: Loader;
     entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
-    addVisitedCard: (url: string, card: Card) => void;
+    visitCard: (
+      path: string,
+      staticResponses: Map<string, string>,
+      send: (html: string) => void
+    ) => Promise<void>;
   }) {
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
@@ -104,7 +112,7 @@ export class CurrentRun {
     this.#ignoreMap = ignoreMap;
     this.#loader = loader;
     this.#entrySetter = entrySetter;
-    this.#addVisitedCard = addVisitedCard;
+    this.#visitCard = visitCard;
   }
 
   static async fromScratch(current: CurrentRun) {
@@ -119,7 +127,7 @@ export class CurrentRun {
     reader,
     loader,
     entrySetter,
-    addVisitedCard,
+    visitCard,
   }: {
     url: URL;
     operation: 'update' | 'delete';
@@ -127,7 +135,11 @@ export class CurrentRun {
     reader: Reader;
     loader: Loader;
     entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
-    addVisitedCard: (url: string, card: Card) => void;
+    visitCard: (
+      path: string,
+      staticResponses: Map<string, string>,
+      send: (html: string) => void
+    ) => Promise<void>;
   }) {
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
@@ -150,7 +162,7 @@ export class CurrentRun {
       ignoreMap,
       loader,
       entrySetter,
-      addVisitedCard,
+      visitCard,
     });
 
     if (operation === 'update') {
@@ -347,13 +359,13 @@ export class CurrentRun {
     let doc: SingleCardDocument | undefined;
     let searchData: Record<string, any> | undefined;
     let cardType: typeof Card | undefined;
-    let card: Card | undefined;
+    let html: string | undefined;
     try {
       let api = await this.#loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`
       );
       let res = { ...resource, ...{ id: instanceURL.href } };
-      card = await api.createFromSerialized<typeof Card>(
+      let card = await api.createFromSerialized<typeof Card>(
         res,
         { data: res },
         new URL(fileURL),
@@ -405,6 +417,12 @@ export class CurrentRun {
         instanceURL.href,
         JSON.stringify(cachedDoc, null, 2)
       );
+      await this.#visitCard(
+        instanceURL.href,
+        this.#staticResponses,
+        (h) => (html = h)
+      );
+      debugger;
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -412,13 +430,13 @@ export class CurrentRun {
     if (!uncaughtError && cardType) {
       typesMaybeError = await this.getTypes(cardType);
     }
-    if (card && searchData && doc && typesMaybeError?.type === 'types') {
-      this.#addVisitedCard(instanceURL.href, card);
+    if (searchData && doc && typesMaybeError?.type === 'types') {
       this.setInstance(instanceURL, {
         type: 'entry',
         entry: {
           resource: doc.data,
           searchData,
+          html,
           types: typesMaybeError.types,
           deps: new Set(await this.loader.getConsumedModules(moduleURL)),
         },

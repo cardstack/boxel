@@ -1,7 +1,6 @@
-{{outlet}}
+<!-- Consider sandboxing this with an iframe -->
+<template shadowroot="open"></template>
+  <WorkerRender/>
+</template>
 
-{{#unless this.model.isFastBoot}}
-  <template shadowroot="open">
-    <WorkerRender/>
-  </template>
-{{/unless}}
+{{outlet}}
