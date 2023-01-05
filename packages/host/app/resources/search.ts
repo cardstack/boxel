@@ -12,6 +12,9 @@ import type LoaderService from '../services/loader-service';
 import type CardService from '../services/card-service';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { Card } from 'https://cardstack.com/base/card-api';
+import ENV from '@cardstack/host/config/environment';
+
+const { demoRealmURL } = ENV;
 
 interface Args {
   named: {
@@ -33,9 +36,10 @@ export class Search extends Resource<Args> {
   @restartableTask private async search(query: Query, loader: Loader) {
     // until we have realm index rollup, search all the realms as separate
     // queries that we merge together
+    let url = demoRealmURL ?? this.localRealm.url.href;
     this.instances = flatMap(
       await Promise.all(
-        [this.localRealm.url.href, loader.resolve(baseRealm.url)].map(
+        [url, loader.resolve(baseRealm.url)].map(
           async (realm) => await this.cardService.search(query, realm)
         )
       )

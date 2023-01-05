@@ -26,6 +26,9 @@ import BoxelInput from '@cardstack/boxel-ui/components/input';
 import FieldContainer from '@cardstack/boxel-ui/components/field-container';
 import CardContainer from '@cardstack/boxel-ui/components/card-container';
 import Label from '@cardstack/boxel-ui/components/label';
+import ENV from '@cardstack/host/config/environment';
+
+const { demoRealmURL } = ENV;
 
 interface Signature {
   Args: {
@@ -141,10 +144,11 @@ export default class Schema extends Component<Signature> {
 
   @cached
   get realmPath() {
-    if (!this.localRealm.isAvailable) {
-      throw new Error('Local realm is not available');
+    if (!demoRealmURL && !this.localRealm.isAvailable) {
+      throw new Error('Realm is not available');
     }
-    return new RealmPaths(this.loaderService.loader.reverseResolution(this.localRealm.url.href));
+    let url = demoRealmURL ?? this.localRealm.url.href;
+    return new RealmPaths(this.loaderService.loader.reverseResolution(url));
   }
 
   @cached

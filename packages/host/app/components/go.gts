@@ -22,6 +22,9 @@ import {
 import monaco from '../modifiers/monaco';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import InLocalRealm from './in-local-realm';
+import ENV from '@cardstack/host/config/environment';
+
+const { demoRealmURL } = ENV;
 
 interface Signature {
   Args: {
@@ -35,9 +38,13 @@ export default class Go extends Component<Signature> {
   <template>
     <div class="main">
       <div class="main__column">
-        <InLocalRealm as |url|>
-          <FileTree @url={{url}} @path={{@path}} @polling={{@polling}} />
-        </InLocalRealm>
+        {{#if demoRealmURL}}
+          <FileTree @url={{demoRealmURL}} @path={{@path}} @polling={{@polling}} />
+        {{else}}
+          <InLocalRealm as |url|>
+            <FileTree @url={{url}} @path={{@path}} @polling={{@polling}} />
+          </InLocalRealm>
+        {{/if}}
       </div>
       {{#if this.openFile}}
         <div {{monaco content=this.openFile.content

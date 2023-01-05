@@ -7,6 +7,9 @@ import type RouterService from '@ember/routing/router-service';
 import LocalRealm from '../services/local-realm';
 import { RealmPaths } from '@cardstack/runtime-common';
 import type { Format } from 'https://cardstack.com/base/card-api';
+import ENV from '@cardstack/host/config/environment';
+
+const { demoRealmURL } = ENV;
 
 interface Model {
   path: string | undefined;
@@ -45,11 +48,11 @@ export default class Index extends Route<Model> {
     }
 
     await this.localRealm.startedUp;
-    if (!this.localRealm.isAvailable) {
+    if (!demoRealmURL && !this.localRealm.isAvailable) {
       return { path, openFile, polling, isFastBoot };
     }
 
-    let realmPath = new RealmPaths(this.localRealm.url);
+    let realmPath = new RealmPaths(demoRealmURL ?? this.localRealm.url);
     let url = realmPath.fileURL(path).href;
     let response = await this.loaderService.loader.fetch(url, {
       headers: {

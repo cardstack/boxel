@@ -14,6 +14,9 @@ import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import ENV from '@cardstack/host/config/environment';
+
+const { demoRealmURL } = ENV;
 
 interface Options {
   absoluteURL?: true;
@@ -65,11 +68,12 @@ export default class CardService extends Service {
     opts?: Options
   ): Promise<Card> {
     await this.apiModule.loaded;
+    let url = demoRealmURL ? new URL(demoRealmURL) : this.localRealm.url;
     let card = await this.api.createFromSerialized(
       resource,
       doc,
       // we don't want to touch the local realm for server side rendering
-      opts?.absoluteURL ? undefined : this.localRealm.url,
+      opts?.absoluteURL ? undefined : url,
       {
         loader: this.loaderService.loader,
       }
@@ -100,7 +104,8 @@ export default class CardService extends Service {
     await this.apiModule.loaded;
     let cardJSON = this.api.serializeCard(card, { includeComputeds: true });
     let isSaved = this.api.isSaved(card);
-    let json = await this.fetchJSON(isSaved ? card.id : this.localRealm.url, {
+    let url = demoRealmURL ?? this.localRealm.url;
+    let json = await this.fetchJSON(isSaved ? card.id : url, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(cardJSON, null, 2),
     });
