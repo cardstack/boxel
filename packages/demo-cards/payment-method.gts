@@ -81,7 +81,9 @@ class EditPaymentMethod extends Component<typeof PaymentMethod> {
       {{#if (eq @model.type "Crypto Payment")}}
         <@fields.cryptoPayment/>
       {{else if (eq @model.type "Wire Transfer")}}
-        <@fields.wireTransfer/>
+        {{!-- TODO: uncommenting the below causes the app to crash
+              (also see: 'alternatePayments' field of InvoicePacket card in invoice-packet.gts) --}}
+        {{!-- <@fields.wireTransfer/> --}}
       {{/if}}
     </div>
   </template>
