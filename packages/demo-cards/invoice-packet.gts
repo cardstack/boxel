@@ -349,8 +349,7 @@ export class InvoicePacket extends Card {
   @field alternatePayment = containsMany(Token || Currency, { computeVia: function(this: InvoicePacket) {
     return [];
     // TODO: implementation below is not working
-    // containsMany field trying to read fields of a `vendor` linksTo field
-    // also see: PaymentMethod card's `wireTransfer` field in `payment-method.gts`
+    // this is a computed containsMany field trying to read fields off of a `vendor` linksTo field
     // return this.vendor?.alternatePaymentMethod?.length ?  this.vendor.alternatePaymentMethod.map(p =>  p.cryptoPayment?.token ?? p.wireTransfer?.currency) : [];
   }});
   @field balanceDue = contains(IntegerCard, { computeVia:
