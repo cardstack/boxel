@@ -141,6 +141,56 @@ module('Unit | search-index', function (hooks) {
     }
   });
 
+  test('can tolerate a card whose computed throws an exception', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Boom/boom.json': {
+        data: {
+          id: `${testRealmURL}Boom/boom`,
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/card-with-error',
+              name: 'Boom',
+            },
+          },
+        },
+      },
+      'Person/owner.json': {
+        data: {
+          id: `${testRealmURL}Person/owner`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+    });
+    let realm = TestRealm.createWithAdapter(adapter);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    {
+      let card = await indexer.card(new URL(`${testRealmURL}Boom/boom`));
+      if (card?.type === 'error') {
+        assert.strictEqual(card.error.detail, 'intentional error thrown');
+      } else {
+        assert.ok(false, `expected search entry to be an error doc`);
+      }
+    }
+
+    {
+      let card = await indexer.card(new URL(`${testRealmURL}Person/owner`));
+      if (card?.type === 'doc') {
+        assert.strictEqual(card.doc.data.attributes?.firstName, 'Hassan');
+      } else {
+        assert.ok(false, `search entry was an error: ${card?.error.detail}`);
+      }
+    }
+  });
+
   test('can index a card that has nested linksTo fields', async function (assert) {
     let adapter = new TestRealmAdapter({
       'Friend/hassan.json': {
