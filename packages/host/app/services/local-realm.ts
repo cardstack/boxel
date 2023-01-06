@@ -14,6 +14,9 @@ import { timeout } from '@cardstack/worker/src/util';
 import { Deferred } from '@cardstack/runtime-common';
 import { TaskInstance } from 'ember-resources';
 import WorkerRenderer from './worker-renderer';
+import ENV from '@cardstack/host/config/environment';
+
+const { demoRealmURL } = ENV;
 
 export default class LocalRealm extends Service {
   realmMappings = new Map<string, string>();
@@ -66,6 +69,14 @@ export default class LocalRealm extends Service {
       this.state = { type: 'fastboot', worker: undefined };
       return;
     }
+    if (demoRealmURL) {
+      this.state = {
+        type: 'demo-realm',
+        worker: undefined,
+        url: new URL(demoRealmURL),
+      };
+      return;
+    }
     await Promise.resolve();
     this.state = { type: 'checking-worker' };
     let worker = await this.ensureWorker();
@@ -105,6 +116,7 @@ export default class LocalRealm extends Service {
       }
     | { type: 'empty'; worker: ServiceWorker }
     | { type: 'fastboot'; worker: undefined }
+    | { type: 'demo-realm'; worker: undefined; url: URL }
     | {
         type: 'available';
         handle: FileSystemDirectoryHandle;
@@ -129,7 +141,7 @@ export default class LocalRealm extends Service {
 
   get url(): URL {
     this.maybeSetup();
-    if (this.state.type !== 'available') {
+    if (this.state.type !== 'available' && this.state.type !== 'demo-realm') {
       throw new Error(`Cannot get url in state ${this.state.type}`);
     }
     return this.state.url;
