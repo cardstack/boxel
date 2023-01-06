@@ -149,15 +149,6 @@ export default class Schema extends Component<Signature> {
     return getCardType(this, () => this.args.card);
   }
 
-  @cached
-  get cardFromSyntax() {
-    let card = this.args.moduleSyntax.possibleCards.find(c => c.exportedAs === this.ref.name);
-    if (!card) {
-      throw new Error(`cannot find card in module syntax for ref ${JSON.stringify(this.ref)}`);
-    }
-    return card;
-  }
-
   get isNewFieldDisabled() {
     return Boolean(this.errorMsg) || !this.newFieldName;
   }
