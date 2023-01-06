@@ -5,7 +5,6 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import LocalRealm from '../services/local-realm';
 import { eq } from '../helpers/truth-helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 //@ts-ignore cached not available yet in definitely typed
@@ -125,12 +124,10 @@ export default class Schema extends Component<Signature> {
     {{/if}}
   </template>
 
-  @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
   @tracked newFieldName: string | undefined;
   @tracked newFieldType: FieldType = 'contains';
 
-  @cached
   get ref() {
     let ref = identifyCard(this.args.card);
     if (!ref) {
@@ -141,7 +138,10 @@ export default class Schema extends Component<Signature> {
 
   @cached
   get realmPath() {
-    return new RealmPaths(this.loaderService.loader.reverseResolution(this.localRealm.url.href));
+    if (!this.cardType.type) {
+      throw new Error(`bug: unable to identify card ${this.args.card.name}`);
+    }
+    return new RealmPaths(this.loaderService.loader.reverseResolution(this.cardType.type.id));
   }
 
   @cached

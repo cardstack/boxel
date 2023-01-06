@@ -23,7 +23,7 @@ export default class LocalRealm extends Service {
 
   constructor(properties: object) {
     super(properties);
-    if (!this.fastboot.isFastBoot) {
+    if (!this.fastboot.isFastBoot || !demoRealmURL) {
       let handler = (event: MessageEvent) => this.handleMessage(event);
       navigator.serviceWorker.addEventListener('message', handler);
       registerDestructor(this, () =>
@@ -141,7 +141,7 @@ export default class LocalRealm extends Service {
 
   get url(): URL {
     this.maybeSetup();
-    if (this.state.type !== 'available' && this.state.type !== 'demo-realm') {
+    if (this.state.type !== 'available') {
       throw new Error(`Cannot get url in state ${this.state.type}`);
     }
     return this.state.url;
