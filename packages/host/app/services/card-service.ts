@@ -46,7 +46,10 @@ export default class CardService extends Service {
   }
 
   get defaultURL() {
-    return demoRealmURL ? new URL(demoRealmURL) : this.localRealm.url;
+    if (demoRealmURL) {
+      return this.loaderService.loader.resolve(demoRealmURL);
+    }
+    return this.localRealm.url;
   }
 
   private async fetchJSON(
@@ -123,8 +126,10 @@ export default class CardService extends Service {
     return await this.createFromSerialized(json.data, json);
   }
 
-  async search(query: Query, realmURL: string | ResolvedURL): Promise<Card[]> {
-    let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
+  async search(query: Query, realmURL: URL | ResolvedURL): Promise<Card[]> {
+    let json = await this.fetchJSON(
+      `${realmURL.href}_search?${stringify(query)}`
+    );
     if (!isCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a card collection document:

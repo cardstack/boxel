@@ -33,7 +33,7 @@ export class Search extends Resource<Args> {
     // queries that we merge together
     this.instances = flatMap(
       await Promise.all(
-        [this.cardService.defaultURL.href, loader.resolve(baseRealm.url)].map(
+        [this.cardService.defaultURL, loader.resolve(baseRealm.url)].map(
           async (realm) => await this.cardService.search(query, realm)
         )
       )

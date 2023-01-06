@@ -33,10 +33,12 @@ export class DirectoryResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     if (named.url) {
-      this.realmPath = new RealmPaths(named.url);
       if (!named.url.endsWith('/')) {
         throw new Error(`A directory URL must end with a "/"`);
       }
+      this.realmPath = new RealmPaths(
+        this.loaderService.loader.reverseResolution(named.url)
+      );
       this.url = named.url;
       taskFor(this.readdir).perform();
     }
