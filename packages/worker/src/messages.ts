@@ -1,5 +1,6 @@
 // this file should be portable to both DOM and ServiceWorker contexts. It
 // establishes the common API between them.
+import { type RunState } from '@cardstack/runtime-common/search-index';
 
 export interface RequestDirectoryHandle {
   type: 'requestDirectoryHandle';
@@ -34,14 +35,36 @@ export interface VisitResponse {
   path: string;
 }
 
+export interface GetRunStateRequest {
+  type: 'getRunStateRequest';
+}
+
+export interface GetRunStateResponse {
+  type: 'getRunStateResponse';
+  state: RunState | null;
+}
+
+export interface SetRunState {
+  type: 'setRunState';
+  state: RunState;
+}
+
+export interface SetRunStateAcknowledged {
+  type: 'setRunStateAcknowledged';
+}
+
 export type ClientMessage =
   | RequestDirectoryHandle
   | SetDirectoryHandle
-  | VisitResponse;
+  | VisitResponse
+  | GetRunStateRequest
+  | SetRunState;
 export type WorkerMessage =
   | DirectoryHandleResponse
   | SetDirectoryHandleAcknowledged
-  | VisitRequest;
+  | VisitRequest
+  | GetRunStateResponse
+  | SetRunStateAcknowledged;
 export type Message = ClientMessage | WorkerMessage;
 
 function isMessageLike(
@@ -60,6 +83,7 @@ export function isClientMessage(message: unknown): message is ClientMessage {
     return false;
   }
   switch (message.type) {
+    case 'getRunStateRequest':
     case 'requestDirectoryHandle':
       return true;
     case 'setDirectoryHandle':
@@ -77,6 +101,12 @@ export function isClientMessage(message: unknown): message is ClientMessage {
         'path' in message &&
         typeof message.path === 'string'
       );
+    case 'setRunState':
+      return (
+        'state' in message &&
+        typeof message.state === 'object' &&
+        message.state != null
+      );
     default:
       return false;
   }
@@ -87,6 +117,8 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
     return false;
   }
   switch (message.type) {
+    case 'setRunStateAcknowledged':
+      return true;
     case 'directoryHandleResponse':
       return (
         'handle' in message &&
@@ -107,6 +139,8 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
         'staticResponses' in message &&
         message.staticResponses instanceof Map
       );
+    case 'getRunStateResponse':
+      return 'state' in message && typeof message.state === 'object';
     default:
       return false;
   }

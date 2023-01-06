@@ -57,17 +57,17 @@ export type GetVisitor = ({
 }: {
   _fetch: typeof fetch;
   resolver: {
-    resolve: (moduleIdentifier: string | URL, relativeTo?: URL) => ResolvedURL;
-    reverseResolution: (
+    resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL;
+    reverseResolution(
       moduleIdentifier: string | ResolvedURL,
       relativeTo?: URL
-    ) => URL;
+    ): URL;
   };
   reader: Reader;
   staticResponses: Map<string, string>;
-  setRunState: (state: RunState) => void;
-  getRunState: () => RunState | undefined; // this always returns the previous run--undefined if there is no previous run
-  entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
+  setRunState(state: RunState): void;
+  getRunState(): RunState | undefined; // this always returns the previous run--undefined if there is no previous run
+  entrySetter(url: URL, entry: SearchEntryWithErrors): void;
 }) => (url: string) => Promise<string>;
 
 // TODO this can probably live in its own module
@@ -226,6 +226,10 @@ export class SearchIndex {
 
   get loader() {
     return this.index.loader;
+  }
+
+  get runState() {
+    return this.index;
   }
 
   async update(url: URL, opts?: { delete?: true }): Promise<void> {

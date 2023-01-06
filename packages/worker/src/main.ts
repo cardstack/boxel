@@ -30,17 +30,17 @@ Loader.addURLMapping(
     if (!messageHandler.fs) {
       throw new Error(`could not get FileSystem`);
     }
-    // TODO this will look very similar to the host/test/helpers/index realm creation, but use the worker renderer component...
-    fetchHandler.addRealm(
-      new Realm(
-        'http://local-realm/',
-        new LocalRealm(messageHandler.fs),
-        (_fetch: typeof fetch, staticResponses: Map<string, string>) =>
-          async (path: string) => {
-            return await messageHandler.visit(path, staticResponses);
-          }
-      )
+    let realm = new Realm(
+      'http://local-realm/',
+      new LocalRealm(messageHandler.fs),
+      ({ getRunState, setRunState, staticResponses }) => {
+        messageHandler.setup(getRunState, setRunState);
+        return async (path: string) => {
+          return await messageHandler.visit(path, staticResponses);
+        };
+      }
     );
+    fetchHandler.addRealm(realm);
   } catch (err) {
     console.log(err);
   }

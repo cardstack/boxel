@@ -1,6 +1,7 @@
 import { isClientMessage, send } from './messages';
 import assertNever from 'assert-never';
 import { Deferred } from '@cardstack/runtime-common/deferred';
+import { type RunState } from '@cardstack/runtime-common/search-index';
 
 let visitIds = 0;
 
@@ -9,6 +10,8 @@ export class MessageHandler {
   private finishedStarting!: () => void;
   startingUp: Promise<void>;
   private source: Client | ServiceWorker | MessagePort | undefined | null;
+  private setRunState: ((runState: RunState) => void) | undefined;
+  private getRunState: (() => RunState | undefined) | undefined;
   private pendingVisits = new Map<
     string,
     { path: string; deferred: Deferred<string> }
@@ -19,6 +22,14 @@ export class MessageHandler {
     worker.addEventListener('message', (event) => {
       this.handle(event);
     });
+  }
+
+  setup(
+    getRunState: () => RunState | undefined,
+    setRunState: (runState: RunState) => void
+  ) {
+    this.setRunState = setRunState;
+    this.getRunState = getRunState;
   }
 
   handle(event: ExtendableMessageEvent) {
@@ -56,6 +67,27 @@ export class MessageHandler {
         let { deferred } = visit;
         deferred.fulfill(html);
         this.pendingVisits.delete(id);
+        return;
+      case 'getRunStateRequest':
+        if (!this.getRunState) {
+          throw new Error(
+            `received request to get run state, but no getRunState callback registered`
+          );
+        }
+        send(source, {
+          type: 'getRunStateResponse',
+          state: this.getRunState() || null,
+        });
+        return;
+      case 'setRunState':
+        if (!this.setRunState) {
+          throw new Error(
+            `received request to set run state, but no setRunState callback registered`
+          );
+        }
+        let { state } = data;
+        this.setRunState(state);
+        send(source, { type: 'setRunStateAcknowledged' });
         return;
       default:
         throw assertNever(data);

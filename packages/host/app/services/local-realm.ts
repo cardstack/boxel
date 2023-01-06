@@ -14,9 +14,12 @@ import { timeout } from '@cardstack/worker/src/util';
 import { Deferred } from '@cardstack/runtime-common';
 import { TaskInstance } from 'ember-resources';
 import IndexerService from './indexer-service';
+import { type RunState } from '@cardstack/runtime-common/search-index';
 
 export default class LocalRealm extends Service {
   realmMappings = new Map<string, string>();
+  private getRunStateDeferred: Deferred<RunState | null> | undefined;
+  private setRunStateDeferred: Deferred<void> | undefined;
 
   constructor(properties: object) {
     super(properties);
@@ -58,9 +61,41 @@ export default class LocalRealm extends Service {
             send(worker, { type: 'visitResponse', id, path, html })
           );
           return;
+        } else if (data.type === 'getRunStateResponse') {
+          if (!this.getRunStateDeferred) {
+            throw new Error(
+              `received getRunStateResponse with no corresponding getRunStateRequest`
+            );
+          }
+          let { state } = data;
+          this.getRunStateDeferred.fulfill(state);
+          return;
+        } else if (data.type === 'setRunStateAcknowledged') {
+          if (!this.setRunStateDeferred) {
+            throw new Error(
+              `received setRunStateAcknowledged with no corresponding setRunState`
+            );
+          }
+          this.setRunStateDeferred.fulfill();
+          return;
         }
     }
     console.log(`did not handle worker message`, data);
+  }
+
+  async getIndexRunState(): Promise<RunState | undefined> {
+    let worker = await this.ensureWorker();
+    this.getRunStateDeferred = new Deferred();
+    send(worker, { type: 'getRunStateRequest' });
+    let runState = await this.getRunStateDeferred.promise;
+    return runState || undefined;
+  }
+
+  async setIndexRunState(state: RunState): Promise<void> {
+    let worker = await this.ensureWorker();
+    this.setRunStateDeferred = new Deferred();
+    send(worker, { type: 'setRunState', state });
+    await this.setRunStateDeferred.promise;
   }
 
   @restartableTask private async setup(): Promise<void> {

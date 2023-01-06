@@ -71,9 +71,8 @@ export class CurrentRun {
   #staticResponses = new Map<string, string>();
   #visitCard: (
     path: string,
-    staticResponses: Map<string, string>,
-    send: (html: string) => void
-  ) => Promise<void>;
+    staticResponses: Map<string, string>
+  ) => Promise<string>;
   private realmURL: URL;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -100,9 +99,8 @@ export class CurrentRun {
     entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
     visitCard: (
       path: string,
-      staticResponses: Map<string, string>,
-      send: (html: string) => void
-    ) => Promise<void>;
+      staticResponses: Map<string, string>
+    ) => Promise<string>;
   }) {
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
@@ -137,9 +135,8 @@ export class CurrentRun {
     entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
     visitCard: (
       path: string,
-      staticResponses: Map<string, string>,
-      send: (html: string) => void
-    ) => Promise<void>;
+      staticResponses: Map<string, string>
+    ) => Promise<string>;
   }) {
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
@@ -417,11 +414,7 @@ export class CurrentRun {
         instanceURL.href,
         JSON.stringify(cachedDoc, null, 2)
       );
-      await this.#visitCard(
-        instanceURL.href,
-        this.#staticResponses,
-        (h) => (html = h)
-      );
+      html = await this.#visitCard(instanceURL.href, this.#staticResponses);
       debugger;
     } catch (err: any) {
       uncaughtError = err;
