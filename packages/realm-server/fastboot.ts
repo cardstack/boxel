@@ -1,17 +1,10 @@
 //@ts-expect-error no types for fastboot
 import FastBoot from "fastboot";
 import { type FastBootInstance } from "@cardstack/runtime-common";
-import { type GetVisitor } from "@cardstack/runtime-common/search-index";
+import { type IndexRunner } from "@cardstack/runtime-common/search-index";
 
-export function makeFastBootVisitor(distPath: string): GetVisitor {
-  return ({
-    _fetch,
-    resolver,
-    reader,
-    setRunState,
-    getRunState,
-    entrySetter,
-  }) => {
+export function makeFastBootIndexRunner(distPath: string): IndexRunner {
+  return async ({ _fetch, resolver, reader, entrySetter, registerRunner }) => {
     // something to think about--if there is a dramatic performance hit for
     // creating a new fastboot instance for each current run, maybe we can look
     // at reusing an existing fastboot instances? we could use the loader
@@ -33,19 +26,15 @@ export function makeFastBootVisitor(distPath: string): GetVisitor {
           btoa,
           resolver,
           reader,
-          setRunState,
-          getRunState,
           entrySetter,
+          registerRunner,
         });
       },
     }) as FastBootInstance;
-    return async (url) => {
-      let page = await fastboot.visit(url, {
-        request: { headers: { host: "localhost:4200" } },
-      });
-      let html = page.html();
-      return html;
-    };
+    await fastboot.visit("/indexer", {
+      // TODO we'll need to configure this host origin as part of the hosted realm work
+      request: { headers: { host: "localhost:4200" } },
+    });
   };
 }
 

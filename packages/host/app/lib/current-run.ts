@@ -69,11 +69,11 @@ export class CurrentRun {
   #loader: Loader;
   #entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
   #staticResponses = new Map<string, string>();
-  #visitCard: (
-    path: string,
+  #renderCard: (
+    url: URL,
     staticResponses: Map<string, string>
   ) => Promise<string>;
-  private realmURL: URL;
+  #realmURL: URL;
   readonly stats: Stats = {
     instancesIndexed: 0,
     instanceErrors: 0,
@@ -88,7 +88,7 @@ export class CurrentRun {
     ignoreMap = new URLMap(),
     loader,
     entrySetter,
-    visitCard,
+    renderCard,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -97,24 +97,24 @@ export class CurrentRun {
     ignoreMap?: URLMap<Ignore>;
     loader: Loader;
     entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
-    visitCard: (
-      path: string,
+    renderCard: (
+      url: URL,
       staticResponses: Map<string, string>
     ) => Promise<string>;
   }) {
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
-    this.realmURL = realmURL;
+    this.#realmURL = realmURL;
     this.#instances = instances;
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
     this.#loader = loader;
     this.#entrySetter = entrySetter;
-    this.#visitCard = visitCard;
+    this.#renderCard = renderCard;
   }
 
   static async fromScratch(current: CurrentRun) {
-    await current.visitDirectory(current.realmURL);
+    await current.visitDirectory(current.#realmURL);
     return current;
   }
 
@@ -125,7 +125,7 @@ export class CurrentRun {
     reader,
     loader,
     entrySetter,
-    visitCard,
+    renderCard,
   }: {
     url: URL;
     operation: 'update' | 'delete';
@@ -133,8 +133,8 @@ export class CurrentRun {
     reader: Reader;
     loader: Loader;
     entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
-    visitCard: (
-      path: string,
+    renderCard: (
+      url: URL,
       staticResponses: Map<string, string>
     ) => Promise<string>;
   }) {
@@ -159,7 +159,7 @@ export class CurrentRun {
       ignoreMap,
       loader,
       entrySetter,
-      visitCard,
+      renderCard,
     });
 
     if (operation === 'update') {
@@ -183,6 +183,10 @@ export class CurrentRun {
     return this.#ignoreMap;
   }
 
+  get realmURL() {
+    return this.#realmURL;
+  }
+
   public get loader() {
     return this.#loader;
   }
@@ -199,7 +203,7 @@ export class CurrentRun {
       this.#realmPaths.local(url)
     )) {
       let innerURL = this.#realmPaths.fileURL(innerPath);
-      if (isIgnored(this.realmURL, this.#ignoreMap, innerURL)) {
+      if (isIgnored(this.#realmURL, this.#ignoreMap, innerURL)) {
         continue;
       }
       if (kind === 'file') {
@@ -216,7 +220,7 @@ export class CurrentRun {
     identityContext?: IdentityContextType,
     stack: string[] = []
   ): Promise<void> {
-    if (isIgnored(this.realmURL, this.#ignoreMap, url)) {
+    if (isIgnored(this.#realmURL, this.#ignoreMap, url)) {
       return;
     }
 
@@ -349,7 +353,7 @@ export class CurrentRun {
     );
     let moduleURL = new URL(
       moduleFrom(resource.meta.adoptsFrom),
-      new URL(path, this.realmURL)
+      new URL(path, this.#realmURL)
     ).href;
     let typesMaybeError: TypesWithErrors | undefined;
     let uncaughtError: Error | undefined;
@@ -401,7 +405,7 @@ export class CurrentRun {
       // will we know how deep to load links before we have actually rendered
       // the card?
       let included = await loadLinks({
-        realmURL: this.realmURL,
+        realmURL: this.#realmURL,
         instances: this.#instances,
         loader: this.loader,
         resource: cachedDoc.data,
@@ -414,8 +418,7 @@ export class CurrentRun {
         instanceURL.href,
         JSON.stringify(cachedDoc, null, 2)
       );
-      html = await this.#visitCard(instanceURL.href, this.#staticResponses);
-      debugger;
+      html = await this.#renderCard(instanceURL, this.#staticResponses);
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -477,7 +480,7 @@ export class CurrentRun {
 
   public async buildModule(
     moduleIdentifier: string,
-    relativeTo = this.realmURL
+    relativeTo = this.#realmURL
   ): Promise<void> {
     let url = new URL(moduleIdentifier, relativeTo).href;
     let existing = this.#modules.get(url);

@@ -1,5 +1,5 @@
 import { Deferred } from "./deferred";
-import { SearchIndex, type GetVisitor } from "./search-index";
+import { SearchIndex, type IndexRunner } from "./search-index";
 import { type SingleCardDocument } from "./card-document";
 import { Loader, type MaybeLocalRequest } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
@@ -109,7 +109,7 @@ export class Realm {
     return this.paths.url;
   }
 
-  constructor(url: string, adapter: RealmAdapter, getVisitor: GetVisitor) {
+  constructor(url: string, adapter: RealmAdapter, getVisitor: IndexRunner) {
     this.paths = new RealmPaths(url);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;

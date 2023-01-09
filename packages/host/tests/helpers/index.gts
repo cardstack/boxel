@@ -14,7 +14,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { renderComponent } from './render-component';
 import Indexer from '@cardstack/host/services/indexer-service';
-import WorkerRender from '@cardstack/host/components/worker-render';
+import CardPrerender from '@cardstack/host/components/card-prerender';
 import { type Card } from 'https://cardstack.com/base/card-api';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -66,7 +66,7 @@ async function makeRenderer() {
     class TestDriver extends GlimmerComponent {
       <template>
         <template shadowroot="open">
-          <WorkerRender/>
+          <CardPrerender/>
         </template>
       </template>
     }

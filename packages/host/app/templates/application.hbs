@@ -1,7 +1,8 @@
-<div>hello world</div>
-<!-- Consider sandboxing this with an iframe -->
-<template shadowroot="open">
-  <WorkerRender/>
-</template>
+{{!-- template-lint-disable no-html-comments --}}
 
 {{outlet}}
+
+<!-- Consider sandboxing this with an iframe -->
+<template shadowroot="open">
+  <CardPrerender/>
+</template>

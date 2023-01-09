@@ -46,16 +46,23 @@ export interface RunState {
   stats: Stats;
 }
 
-export type GetVisitor = ({
+export type RunnerRegistration = (
+  fromScratch: (realmURL: URL) => Promise<RunState>,
+  incremental: (
+    prev: RunState,
+    url: URL,
+    operation: "update" | "delete"
+  ) => Promise<RunState>
+) => Promise<void>;
+
+export type IndexRunner = ({
   _fetch,
   resolver,
   reader,
-  staticResponses,
-  setRunState,
-  getRunState,
   entrySetter,
 }: {
   _fetch: typeof fetch;
+  // TODO remove this and address this resolution in the babel transpile
   resolver: {
     resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL;
     reverseResolution(
@@ -64,11 +71,9 @@ export type GetVisitor = ({
     ): URL;
   };
   reader: Reader;
-  staticResponses: Map<string, string>;
-  setRunState(state: RunState): void;
-  getRunState(): RunState | undefined; // this always returns the previous run--undefined if there is no previous run
   entrySetter(url: URL, entry: SearchEntryWithErrors): void;
-}) => (url: string) => Promise<string>;
+  registerRunner: RunnerRegistration;
+}) => Promise<void>;
 
 // TODO this can probably live in its own module
 export class URLMap<T> {
@@ -161,11 +166,18 @@ type CurrentIndex = RunState & {
 };
 
 export class SearchIndex {
-  #getVisitor: GetVisitor;
+  #runner: IndexRunner;
   #reader: Reader;
   // TODO make private prop (#)
   private index: CurrentIndex;
-  visit: (url: string) => Promise<string>;
+  #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
+  #incremental:
+    | ((
+        prev: RunState,
+        url: URL,
+        operation: "update" | "delete"
+      ) => Promise<RunState>)
+    | undefined;
 
   constructor(
     realm: Realm,
@@ -176,10 +188,10 @@ export class SearchIndex {
       path: LocalPath,
       opts?: { withFallbacks?: true }
     ) => Promise<{ content: string; lastModified: number } | undefined>,
-    getVisitor: GetVisitor
+    runner: IndexRunner
   ) {
     this.#reader = { readdir, readFileAsText };
-    this.#getVisitor = getVisitor;
+    this.#runner = runner;
     this.index = {
       realmURL: new URL(realm.url),
       loader: Loader.createLoaderFromGlobal(),
@@ -192,32 +204,6 @@ export class SearchIndex {
         moduleErrors: 0,
       },
     };
-    this.visit = this.#getVisitor({
-      _fetch: this.loader.fetch.bind(this.loader),
-      staticResponses: new Map(),
-      resolver: {
-        resolve: this.loader.resolve.bind(this.loader),
-        reverseResolution: this.loader.reverseResolution.bind(this.loader),
-      },
-      reader: this.#reader,
-      getRunState: () => undefined,
-      // TODO this overlaps with the entrySetter--clean this up
-      setRunState: (state) => {
-        this.index = {
-          ...state,
-          loader: Loader.createLoaderFromGlobal(),
-        };
-      },
-      entrySetter: (url: URL, entry: SearchEntryWithErrors) => {
-        this.index.instances.set(url, entry);
-      },
-    });
-  }
-
-  async run() {
-    await this.visit(
-      `/indexer?realmURL=${encodeURIComponent(this.index.realmURL.href)}`
-    );
   }
 
   get stats() {
@@ -232,34 +218,61 @@ export class SearchIndex {
     return this.index;
   }
 
+  async run() {
+    await this.setupRunner(async () => {
+      if (!this.#fromScratch) {
+        throw new Error(`Index runner has not been registered`);
+      }
+      let current = await this.#fromScratch(this.index.realmURL);
+      this.index = {
+        instances: current.instances,
+        modules: current.modules,
+        ignoreMap: current.ignoreMap,
+        realmURL: current.realmURL,
+        stats: current.stats,
+        loader: Loader.createLoaderFromGlobal(),
+      };
+    });
+  }
+
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
-    this.visit = this.#getVisitor({
+    await this.setupRunner(async () => {
+      if (!this.#incremental) {
+        throw new Error(`Index runner has not been registered`);
+      }
+      let current = await this.#incremental(
+        this.index,
+        url,
+        opts?.delete ? "delete" : "update"
+      );
+      this.index = {
+        instances: current.instances,
+        modules: current.modules,
+        ignoreMap: current.ignoreMap,
+        realmURL: current.realmURL,
+        stats: current.stats,
+        loader: Loader.createLoaderFromGlobal(),
+      };
+    });
+  }
+
+  private async setupRunner(start: () => Promise<void>) {
+    await this.#runner({
       _fetch: this.loader.fetch.bind(this.loader),
-      staticResponses: new Map(),
       resolver: {
         resolve: this.loader.resolve.bind(this.loader),
         reverseResolution: this.loader.reverseResolution.bind(this.loader),
       },
       reader: this.#reader,
-      getRunState: () => this.index,
-      // TODO this overlaps with the entrySetter--clean this up
-      setRunState: (state) => {
-        this.index = {
-          ...state,
-          loader: Loader.createLoaderFromGlobal(),
-        };
-      },
       entrySetter: (url: URL, entry: SearchEntryWithErrors) => {
         this.index.instances.set(url, entry);
       },
+      registerRunner: async (fromScratch, incremental) => {
+        this.#fromScratch = fromScratch;
+        this.#incremental = incremental;
+        await start();
+      },
     });
-    await this.visit(
-      `/indexer?realmURL=${encodeURIComponent(
-        this.index.realmURL.href
-      )}&url=${encodeURIComponent(url.href)}&op=${
-        opts?.delete ? "delete" : "update"
-      }`
-    );
   }
 
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
