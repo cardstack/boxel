@@ -16,7 +16,8 @@ import CatalogEntryEditor from './catalog-entry-editor';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import Modifier from 'ember-modifier';
-import LoaderService from '../services/loader-service';
+import type LoaderService from '../services/loader-service';
+import type CardService from '../services/card-service';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
@@ -125,6 +126,7 @@ export default class Schema extends Component<Signature> {
   </template>
 
   @service declare loaderService: LoaderService;
+  @service declare cardService: CardService;
   @tracked newFieldName: string | undefined;
   @tracked newFieldType: FieldType = 'contains';
 
@@ -138,10 +140,7 @@ export default class Schema extends Component<Signature> {
 
   @cached
   get realmPath() {
-    if (!this.cardType.type) {
-      throw new Error(`bug: unable to identify card ${this.args.card.name}`);
-    }
-    return new RealmPaths(this.loaderService.loader.reverseResolution(this.cardType.type.id));
+    return new RealmPaths(this.loaderService.loader.reverseResolution(this.cardService.defaultURL.href));
   }
 
   @cached
