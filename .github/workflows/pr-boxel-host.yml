@@ -1,0 +1,112 @@
+name: CI [boxel-host]
+
+on:
+  pull_request:
+    paths:
+      - "packages/host/**"
+      - ".github/workflows/pr-boxel-host.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+  issues: read
+  checks: write
+  pull-requests: write
+  id-token: write
+  statuses: write
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: volta-cli/action@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+  check-if-requires-preview:
+    name: Check if a preview deploy is required
+    runs-on: ubuntu-latest
+    outputs:
+      boxel-host-files-changed: ${{ steps.boxel-host-files-that-changed.outputs.any_changed }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get boxel-host files that changed
+        id: boxel-host-files-that-changed
+        uses: tj-actions/changed-files@v1.1.2
+        with:
+          files: |
+            ^packages/boxel-host
+
+  deploy-safe-tools-preview-staging:
+    name: Deploy a boxel-host staging preview to S3
+    runs-on: ubuntu-latest
+    # github.event.pull_request.head.repo.full_name == github.repository: true if pr is from the original repo, false if it's from a fork
+    # github.head_ref: the branch that the pull request is from. only appears on pull_request events
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-host-files-changed == 'true'
+    needs: check-if-requires-preview
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::680542703984:role/boxel-host
+          aws-region: us-east-1
+      - name: Deploy boxel-host preview
+        uses: ./.github/actions/deploy-ember-preview
+        env:
+          # FIXME what envs? Set up Sentry?
+          # HUB_URL: https://hub-staging.stack.cards
+          S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
+          AWS_S3_BUCKET: boxel-host-preview.stack.cards
+          AWS_REGION: us-east-1
+          AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
+          # SENTRY_DSN: ${{ secrets.SAFE_TOOLS_CLIENT_SENTRY_DSN }}
+        with:
+          package: boxel-host
+          environment: staging
+
+  deploy-safe-tools-preview-production:
+    name: Deploy a boxel-host production preview to S3
+    runs-on: ubuntu-latest
+    # github.event.pull_request.head.repo.full_name == github.repository: true if pr is from the original repo, false if it's from a fork
+    # github.head_ref: the branch that the pull request is from. only appears on pull_request events
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-host-files-changed == 'true'
+    needs: check-if-requires-preview
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::120317779495:role/boxel-host
+          aws-region: us-east-1
+      - name: Deploy boxel-host preview
+        uses: ./.github/actions/deploy-ember-preview
+        env:
+          # HUB_URL: https://hub.cardstack.com
+          S3_PREVIEW_BUCKET_NAME: boxel-host-preview.cardstack.com
+          AWS_S3_BUCKET: boxel-host-preview.cardstack.com
+          AWS_REGION: us-east-1
+          AWS_CLOUDFRONT_DISTRIBUTION: E1JS2AYUPFW775
+          # SENTRY_DSN: ${{ secrets.SAFE_TOOLS_CLIENT_SENTRY_DSN }}
+        with:
+          package: boxel-host
+          environment: production
