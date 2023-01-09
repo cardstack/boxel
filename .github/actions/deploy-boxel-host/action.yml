@@ -9,6 +9,14 @@ inputs:
     description: Discord webhook URL
     required: true
 
+# FIXME should these be passed in?
+env:
+  PNPM_VERSION: 7.2.1
+
+  # This controls what version of node first boots pnpm, but pnpm itself will
+  # read the .npmrc file and download a different version if they don't match.
+  NODE_VERSION: 18.6.0
+
 runs:
   using: composite
   steps:
