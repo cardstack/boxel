@@ -63,7 +63,7 @@ runs:
 
     - name: Send notification to Discord
       if: ${{ always() }}
-      uses: ./.github/actions/discord-notification-deploy
+      uses: cardstack/cardstack/discord-notification-deploy
       with:
         app: boxel-host
         status: ${{ github.action_status }}
