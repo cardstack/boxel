@@ -40,15 +40,15 @@ runs:
           exit 1;
         fi
 
-      - uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+    - uses: pnpm/action-setup@v2
+      with:
+        version: ${{ env.PNPM_VERSION }}
+    - uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: pnpm
+    - name: Install Dependencies
+      run: pnpm install --frozen-lockfile
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1-node16
