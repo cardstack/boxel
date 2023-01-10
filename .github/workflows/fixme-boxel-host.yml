@@ -1,0 +1,22 @@
+name: Manual Deploy [boxel-host]
+
+on:
+  - pull_request
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy boxel-host
+        uses: ./.github/actions/deploy-boxel-host
+        with:
+          environment: staging
+          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
+        env:
+          # FIXME Sentry?
+          # SENTRY_DSN: ${{ secrets.SAFE_TOOLS_CLIENT_SENTRY_DSN }}
