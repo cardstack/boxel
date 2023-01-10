@@ -8,14 +8,14 @@ inputs:
   discord_webhook:
     description: Discord webhook URL
     required: true
-
-# FIXME should these be passed in?
-env:
-  PNPM_VERSION: 7.2.1
-
-  # This controls what version of node first boots pnpm, but pnpm itself will
-  # read the .npmrc file and download a different version if they don't match.
-  NODE_VERSION: 18.6.0
+  pnpm_version:
+    description: Used by pnpm/action-setup
+    default: 7.2.1
+    required: false
+  node_version:
+    description: This controls what version of node first boots pnpm, but pnpm itself will read the .npmrc file and download a different version if they don't match.
+    default: 18.6.0
+    required: false
 
 runs:
   using: composite
@@ -44,10 +44,10 @@ runs:
 
     - uses: pnpm/action-setup@v2
       with:
-        version: 7.2.1 # why is env not working
+        version: ${{ inputs.pnpm_version }}
     - uses: actions/setup-node@v3
       with:
-        node-version: 18.6.0
+        node-version: ${{ inputs.node_version }}
         cache: pnpm
     - name: Install Dependencies
       shell: bash
