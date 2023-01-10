@@ -21,6 +21,7 @@ export default class CardCatalogModal extends Component {
         @size="large"
         @isOpen={{true}}
         @onClose={{fn this.pick undefined}}
+        style="z-index:{{this.zIndex}}"
         data-test-card-catalog-modal
       >
         <CardContainer class="dialog-box" @displayBoundaries={{true}}>
@@ -59,6 +60,11 @@ export default class CardCatalogModal extends Component {
     opts?: { offerToCreate?: CardRef };
   } | undefined = undefined;
 
+  @tracked zIndex = 20;
+  @action incrementZIndex() {
+    this.zIndex++;
+  }
+
   constructor(owner: unknown, args: {}) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CARD_CHOOSER = this;
@@ -68,6 +74,7 @@ export default class CardCatalogModal extends Component {
   }
 
   async chooseCard<T extends Card>(query: Query, opts?: { offerToCreate?: CardRef }): Promise<undefined | T> {
+    this.incrementZIndex();
     return await taskFor(this._chooseCard).perform(query, opts) as T | undefined;
   }
 
