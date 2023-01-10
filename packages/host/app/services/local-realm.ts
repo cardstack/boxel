@@ -23,7 +23,7 @@ export default class LocalRealm extends Service {
 
   constructor(properties: object) {
     super(properties);
-    if (!this.fastboot.isFastBoot || !demoRealmURL) {
+    if (!this.fastboot.isFastBoot && !demoRealmURL) {
       let handler = (event: MessageEvent) => this.handleMessage(event);
       navigator.serviceWorker.addEventListener('message', handler);
       registerDestructor(this, () =>
@@ -73,7 +73,6 @@ export default class LocalRealm extends Service {
       this.state = {
         type: 'demo-realm',
         worker: undefined,
-        url: new URL(demoRealmURL),
       };
       return;
     }
@@ -116,7 +115,7 @@ export default class LocalRealm extends Service {
       }
     | { type: 'empty'; worker: ServiceWorker }
     | { type: 'fastboot'; worker: undefined }
-    | { type: 'demo-realm'; worker: undefined; url: URL }
+    | { type: 'demo-realm'; worker: undefined }
     | {
         type: 'available';
         handle: FileSystemDirectoryHandle;

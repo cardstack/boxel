@@ -130,6 +130,7 @@ export default class Schema extends Component<Signature> {
   @tracked newFieldName: string | undefined;
   @tracked newFieldType: FieldType = 'contains';
 
+  @cached
   get ref() {
     let ref = identifyCard(this.args.card);
     if (!ref) {
