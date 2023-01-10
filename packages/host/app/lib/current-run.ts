@@ -36,16 +36,17 @@ import {
   type Relationship,
 } from '@cardstack/runtime-common/card-document';
 import {
-  URLMap,
   loadLinks,
   isIgnored,
   type Reader,
+  type EntrySetter,
   type RunState,
   type Stats,
   type Module,
   type SearchEntryWithErrors,
   type ModuleWithErrors,
 } from '@cardstack/runtime-common/search-index';
+import { URLMap } from '@cardstack/runtime-common/url-map';
 import {
   Card,
   type IdentityContext as IdentityContextType,
@@ -67,7 +68,7 @@ export class CurrentRun {
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
   #loader: Loader;
-  #entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
+  #entrySetter: EntrySetter;
   #staticResponses = new Map<string, string>();
   #renderCard: (
     url: URL,
@@ -96,7 +97,7 @@ export class CurrentRun {
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
     loader: Loader;
-    entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
+    entrySetter: EntrySetter;
     renderCard: (
       url: URL,
       staticResponses: Map<string, string>
@@ -132,7 +133,7 @@ export class CurrentRun {
     prev: RunState;
     reader: Reader;
     loader: Loader;
-    entrySetter: (url: URL, entry: SearchEntryWithErrors) => void;
+    entrySetter: EntrySetter;
     renderCard: (
       url: URL,
       staticResponses: Map<string, string>

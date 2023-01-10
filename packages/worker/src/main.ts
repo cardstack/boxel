@@ -1,7 +1,7 @@
 import { FetchHandler } from './fetch';
 import { LivenessWatcher } from './liveness';
 import { MessageHandler } from './message-handler';
-import { LocalRealm } from './local-realm';
+import { LocalRealmAdapter } from './local-realm-adapter';
 import { Realm, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import '@cardstack/runtime-common/externals-global';
@@ -32,12 +32,9 @@ Loader.addURLMapping(
     }
     let realm = new Realm(
       'http://local-realm/',
-      new LocalRealm(messageHandler.fs),
-      ({ getRunState, setRunState, staticResponses }) => {
-        messageHandler.setup(getRunState, setRunState);
-        return async (path: string) => {
-          return await messageHandler.visit(path, staticResponses);
-        };
+      new LocalRealmAdapter(messageHandler.fs),
+      async ({ entrySetter, registerRunner }) => {
+        await messageHandler.setupIndexRunner(registerRunner, entrySetter);
       }
     );
     fetchHandler.addRealm(realm);

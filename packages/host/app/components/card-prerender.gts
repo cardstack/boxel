@@ -6,14 +6,17 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
 import { CurrentRun } from '../lib/current-run';
+import { readFileAsText as _readFileAsText } from "@cardstack/runtime-common/stream";
 import {
+  type EntrySetter,
   type Reader,
   type RunState,
-  type SearchEntryWithErrors,
   type RunnerRegistration
 } from '@cardstack/runtime-common/search-index';
 import type IndexerService from '../services/indexer-service';
 import type LoaderService from '../services/loader-service';
+import type LocalRealm from '../services/local-realm';
+import type { LocalPath } from "@cardstack/runtime-common/paths";
 
 export default class CardPrerender extends Component {
   <template>
@@ -27,10 +30,15 @@ export default class CardPrerender extends Component {
   @service declare loaderService: LoaderService;
   @service declare indexerService: IndexerService;
   @service declare fastboot: { isFastBoot: boolean };
+  @service declare localRealm: LocalRealm;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    taskFor(this.doRegistration).perform();
+    if (this.fastboot.isFastBoot) {
+      taskFor(this.doRegistration).perform();
+    } else {
+      this.localRealm.setupIndexing(this.fromScratch.bind(this), this.incremental.bind(this));
+    }
   }
 
   private async fromScratch(realmURL: URL): Promise<RunState> {
@@ -44,23 +52,12 @@ export default class CardPrerender extends Component {
   }
 
   @restartableTask private async doRegistration(): Promise<void> {
-    if (this.fastboot.isFastBoot) {
-      let register = (globalThis as any).registerRunner as RunnerRegistration;
-      await register(this.fromScratch.bind(this), this.incremental.bind(this));
-    } else {
-      throw new Error('not implemented');
-    }
+    let register = (globalThis as any).registerRunner as RunnerRegistration;
+    await register(this.fromScratch.bind(this), this.incremental.bind(this));
   }
 
   @restartableTask private async doFromScratch(realmURL: URL): Promise<RunState> {
-    if (!this.fastboot.isFastBoot) {
-      throw new Error('not implemented');
-    }
-    let reader = (globalThis as any).reader as Reader;
-    let entrySetter = (globalThis as any).entrySetter as (
-      url: URL,
-      entry: SearchEntryWithErrors
-    ) => void;
+    let { reader, entrySetter } = this.getRunnerParams();
     let current = await CurrentRun.fromScratch(
       new CurrentRun({
         realmURL,
@@ -75,14 +72,7 @@ export default class CardPrerender extends Component {
   }
 
   @restartableTask private async doIncremental(prev: RunState, url: URL, operation: 'delete' | 'update'): Promise<RunState> {
-    if (!this.fastboot.isFastBoot) {
-      throw new Error('not implemented');
-    }
-    let reader = (globalThis as any).reader as Reader;
-    let entrySetter = (globalThis as any).entrySetter as (
-      url: URL,
-      entry: SearchEntryWithErrors
-    ) => void;
+    let { reader, entrySetter } = this.getRunnerParams();
     let current = await CurrentRun.incremental({
         url,
         operation,
@@ -94,6 +84,37 @@ export default class CardPrerender extends Component {
       });
     this.indexerService.indexRunDeferred?.fulfill();
     return current;
+  }
+
+  private getRunnerParams(): {
+    reader: Reader;
+    entrySetter: EntrySetter
+  } {
+    if (this.fastboot.isFastBoot) {
+      return {
+        reader: (globalThis as any).reader as Reader,
+        entrySetter: (globalThis as any).entrySetter as EntrySetter
+      };
+    } else {
+      let self = this;
+      function readFileAsText (
+        path: LocalPath,
+        opts?: { withFallbacks?: true }
+      ): Promise<{ content: string; lastModified: number } | undefined> {
+        return _readFileAsText(
+          path,
+          self.localRealm.adapter.openFile.bind(self.localRealm.adapter),
+          opts
+        );
+      }
+      return {
+        reader: { 
+          readdir: this.localRealm.adapter.readdir.bind(this.localRealm.adapter),
+          readFileAsText
+        },
+        entrySetter: this.localRealm.setEntry.bind(this.localRealm)
+      };
+    }
   }
 }
 

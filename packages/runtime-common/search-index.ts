@@ -9,6 +9,7 @@ import { LocalPath, RealmPaths } from "./paths";
 import { Loader, ResolvedURL } from "./loader";
 import { Query, Filter, Sort } from "./query";
 import { CardError, type SerializedError } from "./error";
+import { URLMap } from "./url-map";
 import flatMap from "lodash/flatMap";
 import { type Ignore } from "ignore";
 import { Card } from "https://cardstack.com/base/card-api";
@@ -55,6 +56,8 @@ export type RunnerRegistration = (
   ) => Promise<RunState>
 ) => Promise<void>;
 
+export type EntrySetter = (url: URL, entry: SearchEntryWithErrors) => void;
+
 export type IndexRunner = ({
   _fetch,
   resolver,
@@ -71,61 +74,9 @@ export type IndexRunner = ({
     ): URL;
   };
   reader: Reader;
-  entrySetter(url: URL, entry: SearchEntryWithErrors): void;
+  entrySetter: EntrySetter;
   registerRunner: RunnerRegistration;
 }) => Promise<void>;
-
-// TODO this can probably live in its own module
-export class URLMap<T> {
-  #map: Map<string, T>;
-  constructor();
-  constructor(mapTuple: [key: URL, value: T][]);
-  constructor(map: URLMap<T>);
-  constructor(mapInit: URLMap<T> | [key: URL, value: T][] = []) {
-    if (!Array.isArray(mapInit)) {
-      mapInit = [...mapInit];
-    }
-    this.#map = new Map(mapInit.map(([key, value]) => [key.href, value]));
-  }
-  has(url: URL): boolean {
-    return this.#map.has(url.href);
-  }
-  get(url: URL): T | undefined {
-    return this.#map.get(url.href);
-  }
-  set(url: URL, value: T) {
-    return this.#map.set(url.href, value);
-  }
-  get [Symbol.iterator]() {
-    let self = this;
-    return function* () {
-      for (let [key, value] of self.#map) {
-        yield [new URL(key), value] as [URL, T];
-      }
-    };
-  }
-  values() {
-    return this.#map.values();
-  }
-  keys() {
-    let self = this;
-    return {
-      get [Symbol.iterator]() {
-        return function* () {
-          for (let key of self.#map.keys()) {
-            yield new URL(key);
-          }
-        };
-      },
-    };
-  }
-  get size() {
-    return this.#map.size;
-  }
-  remove(url: URL) {
-    return this.#map.delete(url.href);
-  }
-}
 
 export interface SearchEntry {
   resource: CardResource;
@@ -264,7 +215,7 @@ export class SearchIndex {
         reverseResolution: this.loader.reverseResolution.bind(this.loader),
       },
       reader: this.#reader,
-      entrySetter: (url: URL, entry: SearchEntryWithErrors) => {
+      entrySetter: (url, entry) => {
         this.index.instances.set(url, entry);
       },
       registerRunner: async (fromScratch, incremental) => {

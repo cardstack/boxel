@@ -1,6 +1,9 @@
 // this file should be portable to both DOM and ServiceWorker contexts. It
 // establishes the common API between them.
-import { type RunState } from '@cardstack/runtime-common/search-index';
+import {
+  type SearchEntryWithErrors,
+  type RunState,
+} from '@cardstack/runtime-common/search-index';
 
 export interface RequestDirectoryHandle {
   type: 'requestDirectoryHandle';
@@ -21,50 +24,50 @@ export interface SetDirectoryHandle {
   handle: FileSystemDirectoryHandle | null;
 }
 
-export interface VisitRequest {
-  type: 'visitRequest';
-  id: string;
-  path: string;
-  staticResponses: Map<string, string>;
+export interface SetEntry {
+  type: 'setEntry';
+  url: string;
+  entry: SearchEntryWithErrors;
 }
 
-export interface VisitResponse {
-  type: 'visitResponse';
-  id: string;
-  html: string;
-  path: string;
+export interface SetEntryAcknowledged {
+  type: 'setEntryAcknowledged';
 }
 
-export interface GetRunStateRequest {
-  type: 'getRunStateRequest';
+export interface StartFromScratchIndex {
+  type: 'startFromScratch';
+  realmURL: string;
 }
 
-export interface GetRunStateResponse {
-  type: 'getRunStateResponse';
-  state: RunState | null;
-}
-
-export interface SetRunState {
-  type: 'setRunState';
+export interface FromScratchCompleted {
+  type: 'fromScratchCompleted';
   state: RunState;
 }
 
-export interface SetRunStateAcknowledged {
-  type: 'setRunStateAcknowledged';
+export interface StartIncrementalIndex {
+  type: 'startIncremental';
+  prev: RunState;
+  url: string;
+  operation: 'delete' | 'update';
+}
+
+export interface IncrementalCompleted {
+  type: 'incrementalCompleted';
+  state: RunState;
 }
 
 export type ClientMessage =
   | RequestDirectoryHandle
   | SetDirectoryHandle
-  | VisitResponse
-  | GetRunStateRequest
-  | SetRunState;
+  | SetEntry
+  | FromScratchCompleted
+  | IncrementalCompleted;
 export type WorkerMessage =
   | DirectoryHandleResponse
   | SetDirectoryHandleAcknowledged
-  | VisitRequest
-  | GetRunStateResponse
-  | SetRunStateAcknowledged;
+  | SetEntryAcknowledged
+  | StartFromScratchIndex
+  | StartIncrementalIndex;
 export type Message = ClientMessage | WorkerMessage;
 
 function isMessageLike(
@@ -92,16 +95,16 @@ export function isClientMessage(message: unknown): message is ClientMessage {
         ((message as any).handle === null ||
           (message as any).handle instanceof FileSystemDirectoryHandle)
       );
-    case 'visitResponse':
+    case 'setEntry':
       return (
-        'id' in message &&
-        typeof message.id === 'string' &&
-        'html' in message &&
-        typeof message.html === 'string' &&
-        'path' in message &&
-        typeof message.path === 'string'
+        'url' in message &&
+        typeof message.url === 'string' &&
+        'entry' in message &&
+        typeof message.entry === 'object' &&
+        message.entry != null
       );
-    case 'setRunState':
+    case 'incrementalCompleted':
+    case 'fromScratchCompleted':
       return (
         'state' in message &&
         typeof message.state === 'object' &&
@@ -117,6 +120,7 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
     return false;
   }
   switch (message.type) {
+    case 'setEntryAcknowledged':
     case 'setRunStateAcknowledged':
       return true;
     case 'directoryHandleResponse':
@@ -130,17 +134,19 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
       );
     case 'setDirectoryHandleAcknowledged':
       return 'url' in message && typeof (message as any).url === 'string';
-    case 'visitRequest':
+    case 'startFromScratch':
+      return 'realmURL' in message && typeof message.realmURL === 'string';
+    case 'startIncremental':
       return (
-        'id' in message &&
-        typeof message.id === 'string' &&
-        'path' in message &&
-        typeof message.path === 'string' &&
-        'staticResponses' in message &&
-        message.staticResponses instanceof Map
+        'prev' in message &&
+        typeof message.prev === 'object' &&
+        message.prev != null &&
+        'url' in message &&
+        typeof message.url === 'string' &&
+        'operation' in message &&
+        typeof message.operation === 'string' &&
+        ['update', 'delete'].includes(message.operation)
       );
-    case 'getRunStateResponse':
-      return 'state' in message && typeof message.state === 'object';
     default:
       return false;
   }
