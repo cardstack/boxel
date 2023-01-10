@@ -5,7 +5,6 @@
     "url": "https://github.com/cardstack/boxel-motion"
   },
   "scripts": {
-    "FIXME": "can ember be invoked less hideously?",
     "deploy:boxel-host": "cd packages/host && pnpm exec ember deploy",
     "deploy:boxel-host:preview-staging": "cd ./packages/host && pnpm exec ember deploy s3-preview-staging --verbose",
     "deploy:boxel-host:preview-production": "cd ./packages/host && pnpm exec ember deploy s3-preview-production --verbose",
