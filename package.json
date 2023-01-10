@@ -6,9 +6,9 @@
   },
   "scripts": {
     "FIXME": "can ember be invoked less hideously?",
-    "deploy:boxel-host": "cd packages/host && ./node_modules/.bin/ember deploy",
-    "deploy:boxel-host:preview-staging": "cd ./packages/host && ./node_modules/.bin/ember deploy s3-preview-staging --verbose",
-    "deploy:boxel-host:preview-production": "cd ./packages/host && ./node_modules/.bin/ember deploy s3-preview-production --verbose",
+    "deploy:boxel-host": "cd packages/host && pnpm exec ember deploy",
+    "deploy:boxel-host:preview-staging": "cd ./packages/host && pnpm exec ember deploy s3-preview-staging --verbose",
+    "deploy:boxel-host:preview-production": "cd ./packages/host && pnpm exec ember deploy s3-preview-production --verbose",
     "lint": "pnpm run --if-present -r lint",
     "lint:fix": "pnpm run --if-present -r lint:fix"
   },
