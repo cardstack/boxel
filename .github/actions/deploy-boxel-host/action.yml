@@ -59,6 +59,9 @@ runs:
 
     - name: Deploy
       shell: bash
+      # FIXME duplicated in deploy-ember-preview, could it be centralised
+      env:
+        NODE_OPTIONS: "--max_old_space_size=4096"
       run: pnpm deploy:boxel-host ${{ inputs.environment }} --verbose
 
     - name: Send notification to Discord
