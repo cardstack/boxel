@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Polygon"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/chain",
+        "name": "Chain"
+      }
+    }
+  }
+}

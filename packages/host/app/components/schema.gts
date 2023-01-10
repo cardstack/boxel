@@ -23,6 +23,9 @@ import type { FileResource } from '../resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
 import BoxelInput from '@cardstack/boxel-ui/components/input';
+import FieldContainer from '@cardstack/boxel-ui/components/field-container';
+import CardContainer from '@cardstack/boxel-ui/components/card-container';
+import Label from '@cardstack/boxel-ui/components/label';
 
 interface Signature {
   Args: {
@@ -35,75 +38,90 @@ interface Signature {
 export default class Schema extends Component<Signature> {
   <template>
     {{#if this.cardType.type}}
-      <div class="schema">
-        <div data-test-card-id>Card ID: {{this.cardType.type.id}}</div>
-        <div data-test-adopts-from>Adopts From: {{this.cardType.type.super.id}}</div>
-        <div>Fields:</div>
-        <ul>
-          {{#each this.cardType.type.fields as |field|}}
-            <li data-test-field={{field.name}}>
-              {{#if (this.isOwnField field.name)}}
-                <button type="button" {{on "click" (fn this.deleteField field.name)}} data-test-delete>Delete</button>
-              {{/if}}
-              {{field.name}} - {{field.type}} - field card ID:
-              {{#if (this.inRealm field.card.module)}}
-                <LinkTo
-                  @route="application"
-                  @query={{hash path=(this.modulePath field.card.module)}}
-                >
+      <CardContainer @displayBoundaries={{true}} class="schema">
+        <FieldContainer @label="Card ID:" data-test-card-id>
+          {{this.cardType.type.id}}
+        </FieldContainer>
+        <FieldContainer @label="Adopts From:" data-test-adopts-from>
+          {{this.cardType.type.super.id}}
+        </FieldContainer>
+        <section>
+          <Label>Fields:</Label>
+          <ul>
+            {{#each this.cardType.type.fields as |field|}}
+              <li data-test-field={{field.name}}>
+                {{#if (this.isOwnField field.name)}}
+                  <button type="button" {{on "click" (fn this.deleteField field.name)}} data-test-delete>Delete</button>
+                {{/if}}
+                {{field.name}} - {{field.type}} - field card ID:
+                {{#if (this.inRealm field.card.module)}}
+                  <LinkTo
+                    @route="application"
+                    @query={{hash path=(this.modulePath field.card.module)}}
+                  >
+                    {{field.card.id}}
+                  </LinkTo>
+                {{else}}
                   {{field.card.id}}
-                </LinkTo>
-              {{else}}
-                {{field.card.id}}
+                {{/if}}
+              </li>
+            {{/each}}
+            <p>
+              {{#if this.errorMsg}}
+                <div class="error" data-test-error-msg>{{this.errorMsg}}</div>
               {{/if}}
-            </li>
-          {{/each}}
-          <p>
-            {{#if this.errorMsg}}
-              <div class="error" data-test-error-msg>{{this.errorMsg}}</div>
-            {{/if}}
+            </p>
+          </ul>
+        </section>
+        <fieldset class="add-new-field">
+          <legend>Add New Field</legend>
+          <FieldContainer @label="Field Name:" @tag="label">
             <BoxelInput
               data-test-new-field-name
               type="text"
               @value={{this.newFieldName}}
               @onInput={{this.setNewFieldName}}
             />
-            <label>
-              contains
-              <input
-                data-test-new-field-contains
-                {{RadioInitializer (eq this.newFieldType "contains") true}}
-                type="radio"
-                disabled={{this.isNewFieldDisabled}}
-                checked={{eq this.newFieldType "contains"}}
-                {{on "change" (fn this.setNewFieldType "contains")}}
-                name="field-type"
-              />
-            </label>
-            <label>
-              containsMany
-              <input
-                data-test-new-field-containsMany
-                {{RadioInitializer (eq this.newFieldType "containsMany") true}}
-                type="radio"
-                disabled={{this.isNewFieldDisabled}}
-                checked={{eq this.newFieldType "containsMany"}}
-                {{on "change" (fn this.setNewFieldType "containsMany")}}
-                name="field-type"
-              />
-            </label>
-            <button
-              data-test-add-field
-              type="button"
-              disabled={{this.isNewFieldDisabled}}
-              {{on "click" this.addField}}
-            >
-              Add Field
-            </button>
-          </p>
-        </ul>
-        <CatalogEntryEditor @ref={{this.ref}} />
-      </div>
+          </FieldContainer>
+          <FieldContainer @label="Field Type:">
+            <div>
+              <label>
+                contains
+                <input
+                  data-test-new-field-contains
+                  {{RadioInitializer (eq this.newFieldType "contains") true}}
+                  type="radio"
+                  disabled={{this.isNewFieldDisabled}}
+                  checked={{eq this.newFieldType "contains"}}
+                  {{on "change" (fn this.setNewFieldType "contains")}}
+                  name="field-type"
+                />
+              </label>
+              <label>
+                containsMany
+                <input
+                  data-test-new-field-containsMany
+                  {{RadioInitializer (eq this.newFieldType "containsMany") true}}
+                  type="radio"
+                  disabled={{this.isNewFieldDisabled}}
+                  checked={{eq this.newFieldType "containsMany"}}
+                  {{on "change" (fn this.setNewFieldType "containsMany")}}
+                  name="field-type"
+                />
+              </label>
+            </div>
+          </FieldContainer>
+          <button
+            data-test-add-field
+            type="button"
+            disabled={{this.isNewFieldDisabled}}
+            {{on "click" this.addField}}
+          >
+            Add Field
+          </button>
+        </fieldset>
+      </CardContainer>
+      <CatalogEntryEditor @ref={{this.ref}} />
     {{/if}}
   </template>
 

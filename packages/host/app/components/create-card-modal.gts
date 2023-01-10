@@ -12,23 +12,30 @@ import { service } from '@ember/service';
 import type CardService from '../services/card-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
+import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
 
 export default class CreateCardModal extends Component {
   <template>
     {{#let this.currentRequest.card as |card|}}
       {{#if card}}
-        <dialog class="dialog-box" open data-test-create-new-card={{card.constructor.name}}>
-          <header class="dialog-box__header">
-            <h1>Create New Card</h1>
-            <button {{on "click" (fn this.save undefined)}} type="button">X Close</button>
-          </header>
-          <section class="dialog-box__content">
-            <CardEditor
-              @card={{card}}
-              @onSave={{this.save}}
-            />
-          </section>
-        </dialog>
+        <Modal
+          @size="large"
+          @isOpen={{true}}
+          @onClose={{fn this.save undefined}}
+          data-test-create-new-card={{card.constructor.name}}
+        >
+          <CardContainer class="dialog-box" @displayBoundaries={{true}}>
+            <Header @title="Create New Card">
+              <button {{on "click" (fn this.save undefined)}} class="dialog-box__close">x</button>
+            </Header>
+            <div class="dialog-box__content">
+              <CardEditor
+                @card={{card}}
+                @onSave={{this.save}}
+              />
+            </div>
+          </CardContainer>
+        </Modal>
       {{/if}}
     {{/let}}
   </template>

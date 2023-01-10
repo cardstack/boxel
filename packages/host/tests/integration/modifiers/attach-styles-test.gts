@@ -5,10 +5,10 @@ import { renderCard } from '../../helpers/render-component';
 import {  click, shadowQuerySelector } from '../../helpers/shadow-assert';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
+import { attachStyles, initStyleSheet } from '@cardstack/boxel-ui/attach-styles';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
-let attach: typeof import ("https://cardstack.com/base/attach-styles");
 
 module('Integration | Modifier | attach-styles', function (hooks) {
   setupRenderingTest(hooks);
@@ -20,13 +20,11 @@ module('Integration | Modifier | attach-styles', function (hooks) {
     );
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
-    attach = await Loader.import(`${baseRealm.url}attach-styles`);
   });
 
   test('can correctly add and teardown constructable stylesheets in shadow root', async function (assert) {
     let { field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
-    let { attachStyles, initStyleSheet } = attach;
 
     let sheet = initStyleSheet(`this { color: magenta; }`);
 
@@ -97,7 +95,6 @@ module('Integration | Modifier | attach-styles', function (hooks) {
   test('can correctly add and teardown constructable stylesheets in nested shadow roots', async function (assert) {
     let { field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
-    let { attachStyles, initStyleSheet } = attach;
     let postStyles = initStyleSheet(`
       this { background-color: lightpink; color: darkred; padding: 1rem; }
       p { color: blue; font-weight: bold; }

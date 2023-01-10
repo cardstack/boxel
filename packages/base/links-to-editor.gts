@@ -14,7 +14,7 @@ import {
   identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { initStyleSheet, attachStyles } from './attach-styles';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer } from '@cardstack/boxel-ui';
 
 
@@ -39,7 +39,7 @@ let linksToEditorStyles = initStyleSheet(`
     text-transform: capitalize;
   }
   button:hover {
-    color: #00EBE5;
+    color: var(--boxel-highlight);
   }
 `);
 
@@ -49,12 +49,12 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       {{#if this.isEmpty}}
         <div data-test-empty-link>{{!-- PLACEHOLDER CONTENT --}}</div>
         <button {{on "click" this.choose}} data-test-choose-card>
-          + Add {{@field.name}}
+          + Add New
         </button>
       {{else}}
         <this.linkedCard/>
         <button {{on "click" this.remove}} data-test-remove-card disabled={{this.isEmpty}}>
-          Remove {{@field.name}}
+          Remove
         </button>
       {{/if}}
     </CardContainer>

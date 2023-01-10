@@ -4,6 +4,7 @@ import element from '../helpers/element';
 import { eq, not, or } from '../helpers/truth-helpers';
 import { svgJar } from '../helpers/svg-jar';
 import { initStyleSheet, attachStyles } from '../attach-styles';
+import Label from './label';
 
 export interface Signature {
   Element: HTMLElement;
@@ -52,10 +53,6 @@ let styles = initStyleSheet(`
   }
 
   .boxel-field__label {
-    color: var(--boxel-purple-400);
-    font: 600 var(--boxel-font-xs);
-    letter-spacing: var(--boxel-lsp-xl);
-    text-transform: uppercase;
     display: flex;
     align-items: var(--boxel-field-label-align);
     padding-top: var(--boxel-field-label-padding-top);
@@ -74,10 +71,6 @@ let styles = initStyleSheet(`
   .boxel-field__yield--with-icon {
     width: 100%;
   }
-
-  .boxel-field--vertical + .boxel-field--vertical {
-    margin-top: var(--boxel-sp);
-  }
 `);
 
 const FieldContainer: TemplateOnlyComponent<Signature> = <template>
@@ -94,9 +87,9 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       data-test-boxel-field-id={{@fieldId}}
       ...attributes
     >
-      <div class="boxel-field__label" data-test-boxel-field-label>
-        <span>{{@label}}</span>
-      </div>
+      <Label class="boxel-field__label" data-test-boxel-field-label>
+        {{@label}}
+      </Label>
 
       {{#if @icon}}
         <div class="boxel-field--with-icon">

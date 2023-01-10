@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "address": "eth:0x514910771af9ca656af840dff83e8264ecf986ca",
+      "name": "ChainLink Token",
+      "symbol": "LINK",
+      "logoURL": "http://local-realm/invoice-assets/currency-link.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/asset",
+        "name": "Token"
+      }
+    }
+  }
+}

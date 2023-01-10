@@ -2,25 +2,38 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "PaymentMethod from http://local-realm/payment-method",
-      "description": "Catalog entry for PaymentMethod from http://local-realm/payment-method",
+      "title": "InvoicePacket from http://local-realm/invoice-packet",
+      "description": "Catalog entry for InvoicePacket from http://local-realm/invoice-packet",
       "ref": {
-        "module": "http://local-realm/payment-method",
-        "name": "PaymentMethod"
+        "module": "http://local-realm/invoice-packet",
+        "name": "InvoicePacket"
       },
       "demo": {
-        "currency": "USD",
-        "logo": "http://local-realm/invoice-assets/currency-usd.png",
-        "exchangeRate": 1,
-        "balance": 150
+        "details": {
+          "invoiceNo": null,
+          "invoiceDate": null,
+          "dueDate": null,
+          "terms": null,
+          "invoiceDocument": null,
+          "memo": null
+        },
+        "lineItems": [],
+        "notes": []
+      }
+    },
+    "relationships": {
+      "demo.vendor": {
+        "links": {
+          "self": null
+        }
       }
     },
     "meta": {
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://local-realm/payment-method",
-            "name": "PaymentMethod"
+            "module": "http://local-realm/invoice-packet",
+            "name": "InvoicePacket"
           }
         }
       },

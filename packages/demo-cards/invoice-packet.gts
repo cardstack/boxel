@@ -2,111 +2,115 @@ import { contains, containsMany, linksTo, field, Card, Component } from 'https:/
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import DateCard from 'https://cardstack.com/base/date';
+import DatetimeCard from "https://cardstack.com/base/datetime";
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { Vendor } from './vendor';
-import { PaymentMethod } from './payment-method';
-import { initStyleSheet, attachStyles } from 'https://cardstack.com/base/attach-styles';
-import { formatUSD } from './currency-format';
-import { CardContainer } from '@cardstack/boxel-ui';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
+import { formatUSD, balanceInCurrency } from './currency-format';
+import { CardContainer, FieldContainer, Label, Message } from '@cardstack/boxel-ui';
+import { Token, Currency } from './asset';
 
 let invoiceStyles = initStyleSheet(`
   this {
     max-width: 50rem;
-    font-size: 0.8125rem;
-    letter-spacing: 0.01em;
-    line-height: 1.25;
+    font: var(--boxel-font-sm);
+    letter-spacing: var(--boxel-lsp-xs);
     overflow: hidden;
   }
-  .header {
-    padding: 2rem;
-    background-color: #F8F7FA;
+  .invoice-template-editor {
+    --boxel-label-color: var(--boxel-dark);
   }
   .invoice {
-    padding: 2rem;
+    padding: var(--boxel-sp-xl);
     display: grid;
-    gap: 3rem 0;
-  }
-  h1 {
-    margin: 0;
-    font-size: 1.275rem;
-    letter-spacing: 0;
-    line-height: 1.875;
+    gap: var(--boxel-sp-xxl) 0;
   }
   h2 {
     margin-top: 0;
-    font-size: 1rem;
-    letter-spacing: 0.03em;
-    line-height: 1.375;
-  }
-  .label {
-    margin-bottom: 1rem;
-    color: #A0A0A0;
-    font-size: 0.6875rem;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    line-height: 1.25;
+    margin-bottom: var(--boxel-sp);
+    font: 700 var(--boxel-font);
   }
 
-  .line-items__header {
+  .line-items__title-row {
     display: grid;
     grid-template-columns: 3fr 1fr 2fr;
+    margin-bottom: var(--boxel-sp-xxxs);
   }
-  .line-items__header > *:nth-child(2) {
+  .line-items__title-row > *:nth-child(2) {
     justify-self: center;
   }
-  .line-items__header > *:last-child {
+  .line-items__title-row > *:last-child {
     justify-self: end;
   }
   .line-items__rows {
-    padding: 2rem 0;
-    border-top: 1px solid #E8E8E8;
-    border-bottom: 1px solid #E8E8E8;
+    padding: var(--boxel-sp-lg) 0;
+    border-top: 1px solid var(--boxel-200);
+    border-bottom: 1px solid var(--boxel-200);
   }
   .line-items__rows > * + * {
-    margin-top: 1.25rem;
+    margin-top: var(--boxel-sp-xs);
   }
 
   .payment,
   .payment-methods {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: var(--boxel-sp-xs);
+    gap: 0 var(--boxel-sp-xs);
   }
-  .payment-methods__list > * + * {
-    margin-top: 1rem;
+  .payment-method__item {
+    display: inline-grid;
+    grid-template-columns: var(--boxel-sp) 1fr;
+    gap: var(--boxel-sp-xxxs);
+    font: 700 var(--boxel-font);
+  }
+  .payment-methods__bal {
+    margin-left: var(--boxel-sp-lg);
   }
 
   .balance-due {
+    justify-items: end;
     text-align: right;
   }
   .balance-due__total {
-    font-size: 1.625rem;
-    font-weight: bold;
+    font: 700 var(--boxel-font-lg);
+  }
+
+  .extras {
+    padding: var(--boxel-sp-xl);
+    display: grid;
+    gap: var(--boxel-sp-xxl) 0;
+    background-color: var(--boxel-100);
+  }
+
+  .notes,
+  .history {
+    --boxel-border-radius: 20px;
+    padding: var(--boxel-sp);
+  }
+  .notes > * + *,
+  .history > * + * {
+    margin-top: var(--boxel-sp);
+    padding-top: var(--boxel-sp);
+    border-top: 1px solid var(--boxel-200);
   }
 `);
 
 let detailsStyles = initStyleSheet(`
   this {
+    --boxel-field-label-size: 35%;
+    --boxel-field-label-align: center;
     display: grid;
     grid-template-columns: 1fr 1fr;
+    gap: var(--boxel-sp-xl);
+  }
+  .details--edit {
+    padding: var(--boxel-sp);
   }
   .details__fields {
     display: grid;
-    grid-template-columns: 1fr 2fr;
-    grid-gap: 0 1em;
-  }
-  .label {
-    margin-bottom: 1rem;
-    color: #A0A0A0;
-    font-size: 0.6875rem;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    line-height: 1.25;
+    grid-gap: var(--boxel-sp) 0;
   }
 `);
-
 class Details extends Card {
   @field invoiceNo = contains(StringCard);
   @field invoiceDate = contains(DateCard);
@@ -114,20 +118,31 @@ class Details extends Card {
   @field terms = contains(StringCard);
   @field invoiceDocument = contains(StringCard);
   @field memo = contains(TextAreaCard);
-
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer {{attachStyles detailsStyles}}>
         <div class="details__fields">
-          <div class="label">Invoice No.</div><div><@fields.invoiceNo/></div>
-          <div class="label">Invoice Date</div><div><@fields.invoiceDate/></div>
-          <div class="label">Due Date</div><div><@fields.dueDate/></div>
-          <div class="label">Terms</div> <div><@fields.terms/></div>
-          <div class="label">Invoice Document</div> <div><@fields.invoiceDocument/></div>
+          <FieldContainer @label="Invoice No."><@fields.invoiceNo/></FieldContainer>
+          <FieldContainer @label="Invoice Date"><@fields.invoiceDate/></FieldContainer>
+          <FieldContainer @label="Due Date"><@fields.dueDate/></FieldContainer>
+          <FieldContainer @label="Terms"><@fields.terms/></FieldContainer>
+          <FieldContainer @label="Invoice Document"><@fields.invoiceDocument/></FieldContainer>
         </div>
+        <FieldContainer @label="Memo"><@fields.memo/></FieldContainer>
+      </CardContainer>
+    </template>
+  };
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <CardContainer class="details--edit" @displayBoundaries={{true}} {{attachStyles detailsStyles}}>
         <div class="details__fields">
-          <div class="label">Memo</div> <div><@fields.memo/></div>
+          <FieldContainer @tag="label" @label="Invoice No."><@fields.invoiceNo/></FieldContainer>
+          <FieldContainer @tag="label" @label="Invoice Date"><@fields.invoiceDate/></FieldContainer>
+          <FieldContainer @tag="label" @label="Due Date"><@fields.dueDate/></FieldContainer>
+          <FieldContainer @tag="label" @label="Terms"><@fields.terms/></FieldContainer>
+          <FieldContainer @tag="label" @label="Invoice Document"><@fields.invoiceDocument/></FieldContainer>
         </div>
+        <FieldContainer @tag="label" @vertical={{true}} @label="Memo"><@fields.memo/></FieldContainer>
       </CardContainer>
     </template>
   };
@@ -145,7 +160,18 @@ let lineItemStyles = initStyleSheet(`
     justify-self: end;
   }
 `);
-
+let lineItemEditStyles = initStyleSheet(`
+  this {
+    display: grid;
+    gap: var(--boxel-sp-sm);
+  }
+  .line-item__row {
+    display: grid;
+    grid-template-columns: 3fr 1fr 2fr;
+    gap: var(--boxel-sp);
+    align-items: end;
+  }
+`);
 class LineItem extends Card {
   @field name = contains(StringCard);
   @field quantity = contains(IntegerCard);
@@ -166,30 +192,62 @@ class LineItem extends Card {
       </CardContainer>
     </template>
   };
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <CardContainer {{attachStyles lineItemEditStyles}}>
+        <div class="line-item__row">
+          <FieldContainer class="line-item__field" @tag="label" @label="Goods / Services Rendered" @vertical={{true}}><@fields.name/></FieldContainer>
+          <FieldContainer class="line-item__field" @tag="label" @label="Qty" @vertical={{true}}><@fields.quantity/></FieldContainer>
+          <FieldContainer class="line-item__field" @tag="label" @label="Amount" @vertical={{true}}><@fields.amount/></FieldContainer>
+        </div>
+        <FieldContainer @tag="label" @label="Description" @vertical={{true}}><@fields.description/></FieldContainer>
+      </CardContainer>
+    </template>
+  };
+}
+
+class Note extends Card {
+  @field text = contains(TextAreaCard);
+  @field authorName = contains(StringCard); /* computed */
+  @field authorImage = contains(StringCard); /* computed */
+  @field timestamp = contains(DatetimeCard); /* computed */
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <Message
+        @name={{@model.authorName}}
+        @imgURL={{@model.authorImage}}
+        @datetime={{@model.timestamp}}
+      >
+        <@fields.text/>
+      </Message>
+    </template>
+  }
 }
 
 class InvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
-    <CardContainer @displayBoundaries={{true}} {{attachStyles invoiceStyles}}>
-      <header class="header">
-        <h1>Invoice</h1>
-      </header>
+    <CardContainer
+      @displayBoundaries={{true}}
+      @title="Invoice"
+      {{attachStyles invoiceStyles}}
+    >
       <section class="invoice">
-        <section class="vendor">
+        <section>
           <h2>Vendor</h2>
           <@fields.vendor/>
         </section>
-        <section class="details">
+        <section>
           <h2>Details</h2>
-          <@fields.details />
+          <@fields.details/>
         </section>
-        <section class="line-items">
+        <section>
           <h2>Line Items</h2>
-          <header class="line-items__header">
-            <div class="label">Goods / services rendered</div>
-            <div class="label line-items__qty">Qty</div>
-            <div class="label line-items__amount">Amount</div>
-          </header>
+          <div class="line-items__title-row">
+            <Label>Goods / services rendered</Label>
+            <Label>Qty</Label>
+            <Label>Amount</Label>
+          </div>
           <div class="line-items__rows">
             <@fields.lineItems />
           </div>
@@ -198,66 +256,84 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
           <section>
             <h2>Payment Methods</h2>
             <div class="payment-methods">
-              <div>
-                <div class="label">Primary<br> Payment Method</div>
-                <@fields.primaryPayment/>
-              </div>
-              <div class="payment-methods__list">
-                <div class="label">Alternate<br> Payment Methods</div>
-                <@fields.alternatePayments/>
-              </div>
+              <FieldContainer @label="Primary Payment Method" @vertical={{true}}>
+                <div>
+                  <@fields.primaryPayment/>
+                  {{#if @model.primaryPayment}}
+                    <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue @model.primaryPayment}}</div>
+                  {{/if}}
+                </div>
+              </FieldContainer>
+              {{#if @model.alternatePayment.length}}
+                <FieldContainer @label="Alternate Payment Methods" @vertical={{true}}>
+                  <div>
+                    {{#each @model.alternatePayment as |payment|}}
+                      <div class="payment-method__item">{{#if payment.logoURL}}<img src={{payment.logoURL}}>{{/if}} {{payment.symbol}}</div>
+                      <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue payment}}</div>
+                    {{/each}}
+                  </div>
+                </FieldContainer>
+              {{/if}}
             </div>
           </section>
-          <section class="balance-due">
-            <div class="label">Balance Due</div>
-            <div class="balance-due__total">{{formatUSD @model.balanceDue}}</div>
-          </section>
+          <FieldContainer @vertical={{true}} @label="Balance Due" class="balance-due">
+            <span class="balance-due__total">
+              {{formatUSD @model.balanceDue}}
+            </span>
+          </FieldContainer>
         </div>
       </section>
+      {{#if @model.notes.length}}
+        <section class="extras">
+          <section>
+            <h2>Notes</h2>
+            <CardContainer class="notes">
+              <@fields.notes/>
+            </CardContainer>
+          </section>
+        </section>
+      {{/if}}
     </CardContainer>
   </template>
 }
 
-class EditInvoiceTemplate extends Component<typeof InvoicePacket> {
+class EditTemplate extends Component<typeof InvoicePacket> {
   <template>
-    <CardContainer @displayBoundaries={{true}} {{attachStyles invoiceStyles}}>
-      <header class="header">
-        <h1>Edit Invoice</h1>
-      </header>
+    <CardContainer
+      @displayBoundaries={{true}}
+      @title="Edit Invoice"
+      class="invoice-template-editor"
+      {{attachStyles invoiceStyles}}
+    >
       <section class="invoice">
-        <section class="vendor">
+        <section>
           <h2>Vendor</h2>
           <@fields.vendor/>
         </section>
-        <section class="details">
+        <section>
           <h2>Details</h2>
           <@fields.details />
         </section>
-        <section class="line-items">
+        <section>
           <h2>Line Items</h2>
-          <div class="line-items__rows">
-            <@fields.lineItems />
+          <@fields.lineItems />
+        </section>
+        <section>
+          <h2>Payment Methods</h2>
+          <div class="payment-methods">
+            <FieldContainer @tag="label" @label="Primary Payment Method" @vertical={{true}}>
+              <@fields.primaryPayment/>
+            </FieldContainer>
+            <FieldContainer @tag="label" @label="Alternate Payment Methods" @vertical={{true}}>
+              <@fields.alternatePayment/>
+            </FieldContainer>
           </div>
         </section>
-        <div class="payment">
-          <section>
-            <h2>Payment Methods</h2>
-            <div class="payment-methods">
-              <div>
-                <div class="label">Primary<br> Payment Method</div>
-                <@fields.primaryPayment/>
-              </div>
-              <div class="payment-methods__list">
-                <div class="label">Alternate<br> Payment Methods</div>
-                <@fields.alternatePayments/>
-              </div>
-            </div>
-          </section>
-          <section class="balance-due">
-            <div class="label">Balance Due</div>
-            <div class="balance-due__total">{{formatUSD @model.balanceDue}}</div>
-          </section>
-        </div>
+        <FieldContainer @label="Balance Due" class="balance-due" @vertical={{true}}>
+          <span class="balance-due__total">
+            {{formatUSD @model.balanceDue}}
+          </span>
+        </FieldContainer>
       </section>
     </CardContainer>
   </template>
@@ -267,15 +343,23 @@ export class InvoicePacket extends Card {
   @field vendor = linksTo(Vendor);
   @field details = contains(Details);
   @field lineItems = containsMany(LineItem);
-  @field primaryPayment = contains(PaymentMethod);
-  @field alternatePayments = containsMany(PaymentMethod);
+  @field primaryPayment = contains(Token || Currency, { computeVia: function(this: InvoicePacket) {
+    return this.vendor?.preferredPaymentMethod?.cryptoPayment?.token ?? this.vendor?.preferredPaymentMethod?.wireTransfer?.currency
+  }});
+  @field alternatePayment = containsMany(Token || Currency, { computeVia: function(this: InvoicePacket) {
+    return [];
+    // TODO: implementation below is not working
+    // this is a computed containsMany field trying to read fields off of a `vendor` linksTo field
+    // return this.vendor?.alternatePaymentMethod?.length ?  this.vendor.alternatePaymentMethod.map(p =>  p.cryptoPayment?.token ?? p.wireTransfer?.currency) : [];
+  }});
   @field balanceDue = contains(IntegerCard, { computeVia:
     function(this: InvoicePacket) {
       return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.amount * i.quantity).reduce((a, b) => (a + b));
     }
   });
+  @field notes = containsMany(Note);
 
   static embedded = InvoiceTemplate;
   static isolated = InvoiceTemplate;
-  static edit = EditInvoiceTemplate;
+  static edit = EditTemplate;
 }

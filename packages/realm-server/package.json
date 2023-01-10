@@ -26,11 +26,11 @@
   },
   "scripts": {
     "test": "NODE_NO_WARNINGS=1 SUPPRESS_ERRORS=true qunit --require ts-node/register/transpile-only tests/index.ts",
-    "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/card-api' 'pnpm run wait' 'http-get://localhost:4202/node-test/person' 'test'",
+    "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.api%2Bjson' 'test'",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/'",
     "start:test-realms": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4202 --path='./tests/cards' --fromUrl='/node-test/' --toUrl='/node-test/' --path='../host/tests/cards' --fromUrl='/test/' --toUrl='/test/' --fromUrl='https://cardstack.com/base/' --toUrl='http://localhost:4201/base/'",
-    "start:all": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run start:base' 'http-get://localhost:4201/base/card-api' 'pnpm run start:test-realms' 'http-get://localhost:4202/node-test/person' 'wait'",
+    "start:all": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run start:base' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run start:test-realms' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.api%2Bjson' 'wait'",
     "wait": "sleep 10000000",
     "lint": "glint"
   }

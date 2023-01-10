@@ -22,6 +22,7 @@ import {
   type DirectoryEntryRelationship,
 } from "./index";
 import merge from "lodash/merge";
+import qs from "qs";
 import cloneDeep from "lodash/cloneDeep";
 import {
   fileContentToText,
@@ -174,7 +175,14 @@ export class Realm {
 
   async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
-    if (request.headers.get("Accept")?.includes("application/vnd.api+json")) {
+    let accept = request.headers.get("Accept");
+    if (url.search.length > 0) {
+      let { acceptHeader } = qs.parse(url.search, { ignoreQueryPrefix: true });
+      if (acceptHeader && typeof acceptHeader === "string") {
+        accept = acceptHeader;
+      }
+    }
+    if (accept?.includes("application/vnd.api+json")) {
       // local requests are allowed to query the realm as the index is being built up
       if (!request.isLocal) {
         await this.ready;
@@ -414,7 +422,10 @@ export class Realm {
   }
 
   private async patchCard(request: Request): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
+    // strip off query params
+    let localPath = this.paths.local(
+      new URL(new URL(request.url).pathname, request.url)
+    );
     if (localPath.startsWith("_")) {
       return methodNotAllowed(request);
     }
@@ -474,7 +485,10 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
+    // strip off query params
+    let localPath = this.paths.local(
+      new URL(new URL(request.url).pathname, request.url)
+    );
     let url = this.paths.fileURL(localPath);
     let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
@@ -498,7 +512,8 @@ export class Realm {
   }
 
   private async removeCard(request: Request): Promise<Response> {
-    let url = new URL(request.url);
+    // strip off query params
+    let url = new URL(new URL(request.url).pathname, request.url);
     let result = await this.#searchIndex.card(url);
     if (!result) {
       return notFound(request);

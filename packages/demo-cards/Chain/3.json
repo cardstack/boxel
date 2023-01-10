@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Gnosis Chain"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/chain",
+        "name": "Chain"
+      }
+    }
+  }
+}

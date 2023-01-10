@@ -529,6 +529,7 @@ importers:
       babel-eslint: ^10.1.0
       broccoli-asset-rev: ^3.0.0
       classnames: ^2.3.2
+      dayjs: ^1.11.7
       ember-auto-import: ^2.4.3
       ember-cli: ^4.6.0
       ember-cli-babel: ^7.26.11
@@ -566,6 +567,7 @@ importers:
       webpack: ^5.74.0
     dependencies:
       classnames: 2.3.2
+      dayjs: 1.11.7
       ember-auto-import: 2.4.3_webpack@5.75.0
       ember-cli-babel: 7.26.11
       ember-cli-htmlbars: 6.1.1
@@ -638,7 +640,10 @@ importers:
       webpack: 5.75.0
 
   packages/demo-cards:
-    specifiers: {}
+    specifiers:
+      '@types/lodash': ^4.14.182
+    devDependencies:
+      '@types/lodash': 4.14.189
 
   packages/host:
     specifiers:
@@ -728,7 +733,6 @@ importers:
       ember-source: ~4.2.0
       ember-template-imports: ^3.0.1
       ember-template-lint: ^4.2.0
-      ember-welcome-page: ^6.1.0
       eslint: ^7.32.0
       eslint-config-prettier: ^8.4.0
       eslint-plugin-ember: ^10.5.9
@@ -839,7 +843,6 @@ importers:
       ember-source: 4.2.0_npabyccmuonwo2rku4k53xo3hi
       ember-template-imports: 3.4.0_ember-cli-htmlbars@6.1.1
       ember-template-lint: 4.18.2_ember-cli-htmlbars@6.1.1
-      ember-welcome-page: 6.2.0
       eslint: 7.32.0
       eslint-config-prettier: 8.5.0_eslint@7.32.0
       eslint-plugin-ember: 10.6.1_eslint@7.32.0
@@ -3887,7 +3890,7 @@ packages:
   /@types/ember__controller/4.0.3:
     resolution: {integrity: sha512-7+Lpgcsa/gjGZtUN0JfQoLzUStCT68p8o6t1e4LBXyC+a5DHg2NJYFZ0U3f8F8TgQJcgtFoUAuv8p77XY6FxwQ==}
     dependencies:
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
     dev: true
 
   /@types/ember__controller/4.0.3_@babel+core@7.20.2:
@@ -5477,7 +5480,7 @@ packages:
       '@babel/core': ^7.0.0
       webpack: '>=2'
     dependencies:
-      '@babel/core': 7.20.2_supports-color@8.1.1
+      '@babel/core': 7.20.2
       find-cache-dir: 3.3.2
       loader-utils: 2.0.4
       make-dir: 3.1.0
@@ -7235,7 +7238,7 @@ packages:
       mississippi: 3.0.0
       mkdirp: 0.5.6
       move-concurrently: 1.0.1
-      promise-inflight: 1.0.1_bluebird@3.7.2
+      promise-inflight: 1.0.1
       rimraf: 2.7.1
       ssri: 6.0.2
       unique-filename: 1.1.1
@@ -8557,6 +8560,10 @@ packages:
     dependencies:
       time-zone: 1.0.0
     dev: true
+
+  /dayjs/1.11.7:
+    resolution: {integrity: sha512-+Yw9U6YO5TQohxLcIkrXBeY73WP3ejHWVvx8XCk3gxvQDCTEmS48ZrSZCKciI7Bhl/uCMyxYtE9UqRILmFphkQ==}
+    dev: false
 
   /debug/2.6.9:
     resolution: {integrity: sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==}
@@ -11267,13 +11274,6 @@ packages:
     transitivePeerDependencies:
       - encoding
       - supports-color
-    dev: true
-
-  /ember-welcome-page/6.2.0:
-    resolution: {integrity: sha512-bDPgNgW0eRhLCHLaFK87p1mcP8hGwr0pXvPoskDeUGQzsOI3Pc3U/8WLpUSi2mNrmv0eNtfWqE+A1Wbx6F2l0Q==}
-    engines: {node: 12.* || 14.* || >= 16}
-    dependencies:
-      '@embroider/addon-shim': 1.8.3
     dev: true
 
   /emit-function/0.0.2:
@@ -16506,17 +16506,6 @@ packages:
     peerDependenciesMeta:
       bluebird:
         optional: true
-    dev: true
-
-  /promise-inflight/1.0.1_bluebird@3.7.2:
-    resolution: {integrity: sha512-6zWPyEOFaQBJYcGMHBKTKJ3u6TBsnMFOIZSa6ce1e/ZrrsOlnHRHbabMjLiBYKp+n44X9eUI6VUPaukCXHuG4g==}
-    peerDependencies:
-      bluebird: '*'
-    peerDependenciesMeta:
-      bluebird:
-        optional: true
-    dependencies:
-      bluebird: 3.7.2
     dev: true
 
   /promise-map-series/0.2.3:

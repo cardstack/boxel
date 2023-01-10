@@ -33,15 +33,16 @@ interface Signature {
 
 export default class Go extends Component<Signature> {
   <template>
-    <div class="editor">
-      <div class="file-tree">
+    <div class="main">
+      <div class="main__column">
         <FileTree @localRealm={{this.localRealm}} @path={{@path}} @polling={{@polling}} />
       </div>
       {{#if this.openFile}}
         <div {{monaco content=this.openFile.content
                       language=(getLangFromFileExtension this.openFile.name)
-                      contentChanged=this.contentChanged}}></div>
-        <div class="preview">
+                      contentChanged=this.contentChanged}}>
+        </div>
+        <div class="main__column">
           {{#if (isRunnable this.openFile.name)}}
             <Module @file={{this.openFile}}/>
           {{else if this.openFileCardJSON}}

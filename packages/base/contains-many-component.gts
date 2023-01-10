@@ -11,6 +11,7 @@ import {
 } from './card-api';
 import { getBoxComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
+import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer } from '@cardstack/boxel-ui';
 
 interface Signature {
@@ -23,10 +24,26 @@ interface Signature {
   };
 }
 
+let containsManyStyles = initStyleSheet(`
+  this {
+    padding: var(--boxel-sp);
+  }
+  .contains-many-editor {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .contains-many-editor > li + li {
+    margin-top: var(--boxel-sp);
+    padding-top: var(--boxel-sp);
+    border-top: 1px solid var(--boxel-border-color);
+  }
+`);
+
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <CardContainer data-test-contains-many={{this.args.field.name}}>
-      <ul>
+    <CardContainer @displayBoundaries={{true}} {{attachStyles containsManyStyles}} data-test-contains-many={{this.args.field.name}}>
+      <ul class="contains-many-editor">
         {{#each @arrayField.children as |boxedElement i|}}
           <li data-test-item={{i}}>
             {{#let (getBoxComponent (this.args.cardTypeFor @field boxedElement) @format boxedElement) as |Item|}}
@@ -36,7 +53,7 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
           </li>
         {{/each}}
       </ul>
-      <button {{on "click" this.add}} type="button" data-test-add-new>Add New</button>
+      <button {{on "click" this.add}} type="button" data-test-add-new>+ Add New</button>
     </CardContainer>
   </template>
 
