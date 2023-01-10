@@ -184,7 +184,7 @@ export class Realm {
     }
     if (accept?.includes("application/vnd.api+json")) {
       // local requests are allowed to query the realm as the index is being built up
-      if (!request.isLocal) {
+      if (!request.isLocal && url.host !== "local-realm") {
         await this.ready;
       }
       if (!this.searchIndex) {

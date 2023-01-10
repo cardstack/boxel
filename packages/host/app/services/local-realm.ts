@@ -15,6 +15,8 @@ import { TaskInstance } from 'ember-resources';
 import IndexerService from './indexer-service';
 import type RouterService from '@ember/routing/router-service';
 import {
+  serializeRunState,
+  deserializeRunState,
   type SearchEntryWithErrors,
   type RunState,
 } from '@cardstack/runtime-common/search-index';
@@ -77,12 +79,12 @@ export default class LocalRealm extends Service {
           }
           let { realmURL } = data;
           let worker = this.state.worker;
-          this.#fromScratch(new URL(realmURL)).then((state) =>
+          this.#fromScratch(new URL(realmURL)).then((state) => {
             send(worker, {
               type: 'fromScratchCompleted',
-              state,
-            })
-          );
+              state: serializeRunState(state),
+            });
+          });
           return;
         }
         if (data.type === 'startIncremental') {
@@ -93,10 +95,14 @@ export default class LocalRealm extends Service {
           }
           let { prev, url, operation } = data;
           let worker = this.state.worker;
-          this.#incremental(prev, new URL(url), operation).then((state) =>
+          this.#incremental(
+            deserializeRunState(prev),
+            new URL(url),
+            operation
+          ).then((state) =>
             send(worker, {
               type: 'incrementalCompleted',
-              state,
+              state: serializeRunState(state),
             })
           );
           return;

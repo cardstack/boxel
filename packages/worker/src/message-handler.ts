@@ -2,6 +2,8 @@ import { isClientMessage, send } from './messages';
 import assertNever from 'assert-never';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
+  serializeRunState,
+  deserializeRunState,
   type EntrySetter,
   type RunnerRegistration,
   type RunState,
@@ -82,7 +84,7 @@ export class MessageHandler {
             );
           }
           let { state } = data;
-          this.fromScratchDeferred.fulfill(state);
+          this.fromScratchDeferred.fulfill(deserializeRunState(state));
         }
         return;
       case 'incrementalCompleted':
@@ -93,7 +95,7 @@ export class MessageHandler {
             );
           }
           let { state } = data;
-          this.incrementalDeferred.fulfill(state);
+          this.incrementalDeferred.fulfill(deserializeRunState(state));
         }
         return;
       default:
@@ -128,7 +130,7 @@ export class MessageHandler {
     this.incrementalDeferred = new Deferred();
     send(this.source, {
       type: 'startIncremental',
-      prev,
+      prev: serializeRunState(prev),
       url: url.href,
       operation,
     });

@@ -2,7 +2,7 @@
 // establishes the common API between them.
 import {
   type SearchEntryWithErrors,
-  type RunState,
+  type SerializableRunState,
 } from '@cardstack/runtime-common/search-index';
 
 export interface RequestDirectoryHandle {
@@ -41,19 +41,19 @@ export interface StartFromScratchIndex {
 
 export interface FromScratchCompleted {
   type: 'fromScratchCompleted';
-  state: RunState;
+  state: SerializableRunState;
 }
 
 export interface StartIncrementalIndex {
   type: 'startIncremental';
-  prev: RunState;
+  prev: SerializableRunState;
   url: string;
   operation: 'delete' | 'update';
 }
 
 export interface IncrementalCompleted {
   type: 'incrementalCompleted';
-  state: RunState;
+  state: SerializableRunState;
 }
 
 export type ClientMessage =

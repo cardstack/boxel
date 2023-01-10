@@ -47,6 +47,14 @@ export interface RunState {
   stats: Stats;
 }
 
+export interface SerializableRunState {
+  realmURL: string;
+  instances: [string, SearchEntryWithErrors][];
+  ignoreMap: [string, Ignore][];
+  modules: [string, ModuleWithErrors][];
+  stats: Stats;
+}
+
 export type RunnerRegistration = (
   fromScratch: (realmURL: URL) => Promise<RunState>,
   incremental: (
@@ -119,8 +127,7 @@ type CurrentIndex = RunState & {
 export class SearchIndex {
   #runner: IndexRunner;
   #reader: Reader;
-  // TODO make private prop (#)
-  private index: CurrentIndex;
+  #index: CurrentIndex;
   #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
   #incremental:
     | ((
@@ -143,7 +150,7 @@ export class SearchIndex {
   ) {
     this.#reader = { readdir, readFileAsText };
     this.#runner = runner;
-    this.index = {
+    this.#index = {
       realmURL: new URL(realm.url),
       loader: Loader.createLoaderFromGlobal(),
       ignoreMap: new URLMap(),
@@ -158,15 +165,15 @@ export class SearchIndex {
   }
 
   get stats() {
-    return this.index.stats;
+    return this.#index.stats;
   }
 
   get loader() {
-    return this.index.loader;
+    return this.#index.loader;
   }
 
   get runState() {
-    return this.index;
+    return this.#index;
   }
 
   async run() {
@@ -174,8 +181,8 @@ export class SearchIndex {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
       }
-      let current = await this.#fromScratch(this.index.realmURL);
-      this.index = {
+      let current = await this.#fromScratch(this.#index.realmURL);
+      this.#index = {
         instances: current.instances,
         modules: current.modules,
         ignoreMap: current.ignoreMap,
@@ -192,11 +199,11 @@ export class SearchIndex {
         throw new Error(`Index runner has not been registered`);
       }
       let current = await this.#incremental(
-        this.index,
+        this.#index,
         url,
         opts?.delete ? "delete" : "update"
       );
-      this.index = {
+      this.#index = {
         instances: current.instances,
         modules: current.modules,
         ignoreMap: current.ignoreMap,
@@ -216,7 +223,7 @@ export class SearchIndex {
       },
       reader: this.#reader,
       entrySetter: (url, entry) => {
-        this.index.instances.set(url, entry);
+        this.#index.instances.set(url, entry);
       },
       registerRunner: async (fromScratch, incremental) => {
         this.#fromScratch = fromScratch;
@@ -233,7 +240,7 @@ export class SearchIndex {
     });
 
     let doc: CardCollectionDocument = {
-      data: flatMap([...this.index.instances.values()], (maybeError) =>
+      data: flatMap([...this.#index.instances.values()], (maybeError) =>
         maybeError.type !== "error" ? [maybeError.entry] : []
       )
         .filter(matcher)
@@ -249,8 +256,8 @@ export class SearchIndex {
       let included: CardResource<Saved>[] = [];
       for (let resource of doc.data) {
         included = await loadLinks({
-          realmURL: this.index.realmURL,
-          instances: this.index.instances,
+          realmURL: this.#index.realmURL,
+          instances: this.#index.instances,
           loader: this.loader,
           resource,
           omit,
@@ -266,11 +273,11 @@ export class SearchIndex {
   }
 
   public isIgnored(url: URL): boolean {
-    return isIgnored(this.index.realmURL, this.index.ignoreMap, url);
+    return isIgnored(this.#index.realmURL, this.#index.ignoreMap, url);
   }
 
   async card(url: URL, opts?: Options): Promise<SearchResult | undefined> {
-    let card = this.index.instances.get(url);
+    let card = this.#index.instances.get(url);
     if (!card) {
       return undefined;
     }
@@ -282,8 +289,8 @@ export class SearchIndex {
     };
     if (opts?.loadLinks) {
       let included = await loadLinks({
-        realmURL: this.index.realmURL,
-        instances: this.index.instances,
+        realmURL: this.#index.realmURL,
+        instances: this.#index.instances,
         loader: this.loader,
         resource: doc.data,
         omit: [doc.data.id],
@@ -297,7 +304,7 @@ export class SearchIndex {
 
   // this is meant for tests only
   async searchEntry(url: URL): Promise<SearchEntry | undefined> {
-    let result = this.index.instances.get(url);
+    let result = this.#index.instances.get(url);
     if (result?.type !== "error") {
       return result?.entry;
     }
@@ -661,6 +668,28 @@ export function isIgnored(
   let realmPath = new RealmPaths(realmURL);
   let pathname = realmPath.local(url);
   return ignore.test(pathname).ignored;
+}
+
+export function serializeRunState(state: RunState): SerializableRunState {
+  let { modules, instances, realmURL, ignoreMap, stats } = state;
+  return {
+    stats,
+    realmURL: realmURL.href,
+    modules: [...modules],
+    instances: [...instances].map(([k, v]) => [k.href, v]),
+    ignoreMap: [...ignoreMap].map(([k, v]) => [k.href, v]),
+  };
+}
+
+export function deserializeRunState(state: SerializableRunState): RunState {
+  let { modules, instances, realmURL, ignoreMap, stats } = state;
+  return {
+    realmURL: new URL(realmURL),
+    stats,
+    modules: new Map(modules),
+    instances: new URLMap(instances.map(([k, v]) => [new URL(k), v])),
+    ignoreMap: new URLMap(ignoreMap.map(([k, v]) => [new URL(k), v])),
+  };
 }
 
 // three-valued version of Array.every that propagates nulls. Here, the presence
