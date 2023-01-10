@@ -48,6 +48,7 @@ runs:
         node-version: ${{ env.NODE_VERSION }}
         cache: pnpm
     - name: Install Dependencies
+      shell: bash
       run: pnpm install --frozen-lockfile
 
     - name: Configure AWS credentials
