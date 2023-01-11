@@ -54,7 +54,7 @@ runs:
       run: pnpm install --frozen-lockfile
 
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1-node16
+      uses: aws-actions/configure-aws-credentials@v1
       with:
         role-to-assume: arn:aws:iam::680542703984:role/boxel-host
         aws-region: us-east-1
