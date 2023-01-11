@@ -12,6 +12,10 @@ env:
   # read the .npmrc file and download a different version if they don't match.
   NODE_VERSION: 18.6.0
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   lint:
     name: Lint
