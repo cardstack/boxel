@@ -10,7 +10,6 @@ inputs:
     required: true
     default: web-client
 
-# FIXME should these be passed in?
 env:
   PNPM_VERSION: 7.2.1
 
