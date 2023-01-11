@@ -5,9 +5,9 @@
     "url": "https://github.com/cardstack/boxel-motion"
   },
   "scripts": {
-    "deploy:boxel-host": "cd packages/host && pnpm exec ember deploy",
-    "deploy:boxel-host:preview-staging": "cd ./packages/host && pnpm exec ember deploy s3-preview-staging --verbose",
-    "deploy:boxel-host:preview-production": "cd ./packages/host && pnpm exec ember deploy s3-preview-production --verbose",
+    "deploy:boxel-host": "NODE_OPTIONS='--max_old_space_size=4096' cd packages/host && pnpm exec ember deploy",
+    "deploy:boxel-host:preview-staging": "NODE_OPTIONS='--max_old_space_size=4096' cd ./packages/host && pnpm exec ember deploy s3-preview-staging --verbose",
+    "deploy:boxel-host:preview-production": "NODE_OPTIONS='--max_old_space_size=4096' cd ./packages/host && pnpm exec ember deploy s3-preview-production --verbose",
     "lint": "pnpm run --if-present -r lint",
     "lint:fix": "pnpm run --if-present -r lint:fix"
   },
