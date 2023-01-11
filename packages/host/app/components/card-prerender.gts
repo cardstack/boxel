@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import Render from './render';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
-import { restartableTask } from 'ember-concurrency';
+import { didCancel, enqueueTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
 import { CurrentRun } from '../lib/current-run';
@@ -35,28 +35,49 @@ export default class CardPrerender extends Component {
   constructor(owner: unknown, args: any) {
     super(owner, args);
     if (this.fastboot.isFastBoot) {
-      taskFor(this.doRegistration).perform();
+      try {
+        taskFor(this.doRegistration).perform();
+      } catch (e: any) {
+        if (!didCancel(e)) {
+          throw e;
+        }
+        throw new Error(`card-prerender component is being destroyed before runner registration was completed`);
+      }
     } else {
       this.localRealm.setupIndexing(this.fromScratch.bind(this), this.incremental.bind(this));
     }
   }
 
   private async fromScratch(realmURL: URL): Promise<RunState> {
-    let state = await taskFor(this.doFromScratch).perform(realmURL);
-    return state;
+    try {
+      let state = await taskFor(this.doFromScratch).perform(realmURL);
+      return state
+    } catch (e: any) {
+      if (!didCancel(e)) {
+        throw e;
+      }
+    }
+    throw new Error(`card-prerender component is being destroyed before from scratch index of realm ${realmURL} was completed`);
   }
 
   private async incremental(prev: RunState, url: URL, operation: 'delete' | 'update'): Promise<RunState> {
-    let state = await taskFor(this.doIncremental).perform(prev, url, operation);
-    return state;
+    try {
+      let state = await taskFor(this.doIncremental).perform(prev, url, operation);
+      return state;
+    } catch (e: any) {
+      if (!didCancel(e)) {
+        throw e;
+      }
+    }
+    throw new Error(`card-prerender component is being destroyed before incremental index of ${url} was completed`);
   }
 
-  @restartableTask private async doRegistration(): Promise<void> {
+  @enqueueTask private async doRegistration(): Promise<void> {
     let register = (globalThis as any).registerRunner as RunnerRegistration;
     await register(this.fromScratch.bind(this), this.incremental.bind(this));
   }
 
-  @restartableTask private async doFromScratch(realmURL: URL): Promise<RunState> {
+  @enqueueTask private async doFromScratch(realmURL: URL): Promise<RunState> {
     let { reader, entrySetter } = this.getRunnerParams();
     let current = await CurrentRun.fromScratch(
       new CurrentRun({
@@ -71,7 +92,7 @@ export default class CardPrerender extends Component {
     return current;
   }
 
-  @restartableTask private async doIncremental(prev: RunState, url: URL, operation: 'delete' | 'update'): Promise<RunState> {
+  @enqueueTask private async doIncremental(prev: RunState, url: URL, operation: 'delete' | 'update'): Promise<RunState> {
     let { reader, entrySetter } = this.getRunnerParams();
     let current = await CurrentRun.incremental({
         url,

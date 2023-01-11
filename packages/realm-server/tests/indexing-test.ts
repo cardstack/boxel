@@ -153,7 +153,7 @@ module("indexing", function (hooks) {
     assert.strictEqual(
       cleanWhiteSpace(entry!.html!),
       cleanWhiteSpace(`
-          <div data-test-shadow-component>
+          <div data-test-shadow-boundary>
             <h1> Mango </h1>
           </div>
         `),

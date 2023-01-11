@@ -133,7 +133,7 @@ class MockLocalRealm extends Service {
   }
 }
 
-export function setupLocalRealm(hooks: NestedHooks) {
+export function setupMockLocalRealm(hooks: NestedHooks) {
   hooks.beforeEach(function() {
     this.owner.register('service:local-realm', MockLocalRealm);
   });

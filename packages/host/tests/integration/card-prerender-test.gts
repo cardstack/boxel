@@ -8,7 +8,7 @@ import {
   TestRealmAdapter,
   TestRealm,
   cleanWhiteSpace,
-  setupLocalRealm
+  setupMockLocalRealm
 } from '../helpers';
 import { setupRenderingTest } from 'ember-qunit';
 
@@ -16,7 +16,7 @@ module('Integration | card-prerender', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
-  setupLocalRealm(hooks);
+  setupMockLocalRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
@@ -82,7 +82,7 @@ module('Integration | card-prerender', function (hooks) {
       assert.strictEqual(
         cleanWhiteSpace(entry!.html!),
         cleanWhiteSpace(`
-          <div data-test-shadow-component>
+          <div data-test-shadow-boundary>
             <h3> Mango </h3>
           </div>
         `),
@@ -94,7 +94,7 @@ module('Integration | card-prerender', function (hooks) {
       assert.strictEqual(
         cleanWhiteSpace(entry!.html!),
         cleanWhiteSpace(`
-          <div data-test-shadow-component>
+          <div data-test-shadow-boundary>
             <h3> Van Gogh </h3>
           </div>
         `),

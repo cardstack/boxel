@@ -4,7 +4,7 @@ import {
   TestRealmAdapter,
   testRealmURL,
   setupCardLogs,
-  setupLocalRealm,
+  setupMockLocalRealm,
   type CardDocFiles,
 } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
@@ -22,7 +22,7 @@ const testModuleRealm = 'http://localhost:4202/test/';
 
 module('Integration | search-index', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalRealm(hooks);
+  setupMockLocalRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)

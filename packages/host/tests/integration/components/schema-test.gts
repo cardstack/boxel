@@ -8,11 +8,12 @@ import { file, FileResource } from '@cardstack/host/resources/file';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { TestRealm, TestRealmAdapter, testRealmURL, setupCardLogs, setupLocalRealm } from '../../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL, setupCardLogs, setupMockLocalRealm } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 import { waitFor, fillIn, click, shadowQuerySelector } from '../../helpers/shadow-assert';
+import CardPrerender from '@cardstack/host/components/card-prerender';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 module('Integration | schema', function (hooks) {
@@ -20,7 +21,7 @@ module('Integration | schema', function (hooks) {
   let adapter: TestRealmAdapter;
 
   setupRenderingTest(hooks);
-  setupLocalRealm(hooks);
+  setupMockLocalRealm(hooks);
   setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   hooks.beforeEach(async function() {
@@ -52,6 +53,7 @@ module('Integration | schema', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <Module @file={{openFile}}/>
+          <CardPrerender/>
         </template>
       }
     );
@@ -88,6 +90,7 @@ module('Integration | schema', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <Module @file={{openFile}}/>
+          <CardPrerender/>
         </template>
       }
     );
@@ -113,6 +116,7 @@ module('Integration | schema', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <Module @file={{openFile}}/>
+          <CardPrerender/>
         </template>
       }
     );
@@ -155,6 +159,7 @@ module('Integration | schema', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <Module @file={{openFile}}/>
+          <CardPrerender/>
         </template>
       }
     );
@@ -227,6 +232,7 @@ module('Integration | schema', function (hooks) {
         <template>
           <Module @file={{openFile}}/>
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );
@@ -285,6 +291,7 @@ module('Integration | schema', function (hooks) {
         <template>
           <Module @file={{openFile}}/>
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );
@@ -339,6 +346,7 @@ module('Integration | schema', function (hooks) {
         <template>
           <Module @file={{openFile}}/>
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );

@@ -58,7 +58,10 @@ export default class LoaderService extends Service {
                 ? urlOrRequest
                 : urlOrRequest.href;
             let cachedJSONAPI = this.staticResponses.get(requestURL);
-            if (cachedJSONAPI != null) {
+            if (
+              cachedJSONAPI != null &&
+              (!init || !init.method || init.method.toUpperCase() === 'GET')
+            ) {
               return Promise.resolve(
                 new Response(cachedJSONAPI, {
                   status: 200,

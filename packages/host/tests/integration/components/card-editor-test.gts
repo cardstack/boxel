@@ -7,11 +7,12 @@ import { Loader } from "@cardstack/runtime-common/loader";
 import CardEditor  from '@cardstack/host/components/card-editor';
 import { renderComponent } from '../../helpers/render-component';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import { testRealmURL, shimModule, setupCardLogs, setupLocalRealm, TestRealmAdapter, TestRealm, saveCard } from '../../helpers';
+import { testRealmURL, shimModule, setupCardLogs, setupMockLocalRealm, TestRealmAdapter, TestRealm, saveCard } from '../../helpers';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Card } from "https://cardstack.com/base/card-api";
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
+import CardPrerender from '@cardstack/host/components/card-prerender';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -22,7 +23,7 @@ module('Integration | card-editor', function (hooks) {
   let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
-  setupLocalRealm(hooks);
+  setupMockLocalRealm(hooks);
   setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   async function loadCard(url: string): Promise<Card> {
@@ -212,6 +213,7 @@ module('Integration | card-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CardEditor @card={{card}} />
+          <CardPrerender/>
         </template>
       }
     )
@@ -244,6 +246,7 @@ module('Integration | card-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CardEditor @card={{card}} @format="isolated" />
+          <CardPrerender/>
         </template>
       }
     )
@@ -285,6 +288,7 @@ module('Integration | card-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CardEditor @card={{card}} />
+          <CardPrerender/>
         </template>
       }
     )
@@ -306,6 +310,7 @@ module('Integration | card-editor', function (hooks) {
         <template>
           <CardEditor @card={{card}} />
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );
@@ -335,6 +340,7 @@ module('Integration | card-editor', function (hooks) {
         <template>
           <CardEditor @card={{card}} />
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );
@@ -359,6 +365,7 @@ module('Integration | card-editor', function (hooks) {
         <template>
           <CardEditor @card={{card}} />
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );
@@ -383,6 +390,7 @@ module('Integration | card-editor', function (hooks) {
           <CardEditor @card={{card}} />
           <CardCatalogModal />
           <CreateCardModal />
+          <CardPrerender/>
         </template>
       }
     );

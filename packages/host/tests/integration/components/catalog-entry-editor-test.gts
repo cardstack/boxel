@@ -6,18 +6,19 @@ import { Realm } from "@cardstack/runtime-common/realm";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import CatalogEntryEditor from '@cardstack/host/components/catalog-entry-editor';
-import { TestRealm, TestRealmAdapter, testRealmURL, setupLocalRealm } from '../../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL, setupMockLocalRealm } from '../../helpers';
 import waitUntil from '@ember/test-helpers/wait-until';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
+import CardPrerender from '@cardstack/host/components/card-prerender';
 
 module('Integration | catalog-entry-editor', function (hooks) {
   let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
-  setupLocalRealm(hooks);
+  setupMockLocalRealm(hooks);
 
   hooks.beforeEach(async function() {
     // this seeds the loader used during index which obtains url mappings
@@ -75,6 +76,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
+          <CardPrerender/>
         </template>
       }
     );
@@ -189,6 +191,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
+          <CardPrerender/>
         </template>
       }
     );
@@ -237,6 +240,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
+          <CardPrerender/>
         </template>
       }
     );
@@ -256,11 +260,12 @@ module('Integration | catalog-entry-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
+          <CardPrerender/>
         </template>
       }
     );
 
-    await waitFor('[data-test-ref]');
+    await waitFor('[data-test-format-button="edit"]');
     await click('[data-test-format-button="edit"]');
     await assert.shadowDOM('[data-test-field="firstName"] input').exists();
 
@@ -315,6 +320,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
+          <CardPrerender/>
         </template>
       }
     );
@@ -330,11 +336,12 @@ module('Integration | catalog-entry-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
+          <CardPrerender/>
         </template>
       }
     );
 
-    await waitFor('[data-test-ref]');
+    await waitFor('[data-test-format-button="edit"]');
     await click('[data-test-format-button="edit"]');
     assert.shadowDOM('[data-test-field="firstName"] input').exists();
 
@@ -392,11 +399,12 @@ module('Integration | catalog-entry-editor', function (hooks) {
         };
       }
     `);
-    await realm.write('person.gts', `
+    // note that person.gts already exists in beforeEach, so using a different module so we don't collide
+    await realm.write('nice-person.gts', `
       import { contains, field, linksTo, Card, Component } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Pet } from "./pet";
-      export class Person extends Card {
+      export class NicePerson extends Card {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
         @field pet = linksTo(Pet);
@@ -429,8 +437,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
           title: 'Person',
           description: 'Catalog entry',
           ref: {
-            module: `${testRealmURL}person`,
-            name: 'Person'
+            module: `${testRealmURL}nice-person`,
+            name: 'NicePerson'
           },
           demo: {
             firstName: 'Burcu',
@@ -448,8 +456,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
           fields: {
             demo: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: "Person"
+                module: `${testRealmURL}nice-person`,
+                name: "NicePerson"
               }
             }
           },
@@ -461,17 +469,18 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     }));
 
-    const args: CardRef =  { module: `${testRealmURL}person`, name: 'Person' };
+    const args: CardRef =  { module: `${testRealmURL}nice-person`, name: 'NicePerson' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}}/>
+          <CardPrerender/>
         </template>
       }
     );
 
     await waitFor('[data-test-ref]');
-    assert.shadowDOM(`[data-test-ref]`).hasText(`Module: ${testRealmURL}person Name: Person`);
+    assert.shadowDOM(`[data-test-ref]`).hasText(`Module: ${testRealmURL}nice-person Name: NicePerson`);
 
     await waitFor('[data-test-person-name]');
     assert.shadowDOM('[data-test-person-name]').hasText('Burcu Noyan');
@@ -525,6 +534,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           <CatalogEntryEditor @ref={{args}} />
           <CardCatalogModal />
           <CreateCardModal />
+          <CardPrerender/>
         </template>
       }
     );
