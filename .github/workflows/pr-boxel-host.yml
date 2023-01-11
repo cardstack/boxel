@@ -50,11 +50,9 @@ jobs:
       - name: Get boxel-host files that changed
         id: boxel-host-files-that-changed
         uses: tj-actions/changed-files@v1.1.2
-        # FIXME remove pnpm-lock.yaml, just here to force deployment for now
         with:
           files: |
-            ^packages/boxel-host
-            pnpm-lock.yaml
+            ^packages/host
 
   deploy-safe-tools-preview-staging:
     name: Deploy a boxel-host staging preview to S3
