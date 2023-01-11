@@ -6,23 +6,18 @@ import { Realm } from "@cardstack/runtime-common/realm";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import CatalogEntryEditor from '@cardstack/host/components/catalog-entry-editor';
-import Service from '@ember/service';
-import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL, setupLocalRealm } from '../../helpers';
 import waitUntil from '@ember/test-helpers/wait-until';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 
-class MockLocalRealm extends Service {
-  isAvailable = true;
-  url = new URL(testRealmURL);
-}
-
 module('Integration | catalog-entry-editor', function (hooks) {
   let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
+  setupLocalRealm(hooks);
 
   hooks.beforeEach(async function() {
     // this seeds the loader used during index which obtains url mappings
@@ -68,8 +63,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
         }
       }
     `);
-
-    this.owner.register('service:local-realm', MockLocalRealm);
   });
 
   hooks.afterEach(function() {

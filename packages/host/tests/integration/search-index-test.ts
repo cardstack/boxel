@@ -1,9 +1,10 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
   setupCardLogs,
+  setupLocalRealm,
   type CardDocFiles,
 } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
@@ -21,6 +22,7 @@ const testModuleRealm = 'http://localhost:4202/test/';
 
 module('Integration | search-index', function (hooks) {
   setupRenderingTest(hooks);
+  setupLocalRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
@@ -143,6 +145,8 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
+  skip('can index a card with a contains-many linkTo field');
+
   test('can tolerate a card whose computed throws an exception', async function (assert) {
     let adapter = new TestRealmAdapter({
       'Boom/boom.json': {
@@ -171,7 +175,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = TestRealm.createWithAdapter(adapter);
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     {

@@ -9,6 +9,7 @@ import {
   TestRealmAdapter,
   testRealmURL,
   setupCardLogs,
+  setupLocalRealm,
 } from '../helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { stringify } from 'qs';
@@ -18,6 +19,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
+  setupLocalRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)

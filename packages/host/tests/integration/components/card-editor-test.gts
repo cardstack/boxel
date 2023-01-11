@@ -5,10 +5,9 @@ import { baseRealm, LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { Realm } from "@cardstack/runtime-common/realm";
 import { Loader } from "@cardstack/runtime-common/loader";
 import CardEditor  from '@cardstack/host/components/card-editor';
-import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import { testRealmURL, shimModule, setupCardLogs, TestRealmAdapter, TestRealm, saveCard } from '../../helpers';
+import { testRealmURL, shimModule, setupCardLogs, setupLocalRealm, TestRealmAdapter, TestRealm, saveCard } from '../../helpers';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Card } from "https://cardstack.com/base/card-api";
@@ -18,16 +17,12 @@ let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
 let updateFromSerialized: typeof cardApi["updateFromSerialized"];
 
-class MockLocalRealm extends Service {
-  isAvailable = true;
-  url = new URL(testRealmURL);
-}
-
 module('Integration | card-editor', function (hooks) {
   let loader: Loader;
   let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
+  setupLocalRealm(hooks);
   setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   async function loadCard(url: string): Promise<Card> {
@@ -52,7 +47,6 @@ module('Integration | card-editor', function (hooks) {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     updateFromSerialized = cardApi.updateFromSerialized;
-    this.owner.register('service:local-realm', MockLocalRealm);
 
     adapter = new TestRealmAdapter({});
     realm = await TestRealm.createWithAdapter(adapter, this.owner);

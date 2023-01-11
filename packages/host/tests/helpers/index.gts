@@ -7,15 +7,20 @@ import {
   baseRealm,
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
-import { Deferred } from '@cardstack/runtime-common/deferred';
 import { TestContext } from '@ember/test-helpers';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { renderComponent } from './render-component';
-import Indexer from '@cardstack/host/services/indexer-service';
+import Service from '@ember/service';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import { type Card } from 'https://cardstack.com/base/card-api';
+import {
+  type RunState,
+  type RunnerRegistration,
+  type EntrySetter,
+  type SearchEntryWithErrors
+} from '@cardstack/runtime-common/search-index';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -73,34 +78,78 @@ async function makeRenderer() {
   );
 }
 
+// This marries together the 2 sides of the message channel,
+// LocalRealm and MessageHandler, which glosses over the postMessage calls
+class MockLocalRealm extends Service {
+  isAvailable = true;
+  url = new URL(testRealmURL);
+  #adapter: RealmAdapter | undefined;
+  #entrySetter: EntrySetter | undefined;
+  #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
+  #incremental:
+    | ((
+        prev: RunState,
+        url: URL,
+        operation: 'update' | 'delete'
+      ) => Promise<RunState>)
+    | undefined;
+  setupIndexing(
+    fromScratch: (realmURL: URL) => Promise<RunState>,
+    incremental: (
+      prev: RunState,
+      url: URL,
+      operation: 'update' | 'delete'
+    ) => Promise<RunState>
+  ) {
+    this.#fromScratch = fromScratch;
+    this.#incremental = incremental;
+  }
+  async setupIndexRunner(
+    registerRunner: RunnerRegistration,
+    entrySetter: EntrySetter,
+    adapter: RealmAdapter,
+  ) {
+    if (!this.#fromScratch || !this.#incremental) {
+      throw new Error(`fromScratch/incremental not registered with MockLocalRealm`);
+    }
+    this.#entrySetter = entrySetter;
+    this.#adapter = adapter;
+    await registerRunner(
+      this.#fromScratch.bind(this),
+      this.#incremental.bind(this)
+    );
+  }
+  async setEntry(url: URL, entry: SearchEntryWithErrors) {
+    if (!this.#entrySetter) {
+      throw new Error(`entrySetter not registered with MockLocalRealm`);
+    }
+    this.#entrySetter(url, entry);
+  }
+  get adapter() {
+    if (!this.#adapter) {
+      throw new Error(`adapter has not been set on MockLocalRealm`);
+    }
+    return this.#adapter;
+  }
+}
+
+export function setupLocalRealm(hooks: NestedHooks) {
+  hooks.beforeEach(function() {
+    this.owner.register('service:local-realm', MockLocalRealm);
+  });
+}
+
 function makeRealm(
   adapter: RealmAdapter,
   owner: TestContext['owner'],
   realmURL = testRealmURL
 ) {
-  let indexerService = owner.lookup('service:indexer-service') as Indexer;
+  let localRealm = owner.lookup('service:local-realm') as MockLocalRealm;
   return new Realm(
     realmURL ?? testRealmURL,
     adapter,
-    ({ staticResponses, reader, setRunState, getRunState, entrySetter }) => {
-      indexerService.setup(reader, setRunState, entrySetter, getRunState());
-      return async (path: string) => {
-        if (path.startsWith('/indexer?')) {
-          await indexerService.index(path);
-          let current = getRunState();
-          return JSON.stringify(current?.stats);
-          // TODO this needs to return the HTML for the indexer route template
-        } else {
-          // TODO we no longer need this anymore
-          let deferred = new Deferred<string>();
-          await indexerService.visitCard(
-            `/render?url=${encodeURIComponent(path)}&format=isolated`,
-            staticResponses,
-            (html: string) => deferred.fulfill(html)
-          )
-          return await deferred.promise;
-        }
-      }
+    async ({ entrySetter, registerRunner }) => {
+      await localRealm.setupIndexRunner(registerRunner, entrySetter, adapter);
     }
   );
 }

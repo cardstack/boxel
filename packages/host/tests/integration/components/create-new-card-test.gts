@@ -5,8 +5,7 @@ import { Loader } from "@cardstack/runtime-common/loader";
 import { Realm } from "@cardstack/runtime-common/realm";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import Service from '@ember/service';
-import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL, setupLocalRealm } from '../../helpers';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import waitUntil from '@ember/test-helpers/wait-until';
@@ -16,15 +15,11 @@ import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { on } from '@ember/modifier';
 import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
 
-class MockLocalRealm extends Service {
-  isAvailable = true;
-  url = new URL(testRealmURL);
-}
-
 module('Integration | create-new-card', function (hooks) {
   let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
+  setupLocalRealm(hooks);
 
   hooks.beforeEach(async function() {
     // this seeds the loader used during index which obtains url mappings
@@ -106,8 +101,6 @@ module('Integration | create-new-card', function (hooks) {
         }
       }
     }));
-
-    this.owner.register('service:local-realm', MockLocalRealm);
   });
 
   hooks.afterEach(function() {
