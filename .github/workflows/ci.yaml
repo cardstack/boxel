@@ -111,3 +111,16 @@ jobs:
       - name: realm server test suite
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
+
+  host-deploy:
+    name: Deploy host to staging
+    needs: host-test
+    # FIXME should have an if for main only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy boxel-host
+        uses: ./.github/actions/deploy-boxel-host
+        with:
+          environment: staging
+          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
