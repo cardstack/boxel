@@ -83,6 +83,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await waitFor('button[data-test-catalog-entry-publish]');
     await click('[data-test-catalog-entry-publish]');
+    // for some reason this takes long enough in CI that it seems
+    // to trigger a timeout error using the default timeout
     await waitFor('[data-test-ref]', { timeout: 5000 });
 
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
