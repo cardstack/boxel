@@ -11,7 +11,7 @@ import {
   type EntrySetter,
   type Reader,
   type RunState,
-  type RunnerRegistration
+  type RunnerOpts
 } from '@cardstack/runtime-common/search-index';
 import type IndexerService from '../services/indexer-service';
 import type LoaderService from '../services/loader-service';
@@ -73,7 +73,7 @@ export default class CardPrerender extends Component {
   }
 
   @enqueueTask private async doRegistration(): Promise<void> {
-    let register = (globalThis as any).registerRunner as RunnerRegistration;
+    let register = getRunnerOpts().registerRunner;
     await register(this.fromScratch.bind(this), this.incremental.bind(this));
   }
 
@@ -113,8 +113,8 @@ export default class CardPrerender extends Component {
   } {
     if (this.fastboot.isFastBoot) {
       return {
-        reader: (globalThis as any).reader as Reader,
-        entrySetter: (globalThis as any).entrySetter as EntrySetter
+        reader: getRunnerOpts().reader,
+        entrySetter: getRunnerOpts().entrySetter 
       };
     } else {
       let self = this;
@@ -137,6 +137,10 @@ export default class CardPrerender extends Component {
       };
     }
   }
+}
+
+function getRunnerOpts(): RunnerOpts {
+  return ((globalThis as any).getRunnerOpts as () => RunnerOpts)();
 }
 
 declare module '@glint/environment-ember-loose/registry' {

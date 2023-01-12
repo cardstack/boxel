@@ -66,13 +66,13 @@ export type RunnerRegistration = (
 
 export type EntrySetter = (url: URL, entry: SearchEntryWithErrors) => void;
 
-interface RunnerOpts {
+export interface RunnerOpts {
   _fetch: typeof fetch;
   reader: Reader;
   entrySetter: EntrySetter;
   registerRunner: RunnerRegistration;
 }
-export type IndexRunner = (opts: RunnerOpts) => Promise<void>;
+export type IndexRunner = () => Promise<void>;
 
 export interface SearchEntry {
   resource: CardResource;
@@ -114,6 +114,7 @@ type CurrentIndex = RunState & {
 
 export class SearchIndex {
   #runner: IndexRunner;
+  #setRunnerOpts: (opts: RunnerOpts) => void;
   #reader: Reader;
   #index: CurrentIndex;
   #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
@@ -134,9 +135,11 @@ export class SearchIndex {
       path: LocalPath,
       opts?: { withFallbacks?: true }
     ) => Promise<{ content: string; lastModified: number } | undefined>,
-    runner: IndexRunner
+    runner: IndexRunner,
+    setRunnerOpts: (opts: RunnerOpts) => void
   ) {
     this.#reader = { readdir, readFileAsText };
+    this.#setRunnerOpts = setRunnerOpts;
     this.#runner = runner;
     this.#index = {
       realmURL: new URL(realm.url),
@@ -171,7 +174,7 @@ export class SearchIndex {
       }
       let current = await this.#fromScratch(this.#index.realmURL);
       this.#index = {
-        instances: current.instances,
+        ...this.#index, // don't clobber the instances that the entrySetter has already made
         modules: current.modules,
         ignoreMap: current.ignoreMap,
         realmURL: current.realmURL,
@@ -192,6 +195,9 @@ export class SearchIndex {
         opts?.delete ? "delete" : "update"
       );
       this.#index = {
+        // we overwrite the instances in the incremental update, as there may
+        // have been instance removals due to invalidation that the entrySetter
+        // cannot accommodate in its current form
         instances: current.instances,
         modules: current.modules,
         ignoreMap: current.ignoreMap,
@@ -203,7 +209,7 @@ export class SearchIndex {
   }
 
   private async setupRunner(start: () => Promise<void>) {
-    await this.#runner({
+    this.#setRunnerOpts({
       _fetch: this.loader.fetch.bind(this.loader),
       reader: this.#reader,
       entrySetter: (url, entry) => {
@@ -215,6 +221,7 @@ export class SearchIndex {
         await start();
       },
     });
+    await this.#runner();
   }
 
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {

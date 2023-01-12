@@ -19,7 +19,8 @@ import {
   type RunState,
   type RunnerRegistration,
   type EntrySetter,
-  type SearchEntryWithErrors
+  type SearchEntryWithErrors,
+  type RunnerOpts
 } from '@cardstack/runtime-common/search-index';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -139,6 +140,17 @@ export function setupMockLocalRealm(hooks: NestedHooks) {
   });
 }
 
+let runnerOpts: RunnerOpts | undefined;
+function setRunnerOpts(opts: RunnerOpts) {
+  runnerOpts = opts;
+}
+function getRunnerOpts() {
+  if (!runnerOpts) {
+    throw new Error(`RunnerOpts have not been set`);
+  }
+  return runnerOpts;
+}
+
 function makeRealm(
   adapter: RealmAdapter,
   owner: TestContext['owner'],
@@ -148,9 +160,11 @@ function makeRealm(
   return new Realm(
     realmURL ?? testRealmURL,
     adapter,
-    async ({ entrySetter, registerRunner }) => {
+    async () => {
+        let { registerRunner, entrySetter } = getRunnerOpts();
       await localRealm.setupIndexRunner(registerRunner, entrySetter, adapter);
-    }
+    },
+    setRunnerOpts
   );
 }
 

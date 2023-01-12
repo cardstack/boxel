@@ -4,9 +4,9 @@ import { Deferred } from "./deferred";
 import { trimExecutableExtension } from "./index";
 import { RealmPaths } from "./paths";
 import { CardError } from "./error";
+import { type RunnerOpts } from "./search-index";
 
-// TODO remove this
-let nonce = 0;
+const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -80,7 +80,6 @@ export class Loader {
     { module: string; name: string }
   >();
   private consumptionCache = new WeakMap<object, string[]>();
-  nonce = nonce++;
 
   static #instance: Loader | undefined;
   static loaders = new WeakMap<Function, Loader>();
@@ -301,7 +300,7 @@ export class Loader {
         headers: urlOrRequest.headers,
         body: urlOrRequest.body,
       });
-      return fetch(request);
+      return getNativeFetch()(request);
     } else {
       let unresolvedURL =
         typeof urlOrRequest === "string"
@@ -320,7 +319,7 @@ export class Loader {
           return await handle(request);
         }
       }
-      return fetch(this.resolve(unresolvedURL).href, init);
+      return getNativeFetch()(this.resolve(unresolvedURL).href, init);
     }
   }
 
@@ -578,6 +577,15 @@ export class Loader {
       throw error;
     }
     return await response.text();
+  }
+}
+
+function getNativeFetch(): typeof fetch {
+  if (isFastBoot) {
+    let getRunnerOpts = (globalThis as any).getRunnerOpts as () => RunnerOpts;
+    return getRunnerOpts()._fetch;
+  } else {
+    return fetch;
   }
 }
 

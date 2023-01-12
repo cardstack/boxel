@@ -1,5 +1,5 @@
 import { Deferred } from "./deferred";
-import { SearchIndex, type IndexRunner } from "./search-index";
+import { SearchIndex, type IndexRunner, type RunnerOpts } from "./search-index";
 import { type SingleCardDocument } from "./card-document";
 import { Loader, type MaybeLocalRequest } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
@@ -106,15 +106,20 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
-  readonly paths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
+  readonly paths: RealmPaths;
 
   get url(): string {
     return this.paths.url;
   }
 
-  constructor(url: string, adapter: RealmAdapter, indexRunner: IndexRunner) {
+  constructor(
+    url: string,
+    adapter: RealmAdapter,
+    indexRunner: IndexRunner,
+    setRunnerOpts: (opts: RunnerOpts) => void
+  ) {
     this.paths = new RealmPaths(url);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
@@ -123,7 +128,8 @@ export class Realm {
       this,
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this),
-      indexRunner
+      indexRunner,
+      setRunnerOpts
     );
 
     this.#jsonAPIRouter = new Router(new URL(url))
