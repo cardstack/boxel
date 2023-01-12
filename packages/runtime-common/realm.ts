@@ -1,5 +1,5 @@
 import { Deferred } from "./deferred";
-import { SearchIndex } from "./search-index";
+import { SearchIndex, type IndexRunner, type RunnerOpts } from "./search-index";
 import { type SingleCardDocument } from "./card-document";
 import { Loader, type MaybeLocalRequest } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
@@ -24,7 +24,11 @@ import {
 import merge from "lodash/merge";
 import qs from "qs";
 import cloneDeep from "lodash/cloneDeep";
-import { webStreamToText } from "./stream";
+import {
+  fileContentToText,
+  readFileAsText,
+  getFileWithFallbacks,
+} from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
 import makeEmberTemplatePlugin from "babel-plugin-ember-template-compilation";
@@ -102,9 +106,9 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
-  readonly paths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
+  readonly paths: RealmPaths;
 
   get url(): string {
     return this.paths.url;
@@ -113,10 +117,8 @@ export class Realm {
   constructor(
     url: string,
     adapter: RealmAdapter,
-    getVisitor: (
-      _fetch: typeof fetch,
-      staticResponses: Map<string, string>
-    ) => (url: string) => Promise<string>
+    indexRunner: IndexRunner,
+    setRunnerOpts: (opts: RunnerOpts) => void
   ) {
     this.paths = new RealmPaths(url);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
@@ -126,7 +128,8 @@ export class Realm {
       this,
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this),
-      getVisitor
+      indexRunner,
+      setRunnerOpts
     );
 
     this.#jsonAPIRouter = new Router(new URL(url))
@@ -187,7 +190,7 @@ export class Realm {
     }
     if (accept?.includes("application/vnd.api+json")) {
       // local requests are allowed to query the realm as the index is being built up
-      if (!request.isLocal) {
+      if (!request.isLocal && url.host !== "local-realm") {
         await this.ready;
       }
       if (!this.searchIndex) {
@@ -211,7 +214,7 @@ export class Realm {
     if (
       executableExtensions.some((extension) => handle.path.endsWith(extension))
     ) {
-      return this.makeJS(await this.fileContentToText(handle), handle.path);
+      return this.makeJS(await fileContentToText(handle), handle.path);
     } else {
       return await this.serveLocalFile(handle);
     }
@@ -351,20 +354,10 @@ export class Realm {
   private async getFileWithFallbacks(
     path: LocalPath
   ): Promise<FileRef | undefined> {
-    // TODO refactor to use search index
-
-    let result = await this.#adapter.openFile(path);
-    if (result) {
-      return result;
-    }
-
-    for (let extension of executableExtensions) {
-      result = await this.#adapter.openFile(path + extension);
-      if (result) {
-        return result;
-      }
-    }
-    return undefined;
+    return getFileWithFallbacks(
+      path,
+      this.#adapter.openFile.bind(this.#adapter)
+    );
   }
 
   private async createCard(request: Request): Promise<Response> {
@@ -618,53 +611,16 @@ export class Realm {
     path: LocalPath,
     opts: { withFallbacks?: true } = {}
   ): Promise<{ content: string; lastModified: number } | undefined> {
-    let ref: FileRef | undefined;
-    if (opts.withFallbacks) {
-      ref = await this.getFileWithFallbacks(path);
-    } else {
-      ref = await this.#adapter.openFile(path);
-    }
-    if (!ref) {
-      return;
-    }
-    return {
-      content: await this.fileContentToText(ref),
-      lastModified: ref.lastModified,
-    };
+    return readFileAsText(
+      path,
+      this.#adapter.openFile.bind(this.#adapter),
+      opts
+    );
   }
 
   private async isIgnored(url: URL): Promise<boolean> {
     await this.ready;
     return this.#searchIndex.isIgnored(url);
-  }
-
-  private async fileContentToText({ content }: FileRef): Promise<string> {
-    if (typeof content === "string") {
-      return content;
-    }
-    if (content instanceof Uint8Array) {
-      let decoder = new TextDecoder();
-      return decoder.decode(content);
-    } else if (content instanceof ReadableStream) {
-      return await webStreamToText(content);
-    } else {
-      if (!isNode) {
-        throw new Error(`cannot handle node-streams when not in node`);
-      }
-
-      // we're in a node-only branch, so this code isn't relevant to the worker
-      // build, but the worker build will try to resolve the buffer polyfill and
-      // blow up since we don't include that library. So we're hiding from
-      // webpack.
-      const B = (globalThis as any)["Buffer"];
-
-      const chunks: typeof B[] = []; // Buffer is available from globalThis when in the node env, however tsc can't type check this for the worker
-      // the types for Readable have not caught up to the fact these are async generators
-      for await (const chunk of content as any) {
-        chunks.push(B.from(chunk));
-      }
-      return B.concat(chunks).toString("utf-8");
-    }
   }
 
   private async search(request: Request): Promise<Response> {

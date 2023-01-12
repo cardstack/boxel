@@ -1,5 +1,9 @@
 // this file should be portable to both DOM and ServiceWorker contexts. It
 // establishes the common API between them.
+import {
+  type SearchEntryWithErrors,
+  type SerializableRunState,
+} from '@cardstack/runtime-common/search-index';
 
 export interface RequestDirectoryHandle {
   type: 'requestDirectoryHandle';
@@ -20,28 +24,50 @@ export interface SetDirectoryHandle {
   handle: FileSystemDirectoryHandle | null;
 }
 
-export interface VisitRequest {
-  type: 'visitRequest';
-  id: string;
-  path: string;
-  staticResponses: Map<string, string>;
+export interface SetEntry {
+  type: 'setEntry';
+  url: string;
+  entry: SearchEntryWithErrors;
 }
 
-export interface VisitResponse {
-  type: 'visitResponse';
-  id: string;
-  html: string;
-  path: string;
+export interface SetEntryAcknowledged {
+  type: 'setEntryAcknowledged';
+}
+
+export interface StartFromScratchIndex {
+  type: 'startFromScratch';
+  realmURL: string;
+}
+
+export interface FromScratchCompleted {
+  type: 'fromScratchCompleted';
+  state: SerializableRunState;
+}
+
+export interface StartIncrementalIndex {
+  type: 'startIncremental';
+  prev: SerializableRunState;
+  url: string;
+  operation: 'delete' | 'update';
+}
+
+export interface IncrementalCompleted {
+  type: 'incrementalCompleted';
+  state: SerializableRunState;
 }
 
 export type ClientMessage =
   | RequestDirectoryHandle
   | SetDirectoryHandle
-  | VisitResponse;
+  | SetEntry
+  | FromScratchCompleted
+  | IncrementalCompleted;
 export type WorkerMessage =
   | DirectoryHandleResponse
   | SetDirectoryHandleAcknowledged
-  | VisitRequest;
+  | SetEntryAcknowledged
+  | StartFromScratchIndex
+  | StartIncrementalIndex;
 export type Message = ClientMessage | WorkerMessage;
 
 function isMessageLike(
@@ -60,6 +86,7 @@ export function isClientMessage(message: unknown): message is ClientMessage {
     return false;
   }
   switch (message.type) {
+    case 'getRunStateRequest':
     case 'requestDirectoryHandle':
       return true;
     case 'setDirectoryHandle':
@@ -68,14 +95,20 @@ export function isClientMessage(message: unknown): message is ClientMessage {
         ((message as any).handle === null ||
           (message as any).handle instanceof FileSystemDirectoryHandle)
       );
-    case 'visitResponse':
+    case 'setEntry':
       return (
-        'id' in message &&
-        typeof message.id === 'string' &&
-        'html' in message &&
-        typeof message.html === 'string' &&
-        'path' in message &&
-        typeof message.path === 'string'
+        'url' in message &&
+        typeof message.url === 'string' &&
+        'entry' in message &&
+        typeof message.entry === 'object' &&
+        message.entry != null
+      );
+    case 'incrementalCompleted':
+    case 'fromScratchCompleted':
+      return (
+        'state' in message &&
+        typeof message.state === 'object' &&
+        message.state != null
       );
     default:
       return false;
@@ -87,6 +120,9 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
     return false;
   }
   switch (message.type) {
+    case 'setEntryAcknowledged':
+    case 'setRunStateAcknowledged':
+      return true;
     case 'directoryHandleResponse':
       return (
         'handle' in message &&
@@ -98,14 +134,18 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
       );
     case 'setDirectoryHandleAcknowledged':
       return 'url' in message && typeof (message as any).url === 'string';
-    case 'visitRequest':
+    case 'startFromScratch':
+      return 'realmURL' in message && typeof message.realmURL === 'string';
+    case 'startIncremental':
       return (
-        'id' in message &&
-        typeof message.id === 'string' &&
-        'path' in message &&
-        typeof message.path === 'string' &&
-        'staticResponses' in message &&
-        message.staticResponses instanceof Map
+        'prev' in message &&
+        typeof message.prev === 'object' &&
+        message.prev != null &&
+        'url' in message &&
+        typeof message.url === 'string' &&
+        'operation' in message &&
+        typeof message.operation === 'string' &&
+        ['update', 'delete'].includes(message.operation)
       );
     default:
       return false;

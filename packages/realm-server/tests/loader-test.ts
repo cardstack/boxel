@@ -2,6 +2,7 @@ import { module, test } from "qunit";
 import { Loader } from "@cardstack/runtime-common";
 import { dirSync, setGracefulCleanup } from "tmp";
 import { createRealm } from "./helpers";
+import { baseRealm } from "@cardstack/runtime-common";
 
 setGracefulCleanup();
 
@@ -15,6 +16,10 @@ module("loader", function (hooks) {
 
   test("can dynamically load modules with cycles", async function (assert) {
     let loader = new Loader();
+    loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     let module = await loader.import<{ three(): number }>(
       `${testRealm}cycle-two`
     );
@@ -23,6 +28,10 @@ module("loader", function (hooks) {
 
   test("can resolve multiple import load races against a common dep", async function (assert) {
     let loader = new Loader();
+    loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     let a = loader.import<{ a(): string }>(`${testRealm}a`);
     let b = loader.import<{ b(): string }>(`${testRealm}b`);
     let [aModule, bModule] = await Promise.all([a, b]);
@@ -65,6 +74,10 @@ module("loader", function (hooks) {
 
   test("can determine consumed modules when an error is encountered during loading", async function (assert) {
     let loader = new Loader();
+    loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     try {
       await loader.import<{ d(): string }>(`${testRealm}d`);
       throw new Error(`expected error was not thrown`);
@@ -82,6 +95,10 @@ module("loader", function (hooks) {
 
   test("can get consumed modules within a cycle", async function (assert) {
     let loader = new Loader();
+    loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     await loader.import<{ three(): number }>(`${testRealm}cycle-two`);
     let modules = await loader.getConsumedModules(`${testRealm}cycle-two`);
     assert.deepEqual(modules, [
@@ -92,6 +109,10 @@ module("loader", function (hooks) {
 
   test("supports identify API", async function (assert) {
     let loader = new Loader();
+    loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     let { Person } = await loader.import<{ Person: unknown }>(
       `${testRealm}person`
     );
@@ -108,6 +129,10 @@ module("loader", function (hooks) {
 
   test("exports cannot be mutated", async function (assert) {
     let loader = new Loader();
+    loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     let module = await loader.import<{ Person: unknown }>(`${testRealm}person`);
     assert.throws(() => {
       module.Person = 1;
@@ -116,6 +141,10 @@ module("loader", function (hooks) {
 
   test("can get a loader used to import a specific card", async function (assert) {
     let loader = new Loader();
+    loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/base/")
+    );
     let module = await loader.import<any>(`${testRealm}person`);
     let card = module.Person;
     let testingLoader = Loader.getLoaderFor(card);

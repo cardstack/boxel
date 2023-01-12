@@ -5,29 +5,25 @@ import { baseRealm, LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { Realm } from "@cardstack/runtime-common/realm";
 import { Loader } from "@cardstack/runtime-common/loader";
 import CardEditor  from '@cardstack/host/components/card-editor';
-import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import { testRealmURL, shimModule, setupCardLogs, TestRealmAdapter, TestRealm, saveCard } from '../../helpers';
+import { testRealmURL, shimModule, setupCardLogs, setupMockLocalRealm, TestRealmAdapter, TestRealm, saveCard } from '../../helpers';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Card } from "https://cardstack.com/base/card-api";
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
+import CardPrerender from '@cardstack/host/components/card-prerender';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
 let updateFromSerialized: typeof cardApi["updateFromSerialized"];
-
-class MockLocalRealm extends Service {
-  isAvailable = true;
-  url = new URL(testRealmURL);
-}
 
 module('Integration | card-editor', function (hooks) {
   let loader: Loader;
   let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
+  setupMockLocalRealm(hooks);
   setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   async function loadCard(url: string): Promise<Card> {
@@ -52,10 +48,9 @@ module('Integration | card-editor', function (hooks) {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     updateFromSerialized = cardApi.updateFromSerialized;
-    this.owner.register('service:local-realm', MockLocalRealm);
 
     adapter = new TestRealmAdapter({});
-    realm = TestRealm.createWithAdapter(adapter);
+    realm = await TestRealm.createWithAdapter(adapter, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
 
@@ -218,6 +213,7 @@ module('Integration | card-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CardEditor @card={{card}} />
+          <CardPrerender/>
         </template>
       }
     )
@@ -250,6 +246,7 @@ module('Integration | card-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CardEditor @card={{card}} @format="isolated" />
+          <CardPrerender/>
         </template>
       }
     )
@@ -291,6 +288,7 @@ module('Integration | card-editor', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <CardEditor @card={{card}} />
+          <CardPrerender/>
         </template>
       }
     )
@@ -312,6 +310,7 @@ module('Integration | card-editor', function (hooks) {
         <template>
           <CardEditor @card={{card}} />
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );
@@ -341,6 +340,7 @@ module('Integration | card-editor', function (hooks) {
         <template>
           <CardEditor @card={{card}} />
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );
@@ -365,6 +365,7 @@ module('Integration | card-editor', function (hooks) {
         <template>
           <CardEditor @card={{card}} />
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );
@@ -389,6 +390,7 @@ module('Integration | card-editor', function (hooks) {
           <CardEditor @card={{card}} />
           <CardCatalogModal />
           <CreateCardModal />
+          <CardPrerender/>
         </template>
       }
     );

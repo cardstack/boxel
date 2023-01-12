@@ -173,9 +173,9 @@ export function humanReadable(ref: CardRef): string {
   if (!("type" in ref)) {
     return `${ref.name} from ${ref.module}`;
   } else if (ref.type === "ancestorOf") {
-    return `Ancestor of ${humanReadable(ref)}`;
+    return `Ancestor of ${humanReadable(ref.card)}`;
   } else {
-    return `Field ${ref.field} of ${humanReadable(ref)}`;
+    return `Field ${ref.field} of ${humanReadable(ref.card)}`;
   }
 }
 

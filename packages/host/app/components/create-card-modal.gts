@@ -22,6 +22,7 @@ export default class CreateCardModal extends Component {
           @size="large"
           @isOpen={{true}}
           @onClose={{fn this.save undefined}}
+          style="z-index:{{this.zIndex}}"
           data-test-create-new-card={{card.constructor.name}}
         >
           <CardContainer class="dialog-box" @displayBoundaries={{true}}>
@@ -46,6 +47,11 @@ export default class CreateCardModal extends Component {
     deferred: Deferred<Card | undefined>;
   } | undefined = undefined;
 
+  @tracked zIndex = 20;
+  @action incrementZIndex() {
+    this.zIndex++;
+  }
+
   constructor(owner: unknown, args: {}) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CREATE_NEW_CARD = this;
@@ -55,6 +61,7 @@ export default class CreateCardModal extends Component {
   }
 
   async create<T extends Card>(ref: CardRef): Promise<undefined | T> {
+    this.incrementZIndex();
     return await taskFor(this._create).perform(ref) as T | undefined;
   }
 

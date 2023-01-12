@@ -1,18 +1,22 @@
 import { isClientMessage, send } from './messages';
 import assertNever from 'assert-never';
 import { Deferred } from '@cardstack/runtime-common/deferred';
-
-let visitIds = 0;
+import {
+  serializeRunState,
+  deserializeRunState,
+  type EntrySetter,
+  type RunnerRegistration,
+  type RunState,
+} from '@cardstack/runtime-common/search-index';
 
 export class MessageHandler {
   fs: FileSystemDirectoryHandle | null = null;
-  private finishedStarting!: () => void;
   startingUp: Promise<void>;
+  private finishedStarting!: () => void;
+  private entrySetter: EntrySetter | undefined;
   private source: Client | ServiceWorker | MessagePort | undefined | null;
-  private pendingVisits = new Map<
-    string,
-    { path: string; deferred: Deferred<string> }
-  >();
+  private fromScratchDeferred: Deferred<RunState> | undefined;
+  private incrementalDeferred: Deferred<RunState> | undefined;
 
   constructor(worker: ServiceWorkerGlobalScope) {
     this.startingUp = new Promise((res) => (this.finishedStarting = res));
@@ -21,62 +25,115 @@ export class MessageHandler {
     });
   }
 
+  async setupIndexRunner(
+    registerRunner: RunnerRegistration,
+    entrySetter: EntrySetter
+  ) {
+    this.entrySetter = entrySetter;
+    await registerRunner(
+      this.fromScratch.bind(this),
+      this.incremental.bind(this)
+    );
+  }
+
   handle(event: ExtendableMessageEvent) {
     let { data, source } = event;
-    this.source = source;
     if (!isClientMessage(data) || !source) {
       return;
     }
+    this.source = source;
     switch (data.type) {
       case 'requestDirectoryHandle':
-        send(source, {
-          type: 'directoryHandleResponse',
-          handle: this.fs,
-          url: 'http://local-realm/', // TODO: this is hardcoded, should come from realm.url
-        });
-        return;
-      case 'setDirectoryHandle':
-        this.fs = data.handle;
-        this.finishedStarting();
-        if (this.fs) {
+        {
           send(source, {
-            type: 'setDirectoryHandleAcknowledged',
+            type: 'directoryHandleResponse',
+            handle: this.fs,
             url: 'http://local-realm/', // TODO: this is hardcoded, should come from realm.url
           });
         }
         return;
-      case 'visitResponse':
-        let { id, html, path } = data;
-        let visit = this.pendingVisits.get(id);
-        if (!visit) {
-          throw new Error(
-            `received a visitResponse from the client that has no correlating worker request, id: ${id}, path ${path}`
-          );
+      case 'setDirectoryHandle':
+        {
+          this.fs = data.handle;
+          this.finishedStarting();
+          if (this.fs) {
+            send(source, {
+              type: 'setDirectoryHandleAcknowledged',
+              url: 'http://local-realm/', // TODO: this is hardcoded, should come from realm.url
+            });
+          }
         }
-        let { deferred } = visit;
-        deferred.fulfill(html);
-        this.pendingVisits.delete(id);
+        return;
+      case 'setEntry':
+        {
+          if (!this.entrySetter) {
+            throw new Error(
+              `no entrySetter provided in MessageHandler.setup()`
+            );
+          }
+          let { url, entry } = data;
+          this.entrySetter(new URL(url), entry);
+          send(source, { type: 'setEntryAcknowledged' });
+        }
+        return;
+      case 'fromScratchCompleted':
+        {
+          if (!this.fromScratchDeferred) {
+            throw new Error(
+              `received from scratch index completion response without corresponding request`
+            );
+          }
+          let { state } = data;
+          this.fromScratchDeferred.fulfill(deserializeRunState(state));
+        }
+        return;
+      case 'incrementalCompleted':
+        {
+          if (!this.incrementalDeferred) {
+            throw new Error(
+              `received incremental index completion response without corresponding request`
+            );
+          }
+          let { state } = data;
+          this.incrementalDeferred.fulfill(deserializeRunState(state));
+        }
         return;
       default:
         throw assertNever(data);
     }
   }
 
-  async visit(path: string, staticResponses: Map<string, string>) {
+  private async fromScratch(realmURL: URL): Promise<RunState> {
     if (!this.source) {
       throw new Error(
-        `Can't visit ${path}, the service worker doesn't know which DOM to talk to`
+        `Can't perform fromScratch indexing, the service worker doesn't know which DOM to talk to`
       );
     }
-    let deferred = new Deferred<string>();
-    let id = String(visitIds++);
-    this.pendingVisits.set(id, { path, deferred });
+    this.fromScratchDeferred = new Deferred();
     send(this.source, {
-      type: 'visitRequest',
-      path,
-      id,
-      staticResponses,
+      type: 'startFromScratch',
+      realmURL: realmURL.href,
     });
-    return await deferred.promise;
+    return this.fromScratchDeferred.promise;
+  }
+
+  private async incremental(
+    prev: RunState,
+    url: URL,
+    operation: 'update' | 'delete'
+  ): Promise<RunState> {
+    if (!this.source) {
+      throw new Error(
+        `Can't perform incremental indexing, the service worker doesn't know which DOM to talk to`
+      );
+    }
+    this.incrementalDeferred = new Deferred();
+    send(this.source, {
+      type: 'startIncremental',
+      prev: serializeRunState(prev),
+      url: url.href,
+      operation,
+    });
+    return this.incrementalDeferred.promise;
   }
 }

@@ -10,39 +10,21 @@ interface Model {
 
 interface ModelArgs {
   url: string;
-  format: Format;
 }
 
-interface RouteInfoModelArgs {
-  queryParams: ModelArgs;
-}
-
-export default class Application extends Route<Model> {
-  queryParams = {
-    url: {
-      refreshModel: true,
-    },
-    format: {
-      refreshModel: true,
-    },
-  };
-
+// TODO i think this actually goes away after we refactor the browser for card pre-rendering...
+export default class Render extends Route<Model> {
   @service declare cardService: CardService;
 
-  async model(args: ModelArgs | RouteInfoModelArgs): Promise<Model> {
-    let url: string;
-    let format: Format;
-    if ('queryParams' in args) {
-      url = args.queryParams.url;
-      format = args.queryParams.format;
-    } else {
-      url = args.url;
-      format = args.format;
-    }
+  async model(_params: ModelArgs, transition: any): Promise<Model> {
+    let format: Format = 'isolated';
+    // model(params) results in an empty object when using router.recognizeAndLoad()...
+    let params: ModelArgs = transition.routeInfos.pop().params;
+    let { url } = params;
     let card = await this.cardService.loadModel(url, { absoluteURL: true });
     if (!card) {
       throw new Error(`could not load card for url ${url}`);
     }
-    return { card, format: format as Format };
+    return { card, format };
   }
 }

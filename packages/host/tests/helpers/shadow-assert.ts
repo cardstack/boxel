@@ -36,11 +36,14 @@ export function shadowQuerySelectorAll(
   }
 }
 
-export async function waitFor(selector: string): Promise<Element | Element[]> {
+export async function waitFor(
+  selector: string,
+  opts?: { timeout?: number }
+): Promise<Element | Element[]> {
   try {
     let el: Element | undefined = undefined;
     for (let s of selector.split(' ')) {
-      el = await waitUntil(() => shadowQuerySelector(s, el));
+      el = await waitUntil(() => shadowQuerySelector(s, el), opts);
     }
     return el!;
   } catch (e) {

@@ -20,11 +20,6 @@ export function externalsPlugin(_babel: typeof Babel) {
                 // rewrite the external to use the /externals route of the base
                 // realm that the realm was configured to talk to
                 topLevelPath.node.source.value = `${externalsURL}${topLevelPath.node.source.value}`;
-              } else if (topLevelPath.node.source.value.startsWith("http")) {
-                // resolve the import path using the loader
-                topLevelPath.node.source.value = Loader.resolve(
-                  topLevelPath.node.source.value
-                ).href;
               }
             }
           }
