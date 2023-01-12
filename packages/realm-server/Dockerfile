@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+
+FROM node:18-alpine
+
+WORKDIR /realm-server
+
+# FIXME 7.2 doesn’t exist, is it bad?
+RUN curl -f https://get.pnpm.io/v6.16.js | node - add --global pnpm
+
+# pnpm fetch does require only lockfile
+COPY pnpm-lock.yaml ./
+
+RUN pnpm fetch --prod
+
+
+ADD . ./
+RUN pnpm install -r --offline --prod
+RUN cd packages/realm-server && ./node_modules/.bin/tsc
+
+EXPOSE 3000
+# FIXME this is hardcoded to be base-esque
+CMD [ "node", "packages/realm-server/main", "--port=3000", "--path='./tests/cards'", "--fromUrl='/node-test/'", "--toUrl='/node-test/'", "--path='../host/tests/cards'" "--fromUrl='https://cardstack.com/base/'", "--toUrl='/base" ]
+
