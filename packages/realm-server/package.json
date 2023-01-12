@@ -12,7 +12,7 @@
     "@types/supertest": "^2.0.12",
     "@types/tmp": "^0.2.3",
     "@types/yargs": "^17.0.10",
-    "fastboot": "^3.3.2",
+    "fastboot": "^4.1.0",
     "fs-extra": "^10.1.0",
     "lodash": "^4.17.21",
     "qs": "^6.10.5",
