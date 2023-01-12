@@ -66,12 +66,7 @@ export type RunnerRegistration = (
 
 export type EntrySetter = (url: URL, entry: SearchEntryWithErrors) => void;
 
-export type IndexRunner = ({
-  _fetch,
-  resolver,
-  reader,
-  entrySetter,
-}: {
+interface RunnerOpts {
   _fetch: typeof fetch;
   // TODO remove this and address this resolution in the babel transpile
   resolver: {
@@ -84,7 +79,8 @@ export type IndexRunner = ({
   reader: Reader;
   entrySetter: EntrySetter;
   registerRunner: RunnerRegistration;
-}) => Promise<void>;
+}
+export type IndexRunner = (opts: RunnerOpts) => Promise<void>;
 
 export interface SearchEntry {
   resource: CardResource;
