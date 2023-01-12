@@ -5,10 +5,10 @@ import { Loader } from "@cardstack/runtime-common/loader";
 import { Realm } from "@cardstack/runtime-common/realm";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import Service from '@ember/service';
-import { TestRealm, TestRealmAdapter, testRealmURL } from '../../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL, setupMockLocalRealm } from '../../helpers';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
+import CardPrerender from '@cardstack/host/components/card-prerender';
 import waitUntil from '@ember/test-helpers/wait-until';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -16,15 +16,11 @@ import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { on } from '@ember/modifier';
 import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
 
-class MockLocalRealm extends Service {
-  isAvailable = true;
-  url = new URL(testRealmURL);
-}
-
 module('Integration | create-new-card', function (hooks) {
   let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
+  setupMockLocalRealm(hooks);
 
   hooks.beforeEach(async function() {
     // this seeds the loader used during index which obtains url mappings
@@ -34,7 +30,7 @@ module('Integration | create-new-card', function (hooks) {
       new URL('http://localhost:4201/base/')
     );
     adapter = new TestRealmAdapter({});
-    realm = TestRealm.createWithAdapter(adapter);
+    realm = await TestRealm.createWithAdapter(adapter, this.owner);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
@@ -106,8 +102,6 @@ module('Integration | create-new-card', function (hooks) {
         }
       }
     }));
-
-    this.owner.register('service:local-realm', MockLocalRealm);
   });
 
   hooks.afterEach(function() {
@@ -135,6 +129,7 @@ module('Integration | create-new-card', function (hooks) {
           </button>
           <CreateCardModal />
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );

@@ -4,7 +4,7 @@ import type { ComponentOptions } from 'https://cardstack.com/base/field-componen
 
 interface Signature {
   Args: {
-    card: Card
+    card: Card;
     format: Format;
     opts?: ComponentOptions
   }
@@ -12,9 +12,9 @@ interface Signature {
 
 export default class Render extends Component<Signature> {
   <template>
-    <!--Server Side Rendered Card START-->
+    <!--Server Side Rendered Card HTML START-->
     <this.renderedCard/>
-    <!--Server Side Rendered Card END-->
+    <!--Server Side Rendered Card HTML END-->
   </template>
 
   get renderedCard() {

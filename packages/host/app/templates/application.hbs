@@ -1,7 +1,8 @@
+{{!-- template-lint-disable no-html-comments --}}
+
 {{outlet}}
 
-{{#unless this.model.isFastBoot}}
-  <template shadowroot="open">
-    <WorkerRender/>
-  </template>
-{{/unless}}
+<!-- Consider sandboxing this with an iframe -->
+<template shadowroot="open">
+  <CardPrerender/>
+</template>

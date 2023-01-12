@@ -1,40 +1,33 @@
 //@ts-expect-error no types for fastboot
 import FastBoot from "fastboot";
 import { type FastBootInstance } from "@cardstack/runtime-common";
+import {
+  type IndexRunner,
+  type RunnerOpts,
+} from "@cardstack/runtime-common/search-index";
 
-export function makeFastBootVisitor(
-  distPath: string
-): (_fetch: typeof fetch) => (url: string) => Promise<string> {
-  return (_fetch: typeof fetch) => {
-    // something to think about--if there is a dramatic performance hit for
-    // creating a new fastboot instance for each current run, maybe we can look
-    // at reusing an existing fastboot instances? we could use the loader
-    // service in the ember app within the fastboot VM to reset the loader
-    // instead of making a new fastboot instance. Although we'd need to be
-    // careful about fastboot instances shared by different current runs. we
-    // wouldn't want loader state to bleed into different current runs. maybe
-    // the idea is that we could lazily create a pool of fastboot instances that
-    // we reuse after the current run's lifetime.
-    let fastboot = new FastBoot({
-      distPath,
-      resilient: false,
-      buildSandboxGlobals(defaultGlobals: any) {
-        return Object.assign({}, defaultGlobals, {
-          URL: globalThis.URL,
-          Request: globalThis.Request,
-          Response: globalThis.Response,
-          fetch: _fetch,
-          btoa,
-        });
-      },
-    }) as FastBootInstance;
-    return async (url: string) => {
-      let page = await fastboot.visit(url, {
-        request: { headers: { host: "localhost:4200" } },
+export function makeFastBootIndexRunner(
+  distPath: string,
+  getRunnerOpts: () => RunnerOpts
+): IndexRunner {
+  let fastboot = new FastBoot({
+    distPath,
+    resilient: false,
+    buildSandboxGlobals(defaultGlobals: any) {
+      return Object.assign({}, defaultGlobals, {
+        URL: globalThis.URL,
+        Request: globalThis.Request,
+        Response: globalThis.Response,
+        btoa,
+        getRunnerOpts,
       });
-      let html = page.html();
-      return html;
-    };
+    },
+  }) as FastBootInstance;
+  return async () => {
+    await fastboot.visit("/indexer", {
+      // TODO we'll need to configure this host origin as part of the hosted realm work
+      request: { headers: { host: "localhost:4200" } },
+    });
   };
 }
 

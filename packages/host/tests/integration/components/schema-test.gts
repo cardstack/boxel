@@ -5,27 +5,23 @@ import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import Module from '@cardstack/host/components/module';
 import { file, FileResource } from '@cardstack/host/resources/file';
-import Service from '@ember/service';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { TestRealm, TestRealmAdapter, testRealmURL, setupCardLogs } from '../../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL, setupCardLogs, setupMockLocalRealm } from '../../helpers';
 import { Realm } from "@cardstack/runtime-common/realm";
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 import { waitFor, fillIn, click, shadowQuerySelector } from '../../helpers/shadow-assert';
+import CardPrerender from '@cardstack/host/components/card-prerender';
 import type LoaderService from '@cardstack/host/services/loader-service';
-
-class MockLocalRealm extends Service {
-  isAvailable = true;
-  url = new URL(testRealmURL);
-}
 
 module('Integration | schema', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
 
   setupRenderingTest(hooks);
+  setupMockLocalRealm(hooks);
   setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
 
   hooks.beforeEach(async function() {
@@ -36,11 +32,10 @@ module('Integration | schema', function (hooks) {
       new URL('http://localhost:4201/base/')
     );
     adapter = new TestRealmAdapter({});
-    realm = TestRealm.createWithAdapter(adapter);
+    realm = await TestRealm.createWithAdapter(adapter, this.owner);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
-    this.owner.register('service:local-realm', MockLocalRealm);
   })
 
   test('renders card schema view', async function (assert) {
@@ -58,6 +53,7 @@ module('Integration | schema', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <Module @file={{openFile}}/>
+          <CardPrerender/>
         </template>
       }
     );
@@ -94,6 +90,7 @@ module('Integration | schema', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <Module @file={{openFile}}/>
+          <CardPrerender/>
         </template>
       }
     );
@@ -119,6 +116,7 @@ module('Integration | schema', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <Module @file={{openFile}}/>
+          <CardPrerender/>
         </template>
       }
     );
@@ -161,6 +159,7 @@ module('Integration | schema', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <Module @file={{openFile}}/>
+          <CardPrerender/>
         </template>
       }
     );
@@ -233,6 +232,7 @@ module('Integration | schema', function (hooks) {
         <template>
           <Module @file={{openFile}}/>
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );
@@ -291,6 +291,7 @@ module('Integration | schema', function (hooks) {
         <template>
           <Module @file={{openFile}}/>
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );
@@ -345,6 +346,7 @@ module('Integration | schema', function (hooks) {
         <template>
           <Module @file={{openFile}}/>
           <CardCatalogModal />
+          <CardPrerender/>
         </template>
       }
     );

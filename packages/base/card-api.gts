@@ -1157,7 +1157,13 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
           if (recomputePromises.get(card) !== recomputePromise) {
             return;
           }
-          if (isCard(value) && !stack.includes(value)) {
+          if (Array.isArray(value)) {
+            for (let item of value) {
+              if (item && isCard(item) && !stack.includes(item)) {
+                await _loadModel(item, [item, ...stack]);
+              }
+            }
+          } else if (isCard(value) && !stack.includes(value)) {
             await _loadModel(value, [value, ...stack]);
           }
         }

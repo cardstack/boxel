@@ -3,8 +3,7 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
-import type RouterService from '@ember/routing/router-service';
-
+import { LocalRealmAdapter } from '@cardstack/worker/src/local-realm-adapter';
 import {
   isWorkerMessage,
   DirectoryHandleResponse,
@@ -13,10 +12,25 @@ import {
 import { timeout } from '@cardstack/worker/src/util';
 import { Deferred } from '@cardstack/runtime-common';
 import { TaskInstance } from 'ember-resources';
-import WorkerRenderer from './worker-renderer';
+import IndexerService from './indexer-service';
+import type RouterService from '@ember/routing/router-service';
+import {
+  serializeRunState,
+  deserializeRunState,
+  type SearchEntryWithErrors,
+  type RunState,
+} from '@cardstack/runtime-common/search-index';
 
 export default class LocalRealm extends Service {
-  realmMappings = new Map<string, string>();
+  #setEntryDeferred: Deferred<void> | undefined;
+  #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
+  #incremental:
+    | ((
+        prev: RunState,
+        url: URL,
+        operation: 'update' | 'delete'
+      ) => Promise<RunState>)
+    | undefined;
 
   constructor(properties: object) {
     super(properties);
@@ -48,17 +62,65 @@ export default class LocalRealm extends Service {
         }
         break;
       case 'available':
-        if (data.type === 'visitRequest') {
-          let { id, path, staticResponses } = data;
+        if (data.type === 'setEntryAcknowledged') {
+          if (!this.#setEntryDeferred) {
+            throw new Error(
+              `received setEntry acknowledgement without corresponding setEntry request`
+            );
+          }
+          this.#setEntryDeferred.fulfill();
+          return;
+        }
+        if (data.type === 'startFromScratch') {
+          if (!this.#fromScratch) {
+            throw new Error(
+              `the fromScratch runner has not been registered with the local realm service`
+            );
+          }
+          let { realmURL } = data;
           let worker = this.state.worker;
-          // might want to keep track of these promises for orderly tear down...
-          this.workerRenderer.visit(path, staticResponses, (html) =>
-            send(worker, { type: 'visitResponse', id, path, html })
+          this.#fromScratch(new URL(realmURL)).then((state) => {
+            send(worker, {
+              type: 'fromScratchCompleted',
+              state: serializeRunState(state),
+            });
+          });
+          return;
+        }
+        if (data.type === 'startIncremental') {
+          if (!this.#incremental) {
+            throw new Error(
+              `the incremental runner has not been registered with the local realm service`
+            );
+          }
+          let { prev, url, operation } = data;
+          let worker = this.state.worker;
+          this.#incremental(
+            deserializeRunState(prev),
+            new URL(url),
+            operation
+          ).then((state) =>
+            send(worker, {
+              type: 'incrementalCompleted',
+              state: serializeRunState(state),
+            })
           );
           return;
         }
     }
     console.log(`did not handle worker message`, data);
+  }
+
+  setupIndexing(
+    fromScratch: (realmURL: URL) => Promise<RunState>,
+    incremental: (
+      prev: RunState,
+      url: URL,
+      operation: 'update' | 'delete'
+    ) => Promise<RunState>
+  ) {
+    this.#fromScratch = fromScratch;
+    this.#incremental = incremental;
   }
 
   @restartableTask private async setup(): Promise<void> {
@@ -82,6 +144,7 @@ export default class LocalRealm extends Service {
         handle,
         worker: this.state.worker,
         url: new URL(url),
+        adapter: new LocalRealmAdapter(handle),
       };
     } else {
       this.state = { type: 'empty', worker: this.state.worker };
@@ -110,6 +173,7 @@ export default class LocalRealm extends Service {
         handle: FileSystemDirectoryHandle;
         url: URL;
         worker: ServiceWorker;
+        adapter: LocalRealmAdapter;
       }
     | {
         type: 'wait-for-worker-handle-receipt';
@@ -120,7 +184,20 @@ export default class LocalRealm extends Service {
 
   @service declare router: RouterService;
   @service declare fastboot: { isFastBoot: boolean };
-  @service declare workerRenderer: WorkerRenderer;
+  @service declare indexerService: IndexerService;
+
+  async setEntry(url: URL, entry: SearchEntryWithErrors) {
+    if (this.state.type !== 'available') {
+      throw new Error(`Cannot setEntry in state ${this.state.type}`);
+    }
+    this.#setEntryDeferred = new Deferred();
+    send(this.state.worker, {
+      type: 'setEntry',
+      url: url.href,
+      entry,
+    });
+    await this.#setEntryDeferred.promise;
+  }
 
   get isAvailable(): boolean {
     this.maybeSetup();
@@ -133,6 +210,16 @@ export default class LocalRealm extends Service {
       throw new Error(`Cannot get url in state ${this.state.type}`);
     }
     return this.state.url;
+  }
+
+  get adapter(): LocalRealmAdapter {
+    this.maybeSetup();
+    if (this.state.type !== 'available') {
+      throw new Error(
+        `Cannot get LocalRealmAdapter in state ${this.state.type}`
+      );
+    }
+    return this.state.adapter;
   }
 
   get isEmpty(): boolean {
@@ -199,8 +286,15 @@ export default class LocalRealm extends Service {
       handle,
     });
     let url = await this.state.wait.promise;
+    let adapter = new LocalRealmAdapter(handle);
 
-    this.state = { type: 'available', handle, worker: this.state.worker, url };
+    this.state = {
+      type: 'available',
+      handle,
+      worker: this.state.worker,
+      url,
+      adapter,
+    };
 
     if (cb) {
       cb();

@@ -6,6 +6,12 @@
  * runtime-common/index.js file.
  */
 
+// Note: even though cards are only run in the host context (via fastboot), we
+// still use these stubs because we deserialize cards in the server which means
+// that the card module is imported, and these externals are seen by the
+// card-api that the card modules depend on. Might be worth auditing all the
+// places where server deserialization happens to see if its really necessary.
+
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS = new Map();
 import * as runtime from "./index";
 (globalThis as any).RUNTIME_SPIKE_EXTERNALS.set(

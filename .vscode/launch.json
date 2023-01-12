@@ -45,19 +45,18 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "start base and host test realms",
+      "name": "start host test realm",
       "skipFiles": ["<node_internals>/**"],
       "program": "./node_modules/.bin/../../../../node_modules/.pnpm/ts-node@10.9.1_wup25etrarvlqkprac7h35hj7u/node_modules/ts-node/dist/bin.js",
       "args": [
         "--transpileOnly",
         "main",
-        "--port=4201",
-        "--path='../base'",
-        "--fromUrl='https://cardstack.com/base/'",
-        "--toUrl='/base/'",
+        "--port=4202",
         "--path='../host/tests/cards'",
         "--fromUrl='/test/'",
-        "--toUrl='/test/'"
+        "--toUrl='/test/'",
+        "--fromUrl='https://cardstack.com/base/'",
+        "--toUrl='http://localhost:4201/base/'"
       ],
       "cwd": "${workspaceFolder}/packages/realm-server",
       "outFiles": ["${workspaceFolder}/**/*.js"],

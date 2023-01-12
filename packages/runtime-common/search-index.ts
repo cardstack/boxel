@@ -1,19 +1,98 @@
-import { baseRealm, internalKeyFor } from ".";
+import {
+  maxLinkDepth,
+  baseRealm,
+  internalKeyFor,
+  type LooseCardResource,
+} from ".";
 import { Kind, Realm } from "./realm";
-import { CurrentRun, SearchEntry } from "./current-run";
-import { LocalPath } from "./paths";
+import { LocalPath, RealmPaths } from "./paths";
+import { Loader } from "./loader";
 import { Query, Filter, Sort } from "./query";
-import { type SerializedError } from "./error";
+import { CardError, type SerializedError } from "./error";
+import { URLMap } from "./url-map";
 import flatMap from "lodash/flatMap";
+import { type Ignore } from "ignore";
 import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import { type CardRef, getField, identifyCard, loadCard } from "./card-ref";
 import {
+  isSingleCardDocument,
   type SingleCardDocument,
   type CardCollectionDocument,
   type CardResource,
   type Saved,
 } from "./card-document";
+
+export interface Reader {
+  readFileAsText: (
+    path: LocalPath,
+    opts?: { withFallbacks?: true }
+  ) => Promise<{ content: string; lastModified: number } | undefined>;
+  readdir: (
+    path: string
+  ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
+}
+
+export interface Stats {
+  instancesIndexed: number;
+  instanceErrors: number;
+  moduleErrors: number;
+}
+
+export interface RunState {
+  realmURL: URL;
+  instances: URLMap<SearchEntryWithErrors>;
+  ignoreMap: URLMap<Ignore>;
+  modules: Map<string, ModuleWithErrors>;
+  stats: Stats;
+}
+
+export interface SerializableRunState {
+  realmURL: string;
+  instances: [string, SearchEntryWithErrors][];
+  ignoreMap: [string, Ignore][];
+  modules: [string, ModuleWithErrors][];
+  stats: Stats;
+}
+
+export type RunnerRegistration = (
+  fromScratch: (realmURL: URL) => Promise<RunState>,
+  incremental: (
+    prev: RunState,
+    url: URL,
+    operation: "update" | "delete"
+  ) => Promise<RunState>
+) => Promise<void>;
+
+export type EntrySetter = (url: URL, entry: SearchEntryWithErrors) => void;
+
+export interface RunnerOpts {
+  _fetch: typeof fetch;
+  reader: Reader;
+  entrySetter: EntrySetter;
+  registerRunner: RunnerRegistration;
+}
+export type IndexRunner = () => Promise<void>;
+
+export interface SearchEntry {
+  resource: CardResource;
+  searchData: Record<string, any>;
+  html?: string; // we don't have this until after the indexer route is rendered...
+  types: string[];
+  deps: Set<string>;
+}
+
+export type SearchEntryWithErrors =
+  | { type: "entry"; entry: SearchEntry }
+  | { type: "error"; error: SerializedError };
+
+export interface Module {
+  url: string;
+  consumes: string[];
+}
+export type ModuleWithErrors =
+  | { type: "module"; module: Module }
+  | { type: "error"; moduleURL: string; error: SerializedError };
 
 interface Options {
   loadLinks?: true;
@@ -29,8 +108,23 @@ interface SearchResultError {
   error: SerializedError;
 }
 
+type CurrentIndex = RunState & {
+  loader: Loader;
+};
+
 export class SearchIndex {
-  #currentRun: CurrentRun;
+  #runner: IndexRunner;
+  #setRunnerOpts: (opts: RunnerOpts) => void;
+  #reader: Reader;
+  #index: CurrentIndex;
+  #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
+  #incremental:
+    | ((
+        prev: RunState,
+        url: URL,
+        operation: "update" | "delete"
+      ) => Promise<RunState>)
+    | undefined;
 
   constructor(
     realm: Realm,
@@ -41,36 +135,93 @@ export class SearchIndex {
       path: LocalPath,
       opts?: { withFallbacks?: true }
     ) => Promise<{ content: string; lastModified: number } | undefined>,
-    getVisitor: (
-      _fetch: typeof fetch,
-      staticResponses: Map<string, string>
-    ) => (url: string) => Promise<string>
+    runner: IndexRunner,
+    setRunnerOpts: (opts: RunnerOpts) => void
   ) {
-    this.#currentRun = new CurrentRun({
-      realm,
-      reader: { readdir, readFileAsText },
-      getVisitor,
-    });
-  }
-
-  async run() {
-    await CurrentRun.fromScratch(this.#currentRun);
+    this.#reader = { readdir, readFileAsText };
+    this.#setRunnerOpts = setRunnerOpts;
+    this.#runner = runner;
+    this.#index = {
+      realmURL: new URL(realm.url),
+      loader: Loader.createLoaderFromGlobal(),
+      ignoreMap: new URLMap(),
+      instances: new URLMap(),
+      modules: new Map(),
+      stats: {
+        instancesIndexed: 0,
+        instanceErrors: 0,
+        moduleErrors: 0,
+      },
+    };
   }
 
   get stats() {
-    return this.#currentRun.stats;
+    return this.#index.stats;
   }
 
   get loader() {
-    return this.#currentRun.loader;
+    return this.#index.loader;
+  }
+
+  get runState() {
+    return this.#index;
+  }
+
+  async run() {
+    await this.setupRunner(async () => {
+      if (!this.#fromScratch) {
+        throw new Error(`Index runner has not been registered`);
+      }
+      let current = await this.#fromScratch(this.#index.realmURL);
+      this.#index = {
+        ...this.#index, // don't clobber the instances that the entrySetter has already made
+        modules: current.modules,
+        ignoreMap: current.ignoreMap,
+        realmURL: current.realmURL,
+        stats: current.stats,
+        loader: Loader.createLoaderFromGlobal(),
+      };
+    });
   }
 
   async update(url: URL, opts?: { delete?: true }): Promise<void> {
-    this.#currentRun = await CurrentRun.incremental(
-      url,
-      opts?.delete ? "delete" : "update",
-      this.#currentRun
-    );
+    await this.setupRunner(async () => {
+      if (!this.#incremental) {
+        throw new Error(`Index runner has not been registered`);
+      }
+      let current = await this.#incremental(
+        this.#index,
+        url,
+        opts?.delete ? "delete" : "update"
+      );
+      this.#index = {
+        // we overwrite the instances in the incremental update, as there may
+        // have been instance removals due to invalidation that the entrySetter
+        // cannot accommodate in its current form
+        instances: current.instances,
+        modules: current.modules,
+        ignoreMap: current.ignoreMap,
+        realmURL: current.realmURL,
+        stats: current.stats,
+        loader: Loader.createLoaderFromGlobal(),
+      };
+    });
+  }
+
+  private async setupRunner(start: () => Promise<void>) {
+    this.#setRunnerOpts({
+      _fetch: this.loader.fetch.bind(this.loader),
+      reader: this.#reader,
+      entrySetter: (url, entry) => {
+        this.#index.instances.set(url, entry);
+      },
+      registerRunner: async (fromScratch, incremental) => {
+        this.#fromScratch = fromScratch;
+        this.#incremental = incremental;
+        await start();
+      },
+    });
+    await this.#runner();
   }
 
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
@@ -80,7 +231,7 @@ export class SearchIndex {
     });
 
     let doc: CardCollectionDocument = {
-      data: flatMap([...this.#currentRun.instances.values()], (maybeError) =>
+      data: flatMap([...this.#index.instances.values()], (maybeError) =>
         maybeError.type !== "error" ? [maybeError.entry] : []
       )
         .filter(matcher)
@@ -95,7 +246,14 @@ export class SearchIndex {
     if (opts?.loadLinks) {
       let included: CardResource<Saved>[] = [];
       for (let resource of doc.data) {
-        included = await this.#currentRun.loadLinks(resource, omit, included);
+        included = await loadLinks({
+          realmURL: this.#index.realmURL,
+          instances: this.#index.instances,
+          loader: this.loader,
+          resource,
+          omit,
+          included,
+        });
       }
       if (included.length > 0) {
         doc.included = included;
@@ -106,11 +264,11 @@ export class SearchIndex {
   }
 
   public isIgnored(url: URL): boolean {
-    return this.#currentRun.isIgnored(url);
+    return isIgnored(this.#index.realmURL, this.#index.ignoreMap, url);
   }
 
   async card(url: URL, opts?: Options): Promise<SearchResult | undefined> {
-    let card = this.#currentRun.instances.get(url);
+    let card = this.#index.instances.get(url);
     if (!card) {
       return undefined;
     }
@@ -121,7 +279,13 @@ export class SearchIndex {
       data: { ...card.entry.resource, ...{ links: { self: url.href } } },
     };
     if (opts?.loadLinks) {
-      let included = await this.#currentRun.loadLinks(doc.data, [doc.data.id]);
+      let included = await loadLinks({
+        realmURL: this.#index.realmURL,
+        instances: this.#index.instances,
+        loader: this.loader,
+        resource: doc.data,
+        omit: [doc.data.id],
+      });
       if (included.length > 0) {
         doc.included = included;
       }
@@ -131,7 +295,7 @@ export class SearchIndex {
 
   // this is meant for tests only
   async searchEntry(url: URL): Promise<SearchEntry | undefined> {
-    let result = this.#currentRun.instances.get(url);
+    let result = this.#index.instances.get(url);
     if (result?.type !== "error") {
       return result?.entry;
     }
@@ -372,6 +536,151 @@ export class SearchIndex {
 
     throw new Error("Unknown filter");
   }
+}
+
+// TODO The caller should provide a list of fields to be included via JSONAPI
+// request. currently we just use the maxLinkDepth to control how deep to load
+// links
+export async function loadLinks({
+  realmURL,
+  instances,
+  loader,
+  resource,
+  omit = [],
+  included = [],
+  visited = [],
+  stack = [],
+}: {
+  realmURL: URL;
+  instances: URLMap<SearchEntryWithErrors>;
+  loader: Loader;
+  resource: LooseCardResource;
+  omit?: string[];
+  included?: CardResource<Saved>[];
+  visited?: string[];
+  stack?: string[];
+}): Promise<CardResource<Saved>[]> {
+  if (resource.id != null) {
+    if (visited.includes(resource.id)) {
+      return [];
+    }
+    visited.push(resource.id);
+  }
+  let realmPath = new RealmPaths(realmURL);
+  for (let [fieldName, relationship] of Object.entries(
+    resource.relationships ?? {}
+  )) {
+    if (!relationship.links.self) {
+      continue;
+    }
+    let linkURL = new URL(relationship.links.self);
+    let linkResource: CardResource<Saved> | undefined;
+    if (realmPath.inRealm(linkURL)) {
+      let maybeEntry = instances.get(new URL(relationship.links.self));
+      linkResource =
+        maybeEntry?.type === "entry" ? maybeEntry.entry.resource : undefined;
+    } else {
+      let response = await loader.fetch(linkURL, {
+        headers: { Accept: "application/vnd.api+json" },
+      });
+      if (!response.ok) {
+        let cardError = await CardError.fromFetchResponse(
+          linkURL.href,
+          response
+        );
+        throw cardError;
+      }
+      let json = await response.json();
+      if (!isSingleCardDocument(json)) {
+        throw new Error(
+          `instance ${
+            linkURL.href
+          } is not a card document. it is: ${JSON.stringify(json, null, 2)}`
+        );
+      }
+      linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
+    }
+    let foundLinks = false;
+    if (linkResource && stack.length <= maxLinkDepth) {
+      for (let includedResource of await loadLinks({
+        realmURL,
+        instances,
+        loader,
+        resource: linkResource,
+        omit,
+        included: [...included, linkResource],
+        visited,
+        stack: [...(resource.id != null ? [resource.id] : []), ...stack],
+      })) {
+        foundLinks = true;
+        if (
+          !omit.includes(includedResource.id) &&
+          !included.find((r) => r.id === includedResource.id)
+        ) {
+          included.push({
+            ...includedResource,
+            ...{ links: { self: includedResource.id } },
+          });
+        }
+      }
+    }
+    if (foundLinks || omit.includes(relationship.links.self)) {
+      resource.relationships![fieldName].data = {
+        type: "card",
+        id: relationship.links.self,
+      };
+    }
+  }
+  return included;
+}
+
+export function isIgnored(
+  realmURL: URL,
+  ignoreMap: URLMap<Ignore>,
+  url: URL
+): boolean {
+  if (url.href === realmURL.href) {
+    return false; // you can't ignore the entire realm
+  }
+  if (ignoreMap.size === 0) {
+    return false;
+  }
+  // Test URL against closest ignore. (Should the ignores cascade? so that the
+  // child ignore extends the parent ignore?)
+  let ignoreURLs = [...ignoreMap.keys()].map((u) => u.href);
+  let matchingIgnores = ignoreURLs.filter((u) => url.href.includes(u));
+  let ignoreURL = matchingIgnores.sort((a, b) => b.length - a.length)[0] as
+    | string
+    | undefined;
+  if (!ignoreURL) {
+    return false;
+  }
+  let ignore = ignoreMap.get(new URL(ignoreURL))!;
+  let realmPath = new RealmPaths(realmURL);
+  let pathname = realmPath.local(url);
+  return ignore.test(pathname).ignored;
+}
+
+export function serializeRunState(state: RunState): SerializableRunState {
+  let { modules, instances, realmURL, ignoreMap, stats } = state;
+  return {
+    stats,
+    realmURL: realmURL.href,
+    modules: [...modules],
+    instances: [...instances].map(([k, v]) => [k.href, v]),
+    ignoreMap: [...ignoreMap].map(([k, v]) => [k.href, v]),
+  };
+}
+
+export function deserializeRunState(state: SerializableRunState): RunState {
+  let { modules, instances, realmURL, ignoreMap, stats } = state;
+  return {
+    realmURL: new URL(realmURL),
+    stats,
+    modules: new Map(modules),
+    instances: new URLMap(instances.map(([k, v]) => [new URL(k), v])),
+    ignoreMap: new URLMap(ignoreMap.map(([k, v]) => [new URL(k), v])),
+  };
 }
 
 // three-valued version of Array.every that propagates nulls. Here, the presence

@@ -7,6 +7,7 @@ import {
   Realm,
 } from "@cardstack/runtime-common";
 import { createRealm, testRealm, setupCardLogs } from "./helpers";
+import isEqual from "lodash/isEqual";
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, " ").trim();
@@ -152,7 +153,7 @@ module("indexing", function (hooks) {
     assert.strictEqual(
       cleanWhiteSpace(entry!.html!),
       cleanWhiteSpace(`
-          <div data-test-shadow-component>
+          <div data-test-shadow-boundary>
             <h1> Mango </h1>
           </div>
         `),
@@ -185,13 +186,13 @@ module("indexing", function (hooks) {
       },
     });
     assert.strictEqual(result.length, 1, "found updated document");
-    assert.deepEqual(
-      realm.searchIndex.stats,
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 1,
         instanceErrors: 0,
         moduleErrors: 0,
-      },
+      }),
       "indexed correct number of files"
     );
   });
@@ -210,13 +211,13 @@ module("indexing", function (hooks) {
           throw new Error('boom!');
         `
     );
-    assert.deepEqual(
-      realm.searchIndex.stats,
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
         instanceErrors: 1,
         moduleErrors: 1,
-      },
+      }),
       "indexed correct number of files"
     );
     await realm.write(
@@ -226,13 +227,13 @@ module("indexing", function (hooks) {
           export class IntentionallyThrownError {
         `
     );
-    assert.deepEqual(
-      realm.searchIndex.stats,
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
         instanceErrors: 3, // 1 post, 2 persons
         moduleErrors: 3, // post, fancy person, person
-      },
+      }),
       "indexed correct number of files"
     );
     let { data: result } = await realm.searchIndex.search({
@@ -256,13 +257,13 @@ module("indexing", function (hooks) {
           }
         `
     );
-    assert.deepEqual(
-      realm.searchIndex.stats,
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 3, // 1 post and 2 persons
         instanceErrors: 0,
         moduleErrors: 0,
-      },
+      }),
       "indexed correct number of files"
     );
     result = (
@@ -289,13 +290,13 @@ module("indexing", function (hooks) {
       },
     });
     assert.strictEqual(result.length, 0, "found no documents");
-    assert.deepEqual(
-      realm.searchIndex.stats,
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
         instanceErrors: 0,
         moduleErrors: 0,
-      },
+      }),
       "index did not touch any files"
     );
   });
@@ -327,13 +328,13 @@ module("indexing", function (hooks) {
       },
     });
     assert.strictEqual(result.length, 1, "found updated document");
-    assert.deepEqual(
-      realm.searchIndex.stats,
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 1,
         instanceErrors: 0,
         moduleErrors: 0,
-      },
+      }),
       "indexed correct number of files"
     );
   });
@@ -363,13 +364,13 @@ module("indexing", function (hooks) {
       },
     });
     assert.strictEqual(result.length, 1, "found updated document");
-    assert.deepEqual(
-      realm.searchIndex.stats,
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 3,
         instanceErrors: 0,
         moduleErrors: 0,
-      },
+      }),
       "indexed correct number of files"
     );
   });
@@ -392,9 +393,9 @@ module("indexing", function (hooks) {
     if (actual?.type === "error") {
       assert.ok(actual.error.stack, "stack trace is included");
       delete actual.error.stack;
-      assert.deepEqual(
-        await realm.searchIndex.card(new URL(`${testRealm}post-1`)),
-        {
+      assert.ok(
+        // assert.deepEqual returns false because despite having the same shape, the constructors are different
+        isEqual(await realm.searchIndex.card(new URL(`${testRealm}post-1`)), {
           type: "error",
           error: {
             isCardError: true,
@@ -405,19 +406,19 @@ module("indexing", function (hooks) {
             title: "Not Found",
             deps: ["http://test-realm/post"],
           },
-        },
+        }),
         "card instance is an error document"
       );
     } else {
       assert.ok(false, "search index entry is not an error document");
     }
-    assert.deepEqual(
-      realm.searchIndex.stats,
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
         instanceErrors: 1,
         moduleErrors: 0,
-      },
+      }),
       "indexed correct number of files"
     );
 
@@ -449,13 +450,13 @@ module("indexing", function (hooks) {
       });
       assert.strictEqual(result.length, 1, "found the post instance");
     }
-    assert.deepEqual(
-      realm.searchIndex.stats,
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 1,
         instanceErrors: 0,
         moduleErrors: 0,
-      },
+      }),
       "indexed correct number of files"
     );
   });
