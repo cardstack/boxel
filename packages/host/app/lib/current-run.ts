@@ -321,7 +321,7 @@ export class CurrentRun {
         let linkURL = new URL(`${notLoadedErr.reference}.json`);
         if (this.#realmPaths.inRealm(linkURL)) {
           await this.visitFile(linkURL, identityContext, [fileURL, ...stack]);
-          await api.recompute(card, { loadFields: true });
+          await this.recomputeCard(card, fileURL, identityContext, stack);
         } else {
           // in this case the instance we are linked to is a missing instance
           // in an external realm.
