@@ -226,6 +226,7 @@ export class Realm {
       return new Response(ref.content, {
         headers: {
           "last-modified": formatRFC7231(ref.lastModified),
+          vary: "Accept",
         },
       });
     }
@@ -238,6 +239,7 @@ export class Realm {
     let response = new Response(null, {
       headers: {
         "last-modified": formatRFC7231(ref.lastModified),
+        vary: "Accept",
       },
     }) as ResponseWithNodeStream;
     response.nodeStream = ref.content;
@@ -253,6 +255,7 @@ export class Realm {
       status: 204,
       headers: {
         "last-modified": formatRFC7231(lastModified),
+        vary: "Accept",
       },
     });
   }
@@ -271,6 +274,7 @@ export class Realm {
         status: 302,
         headers: {
           Location: `/${handle.path}`,
+          vary: "Accept",
         },
       });
     }
@@ -337,6 +341,7 @@ export class Realm {
       status: 200,
       headers: {
         "content-type": "text/javascript",
+        vary: "Accept",
       },
     });
   }
@@ -429,6 +434,7 @@ export class Realm {
       status: 201,
       headers: {
         "content-type": "application/vnd.api+json",
+        vary: "Accept",
         ...lastModifiedHeader(doc),
       },
     });
@@ -492,6 +498,7 @@ export class Realm {
     return new Response(JSON.stringify(doc, null, 2), {
       headers: {
         "content-type": "application/vnd.api+json",
+        vary: "Accept",
         ...lastModifiedHeader(doc),
       },
     });
@@ -519,6 +526,7 @@ export class Realm {
       headers: {
         "last-modified": formatRFC7231(card.data.meta.lastModified!),
         "content-type": "application/vnd.api+json",
+        vary: "Accept",
         ...lastModifiedHeader(card),
       },
     });
@@ -602,7 +610,7 @@ export class Realm {
     }
 
     return new Response(JSON.stringify({ data }, null, 2), {
-      headers: { "content-type": "application/vnd.api+json" },
+      headers: { "content-type": "application/vnd.api+json", vary: "Accept" },
     });
   }
 
@@ -665,7 +673,7 @@ export class Realm {
       { loadLinks: true }
     );
     return new Response(JSON.stringify(doc, null, 2), {
-      headers: { "content-type": "application/vnd.api+json" },
+      headers: { "content-type": "application/vnd.api+json", vary: "Accept" },
     });
   }
 

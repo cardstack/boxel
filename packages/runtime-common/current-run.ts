@@ -214,6 +214,7 @@ export class CurrentRun {
           status: 200,
           headers: {
             "content-type": "application/vnd.api+json",
+            vary: "Accept",
           },
         })
       );
