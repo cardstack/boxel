@@ -4,16 +4,13 @@ import { type FastBootInstance } from "@cardstack/runtime-common";
 import { type IndexRunner } from "@cardstack/runtime-common/search-index";
 
 export function makeFastBootIndexRunner(distPath: string): IndexRunner {
-  return async ({ _fetch, resolver, reader, entrySetter, registerRunner }) => {
-    // something to think about--if there is a dramatic performance hit for
-    // creating a new fastboot instance for each current run, maybe we can look
-    // at reusing an existing fastboot instances? we could use the loader
-    // service in the ember app within the fastboot VM to reset the loader
-    // instead of making a new fastboot instance. Although we'd need to be
-    // careful about fastboot instances shared by different current runs. we
-    // wouldn't want loader state to bleed into different current runs. maybe
-    // the idea is that we could lazily create a pool of fastboot instances that
-    // we reuse after the current run's lifetime.
+  return async ({ _fetch, reader, entrySetter, registerRunner }) => {
+    // TODO we should be able to hoist the creation of the fastboot service to
+    // outside of this function. However, the fetch that gets passed in will
+    // probably have to be a function that lazily gets the fetch, as each
+    // current run will likely have an outside fetch that could be different.
+    // The registerRunnner and entrySetter may fall into the same boat since we
+    // wont have these available yet outside of this function.
     let fastboot = new FastBoot({
       distPath,
       resilient: false,
@@ -24,7 +21,6 @@ export function makeFastBootIndexRunner(distPath: string): IndexRunner {
           Response: globalThis.Response,
           fetch: _fetch,
           btoa,
-          resolver,
           reader,
           entrySetter,
           registerRunner,

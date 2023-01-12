@@ -1,6 +1,6 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { Loader, type ResolvedURL } from '@cardstack/runtime-common/loader';
+import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 
 export default class LoaderService extends Service {
@@ -18,20 +18,7 @@ export default class LoaderService extends Service {
 
   private makeInstance() {
     if (this.fastboot.isFastBoot) {
-      return this.makeProxiedLoader(
-        new Loader(
-          (globalThis as any).resolver as {
-            resolve: (
-              moduleIdentifier: string | URL,
-              relativeTo?: URL
-            ) => ResolvedURL;
-            reverseResolution: (
-              moduleIdentifier: string | ResolvedURL,
-              relativeTo?: URL
-            ) => URL;
-          }
-        )
-      );
+      return this.makeProxiedLoader(new Loader());
     }
 
     let loader = Loader.createLoaderFromGlobal();

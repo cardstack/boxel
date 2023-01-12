@@ -6,7 +6,7 @@ import {
 } from ".";
 import { Kind, Realm } from "./realm";
 import { LocalPath, RealmPaths } from "./paths";
-import { Loader, ResolvedURL } from "./loader";
+import { Loader } from "./loader";
 import { Query, Filter, Sort } from "./query";
 import { CardError, type SerializedError } from "./error";
 import { URLMap } from "./url-map";
@@ -68,14 +68,6 @@ export type EntrySetter = (url: URL, entry: SearchEntryWithErrors) => void;
 
 interface RunnerOpts {
   _fetch: typeof fetch;
-  // TODO remove this and address this resolution in the babel transpile
-  resolver: {
-    resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL;
-    reverseResolution(
-      moduleIdentifier: string | ResolvedURL,
-      relativeTo?: URL
-    ): URL;
-  };
   reader: Reader;
   entrySetter: EntrySetter;
   registerRunner: RunnerRegistration;
@@ -213,10 +205,6 @@ export class SearchIndex {
   private async setupRunner(start: () => Promise<void>) {
     await this.#runner({
       _fetch: this.loader.fetch.bind(this.loader),
-      resolver: {
-        resolve: this.loader.resolve.bind(this.loader),
-        reverseResolution: this.loader.reverseResolution.bind(this.loader),
-      },
       reader: this.#reader,
       entrySetter: (url, entry) => {
         this.#index.instances.set(url, entry);
