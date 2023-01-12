@@ -267,11 +267,9 @@ export class CurrentRun {
       module = await this.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
-      if ((globalThis as any).process?.env?.SUPPRESS_ERRORS !== 'true') {
-        console.warn(
-          `encountered error loading module "${url.href}": ${err.message}`
-        );
-      }
+      console.warn(
+        `encountered error loading module "${url.href}": ${err.message}`
+      );
       let deps = await (
         await this.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
@@ -459,11 +457,9 @@ export class CurrentRun {
         deferred.reject(err);
         throw err;
       }
-      if ((globalThis as any).process?.env?.SUPPRESS_ERRORS !== 'true') {
-        console.warn(
-          `encountered error indexing card instance ${path}: ${error.error.detail}`
-        );
-      }
+      console.warn(
+        `encountered error indexing card instance ${path}: ${error.error.detail}`
+      );
       this.setInstance(instanceURL, error);
       deferred.fulfill();
     }
