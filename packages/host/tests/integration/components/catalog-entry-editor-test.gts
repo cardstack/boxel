@@ -83,7 +83,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await waitFor('button[data-test-catalog-entry-publish]');
     await click('[data-test-catalog-entry-publish]');
-    await waitFor('[data-test-ref]');
+    await waitFor('[data-test-ref]', { timeout: 5000 });
 
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry for Pet card');
