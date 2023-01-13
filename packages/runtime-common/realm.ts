@@ -179,7 +179,11 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
+  async handle(
+    request: MaybeLocalRequest,
+    response: Response
+  ): Promise<ResponseWithNodeStream> {
+    response.headers.set("vary", "Accept");
     let url = new URL(request.url);
     let accept = request.headers.get("Accept");
     if (url.search.length > 0) {
@@ -196,11 +200,11 @@ export class Realm {
       if (!this.searchIndex) {
         return systemError("search index is not available");
       }
-      return this.#jsonAPIRouter.handle(request);
+      return this.#jsonAPIRouter.handle(request, response);
     } else if (
       request.headers.get("Accept")?.includes("application/vnd.card+source")
     ) {
-      return this.#cardSourceRouter.handle(request);
+      return this.#cardSourceRouter.handle(request, response);
     }
 
     let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
@@ -216,11 +220,14 @@ export class Realm {
     ) {
       return this.makeJS(await fileContentToText(handle), handle.path);
     } else {
-      return await this.serveLocalFile(handle);
+      return await this.serveLocalFile(handle, response);
     }
   }
 
-  private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {
+  private async serveLocalFile(
+    ref: FileRef,
+    response: ResponseWithNodeStream
+  ): Promise<ResponseWithNodeStream> {
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||
@@ -228,8 +235,8 @@ export class Realm {
     ) {
       return new Response(ref.content, {
         headers: {
+          ...response.headers,
           "last-modified": formatRFC7231(ref.lastModified),
-          vary: "Accept",
         },
       });
     }
@@ -239,17 +246,15 @@ export class Realm {
     }
 
     // add the node stream to the response which will get special handling in the node env
-    let response = new Response(null, {
-      headers: {
-        "last-modified": formatRFC7231(ref.lastModified),
-        vary: "Accept",
-      },
-    }) as ResponseWithNodeStream;
+    response.headers.set("last-modified", formatRFC7231(ref.lastModified));
     response.nodeStream = ref.content;
     return response;
   }
 
-  private async upsertCardSource(request: Request): Promise<Response> {
+  private async upsertCardSource(
+    request: Request,
+    response: Response
+  ): Promise<Response> {
     let { lastModified } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text()
@@ -257,14 +262,15 @@ export class Realm {
     return new Response(null, {
       status: 204,
       headers: {
+        ...response.headers,
         "last-modified": formatRFC7231(lastModified),
-        vary: "Accept",
       },
     });
   }
 
   private async getCardSourceOrRedirect(
-    request: Request
+    request: Request,
+    res: Response
   ): Promise<ResponseWithNodeStream> {
     let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
@@ -276,12 +282,12 @@ export class Realm {
       return new Response(null, {
         status: 302,
         headers: {
+          ...res.headers,
           Location: `/${handle.path}`,
-          vary: "Accept",
         },
       });
     }
-    return await this.serveLocalFile(handle);
+    return await this.serveLocalFile(handle, res);
   }
 
   private async removeCardSource(request: Request): Promise<Response> {
@@ -344,7 +350,6 @@ export class Realm {
       status: 200,
       headers: {
         "content-type": "text/javascript",
-        vary: "Accept",
       },
     });
   }
@@ -360,7 +365,10 @@ export class Realm {
     );
   }
 
-  private async createCard(request: Request): Promise<Response> {
+  private async createCard(
+    request: Request,
+    response: Response
+  ): Promise<Response> {
     let body = await request.text();
     let json;
     try {
@@ -426,14 +434,17 @@ export class Realm {
     return new Response(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
+        ...response.headers,
         "content-type": "application/vnd.api+json",
-        vary: "Accept",
         ...lastModifiedHeader(doc),
       },
     });
   }
 
-  private async patchCard(request: Request): Promise<Response> {
+  private async patchCard(
+    request: Request,
+    response: Response
+  ): Promise<Response> {
     // strip off query params
     let localPath = this.paths.local(
       new URL(new URL(request.url).pathname, request.url)
@@ -490,14 +501,17 @@ export class Realm {
     });
     return new Response(JSON.stringify(doc, null, 2), {
       headers: {
+        ...response.headers,
         "content-type": "application/vnd.api+json",
-        vary: "Accept",
         ...lastModifiedHeader(doc),
       },
     });
   }
 
-  private async getCard(request: Request): Promise<Response> {
+  private async getCard(
+    request: Request,
+    response: Response
+  ): Promise<Response> {
     // strip off query params
     let localPath = this.paths.local(
       new URL(new URL(request.url).pathname, request.url)
@@ -517,9 +531,9 @@ export class Realm {
     card.data.links = { self: url.href };
     return new Response(JSON.stringify(card, null, 2), {
       headers: {
+        ...response.headers,
         "last-modified": formatRFC7231(card.data.meta.lastModified!),
         "content-type": "application/vnd.api+json",
-        vary: "Accept",
         ...lastModifiedHeader(card),
       },
     });
@@ -562,7 +576,10 @@ export class Realm {
     return entries;
   }
 
-  private async getDirectoryListing(request: Request): Promise<Response> {
+  private async getDirectoryListing(
+    request: Request,
+    response: Response
+  ): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
     let localPath: LocalPath = this.paths.local(new URL(request.url));
     let url = this.paths.directoryURL(localPath);
@@ -603,7 +620,10 @@ export class Realm {
     }
 
     return new Response(JSON.stringify({ data }, null, 2), {
-      headers: { "content-type": "application/vnd.api+json", vary: "Accept" },
+      headers: {
+        ...response.headers,
+        "content-type": "application/vnd.api+json",
+      },
     });
   }
 
@@ -623,13 +643,19 @@ export class Realm {
     return this.#searchIndex.isIgnored(url);
   }
 
-  private async search(request: Request): Promise<Response> {
+  private async search(
+    request: Request,
+    response: Response
+  ): Promise<Response> {
     let doc = await this.#searchIndex.search(
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true }
     );
     return new Response(JSON.stringify(doc, null, 2), {
-      headers: { "content-type": "application/vnd.api+json", vary: "Accept" },
+      headers: {
+        ...response.headers,
+        "content-type": "application/vnd.api+json",
+      },
     });
   }
 

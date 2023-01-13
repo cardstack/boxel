@@ -54,7 +54,6 @@ export default class LoaderService extends Service {
                   status: 200,
                   headers: {
                     'content-type': 'application/vnd.api+json',
-                    vary: 'Accept',
                   },
                 })
               );
