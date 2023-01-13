@@ -1,0 +1,114 @@
+name: CI [boxel]
+
+on:
+  # FIXME pull_request is for development only, should be a workflow_dispatch
+  pull_request:
+    paths:
+      - "waypoint.hcl"
+
+env:
+  PNPM_VERSION: 7.2.1
+
+  # This controls what version of node first boots pnpm, but pnpm itself will
+  # read the .npmrc file and download a different version if they don't match.
+  NODE_VERSION: 18.6.0
+
+  # FIXME this would be in the dispatch event
+  ENVIRONMENT: staging
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm exec build
+        shell: bash
+        working-directory: packages/realm-server
+
+      # FIXME surely this path is wrong
+      - name: Tar artifact
+        run: tar -cvf artifact.tar packages/realm-server/dist
+        shell: bash
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: boxel-realm-server-${{ github.sha }}
+          path: artifact.tar
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [boxel-realm-server-base, boxel-realm-server-demo]
+        include:
+          - retain: "0"
+          - retain: "1"
+            app: hub
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: boxel-realm-server-${{ github.sha }}
+
+      - name: Extract artifact
+        run: tar -xvf artifact.tar
+        shell: bash
+
+      - name: Set up env
+        env:
+          INPUT_ENVIRONMENT: ${{ env.ENVIRONMENT }}
+        run: |
+          if [ "$INPUT_ENVIRONMENT" = "production" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/waypoint" >> $GITHUB_ENV
+            echo "WAYPOINT_SERVER_TOKEN=${{ secrets.PRODUCTION_WAYPOINT_SERVER_TOKEN }}" >> $GITHUB_ENV
+            echo "WAYPOINT_SERVER_ADDR=${{ secrets.PRODUCTION_WAYPOINT_SERVER_ADDR }}" >> $GITHUB_ENV
+            cp waypoint.prod.hcl waypoint.hcl
+          elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/waypoint" >> $GITHUB_ENV
+            echo "WAYPOINT_SERVER_TOKEN=${{ secrets.STAGING_WAYPOINT_SERVER_TOKEN }}" >> $GITHUB_ENV
+            echo "WAYPOINT_SERVER_ADDR=${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}" >> $GITHUB_ENV
+          else
+            echo "unrecognized environment"
+            exit 1;
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Deploy ${{ matrix.app }}
+        uses: cardstack/cardstack/.github/actions/waypoint-deploy@main
+        with:
+          app: ${{ matrix.app }}
+          retain: ${{ matrix.retain }}
+          environment: ${{ env.ENVIRONMENT }}
+          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
+        env:
+          WAYPOINT_SERVER_TLS: "1"
+          WAYPOINT_SERVER_TLS_SKIP_VERIFY: "1"
