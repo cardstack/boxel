@@ -72,7 +72,7 @@ export interface RunnerOpts {
   entrySetter: EntrySetter;
   registerRunner: RunnerRegistration;
 }
-export type IndexRunner = () => Promise<void>;
+export type IndexRunner = (optsId: number) => Promise<void>;
 
 export interface SearchEntry {
   resource: CardResource;
@@ -112,9 +112,39 @@ type CurrentIndex = RunState & {
   loader: Loader;
 };
 
+// This class is used to support concurrent index runs against the same fastboot
+// instance. While each index run calls visit on the fastboot instance and has
+// its own memory space, the globals that are passed into fastboot are shared.
+// This global is what holds loader context (specifically the loader fetch) and
+// index mutators for the fastboot instance. each index run will have a
+// different loader fetch and its own index mutator. in order to keep these from
+// colliding during concurrent indexing we hold each set of fastboot globals in
+// a map that is unique for the index run. When the server visits fastboot it
+// will provide the indexer route with the id for the fastboot global that is
+// specific to the index run.
+let optsId = 0;
+export class RunnerOptionsManager {
+  #opts = new Map<number, RunnerOpts>();
+  setOptions(opts: RunnerOpts): number {
+    let id = optsId++;
+    this.#opts.set(id, opts);
+    return id;
+  }
+  getOptions(id: number): RunnerOpts {
+    let opts = this.#opts.get(id);
+    if (!opts) {
+      throw new Error(`No runner opts for id ${id}`);
+    }
+    return opts;
+  }
+  removeOptions(id: number) {
+    this.#opts.delete(id);
+  }
+}
+
 export class SearchIndex {
   #runner: IndexRunner;
-  #setRunnerOpts: (opts: RunnerOpts) => void;
+  runnerOptsMgr: RunnerOptionsManager;
   #reader: Reader;
   #index: CurrentIndex;
   #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
@@ -136,10 +166,10 @@ export class SearchIndex {
       opts?: { withFallbacks?: true }
     ) => Promise<{ content: string; lastModified: number } | undefined>,
     runner: IndexRunner,
-    setRunnerOpts: (opts: RunnerOpts) => void
+    runnerOptsManager: RunnerOptionsManager
   ) {
     this.#reader = { readdir, readFileAsText };
-    this.#setRunnerOpts = setRunnerOpts;
+    this.runnerOptsMgr = runnerOptsManager;
     this.#runner = runner;
     this.#index = {
       realmURL: new URL(realm.url),
@@ -209,7 +239,7 @@ export class SearchIndex {
   }
 
   private async setupRunner(start: () => Promise<void>) {
-    this.#setRunnerOpts({
+    let optsId = this.runnerOptsMgr.setOptions({
       _fetch: this.loader.fetch.bind(this.loader),
       reader: this.#reader,
       entrySetter: (url, entry) => {
@@ -221,7 +251,8 @@ export class SearchIndex {
         await start();
       },
     });
-    await this.#runner();
+    await this.#runner(optsId);
+    this.runnerOptsMgr.removeOptions(optsId);
   }
 
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {

@@ -5,7 +5,7 @@ import yargs from "yargs";
 import { createRealmServer } from "./server";
 import { resolve, join } from "path";
 import { makeFastBootIndexRunner } from "./fastboot";
-import { type RunnerOpts } from "@cardstack/runtime-common/search-index";
+import { RunnerOptionsManager } from "@cardstack/runtime-common/search-index";
 
 let {
   port,
@@ -69,23 +69,17 @@ let distPath = resolve(dist);
 
 let realms: Realm[] = [];
 for (let [i, path] of paths.entries()) {
-  let runnerOpts: RunnerOpts | undefined;
-  function setRunnerOpts(opts: RunnerOpts) {
-    runnerOpts = opts;
-  }
-  function getRunnerOpts() {
-    if (!runnerOpts) {
-      throw new Error(`RunnerOpts have not been set`);
-    }
-    return runnerOpts;
-  }
-  let getRunner = makeFastBootIndexRunner(distPath, getRunnerOpts);
+  let manager = new RunnerOptionsManager();
+  let getRunner = makeFastBootIndexRunner(
+    distPath,
+    manager.getOptions.bind(manager)
+  );
   realms.push(
     new Realm(
       hrefs[i][0],
       new NodeAdapter(resolve(String(path))),
       getRunner,
-      setRunnerOpts
+      manager
     )
   );
 }

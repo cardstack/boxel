@@ -10,7 +10,13 @@ export default class Indexer extends Route {
   };
   @service declare indexerService: IndexerService;
 
-  async model() {
+  async model(params: { id: string }) {
+    if (params.id == null) {
+      throw new Error(`no runner options id was specified`);
+    }
+    let optsId = parseInt(params.id);
+    // we put this on the global since it needs to be accessible in the loader as well
+    (globalThis as any).runnerOptsId = optsId;
     this.indexerService.indexRunDeferred = new Deferred<void>();
     this.fastboot.deferRendering(this.indexerService.indexRunDeferred.promise);
     return;

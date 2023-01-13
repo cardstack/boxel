@@ -3,24 +3,15 @@ import { NodeAdapter } from "../../node-realm";
 import { resolve, join } from "path";
 import { Realm, LooseSingleCardDocument } from "@cardstack/runtime-common";
 import { makeFastBootIndexRunner } from "../../fastboot";
+import { RunnerOptionsManager } from "@cardstack/runtime-common/search-index";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
-import { type RunnerOpts } from "@cardstack/runtime-common/search-index";
 
 export const testRealm = "http://test-realm/";
 
-let runnerOpts: RunnerOpts | undefined;
-function setRunnerOpts(opts: RunnerOpts) {
-  runnerOpts = opts;
-}
-function getRunnerOpts() {
-  if (!runnerOpts) {
-    throw new Error(`RunnerOpts have not been set`);
-  }
-  return runnerOpts;
-}
+let manager = new RunnerOptionsManager();
 let getRunner = makeFastBootIndexRunner(
   resolve(__dirname, "..", "..", "..", "host", "dist"),
-  getRunnerOpts
+  manager.getOptions.bind(manager)
 );
 
 export function createRealm(
@@ -35,7 +26,7 @@ export function createRealm(
       writeJSONSync(join(dir, filename), contents);
     }
   }
-  return new Realm(realmURL, new NodeAdapter(dir), getRunner, setRunnerOpts);
+  return new Realm(realmURL, new NodeAdapter(dir), getRunner, manager);
 }
 
 export function setupCardLogs(
