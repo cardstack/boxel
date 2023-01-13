@@ -181,9 +181,10 @@ export class Realm {
 
   async handle(
     request: MaybeLocalRequest,
-    response: Response
+    response?: Response
   ): Promise<ResponseWithNodeStream> {
-    response.headers.set("vary", "Accept");
+    let res = response ?? new Response();
+    res.headers.set("vary", "Accept");
     let url = new URL(request.url);
     let accept = request.headers.get("Accept");
     if (url.search.length > 0) {
@@ -200,11 +201,11 @@ export class Realm {
       if (!this.searchIndex) {
         return systemError("search index is not available");
       }
-      return this.#jsonAPIRouter.handle(request, response);
+      return this.#jsonAPIRouter.handle(request, res);
     } else if (
       request.headers.get("Accept")?.includes("application/vnd.card+source")
     ) {
-      return this.#cardSourceRouter.handle(request, response);
+      return this.#cardSourceRouter.handle(request, res);
     }
 
     let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
@@ -220,7 +221,7 @@ export class Realm {
     ) {
       return this.makeJS(await fileContentToText(handle), handle.path);
     } else {
-      return await this.serveLocalFile(handle, response);
+      return await this.serveLocalFile(handle, res);
     }
   }
 
