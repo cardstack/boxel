@@ -10,4 +10,5 @@ Router.map(function () {
   this.route('index', { path: '/' });
   this.route('render', { path: '/render/:url' });
   this.route('indexer');
+  this.route('render-experiment');
 });
