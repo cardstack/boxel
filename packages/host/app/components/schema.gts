@@ -5,7 +5,6 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import LocalRealm from '../services/local-realm';
 import { eq } from '../helpers/truth-helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 //@ts-ignore cached not available yet in definitely typed
@@ -17,7 +16,8 @@ import CatalogEntryEditor from './catalog-entry-editor';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import Modifier from 'ember-modifier';
-import LoaderService from '../services/loader-service';
+import type LoaderService from '../services/loader-service';
+import type CardService from '../services/card-service';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
@@ -125,8 +125,8 @@ export default class Schema extends Component<Signature> {
     {{/if}}
   </template>
 
-  @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
+  @service declare cardService: CardService;
   @tracked newFieldName: string | undefined;
   @tracked newFieldType: FieldType = 'contains';
 
@@ -141,24 +141,12 @@ export default class Schema extends Component<Signature> {
 
   @cached
   get realmPath() {
-    if (!this.localRealm.isAvailable) {
-      throw new Error('Local realm is not available');
-    }
-    return new RealmPaths(this.loaderService.loader.reverseResolution(this.localRealm.url.href));
+    return new RealmPaths(this.loaderService.loader.reverseResolution(this.cardService.defaultURL.href));
   }
 
   @cached
   get cardType() {
     return getCardType(this, () => this.args.card);
-  }
-
-  @cached
-  get cardFromSyntax() {
-    let card = this.args.moduleSyntax.possibleCards.find(c => c.exportedAs === this.ref.name);
-    if (!card) {
-      throw new Error(`cannot find card in module syntax for ref ${JSON.stringify(this.ref)}`);
-    }
-    return card;
   }
 
   get isNewFieldDisabled() {

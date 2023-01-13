@@ -8,7 +8,6 @@ import { service } from '@ember/service';
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
 import { isCardDocument } from '@cardstack/runtime-common';
-import type LocalRealm from '../services/local-realm';
 import type LoaderService from '../services/loader-service';
 import type CardService from '../services/card-service';
 import type { FileResource } from '../resources/file';
@@ -22,6 +21,10 @@ import {
 } from '../utils/editor-language';
 import monaco from '../modifiers/monaco';
 import type { Card } from 'https://cardstack.com/base/card-api';
+import InLocalRealm from './in-local-realm';
+import ENV from '@cardstack/host/config/environment';
+
+const { demoRealmURL } = ENV;
 
 interface Signature {
   Args: {
@@ -35,7 +38,13 @@ export default class Go extends Component<Signature> {
   <template>
     <div class="main">
       <div class="main__column">
-        <FileTree @localRealm={{this.localRealm}} @path={{@path}} @polling={{@polling}} />
+        {{#if demoRealmURL}}
+          <FileTree @url={{demoRealmURL}} @path={{@path}} @polling={{@polling}} />
+        {{else}}
+          <InLocalRealm as |url|>
+            <FileTree @url={{url}} @path={{@path}} @polling={{@polling}} />
+          </InLocalRealm>
+        {{/if}}
       </div>
       {{#if this.openFile}}
         <div {{monaco content=this.openFile.content
@@ -63,7 +72,6 @@ export default class Go extends Component<Signature> {
     </div>
   </template>
 
-  @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked jsonError: string | undefined;

@@ -20,6 +20,9 @@ import {
   type SearchEntryWithErrors,
   type RunState,
 } from '@cardstack/runtime-common/search-index';
+import ENV from '@cardstack/host/config/environment';
+
+const { demoRealmURL } = ENV;
 
 export default class LocalRealm extends Service {
   #setEntryDeferred: Deferred<void> | undefined;
@@ -34,7 +37,7 @@ export default class LocalRealm extends Service {
 
   constructor(properties: object) {
     super(properties);
-    if (!this.fastboot.isFastBoot) {
+    if (!this.fastboot.isFastBoot && !demoRealmURL) {
       let handler = (event: MessageEvent) => this.handleMessage(event);
       navigator.serviceWorker.addEventListener('message', handler);
       registerDestructor(this, () =>
@@ -128,6 +131,13 @@ export default class LocalRealm extends Service {
       this.state = { type: 'fastboot', worker: undefined };
       return;
     }
+    if (demoRealmURL) {
+      this.state = {
+        type: 'demo-realm',
+        worker: undefined,
+      };
+      return;
+    }
     await Promise.resolve();
     this.state = { type: 'checking-worker' };
     let worker = await this.ensureWorker();
@@ -168,6 +178,7 @@ export default class LocalRealm extends Service {
       }
     | { type: 'empty'; worker: ServiceWorker }
     | { type: 'fastboot'; worker: undefined }
+    | { type: 'demo-realm'; worker: undefined }
     | {
         type: 'available';
         handle: FileSystemDirectoryHandle;

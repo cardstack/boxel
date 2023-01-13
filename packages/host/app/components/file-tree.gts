@@ -6,16 +6,13 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { eq } from '../helpers/truth-helpers'
-import LocalRealm from '../services/local-realm';
 import { directory, Entry } from '../resources/directory';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
 
 interface Args {
   Args: {
-    // we want to use the local realm so that we can show a button
-    // to open or close it.
-    localRealm: LocalRealm;
+    url: string;
     path: string | undefined;
     polling: 'off' | undefined;
   }
@@ -23,36 +20,29 @@ interface Args {
 
 export default class FileTree extends Component<Args> {
   <template>
-    {{#if @localRealm.isAvailable}}
-      <button {{on "click" this.closeRealm}} type="button">Close local realm</button>
-      <nav>
-        {{#each this.listing.entries key="path" as |entry|}}
-          {{#if (eq entry.kind 'file')}}
-            <div role="button" {{on "click" (fn this.open entry)}} class="file {{if (eq entry.path @path) "selected"}} indent-{{entry.indent}}">
+    <nav>
+      {{#each this.listing.entries key="path" as |entry|}}
+        {{#if (eq entry.kind 'file')}}
+          <div role="button" {{on "click" (fn this.open entry)}} class="file {{if (eq entry.path @path) "selected"}} indent-{{entry.indent}}">
+          {{entry.name}}
+          </div>
+        {{else}}
+          <div class="directory indent-{{entry.indent}}">
             {{entry.name}}
-            </div>
-          {{else}}
-            <div class="directory indent-{{entry.indent}}">
-              {{entry.name}}
-            </div>
-          {{/if}}
-        {{/each}}
-      </nav>
-      <button {{on "click" this.createNew}} type="button" data-test-create-new-card-button>
-        Create New Card
-      </button>
-      <div>
-        <button {{on "click" this.togglePolling}}>{{if this.isPolling "Stop" "Start"}} Polling</button>
-        {{#unless this.isPolling}}<p><strong>Status: Polling is off!</strong></p>{{/unless}}
-      </div>
-    {{else if @localRealm.isLoading}}
-      ...
-    {{else if @localRealm.isEmpty}}
-      <button {{on "click" this.openRealm}}>Open a local realm</button>
-    {{/if}}
+          </div>
+        {{/if}}
+      {{/each}}
+    </nav>
+    <button {{on "click" this.createNew}} type="button" data-test-create-new-card-button>
+      Create New Card
+    </button>
+    <div>
+      <button {{on "click" this.togglePolling}}>{{if this.isPolling "Stop" "Start"}} Polling</button>
+      {{#unless this.isPolling}}<p><strong>Status: Polling is off!</strong></p>{{/unless}}
+    </div>
   </template>
 
-  listing = directory(this, () => this.args.localRealm.isAvailable ? "http://local-realm/" : undefined, () => this.args.polling);
+  listing = directory(this, () => this.args.url, () => this.args.polling);
   @service declare router: RouterService;
   @tracked isPolling = this.args.polling !== 'off';
 
@@ -60,19 +50,6 @@ export default class FileTree extends Component<Args> {
   togglePolling() {
     this.router.transitionTo({ queryParams: { polling: this.isPolling ? 'off' : undefined } });
     this.isPolling = !this.isPolling;
-  }
-
-  @action
-  openRealm() {
-    this.args.localRealm.chooseDirectory(() => this.router.refresh());
-  }
-
-  @action
-  closeRealm() {
-    if (this.args.localRealm.isAvailable) {
-      this.args.localRealm.close();
-      this.router.transitionTo({ queryParams: { path: undefined } });
-    }
   }
 
   @action
