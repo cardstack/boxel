@@ -1,4 +1,4 @@
-name: CI [boxel]
+name: Manual Deploy [realm-server]
 
 on:
   # FIXME pull_request is for development only, should be a workflow_dispatch
