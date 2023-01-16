@@ -37,14 +37,6 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
-      - uses: actions/download-artifact@v3
-        with:
-          name: boxel-realm-server-${{ github.sha }}
-
-      - name: Extract artifact
-        run: tar -xvf artifact.tar
-        shell: bash
-
       - name: Set up env
         env:
           INPUT_ENVIRONMENT: ${{ env.ENVIRONMENT }}
