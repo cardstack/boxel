@@ -13,11 +13,15 @@ COPY pnpm-lock.yaml ./
 COPY patches/ ./patches
 COPY vendor/ ./vendor
 
-RUN pnpm fetch --prod
-
-
 ADD . ./
-RUN pnpm install -r --offline --prod
+
+# FIXME see below re --prod
+RUN pnpm fetch
+
+
+# FIXME the documentation says to use --prod but packages/worker has webpack in devDependencies
+# and --offline but
+RUN pnpm install -r --offline
 
 EXPOSE 3000
 # FIXME this is hardcoded to be base-esque
