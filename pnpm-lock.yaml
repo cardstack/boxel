@@ -27,6 +27,7 @@ importers:
       ember-source: ~4.2.0
       ember-template-imports: ^3.0.1
       eslint-plugin-import: ^2.26.0
+      hcl2-parser: ^1.0.3
       typescript: ^4.6.3
     devDependencies:
       '@actions/core': 1.10.0
@@ -42,6 +43,7 @@ importers:
       ember-source: 4.2.0_@babel+core@7.20.2
       ember-template-imports: 3.4.0_ember-cli-htmlbars@6.1.1
       eslint-plugin-import: 2.26.0
+      hcl2-parser: 1.0.3
       typescript: 4.9.3
 
   packages/base:
@@ -13301,6 +13303,10 @@ packages:
     dependencies:
       inherits: 2.0.4
       minimalistic-assert: 1.0.1
+    dev: true
+
+  /hcl2-parser/1.0.3:
+    resolution: {integrity: sha512-NQUm/BFF+2nrBfeqDhhsy4DxxiLHgkeE3FywtjFiXnjSUaio3w4Tz1MQ3vGJBUhyArzOXJ24pO7JwE5LAn7Ncg==}
     dev: true
 
   /heimdalljs-fs-monitor/1.1.1:
