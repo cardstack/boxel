@@ -11,7 +11,7 @@ function getAppConfig(waypointConfigFilePath, appName) {
   const waypointConfig = hcl.parseToObject(waypointHcl)[0];
   console.log('waypoint config?');
   console.log(waypointConfig);
-  console.log(`appName: $[appName]`);
+  console.log(`appName: ${appName}`);
   const waypointApp = waypointConfig.app[appName][0];
   const cluster = waypointApp.deploy[0].use['aws-ecs'][0].cluster;
 
