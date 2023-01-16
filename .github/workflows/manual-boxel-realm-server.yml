@@ -61,6 +61,8 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1
 
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
       - name: Build host dist/ for fastboot
         run: pnpm build
         working-directory: packages/host
