@@ -35,14 +35,9 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm exec tsc
-        shell: bash
-        working-directory: packages/realm-server
-
-      # FIXME surely this path is wrong
+      # FIXME surely this path is wrong…?
       - name: Tar artifact
-        run: tar -cvf artifact.tar packages/realm-server/dist
+        run: tar -cvf artifact.tar ./
         shell: bash
 
       - uses: actions/upload-artifact@v3
@@ -55,7 +50,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [boxel-realm-server-base, boxel-realm-server-demo]
+        # app: [boxel-realm-server-base, boxel-realm-server-demo]
+        app: [realm-server-base]
         include:
           - retain: "0"
           - retain: "1"
