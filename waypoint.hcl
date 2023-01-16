@@ -5,8 +5,8 @@ app "realm-server-base" {
 
   build {
     use "docker" {
-      dockerfile = "Dockerfile"
-      context = "../../"
+      # This just means the root of the repository, it’s not relative to the above
+      context = "./"
 
       build_args = {
         fixme = "FIXME"
