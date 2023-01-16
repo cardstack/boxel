@@ -6,6 +6,7 @@ app "realm-server-base" {
   build {
     use "docker" {
       dockerfile = "Dockerfile"
+      context = "../../"
 
       build_args = {
         fixme = "FIXME"
