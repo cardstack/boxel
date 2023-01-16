@@ -15,9 +15,9 @@ RUN pnpm fetch --prod
 
 ADD . ./
 RUN pnpm install -r --offline --prod
-RUN cd packages/realm-server && ./node_modules/.bin/tsc
+RUN cd packages/realm-server
 
 EXPOSE 3000
 # FIXME this is hardcoded to be base-esque
-CMD [ "node", "packages/realm-server/main", "--port=3000", "--path='./tests/cards'", "--fromUrl='/node-test/'", "--toUrl='/node-test/'", "--path='../host/tests/cards'" "--fromUrl='https://cardstack.com/base/'", "--toUrl='/base" ]
+CMD [ "ts-node", "--transpileOnly", "main", "--port=3000", "--path='./tests/cards'", "--fromUrl='/node-test/'", "--toUrl='/node-test/'", "--path='../host/tests/cards'" "--fromUrl='https://cardstack.com/base/'", "--toUrl='/base" ]
 
