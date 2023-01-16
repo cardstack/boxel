@@ -52,10 +52,6 @@ jobs:
       matrix:
         # app: [boxel-realm-server-base, boxel-realm-server-demo]
         app: [realm-server-base]
-        include:
-          - retain: "0"
-          - retain: "1"
-            app: hub
     steps:
       - uses: actions/checkout@v3
       - uses: pnpm/action-setup@v2
