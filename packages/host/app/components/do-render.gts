@@ -25,6 +25,12 @@ class DoTheRender extends Modifier {
       // some tracking frames around which is also bad. We need properly balanced
       // cleanup of tracking frames via finally blocks at each level in the stack.
 
+      // Update 1/16: It looks like the unbalanced nature of the frames stems
+      // from here:
+      // https://github.com/glimmerjs/glimmer-vm/blob/5c0dd7b4514b7f5211f61be4eba2c5c0c237274d/packages/%40glimmer/runtime/lib/vm/append.ts#L388
+      // Within the glimmer VM class there is a `beginCacheGroup` method that
+      // pushes tracked frames without a finally to end the tracked frame.
+
       // this is the more public API
       // renderSync(_runtime.env, iterator);
 
