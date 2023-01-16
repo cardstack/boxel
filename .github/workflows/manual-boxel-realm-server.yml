@@ -96,7 +96,7 @@ jobs:
 
       - name: Deploy ${{ matrix.app }}
         # FIXME can this be shared from monorepo? Would need to support both yarn and pnpm
-        uses: ./.github/actions/waypoint-deploy@main
+        uses: ./.github/actions/waypoint-deploy
         with:
           app: ${{ matrix.app }}
           retain: ${{ matrix.retain }}
