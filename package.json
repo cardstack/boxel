@@ -25,6 +25,8 @@
   },
   "devDependencies": {
     "@babel/core": "^7.17.8",
+    "@actions/core": "^1.2.6",
+    "@actions/github": "^4.0.0",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.0.4",
     "@glint/core": "^0.9.7",
