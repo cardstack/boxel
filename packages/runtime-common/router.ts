@@ -50,12 +50,13 @@ export class Router {
   }
 
   async handle(request: Request): Promise<Response> {
+    let response = new Response(null, { headers: { vary: "Accept" } });
     if (!isHTTPMethod(request.method)) {
-      return methodNotAllowed(request);
+      return methodNotAllowed(request, response);
     }
     let routes = this.#routeTable.get(request.method);
     if (!routes) {
-      return notFound(request);
+      return notFound(request, response);
     }
 
     let url = new URL(request.url);
@@ -72,19 +73,17 @@ export class Router {
       let routeRegExp = new RegExp(`^${route.replace("/", "\\/")}$`);
       if (routeRegExp.test(requestPath)) {
         try {
-          let response = new Response(null, { headers: { vary: "Accept" } });
           return await handler(request, response);
         } catch (err) {
           if (err instanceof CardError) {
-            return responseWithError(err);
+            return responseWithError(err, response);
           }
           console.error(err);
-          return new Response(`unexpected exception in realm ${err}`, {
-            status: 500,
-          });
+          // response.status = 500; // TODO
+          response.text = async () => `unexpected exception in realm ${err}`;
         }
       }
     }
-    return notFound(request);
+    return notFound(request, response);
   }
 }

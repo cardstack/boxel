@@ -197,7 +197,7 @@ export class Realm {
         await this.ready;
       }
       if (!this.searchIndex) {
-        return systemError("search index is not available");
+        return systemError(response, "search index is not available");
       }
       return this.#jsonAPIRouter.handle(request);
     } else if (
@@ -209,7 +209,7 @@ export class Realm {
     let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
 
     if (!maybeHandle) {
-      return notFound(request, `${request.url} not found`);
+      return notFound(request, response, `${request.url} not found`);
     }
 
     let handle = maybeHandle;
@@ -217,7 +217,11 @@ export class Realm {
     if (
       executableExtensions.some((extension) => handle.path.endsWith(extension))
     ) {
-      return this.makeJS(await fileContentToText(handle), handle.path);
+      return this.makeJS(
+        await fileContentToText(handle),
+        response,
+        handle.path
+      );
     } else {
       return await this.serveLocalFile(handle, response);
     }
@@ -232,7 +236,8 @@ export class Realm {
       ref.content instanceof Uint8Array ||
       typeof ref.content === "string"
     ) {
-      (response as Response).text = async () => ref.content; // TODO: handle ReadableStream and Uint8Array
+      // TODO: fix this: handle ReadableStream and Uint8Array
+      (response as Response).text = async () => ref.content;
       response.headers.set("last-modified", formatRFC7231(ref.lastModified));
       return response;
     }
@@ -255,7 +260,7 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    // response.status = 204; // TODO: can't set read-only property
+    // response.status = 204; // TODO
     response.headers.set("last-modified", formatRFC7231(lastModified));
     return response;
   }
@@ -267,25 +272,29 @@ export class Realm {
     let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
-      return notFound(request, `${localName} not found`);
+      return notFound(request, response, `${localName} not found`);
     }
 
     if (handle.path !== localName) {
-      // response.status = 302; // TODO: can't set read-only property
+      // response.status = 302; // TODO
       response.headers.set("Location", `/${handle.path}`);
       return response;
     }
     return await this.serveLocalFile(handle, response);
   }
 
-  private async removeCardSource(request: Request): Promise<Response> {
+  private async removeCardSource(
+    request: Request,
+    response: Response
+  ): Promise<Response> {
     let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
-      return notFound(request, `${localName} not found`);
+      return notFound(request, response, `${localName} not found`);
     }
     await this.delete(handle.path);
-    return new Response(null, { status: 204 });
+    // response.status = 204; // TODO
+    return response;
   }
 
   private transpileJS(content: string, debugFilename: string): string {
@@ -323,23 +332,25 @@ export class Realm {
     })!.code!;
   }
 
-  private makeJS(content: string, debugFilename: string): Response {
+  private makeJS(
+    content: string,
+    response: Response,
+    debugFilename: string
+  ): Response {
     try {
       content = this.transpileJS(content, debugFilename);
     } catch (err: any) {
-      return new Response(err.message, {
-        // using "Not Acceptable" here because no text/javascript representation
-        // can be made and we're sending text/html error page instead
-        status: 406,
-        headers: { "content-type": "text/html" },
-      });
+      response.text = async () => err.message;
+      // using "Not Acceptable" here because no text/javascript representation
+      // can be made and we're sending text/html error page instead
+      // response.status = 406; // TODO
+      response.headers.set("content-type", "text/html");
+      return response;
     }
-    return new Response(content, {
-      status: 200,
-      headers: {
-        "content-type": "text/javascript",
-      },
-    });
+    response.text = async () => content;
+    // response.status = 200; // TODO
+    response.headers.set("content-type", "text/javascript");
+    return response;
   }
 
   // we bother with this because typescript is picky about allowing you to use
@@ -362,11 +373,11 @@ export class Realm {
     try {
       json = JSON.parse(body);
     } catch (e) {
-      return badRequest(`Request body is not valid card JSON-API`);
+      return badRequest(response, `Request body is not valid card JSON-API`);
     }
     let { data: resource } = json;
     if (!isCardResource(resource)) {
-      return badRequest(`Request body is not valid card JSON-API`);
+      return badRequest(response, `Request body is not valid card JSON-API`);
     }
 
     let name: string;
@@ -409,6 +420,7 @@ export class Realm {
         ? CardError.fromSerializableError(entry.error)
         : undefined;
       return systemError(
+        response,
         `Unable to index new card, can't find new instance in index`,
         err
       );
@@ -420,7 +432,7 @@ export class Realm {
       },
     });
     response.json = async () => JSON.stringify(doc, null, 2);
-    // response.status = 201; // TODO: can't set read-only property
+    // response.status = 201; // TODO
     response.headers.set("content-type", "application/vnd.api+json");
     response.headers.set("last-modified", lastModifiedHeader(doc));
     return response;
@@ -435,16 +447,17 @@ export class Realm {
       new URL(new URL(request.url).pathname, request.url)
     );
     if (localPath.startsWith("_")) {
-      return methodNotAllowed(request);
+      return methodNotAllowed(request, response);
     }
 
     let url = this.paths.fileURL(localPath);
     let originalMaybeError = await this.#searchIndex.card(url);
     if (!originalMaybeError) {
-      return notFound(request);
+      return notFound(request, response);
     }
     if (originalMaybeError.type === "error") {
       return systemError(
+        response,
         `unable to patch card, cannot load original from index`,
         CardError.fromSerializableError(originalMaybeError.error)
       );
@@ -455,7 +468,7 @@ export class Realm {
 
     let patch = await request.json();
     if (!isSingleCardDocument(patch)) {
-      return badRequest(`The request body was not a card document`);
+      return badRequest(response, `The request body was not a card document`);
     }
     // prevent the client from changing the card type or ID in the patch
     delete (patch as any).data.meta;
@@ -474,6 +487,7 @@ export class Realm {
     });
     if (!entry || entry?.type === "error") {
       return systemError(
+        response,
         `Unable to index card: can't find patched instance in index`,
         entry ? CardError.fromSerializableError(entry.error) : undefined
       );
@@ -501,10 +515,11 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
-      return notFound(request);
+      return notFound(request, response);
     }
     if (maybeError.type === "error") {
       return systemError(
+        response,
         `cannot return card from index: ${maybeError.error.title} - ${maybeError.error.detail}`,
         CardError.fromSerializableError(maybeError.error)
       );
@@ -517,16 +532,20 @@ export class Realm {
     return response;
   }
 
-  private async removeCard(request: Request): Promise<Response> {
+  private async removeCard(
+    request: Request,
+    response: Response
+  ): Promise<Response> {
     // strip off query params
     let url = new URL(new URL(request.url).pathname, request.url);
     let result = await this.#searchIndex.card(url);
     if (!result) {
-      return notFound(request);
+      return notFound(request, response);
     }
     let localPath = this.paths.local(url) + ".json";
     await this.delete(localPath);
-    return new Response(null, { status: 204 });
+    // response.status = 204; // TODO
+    return response;
   }
 
   private async directoryEntries(
@@ -564,7 +583,7 @@ export class Realm {
     let entries = await this.directoryEntries(url);
     if (!entries) {
       console.log(`can't find directory ${url.href}`);
-      return notFound(request);
+      return notFound(request, response);
     }
 
     let data: ResourceObjectWithId = {
@@ -626,12 +645,9 @@ export class Realm {
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true }
     );
-    return new Response(JSON.stringify(doc, null, 2), {
-      headers: {
-        ...response.headers,
-        "content-type": "application/vnd.api+json",
-      },
-    });
+    response.json = async () => JSON.stringify(doc, null, 2);
+    response.headers.set("content-type", "application/vnd.api+json");
+    return response;
   }
 
   private async fileSerialization(

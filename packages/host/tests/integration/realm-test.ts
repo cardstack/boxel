@@ -54,7 +54,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.api+json',
         },
-      })
+      }),
+      new Response()
     );
 
     assert.strictEqual(response.status, 200, 'successful http status');
@@ -127,7 +128,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.api+json',
         },
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -222,7 +224,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.api+json',
         },
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -308,7 +311,8 @@ module('Integration | realm', function (hooks) {
           headers: {
             Accept: 'application/vnd.api+json',
           },
-        })
+        }),
+        new Response()
       );
       assert.strictEqual(response.status, 200, 'successful http status');
       let json = await response.json();
@@ -324,7 +328,8 @@ module('Integration | realm', function (hooks) {
           headers: {
             Accept: 'application/vnd.api+json',
           },
-        })
+        }),
+        new Response()
       );
       let json = await response.json();
       assert.strictEqual(
@@ -366,7 +371,8 @@ module('Integration | realm', function (hooks) {
             null,
             2
           ),
-        })
+        }),
+        new Response()
       );
       assert.strictEqual(response.status, 201, 'successful http status');
       let json = await response.json();
@@ -437,7 +443,8 @@ module('Integration | realm', function (hooks) {
             null,
             2
           ),
-        })
+        }),
+        new Response()
       );
       assert.strictEqual(response.status, 201, 'successful http status');
       let json = await response.json();
@@ -520,7 +527,8 @@ module('Integration | realm', function (hooks) {
           null,
           2
         ),
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 201, 'successful http status');
     let json = await response.json();
@@ -653,7 +661,8 @@ module('Integration | realm', function (hooks) {
           null,
           2
         ),
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -824,7 +833,8 @@ module('Integration | realm', function (hooks) {
           null,
           2
         ),
-      })
+      }),
+      new Response()
     );
 
     assert.strictEqual(response.status, 200, 'successful http status');
@@ -966,7 +976,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.api+json',
         },
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 204, 'status was 204');
 
@@ -1002,7 +1013,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+source',
         },
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 200, '200 HTTP status');
     let responseText = await response.text();
@@ -1026,7 +1038,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+source',
         },
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 302, '302 HTTP status');
     assert.strictEqual(
@@ -1044,7 +1057,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+source',
         },
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 404, '404 HTTP status');
   });
@@ -1062,7 +1076,8 @@ module('Integration | realm', function (hooks) {
             Accept: 'application/vnd.card+source',
           },
           body: cardSrc,
-        })
+        }),
+        new Response()
       );
 
       assert.strictEqual(response.status, 204, 'HTTP status is 204');
@@ -1077,7 +1092,8 @@ module('Integration | realm', function (hooks) {
           headers: {
             Accept: 'application/vnd.card+source',
           },
-        })
+        }),
+        new Response()
       );
       assert.strictEqual(response.status, 200, '200 HTTP status');
       let responseText = await response.text();
@@ -1107,7 +1123,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+source',
         },
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 302, 'file exists');
 
@@ -1117,7 +1134,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+source',
         },
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 204, 'file is deleted');
 
@@ -1126,7 +1144,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+source',
         },
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 404, 'file no longer exists');
   });
@@ -1139,7 +1158,10 @@ module('Integration | realm', function (hooks) {
       this.owner
     );
     await realm.ready;
-    let response = await realm.handle(new Request(`${testRealmURL}dir/person`));
+    let response = await realm.handle(
+      new Request(`${testRealmURL}dir/person`),
+      new Response()
+    );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
     assert.codeEqual(compiledJS, compiledCard(), 'compiled card is correct');
@@ -1154,7 +1176,8 @@ module('Integration | realm', function (hooks) {
     );
     await realm.ready;
     let response = await realm.handle(
-      new Request(`${testRealmURL}dir/person.gts`)
+      new Request(`${testRealmURL}dir/person.gts`),
+      new Response()
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
@@ -1177,7 +1200,8 @@ module('Integration | realm', function (hooks) {
     );
     await realm.ready;
     let response = await realm.handle(
-      new Request(`${testRealmURL}dir/index.html`)
+      new Request(`${testRealmURL}dir/index.html`),
+      new Response()
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let responseText = await response.text();
@@ -1207,7 +1231,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.api+json',
         },
-      })
+      }),
+      new Response()
     );
     let json = await response.json();
     assert.strictEqual(
@@ -1300,7 +1325,8 @@ module('Integration | realm', function (hooks) {
             Accept: 'application/vnd.api+json',
           },
         }
-      )
+      ),
+      new Response()
     );
     let json = await response.json();
     delete json.included?.[0].meta.lastModified;
@@ -1439,7 +1465,8 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.api+json',
         },
-      })
+      }),
+      new Response()
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let json = await response.json();
@@ -1511,7 +1538,8 @@ posts/ignore-me.gts
               Accept: 'application/vnd.api+json',
             },
           }
-        )
+        ),
+        new Response()
       );
 
       assert.strictEqual(response.status, 404, 'HTTP 404 response');
@@ -1522,7 +1550,8 @@ posts/ignore-me.gts
           headers: {
             Accept: 'application/vnd.api+json',
           },
-        })
+        }),
+        new Response()
       );
       assert.strictEqual(response.status, 404, 'HTTP 404 response');
     }
@@ -1532,7 +1561,8 @@ posts/ignore-me.gts
           headers: {
             Accept: 'application/vnd.api+json',
           },
-        })
+        }),
+        new Response()
       );
 
       let json = await response.json();
@@ -1548,7 +1578,8 @@ posts/ignore-me.gts
           headers: {
             Accept: 'application/vnd.api+json',
           },
-        })
+        }),
+        new Response()
       );
 
       let json = await response.json();

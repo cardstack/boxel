@@ -135,38 +135,52 @@ export function serializableError(err: any): any {
   return result;
 }
 
-export function responseWithError(error: CardError): Response {
-  return new Response(JSON.stringify({ errors: [serializableError(error)] }), {
-    status: error.status,
-    statusText: error.title,
-    headers: { "content-type": "application/vnd.api+json" },
-  });
+export function responseWithError(
+  error: CardError,
+  response: Response
+): Response {
+  response.json = async () => {
+    errors: [serializableError(error)];
+  };
+  // response.status = error.status; // TODO
+  // response.statusText = error.title; // TODO
+  response.headers.set("content-type", "application/vnd.api+json");
+  return response;
 }
 
-export function methodNotAllowed(request: Request): Response {
+export function methodNotAllowed(
+  request: Request,
+  response: Response
+): Response {
   return responseWithError(
     new CardError(`${request.method} not allowed for ${request.url}`, {
       status: 405,
-    })
+    }),
+    response
   );
 }
 
 export function notFound(
   request: Request,
+  response: Response,
   message = `Could not find ${request.url}`
 ): Response {
-  return responseWithError(new CardError(message, { status: 404 }));
+  return responseWithError(new CardError(message, { status: 404 }), response);
 }
 
-export function badRequest(message: string): Response {
-  return responseWithError(new CardError(message, { status: 400 }));
+export function badRequest(response: Response, message: string): Response {
+  return responseWithError(new CardError(message, { status: 400 }), response);
 }
 
-export function systemUnavailable(message: string): Response {
-  return responseWithError(new CardError(message, { status: 503 }));
+export function systemUnavailable(
+  response: Response,
+  message: string
+): Response {
+  return responseWithError(new CardError(message, { status: 503 }), response);
 }
 
 export function systemError(
+  response: Response,
   message: string,
   additionalError?: CardError | Error
 ): Response {
@@ -174,5 +188,5 @@ export function systemError(
   if (additionalError) {
     err.additionalErrors = [additionalError];
   }
-  return responseWithError(err);
+  return responseWithError(err, response);
 }

@@ -292,13 +292,14 @@ export class Loader {
         : typeof urlOrRequest === "string"
         ? urlOrRequest
         : urlOrRequest.href;
+    let response = new Response(null, { headers: { vary: "Accept" } });
     if (urlOrRequest instanceof Request) {
       for (let [url, handle] of this.urlHandlers) {
         let path = new RealmPaths(new URL(url));
         if (path.inRealm(new URL(requestURL))) {
           let request = urlOrRequest as MaybeLocalRequest;
           request.isLocal = true;
-          return await handle(request, new Response());
+          return await handle(request, response);
         }
       }
       let request = new Request(this.resolve(requestURL).href, {
@@ -322,7 +323,7 @@ export class Loader {
             init
           ) as MaybeLocalRequest;
           request.isLocal = true;
-          return await handle(request, new Response());
+          return await handle(request, response);
         }
       }
       return getNativeFetch()(this.resolve(unresolvedURL).href, init);
