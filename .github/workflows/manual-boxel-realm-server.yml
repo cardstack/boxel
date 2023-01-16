@@ -21,32 +21,7 @@ permissions:
   id-token: write
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
-
-      # FIXME surely this path is wrong…?
-      - name: Tar artifact
-        run: tar -cvf artifact.tar ./
-        shell: bash
-
-      - uses: actions/upload-artifact@v3
-        with:
-          name: boxel-realm-server-${{ github.sha }}
-          path: artifact.tar
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
     strategy:
       matrix:
