@@ -39,22 +39,23 @@ class DoTheRender extends Modifier {
       //   Attempting to update a value after using it in a computation can cause logical 
       //   errors, infinite revalidation bugs, and performance issues, and is not supported.
       //
-      // Perhaps the issue is a little more subtle? Looking more carefully at this scenario it explodes
-      // because the 'counter' tag in our control case below was already consumed in this
-      // render and we trying to set it again. The validator actually uses a WeakMap, with
-      // the tag impl as the key, to detect consumption. so i'm not sure this is directly a stack
-      // balancing issue since a stack is not going to change the presence of an object in
-      // the CONSUMED_TAGS weak map (although maybe stack balancing does subtly effect this?--it's
-      // just not as cut and dry as we first thought). CONSUMED_TAGS is a module scoped variable
-      // that is called when reading 'this.counter' in the setInterval() callback. The setter
-      // for 'this.counter' is then called as part of the increment in the same setInterval
+      // Perhaps the issue is a little more subtle? Looking more carefully at this scenario
+      // it explodes because the 'counter' tag in our control case below was already consumed
+      // in this render and we trying to set it again. The validator actually uses a module
+      // scoped WeakMap called CONSUMED_TAGS, with the tag impl as the key, to detect
+      // consumption. so i'm not sure this is directly a stack balancing issue since a stack
+      // is not going to change the presence of an object in the CONSUMED_TAGS weak map
+      // (although maybe stack balancing does subtly effect this?--it's just not as cut and
+      // dry as we first thought). CONSUMED_TAGS.set() is called when reading 'this.counter'
+      // in the setInterval() callback to mark it as being consumed. The setter for
+      // 'this.counter' is then called as part of the increment in the same setInterval
       // callback(), which requires that the tag not be consumed in the same render. When
       // there is no error thrown, the tag impl for counter in the getter is different than
       // in the setter. When there is an error thrown, its because the tag impl for the setter
-      // and the getter of 'counter' is the same. so the next part of hunting down why this error
-      // happens is to dive into when/how the tag impls are instantiated to nail down why the
-      // instantiation of the 'counter' tag differs when the inner render blows up vs it not
-      // blowing up.
+      // and the getter of 'counter' is the same. so the next part of hunting down why this
+      // error happens is to dive into when/how the tag impls are instantiated to nail down
+      // why the instantiation of the 'counter' tag differs when the inner render blows up
+      // vs it not blowing up.
 
 
       // this is the more public API
