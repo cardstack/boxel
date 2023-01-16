@@ -95,7 +95,8 @@ jobs:
           aws-region: us-east-1
 
       - name: Deploy ${{ matrix.app }}
-        uses: cardstack/cardstack/.github/actions/waypoint-deploy@main
+        # FIXME can this be shared from monorepo? Would need to support both yarn and pnpm
+        uses: ./.github/actions/waypoint-deploy@main
         with:
           app: ${{ matrix.app }}
           retain: ${{ matrix.retain }}
