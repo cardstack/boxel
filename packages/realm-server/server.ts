@@ -54,8 +54,9 @@ export function createRealmServer(realms: Realm[]) {
         headers: req.headers as { [name: string]: string },
         ...(reqBody ? { body: reqBody } : {}),
       });
+      let response = new Response(null, { headers: { vary: "Accept" } });
       let { status, statusText, headers, body, nodeStream } =
-        await realm.handle(request);
+        await realm.handle(request, response);
       res.statusCode = status;
       res.statusMessage = statusText;
       for (let [header, value] of headers.entries()) {

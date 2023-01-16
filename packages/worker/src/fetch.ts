@@ -24,7 +24,8 @@ export class FetchHandler {
     if (!this.realm) {
       console.warn(`No realm is currently available`);
     } else if (this.realm.paths.inRealm(new URL(request.url))) {
-      return await this.realm.handle(request);
+      let response = new Response(null, { headers: { vary: 'Accept' } });
+      return await this.realm.handle(request, response);
     }
 
     return await Loader.fetch(request);

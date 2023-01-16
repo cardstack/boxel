@@ -181,10 +181,8 @@ export class Realm {
 
   async handle(
     request: MaybeLocalRequest,
-    response?: Response
+    response: ResponseWithNodeStream
   ): Promise<ResponseWithNodeStream> {
-    let res = response ?? new Response();
-    res.headers.set("vary", "Accept");
     let url = new URL(request.url);
     let accept = request.headers.get("Accept");
     if (url.search.length > 0) {
@@ -201,11 +199,11 @@ export class Realm {
       if (!this.searchIndex) {
         return systemError("search index is not available");
       }
-      return this.#jsonAPIRouter.handle(request, res);
+      return this.#jsonAPIRouter.handle(request);
     } else if (
       request.headers.get("Accept")?.includes("application/vnd.card+source")
     ) {
-      return this.#cardSourceRouter.handle(request, res);
+      return this.#cardSourceRouter.handle(request);
     }
 
     let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
@@ -221,7 +219,7 @@ export class Realm {
     ) {
       return this.makeJS(await fileContentToText(handle), handle.path);
     } else {
-      return await this.serveLocalFile(handle, res);
+      return await this.serveLocalFile(handle, response);
     }
   }
 
@@ -234,12 +232,9 @@ export class Realm {
       ref.content instanceof Uint8Array ||
       typeof ref.content === "string"
     ) {
-      return new Response(ref.content, {
-        headers: {
-          ...response.headers,
-          "last-modified": formatRFC7231(ref.lastModified),
-        },
-      });
+      (response as Response).text = async () => ref.content; // TODO: handle ReadableStream and Uint8Array
+      response.headers.set("last-modified", formatRFC7231(ref.lastModified));
+      return response;
     }
 
     if (!isNode) {
@@ -248,7 +243,7 @@ export class Realm {
 
     // add the node stream to the response which will get special handling in the node env
     response.headers.set("last-modified", formatRFC7231(ref.lastModified));
-    response.nodeStream = ref.content;
+    (response as ResponseWithNodeStream).nodeStream = ref.content;
     return response;
   }
 
@@ -260,19 +255,15 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    return new Response(null, {
-      status: 204,
-      headers: {
-        ...response.headers,
-        "last-modified": formatRFC7231(lastModified),
-      },
-    });
+    // response.status = 204; // TODO: can't set read-only property
+    response.headers.set("last-modified", formatRFC7231(lastModified));
+    return response;
   }
 
   private async getCardSourceOrRedirect(
     request: Request,
-    res: Response
-  ): Promise<ResponseWithNodeStream> {
+    response: Response
+  ): Promise<Response> {
     let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
@@ -280,15 +271,11 @@ export class Realm {
     }
 
     if (handle.path !== localName) {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          ...res.headers,
-          Location: `/${handle.path}`,
-        },
-      });
+      // response.status = 302; // TODO: can't set read-only property
+      response.headers.set("Location", `/${handle.path}`);
+      return response;
     }
-    return await this.serveLocalFile(handle, res);
+    return await this.serveLocalFile(handle, response);
   }
 
   private async removeCardSource(request: Request): Promise<Response> {
@@ -432,14 +419,11 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return new Response(JSON.stringify(doc, null, 2), {
-      status: 201,
-      headers: {
-        ...response.headers,
-        "content-type": "application/vnd.api+json",
-        ...lastModifiedHeader(doc),
-      },
-    });
+    response.json = async () => JSON.stringify(doc, null, 2);
+    // response.status = 201; // TODO: can't set read-only property
+    response.headers.set("content-type", "application/vnd.api+json");
+    response.headers.set("last-modified", lastModifiedHeader(doc));
+    return response;
   }
 
   private async patchCard(
@@ -500,13 +484,10 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return new Response(JSON.stringify(doc, null, 2), {
-      headers: {
-        ...response.headers,
-        "content-type": "application/vnd.api+json",
-        ...lastModifiedHeader(doc),
-      },
-    });
+    response.json = async () => JSON.stringify(doc, null, 2);
+    response.headers.set("content-type", "application/vnd.api+json");
+    response.headers.set("last-modified", lastModifiedHeader(doc));
+    return response;
   }
 
   private async getCard(
@@ -530,14 +511,10 @@ export class Realm {
     }
     let { doc: card } = maybeError;
     card.data.links = { self: url.href };
-    return new Response(JSON.stringify(card, null, 2), {
-      headers: {
-        ...response.headers,
-        "last-modified": formatRFC7231(card.data.meta.lastModified!),
-        "content-type": "application/vnd.api+json",
-        ...lastModifiedHeader(card),
-      },
-    });
+    response.json = async () => JSON.stringify(card, null, 2);
+    response.headers.set("content-type", "application/vnd.api+json");
+    response.headers.set("last-modified", lastModifiedHeader(card));
+    return response;
   }
 
   private async removeCard(request: Request): Promise<Response> {
@@ -620,12 +597,9 @@ export class Realm {
       ] = relationship;
     }
 
-    return new Response(JSON.stringify({ data }, null, 2), {
-      headers: {
-        ...response.headers,
-        "content-type": "application/vnd.api+json",
-      },
-    });
+    response.json = async () => JSON.stringify({ data }, null, 2);
+    response.headers.set("content-type", "application/vnd.api+json");
+    return response;
   }
 
   private async readFileAsText(
@@ -682,14 +656,10 @@ export class Realm {
 
 export type Kind = "file" | "directory";
 
-function lastModifiedHeader(
-  card: LooseSingleCardDocument
-): {} | { "last-modified": string } {
-  return (
-    card.data.meta.lastModified != null
-      ? { "last-modified": formatRFC7231(card.data.meta.lastModified) }
-      : {}
-  ) as {} | { "last-modified": string };
+function lastModifiedHeader(card: LooseSingleCardDocument): string {
+  return card.data.meta.lastModified != null
+    ? formatRFC7231(card.data.meta.lastModified)
+    : "";
 }
 
 export interface CardDefinitionResource {

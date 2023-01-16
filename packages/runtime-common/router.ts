@@ -49,7 +49,7 @@ export class Router {
     routes.set(path, handler);
   }
 
-  async handle(request: Request, response: Response): Promise<Response> {
+  async handle(request: Request): Promise<Response> {
     if (!isHTTPMethod(request.method)) {
       return methodNotAllowed(request);
     }
@@ -72,6 +72,7 @@ export class Router {
       let routeRegExp = new RegExp(`^${route.replace("/", "\\/")}$`);
       if (routeRegExp.test(requestPath)) {
         try {
+          let response = new Response(null, { headers: { vary: "Accept" } });
           return await handler(request, response);
         } catch (err) {
           if (err instanceof CardError) {
