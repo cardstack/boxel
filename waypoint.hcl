@@ -37,12 +37,12 @@ app "realm-server-base" {
 
     hook {
       when    = "after"
-      command = ["node", "./scripts/waypoint-ecs-add-tags.mjs", "hub-worker"]
+      command = ["node", "./scripts/waypoint-ecs-add-tags.mjs", "realm-server-base"]
     }
 
     hook {
       when    = "after"
-      command = ["node", "./scripts/wait-service-stable.mjs", "hub-worker"]
+      command = ["node", "./scripts/wait-service-stable.mjs", "realm-server-base"]
     }
   }
 
