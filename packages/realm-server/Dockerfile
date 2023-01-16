@@ -7,13 +7,14 @@ WORKDIR /realm-server
 # FIXME 7.2 doesn’t exist, is it bad?
 RUN curl -f https://get.pnpm.io/v6.16.js | node - add --global pnpm
 
-# Files required by pnpm install
-COPY .npmrc package.json pnpm-lock.yaml .pnpmfile.cjs ./
+# pnpm fetch does require only lockfile
+COPY pnpm-lock.yaml ./
 
-RUN pnpm install --frozen-lockfile --prod
+RUN pnpm fetch --prod
 
-# Bundle app source
-COPY . .
+
+ADD . ./
+RUN pnpm install -r --offline --prod
 
 EXPOSE 3000
 # FIXME this is hardcoded to be base-esque
