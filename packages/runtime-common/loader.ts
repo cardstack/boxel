@@ -582,8 +582,14 @@ export class Loader {
 
 function getNativeFetch(): typeof fetch {
   if (isFastBoot) {
-    let getRunnerOpts = (globalThis as any).getRunnerOpts as () => RunnerOpts;
-    return getRunnerOpts()._fetch;
+    let optsId = (globalThis as any).runnerOptsId;
+    if (optsId == null) {
+      throw new Error(`Runner Options Identifier was not set`);
+    }
+    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
+      optsId: number
+    ) => RunnerOpts;
+    return getRunnerOpts(optsId)._fetch;
   } else {
     return fetch;
   }
