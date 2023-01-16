@@ -25,5 +25,5 @@ RUN pnpm install -r --offline
 
 EXPOSE 3000
 # FIXME this is hardcoded to be base-esque
-CMD [ "ts-node", "--transpileOnly", "packages/realm-server/main", "--port=3000", "--path='./tests/cards'", "--fromUrl='/node-test/'", "--toUrl='/node-test/'", "--path='../host/tests/cards'" "--fromUrl='https://cardstack.com/base/'", "--toUrl='/base" ]
+CMD [ "ts-node", "--transpileOnly", "packages/realm-server/main", "--port=3000", "--path='./tests/cards'", "--fromUrl='/node-test/'", "--toUrl='/node-test/'", "--path='../host/tests/cards'", "--fromUrl='https://cardstack.com/base/'", "--toUrl='/base" ]
 
