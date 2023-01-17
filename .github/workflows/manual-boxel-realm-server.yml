@@ -24,6 +24,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         app: [realm-base, realm-demo]
     steps:
