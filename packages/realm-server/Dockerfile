@@ -20,7 +20,6 @@ ADD . ./
 # FIXME see below re --prod
 RUN pnpm fetch
 
-
 # FIXME the documentation says to use --prod but packages/worker has webpack in devDependencies
 RUN pnpm install -r --offline
 
