@@ -61,13 +61,22 @@ class DoTheRender extends Modifier {
       // UPDATE 1/17 (Hassan) OK, I think I have a handle on this. In the finally's that we
       // desire where there is a endTrackFrame(), within endTrackFrame() the CONSUMED_TAGS is
       // reset to null (which triggers new tag impls for subsequent consumption of tag). 
-      // When our error is thrown, the problem is not that the stack is unbalanced (which is
-      // not to say that might not be an additional situation that we may encounter in the future)
-      // problem is that the CONSUMED_TAGS which would have otherwise been reset by calling
-      // endTrackFrame() in a finally block is never being reset. This results in tags being
-      // considered as consumed when in fact they are not, and hence the error message about
-      // updating a tracked property when it has already been consumed because it was never
-      // able to reset the CONSUMED_TAGS as part of dealing with the error.
+      // When our error is thrown, the problem is that the CONSUMED_TAGS is not being reset
+      // (set to null). This results in tags being considered as consumed when in fact they 
+      // are not, and hence the error message about updating a tracked property when it has 
+      // already been consumed because it was never able to reset the CONSUMED_TAGS as part 
+      // of dealing with the error. In the case where there is no error being thrown, within 
+      // the endTrackFrame(), there is a guard that checks to see if the TRANSACTION_STACK 
+      // is empty. If the transaction stack is empty, then CONSUMED_TAGS is set to null. In
+      // the success case, the TRANSACTION_STACK is indeed empty, CONSUMED_TAGS is set to 
+      // null which triggers new tag impls for the subsequent consumption of the 'counter'. 
+      // CONSUMED_TAGS is called in a finally block after rendering our DoTheRender modifier.
+      // And in the case of the error being thrown, within endTrackFrame(), the 
+      // TRANSACTION_STACK still contains entries, and hence the CONSUMED_TAGS is never reset,
+      // so that subsequent mutation of tags that were consumed in the previous frame are 
+      // treated as an error--which is the error that we see. This does actually tie back to
+      // a stack balancing problem, and specifically we need to figure out how to balance the
+      // TRANSACTION_STACK.
 
 
       // this is the more public API
