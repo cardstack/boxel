@@ -25,8 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # app: [boxel-realm-server-base, boxel-realm-server-demo]
-        app: [realm-server-base]
+        app: [realm-base, realm-demo]
     steps:
       - uses: actions/checkout@v3
       - uses: pnpm/action-setup@v2

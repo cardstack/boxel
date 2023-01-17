@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 
 FROM node:18
+ARG realm_server_script
+ENV realm_server_script=$realm_server_script
 
 WORKDIR /realm-server
 
@@ -23,6 +25,5 @@ RUN pnpm fetch
 RUN pnpm install -r --offline
 
 EXPOSE 3000
-# FIXME this is hardcoded to be base-esque
-CMD [ "./packages/realm-server/node_modules/.bin/ts-node", "--transpileOnly", "packages/realm-server/main", "--port=3000", "--path='./tests/cards'", "--fromUrl='/node-test/'", "--toUrl='/node-test/'", "--path='../host/tests/cards'", "--fromUrl='https://cardstack.com/base/'", "--toUrl='/base" ]
 
+CMD pnpm --filter "./packages/realm-server" $realm_server_script
