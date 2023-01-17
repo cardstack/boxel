@@ -109,7 +109,7 @@ class DoTheRender extends Modifier {
       console.log(err);
       // This is to compensate for the commitCacheGroup op code that is not called because
       // of the error being thrown here. we do this so we can keep the TRANSACTION_STACK
-      // balanced (which would otherwise cause consumed tags to leakinto subsequent frames)
+      // balanced (which would otherwise cause consumed tags to leak into subsequent frames)
       iterator.vm.commitCacheGroup();
     }
   }
