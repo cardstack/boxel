@@ -109,7 +109,12 @@ class DoTheRender extends Modifier {
       console.log(err);
       // This is to compensate for the commitCacheGroup op code that is not called because
       // of the error being thrown here. we do this so we can keep the TRANSACTION_STACK
-      // balanced (which would otherwise cause consumed tags to leak into subsequent frames)
+      // balanced (which would otherwise cause consumed tags to leak into subsequent frames).
+      // My assumption here is that it is specifically always going to be the component that
+      // we wrap in our `root` whose cache group never gets committed when there is an error.
+      // I'm not adding this to a "finally" because when there is no error, the VM will 
+      // process an op code that will do this organically. It's only when there is an error 
+      // that we need to step in and do this by hand.
       iterator.vm.commitCacheGroup();
     }
   }
