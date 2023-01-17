@@ -58,6 +58,16 @@ class DoTheRender extends Modifier {
       // vs it not blowing up.
 
 
+      // UPDATE 1/17 (Hassan) OK, I think I have a handle on this. In the finally's that we
+      // desire where there is a endTrackFrame(), within endTrackFrame() the CONSUMED_TAGS is
+      // reset to null. When our error is thrown, the problem is not that the stack is 
+      // unbalanced, the problem is that the CONSUMED_TAGS which would have otherwise been
+      // reset by calling endTrackFrame() in a finally block is never being reset. This results
+      // in tags being considered as consumed when in fact they are not, and hence the error
+      // message about updating a tracked property when it has already been consumed because 
+      // it was never able to reset the CONSUMED_TAGS as part of dealing with the error.
+
+
       // this is the more public API
       // renderSync(_runtime.env, iterator);
 
