@@ -46,6 +46,7 @@ export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from "./not-loaded";
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
+export { createResponse } from "./create-response";
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
@@ -84,6 +85,7 @@ export const externalsMap: Map<string, string[]> = new Map([
       "identifyCard",
       "loadCard",
       "humanReadable",
+      "createResponse",
     ],
   ],
   [
