@@ -78,6 +78,27 @@ class DoTheRender extends Modifier {
       // TRANSACTION_STACK.
 
 
+      // UPDATE 1/17 II (Hassan) So it looks like for the error case, specifically the
+      // transaction to render the "message" property in the Sample component that results
+      // in an error is the transaction that is not cleaned up and causes the unbalanced
+      // TRANSACTION_STACK triggering the CONSUMED_TAGS to not be reset properly.
+      // Specifically when there is no error, there is a commitCacheGroup op code that is
+      // processed which is responsible for removing the Sample component's render txn. This
+      // particular op code does not seem to be processed in the error case. This also related
+      // to the very first finding around the missing "finally". The omission of the 
+      // commitCacheGroup from being called is what causes the unbalanced TRANSACTION_STACK.
+      // I'm not sure, though, there is a natural place to even add the finally, as there
+      // is a specific op code that the VM evaluates whose sole purpose is for committing 
+      // the cache group. Maybe we need to hook into the finally that already exists in 
+      // validator's track() function and attempt to commit the cache group there if there? 
+
+
+      // UPDATE 1/17 III (Hassan) I'm adding a VM.commitCacheGroup() to our own error
+      // handler so that we can compensate for the op code that is responsible for doing
+      // this which is never processed due to the error being thrown. This appears to keep
+      // the TRANSACTION_STACK balanced, and no errors spill out from our inner render.
+
+
       // this is the more public API
       // renderSync(_runtime.env, iterator);
 
@@ -86,6 +107,10 @@ class DoTheRender extends Modifier {
       inTransaction(_runtime.env, () => iterator.vm._execute());
     } catch (err) {
       console.log(err);
+      // This is to compensate for the commitCacheGroup op code that is not called because
+      // of the error being thrown here. we do this so we can keep the TRANSACTION_STACK
+      // balanced (which would otherwise cause consumed tags to leakinto subsequent frames)
+      iterator.vm.commitCacheGroup();
     }
   }
 }
