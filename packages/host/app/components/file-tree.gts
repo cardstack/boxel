@@ -9,6 +9,7 @@ import { eq, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { directory, Entry, type DirectoryResource } from '../resources/directory';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { chooseCard, catalogEntryRef, createNewCard, RealmPaths } from '@cardstack/runtime-common';
+import File from './file';
 
 interface Args {
   Args: {
@@ -23,17 +24,16 @@ export default class FileTree extends Component<Args> {
     <nav>
       {{#each this.listing.entries key="path" as |entry|}}
         {{#if (eq entry.kind 'file')}}
-          <div role="button" {{on "click" (fn this.open entry this.listing.url)}} class="file {{if (eq entry.path @path) "selected"}} indent-{{entry.indent}}">
+          <File @entry={{entry}} @url={{this.listing.url}} />
+          {{!-- <div role="button" {{on "click" (fn this.open entry this.listing.url)}} class="file {{if (eq entry.path @path) "selected"}} indent-{{entry.indent}}">
           {{entry.name}}
-          </div>
+          </div> --}}
         {{else}}
           <div role="button" {{on "click" (fn this.openDirectory entry)}} class="directory indent-{{entry.indent}}">
             {{entry.name}}
             {{#if (and (eq this.currentDir entry.name) this.results.entries.length)}}
               {{#each this.results.entries as |subEntry|}}
-                <div role="button" {{on "click" (fn this.open subEntry this.results.url)}} class="file {{if (eq subEntry.path @path) "selected"}} indent-{{subEntry.indent}}">
-                  {{subEntry.name}}
-                </div>
+                <File @entry={{subEntry}} @url={{this.results.url}} />
               {{/each}}
             {{/if}}
           </div>
