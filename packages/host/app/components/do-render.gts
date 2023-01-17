@@ -70,7 +70,6 @@ class DoTheRender extends Modifier {
       // is empty. If the transaction stack is empty, then CONSUMED_TAGS is set to null. In
       // the success case, the TRANSACTION_STACK is indeed empty, CONSUMED_TAGS is set to 
       // null which triggers new tag impls for the subsequent consumption of the 'counter'. 
-      // CONSUMED_TAGS is called in a finally block after rendering our DoTheRender modifier.
       // And in the case of the error being thrown, within endTrackFrame(), the 
       // TRANSACTION_STACK still contains entries, and hence the CONSUMED_TAGS is never reset,
       // so that subsequent mutation of tags that were consumed in the previous frame are 
