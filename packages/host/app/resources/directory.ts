@@ -98,15 +98,15 @@ export class DirectoryResource extends Resource<Args> {
             .length - 1,
       })
     );
-    let nestedDirs = flatMap(
-      Object.values(relationships) as unknown[] as DirectoryEntryRelationship[],
-      (rel) => (rel.meta.kind === 'directory' ? [rel.links.related] : [])
-    );
-    let nestedEntries: Entry[] = [];
-    for (let dir of nestedDirs) {
-      nestedEntries.push(...(await this.getEntries(realmPath, dir)));
-    }
-    return [...newEntries, ...nestedEntries];
+    // let nestedDirs = flatMap(
+    //   Object.values(relationships) as unknown[] as DirectoryEntryRelationship[],
+    //   (rel) => (rel.meta.kind === 'directory' ? [rel.links.related] : [])
+    // );
+    // let nestedEntries: Entry[] = [];
+    // for (let dir of nestedDirs) {
+    //   nestedEntries.push(...(await this.getEntries(realmPath, dir)));
+    // }
+    return [...newEntries];
   }
 }
 

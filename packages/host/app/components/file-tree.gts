@@ -5,10 +5,10 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
-import { eq } from '../helpers/truth-helpers'
-import { directory, Entry } from '../resources/directory';
+import { eq, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { directory, Entry, type DirectoryResource } from '../resources/directory';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
+import { chooseCard, catalogEntryRef, createNewCard, RealmPaths } from '@cardstack/runtime-common';
 
 interface Args {
   Args: {
@@ -23,12 +23,19 @@ export default class FileTree extends Component<Args> {
     <nav>
       {{#each this.listing.entries key="path" as |entry|}}
         {{#if (eq entry.kind 'file')}}
-          <div role="button" {{on "click" (fn this.open entry)}} class="file {{if (eq entry.path @path) "selected"}} indent-{{entry.indent}}">
+          <div role="button" {{on "click" (fn this.open entry this.listing.url)}} class="file {{if (eq entry.path @path) "selected"}} indent-{{entry.indent}}">
           {{entry.name}}
           </div>
         {{else}}
-          <div class="directory indent-{{entry.indent}}">
+          <div role="button" {{on "click" (fn this.openDirectory entry)}} class="directory indent-{{entry.indent}}">
             {{entry.name}}
+            {{#if (and (eq this.currentDir entry.name) this.results.entries.length)}}
+              {{#each this.results.entries as |subEntry|}}
+                <div role="button" {{on "click" (fn this.open subEntry this.results.url)}} class="file {{if (eq subEntry.path @path) "selected"}} indent-{{subEntry.indent}}">
+                  {{subEntry.name}}
+                </div>
+              {{/each}}
+            {{/if}}
           </div>
         {{/if}}
       {{/each}}
@@ -45,6 +52,8 @@ export default class FileTree extends Component<Args> {
   listing = directory(this, () => this.args.url, () => this.args.polling);
   @service declare router: RouterService;
   @tracked isPolling = this.args.polling !== 'off';
+  @tracked results: DirectoryResource | undefined;
+  @tracked currentDir: string | undefined;
 
   @action
   togglePolling() {
@@ -67,13 +76,25 @@ export default class FileTree extends Component<Args> {
   }
 
   @action
-  open(entry: Entry) {
+  open(entry: Entry, url: string) {
     let { path } = entry;
-    this.router.transitionTo({ queryParams: { path } });
+    console.log(url + path);
+    this.router.transitionTo({ queryParams: { path: url + path } });
   }
 
   @action
   onSave(path: string) {
     this.router.transitionTo({ queryParams: { path } });
+  }
+
+  @action
+  openDirectory(entry: Entry) {
+    let { path } = entry;
+    let realmPaths = new RealmPaths(this.args.url);
+    let url = realmPaths.directoryURL(path);
+    let inner = directory(this, () => url.href, () => this.args.polling);
+    console.log(inner);
+    this.results = inner;
+    this.currentDir = entry.name;
   }
 }
