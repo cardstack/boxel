@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Friend from http://local-realm/friend",
+      "description": "Catalog entry for Friend from http://local-realm/friend",
+      "ref": {
+        "module": "http://local-realm/friend",
+        "name": "Friend"
+      },
+      "demo": {
+        "firstName": null
+      }
+    },
+    "relationships": {
+      "demo.friend": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://local-realm/friend",
+            "name": "Friend"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

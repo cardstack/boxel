@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Mango"
+    },
+    "relationships": {
+      "friend": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/friend",
+        "name": "Friend"
+      }
+    }
+  }
+}
