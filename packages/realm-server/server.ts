@@ -35,7 +35,7 @@ export function createRealmServer(realms: Realm[]) {
       );
 
       // FIXME a hack to get health checks to pass, can a proper check be set in Terraform?
-      if (req.url === '/') {
+      if (req.url === '/' && req.method === 'GET') {
         res.statusCode = 200;
         res.statusMessage = 'OK';
         res.end();
