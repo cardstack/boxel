@@ -20,7 +20,6 @@ RUN pnpm fetch
 
 
 # FIXME the documentation says to use --prod but packages/worker has webpack in devDependencies
-# and --offline but
 RUN pnpm install -r --offline
 
 EXPOSE 3000
