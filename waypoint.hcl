@@ -29,8 +29,8 @@ app "realm-base" {
       cluster             = "realm-base-staging"
       count               = 2
       subnets             = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
-      task_role_name      = "realm-base-staging-ecs-task"
-      execution_role_name = "realm-base-staging-ecs-task-execution"
+      task_role_name      = "realm-base-ecs-task"
+      execution_role_name = "realm-base-ecs-task-execution"
       security_group_ids  = ["sg-05f830d022a2cd913"] # FIXME this should be a Terraform output maybe?
 
       alb {
@@ -83,8 +83,8 @@ app "realm-demo" {
       cluster             = "realm-demo-staging"
       count               = 2
       subnets             = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
-      task_role_name      = "realm-demo-staging-ecs-task"
-      execution_role_name = "realm-demo-staging-ecs-task-execution"
+      task_role_name      = "realm-demo-ecs-task"
+      execution_role_name = "realm-demo-ecs-task-execution"
       security_group_ids  = ["sg-05f830d022a2cd913"] # FIXME this should be a Terraform output maybe?
 
       alb {
