@@ -8,7 +8,7 @@ import { Entry } from '../resources/directory';
 interface Args {
   Args: {
     entry: Entry;
-    url: string | undefined;
+    path: string;
   }
 }
 
@@ -23,10 +23,6 @@ export default class File extends Component<Args> {
 
   @action
   open() {
-    if (!this.args.url) {
-      return; // TODO
-    }
-    let path = this.args.url + this.args.entry.path;
-    this.router.transitionTo({ queryParams: { path } });
+    this.router.transitionTo({ queryParams: { path: this.args.path } });
   }
 }

@@ -4,16 +4,16 @@ import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
-import flatMap from 'lodash/flatMap';
-import {
-  DirectoryEntryRelationship,
-  type Relationship,
-} from '@cardstack/runtime-common';
+import type { Relationship } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import LoaderService from '../services/loader-service';
 
 interface Args {
-  named: { url: string | undefined; polling: 'off' | undefined };
+  named: {
+    url: string | undefined;
+    openDirs: string | undefined;
+    polling: 'off' | undefined;
+  };
 }
 
 export interface Entry {
@@ -98,14 +98,6 @@ export class DirectoryResource extends Resource<Args> {
             .length - 1,
       })
     );
-    // let nestedDirs = flatMap(
-    //   Object.values(relationships) as unknown[] as DirectoryEntryRelationship[],
-    //   (rel) => (rel.meta.kind === 'directory' ? [rel.links.related] : [])
-    // );
-    // let nestedEntries: Entry[] = [];
-    // for (let dir of nestedDirs) {
-    //   nestedEntries.push(...(await this.getEntries(realmPath, dir)));
-    // }
     return [...newEntries];
   }
 }
@@ -113,9 +105,10 @@ export class DirectoryResource extends Resource<Args> {
 export function directory(
   parent: object,
   url: () => string | undefined,
+  openDirs: () => string | undefined,
   polling: () => 'off' | undefined
 ) {
   return DirectoryResource.from(parent, () => ({
-    named: { url: url(), polling: polling() },
+    named: { url: url(), openDirs: openDirs(), polling: polling() },
   })) as DirectoryResource;
 }
