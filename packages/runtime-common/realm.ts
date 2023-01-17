@@ -57,6 +57,7 @@ import type { Readable } from "stream";
 import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
+import { createResponse } from "./create-response";
 
 export interface FileRef {
   path: LocalPath;
@@ -230,10 +231,9 @@ export class Realm {
       ref.content instanceof Uint8Array ||
       typeof ref.content === "string"
     ) {
-      return new Response(ref.content, {
+      return createResponse(ref.content, {
         headers: {
           "last-modified": formatRFC7231(ref.lastModified),
-          vary: "Accept",
         },
       });
     }
@@ -243,10 +243,9 @@ export class Realm {
     }
 
     // add the node stream to the response which will get special handling in the node env
-    let response = new Response(null, {
+    let response = createResponse(null, {
       headers: {
         "last-modified": formatRFC7231(ref.lastModified),
-        vary: "Accept",
       },
     }) as ResponseWithNodeStream;
     response.nodeStream = ref.content;
@@ -258,12 +257,9 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    return new Response(null, {
+    return createResponse(null, {
       status: 204,
-      headers: {
-        "last-modified": formatRFC7231(lastModified),
-        vary: "Accept",
-      },
+      headers: { "last-modified": formatRFC7231(lastModified) },
     });
   }
 
@@ -277,12 +273,9 @@ export class Realm {
     }
 
     if (handle.path !== localName) {
-      return new Response(null, {
+      return createResponse(null, {
         status: 302,
-        headers: {
-          Location: `/${handle.path}`,
-          vary: "Accept",
-        },
+        headers: { Location: `/${handle.path}` },
       });
     }
     return await this.serveLocalFile(handle);
@@ -295,7 +288,7 @@ export class Realm {
       return notFound(request, `${localName} not found`);
     }
     await this.delete(handle.path);
-    return new Response(null, { status: 204 });
+    return createResponse(null, { status: 204 });
   }
 
   private transpileJS(content: string, debugFilename: string): string {
@@ -337,19 +330,16 @@ export class Realm {
     try {
       content = this.transpileJS(content, debugFilename);
     } catch (err: any) {
-      return new Response(err.message, {
+      return createResponse(err.message, {
         // using "Not Acceptable" here because no text/javascript representation
         // can be made and we're sending text/html error page instead
         status: 406,
         headers: { "content-type": "text/html" },
       });
     }
-    return new Response(content, {
+    return createResponse(content, {
       status: 200,
-      headers: {
-        "content-type": "text/javascript",
-        vary: "Accept",
-      },
+      headers: { "content-type": "text/javascript" },
     });
   }
 
@@ -427,11 +417,10 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return new Response(JSON.stringify(doc, null, 2), {
+    return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
         "content-type": "application/vnd.api+json",
-        vary: "Accept",
         ...lastModifiedHeader(doc),
       },
     });
@@ -492,10 +481,9 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return new Response(JSON.stringify(doc, null, 2), {
+    return createResponse(JSON.stringify(doc, null, 2), {
       headers: {
         "content-type": "application/vnd.api+json",
-        vary: "Accept",
         ...lastModifiedHeader(doc),
       },
     });
@@ -519,11 +507,10 @@ export class Realm {
     }
     let { doc: card } = maybeError;
     card.data.links = { self: url.href };
-    return new Response(JSON.stringify(card, null, 2), {
+    return createResponse(JSON.stringify(card, null, 2), {
       headers: {
         "last-modified": formatRFC7231(card.data.meta.lastModified!),
         "content-type": "application/vnd.api+json",
-        vary: "Accept",
         ...lastModifiedHeader(card),
       },
     });
@@ -538,7 +525,7 @@ export class Realm {
     }
     let localPath = this.paths.local(url) + ".json";
     await this.delete(localPath);
-    return new Response(null, { status: 204 });
+    return createResponse(null, { status: 204 });
   }
 
   private async directoryEntries(
@@ -606,8 +593,8 @@ export class Realm {
       ] = relationship;
     }
 
-    return new Response(JSON.stringify({ data }, null, 2), {
-      headers: { "content-type": "application/vnd.api+json", vary: "Accept" },
+    return createResponse(JSON.stringify({ data }, null, 2), {
+      headers: { "content-type": "application/vnd.api+json" },
     });
   }
 
@@ -632,8 +619,8 @@ export class Realm {
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true }
     );
-    return new Response(JSON.stringify(doc, null, 2), {
-      headers: { "content-type": "application/vnd.api+json", vary: "Accept" },
+    return createResponse(JSON.stringify(doc, null, 2), {
+      headers: { "content-type": "application/vnd.api+json" },
     });
   }
 
