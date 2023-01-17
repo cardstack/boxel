@@ -236,9 +236,9 @@ export class Realm {
       ref.content instanceof Uint8Array ||
       typeof ref.content === "string"
     ) {
-      // TODO: fix this: handle ReadableStream and Uint8Array
-      (response as Response).text = async () => ref.content;
       response.headers.set("last-modified", formatRFC7231(ref.lastModified));
+      // (response as Response).body = ref.content; // TODO
+      (response as Response).text = async () => ref.content; // TODO: handle ReadableStream and Uint8Array
       return response;
     }
 
@@ -260,8 +260,8 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    // response.status = 204; // TODO
     response.headers.set("last-modified", formatRFC7231(lastModified));
+    // response.status = 204; // TODO
     return response;
   }
 
@@ -276,8 +276,8 @@ export class Realm {
     }
 
     if (handle.path !== localName) {
-      // response.status = 302; // TODO
       response.headers.set("Location", `/${handle.path}`);
+      // response.status = 302; // TODO
       return response;
     }
     return await this.serveLocalFile(handle, response);
@@ -340,11 +340,12 @@ export class Realm {
     try {
       content = this.transpileJS(content, debugFilename);
     } catch (err: any) {
+      response.headers.set("content-type", "text/html");
+      // response.body = err.message; // TODO
       response.text = async () => err.message;
       // using "Not Acceptable" here because no text/javascript representation
       // can be made and we're sending text/html error page instead
       // response.status = 406; // TODO
-      response.headers.set("content-type", "text/html");
       return response;
     }
     // response.headers.set("content-type", "text/javascript");
@@ -437,10 +438,11 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    response.json = async () => JSON.stringify(doc, null, 2);
-    // response.status = 201; // TODO
     response.headers.set("content-type", "application/vnd.api+json");
     response.headers.set("last-modified", lastModifiedHeader(doc));
+    // response.body = JSON.stringify(doc, null, 2); // TODO
+    response.json = async () => JSON.stringify(doc, null, 2);
+    // response.status = 201; // TODO
     return response;
   }
 
@@ -504,9 +506,10 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    response.json = async () => JSON.stringify(doc, null, 2);
     response.headers.set("content-type", "application/vnd.api+json");
     response.headers.set("last-modified", lastModifiedHeader(doc));
+    // response.body = JSON.stringify(doc, null, 2); // TODO
+    response.json = async () => JSON.stringify(doc, null, 2);
     return response;
   }
 
@@ -532,9 +535,10 @@ export class Realm {
     }
     let { doc: card } = maybeError;
     card.data.links = { self: url.href };
-    response.json = async () => JSON.stringify(card, null, 2);
     response.headers.set("content-type", "application/vnd.api+json");
     response.headers.set("last-modified", lastModifiedHeader(card));
+    // response.body = JSON.stringify(card, null, 2); // TODO
+    response.json = async () => JSON.stringify(card, null, 2);
     return response;
   }
 
@@ -622,8 +626,9 @@ export class Realm {
       ] = relationship;
     }
 
-    response.json = async () => JSON.stringify({ data }, null, 2);
     response.headers.set("content-type", "application/vnd.api+json");
+    // response.body = JSON.stringify({ data }, null, 2); // TODO
+    response.json = async () => JSON.stringify({ data }, null, 2);
     return response;
   }
 
@@ -651,8 +656,9 @@ export class Realm {
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true }
     );
-    response.json = async () => JSON.stringify(doc, null, 2);
     response.headers.set("content-type", "application/vnd.api+json");
+    // response.body = JSON.stringify(doc, null, 2); // TODO
+    response.json = async () => JSON.stringify(doc, null, 2);
     return response;
   }
 
