@@ -26,7 +26,7 @@ app "realm-base" {
     use "aws-ecs" {
       region              = "us-east-1"
       memory              = "512"
-      cluster             = "boxel-realm-server-base-staging"
+      cluster             = "realm-base-staging"
       count               = 2
       subnets             = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
       task_role_name      = "realm-base-staging-ecs-task"
