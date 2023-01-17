@@ -347,10 +347,16 @@ export class Realm {
       response.headers.set("content-type", "text/html");
       return response;
     }
-    response.text = async () => content;
+    // response.headers.set("content-type", "text/javascript");
+    // response.body = content; // TODO
     // response.status = 200; // TODO
-    response.headers.set("content-type", "text/javascript");
-    return response;
+    // return response;
+    return new Response(content, {
+      status: 200,
+      headers: {
+        "content-type": "text/javascript",
+      },
+    });
   }
 
   // we bother with this because typescript is picky about allowing you to use
