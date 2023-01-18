@@ -107,12 +107,17 @@ export interface RealmAdapter {
   remove(path: LocalPath): Promise<void>;
 }
 
+interface Options {
+  deferStartUp?: true;
+}
+
 export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
+  #deferStartup: boolean;
   readonly paths: RealmPaths;
 
   get url(): string {
@@ -123,12 +128,12 @@ export class Realm {
     url: string,
     adapter: RealmAdapter,
     indexRunner: IndexRunner,
-    runnerOptsMgr: RunnerOptionsManager
+    runnerOptsMgr: RunnerOptionsManager,
+    opts?: Options
   ) {
     this.paths = new RealmPaths(url);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
-    this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
       this,
       this.#adapter.readdir.bind(this.#adapter),
@@ -152,6 +157,19 @@ export class Realm {
       )
       .get("/.+", this.getCardSourceOrRedirect.bind(this))
       .delete("/.+", this.removeCardSource.bind(this));
+
+    this.#deferStartup = opts?.deferStartUp ?? false;
+    if (!opts?.deferStartUp) {
+      this.#startedUp.fulfill((() => this.#startup())());
+    }
+  }
+
+  // it's only necessary to call this when the realm is using a deferred startup
+  async start() {
+    if (this.#deferStartup) {
+      this.#startedUp.fulfill((() => this.#startup())());
+    }
+    await this.ready;
   }
 
   async write(
