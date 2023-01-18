@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -145,7 +145,186 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
-  skip('can index a card with a contains-many linkTo field');
+  test('can index a card with a containsMany composite containing a linkTo field', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Vendor/vendor1.json': {
+        data: {
+          id: `${testRealmURL}Vendor/vendor1`,
+          attributes: {
+            name: 'Acme Industries',
+            paymentMethods: [
+              {
+                type: 'crypto',
+                payment: {
+                  address: '0x1111',
+                },
+              },
+              {
+                type: 'crypto',
+                payment: {
+                  address: '0x2222',
+                },
+              },
+            ],
+          },
+          relationships: {
+            'paymentMethods.0.payment.chain': {
+              links: {
+                self: `${testRealmURL}Chain/1`,
+              },
+            },
+            'paymentMethods.1.payment.chain': {
+              links: {
+                self: `${testRealmURL}Chain/2`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/vendor`,
+              name: 'Vendor',
+            },
+          },
+        },
+      },
+      'Chain/1.json': {
+        data: {
+          id: `${testRealmURL}Chain/1`,
+          attributes: {
+            name: 'Ethereum Mainnet',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/chain`,
+              name: 'Chain',
+            },
+          },
+        },
+      },
+      'Chain/2.json': {
+        data: {
+          id: `${testRealmURL}Chain/2`,
+          attributes: {
+            name: 'Polygon',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/chain`,
+              name: 'Chain',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let vendor = await indexer.card(new URL(`${testRealmURL}Vendor/vendor1`), {
+      loadLinks: true,
+    });
+    if (vendor?.type === 'doc') {
+      assert.deepEqual(vendor.doc, {
+        data: {
+          id: `${testRealmURL}Vendor/vendor1`,
+          type: 'card',
+          links: {
+            self: `${testRealmURL}Vendor/vendor1`,
+          },
+          attributes: {
+            name: 'Acme Industries',
+            paymentMethods: [
+              {
+                type: 'crypto',
+                payment: {
+                  address: '0x1111',
+                },
+              },
+              {
+                type: 'crypto',
+                payment: {
+                  address: '0x2222',
+                },
+              },
+            ],
+          },
+          relationships: {
+            'paymentMethods.0.payment.chain': {
+              data: {
+                id: `${testRealmURL}Chain/1`,
+                type: 'card',
+              },
+              links: {
+                self: `${testRealmURL}Chain/1`,
+              },
+            },
+            'paymentMethods.1.payment.chain': {
+              data: {
+                id: `${testRealmURL}Chain/2`,
+                type: 'card',
+              },
+              links: {
+                self: `${testRealmURL}Chain/2`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/vendor`,
+              name: 'Vendor',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Vendor/vendor1.json`
+            ),
+          },
+        },
+        included: [
+          {
+            id: `${testRealmURL}Chain/1`,
+            type: 'card',
+            links: {
+              self: `${testRealmURL}Chain/1`,
+            },
+            attributes: {
+              name: 'Ethereum Mainnet',
+              chainId: 1,
+            },
+
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/chain`,
+                name: 'Chain',
+              },
+              lastModified: adapter.lastModified.get(
+                `${testRealmURL}Chain/1.json`
+              ),
+            },
+          },
+          {
+            id: `${testRealmURL}Chain/2`,
+            type: 'card',
+            links: {
+              self: `${testRealmURL}Chain/2`,
+            },
+            attributes: {
+              name: 'Polygon',
+              chainId: 137,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/chain`,
+                name: 'Chain',
+              },
+              lastModified: adapter.lastModified.get(
+                `${testRealmURL}Chain/2.json`
+              ),
+            },
+          },
+        ],
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${vendor?.error.detail}`);
+    }
+  });
 
   test('can tolerate a card whose computed throws an exception', async function (assert) {
     let adapter = new TestRealmAdapter({
