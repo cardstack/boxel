@@ -4,11 +4,13 @@ import type RouterService from '@ember/routing/router-service';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { Entry } from '../resources/directory';
+import { RealmPaths } from '@cardstack/runtime-common';
 
 interface Args {
   Args: {
     entry: Entry;
     path: string;
+    realmPath: RealmPaths;
   }
 }
 
@@ -23,6 +25,7 @@ export default class File extends Component<Args> {
 
   @action
   open() {
-    this.router.transitionTo({ queryParams: { path: this.args.path } });
+    let path = this.args.realmPath.local(new URL(this.args.path));
+    this.router.transitionTo({ queryParams: { path } });
   }
 }

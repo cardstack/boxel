@@ -88,17 +88,14 @@ export class DirectoryResource extends Resource<Args> {
       data: { relationships: _relationships },
     } = await response.json();
     let relationships = _relationships as Record<string, Relationship>;
-    let newEntries: Entry[] = Object.entries(relationships).map(
-      ([name, info]) => ({
-        name,
-        kind: info.meta!.kind,
-        path: realmPath.local(new URL(info.links!.related!)),
-        indent:
-          new URL(info.links!.related!).pathname.replace(/\/$/, '').split('/')
-            .length - 1,
-      })
-    );
-    return [...newEntries];
+    return Object.entries(relationships).map(([name, info]) => ({
+      name,
+      kind: info.meta!.kind,
+      path: realmPath.local(new URL(info.links!.related!)),
+      indent:
+        new URL(info.links!.related!).pathname.replace(/\/$/, '').split('/')
+          .length - 1,
+    }));
   }
 }
 

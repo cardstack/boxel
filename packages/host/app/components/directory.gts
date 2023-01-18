@@ -8,6 +8,8 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { RealmPaths } from '@cardstack/runtime-common';
 import { directory, Entry } from '../resources/directory';
 import File from './file';
+//@ts-ignore cached not available yet in definitely typed
+import { cached } from '@glimmer/tracking';
 
 interface Args {
   Args: {
@@ -15,11 +17,8 @@ interface Args {
     url: string;
     directory: Entry;
     openDirs: string | undefined;
+    realmPath: RealmPaths;
   }
-}
-
-function localPath(dirPath: string, path: string) {
-  return `${dirPath}${path}`;
 }
 
 export default class Directory extends Component<Args> {
@@ -27,12 +26,12 @@ export default class Directory extends Component<Args> {
     {{#if this.isOpen}}
       {{#each this.listing.entries as |entry|}}
         {{#if (eq entry.kind 'file')}}
-          <File @entry={{entry}} @path={{localPath this.dirPath entry.path}} />
+          <File @realmPath={{@realmPath}} @entry={{entry}} @path="{{this.dirPath}}{{entry.path}}" />
         {{else}}
           <div role="button" {{on "click" (fn this.toggleOpen entry)}} class="directory indent-{{entry.indent}}">
             {{entry.name}}
-            <Directory @polling={{@polling}} @directory={{entry}} @url={{this.dirPath}} @openDirs={{@openDirs}} />
           </div>
+          <Directory @realmPath={{@realmPath}} @polling={{@polling}} @directory={{entry}} @url={{this.dirPath}} @openDirs={{@openDirs}} />
         {{/if}}
       {{/each}}
     {{/if}}
@@ -42,17 +41,17 @@ export default class Directory extends Component<Args> {
   @service declare router: RouterService;
 
   get isOpen() {
-    return true;
-    // return this.args.openDirs === this.args.directory.path;
+    let directoryPath = this.args.realmPath.local(new URL(this.dirPath));
+    return this.args.openDirs === directoryPath;
   }
 
   get dirPath() {
-    let realmPaths = new RealmPaths(this.args.url);
-    return realmPaths.directoryURL(this.args.directory.path).href;
+    return this.args.realmPath.directoryURL(this.args.directory.path).href;
   }
 
   @action
   toggleOpen(entry: Entry) {
-    this.router.transitionTo({ queryParams: { openDirs: entry.path } });
+    let openDirs = this.args.realmPath.local(new URL(this.dirPath + entry.path));
+    this.router.transitionTo({ queryParams: { openDirs } });
   }
 }
