@@ -11,7 +11,7 @@ import { directory, Entry } from '../resources/directory';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { chooseCard, catalogEntryRef, createNewCard, RealmPaths } from '@cardstack/runtime-common';
 import File from './file';
-import Directory from './directory';
+import Directory, { editOpenDirsQuery } from './directory';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 
@@ -57,13 +57,6 @@ export default class FileTree extends Component<Args> {
     return new RealmPaths(this.cardService.defaultURL.href);
   }
 
-  get openDirs() {
-    if (!this.args.openDirs) {
-      return [];
-    }
-    return this.args.openDirs.includes(',') ? this.args.openDirs.split(',') : [ this.args.openDirs ];
-  }
-
   @action
   togglePolling() {
     this.router.transitionTo({ queryParams: { polling: this.isPolling ? 'off' : undefined } });
@@ -86,34 +79,9 @@ export default class FileTree extends Component<Args> {
 
   @action
   toggleOpen(entry: Entry) {
-    let queryPath: string | undefined;
     let dirURL = this.realmPath.directoryURL(entry.path);
     let localPath = this.realmPath.local(dirURL);
-    if (!this.args.openDirs || this.openDirs.length === 0) {
-      queryPath = localPath;
-    } else if (!this.args.openDirs.includes(entry.path)) {
-      queryPath = [...this.openDirs, localPath].join(',');
-    } else {
-      let dirArr: string[] = [];
-      for (let dirPath of this.openDirs) {
-        if (localPath.startsWith(dirPath) || dirPath.startsWith(localPath)) {
-          let dirParts = dirPath.split('/');
-          let i = dirParts.indexOf(entry.path);
-          if (i === -1) {
-            dirParts = [...dirParts, entry.path];
-            dirArr.push(dirParts.join('/'));
-          } else {
-            dirPath = dirParts.slice(0, i).join('/');
-            if (dirPath.length > 0) {
-              dirArr.push(dirPath);
-            }
-          }
-        } else {
-          dirArr.push(dirPath);
-        }
-      }
-      queryPath = dirArr.length ? dirArr.join(',') : undefined;
-    }
-    this.router.transitionTo({ queryParams: { openDirs: queryPath } });
+    let openDirs = editOpenDirsQuery(localPath, entry.path, this.args.openDirs);
+    this.router.transitionTo({ queryParams: { openDirs } });
   }
 }

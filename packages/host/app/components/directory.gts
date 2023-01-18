@@ -50,40 +50,46 @@ export default class Directory extends Component<Args> {
     return this.args.realmPath.directoryURL(localPath).href;
   }
 
-  get openDirs() {
-    if (!this.args.openDirs) {
-      return [];
-    }
-    return this.args.openDirs.includes(',') ? this.args.openDirs.split(',') : [ this.args.openDirs ];
-  }
-
   @action
   toggleOpen(entry: Entry) {
-    let queryPath: string | undefined;
     let localPath = this.args.realmPath.local(new URL(this.dirPath + entry.path));
-    if (!this.args.openDirs || this.openDirs.length === 0) {
-      queryPath = localPath;
-    } else {
-      let dirArr: string[] = [];
-      for (let dirPath of this.openDirs) {
-        if (localPath.startsWith(dirPath) || dirPath.startsWith(localPath)) {
-          let dirParts = dirPath.split('/');
-          let i = dirParts.indexOf(entry.path);
-          if (i === -1) {
-            dirParts = [...dirParts, entry.path];
-            dirArr.push(dirParts.join('/'));
-          } else {
-            dirPath = dirParts.slice(0, i).join('/');
-            if (dirPath.length > 0) {
-              dirArr.push(dirPath);
-            }
-          }
-        } else {
-          dirArr.push(dirPath);
-        }
-      }
-      queryPath = dirArr.length ? dirArr.join(',') : undefined;
-    }
-    this.router.transitionTo({ queryParams: { openDirs: queryPath } });
+    let openDirs = editOpenDirsQuery(localPath, entry.path, this.args.openDirs);
+    this.router.transitionTo({ queryParams: { openDirs } });
   }
+}
+
+export function editDirectoryPath(dirPath: string, entryPath: string): string {
+  let dirParts = dirPath.split('/');
+  let i = dirParts.indexOf(entryPath);
+  if (i === -1) {
+    dirParts = [...dirParts, entryPath];
+    return dirParts.join('/');
+  } else {
+    return dirParts.slice(0, i).join('/');
+  }
+}
+
+export function editOpenDirsQuery(path: string, entryPath: string, openDirsQuery?: string) {
+  if (!openDirsQuery) {
+    return path;
+  }
+  let openDirs = openDirsQuery.includes(',') ? openDirsQuery.split(',') : [ openDirsQuery ];
+  if (openDirs.length === 0) {
+    return path;
+  }
+  if (!openDirsQuery.includes(path.split('/')[0])) {
+    return [...openDirs, path].join(',');
+  }
+  let dirArr: string[] = [];
+  for (let dirPath of openDirs) {
+    if (path.startsWith(dirPath) || dirPath.startsWith(path)) {
+      let editedPath = editDirectoryPath(dirPath, entryPath);
+      if (editedPath.length) {
+        dirArr.push(editedPath);
+      }
+    } else {
+      dirArr.push(dirPath);
+    }
+  }
+  return dirArr.length ? dirArr.join(',') : undefined;
 }
