@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
-import { chooseCard, catalogEntryRef, identifyCard } from '@cardstack/runtime-common';
-import { getCardType } from '../resources/card-type';
+import { chooseCard, catalogEntryRef, identifyCard, internalKeyFor, moduleFrom } from '@cardstack/runtime-common';
+import { isCardRef, type CardRef } from '@cardstack/runtime-common/card-ref';
+import { getCardType, type Type } from '../resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { fn } from '@ember/helper';
@@ -54,15 +55,17 @@ export default class Schema extends Component<Signature> {
                   <button type="button" {{on "click" (fn this.deleteField field.name)}} data-test-delete>Delete</button>
                 {{/if}}
                 {{field.name}} - {{field.type}} - field card ID:
-                {{#if (this.inRealm field.card.module)}}
+                {{#if (this.isThisCard field.card)}}
+                  {{cardId field.card}} (this card)
+                {{else if (this.inRealm (cardModule field.card))}}
                   <LinkTo
                     @route="application"
-                    @query={{hash path=(this.modulePath field.card.module)}}
+                    @query={{hash path=(this.modulePath (cardModule field.card))}}
                   >
-                    {{field.card.id}}
+                    {{cardId field.card}}
                   </LinkTo>
                 {{else}}
-                  {{field.card.id}}
+                  {{cardId field.card}}
                 {{/if}}
               </li>
             {{/each}}
@@ -168,6 +171,10 @@ export default class Schema extends Component<Signature> {
   isOwnField(fieldName: string): boolean {
     return Object.keys(Object.getOwnPropertyDescriptors(this.args.card.prototype)).includes(fieldName);
   }
+  @action
+  isThisCard(card: Type | CardRef): boolean {
+    return internalKeyFor(this.ref, undefined) === (isCardRef(card) ? internalKeyFor(card, undefined): card.id);
+  }
 
   @action
   inRealm(url: string): boolean {
@@ -237,6 +244,22 @@ export default class Schema extends Component<Signature> {
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
     await this.args.file.write(src, true);
+  }
+}
+
+function cardId(card: Type | CardRef): string {
+  if (isCardRef(card)) {
+    return internalKeyFor(card, undefined);
+  } else {
+    return card.id
+  }
+}
+
+function cardModule(card: Type | CardRef): string {
+  if (isCardRef(card)) {
+    return moduleFrom(card);
+  } else {
+    return card.module;
   }
 }
 
