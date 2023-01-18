@@ -80,7 +80,7 @@ jobs:
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          DEMO_REALM_URL: https://boxel-realm-server-staging.stack.cards
+          DEMO_REALM_URL: https://realm-demo-staging.stack.cards
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
           AWS_REGION: us-east-1
@@ -106,7 +106,7 @@ jobs:
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          DEMO_REALM_URL: https://boxel-realm-server.cardstack.com
+          DEMO_REALM_URL: https://realm-demo.cardstack.com
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.cardstack.com
           AWS_S3_BUCKET: boxel-host-preview.cardstack.com
           AWS_REGION: us-east-1
