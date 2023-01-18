@@ -1,5 +1,9 @@
 import { Deferred } from "./deferred";
-import { SearchIndex } from "./search-index";
+import {
+  SearchIndex,
+  type IndexRunner,
+  type RunnerOptionsManager,
+} from "./search-index";
 import { type SingleCardDocument } from "./card-document";
 import { Loader, type MaybeLocalRequest } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
@@ -24,7 +28,11 @@ import {
 import merge from "lodash/merge";
 import qs from "qs";
 import cloneDeep from "lodash/cloneDeep";
-import { webStreamToText } from "./stream";
+import {
+  fileContentToText,
+  readFileAsText,
+  getFileWithFallbacks,
+} from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
 import makeEmberTemplatePlugin from "babel-plugin-ember-template-compilation";
@@ -49,6 +57,7 @@ import type { Readable } from "stream";
 import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
+import { createResponse } from "./create-response";
 
 export interface FileRef {
   path: LocalPath;
@@ -102,9 +111,9 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
-  readonly paths: RealmPaths;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
+  readonly paths: RealmPaths;
 
   get url(): string {
     return this.paths.url;
@@ -113,10 +122,8 @@ export class Realm {
   constructor(
     url: string,
     adapter: RealmAdapter,
-    getVisitor: (
-      _fetch: typeof fetch,
-      staticResponses: Map<string, string>
-    ) => (url: string) => Promise<string>
+    indexRunner: IndexRunner,
+    runnerOptsMgr: RunnerOptionsManager
   ) {
     this.paths = new RealmPaths(url);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
@@ -126,7 +133,8 @@ export class Realm {
       this,
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this),
-      getVisitor
+      indexRunner,
+      runnerOptsMgr
     );
 
     this.#jsonAPIRouter = new Router(new URL(url))
@@ -187,7 +195,7 @@ export class Realm {
     }
     if (accept?.includes("application/vnd.api+json")) {
       // local requests are allowed to query the realm as the index is being built up
-      if (!request.isLocal) {
+      if (!request.isLocal && url.host !== "local-realm") {
         await this.ready;
       }
       if (!this.searchIndex) {
@@ -211,7 +219,7 @@ export class Realm {
     if (
       executableExtensions.some((extension) => handle.path.endsWith(extension))
     ) {
-      return this.makeJS(await this.fileContentToText(handle), handle.path);
+      return this.makeJS(await fileContentToText(handle), handle.path);
     } else {
       return await this.serveLocalFile(handle);
     }
@@ -223,7 +231,7 @@ export class Realm {
       ref.content instanceof Uint8Array ||
       typeof ref.content === "string"
     ) {
-      return new Response(ref.content, {
+      return createResponse(ref.content, {
         headers: {
           "last-modified": formatRFC7231(ref.lastModified),
         },
@@ -235,7 +243,7 @@ export class Realm {
     }
 
     // add the node stream to the response which will get special handling in the node env
-    let response = new Response(null, {
+    let response = createResponse(null, {
       headers: {
         "last-modified": formatRFC7231(ref.lastModified),
       },
@@ -249,11 +257,9 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    return new Response(null, {
+    return createResponse(null, {
       status: 204,
-      headers: {
-        "last-modified": formatRFC7231(lastModified),
-      },
+      headers: { "last-modified": formatRFC7231(lastModified) },
     });
   }
 
@@ -267,11 +273,9 @@ export class Realm {
     }
 
     if (handle.path !== localName) {
-      return new Response(null, {
+      return createResponse(null, {
         status: 302,
-        headers: {
-          Location: `/${handle.path}`,
-        },
+        headers: { Location: `/${handle.path}` },
       });
     }
     return await this.serveLocalFile(handle);
@@ -284,7 +288,7 @@ export class Realm {
       return notFound(request, `${localName} not found`);
     }
     await this.delete(handle.path);
-    return new Response(null, { status: 204 });
+    return createResponse(null, { status: 204 });
   }
 
   private transpileJS(content: string, debugFilename: string): string {
@@ -326,18 +330,16 @@ export class Realm {
     try {
       content = this.transpileJS(content, debugFilename);
     } catch (err: any) {
-      return new Response(err.message, {
+      return createResponse(err.message, {
         // using "Not Acceptable" here because no text/javascript representation
         // can be made and we're sending text/html error page instead
         status: 406,
         headers: { "content-type": "text/html" },
       });
     }
-    return new Response(content, {
+    return createResponse(content, {
       status: 200,
-      headers: {
-        "content-type": "text/javascript",
-      },
+      headers: { "content-type": "text/javascript" },
     });
   }
 
@@ -346,20 +348,10 @@ export class Realm {
   private async getFileWithFallbacks(
     path: LocalPath
   ): Promise<FileRef | undefined> {
-    // TODO refactor to use search index
-
-    let result = await this.#adapter.openFile(path);
-    if (result) {
-      return result;
-    }
-
-    for (let extension of executableExtensions) {
-      result = await this.#adapter.openFile(path + extension);
-      if (result) {
-        return result;
-      }
-    }
-    return undefined;
+    return getFileWithFallbacks(
+      path,
+      this.#adapter.openFile.bind(this.#adapter)
+    );
   }
 
   private async createCard(request: Request): Promise<Response> {
@@ -425,7 +417,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return new Response(JSON.stringify(doc, null, 2), {
+    return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
         "content-type": "application/vnd.api+json",
@@ -489,7 +481,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return new Response(JSON.stringify(doc, null, 2), {
+    return createResponse(JSON.stringify(doc, null, 2), {
       headers: {
         "content-type": "application/vnd.api+json",
         ...lastModifiedHeader(doc),
@@ -515,7 +507,7 @@ export class Realm {
     }
     let { doc: card } = maybeError;
     card.data.links = { self: url.href };
-    return new Response(JSON.stringify(card, null, 2), {
+    return createResponse(JSON.stringify(card, null, 2), {
       headers: {
         "last-modified": formatRFC7231(card.data.meta.lastModified!),
         "content-type": "application/vnd.api+json",
@@ -533,7 +525,7 @@ export class Realm {
     }
     let localPath = this.paths.local(url) + ".json";
     await this.delete(localPath);
-    return new Response(null, { status: 204 });
+    return createResponse(null, { status: 204 });
   }
 
   private async directoryEntries(
@@ -601,7 +593,7 @@ export class Realm {
       ] = relationship;
     }
 
-    return new Response(JSON.stringify({ data }, null, 2), {
+    return createResponse(JSON.stringify({ data }, null, 2), {
       headers: { "content-type": "application/vnd.api+json" },
     });
   }
@@ -610,19 +602,11 @@ export class Realm {
     path: LocalPath,
     opts: { withFallbacks?: true } = {}
   ): Promise<{ content: string; lastModified: number } | undefined> {
-    let ref: FileRef | undefined;
-    if (opts.withFallbacks) {
-      ref = await this.getFileWithFallbacks(path);
-    } else {
-      ref = await this.#adapter.openFile(path);
-    }
-    if (!ref) {
-      return;
-    }
-    return {
-      content: await this.fileContentToText(ref),
-      lastModified: ref.lastModified,
-    };
+    return readFileAsText(
+      path,
+      this.#adapter.openFile.bind(this.#adapter),
+      opts
+    );
   }
 
   private async isIgnored(url: URL): Promise<boolean> {
@@ -630,41 +614,12 @@ export class Realm {
     return this.#searchIndex.isIgnored(url);
   }
 
-  private async fileContentToText({ content }: FileRef): Promise<string> {
-    if (typeof content === "string") {
-      return content;
-    }
-    if (content instanceof Uint8Array) {
-      let decoder = new TextDecoder();
-      return decoder.decode(content);
-    } else if (content instanceof ReadableStream) {
-      return await webStreamToText(content);
-    } else {
-      if (!isNode) {
-        throw new Error(`cannot handle node-streams when not in node`);
-      }
-
-      // we're in a node-only branch, so this code isn't relevant to the worker
-      // build, but the worker build will try to resolve the buffer polyfill and
-      // blow up since we don't include that library. So we're hiding from
-      // webpack.
-      const B = (globalThis as any)["Buffer"];
-
-      const chunks: typeof B[] = []; // Buffer is available from globalThis when in the node env, however tsc can't type check this for the worker
-      // the types for Readable have not caught up to the fact these are async generators
-      for await (const chunk of content as any) {
-        chunks.push(B.from(chunk));
-      }
-      return B.concat(chunks).toString("utf-8");
-    }
-  }
-
   private async search(request: Request): Promise<Response> {
     let doc = await this.#searchIndex.search(
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true }
     );
-    return new Response(JSON.stringify(doc, null, 2), {
+    return createResponse(JSON.stringify(doc, null, 2), {
       headers: { "content-type": "application/vnd.api+json" },
     });
   }

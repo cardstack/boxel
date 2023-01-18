@@ -6,10 +6,22 @@ import {
   LooseSingleCardDocument,
   baseRealm,
 } from '@cardstack/runtime-common';
+import GlimmerComponent from '@glimmer/component';
+import { TestContext } from '@ember/test-helpers';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
+import { renderComponent } from './render-component';
+import Service from '@ember/service';
+import CardPrerender from '@cardstack/host/components/card-prerender';
 import { type Card } from 'https://cardstack.com/base/card-api';
+import {
+  RunnerOptionsManager,
+  type RunState,
+  type RunnerRegistration,
+  type EntrySetter,
+  type SearchEntryWithErrors,
+} from '@cardstack/runtime-common/search-index';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -31,37 +43,120 @@ export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
 }
 
+// We use a rendered component to facilitate our indexing (this emulates
+// the work that the service worker renderer is doing), which means that the
+// `setupRenderingTest(hooks)` from ember-qunit must be used in your tests. 
 export const TestRealm = {
-  create(
+  async create(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
+    owner: TestContext['owner'],
     realmURL?: string
-  ): Realm {
-    return new Realm(
-      realmURL ?? testRealmURL,
-      new TestRealmAdapter(flatFiles),
-      (_fetch: typeof fetch) => async (_url: string) => {
-        return `
-          <!--Server Side Rendered Card START-->
-            <h1>Test card HTML</h1>
-          <!--Server Side Rendered Card END-->
-        `;
-      }
-    );
+  ): Promise<Realm> {
+    await makeRenderer();
+    return makeRealm(new TestRealmAdapter(flatFiles), owner, realmURL);
   },
-  createWithAdapter(adapter: RealmAdapter, realmURL?: string): Realm {
-    return new Realm(
-      realmURL ?? testRealmURL,
-      adapter,
-      (_fetch: typeof fetch) => async (_url: string) => {
-        return `
-          <!--Server Side Rendered Card START-->
-            <h1>Test card HTML</h1>
-          <!--Server Side Rendered Card END-->
-        `;
-      }
-    );
+
+  async createWithAdapter(
+    adapter: RealmAdapter,
+    owner: TestContext['owner'],
+    realmURL?: string
+  ): Promise<Realm> {
+    await makeRenderer();
+    return makeRealm(adapter, owner, realmURL);
   },
 };
+
+async function makeRenderer() {
+  // This emulates the application.hbs
+  await renderComponent(
+    class TestDriver extends GlimmerComponent {
+      <template>
+        <template shadowroot="open">
+          <CardPrerender/>
+        </template>
+      </template>
+    }
+  );
+}
+
+// This marries together the 2 sides of the message channel,
+// LocalRealm and MessageHandler, which glosses over the postMessage calls
+class MockLocalRealm extends Service {
+  isAvailable = true;
+  url = new URL(testRealmURL);
+  #adapter: RealmAdapter | undefined;
+  #entrySetter: EntrySetter | undefined;
+  #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
+  #incremental:
+    | ((
+        prev: RunState,
+        url: URL,
+        operation: 'update' | 'delete'
+      ) => Promise<RunState>)
+    | undefined;
+  setupIndexing(
+    fromScratch: (realmURL: URL) => Promise<RunState>,
+    incremental: (
+      prev: RunState,
+      url: URL,
+      operation: 'update' | 'delete'
+    ) => Promise<RunState>
+  ) {
+    this.#fromScratch = fromScratch;
+    this.#incremental = incremental;
+  }
+  async setupIndexRunner(
+    registerRunner: RunnerRegistration,
+    entrySetter: EntrySetter,
+    adapter: RealmAdapter,
+  ) {
+    if (!this.#fromScratch || !this.#incremental) {
+      throw new Error(`fromScratch/incremental not registered with MockLocalRealm`);
+    }
+    this.#entrySetter = entrySetter;
+    this.#adapter = adapter;
+    await registerRunner(
+      this.#fromScratch.bind(this),
+      this.#incremental.bind(this)
+    );
+  }
+  async setEntry(url: URL, entry: SearchEntryWithErrors) {
+    if (!this.#entrySetter) {
+      throw new Error(`entrySetter not registered with MockLocalRealm`);
+    }
+    this.#entrySetter(url, entry);
+  }
+  get adapter() {
+    if (!this.#adapter) {
+      throw new Error(`adapter has not been set on MockLocalRealm`);
+    }
+    return this.#adapter;
+  }
+}
+
+export function setupMockLocalRealm(hooks: NestedHooks) {
+  hooks.beforeEach(function() {
+    this.owner.register('service:local-realm', MockLocalRealm);
+  });
+}
+
+let runnerOptsMgr = new RunnerOptionsManager();
+function makeRealm(
+  adapter: RealmAdapter,
+  owner: TestContext['owner'],
+  realmURL = testRealmURL
+) {
+  let localRealm = owner.lookup('service:local-realm') as MockLocalRealm;
+  return new Realm(
+    realmURL ?? testRealmURL,
+    adapter,
+    async (optsId) => {
+        let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
+      await localRealm.setupIndexRunner(registerRunner, entrySetter, adapter);
+    },
+    runnerOptsMgr
+  );
+}
 
 export async function saveCard(
   instance: Card,

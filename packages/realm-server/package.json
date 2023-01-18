@@ -5,14 +5,16 @@
   "devDependencies": {
     "@cardstack/runtime-common": "workspace:*",
     "@types/fs-extra": "^9.0.13",
+    "@types/lodash": "^4.14.182",
     "@types/node": "^18.6.0",
     "@types/qs": "^6.9.7",
     "@types/qunit": "^2.11.3",
     "@types/supertest": "^2.0.12",
     "@types/tmp": "^0.2.3",
     "@types/yargs": "^17.0.10",
-    "fastboot": "^3.3.2",
+    "fastboot": "^4.1.0",
     "fs-extra": "^10.1.0",
+    "lodash": "^4.17.21",
     "qs": "^6.10.5",
     "qunit": "^2.18.0",
     "start-server-and-test": "^1.14.0",
@@ -23,7 +25,7 @@
     "yargs": "^17.5.1"
   },
   "scripts": {
-    "test": "NODE_NO_WARNINGS=1 SUPPRESS_ERRORS=true qunit --require ts-node/register/transpile-only tests/index.ts",
+    "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.api%2Bjson' 'test'",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/'",

@@ -4,7 +4,8 @@ import { NodeAdapter } from "./node-realm";
 import yargs from "yargs";
 import { createRealmServer } from "./server";
 import { resolve, join } from "path";
-import { makeFastBootVisitor } from "./fastboot";
+import { makeFastBootIndexRunner } from "./fastboot";
+import { RunnerOptionsManager } from "@cardstack/runtime-common/search-index";
 
 let {
   port,
@@ -65,14 +66,23 @@ for (let [from, to] of urlMappings) {
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let distPath = resolve(dist);
-let getVisitor = makeFastBootVisitor(distPath);
-let realms: Realm[] = paths.map((path, i) => {
-  return new Realm(
-    hrefs[i][0],
-    new NodeAdapter(resolve(String(path))),
-    getVisitor
+
+let realms: Realm[] = [];
+for (let [i, path] of paths.entries()) {
+  let manager = new RunnerOptionsManager();
+  let getRunner = makeFastBootIndexRunner(
+    distPath,
+    manager.getOptions.bind(manager)
   );
-});
+  realms.push(
+    new Realm(
+      hrefs[i][0],
+      new NodeAdapter(resolve(String(path))),
+      getRunner,
+      manager
+    )
+  );
+}
 
 let server = createRealmServer(realms);
 server.listen(port);

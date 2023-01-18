@@ -1,11 +1,11 @@
 import Component from '@glimmer/component';
-import { chooseCard, catalogEntryRef, identifyCard } from '@cardstack/runtime-common';
-import { getCardType } from '../resources/card-type';
+import { chooseCard, catalogEntryRef, identifyCard, internalKeyFor, moduleFrom } from '@cardstack/runtime-common';
+import { isCardRef, type CardRef } from '@cardstack/runtime-common/card-ref';
+import { getCardType, type Type } from '../resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import LocalRealm from '../services/local-realm';
 import { eq } from '../helpers/truth-helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 //@ts-ignore cached not available yet in definitely typed
@@ -17,7 +17,8 @@ import CatalogEntryEditor from './catalog-entry-editor';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import Modifier from 'ember-modifier';
-import LoaderService from '../services/loader-service';
+import type LoaderService from '../services/loader-service';
+import type CardService from '../services/card-service';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
@@ -54,15 +55,17 @@ export default class Schema extends Component<Signature> {
                   <button type="button" {{on "click" (fn this.deleteField field.name)}} data-test-delete>Delete</button>
                 {{/if}}
                 {{field.name}} - {{field.type}} - field card ID:
-                {{#if (this.inRealm field.card.module)}}
+                {{#if (this.isThisCard field.card)}}
+                  {{cardId field.card}} (this card)
+                {{else if (this.inRealm (cardModule field.card))}}
                   <LinkTo
                     @route="application"
-                    @query={{hash path=(this.modulePath field.card.module)}}
+                    @query={{hash path=(this.modulePath (cardModule field.card))}}
                   >
-                    {{field.card.id}}
+                    {{cardId field.card}}
                   </LinkTo>
                 {{else}}
-                  {{field.card.id}}
+                  {{cardId field.card}}
                 {{/if}}
               </li>
             {{/each}}
@@ -125,8 +128,8 @@ export default class Schema extends Component<Signature> {
     {{/if}}
   </template>
 
-  @service declare localRealm: LocalRealm;
   @service declare loaderService: LoaderService;
+  @service declare cardService: CardService;
   @tracked newFieldName: string | undefined;
   @tracked newFieldType: FieldType = 'contains';
 
@@ -141,24 +144,12 @@ export default class Schema extends Component<Signature> {
 
   @cached
   get realmPath() {
-    if (!this.localRealm.isAvailable) {
-      throw new Error('Local realm is not available');
-    }
-    return new RealmPaths(this.loaderService.loader.reverseResolution(this.localRealm.url.href));
+    return new RealmPaths(this.loaderService.loader.reverseResolution(this.cardService.defaultURL.href));
   }
 
   @cached
   get cardType() {
     return getCardType(this, () => this.args.card);
-  }
-
-  @cached
-  get cardFromSyntax() {
-    let card = this.args.moduleSyntax.possibleCards.find(c => c.exportedAs === this.ref.name);
-    if (!card) {
-      throw new Error(`cannot find card in module syntax for ref ${JSON.stringify(this.ref)}`);
-    }
-    return card;
   }
 
   get isNewFieldDisabled() {
@@ -179,6 +170,10 @@ export default class Schema extends Component<Signature> {
   @action
   isOwnField(fieldName: string): boolean {
     return Object.keys(Object.getOwnPropertyDescriptors(this.args.card.prototype)).includes(fieldName);
+  }
+  @action
+  isThisCard(card: Type | CardRef): boolean {
+    return internalKeyFor(this.ref, undefined) === (isCardRef(card) ? internalKeyFor(card, undefined): card.id);
   }
 
   @action
@@ -249,6 +244,22 @@ export default class Schema extends Component<Signature> {
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
     await this.args.file.write(src, true);
+  }
+}
+
+function cardId(card: Type | CardRef): string {
+  if (isCardRef(card)) {
+    return internalKeyFor(card, undefined);
+  } else {
+    return card.id
+  }
+}
+
+function cardModule(card: Type | CardRef): string {
+  if (isCardRef(card)) {
+    return moduleFrom(card);
+  } else {
+    return card.module;
   }
 }
 

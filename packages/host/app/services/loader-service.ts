@@ -1,7 +1,7 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, createResponse } from '@cardstack/runtime-common';
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
@@ -17,16 +17,19 @@ export default class LoaderService extends Service {
   }
 
   private makeInstance() {
-    let loader = new Loader();
     if (this.fastboot.isFastBoot) {
-      return loader;
+      return this.makeProxiedLoader(new Loader());
     }
 
+    let loader = Loader.createLoaderFromGlobal();
     loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+    return this.makeProxiedLoader(loader);
+  }
 
+  private makeProxiedLoader(loader: Loader) {
     return new Proxy(loader, {
       get: (target, property, received) => {
         let maybeFetch = Reflect.get(target, property, received);
@@ -42,9 +45,12 @@ export default class LoaderService extends Service {
                 ? urlOrRequest
                 : urlOrRequest.href;
             let cachedJSONAPI = this.staticResponses.get(requestURL);
-            if (cachedJSONAPI != null) {
+            if (
+              cachedJSONAPI != null &&
+              (!init || !init.method || init.method.toUpperCase() === 'GET')
+            ) {
               return Promise.resolve(
-                new Response(cachedJSONAPI, {
+                createResponse(cachedJSONAPI, {
                   status: 200,
                   headers: {
                     'content-type': 'application/vnd.api+json',

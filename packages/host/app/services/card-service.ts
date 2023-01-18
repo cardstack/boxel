@@ -14,6 +14,9 @@ import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import ENV from '@cardstack/host/config/environment';
+
+const { demoRealmURL } = ENV;
 
 interface Options {
   absoluteURL?: true;
@@ -40,6 +43,12 @@ export default class CardService extends Service {
       );
     }
     return this.apiModule.module as typeof CardAPI;
+  }
+
+  get defaultURL(): ResolvedURL {
+    return this.loaderService.loader.resolve(
+      demoRealmURL ?? this.localRealm.url
+    );
   }
 
   private async fetchJSON(
@@ -69,7 +78,7 @@ export default class CardService extends Service {
       resource,
       doc,
       // we don't want to touch the local realm for server side rendering
-      opts?.absoluteURL ? undefined : this.localRealm.url,
+      opts?.absoluteURL ? undefined : this.defaultURL,
       {
         loader: this.loaderService.loader,
       }
@@ -100,7 +109,7 @@ export default class CardService extends Service {
     await this.apiModule.loaded;
     let cardJSON = this.api.serializeCard(card, { includeComputeds: true });
     let isSaved = this.api.isSaved(card);
-    let json = await this.fetchJSON(isSaved ? card.id : this.localRealm.url, {
+    let json = await this.fetchJSON(isSaved ? card.id : this.defaultURL, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(cardJSON, null, 2),
     });
@@ -116,7 +125,7 @@ export default class CardService extends Service {
     return await this.createFromSerialized(json.data, json);
   }
 
-  async search(query: Query, realmURL: string | ResolvedURL): Promise<Card[]> {
+  async search(query: Query, realmURL: ResolvedURL): Promise<Card[]> {
     let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
     if (!isCardCollectionDocument(json)) {
       throw new Error(

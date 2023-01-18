@@ -4,7 +4,8 @@ import { action } from '@ember/object';
 import { file, FileResource } from '../resources/file';
 import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
-import LocalRealm from '../services/local-realm';
+import type LocalRealm from '../services/local-realm';
+import type CardService from '../services/card-service';
 import { RealmPaths } from '@cardstack/runtime-common';
 import type { Format } from 'https://cardstack.com/base/card-api';
 
@@ -27,6 +28,7 @@ export default class Index extends Route<Model> {
 
   @service declare router: RouterService;
   @service declare loaderService: LoaderService;
+  @service declare cardService: CardService;
   @service declare localRealm: LocalRealm;
   @service declare fastboot: { isFastBoot: boolean };
 
@@ -45,11 +47,11 @@ export default class Index extends Route<Model> {
     }
 
     await this.localRealm.startedUp;
-    if (!this.localRealm.isAvailable) {
+    if (!this.localRealm.isAvailable && !this.cardService.defaultURL) {
       return { path, openFile, polling, isFastBoot };
     }
 
-    let realmPath = new RealmPaths(this.localRealm.url);
+    let realmPath = new RealmPaths(this.cardService.defaultURL);
     let url = realmPath.fileURL(path).href;
     let response = await this.loaderService.loader.fetch(url, {
       headers: {

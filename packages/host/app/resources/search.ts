@@ -5,7 +5,6 @@ import { tracked } from '@glimmer/tracking';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { service } from '@ember/service';
-import LocalRealm from '../services/local-realm';
 import flatMap from 'lodash/flatMap';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
@@ -22,7 +21,6 @@ interface Args {
 
 export class Search extends Resource<Args> {
   @tracked instances: Card[] = [];
-  @service declare localRealm: LocalRealm;
   @service declare cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {
@@ -35,7 +33,7 @@ export class Search extends Resource<Args> {
     // queries that we merge together
     this.instances = flatMap(
       await Promise.all(
-        [this.localRealm.url.href, loader.resolve(baseRealm.url)].map(
+        [this.cardService.defaultURL, loader.resolve(baseRealm.url)].map(
           async (realm) => await this.cardService.search(query, realm)
         )
       )

@@ -1,9 +1,10 @@
 import { FetchHandler } from './fetch';
 import { LivenessWatcher } from './liveness';
 import { MessageHandler } from './message-handler';
-import { LocalRealm } from './local-realm';
+import { LocalRealmAdapter } from './local-realm-adapter';
 import { Realm, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import '@cardstack/runtime-common/externals-global';
 
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
@@ -24,22 +25,23 @@ Loader.addURLMapping(
 
 // TODO: this should be a more event-driven capability driven from the message
 // handler
+let runnerOptsMgr = new RunnerOptionsManager();
 (async () => {
   try {
     await messageHandler.startingUp;
     if (!messageHandler.fs) {
       throw new Error(`could not get FileSystem`);
     }
-    fetchHandler.addRealm(
-      new Realm(
-        'http://local-realm/',
-        new LocalRealm(messageHandler.fs),
-        (_fetch: typeof fetch, staticResponses: Map<string, string>) =>
-          async (path: string) => {
-            return await messageHandler.visit(path, staticResponses);
-          }
-      )
+    let realm = new Realm(
+      'http://local-realm/',
+      new LocalRealmAdapter(messageHandler.fs),
+      async (optsId) => {
+        let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
+        await messageHandler.setupIndexRunner(registerRunner, entrySetter);
+      },
+      runnerOptsMgr
     );
+    fetchHandler.addRealm(realm);
   } catch (err) {
     console.log(err);
   }

@@ -4,6 +4,9 @@ import { Deferred } from "./deferred";
 import { trimExecutableExtension } from "./index";
 import { RealmPaths } from "./paths";
 import { CardError } from "./error";
+import { type RunnerOpts } from "./search-index";
+
+const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -182,7 +185,7 @@ export class Loader {
     consumed.add(moduleIdentifier);
 
     let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
-    let module = this.modules.get(resolvedModuleIdentifier.href);
+    let module = this.getModule(resolvedModuleIdentifier.href);
     if (!module || module.state === "fetching") {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
@@ -297,7 +300,7 @@ export class Loader {
         headers: urlOrRequest.headers,
         body: urlOrRequest.body,
       });
-      return fetch(request);
+      return getNativeFetch()(request);
     } else {
       let unresolvedURL =
         typeof urlOrRequest === "string"
@@ -316,7 +319,7 @@ export class Loader {
           return await handle(request);
         }
       }
-      return fetch(this.resolve(unresolvedURL).href, init);
+      return getNativeFetch()(this.resolve(unresolvedURL).href, init);
     }
   }
 
@@ -346,6 +349,14 @@ export class Loader {
     return absoluteURL;
   }
 
+  private getModule(moduleIdentifier: string): Module | undefined {
+    return this.modules.get(moduleIdentifier);
+  }
+
+  private setModule(moduleIdentifier: string, module: Module) {
+    this.modules.set(moduleIdentifier, module);
+  }
+
   private createModuleProxy(module: any, moduleIdentifier: string) {
     return new Proxy(module, {
       get: (target, property, received) => {
@@ -372,7 +383,7 @@ export class Loader {
     stack: string[] = []
   ): Promise<Module> {
     let moduleIdentifier = moduleURL.href;
-    let module = this.modules.get(moduleIdentifier);
+    let module = this.getModule(moduleIdentifier);
     if (module) {
       // in the event of a cycle, we have already evaluated the
       // define() since we recurse into our deps after the evaluation of the
@@ -403,13 +414,13 @@ export class Loader {
       state: "fetching",
       deferred: new Deferred<Module>(),
     };
-    this.modules.set(moduleIdentifier, module);
+    this.setModule(moduleIdentifier, module);
 
     let src: string;
     try {
       src = await this.load(moduleURL);
     } catch (exception) {
-      this.modules.set(moduleIdentifier, {
+      this.setModule(moduleIdentifier, {
         state: "broken",
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
@@ -449,7 +460,7 @@ export class Loader {
     try {
       eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
     } catch (exception) {
-      this.modules.set(moduleIdentifier, {
+      this.setModule(moduleIdentifier, {
         state: "broken",
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
@@ -480,13 +491,13 @@ export class Loader {
       ),
     };
 
-    this.modules.set(moduleIdentifier, registeredModule);
+    this.setModule(moduleIdentifier, registeredModule);
     module.deferred.fulfill(registeredModule);
     return registeredModule;
   }
 
   private evaluateModule<T extends object>(moduleIdentifier: string): T {
-    let module = this.modules.get(moduleIdentifier);
+    let module = this.getModule(moduleIdentifier);
     if (!module) {
       throw new Error(
         `bug in module loader: can't find module. ${moduleIdentifier} should have been registered before entering evaluateModule`
@@ -515,7 +526,7 @@ export class Loader {
       privateModuleInstance,
       moduleIdentifier
     );
-    this.modules.set(moduleIdentifier, {
+    this.setModule(moduleIdentifier, {
       state: "preparing",
       implementation: module.implementation,
       moduleInstance,
@@ -534,14 +545,14 @@ export class Loader {
       });
 
       module.implementation(...dependencies);
-      this.modules.set(moduleIdentifier, {
+      this.setModule(moduleIdentifier, {
         state: "evaluated",
         moduleInstance,
         consumedModules: module.consumedModules,
       });
       return moduleInstance;
     } catch (exception) {
-      this.modules.set(moduleIdentifier, {
+      this.setModule(moduleIdentifier, {
         state: "broken",
         exception,
         consumedModules: module.consumedModules,
@@ -566,6 +577,21 @@ export class Loader {
       throw error;
     }
     return await response.text();
+  }
+}
+
+function getNativeFetch(): typeof fetch {
+  if (isFastBoot) {
+    let optsId = (globalThis as any).runnerOptsId;
+    if (optsId == null) {
+      throw new Error(`Runner Options Identifier was not set`);
+    }
+    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
+      optsId: number
+    ) => RunnerOpts;
+    return getRunnerOpts(optsId)._fetch;
+  } else {
+    return fetch;
   }
 }
 

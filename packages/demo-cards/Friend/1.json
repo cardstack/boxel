@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Hassan"
+    },
+    "relationships": {
+      "friend": {
+        "links": {
+          "self": "http://local-realm/Friend/2"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://local-realm/friend",
+        "name": "Friend"
+      }
+    }
+  }
+}
