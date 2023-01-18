@@ -65,8 +65,6 @@ export class DirectoryResource extends Resource<Args> {
     this.entries = entries;
   }
 
-  // TODO when we want to include actual real file-tree behavior, let's stop
-  // recursing blindly into directories
   private async getEntries(
     realmPath: RealmPaths,
     url: string
