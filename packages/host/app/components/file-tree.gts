@@ -24,12 +24,6 @@ interface Args {
   }
 }
 
-function localPath(url: string, path: string) {
-  let realmPaths = new RealmPaths(url);
-  let dirURL = realmPaths.directoryURL(path);
-  return realmPaths.local(dirURL);
-}
-
 export default class FileTree extends Component<Args> {
   <template>
     <nav>
@@ -85,8 +79,15 @@ export default class FileTree extends Component<Args> {
 
   @action
   toggleOpen(entry: Entry) {
+    let dirs = this.args.openDirs ? this.args.openDirs.split('/'): [];
+    let i = dirs.indexOf(entry.path);
+    if (dirs.length && i !== -1) {
+      dirs = dirs.slice(0, i);
+      let openDirs = dirs.length ? dirs.join('/') : undefined;
+      return this.router.transitionTo({ queryParams: { openDirs } });
+    }
     let dirPath = this.realmPath.directoryURL(entry.path);
-    let path = this.realmPath.local(dirPath);
-    this.router.transitionTo({ queryParams: { openDirs: path } });
+    let openDirs = this.realmPath.local(dirPath);
+    return this.router.transitionTo({ queryParams: { openDirs } });
   }
 }

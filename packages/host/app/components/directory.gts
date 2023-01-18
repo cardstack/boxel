@@ -42,16 +42,24 @@ export default class Directory extends Component<Args> {
 
   get isOpen() {
     let directoryPath = this.args.realmPath.local(new URL(this.dirPath));
-    return this.args.openDirs === directoryPath;
+    return this.args.openDirs?.includes(directoryPath);
   }
 
   get dirPath() {
-    return this.args.realmPath.directoryURL(this.args.directory.path).href;
+    let localPath = this.args.realmPath.local(new URL(this.args.url + this.args.directory.path));
+    return this.args.realmPath.directoryURL(localPath).href;
   }
 
   @action
   toggleOpen(entry: Entry) {
+    let dirs = this.args.openDirs ? this.args.openDirs.split('/'): [];
+    let i = dirs.indexOf(entry.path);
+    if (dirs.length && i !== -1) {
+      dirs = dirs.slice(0, i);
+      let openDirs = dirs.length ? dirs.join('/') : undefined;
+      return this.router.transitionTo({ queryParams: { openDirs } });
+    }
     let openDirs = this.args.realmPath.local(new URL(this.dirPath + entry.path));
-    this.router.transitionTo({ queryParams: { openDirs } });
+    return this.router.transitionTo({ queryParams: { openDirs } });
   }
 }
