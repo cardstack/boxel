@@ -50,16 +50,40 @@ export default class Directory extends Component<Args> {
     return this.args.realmPath.directoryURL(localPath).href;
   }
 
+  get openDirs() {
+    if (!this.args.openDirs) {
+      return [];
+    }
+    return this.args.openDirs.includes(',') ? this.args.openDirs.split(',') : [ this.args.openDirs ];
+  }
+
   @action
   toggleOpen(entry: Entry) {
-    let dirs = this.args.openDirs ? this.args.openDirs.split('/'): [];
-    let i = dirs.indexOf(entry.path);
-    if (dirs.length && i !== -1) {
-      dirs = dirs.slice(0, i);
-      let openDirs = dirs.length ? dirs.join('/') : undefined;
-      return this.router.transitionTo({ queryParams: { openDirs } });
+    let queryPath: string | undefined;
+    let localPath = this.args.realmPath.local(new URL(this.dirPath + entry.path));
+    if (!this.args.openDirs || this.openDirs.length === 0) {
+      queryPath = localPath;
+    } else {
+      let dirArr: string[] = [];
+      for (let dirPath of this.openDirs) {
+        if (localPath.startsWith(dirPath) || dirPath.startsWith(localPath)) {
+          let dirParts = dirPath.split('/');
+          let i = dirParts.indexOf(entry.path);
+          if (i === -1) {
+            dirParts = [...dirParts, entry.path];
+            dirArr.push(dirParts.join('/'));
+          } else {
+            dirPath = dirParts.slice(0, i).join('/');
+            if (dirPath.length > 0) {
+              dirArr.push(dirPath);
+            }
+          }
+        } else {
+          dirArr.push(dirPath);
+        }
+      }
+      queryPath = dirArr.length ? dirArr.join(',') : undefined;
     }
-    let openDirs = this.args.realmPath.local(new URL(this.dirPath + entry.path));
-    return this.router.transitionTo({ queryParams: { openDirs } });
+    this.router.transitionTo({ queryParams: { openDirs: queryPath } });
   }
 }
