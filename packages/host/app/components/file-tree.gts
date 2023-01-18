@@ -1,19 +1,12 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
-import type CardService from '../services/card-service';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { directory, Entry } from '../resources/directory';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import { chooseCard, catalogEntryRef, createNewCard, RealmPaths } from '@cardstack/runtime-common';
-import File from './file';
-import Directory, { editOpenDirsQuery } from './directory';
-//@ts-ignore cached not available yet in definitely typed
-import { cached } from '@glimmer/tracking';
+import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
+import Directory from './directory';
 
 interface Args {
   Args: {
@@ -27,16 +20,11 @@ interface Args {
 export default class FileTree extends Component<Args> {
   <template>
     <nav>
-      {{#each this.listing.entries key="path" as |entry|}}
-        {{#if (eq entry.kind 'file')}}
-          <File @realmPath={{this.realmPath}} @entry={{entry}} @path="{{this.realmPath.url}}{{entry.path}}" />
-        {{else}}
-          <div role="button" {{on "click" (fn this.toggleOpen entry)}} class="directory indent-{{entry.indent}}">
-            {{entry.name}}
-          </div>
-          <Directory @realmPath={{this.realmPath}} @polling={{@polling}} @directory={{entry}} @url={{this.args.url}} @openDirs={{@openDirs}} />
-        {{/if}}
-      {{/each}}
+      <Directory
+        @url={{@url}}
+        @openDirs={{@openDirs}}
+        @polling={{@polling}}
+      />
     </nav>
     <button {{on "click" this.createNew}} type="button" data-test-create-new-card-button>
       Create New Card
@@ -47,15 +35,8 @@ export default class FileTree extends Component<Args> {
     </div>
   </template>
 
-  listing = directory(this, () => this.args.url, () => this.args.openDirs, () => this.args.polling);
   @service declare router: RouterService;
-  @service declare cardService: CardService;
   @tracked isPolling = this.args.polling !== 'off';
-
-  @cached
-  get realmPath() {
-    return new RealmPaths(this.cardService.defaultURL.href);
-  }
 
   @action
   togglePolling() {
@@ -75,13 +56,5 @@ export default class FileTree extends Component<Args> {
       return;
     }
     return await createNewCard(card.ref);
-  }
-
-  @action
-  toggleOpen(entry: Entry) {
-    let dirURL = this.realmPath.directoryURL(entry.path);
-    let localPath = this.realmPath.local(dirURL);
-    let openDirs = editOpenDirsQuery(localPath, entry.path, this.args.openDirs);
-    this.router.transitionTo({ queryParams: { openDirs } });
   }
 }

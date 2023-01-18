@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
+import type CardService from '../services/card-service';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -15,9 +16,8 @@ interface Args {
   Args: {
     polling: 'off' | undefined;
     url: string;
-    directory: Entry;
     openDirs: string | undefined;
-    realmPath: RealmPaths;
+    directory?: Entry;
   }
 }
 
@@ -26,12 +26,21 @@ export default class Directory extends Component<Args> {
     {{#if this.isOpen}}
       {{#each this.listing.entries as |entry|}}
         {{#if (eq entry.kind 'file')}}
-          <File @realmPath={{@realmPath}} @entry={{entry}} @path="{{this.dirPath}}{{entry.path}}" />
+          <File
+            @entry={{entry}}
+            @path="{{this.dirPath}}{{entry.path}}"
+            @realmPath={{this.realmPath}}
+          />
         {{else}}
           <div role="button" {{on "click" (fn this.toggleOpen entry)}} class="directory indent-{{entry.indent}}">
             {{entry.name}}
           </div>
-          <Directory @realmPath={{@realmPath}} @polling={{@polling}} @directory={{entry}} @url={{this.dirPath}} @openDirs={{@openDirs}} />
+          <Directory
+            @directory={{entry}}
+            @url={{this.dirPath}}
+            @openDirs={{@openDirs}}
+            @polling={{@polling}}
+          />
         {{/if}}
       {{/each}}
     {{/if}}
@@ -39,26 +48,37 @@ export default class Directory extends Component<Args> {
 
   listing = directory(this, () => this.dirPath, () => this.args.openDirs, () => this.args.polling);
   @service declare router: RouterService;
+  @service declare cardService: CardService;
+
+  @cached
+  get realmPath() {
+    return new RealmPaths(this.cardService.defaultURL.href);
+  }
 
   get isOpen() {
-    let directoryPath = this.args.realmPath.local(new URL(this.dirPath));
+    if (!this.args.directory) {
+      // on first render, we don't have a directory argument yet
+      return true;
+    }
+    let directoryPath = this.realmPath.local(new URL(this.dirPath));
     return this.args.openDirs?.includes(directoryPath);
   }
 
   get dirPath() {
-    let localPath = this.args.realmPath.local(new URL(this.args.url + this.args.directory.path));
-    return this.args.realmPath.directoryURL(localPath).href;
+    let path = this.args.directory ? this.args.url + this.args.directory.path : this.args.url;
+    let localPath = this.realmPath.local(new URL(path));
+    return this.realmPath.directoryURL(localPath).href;
   }
 
   @action
   toggleOpen(entry: Entry) {
-    let localPath = this.args.realmPath.local(new URL(this.dirPath + entry.path));
+    let localPath = this.realmPath.local(new URL(this.dirPath + entry.path));
     let openDirs = editOpenDirsQuery(localPath, entry.path, this.args.openDirs);
     this.router.transitionTo({ queryParams: { openDirs } });
   }
 }
 
-export function editDirectoryPath(dirPath: string, entryPath: string): string {
+function editDirectoryPath(dirPath: string, entryPath: string): string {
   let dirParts = dirPath.split('/');
   let i = dirParts.indexOf(entryPath);
   if (i === -1) {
@@ -69,7 +89,7 @@ export function editDirectoryPath(dirPath: string, entryPath: string): string {
   }
 }
 
-export function editOpenDirsQuery(path: string, entryPath: string, openDirsQuery?: string) {
+function editOpenDirsQuery(path: string, entryPath: string, openDirsQuery?: string) {
   if (!openDirsQuery) {
     return path;
   }
