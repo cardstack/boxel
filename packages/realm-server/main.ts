@@ -79,7 +79,8 @@ for (let [i, path] of paths.entries()) {
       hrefs[i][0],
       new NodeAdapter(resolve(String(path))),
       getRunner,
-      manager
+      manager,
+      { deferStartUp: true }
     )
   );
 }
@@ -98,3 +99,17 @@ if (additionalMappings.length) {
   }
 }
 console.log(`Using host dist path: '${distPath}' for card pre-rendering`);
+
+(async () => {
+  for (let realm of realms) {
+    console.log(`Starting realm ${realm.url}...`);
+    await realm.start();
+    console.log(`Realm ${realm.url} has started`);
+  }
+})().catch((e: any) => {
+  console.error(
+    `Unexpected error encountered starting realm, stopping server`,
+    e
+  );
+  process.exit(1);
+});
