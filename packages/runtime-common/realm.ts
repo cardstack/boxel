@@ -1,5 +1,9 @@
 import { Deferred } from "./deferred";
-import { SearchIndex, type IndexRunner, type RunnerOpts } from "./search-index";
+import {
+  SearchIndex,
+  type IndexRunner,
+  type RunnerOptionsManager,
+} from "./search-index";
 import { type SingleCardDocument } from "./card-document";
 import { Loader, type MaybeLocalRequest } from "./loader";
 import { RealmPaths, LocalPath, join } from "./paths";
@@ -53,6 +57,7 @@ import type { Readable } from "stream";
 import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
+import { createResponse } from "./create-response";
 
 export interface FileRef {
   path: LocalPath;
@@ -102,12 +107,17 @@ export interface RealmAdapter {
   remove(path: LocalPath): Promise<void>;
 }
 
+interface Options {
+  deferStartUp?: true;
+}
+
 export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
+  #deferStartup: boolean;
   readonly paths: RealmPaths;
 
   get url(): string {
@@ -118,18 +128,18 @@ export class Realm {
     url: string,
     adapter: RealmAdapter,
     indexRunner: IndexRunner,
-    setRunnerOpts: (opts: RunnerOpts) => void
+    runnerOptsMgr: RunnerOptionsManager,
+    opts?: Options
   ) {
     this.paths = new RealmPaths(url);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
-    this.#startedUp.fulfill((() => this.#startup())());
     this.#searchIndex = new SearchIndex(
       this,
       this.#adapter.readdir.bind(this.#adapter),
       this.readFileAsText.bind(this),
       indexRunner,
-      setRunnerOpts
+      runnerOptsMgr
     );
 
     this.#jsonAPIRouter = new Router(new URL(url))
@@ -147,6 +157,19 @@ export class Realm {
       )
       .get("/.+", this.getCardSourceOrRedirect.bind(this))
       .delete("/.+", this.removeCardSource.bind(this));
+
+    this.#deferStartup = opts?.deferStartUp ?? false;
+    if (!opts?.deferStartUp) {
+      this.#startedUp.fulfill((() => this.#startup())());
+    }
+  }
+
+  // it's only necessary to call this when the realm is using a deferred startup
+  async start() {
+    if (this.#deferStartup) {
+      this.#startedUp.fulfill((() => this.#startup())());
+    }
+    await this.ready;
   }
 
   async write(
@@ -226,10 +249,9 @@ export class Realm {
       ref.content instanceof Uint8Array ||
       typeof ref.content === "string"
     ) {
-      return new Response(ref.content, {
+      return createResponse(ref.content, {
         headers: {
           "last-modified": formatRFC7231(ref.lastModified),
-          vary: "Accept",
         },
       });
     }
@@ -239,10 +261,9 @@ export class Realm {
     }
 
     // add the node stream to the response which will get special handling in the node env
-    let response = new Response(null, {
+    let response = createResponse(null, {
       headers: {
         "last-modified": formatRFC7231(ref.lastModified),
-        vary: "Accept",
       },
     }) as ResponseWithNodeStream;
     response.nodeStream = ref.content;
@@ -254,12 +275,9 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    return new Response(null, {
+    return createResponse(null, {
       status: 204,
-      headers: {
-        "last-modified": formatRFC7231(lastModified),
-        vary: "Accept",
-      },
+      headers: { "last-modified": formatRFC7231(lastModified) },
     });
   }
 
@@ -273,12 +291,9 @@ export class Realm {
     }
 
     if (handle.path !== localName) {
-      return new Response(null, {
+      return createResponse(null, {
         status: 302,
-        headers: {
-          Location: `/${handle.path}`,
-          vary: "Accept",
-        },
+        headers: { Location: `/${handle.path}` },
       });
     }
     return await this.serveLocalFile(handle);
@@ -291,7 +306,7 @@ export class Realm {
       return notFound(request, `${localName} not found`);
     }
     await this.delete(handle.path);
-    return new Response(null, { status: 204 });
+    return createResponse(null, { status: 204 });
   }
 
   private transpileJS(content: string, debugFilename: string): string {
@@ -333,19 +348,16 @@ export class Realm {
     try {
       content = this.transpileJS(content, debugFilename);
     } catch (err: any) {
-      return new Response(err.message, {
+      return createResponse(err.message, {
         // using "Not Acceptable" here because no text/javascript representation
         // can be made and we're sending text/html error page instead
         status: 406,
         headers: { "content-type": "text/html" },
       });
     }
-    return new Response(content, {
+    return createResponse(content, {
       status: 200,
-      headers: {
-        "content-type": "text/javascript",
-        vary: "Accept",
-      },
+      headers: { "content-type": "text/javascript" },
     });
   }
 
@@ -423,11 +435,10 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return new Response(JSON.stringify(doc, null, 2), {
+    return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
         "content-type": "application/vnd.api+json",
-        vary: "Accept",
         ...lastModifiedHeader(doc),
       },
     });
@@ -488,10 +499,9 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return new Response(JSON.stringify(doc, null, 2), {
+    return createResponse(JSON.stringify(doc, null, 2), {
       headers: {
         "content-type": "application/vnd.api+json",
-        vary: "Accept",
         ...lastModifiedHeader(doc),
       },
     });
@@ -515,11 +525,10 @@ export class Realm {
     }
     let { doc: card } = maybeError;
     card.data.links = { self: url.href };
-    return new Response(JSON.stringify(card, null, 2), {
+    return createResponse(JSON.stringify(card, null, 2), {
       headers: {
         "last-modified": formatRFC7231(card.data.meta.lastModified!),
         "content-type": "application/vnd.api+json",
-        vary: "Accept",
         ...lastModifiedHeader(card),
       },
     });
@@ -534,7 +543,7 @@ export class Realm {
     }
     let localPath = this.paths.local(url) + ".json";
     await this.delete(localPath);
-    return new Response(null, { status: 204 });
+    return createResponse(null, { status: 204 });
   }
 
   private async directoryEntries(
@@ -602,8 +611,8 @@ export class Realm {
       ] = relationship;
     }
 
-    return new Response(JSON.stringify({ data }, null, 2), {
-      headers: { "content-type": "application/vnd.api+json", vary: "Accept" },
+    return createResponse(JSON.stringify({ data }, null, 2), {
+      headers: { "content-type": "application/vnd.api+json" },
     });
   }
 
@@ -628,8 +637,8 @@ export class Realm {
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true }
     );
-    return new Response(JSON.stringify(doc, null, 2), {
-      headers: { "content-type": "application/vnd.api+json", vary: "Accept" },
+    return createResponse(JSON.stringify(doc, null, 2), {
+      headers: { "content-type": "application/vnd.api+json" },
     });
   }
 

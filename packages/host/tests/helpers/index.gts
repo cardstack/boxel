@@ -16,11 +16,11 @@ import Service from '@ember/service';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import {
+  RunnerOptionsManager,
   type RunState,
   type RunnerRegistration,
   type EntrySetter,
   type SearchEntryWithErrors,
-  type RunnerOpts
 } from '@cardstack/runtime-common/search-index';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -140,17 +140,7 @@ export function setupMockLocalRealm(hooks: NestedHooks) {
   });
 }
 
-let runnerOpts: RunnerOpts | undefined;
-function setRunnerOpts(opts: RunnerOpts) {
-  runnerOpts = opts;
-}
-function getRunnerOpts() {
-  if (!runnerOpts) {
-    throw new Error(`RunnerOpts have not been set`);
-  }
-  return runnerOpts;
-}
-
+let runnerOptsMgr = new RunnerOptionsManager();
 function makeRealm(
   adapter: RealmAdapter,
   owner: TestContext['owner'],
@@ -160,11 +150,11 @@ function makeRealm(
   return new Realm(
     realmURL ?? testRealmURL,
     adapter,
-    async () => {
-        let { registerRunner, entrySetter } = getRunnerOpts();
+    async (optsId) => {
+        let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
       await localRealm.setupIndexRunner(registerRunner, entrySetter, adapter);
     },
-    setRunnerOpts
+    runnerOptsMgr
   );
 }
 

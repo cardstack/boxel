@@ -18,8 +18,7 @@
       "cwd": "${workspaceFolder}/packages/realm-server",
       "outFiles": ["${workspaceFolder}/**/*.js"],
       "env": {
-        "NODE_NO_WARNINGS": "1",
-        "SUPPRESS_ERRORS": "true"
+        "NODE_NO_WARNINGS": "1"
       }
     },
     {

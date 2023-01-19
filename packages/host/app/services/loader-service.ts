@@ -1,7 +1,7 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, createResponse } from '@cardstack/runtime-common';
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
@@ -50,11 +50,10 @@ export default class LoaderService extends Service {
               (!init || !init.method || init.method.toUpperCase() === 'GET')
             ) {
               return Promise.resolve(
-                new Response(cachedJSONAPI, {
+                createResponse(cachedJSONAPI, {
                   status: 200,
                   headers: {
                     'content-type': 'application/vnd.api+json',
-                    vary: 'Accept',
                   },
                 })
               );

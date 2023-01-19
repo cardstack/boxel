@@ -73,7 +73,11 @@ export default class CardPrerender extends Component {
   }
 
   @enqueueTask private async doRegistration(): Promise<void> {
-    let register = getRunnerOpts().registerRunner;
+    let optsId = (globalThis as any).runnerOptsId;
+    if (optsId == null) {
+      throw new Error(`Runner Options Identifier was not set`);
+    }
+    let register = getRunnerOpts(optsId).registerRunner;
     await register(this.fromScratch.bind(this), this.incremental.bind(this));
   }
 
@@ -112,9 +116,13 @@ export default class CardPrerender extends Component {
     entrySetter: EntrySetter
   } {
     if (this.fastboot.isFastBoot) {
+      let optsId = (globalThis as any).runnerOptsId;
+      if (optsId == null) {
+        throw new Error(`Runner Options Identifier was not set`);
+      }
       return {
-        reader: getRunnerOpts().reader,
-        entrySetter: getRunnerOpts().entrySetter 
+        reader: getRunnerOpts(optsId).reader,
+        entrySetter: getRunnerOpts(optsId).entrySetter 
       };
     } else {
       let self = this;
@@ -139,8 +147,8 @@ export default class CardPrerender extends Component {
   }
 }
 
-function getRunnerOpts(): RunnerOpts {
-  return ((globalThis as any).getRunnerOpts as () => RunnerOpts)();
+function getRunnerOpts(optsId: number): RunnerOpts {
+  return ((globalThis as any).getRunnerOpts as (optsId: number) => RunnerOpts)(optsId);
 }
 
 declare module '@glint/environment-ember-loose/registry' {

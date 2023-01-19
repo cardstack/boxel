@@ -1,0 +1,24 @@
+name: Manual Deploy [boxel-host]
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy boxel-host
+        uses: ./.github/actions/deploy-boxel-host
+        with:
+          environment: ${{ github.event.inputs.environment }}
+          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
