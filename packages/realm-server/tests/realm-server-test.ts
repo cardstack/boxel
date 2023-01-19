@@ -19,6 +19,7 @@ import { stringify } from "qs";
 import { Query } from "@cardstack/runtime-common/query";
 import { setupCardLogs, createRealm } from "./helpers";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
+import { shimExternals } from "@cardstack/runtime-common/externals-global";
 
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
@@ -36,6 +37,7 @@ module("Realm Server", function (hooks) {
 
   hooks.beforeEach(async function () {
     Loader.destroy();
+    shimExternals();
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL("http://localhost:4201/base/")

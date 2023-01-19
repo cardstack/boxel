@@ -3,6 +3,7 @@ import { Loader } from "@cardstack/runtime-common";
 import { dirSync, setGracefulCleanup } from "tmp";
 import { createRealm } from "./helpers";
 import { baseRealm } from "@cardstack/runtime-common";
+import { shimExternals } from "@cardstack/runtime-common/externals-global";
 
 setGracefulCleanup();
 
@@ -109,6 +110,7 @@ module("loader", function (hooks) {
 
   test("supports identify API", async function (assert) {
     let loader = new Loader();
+    shimExternals(loader);
     loader.addURLMapping(
       new URL(baseRealm.url),
       new URL("http://localhost:4201/base/")
@@ -129,6 +131,7 @@ module("loader", function (hooks) {
 
   test("exports cannot be mutated", async function (assert) {
     let loader = new Loader();
+    shimExternals(loader);
     loader.addURLMapping(
       new URL(baseRealm.url),
       new URL("http://localhost:4201/base/")
@@ -141,6 +144,7 @@ module("loader", function (hooks) {
 
   test("can get a loader used to import a specific card", async function (assert) {
     let loader = new Loader();
+    shimExternals(loader);
     loader.addURLMapping(
       new URL(baseRealm.url),
       new URL("http://localhost:4201/base/")

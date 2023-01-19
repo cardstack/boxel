@@ -10,6 +10,7 @@ import type { CardRef } from "@cardstack/runtime-common";
 import type { SignatureFor, primitive as primitiveType, queryableValue as queryableValueType } from "https://cardstack.com/base/card-api";
 import { shadowQuerySelector, shadowQuerySelectorAll, fillIn, click } from '../../helpers/shadow-assert';
 import BoxelInput from '@cardstack/boxel-ui/components/input';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -28,6 +29,7 @@ module('Integration | card-basics', function (hooks) {
 
   hooks.before(async function () {
     Loader.destroy();
+    shimExternals();
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')

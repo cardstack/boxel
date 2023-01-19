@@ -15,6 +15,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { on } from '@ember/modifier';
 import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 module('Integration | create-new-card', function (hooks) {
   let adapter: TestRealmAdapter
@@ -29,6 +30,7 @@ module('Integration | create-new-card', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+    shimExternals();
     adapter = new TestRealmAdapter({});
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;

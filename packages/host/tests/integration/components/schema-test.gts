@@ -15,6 +15,7 @@ import "@cardstack/runtime-common/helpers/code-equality-assertion";
 import { waitFor, fillIn, click, shadowQuerySelector } from '../../helpers/shadow-assert';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 module('Integration | schema', function (hooks) {
   let realm: Realm;
@@ -31,6 +32,7 @@ module('Integration | schema', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+    shimExternals();
     adapter = new TestRealmAdapter({});
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;

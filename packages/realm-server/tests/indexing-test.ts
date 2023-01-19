@@ -8,6 +8,7 @@ import {
 } from "@cardstack/runtime-common";
 import { createRealm, testRealm, setupCardLogs } from "./helpers";
 import isEqual from "lodash/isEqual";
+import { shimExternals } from "@cardstack/runtime-common/externals-global";
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, " ").trim();
@@ -29,6 +30,7 @@ module("indexing", function (hooks) {
 
   hooks.beforeEach(async function () {
     Loader.destroy();
+    shimExternals();
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL("http://localhost:4201/base/")
