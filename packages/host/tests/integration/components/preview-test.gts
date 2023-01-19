@@ -9,6 +9,7 @@ import { renderComponent } from '../../helpers/render-component';
 import { testRealmURL, shimModule } from '../../helpers';
 import { waitFor } from '../../helpers/shadow-assert';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -23,6 +24,7 @@ module('Integration | preview', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function () {
+    shimExternals();
     loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);

@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -16,6 +16,7 @@ import {
   type CardRef,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4202/test/';
@@ -30,6 +31,7 @@ module('Integration | search-index', function (hooks) {
 
   hooks.beforeEach(async function () {
     Loader.destroy();
+    shimExternals();
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
@@ -145,7 +147,186 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
-  skip('can index a card with a contains-many linkTo field');
+  test('can index a card with a containsMany composite containing a linkTo field', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Vendor/vendor1.json': {
+        data: {
+          id: `${testRealmURL}Vendor/vendor1`,
+          attributes: {
+            name: 'Acme Industries',
+            paymentMethods: [
+              {
+                type: 'crypto',
+                payment: {
+                  address: '0x1111',
+                },
+              },
+              {
+                type: 'crypto',
+                payment: {
+                  address: '0x2222',
+                },
+              },
+            ],
+          },
+          relationships: {
+            'paymentMethods.0.payment.chain': {
+              links: {
+                self: `${testRealmURL}Chain/1`,
+              },
+            },
+            'paymentMethods.1.payment.chain': {
+              links: {
+                self: `${testRealmURL}Chain/2`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/vendor`,
+              name: 'Vendor',
+            },
+          },
+        },
+      },
+      'Chain/1.json': {
+        data: {
+          id: `${testRealmURL}Chain/1`,
+          attributes: {
+            name: 'Ethereum Mainnet',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/chain`,
+              name: 'Chain',
+            },
+          },
+        },
+      },
+      'Chain/2.json': {
+        data: {
+          id: `${testRealmURL}Chain/2`,
+          attributes: {
+            name: 'Polygon',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/chain`,
+              name: 'Chain',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let vendor = await indexer.card(new URL(`${testRealmURL}Vendor/vendor1`), {
+      loadLinks: true,
+    });
+    if (vendor?.type === 'doc') {
+      assert.deepEqual(vendor.doc, {
+        data: {
+          id: `${testRealmURL}Vendor/vendor1`,
+          type: 'card',
+          links: {
+            self: `${testRealmURL}Vendor/vendor1`,
+          },
+          attributes: {
+            name: 'Acme Industries',
+            paymentMethods: [
+              {
+                type: 'crypto',
+                payment: {
+                  address: '0x1111',
+                },
+              },
+              {
+                type: 'crypto',
+                payment: {
+                  address: '0x2222',
+                },
+              },
+            ],
+          },
+          relationships: {
+            'paymentMethods.0.payment.chain': {
+              data: {
+                id: `${testRealmURL}Chain/1`,
+                type: 'card',
+              },
+              links: {
+                self: `${testRealmURL}Chain/1`,
+              },
+            },
+            'paymentMethods.1.payment.chain': {
+              data: {
+                id: `${testRealmURL}Chain/2`,
+                type: 'card',
+              },
+              links: {
+                self: `${testRealmURL}Chain/2`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/vendor`,
+              name: 'Vendor',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Vendor/vendor1.json`
+            ),
+          },
+        },
+        included: [
+          {
+            id: `${testRealmURL}Chain/1`,
+            type: 'card',
+            links: {
+              self: `${testRealmURL}Chain/1`,
+            },
+            attributes: {
+              name: 'Ethereum Mainnet',
+              chainId: 1,
+            },
+
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/chain`,
+                name: 'Chain',
+              },
+              lastModified: adapter.lastModified.get(
+                `${testRealmURL}Chain/1.json`
+              ),
+            },
+          },
+          {
+            id: `${testRealmURL}Chain/2`,
+            type: 'card',
+            links: {
+              self: `${testRealmURL}Chain/2`,
+            },
+            attributes: {
+              name: 'Polygon',
+              chainId: 137,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `http://localhost:4202/test/chain`,
+                name: 'Chain',
+              },
+              lastModified: adapter.lastModified.get(
+                `${testRealmURL}Chain/2.json`
+              ),
+            },
+          },
+        ],
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${vendor?.error.detail}`);
+    }
+  });
 
   test('can tolerate a card whose computed throws an exception', async function (assert) {
     let adapter = new TestRealmAdapter({
@@ -582,6 +763,22 @@ module('Integration | search-index', function (hooks) {
     assert.deepEqual(
       [...refs!.keys()].sort(),
       [
+        '@cardstack/boxel-ui',
+        '@cardstack/boxel-ui/attach-styles',
+        '@cardstack/boxel-ui/helpers/pick',
+        '@cardstack/boxel-ui/helpers/truth-helpers',
+        '@cardstack/runtime-common',
+        '@ember/component',
+        '@ember/component/template-only',
+        '@ember/helper',
+        '@ember/modifier',
+        '@ember/template-factory',
+        '@glimmer/component',
+        '@glimmer/tracking',
+        'ember-concurrency',
+        'ember-concurrency-ts',
+        'ember-modifier',
+        'flat',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/contains-many-component',
         'http://localhost:4201/base/default-card-component',
@@ -592,25 +789,9 @@ module('Integration | search-index', function (hooks) {
         'http://localhost:4201/base/shadow-dom',
         'http://localhost:4201/base/string',
         'http://localhost:4201/base/watched-array',
-        'http://localhost:4201/externals/@cardstack/boxel-ui',
-        'http://localhost:4201/externals/@cardstack/boxel-ui/attach-styles',
-        'http://localhost:4201/externals/@cardstack/boxel-ui/helpers/pick',
-        'http://localhost:4201/externals/@cardstack/boxel-ui/helpers/truth-helpers',
-        'http://localhost:4201/externals/@cardstack/runtime-common',
-        'http://localhost:4201/externals/@ember/component',
-        'http://localhost:4201/externals/@ember/component/template-only',
-        'http://localhost:4201/externals/@ember/helper',
-        'http://localhost:4201/externals/@ember/modifier',
-        'http://localhost:4201/externals/@ember/template-factory',
-        'http://localhost:4201/externals/@glimmer/component',
-        'http://localhost:4201/externals/@glimmer/tracking',
-        'http://localhost:4201/externals/ember-concurrency',
-        'http://localhost:4201/externals/ember-concurrency-ts',
-        'http://localhost:4201/externals/ember-modifier',
-        'http://localhost:4201/externals/flat',
-        'http://localhost:4201/externals/lodash',
-        'http://localhost:4201/externals/tracked-built-ins',
         'http://localhost:4202/test/person',
+        'lodash',
+        'tracked-built-ins',
       ],
       'the card references for the instance are correct'
     );

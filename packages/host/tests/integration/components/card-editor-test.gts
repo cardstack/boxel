@@ -13,6 +13,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import { Card } from "https://cardstack.com/base/card-api";
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -44,6 +45,7 @@ module('Integration | card-editor', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+    shimExternals();
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);

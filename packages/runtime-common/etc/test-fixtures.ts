@@ -14,8 +14,8 @@ export function compiledCard(id = "null") {
   return `
 var _class, _descriptor, _class2;
 
-import { createTemplateFactory } from "http://localhost:4201/externals/@ember/template-factory";
-import { setComponentTemplate } from "http://localhost:4201/externals/@ember/component";
+import { createTemplateFactory } from "@ember/template-factory";
+import { setComponentTemplate } from "@ember/component";
 
 function _initializerDefineProperty(target, property, descriptor, context) { if (!descriptor) return; Object.defineProperty(target, property, { enumerable: descriptor.enumerable, configurable: descriptor.configurable, writable: descriptor.writable, value: descriptor.initializer ? descriptor.initializer.call(context) : void 0 }); }
 

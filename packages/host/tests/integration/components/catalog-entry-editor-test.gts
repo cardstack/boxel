@@ -13,6 +13,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 module('Integration | catalog-entry-editor', function (hooks) {
   let adapter: TestRealmAdapter
@@ -27,6 +28,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+    shimExternals();
     adapter = new TestRealmAdapter({});
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;

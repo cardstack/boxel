@@ -5,6 +5,9 @@
     "url": "https://github.com/cardstack/boxel-motion"
   },
   "scripts": {
+    "deploy:boxel-host": "cd packages/host && NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy",
+    "deploy:boxel-host:preview-staging": "cd packages/host && NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-staging --verbose",
+    "deploy:boxel-host:preview-production": "cd packages/host && NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-production --verbose",
     "lint": "pnpm run --if-present -r lint",
     "lint:fix": "pnpm run --if-present -r lint:fix"
   },
@@ -20,7 +23,8 @@
       }
     },
     "patchedDependencies": {
-      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch"
+      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
+      "fastboot@4.1.0": "patches/fastboot@4.1.0.patch"
     }
   },
   "devDependencies": {

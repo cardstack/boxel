@@ -1,11 +1,9 @@
 import http, { IncomingMessage, ServerResponse } from "http";
-import { Realm, externalsMap } from "@cardstack/runtime-common";
+import { Realm } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
 import "@cardstack/runtime-common/externals-global";
-
-const externalsPath = "/externals/";
 
 export interface RealmConfig {
   realmURL: string;
@@ -23,11 +21,6 @@ export function createRealmServer(realms: Realm[]) {
       }
       if (!req.url) {
         throw new Error(`bug: missing URL in request`);
-      }
-
-      if (req.url.startsWith(externalsPath)) {
-        handleExternals(req, res);
-        return;
       }
 
       let realm = realms.find((r) =>
@@ -104,33 +97,6 @@ function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
     return true;
   }
   return false;
-}
-
-function handleExternals(req: IncomingMessage, res: ServerResponse): void {
-  let moduleName = req.url!.slice(externalsPath.length);
-  let names = externalsMap.get(moduleName);
-  if (!names) {
-    res.statusCode = 404;
-    res.statusMessage = `external module ${moduleName} not found.`;
-    res.end();
-    return;
-  }
-
-  let src = [
-    `const m = globalThis.RUNTIME_SPIKE_EXTERNALS.get('${moduleName}');`,
-  ];
-
-  for (let name of names) {
-    if (name === "default") {
-      src.push(`export default m.default;`);
-    } else {
-      src.push(`export const ${name} = m.${name};`);
-    }
-  }
-  res.statusCode = 200;
-  res.setHeader("content-type", "text/javascript");
-  res.write(src.join("\n"));
-  res.end();
 }
 
 async function nodeStreamToText(stream: Readable): Promise<string> {

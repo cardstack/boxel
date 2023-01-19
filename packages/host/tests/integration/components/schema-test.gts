@@ -15,6 +15,7 @@ import "@cardstack/runtime-common/helpers/code-equality-assertion";
 import { waitFor, fillIn, click, shadowQuerySelector } from '../../helpers/shadow-assert';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 module('Integration | schema', function (hooks) {
   let realm: Realm;
@@ -31,6 +32,7 @@ module('Integration | schema', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+    shimExternals();
     adapter = new TestRealmAdapter({});
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
@@ -63,6 +65,34 @@ module('Integration | schema', function (hooks) {
     assert.dom('[data-test-card-id]').hasText(`Card ID: ${testRealmURL}person/Person`);
     assert.dom('[data-test-adopts-from').hasText('Adopts From: https://cardstack.com/base/card-api/Card');
     assert.dom('[data-test-field="firstName"]').hasText('Delete firstName - contains - field card ID: https://cardstack.com/base/string/default');
+  });
+
+  test('renders a card schema view for a card that contains itself as a field', async function(assert) {
+    await realm.write('friend.gts', `
+      import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Friend extends Card {
+        @field firstName = contains(StringCard);
+        @field friend = linksTo(() => Friend);
+      }
+    `);
+    let openFile = await getFileResource(this, adapter, { module: `${testRealmURL}friend`, name: 'Friend'});
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Module @file={{openFile}}/>
+          <CardPrerender/>
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-card-id]');
+
+    assert.dom('[data-test-card-id]').hasText(`Card ID: ${testRealmURL}friend/Friend`);
+    assert.dom('[data-test-adopts-from').hasText('Adopts From: https://cardstack.com/base/card-api/Card');
+    assert.dom('[data-test-field="firstName"]').hasText('Delete firstName - contains - field card ID: https://cardstack.com/base/string/default');
+    assert.dom('[data-test-field="friend"]').hasText(`Delete friend - linksTo - field card ID: ${testRealmURL}friend/Friend (this card)`);
   });
 
   test('renders link to field card for contained field', async function(assert) {

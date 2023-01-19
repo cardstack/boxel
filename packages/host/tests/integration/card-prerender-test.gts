@@ -11,6 +11,7 @@ import {
   setupMockLocalRealm
 } from '../helpers';
 import { setupRenderingTest } from 'ember-qunit';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 module('Integration | card-prerender', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -27,6 +28,7 @@ module('Integration | card-prerender', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+    shimExternals();
     adapter = new TestRealmAdapter({
       'pet.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";

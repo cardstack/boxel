@@ -1,4 +1,5 @@
 import { getReasonPhrase } from "http-status-codes";
+import { createResponse } from "./create-response";
 export interface ErrorDetails {
   status?: number;
   title?: string;
@@ -136,11 +137,14 @@ export function serializableError(err: any): any {
 }
 
 export function responseWithError(error: CardError): Response {
-  return new Response(JSON.stringify({ errors: [serializableError(error)] }), {
-    status: error.status,
-    statusText: error.title,
-    headers: { "content-type": "application/vnd.api+json" },
-  });
+  return createResponse(
+    JSON.stringify({ errors: [serializableError(error)] }),
+    {
+      status: error.status,
+      statusText: error.title,
+      headers: { "content-type": "application/vnd.api+json" },
+    }
+  );
 }
 
 export function methodNotAllowed(request: Request): Response {

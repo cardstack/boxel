@@ -8,7 +8,7 @@ import {
 
 export function makeFastBootIndexRunner(
   distPath: string,
-  getRunnerOpts: () => RunnerOpts
+  getRunnerOpts: (optsId: number) => RunnerOpts
 ): IndexRunner {
   let fastboot = new FastBoot({
     distPath,
@@ -23,8 +23,8 @@ export function makeFastBootIndexRunner(
       });
     },
   }) as FastBootInstance;
-  return async () => {
-    await fastboot.visit("/indexer", {
+  return async (optsId: number) => {
+    await fastboot.visit(`/indexer/${optsId}`, {
       // TODO we'll need to configure this host origin as part of the hosted realm work
       request: { headers: { host: "localhost:4200" } },
     });

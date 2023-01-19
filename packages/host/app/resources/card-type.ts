@@ -13,6 +13,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
 import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
+import { isCardRef, type CardRef } from '@cardstack/runtime-common/card-ref';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 interface Args {
@@ -25,7 +26,7 @@ export interface Type {
   id: string;
   module: string;
   super: Type | undefined;
-  fields: { name: string; card: Type; type: FieldType }[];
+  fields: { name: string; card: Type | CardRef; type: FieldType }[];
 }
 
 export class CardType extends Resource<Args> {
@@ -40,15 +41,25 @@ export class CardType extends Resource<Args> {
   }
 
   @restartableTask private async assembleType(card: typeof Card) {
-    this.type = await this.toType(card);
+    let maybeType = await this.toType(card);
+    if (isCardRef(maybeType)) {
+      throw new Error(`bug: should never get here`);
+    }
+    this.type = maybeType;
   }
 
-  async toType(card: typeof Card): Promise<Type> {
+  async toType(
+    card: typeof Card,
+    stack: typeof Card[] = []
+  ): Promise<Type | CardRef> {
     let maybeRef = identifyCard(card);
     if (!maybeRef) {
       throw new Error(`cannot identify card ${card.name}`);
     }
     let ref = maybeRef;
+    if (stack.includes(card)) {
+      return ref;
+    }
     let id = internalKeyFor(ref, undefined);
     let cached = this.typeCache.get(id);
     if (cached) {
@@ -60,15 +71,25 @@ export class CardType extends Resource<Args> {
     );
     let { id: _remove, ...fields } = api.getFields(card);
     let superCard = getAncestor(card);
-    let superType: Type | undefined;
+    let superType: Type | CardRef | undefined;
     if (superCard && card !== superCard) {
-      superType = await this.toType(superCard);
+      superType = await this.toType(superCard, [card, ...stack]);
+    }
+    if (isCardRef(superType)) {
+      throw new Error(
+        `bug: encountered cycle in card ancestor: ${[
+          superType,
+          ...stack.map((c) => identifyCard(c)),
+        ]
+          .map((r) => JSON.stringify(r))
+          .join()}`
+      );
     }
     let fieldTypes: Type['fields'] = await Promise.all(
       Object.entries(fields).map(async ([name, field]) => ({
         name,
         type: field.fieldType,
-        card: await this.toType(field.card),
+        card: await this.toType(field.card, [card, ...stack]),
       }))
     );
     let type: Type = {
