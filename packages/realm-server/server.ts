@@ -31,6 +31,7 @@ export function createRealmServer(realms: Realm[]) {
       if (req.url === '/' && req.method === 'GET') {
         res.statusCode = 200;
         res.statusMessage = 'OK';
+        res.write('hello');
         res.end();
         return;
       }
