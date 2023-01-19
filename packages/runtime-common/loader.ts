@@ -1,12 +1,13 @@
 import TransformModulesAmdPlugin from "transform-modules-amd-plugin";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
-import { trimExecutableExtension } from "./index";
+import { trimExecutableExtension, externalsMap } from "./index";
 import { RealmPaths } from "./paths";
 import { CardError } from "./error";
 import { type RunnerOpts } from "./search-index";
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
+const externalsPath = "/externals/";
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -280,16 +281,23 @@ export class Loader {
     urlOrRequest: string | URL | Request,
     init?: RequestInit
   ): Promise<Response> {
-    let requestURL =
+    let requestURL = new URL(
       urlOrRequest instanceof Request
         ? urlOrRequest.url
         : typeof urlOrRequest === "string"
         ? urlOrRequest
-        : urlOrRequest.href;
+        : urlOrRequest.href
+    );
+    if (requestURL.pathname.startsWith(externalsPath)) {
+      let maybeExternalsResponse = handleExternals(requestURL);
+      if (maybeExternalsResponse) {
+        return maybeExternalsResponse;
+      }
+    }
     if (urlOrRequest instanceof Request) {
       for (let [url, handle] of this.urlHandlers) {
         let path = new RealmPaths(new URL(url));
-        if (path.inRealm(new URL(requestURL))) {
+        if (path.inRealm(requestURL)) {
           let request = urlOrRequest as MaybeLocalRequest;
           request.isLocal = true;
           return await handle(request);
@@ -578,6 +586,32 @@ export class Loader {
     }
     return await response.text();
   }
+}
+
+function handleExternals(url: URL): Response | undefined {
+  let moduleName = url.pathname!.slice(externalsPath.length);
+  let names = externalsMap.get(moduleName);
+  if (!names) {
+    return;
+  }
+
+  let src = [
+    `const m = globalThis.RUNTIME_SPIKE_EXTERNALS.get('${moduleName}');`,
+  ];
+
+  for (let name of names) {
+    if (name === "default") {
+      src.push(`export default m.default;`);
+    } else {
+      src.push(`export const ${name} = m.${name};`);
+    }
+  }
+  return new Response(src.join("\n"), {
+    status: 200,
+    headers: {
+      "content-type": "text/javascript",
+    },
+  });
 }
 
 function getNativeFetch(): typeof fetch {
