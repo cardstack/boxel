@@ -16,6 +16,7 @@ import { stringify } from 'qs';
 import { baseRealm, CardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
@@ -27,6 +28,7 @@ module('Integration | realm', function (hooks) {
 
   hooks.beforeEach(async function () {
     Loader.destroy();
+    shimExternals();
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')

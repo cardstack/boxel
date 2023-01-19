@@ -16,6 +16,7 @@ import {
   type CardRef,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4202/test/';
@@ -30,6 +31,7 @@ module('Integration | search-index', function (hooks) {
 
   hooks.beforeEach(async function () {
     Loader.destroy();
+    shimExternals();
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
@@ -761,6 +763,22 @@ module('Integration | search-index', function (hooks) {
     assert.deepEqual(
       [...refs!.keys()].sort(),
       [
+        '@cardstack/boxel-ui',
+        '@cardstack/boxel-ui/attach-styles',
+        '@cardstack/boxel-ui/helpers/pick',
+        '@cardstack/boxel-ui/helpers/truth-helpers',
+        '@cardstack/runtime-common',
+        '@ember/component',
+        '@ember/component/template-only',
+        '@ember/helper',
+        '@ember/modifier',
+        '@ember/template-factory',
+        '@glimmer/component',
+        '@glimmer/tracking',
+        'ember-concurrency',
+        'ember-concurrency-ts',
+        'ember-modifier',
+        'flat',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/contains-many-component',
         'http://localhost:4201/base/default-card-component',
@@ -771,25 +789,9 @@ module('Integration | search-index', function (hooks) {
         'http://localhost:4201/base/shadow-dom',
         'http://localhost:4201/base/string',
         'http://localhost:4201/base/watched-array',
-        'http://localhost:4201/externals/@cardstack/boxel-ui',
-        'http://localhost:4201/externals/@cardstack/boxel-ui/attach-styles',
-        'http://localhost:4201/externals/@cardstack/boxel-ui/helpers/pick',
-        'http://localhost:4201/externals/@cardstack/boxel-ui/helpers/truth-helpers',
-        'http://localhost:4201/externals/@cardstack/runtime-common',
-        'http://localhost:4201/externals/@ember/component',
-        'http://localhost:4201/externals/@ember/component/template-only',
-        'http://localhost:4201/externals/@ember/helper',
-        'http://localhost:4201/externals/@ember/modifier',
-        'http://localhost:4201/externals/@ember/template-factory',
-        'http://localhost:4201/externals/@glimmer/component',
-        'http://localhost:4201/externals/@glimmer/tracking',
-        'http://localhost:4201/externals/ember-concurrency',
-        'http://localhost:4201/externals/ember-concurrency-ts',
-        'http://localhost:4201/externals/ember-modifier',
-        'http://localhost:4201/externals/flat',
-        'http://localhost:4201/externals/lodash',
-        'http://localhost:4201/externals/tracked-built-ins',
         'http://localhost:4202/test/person',
+        'lodash',
+        'tracked-built-ins',
       ],
       'the card references for the instance are correct'
     );

@@ -18,7 +18,7 @@ export default class LoaderService extends Service {
 
   private makeInstance() {
     if (this.fastboot.isFastBoot) {
-      return this.makeProxiedLoader(new Loader());
+      return this.makeProxiedLoader(Loader.createLoaderFromGlobal());
     }
 
     let loader = Loader.createLoaderFromGlobal();
