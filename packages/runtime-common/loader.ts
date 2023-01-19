@@ -269,6 +269,12 @@ export class Loader {
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
+
+    let shimmed = this.moduleShims.get(moduleIdentifier);
+    if (shimmed) {
+      return shimmed as T;
+    }
+
     let module = await this.fetchModule(resolvedModule);
     switch (module.state) {
       case "fetching":
