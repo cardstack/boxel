@@ -1,13 +1,12 @@
 import TransformModulesAmdPlugin from "transform-modules-amd-plugin";
 import { transformSync } from "@babel/core";
 import { Deferred } from "./deferred";
-import { trimExecutableExtension, externalsMap } from "./index";
+import { trimExecutableExtension } from "./index";
 import { RealmPaths } from "./paths";
 import { CardError } from "./error";
 import { type RunnerOpts } from "./search-index";
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
-const externalsPath = "/externals/";
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -99,6 +98,9 @@ export class Loader {
     let loader = new Loader();
     loader.urlHandlers = globalLoader.urlHandlers;
     loader.urlMappings = globalLoader.urlMappings;
+    for (let [moduleIdentifier, module] of globalLoader.moduleShims) {
+      loader.shimModule(moduleIdentifier, module);
+    }
     return loader;
   }
 
@@ -106,6 +108,9 @@ export class Loader {
     let clone = new Loader();
     clone.urlHandlers = loader.urlHandlers;
     clone.urlMappings = loader.urlMappings;
+    for (let [moduleIdentifier, module] of loader.moduleShims) {
+      clone.shimModule(moduleIdentifier, module);
+    }
     return clone;
   }
 
@@ -174,6 +179,11 @@ export class Loader {
       moduleIdentifier,
       this.createModuleProxy(module, moduleIdentifier)
     );
+    this.setModule(moduleIdentifier, {
+      state: "evaluated",
+      moduleInstance: module,
+      consumedModules: new Set(),
+    });
   }
 
   async getConsumedModules(
@@ -185,8 +195,13 @@ export class Loader {
     }
     consumed.add(moduleIdentifier);
 
-    let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
-    let module = this.getModule(resolvedModuleIdentifier.href);
+    let module: Module | undefined;
+    if (isUrlLike(moduleIdentifier)) {
+      let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
+      module = this.getModule(resolvedModuleIdentifier.href);
+    } else {
+      module = this.getModule(moduleIdentifier);
+    }
     if (!module || module.state === "fetching") {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
@@ -288,12 +303,6 @@ export class Loader {
         ? urlOrRequest
         : urlOrRequest.href
     );
-    if (requestURL.pathname.startsWith(externalsPath)) {
-      let maybeExternalsResponse = handleExternals(requestURL);
-      if (maybeExternalsResponse) {
-        return maybeExternalsResponse;
-      }
-    }
     if (urlOrRequest instanceof Request) {
       for (let [url, handle] of this.urlHandlers) {
         let path = new RealmPaths(new URL(url));
@@ -371,9 +380,11 @@ export class Loader {
         let value = Reflect.get(target, property, received);
         if (typeof value === "function" && typeof property === "string") {
           this.identities.set(value, {
-            module: trimExecutableExtension(
-              this.reverseResolution(moduleIdentifier)
-            ).href,
+            module: isUrlLike(moduleIdentifier)
+              ? trimExecutableExtension(
+                  this.reverseResolution(moduleIdentifier)
+                ).href
+              : moduleIdentifier,
             name: property,
           });
           Loader.loaders.set(value, this);
@@ -387,10 +398,11 @@ export class Loader {
   }
 
   private async fetchModule(
-    moduleURL: ResolvedURL,
+    moduleURL: ResolvedURL | string,
     stack: string[] = []
   ): Promise<Module> {
-    let moduleIdentifier = moduleURL.href;
+    let moduleIdentifier =
+      typeof moduleURL === "string" ? moduleURL : moduleURL.href;
     let module = this.getModule(moduleIdentifier);
     if (module) {
       // in the event of a cycle, we have already evaluated the
@@ -417,6 +429,17 @@ export class Loader {
         return module.deferred.promise;
       }
       return module;
+    }
+    if (typeof moduleURL === "string") {
+      let exception = new Error(
+        `the module '${moduleURL}' appears to be an npm package without a shim. We only support shimmed npm packages, otherwise provide a full URL to the module (e.g. unpkg url for module)`
+      );
+      this.setModule(moduleIdentifier, {
+        state: "broken",
+        exception,
+        consumedModules: new Set(),
+      });
+      throw exception;
     }
     module = {
       state: "fetching",
@@ -458,8 +481,10 @@ export class Loader {
           return "exports";
         } else if (depId === "__import_meta__") {
           return "__import_meta__";
-        } else {
+        } else if (isUrlLike(depId)) {
           return this.resolve(depId, new URL(moduleIdentifier)).href;
+        } else {
+          return depId; // for npm imports
         }
       });
       implementation = impl;
@@ -479,10 +504,10 @@ export class Loader {
     await Promise.all(
       dependencyList!.map(async (depId) => {
         if (depId !== "exports" && depId !== "__import_meta__") {
-          return await this.fetchModule(makeResolvedURL(depId), [
-            ...stack,
-            moduleIdentifier,
-          ]);
+          return await this.fetchModule(
+            isUrlLike(depId) ? makeResolvedURL(depId) : depId,
+            [...stack, moduleIdentifier]
+          );
         }
         return undefined;
       })
@@ -588,32 +613,6 @@ export class Loader {
   }
 }
 
-function handleExternals(url: URL): Response | undefined {
-  let moduleName = url.pathname!.slice(externalsPath.length);
-  let names = externalsMap.get(moduleName);
-  if (!names) {
-    return;
-  }
-
-  let src = [
-    `const m = globalThis.RUNTIME_SPIKE_EXTERNALS.get('${moduleName}');`,
-  ];
-
-  for (let name of names) {
-    if (name === "default") {
-      src.push(`export default m.default;`);
-    } else {
-      src.push(`export const ${name} = m.${name};`);
-    }
-  }
-  return new Response(src.join("\n"), {
-    status: 200,
-    headers: {
-      "content-type": "text/javascript",
-    },
-  });
-}
-
 function getNativeFetch(): typeof fetch {
   if (isFastBoot) {
     let optsId = (globalThis as any).runnerOptsId;
@@ -631,4 +630,13 @@ function getNativeFetch(): typeof fetch {
 
 function assertNever(value: never) {
   throw new Error(`should never happen ${value}`);
+}
+
+function isUrlLike(moduleIdentifier: string): boolean {
+  return (
+    moduleIdentifier.startsWith(".") ||
+    moduleIdentifier.startsWith("/") ||
+    moduleIdentifier.startsWith("http://") ||
+    moduleIdentifier.startsWith("https://")
+  );
 }

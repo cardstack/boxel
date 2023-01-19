@@ -6,6 +6,7 @@ import { cleanWhiteSpace, testRealmURL, shimModule, setupCardLogs } from '../../
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 import { shadowQuerySelector, shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
 let string: typeof import ("https://cardstack.com/base/string");
@@ -17,6 +18,7 @@ module('Integration | computeds', function (hooks) {
 
   hooks.beforeEach(async function () {
     Loader.destroy();
+    shimExternals();
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')

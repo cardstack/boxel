@@ -38,7 +38,6 @@ import * as babel from "@babel/core";
 import makeEmberTemplatePlugin from "babel-plugin-ember-template-compilation";
 //@ts-ignore no types are available
 import * as etc from "ember-source/dist/ember-template-compiler";
-import { externalsPlugin } from "./externals";
 import { loaderPlugin } from "./loader-plugin";
 //@ts-ignore no types are available
 import glimmerTemplatePlugin from "@cardstack/ember-template-imports/src/babel-plugin";
@@ -339,7 +338,6 @@ export class Realm {
             ]
           : (makeEmberTemplatePlugin as any)(() => etc.precompile),
         loaderPlugin,
-        externalsPlugin,
       ],
     })!.code!;
   }
