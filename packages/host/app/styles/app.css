@@ -286,6 +286,7 @@ textarea:focus {
   color: var(--boxel-link-highlight);
   cursor: pointer;
 }
+.directory.selected,
 .file.selected,
 .file:active {
   color: var(--boxel-link-highlight);
