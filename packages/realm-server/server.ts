@@ -13,6 +13,8 @@ export interface RealmConfig {
 export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
+  console.log(`${new Date()} starting server`);
+
   let server = http.createServer(async (req, res) => {
     let isStreaming = false;
     try {
