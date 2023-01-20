@@ -21,9 +21,7 @@ import type { LocalPath } from "@cardstack/runtime-common/paths";
 export default class CardPrerender extends Component {
   <template>
     {{#if this.indexerService.card}}
-      <div class="worker-render">
-        <Render @card={{this.indexerService.card}} @format="isolated" @opts={{hash disableShadowDOM=true}}/>
-      </div>
+      <Render @card={{this.indexerService.card}} @format="isolated" @opts={{hash disableShadowDOM=true}}/>
     {{/if}}
   </template>
 

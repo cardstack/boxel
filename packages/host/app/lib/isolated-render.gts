@@ -1,5 +1,5 @@
 import { getComponentTemplate } from '@ember/component';
-import { ComponentLike } from '@glint/template';
+import { type ComponentLike } from '@glint/template';
 import type Owner from '@ember/owner';
 // @ts-expect-error
 import { renderMain, inTransaction } from '@glimmer/runtime';

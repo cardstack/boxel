@@ -3,19 +3,11 @@ import { tracked } from '@glimmer/tracking';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import Serializer from '@simple-dom/serializer';
 import voidMap from '@simple-dom/void-map';
-import { schedule } from '@ember/runloop';
+import { getIsolatedRenderElement, afterRender } from '../components/render';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import type { SimpleDocument } from '@simple-dom/interface';
-
-async function afterRender() {
-  return new Promise<void>((res) => {
-    schedule('afterRender', function () {
-      res();
-    });
-  });
-}
 
 export default class IndexerService extends Service {
   // @ts-expect-error the types for this invocation of @service() don't work
@@ -39,12 +31,12 @@ export default class IndexerService extends Service {
       throw new Error(`card ${url.href} not found`);
     } else {
       this.card = card;
+      // it takes 2 renders for to establish the isolated renderer (after that
+      // point the 2nd render is superfluous)
       await afterRender();
-      // the latest render will be available 1 micro task after the render
-      await Promise.resolve();
+      await afterRender();
       let serializer = new Serializer(voidMap);
-      // TODO use simple DOM to get this component's element instead of using whole doc
-      let html = serializer.serialize(this.document);
+      let html = serializer.serialize(getIsolatedRenderElement(this.document));
       return parseCardHtml(html);
     }
   }
@@ -52,11 +44,11 @@ export default class IndexerService extends Service {
 
 function parseCardHtml(html: string): string {
   let matches = html.matchAll(
-    /<!--Server Side Rendered Card HTML START-->[\n\s]*(?<html>[\W\w\n\s]*?)[\s\n]*<!--Server Side Rendered Card HTML END-->/gm
+    /<div id="isolated-render"[^>]*>[\n\s]*(?<html>[\W\w\n\s]*)[\s\n]*<\/div>/gm
   );
   for (let match of matches) {
     let { html } = match.groups as { html: string };
-    return html;
+    return html.trim();
   }
   throw new Error(`unable to determine HTML for card. found HTML:\n${html}`);
 }
