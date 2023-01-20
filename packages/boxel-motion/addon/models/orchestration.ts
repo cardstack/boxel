@@ -1,6 +1,8 @@
 import Behavior, { FPS } from '@cardstack/boxel-motion/behaviors/base';
 
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import StaticBehavior from '@cardstack/boxel-motion/behaviors/static';
+import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
 import Sprite, {
   MotionOptions,
@@ -172,9 +174,15 @@ export class OrchestrationMatrix {
 
     // TODO: add support for nested timelines
     timeline.animations.sort((a, b) => {
-      if ('timing' in b && b.timing.duration === 'infer') {
+      if (
+        'timing' in b &&
+        (b.timing.duration || !(b.timing.behavior instanceof SpringBehavior))
+      ) {
         return -1;
-      } else if ('timing' in a && a.timing.duration === 'infer') {
+      } else if (
+        'timing' in a &&
+        (a.timing.duration || !(a.timing.behavior instanceof SpringBehavior))
+      ) {
         return 1;
       }
 
@@ -184,6 +192,17 @@ export class OrchestrationMatrix {
     // maxLength is for anchoring to the end.
     let maxLength = 0;
     for (let item of timeline.animations) {
+      // If the parallel timeline has an anchor setting but the MotionDefinition
+      // doesn't have one, we take the parent anchor.
+      if (
+        timeline.anchor &&
+        'timing' in item &&
+        !item.timing.anchor &&
+        !(item.timing.behavior instanceof SpringBehavior) // only non-physics behaviors are supported with anchor for now.
+      ) {
+        item.timing.anchor = timeline.anchor;
+      }
+
       // TODO: do we want a different option or more flexibility here? We could for example search for the longest
       //  non-inferred duration already compiled rather than picking the first one. Another option is to explicitly
       //  have to link to a MotionDefinition to infer from.
@@ -214,9 +233,9 @@ export class OrchestrationMatrix {
       let rowFragments: RowFragment[] = [];
       let startColumn = 0;
 
-      if (timing.duration === 'infer') {
+      if (timing.anchor === 'fill') {
         assert(
-          'No MotionDefinition to infer from found. Does your parallel timeline definition have MotionDefinition with an inferrible duration?',
+          'No MotionDefinition to infer "fill" from found. Does your parallel timeline definition have MotionDefinition with an inferrible duration?',
           maxLength > 0
         );
 
@@ -279,9 +298,12 @@ export interface AnimationDefinition {
   timeline: AnimationTimeline;
 }
 
+export type Anchor = 'fill' | 'start' | 'center' | 'end';
+
 export type AnimationTimeline = {
   type: 'sequence' | 'parallel';
   animations: (MotionDefinition | AnimationTimeline)[];
+  anchor?: Anchor;
 };
 
 export interface MotionDefinition {
@@ -291,9 +313,9 @@ export interface MotionDefinition {
   };
   timing: {
     behavior: Behavior;
-    duration?: number | 'infer';
+    duration?: number;
     delay?: number;
-    anchor?: 'start' | 'center' | 'end';
+    anchor?: Anchor;
   };
 }
 

@@ -16,6 +16,7 @@ class InterruptionController extends Controller {
     return {
       timeline: {
         type: 'parallel',
+        anchor: 'fill',
         animations: [
           {
             sprites: keptSprites,
@@ -24,7 +25,7 @@ class InterruptionController extends Controller {
             },
             timing: {
               behavior: new TweenBehavior(),
-              duration: 'infer',
+              duration: 100,
             },
           },
           {
