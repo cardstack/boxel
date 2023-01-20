@@ -31,7 +31,7 @@ app "realm-base" {
       subnets             = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
       task_role_name      = "realm-base-ecs-task"
       execution_role_name = "realm-base-ecs-task-execution"
-      security_group_ids  = ["sg-05f830d022a2cd913"] # FIXME this should be a Terraform output maybe?
+      security_group_ids  = ["sg-0c6700e72bc20f766"]
 
       alb {
         subnets     = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
@@ -85,7 +85,7 @@ app "realm-demo" {
       subnets             = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
       task_role_name      = "realm-demo-ecs-task"
       execution_role_name = "realm-demo-ecs-task-execution"
-      security_group_ids  = ["sg-05f830d022a2cd913"] # FIXME this should be a Terraform output maybe?
+      security_group_ids  = ["sg-0c6700e72bc20f766"]
 
       alb {
         subnets     = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
