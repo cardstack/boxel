@@ -13,7 +13,7 @@ export interface RealmConfig {
 export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
-  console.log(`${new Date()} starting server 1317`);
+  console.log(`${new Date()} starting server 1437`);
 
   let server = http.createServer(async (req, res) => {
     console.log(new Date());
