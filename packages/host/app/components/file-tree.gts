@@ -24,23 +24,12 @@ interface Args {
 export default class FileTree extends Component<Args> {
   <template>
     <nav>
-      {{#each this.listing.entries as |entry|}}
-        {{#if (eq entry.kind 'file')}}
-          <File @entry={{entry}} @onOpen={{this.openFile}} @localPath={{entry.path}} @path={{@path}} />
-        {{else}}
-          {{#if (isOpen entry.path @openDirs)}}
-            <Directory
-              @directory={{entry}}
-              @openDirs={{if @openDirs @openDirs ""}}
-              @path={{@path}}
-              @polling={{@polling}}
-              @url="{{@url}}{{entry.path}}/"
-            />
-          {{else}}
-            <ClosedDirectory @entry={{entry}} @onOpen={{this.openDirectory}} />
-          {{/if}}
-        {{/if}}
-      {{/each}}
+      <Directory
+        @openDirs={{if @openDirs @openDirs ""}}
+        @path={{@path}}
+        @polling={{@polling}}
+        @url={{@url}}
+      />
     </nav>
     <button {{on "click" this.createNew}} type="button" data-test-create-new-card-button>
       Create New Card

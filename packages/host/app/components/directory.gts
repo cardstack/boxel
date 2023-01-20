@@ -14,7 +14,7 @@ import { cached } from '@glimmer/tracking';
 
 interface Args {
   Args: {
-    directory: Entry;
+    directory?: Entry;
     openDirs: string;
     polling: 'off' | undefined;
     url: string;
@@ -24,9 +24,6 @@ interface Args {
 
 export default class Directory extends Component<Args> {
   <template>
-    <div role="button" {{on "click" this.closeDirectory}} class="directory {{if (isSelected @directory.path @path) "selected"}} indent-{{@directory.indent}}">
-      {{@directory.name}}
-    </div>
     {{#each this.listing.entries as |entry|}}
       {{#let (getLocalPath @url entry.path this.realmPath) as |localPath|}}
         {{#if (eq entry.kind 'file')}}
@@ -37,6 +34,7 @@ export default class Directory extends Component<Args> {
             @path={{@path}}
           />
         {{else}}
+          <ClosedDirectory @entry={{entry}} @onOpen={{this.openDirectory}} />
           {{#if (isOpen localPath @openDirs)}}
             <Directory
               @directory={{entry}}
@@ -45,8 +43,6 @@ export default class Directory extends Component<Args> {
               @polling={{@polling}}
               @url="{{@url}}{{entry.path}}/"
             />
-          {{else}}
-            <ClosedDirectory @entry={{entry}} @onOpen={{this.openDirectory}} />
           {{/if}}
         {{/if}}
       {{/let}}
@@ -89,9 +85,10 @@ function addDirToQuery(localPath: string, openDirs: string): string {
   for (let i = 0; i < dirs.length; i++) {
     if (localPath.startsWith(dirs[i])) {
       dirs[i] = localPath;
+      return dirs.join(',');
     }
   }
-  return dirs.join(',');
+  return [...dirs, localPath].join(',');
 }
 
 function removeDirFromQuery(localPath: string, openDirs: string): string | undefined {
