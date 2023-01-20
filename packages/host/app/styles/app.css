@@ -286,22 +286,16 @@ textarea:focus {
   color: var(--boxel-link-highlight);
   cursor: pointer;
 }
+.directory.selected,
 .file.selected,
 .file:active {
   color: var(--boxel-link-highlight);
 }
-.indent-0,
-.indent-1 {
+nav > .directory-level {
   padding-left: 0;
 }
-.indent-2 {
-  padding-left: 1rem;
-}
-.indent-3 {
-  padding-left: 2rem;
-}
-.indent-4 {
-  padding-left: 3rem;
+.directory-level {
+  padding-left: 1em;
 }
 
 /* Modal */

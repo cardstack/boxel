@@ -2,18 +2,16 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import { eq } from '../helpers/truth-helpers'
-import { directory, Entry } from '../resources/directory';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
+import Directory from './directory';
 
 interface Args {
   Args: {
     url: string;
     path: string | undefined;
+    openDirs: string | undefined;
     polling: 'off' | undefined;
   }
 }
@@ -21,17 +19,12 @@ interface Args {
 export default class FileTree extends Component<Args> {
   <template>
     <nav>
-      {{#each this.listing.entries key="path" as |entry|}}
-        {{#if (eq entry.kind 'file')}}
-          <div role="button" {{on "click" (fn this.open entry)}} class="file {{if (eq entry.path @path) "selected"}} indent-{{entry.indent}}">
-          {{entry.name}}
-          </div>
-        {{else}}
-          <div class="directory indent-{{entry.indent}}">
-            {{entry.name}}
-          </div>
-        {{/if}}
-      {{/each}}
+      <Directory
+        @openDirs={{@openDirs}}
+        @path={{@path}}
+        @polling={{@polling}}
+        @url={{@url}}
+      />
     </nav>
     <button {{on "click" this.createNew}} type="button" data-test-create-new-card-button>
       Create New Card
@@ -42,14 +35,15 @@ export default class FileTree extends Component<Args> {
     </div>
   </template>
 
-  listing = directory(this, () => this.args.url, () => this.args.polling);
   @service declare router: RouterService;
-  @tracked isPolling = this.args.polling !== 'off';
+
+  get isPolling() {
+    return this.args.polling !== 'off';
+  }
 
   @action
   togglePolling() {
     this.router.transitionTo({ queryParams: { polling: this.isPolling ? 'off' : undefined } });
-    this.isPolling = !this.isPolling;
   }
 
   @action
@@ -64,16 +58,5 @@ export default class FileTree extends Component<Args> {
       return;
     }
     return await createNewCard(card.ref);
-  }
-
-  @action
-  open(entry: Entry) {
-    let { path } = entry;
-    this.router.transitionTo({ queryParams: { path } });
-  }
-
-  @action
-  onSave(path: string) {
-    this.router.transitionTo({ queryParams: { path } });
   }
 }

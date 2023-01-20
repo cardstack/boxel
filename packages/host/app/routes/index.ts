@@ -13,6 +13,7 @@ interface Model {
   path: string | undefined;
   openFile: FileResource | undefined;
   polling: 'off' | undefined;
+  openDirs: string | undefined;
   isFastBoot: boolean;
 }
 
@@ -22,6 +23,9 @@ export default class Index extends Route<Model> {
       refreshModel: true,
     },
     polling: {
+      refreshModel: true,
+    },
+    openDirs: {
       refreshModel: true,
     },
   };
@@ -35,20 +39,21 @@ export default class Index extends Route<Model> {
   async model(args: {
     path?: string;
     polling?: 'off';
+    openDirs: string;
     url?: string;
     format?: Format;
   }): Promise<Model> {
-    let { path, polling } = args;
+    let { path, polling, openDirs } = args;
     let { isFastBoot } = this.fastboot;
 
     let openFile: FileResource | undefined;
     if (!path) {
-      return { path, openFile, polling, isFastBoot };
+      return { path, openFile, polling, openDirs, isFastBoot };
     }
 
     await this.localRealm.startedUp;
     if (!this.localRealm.isAvailable && !this.cardService.defaultURL) {
-      return { path, openFile, polling, isFastBoot };
+      return { path, openFile, polling, openDirs, isFastBoot };
     }
 
     let realmPath = new RealmPaths(this.cardService.defaultURL);
@@ -63,13 +68,14 @@ export default class Index extends Route<Model> {
       console.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
-      return { path, openFile, polling, isFastBoot };
+      return { path, openFile, polling, openDirs, isFastBoot };
     }
     if (response.url !== url) {
       this.router.transitionTo('application', {
         queryParams: {
           path: realmPath.local(new URL(response.url)),
           polling,
+          openDirs,
         },
       });
     } else {
@@ -81,7 +87,11 @@ export default class Index extends Route<Model> {
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.router.transitionTo('application', {
-              queryParams: { path: undefined, polling: undefined },
+              queryParams: {
+                path: undefined,
+                polling: undefined,
+                openDirs: undefined,
+              },
             });
           }
         },
@@ -90,7 +100,7 @@ export default class Index extends Route<Model> {
       await openFile.loading;
     }
 
-    return { path, openFile, polling, isFastBoot };
+    return { path, openFile, polling, openDirs, isFastBoot };
   }
 
   @action
