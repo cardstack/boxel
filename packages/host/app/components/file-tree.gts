@@ -3,7 +3,6 @@ import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
 import Directory from './directory';
@@ -37,12 +36,14 @@ export default class FileTree extends Component<Args> {
   </template>
 
   @service declare router: RouterService;
-  @tracked isPolling = this.args.polling !== 'off';
+
+  get isPolling() {
+    return this.args.polling !== 'off';
+  }
 
   @action
   togglePolling() {
     this.router.transitionTo({ queryParams: { polling: this.isPolling ? 'off' : undefined } });
-    this.isPolling = !this.isPolling;
   }
 
   @action
