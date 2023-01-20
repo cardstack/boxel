@@ -13,7 +13,6 @@ import { cached } from '@glimmer/tracking';
 
 interface Args {
   Args: {
-    directory?: Entry;
     openDirs: string | undefined;
     polling: 'off' | undefined;
     url: string;
@@ -36,7 +35,6 @@ export default class Directory extends Component<Args> {
             </div>
             {{#if (isOpen localPath @openDirs)}}
               <Directory
-                @directory={{entry}}
                 @path={{@path}}
                 @openDirs={{@openDirs}}
                 @polling={{@polling}}
