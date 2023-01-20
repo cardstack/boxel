@@ -22,7 +22,7 @@ interface Args {
 
 export default class Directory extends Component<Args> {
   <template>
-    {{#each this.listing.entries as |entry|}}
+    {{#each this.listing.entries key="path" as |entry|}}
       {{#let (getLocalPath @url entry.path this.realmPath) as |localPath|}}
         <div class="directory-level">
           {{#if (eq entry.kind 'file')}}
