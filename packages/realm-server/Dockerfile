@@ -23,6 +23,6 @@ RUN pnpm fetch
 # FIXME the documentation says to use --prod but packages/worker has webpack in devDependencies
 RUN pnpm install -r --offline
 
-EXPOSE 443
+EXPOSE 3000
 
 CMD pnpm --filter "./packages/realm-server" $realm_server_script
