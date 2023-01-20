@@ -16,6 +16,11 @@ export function createRealmServer(realms: Realm[]) {
   console.log(`${new Date()} starting server`);
 
   let server = http.createServer(async (req, res) => {
+    console.log(new Date());
+    console.log(`==== ${req.method} ${req.url}`);
+    console.log('> Headers');
+    console.log(req.headers);
+
     let isStreaming = false;
     try {
       if (handleCors(req, res)) {
