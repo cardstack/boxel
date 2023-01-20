@@ -20,7 +20,6 @@ export interface Entry {
   name: string;
   kind: 'directory' | 'file';
   path: string;
-  indent: number; // get rid of this once we have collapse-able directory trees
 }
 
 export class DirectoryResource extends Resource<Args> {
@@ -90,9 +89,6 @@ export class DirectoryResource extends Resource<Args> {
       name,
       kind: info.meta!.kind,
       path: realmPath.local(new URL(info.links!.related!)),
-      indent:
-        new URL(info.links!.related!).pathname.replace(/\/$/, '').split('/')
-          .length - 1,
     }));
   }
 }
