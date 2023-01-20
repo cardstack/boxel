@@ -30,7 +30,7 @@ export default class Directory extends Component<Args> {
               {{entry.name}}
             </div>
           {{else}}
-            <div role="button" {{on "click" (fn this.toggleDirectory entry)}} class="directory {{isSelected entry.path @path}}">
+            <div role="button" {{on "click" (fn this.toggleDirectory entry)}} class="directory {{if (isSelected localPath @path) "selected"}}">
               {{entry.name}}
             </div>
             {{#if (isOpen localPath @openDirs)}}
@@ -91,8 +91,8 @@ function editOpenDirsQuery(localPath: string, openDirs: string | undefined): str
   return [...dirs, localPath].join(',');
 }
 
-function isSelected(dir: string, path: string | undefined) {
-  return path?.includes(dir);
+function isSelected(localPath: string, path: string | undefined) {
+  return path?.startsWith(localPath);
 }
 
 function isOpen(path: string, openDirs: string | undefined) {
