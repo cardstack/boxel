@@ -151,5 +151,5 @@ function detectRealmCollision(realms: Realm[]): void {
 function requestIsHealthCheck(req: http.IncomingMessage) {
   return req.url === '/' &&
     req.method === 'GET' &&
-    req.headers["user-agent"]?.startsWith('ELB-HealthChecker/2.0');
+    req.headers["user-agent"]?.startsWith('ELB-HealthChecker');
 }
