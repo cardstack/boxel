@@ -34,11 +34,11 @@ export function createRealmServer(realms: Realm[]) {
         req.url!.startsWith(new URL(r.url).pathname)
       );
 
-      // FIXME a hack to get health checks to pass, can a proper check be set in Terraform?
-      if (req.url === '/' && req.method === 'GET') {
+      // Respond to AWS ELB health check
+      if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
         res.statusMessage = 'OK';
-        res.write('hello');
+        res.write('OK');
         res.end();
         return;
       }
@@ -146,4 +146,10 @@ function detectRealmCollision(realms: Realm[]): void {
       )}`
     );
   }
+}
+
+function requestIsHealthCheck(req: http.IncomingMessage) {
+  return req.url === '/' &&
+    req.method === 'GET' &&
+    req.headers["user-agent"]?.startsWith('ELB-HealthChecker/2.0');
 }
