@@ -1,4 +1,4 @@
-import { module, test, skip } from "qunit";
+import { module, test, only } from "qunit";
 import { dirSync, setGracefulCleanup } from "tmp";
 import {
   Loader,
@@ -78,6 +78,22 @@ module("indexing", function (hooks) {
           @field message = contains(StringCard);
         }
       `,
+      "boom.gts": `
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Boom extends Card {
+          @field firstName = contains(StringCard);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/>{{this.boom}}</h1>
+            </template>
+            get boom() {
+              throw new Error('intentional error');
+            }
+          }
+        }
+      `,
       "mango.json": {
         data: {
           attributes: {
@@ -133,6 +149,19 @@ module("indexing", function (hooks) {
           },
         },
       },
+      "boom.json": {
+        data: {
+          attributes: {
+            firstName: "Boom!",
+          },
+          meta: {
+            adoptsFrom: {
+              module: "./boom",
+              name: "Boom",
+            },
+          },
+        },
+      },
       "empty.json": {
         data: {
           attributes: {},
@@ -163,7 +192,23 @@ module("indexing", function (hooks) {
     );
   });
 
-  skip("TODO: can recover from rendering a card that has a template error");
+  only(
+    "can recover from rendering a card that has a template error",
+    async function (assert) {
+      {
+        let entry = await realm.searchIndex.searchEntry(
+          new URL(`${testRealm}boom`)
+        );
+        debugger;
+      }
+      {
+        let entry = await realm.searchIndex.searchEntry(
+          new URL(`${testRealm}mango`)
+        );
+        debugger;
+      }
+    }
+  );
 
   test("can incrementally index updated instance", async function (assert) {
     await realm.write(

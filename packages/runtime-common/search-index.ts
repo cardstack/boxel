@@ -185,6 +185,11 @@ export class SearchIndex {
     };
   }
 
+  // TODO remove this
+  get index() {
+    return this.#index;
+  }
+
   get stats() {
     return this.#index.stats;
   }

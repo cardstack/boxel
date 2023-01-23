@@ -147,6 +147,80 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
+  test('can recover from rendering a card that has a template error', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'person.gts': `
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/></h1>
+            </template>
+          }
+        }
+      `,
+      'boom.gts': `
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Boom extends Card {
+          @field firstName = contains(StringCard);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/>{{this.boom}}</h1>
+            </template>
+            get boom() {
+              throw new Error('intentional error');
+            }
+          }
+        }
+      `,
+      'vangogh.json': {
+        data: {
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'boom.json': {
+        data: {
+          attributes: {
+            firstName: 'Boom!',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './boom',
+              name: 'Boom',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    {
+      let entry = await indexer.searchEntry(
+        new URL(`${testRealmURL}Boom/boom`)
+      );
+      debugger;
+    }
+    {
+      let entry = await indexer.searchEntry(
+        new URL(`${testRealmURL}Person/vangogh`)
+      );
+    }
+  });
+
   test('can index a card with a containsMany composite containing a linkTo field', async function (assert) {
     let adapter = new TestRealmAdapter({
       'Vendor/vendor1.json': {
