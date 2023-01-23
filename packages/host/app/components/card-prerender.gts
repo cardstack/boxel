@@ -1,7 +1,5 @@
 import Component from '@glimmer/component';
 import Render from './render';
-//@ts-ignore glint does not think this is consumed-but it is consumed in the template
-import { hash } from '@ember/helper';
 import { didCancel, enqueueTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
@@ -21,7 +19,7 @@ import type { LocalPath } from "@cardstack/runtime-common/paths";
 export default class CardPrerender extends Component {
   <template>
     {{#if this.indexerService.card}}
-      <Render @card={{this.indexerService.card}} @format="isolated" @opts={{hash disableShadowDOM=true}}/>
+      <Render @card={{this.indexerService.card}} @format="isolated"/>
     {{/if}}
   </template>
 

@@ -9,7 +9,7 @@ import {
   type Format,
   type Field
 } from './card-api';
-import { getBoxComponent } from './field-component';
+import { getBoxComponent, type ComponentOptions } from './field-component';
 import type { ComponentLike } from '@glint/template';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer } from '@cardstack/boxel-ui';
@@ -74,12 +74,14 @@ export function getContainsManyComponent({
   format,
   field,
   cardTypeFor,
+  opts
 } : {
   model: Box<Card>;
   arrayField: Box<Card[]>;
   format: Format;
   field: Field<typeof Card>;
   cardTypeFor(field: Field<typeof Card>, boxedElement: Box<Card>): typeof Card;
+  opts?: ComponentOptions
 }): ComponentLike<{ Args: {}, Blocks: {} }> {
   if (format === "edit") {
     return class ContainsManyEditorTemplate extends GlimmerComponent {
@@ -97,7 +99,7 @@ export function getContainsManyComponent({
     return class ContainsMany extends GlimmerComponent {
       <template>
         {{#each arrayField.children as |boxedElement|}}
-          {{#let (getBoxComponent (cardTypeFor field boxedElement) format boxedElement) as |Item|}}
+          {{#let (getBoxComponent (cardTypeFor field boxedElement) format boxedElement opts) as |Item|}}
             <Item/>
           {{/let}}
         {{/each}}

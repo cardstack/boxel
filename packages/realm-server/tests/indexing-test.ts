@@ -154,15 +154,7 @@ module("indexing", function (hooks) {
     );
     assert.strictEqual(
       cleanWhiteSpace(entry!.html!),
-      // TODO I'm not super sure what the first div is all about, seems
-      // innocuous, but probably worth looking into?
       cleanWhiteSpace(`
-          <div data-test-shadow-boundary>
-            <div id=\"ember260\" class=\"ember-view boxel-card-container boxel-card-container--boundaries\" data-test-boxel-card-container>
-              <!---->
-              <!---->
-            </div>
-          </div>
           <div data-test-shadow-boundary>
             <h1> Mango </h1>
           </div>

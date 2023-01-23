@@ -25,7 +25,7 @@ export function getBoxComponent(card: typeof Card, format: Format, model: Box<Ca
 
   // *inside* our own component, @fields is a proxy object that looks
   // up our fields on demand.
-  let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format));
+  let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format), opts);
   
   let isPrimitive = primitive in card;
   let component: ComponentLike<{ Args: {}, Blocks: {} }> = <template>
@@ -45,7 +45,7 @@ export function getBoxComponent(card: typeof Card, format: Format, model: Box<Ca
   // It would be possible to use `externalFields` in place of `internalFields` above,
   // avoiding the need for two separate Proxies. But that has the uncanny property of
   // making `<@fields />` be an infinite recursion.
-  let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format));
+  let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format), opts);
 
 
   // This cast is safe because we're returning a proxy that wraps component.
@@ -64,7 +64,7 @@ function defaultFieldFormat(format: Format): Format {
   }
 }
 
-function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defaultFormat: Format): FieldsTypeFor<T> {
+function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defaultFormat: Format, opts?: ComponentOptions): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
       if (typeof property === 'symbol' || model == null || model.value == null) {
@@ -79,7 +79,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       }
       let field = maybeField;
       defaultFormat = getField(modelValue.constructor, property)?.computeVia ? 'embedded' : defaultFormat;
-      return field.component(model as unknown as Box<Card>, defaultFormat);
+      return field.component(model as unknown as Box<Card>, defaultFormat, opts);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
