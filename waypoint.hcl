@@ -16,7 +16,7 @@ app "realm-base" {
     registry {
       use "aws-ecr" {
         region     = "us-east-1"
-        repository = "realm-staging"
+        repository = "realm-base-staging"
         tag        = "latest"
       }
     }
@@ -70,7 +70,7 @@ app "realm-demo" {
     registry {
       use "aws-ecr" {
         region     = "us-east-1"
-        repository = "realm-staging"
+        repository = "realm-demo-staging"
         tag        = "latest"
       }
     }
