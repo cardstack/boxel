@@ -81,8 +81,8 @@ function tagResources(cluster, service, tags) {
   execute(`aws ecs tag-resource --resource-arn ${service.serviceArn} --tags ${tagsArgs}`);
   // FIXME move elsewhere
   console.log('executing this');
-  console.log(`aws ecs update-server --cluster ${cluster} --service ${service.serviceName} --health-check-grace-period-seconds 241`);
-  execute(`aws ecs update-server --cluster ${cluster} --service ${service.serviceName} --health-check-grace-period-seconds 241`);
+  console.log(`aws ecs update-service --cluster ${cluster} --service ${service.serviceName} --health-check-grace-period-seconds 241`);
+  execute(`aws ecs update-service --cluster ${cluster} --service ${service.serviceName} --health-check-grace-period-seconds 241`);
 
   console.log(`-> Updating service to propagate tags to tasks: ${service.serviceName}`);
   execute(
