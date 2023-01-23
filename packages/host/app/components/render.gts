@@ -13,14 +13,6 @@ import { type SimpleDocument, type SimpleElement } from '@simple-dom/interface';
 import type Owner from '@ember/owner';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
 
-
-interface Signature {
-  Args: {
-    card: Card;
-    format: Format;
-  }
-}
-
 const ELEMENT_NODE_TYPE = 1;
 const { environment } = config;
 let nonce = 0;
@@ -78,6 +70,13 @@ function removeChildren(element: SimpleElement) {
   while (child) {
     element.removeChild(child);
     child = element.firstChild;
+  }
+}
+
+interface Signature {
+  Args: {
+    card: Card;
+    format: Format;
   }
 }
 

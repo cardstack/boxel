@@ -209,15 +209,11 @@ module('Integration | search-index', function (hooks) {
     await realm.ready;
     let indexer = realm.searchIndex;
     {
-      let entry = await indexer.searchEntry(
-        new URL(`${testRealmURL}Boom/boom`)
-      );
+      let entry = await indexer.searchEntry(new URL(`${testRealmURL}boom`));
       debugger;
     }
     {
-      let entry = await indexer.searchEntry(
-        new URL(`${testRealmURL}Person/vangogh`)
-      );
+      let entry = await indexer.searchEntry(new URL(`${testRealmURL}vangogh`));
     }
   });
 

@@ -16,9 +16,11 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
   let self = createConstRef({}, 'this');
   let layout = (getComponentTemplate as any)(root)(_owner).asLayout();
   let iterator = renderMain(_runtime, _context, _owner, self, _builder(_runtime.env, { element }), layout);
+  let vm = (iterator as any).vm;
+  let initialState = vm.env.debugRenderTree.stack.current;
 
   try {
-    inTransaction(_runtime.env, () => (iterator as any).vm._execute());
+    inTransaction(_runtime.env, () => vm._execute());
   } catch (err) {
     console.warn(err);
     // This is to compensate for the commitCacheGroup op code that is not called because
@@ -29,6 +31,17 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
     // I'm not adding this to a "finally" because when there is no error, the VM will 
     // process an op code that will do this organically. It's only when there is an error 
     // that we need to step in and do this by hand.
-    (iterator as any).vm.commitCacheGroup();
+    vm.commitCacheGroup();
+
+    // Unwind the render tree stack until we get back to the initial state
+    while (vm.env.debugRenderTree.stack.current!== initialState && vm.env.debugRenderTree.stack.size > 0) {
+      vm.env.debugRenderTree.exit();
+    }
+    if (vm.env.debugRenderTree.stack.size === 0) {
+      throw new Error(`could not unwind the glimmer render tree stack back to the initial state`);
+    }
+
+
+    // TODO we need to send some kind of signal to the caller to indicate that the render failed
   }
 }
