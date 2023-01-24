@@ -68,7 +68,6 @@ jobs:
         working-directory: packages/host
 
       - name: Deploy ${{ matrix.app }}
-        # FIXME can this be shared from monorepo? Would need to support both yarn and pnpm
         uses: ./.github/actions/waypoint-deploy
         with:
           app: ${{ matrix.app }}
