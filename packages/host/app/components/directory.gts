@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
 import type CardService from '../services/card-service';
+import type LoaderService from '../services/loader-service';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -51,10 +52,13 @@ export default class Directory extends Component<Args> {
   listing = directory(this, () => this.args.url, () => this.args.openDirs, () => this.args.polling);
   @service declare router: RouterService;
   @service declare cardService: CardService;
+  @service declare loaderService: LoaderService;
 
   @cached
   get realmPath() {
-    return new RealmPaths(this.cardService.defaultURL.href);
+    // this.cardService.defaultURL is a resolved URL. we need to reverse the
+    // resolution in order to compare it to the directory entries.
+    return new RealmPaths(this.loaderService.loader.reverseResolution(this.cardService.defaultURL));
   }
 
   @action
