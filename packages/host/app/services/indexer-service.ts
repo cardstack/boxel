@@ -39,11 +39,15 @@ export default class IndexerService extends Service {
       await afterRender();
       await afterRender();
       if (this.renderError) {
+        // TODO handle this
         debugger;
+      } else {
+        let serializer = new Serializer(voidMap);
+        let html = serializer.serialize(
+          getIsolatedRenderElement(this.document)
+        );
+        return parseCardHtml(html);
       }
-      let serializer = new Serializer(voidMap);
-      let html = serializer.serialize(getIsolatedRenderElement(this.document));
-      return parseCardHtml(html);
     }
   }
 }
