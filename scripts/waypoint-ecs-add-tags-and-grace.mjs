@@ -86,7 +86,7 @@ function tagResourcesAndAddGracePeriod(cluster, service, tags) {
       ` --cluster ${cluster}` +
       ` --service ${service.serviceArn}` +
       ` --force-new-deployment` +
-      ` --health-check-grace-period-seconds 180` +
+      ` --health-check-grace-period-seconds 240` +
       ` --enable-ecs-managed-tags` +
       ` --propagate-tags SERVICE`
   );
