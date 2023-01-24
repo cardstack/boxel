@@ -41,7 +41,7 @@ app "realm-base" {
 
     hook {
       when    = "after"
-      command = ["node", "./scripts/waypoint-ecs-add-tags.mjs", "realm-base"]
+      command = ["node", "./scripts/waypoint-ecs-add-tags-and-grace.mjs", "realm-base"]
     }
 
     hook {
@@ -95,7 +95,7 @@ app "realm-demo" {
 
     hook {
       when    = "after"
-      command = ["node", "./scripts/waypoint-ecs-add-tags.mjs", "realm-demo"]
+      command = ["node", "./scripts/waypoint-ecs-add-tags-and-grace.mjs", "realm-demo"]
     }
 
     hook {
