@@ -1,5 +1,6 @@
 import { getComponentTemplate } from '@ember/component';
 import { type ComponentLike } from '@glint/template';
+import type IndexerService from '../services/indexer-service';
 import type Owner from '@ember/owner';
 // @ts-expect-error
 import { renderMain, inTransaction } from '@glimmer/runtime';
@@ -21,7 +22,7 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
 
   try {
     inTransaction(_runtime.env, () => vm._execute());
-  } catch (err) {
+  } catch (err: any) {
     console.warn(err);
     // This is to compensate for the commitCacheGroup op code that is not called because
     // of the error being thrown here. we do this so we can keep the TRANSACTION_STACK
@@ -40,8 +41,7 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
     if (vm.env.debugRenderTree.stack.size === 0) {
       throw new Error(`could not unwind the glimmer render tree stack back to the initial state`);
     }
-
-
-    // TODO we need to send some kind of signal to the caller to indicate that the render failed
+    let indexerService = owner.lookup('service:indexer-service') as IndexerService;
+    indexerService.renderError = err;
   }
 }

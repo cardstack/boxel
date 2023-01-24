@@ -9,6 +9,7 @@ import type LoaderService from './loader-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import type { SimpleDocument } from '@simple-dom/interface';
 
+// TODO rename to render-service.ts
 export default class IndexerService extends Service {
   // @ts-expect-error the types for this invocation of @service() don't work
   @service('-document') document: SimpleDocument;
@@ -16,6 +17,7 @@ export default class IndexerService extends Service {
   @service declare cardService: CardService;
   @tracked card: Card | undefined;
   indexRunDeferred: Deferred<void> | undefined;
+  renderError: Error | undefined;
 
   // this seems to want to live in a service and not in the component that
   // renders this card. within the service we are able to see the resulting
@@ -25,6 +27,7 @@ export default class IndexerService extends Service {
     url: URL,
     staticResponses: Map<string, string>
   ): Promise<string> {
+    this.renderError = undefined;
     this.loaderService.setStaticResponses(staticResponses);
     let card = await this.cardService.loadModel(url, { absoluteURL: true });
     if (!card) {
@@ -35,6 +38,9 @@ export default class IndexerService extends Service {
       // point the 2nd render is superfluous)
       await afterRender();
       await afterRender();
+      if (this.renderError) {
+        debugger;
+      }
       let serializer = new Serializer(voidMap);
       let html = serializer.serialize(getIsolatedRenderElement(this.document));
       return parseCardHtml(html);
