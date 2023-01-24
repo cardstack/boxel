@@ -1,4 +1,4 @@
-import { module, test, only } from "qunit";
+import { module, test } from "qunit";
 import { dirSync, setGracefulCleanup } from "tmp";
 import {
   Loader,
@@ -192,23 +192,43 @@ module("indexing", function (hooks) {
     );
   });
 
-  only(
-    "can recover from rendering a card that has a template error",
-    async function (assert) {
-      {
-        let entry = await realm.searchIndex.searchEntry(
-          new URL(`${testRealm}boom`)
+  test("can recover from rendering a card that has a template error", async function (assert) {
+    {
+      let entry = await realm.searchIndex.card(new URL(`${testRealm}boom`));
+      if (entry?.type === "error") {
+        assert.strictEqual(
+          entry.error.detail,
+          "Encountered error rendering HTML for card: intentional error"
         );
-        debugger;
-      }
-      {
-        let entry = await realm.searchIndex.searchEntry(
-          new URL(`${testRealm}mango`)
-        );
-        debugger;
+        assert.deepEqual(entry.error.deps, [`${testRealm}boom`]);
+      } else {
+        assert.ok("false", "expected search entry to be an error document");
       }
     }
-  );
+    {
+      let entry = await realm.searchIndex.card(new URL(`${testRealm}vangogh`));
+      if (entry?.type === "doc") {
+        assert.deepEqual(entry.doc.data.attributes?.firstName, "Van Gogh");
+        let { html } =
+          (await realm.searchIndex.searchEntry(
+            new URL(`${testRealm}vangogh`)
+          )) ?? {};
+        assert.strictEqual(
+          cleanWhiteSpace(html!),
+          cleanWhiteSpace(`
+            <div data-test-shadow-boundary>
+              <h1> Van Gogh </h1>
+            </div>
+          `)
+        );
+      } else {
+        assert.ok(
+          false,
+          `expected search entry to be a document but was: ${entry?.error.detail}`
+        );
+      }
+    }
+  });
 
   test("can incrementally index updated instance", async function (assert) {
     await realm.write(

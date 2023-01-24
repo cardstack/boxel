@@ -1,13 +1,17 @@
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import Serializer from '@simple-dom/serializer';
 import voidMap from '@simple-dom/void-map';
-import { getIsolatedRenderElement, afterRender } from '../components/render';
+import config from '@cardstack/host/config/environment';
+import { getOwner } from '@ember/application';
+import { render } from '../lib/isolated-render';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
-import type { Card } from 'https://cardstack.com/base/card-api';
-import type { SimpleDocument } from '@simple-dom/interface';
+import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
+import type Owner from '@ember/owner';
+
+const ELEMENT_NODE_TYPE = 1;
+const { environment } = config;
 
 // TODO rename to render-service.ts
 export default class IndexerService extends Service {
@@ -15,9 +19,9 @@ export default class IndexerService extends Service {
   @service('-document') document: SimpleDocument;
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  @tracked card: Card | undefined;
   indexRunDeferred: Deferred<void> | undefined;
   renderError: Error | undefined;
+  owner: Owner = getOwner(this)!;
 
   // this seems to want to live in a service and not in the component that
   // renders this card. within the service we are able to see the resulting
@@ -32,23 +36,17 @@ export default class IndexerService extends Service {
     let card = await this.cardService.loadModel(url, { absoluteURL: true });
     if (!card) {
       throw new Error(`card ${url.href} not found`);
-    } else {
-      this.card = card;
-      // it takes 2 renders for to establish the isolated renderer (after that
-      // point the 2nd render is superfluous)
-      await afterRender();
-      await afterRender();
-      if (this.renderError) {
-        // TODO handle this
-        debugger;
-      } else {
-        let serializer = new Serializer(voidMap);
-        let html = serializer.serialize(
-          getIsolatedRenderElement(this.document)
-        );
-        return parseCardHtml(html);
-      }
     }
+    let component = card.constructor.getComponent(card, 'isolated', {
+      disableShadowDOM: true,
+    });
+
+    let serializer = new Serializer(voidMap);
+    let element = getIsolatedRenderElement(this.document);
+
+    render(component, element, this.owner);
+    let html = serializer.serialize(element);
+    return parseCardHtml(html);
   }
 }
 
@@ -61,4 +59,75 @@ function parseCardHtml(html: string): string {
     return html.trim();
   }
   throw new Error(`unable to determine HTML for card. found HTML:\n${html}`);
+}
+
+function getChildElementById(
+  id: string,
+  parent: SimpleElement
+): SimpleElement | undefined {
+  let child = parent.firstChild;
+  while (
+    child &&
+    (child.nodeType !== ELEMENT_NODE_TYPE || child.getAttribute('id') !== id)
+  ) {
+    child = child.nextSibling;
+  }
+  if (child == null) {
+    return undefined;
+  }
+  return child;
+}
+
+function getElementFromIdPath(
+  path: string[],
+  parent: SimpleElement
+): SimpleElement | undefined {
+  if (path.length === 0) {
+    throw new Error(`cannot get element from id path with empty path array`);
+  }
+  let child = getChildElementById(path.shift()!, parent);
+  if (!child) {
+    return undefined;
+  }
+  if (path.length === 0) {
+    return child;
+  }
+  return getElementFromIdPath(path, child);
+}
+
+export function getIsolatedRenderElement(
+  document: SimpleDocument
+): SimpleElement {
+  let element: SimpleElement | undefined;
+  if (environment === 'test') {
+    element = getElementFromIdPath(
+      [
+        'qunit-fixture',
+        'ember-testing-container',
+        'ember-testing',
+        'isolated-render',
+      ],
+      document.body
+    );
+    if (!element) {
+      let parent = getElementFromIdPath(
+        ['qunit-fixture', 'ember-testing-container', 'ember-testing'],
+        document.body
+      );
+      if (!parent) {
+        throw new Error(`bug: cannot find ember testing container`);
+      }
+      element = document.createElement('div');
+      element.setAttribute('id', 'isolated-render');
+      parent.appendChild(element);
+    }
+  } else {
+    element = getElementFromIdPath(['isolated-render'], document.body);
+    if (!element) {
+      element = document.createElement('div');
+      element.setAttribute('id', 'isolated-render');
+      document.body.appendChild(element);
+    }
+  }
+  return element;
 }

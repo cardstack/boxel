@@ -1,5 +1,4 @@
 import Component from '@glimmer/component';
-import Render from './render';
 import { didCancel, enqueueTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
@@ -17,12 +16,6 @@ import type LocalRealm from '../services/local-realm';
 import type { LocalPath } from "@cardstack/runtime-common/paths";
 
 export default class CardPrerender extends Component {
-  <template>
-    {{#if this.indexerService.card}}
-      <Render @card={{this.indexerService.card}} @format="isolated"/>
-    {{/if}}
-  </template>
-
   @service declare loaderService: LoaderService;
   @service declare indexerService: IndexerService;
   @service declare fastboot: { isFastBoot: boolean };
