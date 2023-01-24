@@ -23,7 +23,8 @@
       }
     },
     "patchedDependencies": {
-      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch"
+      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
+      "fastboot@4.1.0": "patches/fastboot@4.1.0.patch"
     }
   },
   "devDependencies": {
