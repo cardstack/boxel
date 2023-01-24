@@ -690,6 +690,7 @@ importers:
       '@types/ember__helper': ^4.0.0
       '@types/ember__modifier': ^4.0.1
       '@types/ember__object': ^4.0.1
+      '@types/ember__owner': ^4.0.1
       '@types/ember__polyfills': ^4.0.0
       '@types/ember__routing': ^4.0.4
       '@types/ember__runloop': ^4.0.0
@@ -804,6 +805,7 @@ importers:
       '@types/ember__helper': 4.0.1_@babel+core@7.20.2
       '@types/ember__modifier': 4.0.3_@babel+core@7.20.2
       '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__owner': 4.0.2
       '@types/ember__polyfills': 4.0.1
       '@types/ember__routing': 4.0.12_@babel+core@7.20.2
       '@types/ember__runloop': 4.0.2_@babel+core@7.20.2
@@ -917,7 +919,7 @@ importers:
       '@types/supertest': 2.0.12
       '@types/tmp': 0.2.3
       '@types/yargs': 17.0.13
-      fastboot: 4.1.0
+      fastboot: 4.1.0_kizxbxhfcldguz4jcwonfduu2y
       fs-extra: 10.1.0
       lodash: 4.17.21
       qs: 6.11.0
@@ -1244,7 +1246,6 @@ packages:
       semver: 6.3.0
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/generator/7.20.4:
     resolution: {integrity: sha512-luCf7yk/cm7yab6CAW1aiFnmEfBJplb/JojV56MYEK7ziWfGmFlTfmL9Ehwfy4gFhbjBfWO1wj7/TuSbVNEEtA==}
@@ -1385,7 +1386,6 @@ packages:
       '@babel/types': 7.20.2
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/helper-optimise-call-expression/7.18.6:
     resolution: {integrity: sha512-HP59oD9/fEHQkdcbgFCnbmgH5vIQTJbxh2yf+CdM89/glUNnuzr87Q8GIjGEnOktTROemO0Pe0iPAYbqZuOUiA==}
@@ -1483,7 +1483,6 @@ packages:
       '@babel/types': 7.20.2
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/highlight/7.18.6:
     resolution: {integrity: sha512-u7stbOuYjaPezCuLj29hNW1v64M2Md2qupEKP1fHc7WdOA3DgLh37suiSrZYY7haUB7iBeQZ9P1uiRF359do3g==}
@@ -1620,7 +1619,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
       '@babel/plugin-syntax-nullish-coalescing-operator': 7.8.3_@babel+core@7.20.2
 
@@ -1663,7 +1662,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
       '@babel/helper-skip-transparent-expression-wrappers': 7.20.0
       '@babel/plugin-syntax-optional-chaining': 7.8.3_@babel+core@7.20.2
@@ -1784,7 +1783,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
 
   /@babel/plugin-syntax-numeric-separator/7.10.4_@babel+core@7.20.2:
@@ -1816,7 +1815,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
 
   /@babel/plugin-syntax-private-property-in-object/7.14.5_@babel+core@7.20.2:
@@ -2403,7 +2402,6 @@ packages:
       globals: 11.12.0
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/types/7.20.2:
     resolution: {integrity: sha512-FnnvsNWgZCr232sqtXggapvlkk/tuwR/qhGzcmxI0GXLCjmPYQPzio2FbdlWuY6y1sHFfQKk+rRbUZ9VStQMog==}
@@ -8675,7 +8673,6 @@ packages:
     dependencies:
       ms: 2.1.2
       supports-color: 8.1.1
-    dev: true
 
   /decamelize/1.2.0:
     resolution: {integrity: sha512-z2S+W9X73hAUUki+N+9Za2lBlun89zigOyGrsax+KUQ6wKW4ZoWpEYBkGhQjwAjjDCkWxhY0VKEhk8wzY7F5cA==}
@@ -9370,7 +9367,7 @@ packages:
       ember-cli-lodash-subset: 2.0.1
       ember-cli-preprocess-registry: 3.3.0
       ember-cli-version-checker: 5.1.2
-      fastboot: 4.1.0
+      fastboot: 4.1.0_kizxbxhfcldguz4jcwonfduu2y
       fastboot-express-middleware: 4.1.0
       fastboot-transform: 0.1.3
       fs-extra: 10.1.0
@@ -12287,7 +12284,7 @@ packages:
     engines: {node: 12.* || 14.* || >=16}
     dependencies:
       chalk: 4.1.2
-      fastboot: 4.1.0
+      fastboot: 4.1.0_kizxbxhfcldguz4jcwonfduu2y
     transitivePeerDependencies:
       - bufferutil
       - canvas
@@ -12304,7 +12301,7 @@ packages:
       - supports-color
     dev: true
 
-  /fastboot/4.1.0:
+  /fastboot/4.1.0_kizxbxhfcldguz4jcwonfduu2y:
     resolution: {integrity: sha512-NoUUiWhLS4JfrYiHmbRjqqWmzttO+6hVyt+CawsZCg79ljTGAIhPThy8cxg11yiDNiaM9EY3kocWZrCMUM7o4g==}
     engines: {node: 12.* || 14.* || >=16}
     dependencies:
@@ -12321,6 +12318,7 @@ packages:
       - supports-color
       - utf-8-validate
     dev: true
+    patched: true
 
   /fastest-levenshtein/1.0.16:
     resolution: {integrity: sha512-eRnCtTTtGZFpQCwhJiUOuxPQWRXVKYDn0b2PeHfXL6/Zi53SLAzAHfVhVWK2AryC/WH05kGfxhFIPvTF0SXQzg==}

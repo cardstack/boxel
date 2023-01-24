@@ -187,7 +187,7 @@ export interface Field<CardT extends CardConstructor> {
   ): Promise<any>;
   emptyValue(instance: Card): any;
   validate(instance: Card, value: any): void;
-  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
+  component(model: Box<Card>, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }>;
   getter(instance: Card): CardInstanceType<CardT>;
 }
 
@@ -362,7 +362,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return new WatchedArray(() => logger.log(recompute(instance)), value);
   }
 
-  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
+  component(model: Box<Card>, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
     let fieldName = this.name as keyof Card;
     let arrayField = model.field(fieldName, useIndexBasedKey in this.card) as unknown as Box<Card[]>;
     return getContainsManyComponent({
@@ -370,7 +370,8 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
       arrayField,
       field: this,
       format,
-      cardTypeFor
+      cardTypeFor,
+      opts
     });
   }
 }
@@ -474,8 +475,8 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     return value;
   }
 
-  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
-    return fieldComponent(this, model, format);
+  component(model: Box<Card>, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
+    return fieldComponent(this, model, format, opts);
   }
 }
 
@@ -608,16 +609,16 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     return value;
   }
 
-  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
+  component(model: Box<Card>, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(this.name as keyof Card) as unknown as Box<Card | null>;
       return getLinksToEditor(innerModel, this);
     }
-    return fieldComponent(this, model, format);
+    return fieldComponent(this, model, format, opts);
   }
 }
 
-function fieldComponent(field: Field<typeof Card>, model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
+function fieldComponent(field: Field<typeof Card>, model: Box<Card>, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
   let fieldName = field.name as keyof Card;
   let card: typeof Card;
   if (primitive in field.card) {
@@ -626,7 +627,7 @@ function fieldComponent(field: Field<typeof Card>, model: Box<Card>, format: For
     card = model.value[fieldName]?.constructor as typeof Card ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<Card>;
-  return getBoxComponent(card, format, innerModel);
+  return getBoxComponent(card, format, innerModel, opts);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
