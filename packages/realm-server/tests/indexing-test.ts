@@ -184,7 +184,7 @@ module("indexing", function (hooks) {
     assert.strictEqual(
       cleanWhiteSpace(entry!.html!),
       cleanWhiteSpace(`
-          <div data-test-shadow-boundary>
+          <div data-test-shadow-boundary data-card-boundary>
             <h1> Mango </h1>
           </div>
         `),
@@ -216,7 +216,7 @@ module("indexing", function (hooks) {
         assert.strictEqual(
           cleanWhiteSpace(html!),
           cleanWhiteSpace(`
-            <div data-test-shadow-boundary>
+            <div data-test-shadow-boundary data-card-boundary>
               <h1> Van Gogh </h1>
             </div>
           `)

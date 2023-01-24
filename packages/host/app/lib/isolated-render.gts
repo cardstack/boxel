@@ -23,7 +23,6 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
   let vm = (iterator as any).vm;
   let initialState = vm.env.debugRenderTree.stack.current;
   let initialStackSize = vm.env.debugRenderTree.stack.stack.length;
-  debugger;
 
   try {
     inTransaction(_runtime.env, () => vm._execute());
@@ -35,13 +34,24 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
     // process an op code that will do this organically. It's only when there is an error 
     // that we need to step in and do this by hand.
 
-    // we need to pair a commit with each component that comprises a card hierarchy.
-    // This logic will work fine if the error is thrown at the top level card, but if an
-    // error is thrown in a nested card I'm unsure if we'll need more commits. If we adjust the
-    // component hierarchy required to construct a card we'll need to adjust this appropriately...
-    vm.commitCacheGroup(); // card field component
-    vm.commitCacheGroup(); // ShadowDOM component
-    vm.commitCacheGroup(); // Isolated/Embedded component
+    // We need to pair a commit with each component that comprises a card hierarchy.
+    // At the time of this implementation there are 3 components per card: the card field 
+    // component, the ShadowDOM component and the Isolated or Embedded component. This logic
+    // will count how many distinct card boundaries we see in the stack and make 2 commits
+    // per card boundary.
+    let blockStack = vm.elementStack.blockStack.stack;
+    let cardBoundaries = new Set<SimpleElement>();
+    for (let block of blockStack) {
+      if (block.parent.getAttribute('data-card-boundary') === '') {
+        cardBoundaries.add(block.parent);
+      }
+    }
+    // WARNING! If the component hierarchy that comprises a card structure, this will need to change too
+    for (let i = 0; i < cardBoundaries.size; i++) {
+      vm.commitCacheGroup(); // card field component
+      vm.commitCacheGroup(); // ShadowDOM component
+      vm.commitCacheGroup(); // Isolated/Embedded component
+    }
 
     // Unwind the render tree stack until we get back to the initial state
     while (vm.env.debugRenderTree.stack.current!== initialState && vm.env.debugRenderTree.stack.size > 0) {
