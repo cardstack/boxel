@@ -6,7 +6,7 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import type { Relationship } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import LoaderService from '../services/loader-service';
+import type LoaderService from '../services/loader-service';
 
 interface Args {
   named: {

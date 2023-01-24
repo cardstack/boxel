@@ -20,6 +20,10 @@
   box-sizing: border-box;
 }
 
+#isolated-render {
+  display: none;
+}
+
 html,
 body {
   height: 100%;

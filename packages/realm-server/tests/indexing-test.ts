@@ -78,6 +78,22 @@ module("indexing", function (hooks) {
           @field message = contains(StringCard);
         }
       `,
+      "boom.gts": `
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Boom extends Card {
+          @field firstName = contains(StringCard);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/>{{this.boom}}</h1>
+            </template>
+            get boom() {
+              throw new Error('intentional error');
+            }
+          }
+        }
+      `,
       "mango.json": {
         data: {
           attributes: {
@@ -133,6 +149,19 @@ module("indexing", function (hooks) {
           },
         },
       },
+      "boom.json": {
+        data: {
+          attributes: {
+            firstName: "Boom!",
+          },
+          meta: {
+            adoptsFrom: {
+              module: "./boom",
+              name: "Boom",
+            },
+          },
+        },
+      },
       "empty.json": {
         data: {
           attributes: {},
@@ -155,12 +184,50 @@ module("indexing", function (hooks) {
     assert.strictEqual(
       cleanWhiteSpace(entry!.html!),
       cleanWhiteSpace(`
-          <div data-test-shadow-boundary>
+          <div data-test-shadow-boundary data-card-boundary>
             <h1> Mango </h1>
           </div>
         `),
       "pre-rendered html is correct"
     );
+  });
+
+  test("can recover from rendering a card that has a template error", async function (assert) {
+    {
+      let entry = await realm.searchIndex.card(new URL(`${testRealm}boom`));
+      if (entry?.type === "error") {
+        assert.strictEqual(
+          entry.error.detail,
+          "Encountered error rendering HTML for card: intentional error"
+        );
+        assert.deepEqual(entry.error.deps, [`${testRealm}boom`]);
+      } else {
+        assert.ok("false", "expected search entry to be an error document");
+      }
+    }
+    {
+      let entry = await realm.searchIndex.card(new URL(`${testRealm}vangogh`));
+      if (entry?.type === "doc") {
+        assert.deepEqual(entry.doc.data.attributes?.firstName, "Van Gogh");
+        let { html } =
+          (await realm.searchIndex.searchEntry(
+            new URL(`${testRealm}vangogh`)
+          )) ?? {};
+        assert.strictEqual(
+          cleanWhiteSpace(html!),
+          cleanWhiteSpace(`
+            <div data-test-shadow-boundary data-card-boundary>
+              <h1> Van Gogh </h1>
+            </div>
+          `)
+        );
+      } else {
+        assert.ok(
+          false,
+          `expected search entry to be a document but was: ${entry?.error.detail}`
+        );
+      }
+    }
   });
 
   test("can incrementally index updated instance", async function (assert) {
