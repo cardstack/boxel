@@ -10,14 +10,14 @@ import {
   type RunState,
   type RunnerOpts
 } from '@cardstack/runtime-common/search-index';
-import type IndexerService from '../services/indexer-service';
+import type RenderService from '../services/render-service';
 import type LoaderService from '../services/loader-service';
 import type LocalRealm from '../services/local-realm';
 import type { LocalPath } from "@cardstack/runtime-common/paths";
 
 export default class CardPrerender extends Component {
   @service declare loaderService: LoaderService;
-  @service declare indexerService: IndexerService;
+  @service declare renderService: RenderService;
   @service declare fastboot: { isFastBoot: boolean };
   @service declare localRealm: LocalRealm;
 
@@ -78,10 +78,10 @@ export default class CardPrerender extends Component {
         loader: this.loaderService.loader,
         reader,
         entrySetter,
-        renderCard: this.indexerService.renderCard.bind(this.indexerService),
+        renderCard: this.renderService.renderCard.bind(this.renderService),
       })
     );
-    this.indexerService.indexRunDeferred?.fulfill();
+    this.renderService.indexRunDeferred?.fulfill();
     return current;
   }
 
@@ -94,9 +94,9 @@ export default class CardPrerender extends Component {
         reader,
         loader: this.loaderService.loader,
         entrySetter,
-        renderCard: this.indexerService.renderCard.bind(this.indexerService),
+        renderCard: this.renderService.renderCard.bind(this.renderService),
       });
-    this.indexerService.indexRunDeferred?.fulfill();
+    this.renderService.indexRunDeferred?.fulfill();
     return current;
   }
 

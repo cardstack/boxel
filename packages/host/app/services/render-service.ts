@@ -13,8 +13,7 @@ import type Owner from '@ember/owner';
 const ELEMENT_NODE_TYPE = 1;
 const { environment } = config;
 
-// TODO rename to render-service.ts
-export default class IndexerService extends Service {
+export default class RenderService extends Service {
   // @ts-expect-error the types for this invocation of @service() don't work
   @service('-document') document: SimpleDocument;
   @service declare loaderService: LoaderService;

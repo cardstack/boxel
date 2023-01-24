@@ -12,7 +12,7 @@ import {
 import { timeout } from '@cardstack/worker/src/util';
 import { Deferred } from '@cardstack/runtime-common';
 import { TaskInstance } from 'ember-resources';
-import IndexerService from './indexer-service';
+import RenderService from './render-service';
 import type RouterService from '@ember/routing/router-service';
 import {
   serializeRunState,
@@ -195,7 +195,7 @@ export default class LocalRealm extends Service {
 
   @service declare router: RouterService;
   @service declare fastboot: { isFastBoot: boolean };
-  @service declare indexerService: IndexerService;
+  @service declare renderService: RenderService;
 
   async setEntry(url: URL, entry: SearchEntryWithErrors) {
     if (this.state.type !== 'available') {
