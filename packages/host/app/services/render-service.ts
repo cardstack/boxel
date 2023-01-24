@@ -22,10 +22,6 @@ export default class RenderService extends Service {
   renderError: Error | undefined;
   owner: Owner = getOwner(this)!;
 
-  // this seems to want to live in a service and not in the component that
-  // renders this card. within the service we are able to see the resulting
-  // card's serialized HTML. However, when this logic lives in the component we
-  // can only ever see the previous rendered card's html
   async renderCard(
     url: URL,
     staticResponses: Map<string, string>
