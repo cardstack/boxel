@@ -13,14 +13,7 @@ export interface RealmConfig {
 export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
-  console.log(`${new Date()} starting server 1030`);
-
   let server = http.createServer(async (req, res) => {
-    console.log(new Date());
-    console.log(`==== ${req.method} ${req.url}`);
-    console.log('> Headers');
-    console.log(req.headers);
-
     let isStreaming = false;
     try {
       if (handleCors(req, res)) {
