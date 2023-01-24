@@ -37,7 +37,7 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
     // We need to pair a commit with each component that comprises a card hierarchy.
     // At the time of this implementation there are 3 components per card: the card field 
     // component, the ShadowDOM component and the Isolated or Embedded component. This logic
-    // will count how many distinct card boundaries we see in the stack and make 2 commits
+    // will count how many distinct card boundaries we see in the stack and make 3 commits
     // per card boundary.
     let blockStack = vm.elementStack.blockStack.stack;
     let cardBoundaries = new Set<SimpleElement>();
@@ -46,7 +46,8 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
         cardBoundaries.add(block.parent);
       }
     }
-    // WARNING! If the component hierarchy that comprises a card structure, this will need to change too
+    // WARNING! If the component hierarchy that comprises a card structure changes
+    // then this will need to change too
     for (let i = 0; i < cardBoundaries.size; i++) {
       vm.commitCacheGroup(); // card field component
       vm.commitCacheGroup(); // ShadowDOM component
