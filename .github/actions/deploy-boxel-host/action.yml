@@ -36,7 +36,7 @@ runs:
           echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-host" >> $GITHUB_ENV
           echo "AWS_S3_BUCKET=cardstack-boxel-host-staging" >> $GITHUB_ENV
           echo "AWS_CLOUDFRONT_DISTRIBUTION=E35TXLK9HIMESQ" >> $GITHUB_ENV
-          echo "DEMO_REALM_URL=https://realm-base-staging.stack.cards/base/" >> $GITHUB_ENV
+          echo "DEMO_REALM_URL=https://realm-demo-staging.stack.cards/demo/" >> $GITHUB_ENV
         else
           echo "unrecognized environment"
           exit 1;
