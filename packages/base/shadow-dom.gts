@@ -35,7 +35,7 @@ const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
 export default class ShadowDOM extends Component<Signature> {
   <template>
     {{#if (or isFastBoot this.disableShadowDOM)}}
-      <div data-test-shadow-boundary>
+      <div data-test-shadow-boundary data-card-boundary>
         {{yield}}
       </div>
     {{else}}

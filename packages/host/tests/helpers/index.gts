@@ -71,9 +71,7 @@ async function makeRenderer() {
   await renderComponent(
     class TestDriver extends GlimmerComponent {
       <template>
-        <template shadowroot="open">
-          <CardPrerender/>
-        </template>
+        <CardPrerender/>
       </template>
     }
   );
