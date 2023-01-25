@@ -340,12 +340,23 @@ export class Loader {
     }
   }
 
-  resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
+  // This is intentionally private to prevent this capability from leaking outside of the loader
+  private resolve(
+    moduleIdentifier: string | URL,
+    relativeTo?: URL
+  ): ResolvedURL {
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
     for (let [sourceURL, to] of this.urlMappings) {
       let sourcePath = new RealmPaths(new URL(sourceURL));
       if (sourcePath.inRealm(absoluteURL)) {
-        return makeResolvedURL(new URL(sourcePath.local(absoluteURL), to));
+        let toPath = new RealmPaths(new URL(to));
+        if (absoluteURL.href.endsWith("/")) {
+          return makeResolvedURL(
+            toPath.directoryURL(sourcePath.local(absoluteURL))
+          );
+        } else {
+          return makeResolvedURL(toPath.fileURL(sourcePath.local(absoluteURL)));
+        }
       }
     }
     return makeResolvedURL(absoluteURL);
@@ -360,7 +371,11 @@ export class Loader {
       let sourcePath = new RealmPaths(new URL(sourceURL));
       let destinationPath = new RealmPaths(to);
       if (destinationPath.inRealm(absoluteURL)) {
-        return new URL(destinationPath.local(absoluteURL), sourcePath.url);
+        if (absoluteURL.href.endsWith("/")) {
+          return sourcePath.directoryURL(destinationPath.local(absoluteURL));
+        } else {
+          return sourcePath.fileURL(destinationPath.local(absoluteURL));
+        }
       }
     }
     return absoluteURL;

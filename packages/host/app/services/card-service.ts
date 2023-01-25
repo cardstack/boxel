@@ -9,7 +9,6 @@ import {
   type CardDocument,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import type { ResolvedURL } from '@cardstack/runtime-common/loader';
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
 import type { Card } from 'https://cardstack.com/base/card-api';
@@ -45,10 +44,10 @@ export default class CardService extends Service {
     return this.apiModule.module as typeof CardAPI;
   }
 
-  get defaultURL(): ResolvedURL {
-    return this.loaderService.loader.resolve(
-      demoRealmURL ?? this.localRealm.url
-    );
+  // Note that this should be the unresolved URL and that we need to rely on our
+  // fetch to do any URL resolution.
+  get defaultURL(): URL {
+    return demoRealmURL ? new URL(demoRealmURL) : this.localRealm.url;
   }
 
   private async fetchJSON(
@@ -125,7 +124,7 @@ export default class CardService extends Service {
     return await this.createFromSerialized(json.data, json);
   }
 
-  async search(query: Query, realmURL: ResolvedURL): Promise<Card[]> {
+  async search(query: Query, realmURL: URL): Promise<Card[]> {
     let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
     if (!isCardCollectionDocument(json)) {
       throw new Error(

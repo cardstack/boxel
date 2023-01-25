@@ -70,10 +70,15 @@ export default class Index extends Route<Model> {
       );
       return { path, openFile, polling, openDirs, isFastBoot };
     }
-    if (response.url !== url) {
+    // The server may have responded with a redirect which we need to pay
+    // attention to. As part of responding to us, the server will hand us a
+    // resolved URL in response.url. We need to reverse that resolution in order
+    // to see if we have been given a redirect.
+    let responseURL = this.loaderService.loader.reverseResolution(response.url);
+    if (responseURL.href !== url) {
       this.router.transitionTo('application', {
         queryParams: {
-          path: realmPath.local(new URL(response.url)),
+          path: realmPath.local(responseURL),
           polling,
           openDirs,
         },
