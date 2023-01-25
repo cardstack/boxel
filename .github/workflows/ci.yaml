@@ -119,7 +119,7 @@ jobs:
   host-deploy:
     name: Deploy host to staging
     needs: host-test
-    if: github.event.push.ref == 'refs/heads/master'
+    if: github.event.push.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
