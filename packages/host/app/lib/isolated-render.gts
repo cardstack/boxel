@@ -32,26 +32,13 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
     // balanced (which would otherwise cause consumed tags to leak into subsequent frames).
     // I'm not adding this to a "finally" because when there is no error, the VM will 
     // process an op code that will do this organically. It's only when there is an error 
-    // that we need to step in and do this by hand.
-
-    // We need to pair a commit with each component that comprises a card hierarchy.
-    // At the time of this implementation there are 3 components per card: the card field 
-    // component, the ShadowDOM component and the Isolated or Embedded component. This logic
-    // will count how many distinct card boundaries we see in the stack and make 3 commits
-    // per card boundary.
-    let blockStack = vm.elementStack.blockStack.stack;
-    let cardBoundaries = new Set<SimpleElement>();
-    for (let block of blockStack) {
-      if (block.parent.getAttribute('data-card-boundary') === '') {
-        cardBoundaries.add(block.parent);
-      }
-    }
-    // WARNING! If the component hierarchy that comprises a card structure changes
-    // then this will need to change too
-    for (let i = 0; i < cardBoundaries.size; i++) {
-      vm.commitCacheGroup(); // card field component
-      vm.commitCacheGroup(); // ShadowDOM component
-      vm.commitCacheGroup(); // Isolated/Embedded component
+    // that we need to step in and do this by hand. Within the vm[STACKS] is a the stack
+    // for the cache group. We need to call a commit for each item in this stack.
+    let vmSymbols = Object.fromEntries(Object.getOwnPropertySymbols(vm).map(s => [s.toString(), s]));
+    let stacks = vm[vmSymbols['Symbol(STACKS)']];
+    let stackSize = stacks.cache.stack.length
+    for (let i = 0; i < stackSize; i++) {
+      vm.commitCacheGroup();
     }
 
     // Unwind the render tree stack until we get back to the initial state

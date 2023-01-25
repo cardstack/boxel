@@ -84,7 +84,7 @@ module('Integration | card-prerender', function (hooks) {
       assert.strictEqual(
         cleanWhiteSpace(entry!.html!),
         cleanWhiteSpace(`
-          <div data-test-shadow-boundary data-card-boundary>
+          <div data-test-shadow-boundary>
             <h3> Mango </h3>
           </div>
         `),
@@ -96,7 +96,7 @@ module('Integration | card-prerender', function (hooks) {
       assert.strictEqual(
         cleanWhiteSpace(entry!.html!),
         cleanWhiteSpace(`
-          <div data-test-shadow-boundary data-card-boundary>
+          <div data-test-shadow-boundary>
             <h3> Van Gogh </h3>
           </div>
         `),
