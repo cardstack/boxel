@@ -1,10 +1,12 @@
 name: Manual Deploy [realm-server]
 
 on:
-  # FIXME pull_request is for development only, should be a workflow_dispatch
-  pull_request:
-    paths:
-      - "waypoint.hcl"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
 
 env:
   # FIXME this would be in the dispatch event
@@ -28,7 +30,7 @@ jobs:
         uses: ./.github/actions/deploy-realm-server
         with:
           app_name: ${{ matrix.app }}
-          environment: ${{ env.ENVIRONMENT }}
+          environment: ${{ inputs.environment }}
           discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
           production_waypoint_server_token: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_TOKEN }}
           production_waypoint_server_address: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_ADDR }}
