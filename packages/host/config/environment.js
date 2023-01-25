@@ -24,6 +24,7 @@ module.exports = function (environment) {
     'ember-cli-mirage': {
       enabled: false,
     },
+    // This should be provided as an *unresolved* URL
     demoRealmURL: process.env.DEMO_REALM_URL,
   };
 

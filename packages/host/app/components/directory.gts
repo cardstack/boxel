@@ -56,9 +56,7 @@ export default class Directory extends Component<Args> {
 
   @cached
   get realmPath() {
-    // this.cardService.defaultURL is a resolved URL. we need to reverse the
-    // resolution in order to compare it to the directory entries.
-    return new RealmPaths(this.loaderService.loader.reverseResolution(this.cardService.defaultURL));
+    return new RealmPaths(this.cardService.defaultURL);
   }
 
   @action
