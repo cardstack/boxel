@@ -1,10 +1,12 @@
 name: Manual Deploy [realm-server]
 
 on:
-  # FIXME pull_request is for development only, should be a workflow_dispatch
-  pull_request:
-    paths:
-      - "waypoint.hcl"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
 
 env:
   PNPM_VERSION: 7.2.1
@@ -39,7 +41,7 @@ jobs:
 
       - name: Set up env
         env:
-          INPUT_ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
         run: |
           if [ "$INPUT_ENVIRONMENT" = "production" ]; then
             echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/waypoint" >> $GITHUB_ENV
@@ -73,7 +75,7 @@ jobs:
         uses: ./.github/actions/waypoint-deploy
         with:
           app: ${{ matrix.app }}
-          environment: ${{ env.ENVIRONMENT }}
+          environment: ${{ github.event.inputs.environment }}
           discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
         env:
           WAYPOINT_SERVER_TLS: "1"
