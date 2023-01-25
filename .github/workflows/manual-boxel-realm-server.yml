@@ -30,3 +30,8 @@ jobs:
           app_name: ${{ matrix.app }}
           environment: ${{ env.ENVIRONMENT }}
           discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          production_waypoint_server_token: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_TOKEN }}
+          production_waypoint_server_address: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_ADDR }}
+          staging_waypoint_server_token: ${{ secrets.STAGING_WAYPOINT_SERVER_TOKEN }}
+          staging_waypoint_server_address: ${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}
+
