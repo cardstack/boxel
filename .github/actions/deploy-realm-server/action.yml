@@ -45,6 +45,7 @@ runs:
         cache: pnpm
 
     - name: Set up env
+      shell: bash
       env:
         INPUT_ENVIRONMENT: ${{ inputs.environment }}
       run: |
@@ -71,8 +72,10 @@ runs:
         aws-region: us-east-1
 
     - name: Install Dependencies
+      shell: bash
       run: pnpm install --frozen-lockfile
     - name: Build host dist/ for fastboot
+      shell: bash
       run: pnpm build:production
       working-directory: packages/host
 
