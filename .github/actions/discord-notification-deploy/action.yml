@@ -1,3 +1,5 @@
+# This is copied from cardstack/cardstack
+
 name: Notify deploy status with Discord
 description: Send a Discord message when to inform about deployment status
 

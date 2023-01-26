@@ -1,3 +1,5 @@
+// This is copied from cardstack/cardstack with the addition of --health-check-grace-period-seconds
+
 import hcl from 'hcl2-parser';
 import fs from 'fs';
 import { execSync } from 'child_process';

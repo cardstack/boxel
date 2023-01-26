@@ -1,3 +1,5 @@
+// This is copied from cardstack/cardstack
+
 const core = require('@actions/core');
 const { main } = require('./main');
 

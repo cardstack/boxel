@@ -1,3 +1,5 @@
+// This is copied from cardstack/cardstack
+
 import hcl from 'hcl2-parser';
 import fs from 'fs';
 import { execSync } from 'child_process';
