@@ -1,4 +1,4 @@
-name: Deploy boxel-realm-serer
+name: Deploy boxel-realm-server
 description: Deploy realm server via Waypoint
 
 inputs:
@@ -51,13 +51,11 @@ runs:
       run: |
         if [ "$INPUT_ENVIRONMENT" = "production" ]; then
           echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/waypoint" >> $GITHUB_ENV
-          echo "DEMO_REALM_URL=https://realm-demo.cardstack.com/demo/" >> $GITHUB_ENV
           echo "WAYPOINT_SERVER_TOKEN=${{ inputs.production_waypoint_server_token }}" >> $GITHUB_ENV
           echo "WAYPOINT_SERVER_ADDR=${{ inputs.production_waypoint_server_address }}" >> $GITHUB_ENV
           cp waypoint.prod.hcl waypoint.hcl
         elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
           echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/waypoint" >> $GITHUB_ENV
-          echo "DEMO_REALM_URL=https://realm-demo-staging.stack.cards/demo/" >> $GITHUB_ENV
           echo "WAYPOINT_SERVER_TOKEN=${{ inputs.staging_waypoint_server_token }}" >> $GITHUB_ENV
           echo "WAYPOINT_SERVER_ADDR=${{ inputs.staging_waypoint_server_address }}" >> $GITHUB_ENV
         else

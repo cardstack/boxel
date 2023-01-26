@@ -26,6 +26,8 @@ module.exports = function (environment) {
     },
     // This should be provided as an *unresolved* URL
     demoRealmURL: process.env.DEMO_REALM_URL,
+    resolvedBaseRealmURL:
+      process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
   };
 
   if (environment === 'development') {

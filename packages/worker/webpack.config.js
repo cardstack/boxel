@@ -12,6 +12,9 @@ module.exports = {
     new webpack.ProvidePlugin({
       process: 'process',
     }),
+    new webpack.EnvironmentPlugin({
+      RESOLVED_BASE_REALM_URL: 'http://localhost:4201/base/',
+    }),
   ],
   module: {
     rules: [

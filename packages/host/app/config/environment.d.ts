@@ -12,4 +12,5 @@ declare const config: {
   rootURL: string;
   APP: Record<string, unknown>;
   demoRealmURL: string;
+  resolvedBaseRealmURL: string;
 };
