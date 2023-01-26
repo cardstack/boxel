@@ -2,10 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Friend from http://local-realm/friend",
-      "description": "Catalog entry for Friend from http://local-realm/friend",
+      "title": "Friend from /friend",
+      "description": "Catalog entry for Friend from /friend",
       "ref": {
-        "module": "http://local-realm/friend",
+        "module": "/friend",
         "name": "Friend"
       },
       "demo": {
@@ -23,7 +23,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://local-realm/friend",
+            "module": "/friend",
             "name": "Friend"
           }
         }

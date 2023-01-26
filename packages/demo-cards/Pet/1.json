@@ -7,7 +7,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/pet",
+        "module": "/pet",
         "name": "Pet"
       }
     },

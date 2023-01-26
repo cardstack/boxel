@@ -12,13 +12,13 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/post",
+        "module": "/post",
         "name": "Post"
       },
       "fields": {
         "author": {
           "adoptsFrom": {
-            "module": "http://local-realm/employee",
+            "module": "/employee",
             "name": "Employee"
           }
         }
