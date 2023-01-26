@@ -128,3 +128,26 @@ jobs:
         with:
           environment: staging
           discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
+
+  realm-server-deploy:
+    name: Deploy realm server to staging
+    needs: realm-server-test
+    if: github.event.push.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [realm-base, realm-demo]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy ${{ matrix.app }}
+        uses: ./.github/actions/deploy-realm-server
+        with:
+          app_name: ${{ matrix.app }}
+          environment: staging
+          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          production_waypoint_server_token: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_TOKEN }}
+          production_waypoint_server_address: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_ADDR }}
+          staging_waypoint_server_token: ${{ secrets.STAGING_WAYPOINT_SERVER_TOKEN }}
+          staging_waypoint_server_address: ${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}
