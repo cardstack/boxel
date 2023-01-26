@@ -17,9 +17,8 @@ livenessWatcher.registerShutdownListener(async () => {
   await fetchHandler.dropCaches();
 });
 
-const resolvedBaseRealmURL =
-  //@ts-expect-error webpack replaces process.env at build time
-  process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base';
+//@ts-expect-error webpack replaces process.env at build time
+let resolvedBaseRealmURL = process.env.RESOLVED_BASE_REALM_URL;
 console.log(`service worker resolvedBaseRealmURL=${resolvedBaseRealmURL}`);
 Loader.addURLMapping(new URL(baseRealm.url), new URL(resolvedBaseRealmURL));
 

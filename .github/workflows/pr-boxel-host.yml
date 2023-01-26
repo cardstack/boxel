@@ -82,7 +82,6 @@ jobs:
         env:
           DEMO_REALM_URL: https://realm-demo-staging.stack.cards/demo/
           RESOLVED_BASE_REALM_URL: https://realm-base-staging.stack.cards/base/
-          STAGING: true
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
           AWS_REGION: us-east-1
@@ -110,7 +109,6 @@ jobs:
         env:
           DEMO_REALM_URL: https://realm-demo.cardstack.com/
           RESOLVED_BASE_REALM_URL: https://realm-base.cardstack.com/
-          PRODUCTION: true
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.cardstack.com
           AWS_S3_BUCKET: boxel-host-preview.cardstack.com
           AWS_REGION: us-east-1
