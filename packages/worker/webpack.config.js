@@ -1,5 +1,6 @@
 const path = require('path');
 const webpack = require('webpack');
+const Dotenv = require('dotenv-webpack');
 
 module.exports = {
   mode: process.env.PRODUCTION != null ? 'production' : 'development',
@@ -11,6 +12,14 @@ module.exports = {
   plugins: [
     new webpack.ProvidePlugin({
       process: 'process',
+    }),
+    new Dotenv({
+      path:
+        process.env.PRODUCTION != null
+          ? './production.env'
+          : process.env.STAGING != null
+          ? './staging.env'
+          : '.env',
     }),
   ],
   module: {
