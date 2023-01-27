@@ -213,7 +213,7 @@ export class Realm {
     }
     if (
       accept?.includes("application/vnd.api+json") ||
-      accept?.includes("text/event-stream")
+      accept === "text/event-stream"
     ) {
       // local requests are allowed to query the realm as the index is being built up
       if (!request.isLocal && url.host !== "local-realm") {
@@ -247,36 +247,7 @@ export class Realm {
   }
 
   private async subscribe() {
-    console.log("subscribe");
-    let headers = {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    };
-    let i = 0;
-    let message = "";
-    let timer = setInterval(fn, 1000);
-    fn();
-    function fn() {
-      i++;
-      if (i == 4) {
-        message += "event: bye\ndata: bye-bye\n\n";
-        clearInterval(timer);
-        return createResponse(message, {
-          headers,
-          status: 200,
-        });
-      }
-      message += `data: ${i}\n\n`;
-      return createResponse(message, {
-        headers,
-        status: 200,
-      });
-    }
-    return createResponse(message, {
-      headers,
-      status: 200,
-    });
+    return sendServerSendEvent();
   }
 
   private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {
@@ -726,4 +697,36 @@ export interface CardDefinitionResource {
       };
     };
   };
+}
+
+let sendInterval = 5000;
+function sendServerSendEvent() {
+  let headers = {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  };
+
+  var sseId = new Date().toLocaleTimeString();
+
+  setInterval(function () {
+    return writeServerSendEvent(
+      headers,
+      sseId,
+      new Date().toLocaleTimeString()
+    );
+  }, sendInterval);
+
+  return writeServerSendEvent(headers, sseId, new Date().toLocaleTimeString());
+}
+
+function writeServerSendEvent(
+  headers: Partial<Headers["entries"]>,
+  _sseId: string,
+  data: string
+) {
+  return createResponse(`data: new server event ${data}\n\n`, {
+    status: 200,
+    headers,
+  });
 }

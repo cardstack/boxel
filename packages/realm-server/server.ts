@@ -1,7 +1,7 @@
 import http, { IncomingMessage, ServerResponse } from "http";
 import { Realm } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
-import { type LocalPath } from "@cardstack/runtime-common/paths";
+import type { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
 import "@cardstack/runtime-common/externals-global";
 
@@ -47,13 +47,13 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
-      if (
-        req.url.includes("/_message") &&
-        req.headers["accept"] === "text/event-stream"
-      ) {
-        sendServerSendEvent(req, res);
-        return;
-      }
+      // if (
+      //   req.url.includes("/_message") &&
+      //   req.headers["accept"]?.includes("text/event-stream")
+      // ) {
+      //   sendServerSendEvent(req, res);
+      //   return;
+      // }
 
       // despite the name, req.url is actually the pathname for the request URL
       let local: LocalPath = req.url === "/" ? "" : req.url;
