@@ -98,6 +98,11 @@ function tagResourcesAndAddGracePeriodAndVolume(cluster, service, tags) {
     }
   ];
 
+  taskDefinition.taskDefinition.containerDefinitions[0].mountPoints = [{
+    containerPath: '/anewpathya',
+    sourceVolume: 'doesitexist',
+  }];
+
   console.log('td', taskDefinition);
 
   delete taskDefinition.taskDefinition.taskDefinitionArn;
