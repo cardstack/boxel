@@ -145,6 +145,7 @@ export class Realm {
       .post("/", this.createCard.bind(this))
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
       .get("/_search", this.search.bind(this))
+      .get("/_message", this.subscribe.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
       .delete("/.+(?<!.json)", this.removeCard.bind(this));
@@ -210,7 +211,10 @@ export class Realm {
         accept = acceptHeader;
       }
     }
-    if (accept?.includes("application/vnd.api+json")) {
+    if (
+      accept?.includes("application/vnd.api+json") ||
+      accept?.includes("text/event-stream")
+    ) {
       // local requests are allowed to query the realm as the index is being built up
       if (!request.isLocal && url.host !== "local-realm") {
         await this.ready;
@@ -240,6 +244,39 @@ export class Realm {
     } else {
       return await this.serveLocalFile(handle);
     }
+  }
+
+  private async subscribe() {
+    console.log("subscribe");
+    let headers = {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    };
+    let i = 0;
+    let message = "";
+    let timer = setInterval(fn, 1000);
+    fn();
+    function fn() {
+      i++;
+      if (i == 4) {
+        message += "event: bye\ndata: bye-bye\n\n";
+        clearInterval(timer);
+        return createResponse(message, {
+          headers,
+          status: 200,
+        });
+      }
+      message += `data: ${i}\n\n`;
+      return createResponse(message, {
+        headers,
+        status: 200,
+      });
+    }
+    return createResponse(message, {
+      headers,
+      status: 200,
+    });
   }
 
   private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {
