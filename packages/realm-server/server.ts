@@ -1,7 +1,7 @@
 import http, { IncomingMessage, ServerResponse } from "http";
 import { Realm } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
-import { LocalPath } from "@cardstack/runtime-common/paths";
+import { type LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
 import "@cardstack/runtime-common/externals-global";
 
@@ -14,8 +14,8 @@ export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
-    res.on('finish', () => {
-      console.log(`${req.method} ${req.url}: ${res.statusCode}`);;
+    res.on("finish", () => {
+      console.log(`${req.method} ${req.url}: ${res.statusCode}`);
     });
 
     let isStreaming = false;
@@ -34,8 +34,8 @@ export function createRealmServer(realms: Realm[]) {
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
-        res.statusMessage = 'OK';
-        res.write('OK');
+        res.statusMessage = "OK";
+        res.write("OK");
         res.end();
         return;
       }
@@ -44,6 +44,14 @@ export function createRealmServer(realms: Realm[]) {
         res.statusCode = 404;
         res.statusMessage = "Not Found";
         res.end();
+        return;
+      }
+
+      if (
+        req.url.includes("/_message") &&
+        req.headers["accept"] === "text/event-stream"
+      ) {
+        sendServerSendEvent(req, res);
         return;
       }
 
@@ -146,7 +154,38 @@ function detectRealmCollision(realms: Realm[]): void {
 }
 
 function requestIsHealthCheck(req: http.IncomingMessage) {
-  return req.url === '/' &&
-    req.method === 'GET' &&
-    req.headers["user-agent"]?.startsWith('ELB-HealthChecker');
+  return (
+    req.url === "/" &&
+    req.method === "GET" &&
+    req.headers["user-agent"]?.startsWith("ELB-HealthChecker")
+  );
+}
+
+let sendInterval = 5000;
+function sendServerSendEvent(
+  _req: http.IncomingMessage,
+  res: http.ServerResponse
+) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+
+  var sseId = new Date().toLocaleTimeString();
+
+  setInterval(function () {
+    writeServerSendEvent(res, sseId, new Date().toLocaleTimeString());
+  }, sendInterval);
+
+  writeServerSendEvent(res, sseId, new Date().toLocaleTimeString());
+}
+
+function writeServerSendEvent(
+  res: http.ServerResponse,
+  sseId: string,
+  data: string
+) {
+  res.write("id: " + sseId + "\n");
+  res.write("data: new server event " + data + "\n\n");
 }
