@@ -148,7 +148,7 @@ function main() {
   const latestService = services[0];
 
   if (!isTagged(latestService, tags)) {
-    tagResourcesAndAddGracePeriod(config.cluster, latestService, tags);
+    tagResourcesAndAddGracePeriodAndVolume(config.cluster, latestService, tags);
   }
 }
 
