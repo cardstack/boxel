@@ -92,7 +92,7 @@ function tagResourcesAndAddGracePeriodAndVolume(cluster, service, tags) {
             "transitEncryption": "ENABLED",
             "authorizationConfig": {
                 "accessPointId": "fsap-05f6f7e465f171f43",
-                "iam": "DISABLED"
+                "iam": "ENABLED"
             }
         }
     }
