@@ -29,6 +29,7 @@ export function normalizeProperty(property: string): string {
   let propertyMap = new Map([
     ['x', 'translateX'],
     ['y', 'translateY'],
+    ['z', 'translateZ'],
   ]);
   return propertyMap.get(property) ?? property;
 }
