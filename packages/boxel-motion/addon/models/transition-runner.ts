@@ -17,9 +17,24 @@ export function constructKeyframe(
 ) {
   let keyframe: Keyframe = {};
 
+  // This combines the individual transform properties that we support
+  // into a single transform property in the specified order.
   let transformValues: { [k: string]: string[] } = {
+    perspective: [],
     translateX: [],
     translateY: [],
+    translateZ: [],
+    rotate: [],
+    rotateX: [],
+    rotateY: [],
+    rotateZ: [],
+    scale: [],
+    scaleX: [],
+    scaleY: [],
+    scaleZ: [],
+    skew: [],
+    skewX: [],
+    skewY: [],
   };
   let transformTemplate = new Set(Object.keys(transformValues));
   frames.forEach((frame) => {
