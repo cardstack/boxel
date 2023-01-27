@@ -350,7 +350,6 @@ module('Unit | Orchestration', function () {
         timing: {
           behavior: new TweenBehavior(),
           duration: 100,
-          anchor: 'center',
         },
       };
 
@@ -422,7 +421,6 @@ module('Unit | Orchestration', function () {
         properties: {},
         timing: {
           behavior: new TweenBehavior(),
-          anchor: 'center',
         },
       };
 
@@ -433,6 +431,489 @@ module('Unit | Orchestration', function () {
       ]);
 
       assert.deepEqual(sortedAnimations, [animation1, animation2, animation3]);
+    });
+  });
+
+  module('Unit | Orchestration | anchor', function () {
+    test('it handles anchor:fill', function (assert) {
+      let sprite = getMockSprite();
+      let sprites = new Set([sprite]);
+      let timeline: AnimationTimeline = {
+        type: 'parallel',
+        animations: [
+          {
+            sprites,
+            properties: {
+              width: {
+                from: '10px',
+                to: '20px',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 100,
+            },
+          },
+          {
+            sprites,
+            properties: {
+              backgroundColor: {
+                from: 'rgb(0,0,0)',
+                to: 'rgb(255,255,255)',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              anchor: 'fill',
+            },
+          },
+        ],
+      };
+
+      let orchestrationMatrix = OrchestrationMatrix.from(timeline);
+      assert.deepEqual(
+        orchestrationMatrix.getKeyframes(constructKeyframe),
+        new Map([
+          [
+            sprite,
+            [
+              {
+                width: '10px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '11.666666666666666px',
+                backgroundColor: 'rgba(43, 43, 43, 1)',
+              },
+              {
+                width: '13.333333333333332px',
+                backgroundColor: 'rgba(85, 85, 85, 1)',
+              },
+              {
+                width: '15px',
+                backgroundColor: 'rgba(128, 128, 128, 1)',
+              },
+              {
+                width: '16.666666666666664px',
+                backgroundColor: 'rgba(170, 170, 170, 1)',
+              },
+              {
+                width: '18.333333333333336px',
+                backgroundColor: 'rgba(213, 213, 213, 1)',
+              },
+              {
+                width: '20px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+            ],
+          ],
+        ])
+      );
+    });
+
+    // anchor:start doesn't really do anything as it's the default behavior, but we test it regardless to make sure
+    // it won't break. It's meant as an override for an anchor set on the timeline.
+    test('it handles anchor:start', function (assert) {
+      let sprite = getMockSprite();
+      let sprites = new Set([sprite]);
+      let timeline: AnimationTimeline = {
+        type: 'parallel',
+        animations: [
+          {
+            sprites,
+            properties: {
+              width: {
+                from: '10px',
+                to: '20px',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 100,
+            },
+          },
+          {
+            sprites,
+            properties: {
+              backgroundColor: {
+                from: 'rgb(0,0,0)',
+                to: 'rgb(255,255,255)',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 30,
+              anchor: 'start',
+            },
+          },
+        ],
+      };
+
+      let orchestrationMatrix = OrchestrationMatrix.from(timeline);
+      assert.deepEqual(
+        orchestrationMatrix.getKeyframes(constructKeyframe),
+        new Map([
+          [
+            sprite,
+            [
+              {
+                width: '10px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '11.666666666666666px',
+                backgroundColor: 'rgba(128, 128, 128, 1)',
+              },
+              {
+                width: '13.333333333333332px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+              {
+                width: '15px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+              {
+                width: '16.666666666666664px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+              {
+                width: '18.333333333333336px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+              {
+                width: '20px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+            ],
+          ],
+        ])
+      );
+    });
+
+    test('it handles anchor:center', function (assert) {
+      let sprite = getMockSprite();
+      let sprites = new Set([sprite]);
+      let timeline: AnimationTimeline = {
+        type: 'parallel',
+        animations: [
+          {
+            sprites,
+            properties: {
+              width: {
+                from: '10px',
+                to: '20px',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 100,
+            },
+          },
+          {
+            sprites,
+            properties: {
+              backgroundColor: {
+                from: 'rgb(0,0,0)',
+                to: 'rgb(255,255,255)',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 30,
+              anchor: 'center',
+            },
+          },
+        ],
+      };
+
+      let orchestrationMatrix = OrchestrationMatrix.from(timeline);
+      assert.deepEqual(
+        orchestrationMatrix.getKeyframes(constructKeyframe),
+        new Map([
+          [
+            sprite,
+            [
+              {
+                width: '10px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '11.666666666666666px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '13.333333333333332px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '15px',
+                backgroundColor: 'rgba(128, 128, 128, 1)',
+              },
+              {
+                width: '16.666666666666664px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+              {
+                width: '18.333333333333336px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+              {
+                width: '20px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+            ],
+          ],
+        ])
+      );
+    });
+
+    test('it handles anchor:end', function (assert) {
+      let sprite = getMockSprite();
+      let sprites = new Set([sprite]);
+      let timeline: AnimationTimeline = {
+        type: 'parallel',
+        animations: [
+          {
+            sprites,
+            properties: {
+              width: {
+                from: '10px',
+                to: '20px',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 100,
+            },
+          },
+          {
+            sprites,
+            properties: {
+              backgroundColor: {
+                from: 'rgb(0,0,0)',
+                to: 'rgb(255,255,255)',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 30,
+              anchor: 'end',
+            },
+          },
+        ],
+      };
+
+      let orchestrationMatrix = OrchestrationMatrix.from(timeline);
+      assert.deepEqual(
+        orchestrationMatrix.getKeyframes(constructKeyframe),
+        new Map([
+          [
+            sprite,
+            [
+              {
+                width: '10px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '11.666666666666666px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '13.333333333333332px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '15px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '16.666666666666664px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '18.333333333333336px',
+                backgroundColor: 'rgba(128, 128, 128, 1)',
+              },
+              {
+                width: '20px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+            ],
+          ],
+        ])
+      );
+    });
+
+    test('it handles anchor options set on the timeline', function (assert) {
+      let sprite = getMockSprite();
+      let sprites = new Set([sprite]);
+      let timeline: AnimationTimeline = {
+        type: 'parallel',
+        anchor: 'fill',
+        animations: [
+          {
+            sprites,
+            properties: {
+              width: {
+                from: '10px',
+                to: '20px',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 100,
+            },
+          },
+          {
+            sprites,
+            properties: {
+              backgroundColor: {
+                from: 'rgb(0,0,0)',
+                to: 'rgb(255,255,255)',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+            },
+          },
+        ],
+      };
+      let orchestrationMatrix = OrchestrationMatrix.from(timeline);
+      assert.deepEqual(
+        orchestrationMatrix.getKeyframes(constructKeyframe),
+        new Map([
+          [
+            sprite,
+            [
+              {
+                width: '10px',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '11.666666666666666px',
+                backgroundColor: 'rgba(43, 43, 43, 1)',
+              },
+              {
+                width: '13.333333333333332px',
+                backgroundColor: 'rgba(85, 85, 85, 1)',
+              },
+              {
+                width: '15px',
+                backgroundColor: 'rgba(128, 128, 128, 1)',
+              },
+              {
+                width: '16.666666666666664px',
+                backgroundColor: 'rgba(170, 170, 170, 1)',
+              },
+              {
+                width: '18.333333333333336px',
+                backgroundColor: 'rgba(213, 213, 213, 1)',
+              },
+              {
+                width: '20px',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+            ],
+          ],
+        ])
+      );
+    });
+
+    test('it handles overrides when an anchor is set on the timeline', function (assert) {
+      let sprite = getMockSprite();
+      let sprites = new Set([sprite]);
+      let timeline: AnimationTimeline = {
+        type: 'parallel',
+        anchor: 'fill',
+        animations: [
+          {
+            sprites,
+            properties: {
+              width: {
+                from: '10px',
+                to: '20px',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 100,
+            },
+          },
+          {
+            sprites,
+            properties: {
+              backgroundColor: {
+                from: 'rgb(0,0,0)',
+                to: 'rgb(255,255,255)',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+            },
+          },
+          {
+            sprites,
+            properties: {
+              borderColor: {
+                from: 'rgb(0,0,0)',
+                to: 'rgb(255,255,255)',
+              },
+            },
+            timing: {
+              behavior: new TweenBehavior(),
+              duration: 30,
+              anchor: 'end',
+            },
+          },
+        ],
+      };
+
+      let orchestrationMatrix = OrchestrationMatrix.from(timeline);
+      assert.deepEqual(
+        orchestrationMatrix.getKeyframes(constructKeyframe),
+        new Map([
+          [
+            sprite,
+            [
+              {
+                width: '10px',
+                borderColor: 'rgba(0, 0, 0, 1)',
+                backgroundColor: 'rgba(0, 0, 0, 1)',
+              },
+              {
+                width: '11.666666666666666px',
+                borderColor: 'rgba(0, 0, 0, 1)',
+                backgroundColor: 'rgba(43, 43, 43, 1)',
+              },
+              {
+                width: '13.333333333333332px',
+                borderColor: 'rgba(0, 0, 0, 1)',
+                backgroundColor: 'rgba(85, 85, 85, 1)',
+              },
+              {
+                width: '15px',
+                borderColor: 'rgba(0, 0, 0, 1)',
+                backgroundColor: 'rgba(128, 128, 128, 1)',
+              },
+              {
+                width: '16.666666666666664px',
+                borderColor: 'rgba(0, 0, 0, 1)',
+                backgroundColor: 'rgba(170, 170, 170, 1)',
+              },
+              {
+                width: '18.333333333333336px',
+                borderColor: 'rgba(128, 128, 128, 1)',
+                backgroundColor: 'rgba(213, 213, 213, 1)',
+              },
+              {
+                width: '20px',
+                borderColor: 'rgba(255, 255, 255, 1)',
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+            ],
+          ],
+        ])
+      );
     });
   });
 });

@@ -279,13 +279,13 @@ export class OrchestrationMatrix {
       );
       if (timing.anchor && maxLength) {
         if (timing.anchor === 'center') {
-          startColumn = Math.round(
+          startColumn = Math.floor(
             maxLength / 2 - (timing!.duration! * FPS + 1) / 2
           );
         }
 
         if (timing.anchor === 'end') {
-          startColumn = maxLength - (timing!.duration! * FPS + 1);
+          startColumn = Math.floor(maxLength - (timing!.duration! * FPS + 1));
         }
       }
 
