@@ -112,18 +112,6 @@ export default function generateFrames(
       return [];
     }
 
-    if (
-      numberValueType.test(from) ||
-      (typeof from === 'string' && from.split(' ').length === 1)
-    ) {
-      return interpolateNumeric(
-        normalizedProperty,
-        cssToUnitValue(from),
-        cssToUnitValue(to),
-        timing
-      );
-    }
-
     if (color.test(from)) {
       if (!color.test(to)) {
         throw new Error('From is a color, but to is not');
@@ -134,6 +122,18 @@ export default function generateFrames(
       let toParts = color.parse(to);
 
       return interpolateColor(normalizedProperty, fromParts, toParts, timing);
+    }
+
+    if (
+      numberValueType.test(from) ||
+      (typeof from === 'string' && from.split(' ').length === 1)
+    ) {
+      return interpolateNumeric(
+        normalizedProperty,
+        cssToUnitValue(from),
+        cssToUnitValue(to),
+        timing
+      );
     }
 
     if (complex.test(from)) {
