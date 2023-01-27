@@ -22,6 +22,8 @@ function main() {
   } else {
     console.log(`-> Not empty, doing nothing`);
   }
+
+  console.log(`${toDir} contents: `, fs.readdirSync(toDir));
 }
 
 try {
