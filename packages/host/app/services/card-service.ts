@@ -17,10 +17,6 @@ import ENV from '@cardstack/host/config/environment';
 
 const { demoRealmURL } = ENV;
 
-interface Options {
-  absoluteURL?: true;
-}
-
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
   @service declare localRealm: LocalRealm;
@@ -70,26 +66,17 @@ export default class CardService extends Service {
   async createFromSerialized(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
-    opts?: Options
+    relativeTo: URL
   ): Promise<Card> {
     await this.apiModule.loaded;
-    let card = await this.api.createFromSerialized(
-      resource,
-      doc,
-      // we don't want to touch the local realm for server side rendering
-      opts?.absoluteURL ? undefined : this.defaultURL,
-      {
-        loader: this.loaderService.loader,
-      }
-    );
+    let card = await this.api.createFromSerialized(resource, doc, relativeTo, {
+      loader: this.loaderService.loader,
+    });
     await this.api.recompute(card);
     return card;
   }
 
-  async loadModel(
-    url: string | URL | undefined,
-    opts?: Options
-  ): Promise<Card | undefined> {
+  async loadModel(url: string | URL | undefined): Promise<Card | undefined> {
     if (!url) {
       return;
     }
@@ -101,14 +88,19 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`
       );
     }
-    return await this.createFromSerialized(json.data, json, opts);
+    return await this.createFromSerialized(
+      json.data,
+      json,
+      typeof url === 'string' ? new URL(url) : url
+    );
   }
 
   async saveModel(card: Card): Promise<Card> {
     await this.apiModule.loaded;
     let cardJSON = this.api.serializeCard(card, { includeComputeds: true });
     let isSaved = this.api.isSaved(card);
-    let json = await this.fetchJSON(isSaved ? card.id : this.defaultURL, {
+    let url = isSaved ? card.id : this.defaultURL;
+    let json = await this.fetchJSON(url, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(cardJSON, null, 2),
     });
@@ -121,7 +113,11 @@ export default class CardService extends Service {
     if (isSaved) {
       return await this.api.updateFromSerialized(card, json);
     }
-    return await this.createFromSerialized(json.data, json);
+    return await this.createFromSerialized(
+      json.data,
+      json,
+      typeof url === 'string' ? new URL(url) : url
+    );
   }
 
   async search(query: Query, realmURL: URL): Promise<Card[]> {
@@ -133,7 +129,9 @@ export default class CardService extends Service {
       );
     }
     return await Promise.all(
-      json.data.map(async (doc) => await this.createFromSerialized(doc, json))
+      json.data.map(
+        async (doc) => await this.createFromSerialized(doc, json, realmURL)
+      )
     );
   }
 }

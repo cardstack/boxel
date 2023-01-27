@@ -1,16 +1,18 @@
 {
   "data": {
+    "type": "card",
     "attributes": {
       "firstName": "Peachy",
       "favoriteToy": "ball of yarn",
-      "sleepsOnTheCouch": false
+      "favoriteTreat": null,
+      "cutenessRating": null,
+      "sleepsOnTheCouch": true
     },
     "meta": {
       "adoptsFrom": {
-        "module": "/pet",
+        "module": "http://local-realm/pet",
         "name": "Pet"
       }
-    },
-    "type": "card"
+    }
   }
 }
