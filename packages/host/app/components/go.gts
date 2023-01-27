@@ -7,7 +7,8 @@ import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
-import { isCardDocument } from '@cardstack/runtime-common';
+import { isCardDocument, isSingleCardDocument } from '@cardstack/runtime-common';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../services/loader-service';
 import type CardService from '../services/card-service';
 import type { FileResource } from '../resources/file';
@@ -86,6 +87,23 @@ export default class Go extends Component<Signature> {
   @action
   contentChanged(content: string) {
     if (this.args.openFile?.state === 'ready' && content !== this.args.openFile.content) {
+      // if the file is a card instance, then use the card-service to update the content
+      if (this.args.openFile.name.endsWith('.json')) {
+        let json: any;
+        try {
+          json = JSON.parse(content);
+        } catch (err) {
+          console.warn(`content for ${this.args.path} is not valid JSON, skipping write`);
+          return;
+        }
+        if (isSingleCardDocument(json)) {
+          let realmPath = new RealmPaths(this.cardService.defaultURL);
+          let url = realmPath.fileURL(this.args.path!.replace(/\.json$/, ''));
+          // note: intentionally not awaiting this promise, we may want to keep track of it...
+          this.cardService.saveCardDocument(json, url);
+          return
+        }
+      }
       this.args.openFile.write(content);
     }
   }
