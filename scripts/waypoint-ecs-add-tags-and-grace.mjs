@@ -74,7 +74,7 @@ function isTagged(service, tags) {
   return service.enableECSManagedTags && service.propagateTags === 'SERVICE';
 }
 
-function tagResourcesAndAddGracePeriod(cluster, service, tags) {
+function tagResourcesAndAddGracePeriodAndVolume(cluster, service, tags) {
   const tagsArgs = Object.entries(tags)
     .map(([key, val]) => `key=${key},value=${val}`)
     .join(' ');
@@ -82,11 +82,49 @@ function tagResourcesAndAddGracePeriod(cluster, service, tags) {
   console.log(`-> Tagging service: ${service.serviceName}`);
   execute(`aws ecs tag-resource --resource-arn ${service.serviceArn} --tags ${tagsArgs}`);
 
+  const taskDefinition = JSON.parse(execute(`aws ecs describe-task-definition --task-definition ${service.taskDefinition}`));
+  taskDefinition.taskDefinition.volumes = [
+    {
+        "name": "doesitexist",
+        "efsVolumeConfiguration": {
+            "fileSystemId": "fs-07b96c537c8c42381",
+            "rootDirectory": "/",
+            "transitEncryption": "ENABLED",
+            "authorizationConfig": {
+                "accessPointId": "fsap-05f6f7e465f171f43",
+                "iam": "DISABLED"
+            }
+        }
+    }
+  ];
+
+  console.log('td', taskDefinition);
+
+  delete taskDefinition.taskDefinition.taskDefinitionArn;
+  delete taskDefinition.taskDefinition.revision;
+  delete taskDefinition.taskDefinition.status;
+  delete taskDefinition.taskDefinition.requiresAttributes;
+  delete taskDefinition.taskDefinition.compatibilities;
+  delete taskDefinition.taskDefinition.registeredAt;
+  delete taskDefinition.taskDefinition.registeredBy;
+
+  fs.writeFileSync('tmp.json', JSON.stringify(taskDefinition.taskDefinition, null, 2));
+
+  const family = taskDefinition.taskDefinition.family;
+  const registeredTaskDefinition = JSON.parse(execute(
+    `aws ecs register-task-definition` +
+      ` --family ${family}` +
+      ` --cli-input-json file://tmp.json`
+  ));
+
+  console.log('rtd', registeredTaskDefinition);
+
   console.log(`-> Updating service to propagate tags to tasks: ${service.serviceName}`);
   execute(
     `aws ecs update-service` +
       ` --cluster ${cluster}` +
       ` --service ${service.serviceArn}` +
+      ` --task-definition ${registeredTaskDefinition.taskDefinition.taskDefinitionArn}` +
       ` --force-new-deployment` +
       ` --health-check-grace-period-seconds 240` +
       ` --enable-ecs-managed-tags` +
