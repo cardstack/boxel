@@ -1,4 +1,5 @@
 import { FPS } from '@cardstack/boxel-motion/behaviors/base';
+import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import StaticBehavior from '@cardstack/boxel-motion/behaviors/static';
 import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
@@ -321,5 +322,117 @@ module('Unit | Orchestration', function () {
         ],
       ])
     );
+  });
+
+  module('Unit | Orchestration | sortParallelTimeline', function () {
+    test('it sorts properly when all animations have durations', function (assert) {
+      let sprites = new Set([getMockSprite()]);
+
+      let animation1 = {
+        sprites,
+        properties: {},
+        timing: {
+          behavior: new TweenBehavior(),
+          duration: 2000,
+        },
+      };
+      let animation2 = {
+        sprites,
+        properties: {},
+        timing: {
+          behavior: new TweenBehavior(),
+          duration: 150,
+        },
+      };
+      let animation3 = {
+        sprites,
+        properties: {},
+        timing: {
+          behavior: new TweenBehavior(),
+          duration: 100,
+          anchor: 'center',
+        },
+      };
+
+      let sortedAnimations = OrchestrationMatrix.sortParallelTimeline([
+        animation2,
+        animation1,
+        animation3,
+      ]);
+
+      assert.deepEqual(sortedAnimations, [animation1, animation2, animation3]);
+    });
+
+    test('it sorts properly when there is an undefined duration', function (assert) {
+      let sprites = new Set([getMockSprite()]);
+
+      let animation1 = {
+        sprites,
+        properties: {},
+        timing: {
+          behavior: new TweenBehavior(),
+          duration: 2000,
+        },
+      };
+      let animation2 = {
+        sprites,
+        properties: {},
+        timing: {
+          behavior: new TweenBehavior(),
+          duration: 150,
+        },
+      };
+      let animation3 = {
+        sprites,
+        properties: {},
+        timing: {
+          behavior: new TweenBehavior(),
+        },
+      };
+
+      let sortedAnimations = OrchestrationMatrix.sortParallelTimeline([
+        animation2,
+        animation3,
+        animation1,
+      ]);
+
+      assert.deepEqual(sortedAnimations, [animation1, animation2, animation3]);
+    });
+
+    test('it sorts animations with SpringBehavior to the front', function (assert) {
+      let sprites = new Set([getMockSprite()]);
+
+      let animation1 = {
+        sprites,
+        properties: {},
+        timing: {
+          behavior: new SpringBehavior(),
+        },
+      };
+      let animation2 = {
+        sprites,
+        properties: {},
+        timing: {
+          behavior: new TweenBehavior(),
+          duration: 100,
+        },
+      };
+      let animation3 = {
+        sprites,
+        properties: {},
+        timing: {
+          behavior: new TweenBehavior(),
+          anchor: 'center',
+        },
+      };
+
+      let sortedAnimations = OrchestrationMatrix.sortParallelTimeline([
+        animation2,
+        animation1,
+        animation3,
+      ]);
+
+      assert.deepEqual(sortedAnimations, [animation1, animation2, animation3]);
+    });
   });
 });
