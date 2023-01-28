@@ -51,7 +51,7 @@ export function createRealmServer(realms: Realm[]) {
       //   req.url.includes("/_message") &&
       //   req.headers["accept"]?.includes("text/event-stream")
       // ) {
-      //   sendServerSendEvent(req, res);
+      //   sendSSE(req, res);
       //   return;
       // }
 
@@ -161,31 +161,31 @@ function requestIsHealthCheck(req: http.IncomingMessage) {
   );
 }
 
-let sendInterval = 5000;
-function sendServerSendEvent(
-  _req: http.IncomingMessage,
-  res: http.ServerResponse
-) {
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-  });
+// let sendInterval = 5000;
+// function sendSSE(
+//   _req: http.IncomingMessage,
+//   res: http.ServerResponse
+// ) {
+//   res.writeHead(200, {
+//     "Content-Type": "text/event-stream",
+//     "Cache-Control": "no-cache",
+//     Connection: "keep-alive",
+//   });
 
-  var sseId = new Date().toLocaleTimeString();
+// var sseId = new Date().toLocaleTimeString();
 
-  setInterval(function () {
-    writeServerSendEvent(res, sseId, new Date().toLocaleTimeString());
-  }, sendInterval);
+// setInterval(function () {
+//   writeServerSendEvent(res, sseId, new Date().toLocaleTimeString());
+// }, sendInterval);
 
-  writeServerSendEvent(res, sseId, new Date().toLocaleTimeString());
-}
+//   writeServerSendEvent(res, sseId, new Date().toLocaleTimeString());
+// }
 
-function writeServerSendEvent(
-  res: http.ServerResponse,
-  sseId: string,
-  data: string
-) {
-  res.write("id: " + sseId + "\n");
-  res.write("data: new server event " + data + "\n\n");
-}
+// function writeServerSendEvent(
+//   res: http.ServerResponse,
+//   sseId: string,
+//   data: string
+// ) {
+//   res.write("id: " + sseId + "\n");
+//   res.write("data: new server event " + data + "\n\n");
+// }

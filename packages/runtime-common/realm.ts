@@ -246,8 +246,8 @@ export class Realm {
     }
   }
 
-  private async subscribe() {
-    return sendServerSendEvent();
+  private async subscribe(req: Request): Promise<Response> {
+    return handleSSE(req.url ?? undefined);
   }
 
   private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {
@@ -699,33 +699,13 @@ export interface CardDefinitionResource {
   };
 }
 
-let sendInterval = 5000;
-function sendServerSendEvent() {
+function handleSSE(data?: string) {
   let headers = {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
   };
-
-  var sseId = new Date().toLocaleTimeString();
-
-  setInterval(function () {
-    return writeServerSendEvent(
-      headers,
-      sseId,
-      new Date().toLocaleTimeString()
-    );
-  }, sendInterval);
-
-  return writeServerSendEvent(headers, sseId, new Date().toLocaleTimeString());
-}
-
-function writeServerSendEvent(
-  headers: Partial<Headers["entries"]>,
-  _sseId: string,
-  data: string
-) {
-  return createResponse(`data: new server event ${data}\n\n`, {
+  return createResponse(`data: ${data}\n\n`, {
     status: 200,
     headers,
   });

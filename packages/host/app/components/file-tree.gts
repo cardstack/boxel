@@ -12,7 +12,7 @@ interface Args {
     url: string;
     path: string | undefined;
     openDirs: string | undefined;
-    polling: 'off' | undefined;
+    polling: string | undefined;
   }
 }
 

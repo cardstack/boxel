@@ -15,7 +15,7 @@ import { cached } from '@glimmer/tracking';
 interface Args {
   Args: {
     openDirs: string | undefined;
-    polling: 'off' | undefined;
+    polling: string | undefined;
     url: string;
     path: string | undefined;
   }
