@@ -10,7 +10,7 @@ function addVolume(cluster, service) {
   const taskDefinition = JSON.parse(execute(`aws ecs describe-task-definition --task-definition ${service.taskDefinition}`));
   taskDefinition.taskDefinition.volumes = [
     {
-        "name": "doesitexist",
+        "name": "realm-server-storage",
         "efsVolumeConfiguration": {
             "fileSystemId": "fs-07b96c537c8c42381",
             "rootDirectory": "/",
@@ -25,7 +25,7 @@ function addVolume(cluster, service) {
 
   taskDefinition.taskDefinition.containerDefinitions[0].mountPoints = [{
     containerPath: '/persistent',
-    sourceVolume: 'doesitexist',
+    sourceVolume: 'realm-server-storage',
   }];
 
   console.log('td', taskDefinition);
