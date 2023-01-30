@@ -115,7 +115,10 @@ function main() {
 }
 
 try {
-  main();
+  // Avoid running main if the add-efs script is consuming exports
+  if (process.argv[1].includes('waypoint-ecs-add-tags')) {
+    main();
+  }
 } catch (err) {
   console.error(err);
 }
