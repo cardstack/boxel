@@ -1,4 +1,4 @@
-import { contains, field, Component, Card, primitive } from './card-api';
+import { contains, field, Component, Card, primitive, relativeTo } from './card-api';
 import StringCard from './string';
 import BooleanCard from './boolean';
 import CardRefCard from './card-ref';
@@ -21,7 +21,7 @@ export class CatalogEntry extends Card {
   @field description = contains(StringCard);
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, { computeVia: async function(this: CatalogEntry) {
-    let card: typeof Card | undefined = await loadCard(this.ref);
+    let card: typeof Card | undefined = await loadCard(this.ref, { relativeTo: this[relativeTo]});
     if (!card) {
       throw new Error(`Could not load card '${this.ref.name}'`);
     }

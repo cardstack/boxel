@@ -7,6 +7,7 @@ import {
   isSingleCardDocument,
   isCardCollectionDocument,
   type CardDocument,
+  type SingleCardDocument,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -16,10 +17,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 
 const { demoRealmURL } = ENV;
-
-interface Options {
-  absoluteURL?: true;
-}
 
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
@@ -70,26 +67,17 @@ export default class CardService extends Service {
   async createFromSerialized(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
-    opts?: Options
+    relativeTo: URL
   ): Promise<Card> {
     await this.apiModule.loaded;
-    let card = await this.api.createFromSerialized(
-      resource,
-      doc,
-      // we don't want to touch the local realm for server side rendering
-      opts?.absoluteURL ? undefined : this.defaultURL,
-      {
-        loader: this.loaderService.loader,
-      }
-    );
+    let card = await this.api.createFromSerialized(resource, doc, relativeTo, {
+      loader: this.loaderService.loader,
+    });
     await this.api.recompute(card);
     return card;
   }
 
-  async loadModel(
-    url: string | URL | undefined,
-    opts?: Options
-  ): Promise<Card | undefined> {
+  async loadModel(url: string | URL | undefined): Promise<Card | undefined> {
     if (!url) {
       return;
     }
@@ -101,16 +89,37 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`
       );
     }
-    return await this.createFromSerialized(json.data, json, opts);
+    return await this.createFromSerialized(
+      json.data,
+      json,
+      typeof url === 'string' ? new URL(url) : url
+    );
   }
 
   async saveModel(card: Card): Promise<Card> {
     await this.apiModule.loaded;
-    let cardJSON = this.api.serializeCard(card, { includeComputeds: true });
+    let doc = this.api.serializeCard(card, { includeComputeds: true });
     let isSaved = this.api.isSaved(card);
-    let json = await this.fetchJSON(isSaved ? card.id : this.defaultURL, {
+    let relativeTo = isSaved ? new URL(card.id) : this.defaultURL;
+    let json = await this.saveCardDocument(
+      doc,
+      card.id ? new URL(card.id) : undefined
+    );
+    if (isSaved) {
+      return await this.api.updateFromSerialized(card, json);
+    }
+    return await this.createFromSerialized(json.data, json, relativeTo);
+  }
+
+  async saveCardDocument(
+    doc: LooseSingleCardDocument,
+    url?: URL
+  ): Promise<SingleCardDocument> {
+    let isSaved = !!url;
+    url = url ?? this.defaultURL;
+    let json = await this.fetchJSON(url, {
       method: isSaved ? 'PATCH' : 'POST',
-      body: JSON.stringify(cardJSON, null, 2),
+      body: JSON.stringify(doc, null, 2),
     });
     if (!isSingleCardDocument(json)) {
       throw new Error(
@@ -118,10 +127,7 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`
       );
     }
-    if (isSaved) {
-      return await this.api.updateFromSerialized(card, json);
-    }
-    return await this.createFromSerialized(json.data, json);
+    return json;
   }
 
   async search(query: Query, realmURL: URL): Promise<Card[]> {
@@ -133,7 +139,9 @@ export default class CardService extends Service {
       );
     }
     return await Promise.all(
-      json.data.map(async (doc) => await this.createFromSerialized(doc, json))
+      json.data.map(
+        async (doc) => await this.createFromSerialized(doc, json, realmURL)
+      )
     );
   }
 }

@@ -2,10 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "InvoicePacket from http://local-realm/invoice-packet",
-      "description": "Catalog entry for InvoicePacket from http://local-realm/invoice-packet",
+      "title": "InvoicePacket from /invoice-packet",
+      "description": "Catalog entry for InvoicePacket from /invoice-packet",
       "ref": {
-        "module": "http://local-realm/invoice-packet",
+        "module": "/invoice-packet",
         "name": "InvoicePacket"
       },
       "demo": {
@@ -32,7 +32,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://local-realm/invoice-packet",
+            "module": "/invoice-packet",
             "name": "InvoicePacket"
           }
         }
