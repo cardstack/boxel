@@ -70,10 +70,7 @@ export class CurrentRun {
   #loader: Loader;
   #entrySetter: EntrySetter;
   #staticResponses = new Map<string, string>();
-  #renderCard: (
-    url: URL,
-    staticResponses: Map<string, string>
-  ) => Promise<string>;
+  #renderCard: (card: Card) => Promise<string>;
   #realmURL: URL;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -98,10 +95,7 @@ export class CurrentRun {
     ignoreMap?: URLMap<Ignore>;
     loader: Loader;
     entrySetter: EntrySetter;
-    renderCard: (
-      url: URL,
-      staticResponses: Map<string, string>
-    ) => Promise<string>;
+    renderCard: (card: Card) => Promise<string>;
   }) {
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
@@ -134,10 +128,7 @@ export class CurrentRun {
     reader: Reader;
     loader: Loader;
     entrySetter: EntrySetter;
-    renderCard: (
-      url: URL,
-      staticResponses: Map<string, string>
-    ) => Promise<string>;
+    renderCard: (card: Card) => Promise<string>;
   }) {
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
@@ -374,7 +365,8 @@ export class CurrentRun {
           loader: this.#loader as unknown as LoaderType,
         }
       );
-      await this.recomputeCard(card, fileURL, identityContext, stack);
+      html = await this.#renderCard(card);
+      // await this.recomputeCard(card, fileURL, identityContext, stack);
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
       let data = api.serializeCard(card, {
         includeComputeds: true,
@@ -417,7 +409,7 @@ export class CurrentRun {
         instanceURL.href,
         JSON.stringify(cachedDoc, null, 2)
       );
-      html = await this.#renderCard(instanceURL, this.#staticResponses);
+      // html = await this.#renderCard(instanceURL, this.#staticResponses);
     } catch (err: any) {
       uncaughtError = err;
     }

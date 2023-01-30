@@ -1,5 +1,4 @@
 import GlimmerComponent from '@glimmer/component';
-import { NotReady, isNotReadyError} from './not-ready';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
@@ -16,8 +15,10 @@ import {
   isSingleCardDocument,
   isRelationship,
   isNotLoadedError,
+  isNotReadyError,
   CardError,
   NotLoaded,
+  NotReady,
   maxLinkDepth,
   getField,
   isField,
@@ -1183,7 +1184,7 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
   done!();
 }
 
-async function getIfReady<T extends Card, K extends keyof T>(
+export async function getIfReady<T extends Card, K extends keyof T>(
   instance: T,
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],

@@ -44,6 +44,7 @@ export {
 } from "./constants";
 export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from "./not-loaded";
+export { NotReady, isNotReadyError } from "./not-ready";
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 export { createResponse } from "./create-response";
