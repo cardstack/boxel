@@ -58,7 +58,7 @@ function addVolume(cluster, service, volumeName, fileSystemId, accessPointId, co
 }
 
 function main() {
-  const [appName, volumeName, fileSystemId, accessPointId, containerPath, ...extraArgs] = process.argv.slice(6);
+  const [appName, volumeName, fileSystemId, accessPointId, containerPath, ...extraArgs] = process.argv.slice(2);
   const waypointConfigFilePath = extraArgs.length > 0 ? extraArgs[0] : 'waypoint.hcl';
 
   const config = getAppConfig(waypointConfigFilePath, appName);
