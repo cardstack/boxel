@@ -81,17 +81,6 @@ function tagResourcesAndAddGracePeriod(cluster, service, tags) {
 
   console.log(`-> Tagging service: ${service.serviceName}`);
   execute(`aws ecs tag-resource --resource-arn ${service.serviceArn} --tags ${tagsArgs}`);
-
-  console.log(`-> Updating service to propagate tags to tasks: ${service.serviceName}`);
-  execute(
-    `aws ecs update-service` +
-      ` --cluster ${cluster}` +
-      ` --service ${service.serviceArn}` +
-      ` --force-new-deployment` +
-      ` --health-check-grace-period-seconds 240` +
-      ` --enable-ecs-managed-tags` +
-      ` --propagate-tags SERVICE`
-  );
 }
 
 function main() {
