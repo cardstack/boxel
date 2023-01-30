@@ -28,8 +28,6 @@ function addVolume(cluster, service) {
     sourceVolume: 'realm-server-storage',
   }];
 
-  console.log('td', taskDefinition);
-
   delete taskDefinition.taskDefinition.taskDefinitionArn;
   delete taskDefinition.taskDefinition.revision;
   delete taskDefinition.taskDefinition.status;
@@ -46,8 +44,6 @@ function addVolume(cluster, service) {
       ` --family ${family}` +
       ` --cli-input-json file://modified-task-definition.json`
   ));
-
-  console.log('rtd', registeredTaskDefinition);
 
   console.log(`-> Updating service: ${service.serviceName}`);
   execute(
