@@ -6,7 +6,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/chain",
+        "module": "/chain",
         "name": "Chain"
       }
     }

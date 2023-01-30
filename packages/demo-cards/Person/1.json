@@ -10,13 +10,13 @@
     "relationships": {
       "pet": {
         "links": {
-          "self": "http://local-realm/Pet/2"
+          "self": "/Pet/2"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/person",
+        "module": "/person",
         "name": "Person"
       }
     }

@@ -98,6 +98,11 @@ export class Vendor extends Card {
           <@fields.mailingAddress/>
           <@fields.vendor.email/>
         </div>
+        {{!-- 
+          TODO: we need a better solution for images--this approach relies 
+          on absolute URL's and just doesn't work in a multi-environment system,
+          i.e. there is no value you can put here that will work in dev and staging 
+        --}}
         <img src={{@model.vendor.logoURL}} />
       </CardContainer>
     </template>

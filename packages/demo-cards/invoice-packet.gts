@@ -268,6 +268,11 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
                 <FieldContainer @label="Alternate Payment Methods" @vertical={{true}}>
                   <div>
                     {{#each @model.alternatePayment as |payment|}}
+                      {{!-- 
+                        TODO: we need a better solution for images--this approach relies 
+                        on absolute URL's and just doesn't work in a multi-environment system,
+                        i.e. there is no value you can put here that will work in dev and staging 
+                      --}}
                       <div class="payment-method__item">{{#if payment.logoURL}}<img src={{payment.logoURL}}>{{/if}} {{payment.symbol}}</div>
                       <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue payment}}</div>
                     {{/each}}

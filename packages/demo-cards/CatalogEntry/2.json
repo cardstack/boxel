@@ -4,7 +4,7 @@
       "title": "Pet",
       "description": "Catalog entry for Pet card",
       "ref": {
-        "module": "http://local-realm/pet",
+        "module": "/pet",
         "name": "Pet"
       },
       "demo": {
@@ -20,7 +20,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://local-realm/pet",
+            "module": "/pet",
             "name": "Pet"
           }
         }
