@@ -1,6 +1,6 @@
 import fs from 'fs';
 import { execSync } from 'child_process';
-import { getAppConfig, getAppNameFromServiceArn, getServices } from './waypoint-ecs-add-tags-and-grace.mjs';
+import { getAppConfig, getAppNameFromServiceArn, getServices } from './waypoint-ecs-add-tags.mjs';
 
 function execute(command, options = {}) {
   return execSync(command, options).toString().trim();
