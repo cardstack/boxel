@@ -6,7 +6,6 @@ import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import type LocalRealm from '../services/local-realm';
 import type CardService from '../services/card-service';
-import type MessageService from '../services/message-service';
 import { RealmPaths } from '@cardstack/runtime-common';
 import type { Format } from 'https://cardstack.com/base/card-api';
 
@@ -31,7 +30,6 @@ export default class Index extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare localRealm: LocalRealm;
-  @service declare messageService: MessageService;
   @service declare fastboot: { isFastBoot: boolean };
 
   async model(args: {
@@ -91,7 +89,6 @@ export default class Index extends Route<Model> {
       });
     } else {
       let content = await response.text();
-      this.messageService.start();
       openFile = file(this, () => ({
         url,
         content,

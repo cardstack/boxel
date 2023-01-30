@@ -1,40 +1,53 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import LoaderService from '../services/loader-service';
 import type CardService from '../services/card-service';
 import { RealmPaths } from '@cardstack/runtime-common';
 
 export default class MessageService extends Service {
   @service declare cardService: CardService;
-  @service declare loaderService: LoaderService;
-  @tracked eventSource: EventSource | null = null;
-  @tracked message: string | undefined = undefined;
+  @tracked eventSource: EventSource | undefined = undefined;
+
+  get isClosed() {
+    return this.eventSource?.readyState === EventSource.CLOSED;
+  }
 
   start() {
     let realmPath = new RealmPaths(this.cardService.defaultURL);
-    if (
-      !this.eventSource ||
-      this.eventSource.readyState === EventSource.CLOSED
-    ) {
+    if (!this.eventSource || this.isClosed) {
       this.eventSource = new EventSource(`${realmPath.url}_message`);
       console.log('Created new event source');
     }
 
-    this.eventSource.onopen = function (_e) {
+    this.eventSource.onopen = (_ev: Event) => {
       console.log('Connection open');
     };
 
-    this.eventSource.onerror = function (e) {
-      if (this.readyState == EventSource.CONNECTING) {
-        console.log(`Reconnecting (readyState=${this.readyState})...`);
+    this.eventSource.onerror = (_ev: Event) => {
+      if (this.eventSource?.readyState == EventSource.CONNECTING) {
+        console.log(
+          `Reconnecting (readyState=${this.eventSource.readyState})...`
+        );
+      } else if (this.isClosed) {
+        console.log(
+          `Connection closed (readyState=${this.eventSource?.readyState})`
+        );
       } else {
-        console.log(`Error has occured, ${JSON.stringify(e)}`);
+        console.log(`An error has occured`);
       }
     };
 
-    this.eventSource.onmessage = (e) => {
+    this.eventSource.onmessage = (e: MessageEvent) => {
       console.log('Event: message, data: ' + e.data);
-      this.message = e.data !== 'undefined' ? e.data : undefined;
     };
+  }
+
+  stop() {
+    if (this.eventSource) {
+      this.eventSource.close();
+      if (this.isClosed) {
+        console.log('Connection closed');
+      }
+      this.eventSource = undefined;
+    }
   }
 }
