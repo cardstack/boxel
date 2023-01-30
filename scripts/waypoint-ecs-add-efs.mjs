@@ -38,13 +38,13 @@ function addVolume(cluster, service) {
   delete taskDefinition.taskDefinition.registeredAt;
   delete taskDefinition.taskDefinition.registeredBy;
 
-  fs.writeFileSync('tmp.json', JSON.stringify(taskDefinition.taskDefinition, null, 2));
+  fs.writeFileSync('modified-task-definition.json', JSON.stringify(taskDefinition.taskDefinition, null, 2));
 
   const family = taskDefinition.taskDefinition.family;
   const registeredTaskDefinition = JSON.parse(execute(
     `aws ecs register-task-definition` +
       ` --family ${family}` +
-      ` --cli-input-json file://tmp.json`
+      ` --cli-input-json file://modified-task-definition.json`
   ));
 
   console.log('rtd', registeredTaskDefinition);
