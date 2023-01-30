@@ -77,7 +77,6 @@ export default class Go extends Component<Signature> {
   @service declare cardService: CardService;
   @tracked jsonError: string | undefined;
   @tracked card: Card | undefined;
-  @tracked message: string | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -116,7 +115,7 @@ export default class Go extends Component<Signature> {
   }
 
   @action
-  async onSave(card: Card) {
+  onSave(card: Card) {
     this.card = card;
   }
 

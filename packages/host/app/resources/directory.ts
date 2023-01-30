@@ -12,7 +12,7 @@ interface Args {
   named: {
     url: string | undefined;
     openDirs: string | undefined;
-    polling: string | undefined;
+    polling: 'off' | undefined;
   };
 }
 
@@ -40,10 +40,6 @@ export class DirectoryResource extends Resource<Args> {
       taskFor(this.readdir).perform();
     }
 
-    if (named.polling) {
-      console.log(named.polling);
-      // taskFor(this.readdir).perform();
-    }
     // if (named.polling !== 'off') {
     //   this.interval = setInterval(() => taskFor(this.readdir).perform(), 1000);
     //   registerDestructor(this, () => clearInterval(this.interval!));
@@ -100,7 +96,7 @@ export function directory(
   parent: object,
   url: () => string | undefined,
   openDirs: () => string | undefined,
-  polling: () => string | undefined
+  polling: () => 'off' | undefined
 ) {
   return DirectoryResource.from(parent, () => ({
     named: { url: url(), openDirs: openDirs(), polling: polling() },

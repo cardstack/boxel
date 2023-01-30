@@ -12,7 +12,7 @@ interface Args {
     content: string | undefined;
     lastModified: string | undefined;
     onStateChange?: (state: FileResource['state']) => void;
-    polling: string | undefined;
+    polling: 'off' | undefined;
   };
 }
 
@@ -47,7 +47,7 @@ class _FileResource extends Resource<Args> {
   @service declare loaderService: LoaderService;
 
   modify(_positional: never[], named: Args['named']) {
-    let { url, content, lastModified, onStateChange, polling } = named;
+    let { url, content, lastModified, onStateChange } = named;
     this._url = url;
     this.onStateChange = onStateChange;
     if (content !== undefined) {
@@ -58,10 +58,6 @@ class _FileResource extends Resource<Args> {
       taskFor(this.read).perform();
     }
 
-    if (polling) {
-      console.log('file', polling);
-      // taskFor(this.read).perform();
-    }
     // if (polling !== 'off') {
     //   this.interval = setInterval(() => taskFor(this.read).perform(), 1000);
     //   registerDestructor(this, () => clearInterval(this.interval!));

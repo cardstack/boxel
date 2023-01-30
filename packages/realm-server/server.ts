@@ -1,7 +1,7 @@
 import http, { IncomingMessage, ServerResponse } from "http";
 import { Realm } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
-import type { LocalPath } from "@cardstack/runtime-common/paths";
+import { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
 import "@cardstack/runtime-common/externals-global";
 
@@ -14,7 +14,7 @@ export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
-    res.on("finish", () => {
+    res.on('finish', () => {
       console.log(`${req.method} ${req.url}: ${res.statusCode}`);
     });
 
@@ -34,8 +34,8 @@ export function createRealmServer(realms: Realm[]) {
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
-        res.statusMessage = "OK";
-        res.write("OK");
+        res.statusMessage = 'OK';
+        res.write('OK');
         res.end();
         return;
       }
@@ -46,14 +46,6 @@ export function createRealmServer(realms: Realm[]) {
         res.end();
         return;
       }
-
-      // if (
-      //   req.url.includes("/_message") &&
-      //   req.headers["accept"]?.includes("text/event-stream")
-      // ) {
-      //   sendSSE(req, res);
-      //   return;
-      // }
 
       // despite the name, req.url is actually the pathname for the request URL
       let local: LocalPath = req.url === "/" ? "" : req.url;
@@ -154,38 +146,7 @@ function detectRealmCollision(realms: Realm[]): void {
 }
 
 function requestIsHealthCheck(req: http.IncomingMessage) {
-  return (
-    req.url === "/" &&
-    req.method === "GET" &&
-    req.headers["user-agent"]?.startsWith("ELB-HealthChecker")
-  );
+  return req.url === '/' &&
+    req.method === 'GET' &&
+    req.headers["user-agent"]?.startsWith('ELB-HealthChecker');
 }
-
-// let sendInterval = 5000;
-// function sendSSE(
-//   _req: http.IncomingMessage,
-//   res: http.ServerResponse
-// ) {
-//   res.writeHead(200, {
-//     "Content-Type": "text/event-stream",
-//     "Cache-Control": "no-cache",
-//     Connection: "keep-alive",
-//   });
-
-// var sseId = new Date().toLocaleTimeString();
-
-// setInterval(function () {
-//   writeServerSendEvent(res, sseId, new Date().toLocaleTimeString());
-// }, sendInterval);
-
-//   writeServerSendEvent(res, sseId, new Date().toLocaleTimeString());
-// }
-
-// function writeServerSendEvent(
-//   res: http.ServerResponse,
-//   sseId: string,
-//   data: string
-// ) {
-//   res.write("id: " + sseId + "\n");
-//   res.write("data: new server event " + data + "\n\n");
-// }
