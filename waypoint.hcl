@@ -46,6 +46,11 @@ app "realm-base" {
 
     hook {
       when    = "after"
+      command = ["node", "./scripts/waypoint-ecs-add-efs.mjs", "realm-base"]
+    }
+
+    hook {
+      when    = "after"
       command = ["node", "./scripts/wait-service-stable.mjs", "realm-base"]
     }
   }
@@ -96,6 +101,11 @@ app "realm-demo" {
     hook {
       when    = "after"
       command = ["node", "./scripts/waypoint-ecs-add-tags-and-grace.mjs", "realm-demo"]
+    }
+
+    hook {
+      when    = "after"
+      command = ["node", "./scripts/waypoint-ecs-add-efs.mjs", "realm-demo"]
     }
 
     hook {
