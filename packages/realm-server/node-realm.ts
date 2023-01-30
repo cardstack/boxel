@@ -13,6 +13,7 @@ import {
   ReadStream,
 } from "fs-extra";
 import { join } from "path";
+import { Duplex } from "node:stream";
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -82,5 +83,56 @@ export class NodeAdapter implements RealmAdapter {
   async remove(path: LocalPath): Promise<void> {
     let absolutePath = join(this.realmDir, path);
     removeSync(absolutePath);
+  }
+
+  createDuplexStream() {
+    let s = new MessageStream();
+    return {
+      readable: s as unknown as ReadableStream,
+      writable: s as unknown as WritableStream,
+    };
+  }
+}
+
+class MessageStream extends Duplex {
+  private pendingWrite:
+    | { chunk: string; callback: (err: null | Error) => void }
+    | undefined;
+
+  private pendingRead = false;
+
+  _read() {
+    if (this.pendingRead) {
+      throw new Error(
+        "bug: did not expect node to call read until after we push data from the prior read"
+      );
+    }
+    if (this.pendingWrite) {
+      let { chunk, callback } = this.pendingWrite;
+      this.pendingWrite = undefined;
+      this.push(chunk);
+      callback(null);
+    } else {
+      this.pendingRead = true;
+    }
+  }
+
+  _write(
+    chunk: string,
+    _encoding: string,
+    callback: (err: null | Error) => void
+  ) {
+    if (this.pendingWrite) {
+      throw new Error(
+        "bug: did not expect node to call write until after we call the callback"
+      );
+    }
+    if (this.pendingRead) {
+      this.pendingRead = false;
+      this.push(chunk);
+      callback(null);
+    } else {
+      this.pendingWrite = { chunk, callback };
+    }
   }
 }

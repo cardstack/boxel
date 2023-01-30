@@ -32,6 +32,7 @@ import {
   fileContentToText,
   readFileAsText,
   getFileWithFallbacks,
+  writeToStream,
 } from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
@@ -104,6 +105,8 @@ export interface RealmAdapter {
   write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
 
   remove(path: LocalPath): Promise<void>;
+
+  createDuplexStream(): { readable: ReadableStream; writable: WritableStream };
 }
 
 interface Options {
@@ -140,6 +143,14 @@ export class Realm {
       indexRunner,
       runnerOptsMgr
     );
+
+    setInterval(async () => {
+      try {
+        await this.sendUpdateMessages();
+      } catch (err) {
+        console.log("error while sendUpdateMessages", err);
+      }
+    }, 1000);
 
     this.#jsonAPIRouter = new Router(new URL(url))
       .post("/", this.createCard.bind(this))
@@ -244,10 +255,6 @@ export class Realm {
     } else {
       return await this.serveLocalFile(handle);
     }
-  }
-
-  private async subscribe(req: Request): Promise<Response> {
-    return handleSSE(req.url ?? undefined);
   }
 
   private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {
@@ -666,6 +673,44 @@ export class Realm {
     }
     return data;
   }
+
+  private listeningClients: WritableStream[] = [];
+
+  private async subscribe(_req: Request): Promise<Response> {
+    let headers = {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    };
+
+    let body = null;
+    let { readable, writable } = this.#adapter.createDuplexStream();
+
+    if (!isNode) {
+      body = readable;
+    }
+
+    let res = createResponse(body, {
+      status: 200,
+      headers,
+    }) as ResponseWithNodeStream;
+
+    if (isNode) {
+      res.nodeStream = readable;
+    }
+
+    this.listeningClients.push(writable);
+    return res;
+  }
+
+  private async sendUpdateMessages(): Promise<void> {
+    console.log(`sending updates to ${this.listeningClients.length} clients`);
+    await Promise.all(
+      this.listeningClients.map((client) =>
+        writeToStream(client, "data: new server event\n\n")
+      )
+    );
+  }
 }
 
 export type Kind = "file" | "directory";
@@ -697,16 +742,4 @@ export interface CardDefinitionResource {
       };
     };
   };
-}
-
-function handleSSE(data?: string) {
-  let headers = {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-  };
-  return createResponse(`data: ${data}\n\n`, {
-    status: 200,
-    headers,
-  });
 }

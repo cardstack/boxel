@@ -88,3 +88,25 @@ export async function getFileWithFallbacks(
   }
   return undefined;
 }
+
+export async function writeToStream(
+  stream: WritableStream,
+  chunk: string
+): Promise<void> {
+  if (typeof stream.getWriter === "function") {
+    return stream.getWriter().write(chunk);
+  } else {
+    if (!isNode) {
+      throw new Error(`cannot handle node-streams when not in node`);
+    }
+    return new Promise<void>((resolve, reject) => {
+      (stream as any).write(chunk, null, (err: unknown) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+}
