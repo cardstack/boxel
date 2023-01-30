@@ -31,8 +31,7 @@ interface Signature {
   Args: {
     openFile: FileResource | undefined;
     openDirs: string | undefined;
-    path: string | undefined,
-    polling: 'off' | undefined,
+    path: string | undefined;
   }
 }
 
@@ -41,10 +40,10 @@ export default class Go extends Component<Signature> {
     <div class="main">
       <div class="main__column">
         {{#if demoRealmURL}}
-          <FileTree @url={{demoRealmURL}} @path={{@path}} @openDirs={{@openDirs}} @polling={{@polling}} />
+          <FileTree @url={{demoRealmURL}} @path={{@path}} @openDirs={{@openDirs}} />
         {{else}}
           <InLocalRealm as |url|>
-            <FileTree @url={{url}} @path={{@path}} @openDirs={{@openDirs}} @polling={{@polling}} />
+            <FileTree @url={{url}} @path={{@path}} @openDirs={{@openDirs}} />
           </InLocalRealm>
         {{/if}}
       </div>

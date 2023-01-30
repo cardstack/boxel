@@ -13,7 +13,6 @@ import type { Format } from 'https://cardstack.com/base/card-api';
 interface Model {
   path: string | undefined;
   openFile: FileResource | undefined;
-  polling: string | undefined;
   openDirs: string | undefined;
   isFastBoot: boolean;
 }
@@ -21,9 +20,6 @@ interface Model {
 export default class Index extends Route<Model> {
   queryParams = {
     path: {
-      refreshModel: true,
-    },
-    polling: {
       refreshModel: true,
     },
     openDirs: {
@@ -52,7 +48,6 @@ export default class Index extends Route<Model> {
       return {
         path,
         openFile,
-        polling: this.messageService.message,
         openDirs,
         isFastBoot,
       };
@@ -63,7 +58,6 @@ export default class Index extends Route<Model> {
       return {
         path,
         openFile,
-        polling: this.messageService.message,
         openDirs,
         isFastBoot,
       };
@@ -81,7 +75,7 @@ export default class Index extends Route<Model> {
       console.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
-      return { path, openFile, polling: undefined, openDirs, isFastBoot };
+      return { path, openFile, openDirs, isFastBoot };
     }
     // The server may have responded with a redirect which we need to pay
     // attention to. As part of responding to us, the server will hand us a
@@ -92,7 +86,6 @@ export default class Index extends Route<Model> {
       this.router.transitionTo('application', {
         queryParams: {
           path: realmPath.local(responseURL),
-          polling: this.messageService.message,
           openDirs,
         },
       });
@@ -114,7 +107,6 @@ export default class Index extends Route<Model> {
             });
           }
         },
-        polling: this.messageService.message,
       }));
       await openFile.loading;
     }
@@ -122,7 +114,6 @@ export default class Index extends Route<Model> {
     return {
       path,
       openFile,
-      polling: this.messageService.message,
       openDirs,
       isFastBoot,
     };

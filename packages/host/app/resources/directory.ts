@@ -1,5 +1,4 @@
 import { Resource } from 'ember-resources/core';
-// import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
@@ -12,7 +11,6 @@ interface Args {
   named: {
     url: string | undefined;
     openDirs: string | undefined;
-    polling: 'off' | undefined;
   };
 }
 
@@ -24,7 +22,6 @@ export interface Entry {
 
 export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
-  // private interval: ReturnType<typeof setInterval> | undefined;
   private url: string | undefined;
   private declare realmPath: RealmPaths;
 
@@ -39,13 +36,6 @@ export class DirectoryResource extends Resource<Args> {
       this.url = named.url;
       taskFor(this.readdir).perform();
     }
-
-    // if (named.polling !== 'off') {
-    //   this.interval = setInterval(() => taskFor(this.readdir).perform(), 1000);
-    //   registerDestructor(this, () => clearInterval(this.interval!));
-    // } else if (this.interval) {
-    //   clearInterval(this.interval);
-    // }
   }
 
   @restartableTask private async readdir() {
@@ -95,10 +85,9 @@ export class DirectoryResource extends Resource<Args> {
 export function directory(
   parent: object,
   url: () => string | undefined,
-  openDirs: () => string | undefined,
-  polling: () => 'off' | undefined
+  openDirs: () => string | undefined
 ) {
   return DirectoryResource.from(parent, () => ({
-    named: { url: url(), openDirs: openDirs(), polling: polling() },
+    named: { url: url(), openDirs: openDirs() },
   })) as DirectoryResource;
 }
