@@ -74,7 +74,7 @@ function isTagged(service, tags) {
   return service.enableECSManagedTags && service.propagateTags === 'SERVICE';
 }
 
-function tagResourcesAndAddGracePeriod(cluster, service, tags) {
+function tagResources(cluster, service, tags) {
   const tagsArgs = Object.entries(tags)
     .map(([key, val]) => `key=${key},value=${val}`)
     .join(' ');
@@ -99,7 +99,7 @@ function main() {
   const latestService = services[0];
 
   if (!isTagged(latestService, tags)) {
-    tagResourcesAndAddGracePeriod(config.cluster, latestService, tags);
+    tagResources(config.cluster, latestService, tags);
   }
 }
 
