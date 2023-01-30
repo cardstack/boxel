@@ -28,7 +28,7 @@ export default class RenderService extends Service {
   ): Promise<string> {
     this.renderError = undefined;
     this.loaderService.setStaticResponses(staticResponses);
-    let card = await this.cardService.loadModel(url, { absoluteURL: true });
+    let card = await this.cardService.loadModel(url);
     if (!card) {
       throw new Error(`card ${url.href} not found`);
     }

@@ -148,6 +148,168 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
+  test('can index card with a relative linkTo field', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Person/owner.json': {
+        data: {
+          id: `${testRealmURL}Person/owner`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'Pet/mango.json': {
+        data: {
+          id: `${testRealmURL}Pet/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `../Person/owner`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
+    if (mango?.type === 'doc') {
+      assert.deepEqual(mango.doc.data, {
+        id: `${testRealmURL}Pet/mango`,
+        type: 'card',
+        links: {
+          self: `${testRealmURL}Pet/mango`,
+        },
+        attributes: {
+          firstName: 'Mango',
+        },
+        relationships: {
+          owner: {
+            links: {
+              self: `${testRealmURL}Person/owner`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4202/test/pet',
+            name: 'Pet',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}Pet/mango.json`
+          ),
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
+    }
+  });
+
+  test('can index a card with relative card-ref fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'person.gts': `
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+        }
+      `,
+      'person-catalog-entry.json': {
+        data: {
+          attributes: {
+            title: 'Person Card',
+            description: 'Catalog entry for Person card',
+            ref: {
+              module: './person',
+              name: 'Person',
+            },
+            demo: {
+              firstName: 'Mango',
+            },
+          },
+          meta: {
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
+              },
+            },
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/catalog-entry',
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let entry = await indexer.card(
+      new URL(`${testRealmURL}person-catalog-entry`)
+    );
+    if (entry?.type === 'doc') {
+      assert.deepEqual(entry.doc.data, {
+        id: `${testRealmURL}person-catalog-entry`,
+        type: 'card',
+        links: {
+          self: `${testRealmURL}person-catalog-entry`,
+        },
+        attributes: {
+          title: 'Person Card',
+          description: 'Catalog entry for Person card',
+          isPrimitive: false,
+          ref: {
+            module: `./person`,
+            name: 'Person',
+          },
+          demo: {
+            firstName: 'Mango',
+          },
+        },
+        meta: {
+          fields: {
+            demo: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/catalog-entry',
+            name: 'CatalogEntry',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}person-catalog-entry.json`
+          ),
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${entry?.error.detail}`);
+    }
+  });
+
   test('can recover from rendering a card that has a template error', async function (assert) {
     {
       let adapter = new TestRealmAdapter({
