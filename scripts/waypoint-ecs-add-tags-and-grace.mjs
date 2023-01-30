@@ -8,7 +8,7 @@ function execute(command, options = {}) {
   return execSync(command, options).toString().trim();
 }
 
-function getAppConfig(waypointConfigFilePath, appName) {
+export function getAppConfig(waypointConfigFilePath, appName) {
   const waypointHcl = fs.readFileSync(waypointConfigFilePath, 'utf8');
   const waypointConfig = hcl.parseToObject(waypointHcl)[0];
   const waypointApp = waypointConfig.app[appName][0];
@@ -17,13 +17,13 @@ function getAppConfig(waypointConfigFilePath, appName) {
   return { cluster };
 }
 
-function getAppNameFromServiceArn(serviceArn) {
+export function getAppNameFromServiceArn(serviceArn) {
   const arnPattern = /^.*\/(.*)-[^-]*$/;
   const matches = serviceArn.match(arnPattern);
   return matches && matches.length > 1 ? matches[1] : '';
 }
 
-function getServices(cluster, appName) {
+export function getServices(cluster, appName) {
   let serviceArns = [];
   let nextToken = null;
   do {
