@@ -6,17 +6,17 @@ function execute(command, options = {}) {
   return execSync(command, options).toString().trim();
 }
 
-function addVolume(cluster, service) {
+function addVolume(cluster, service, volumeName, fileSystemId, accessPointId, containerPath) {
   const taskDefinition = JSON.parse(execute(`aws ecs describe-task-definition --task-definition ${service.taskDefinition}`));
   taskDefinition.taskDefinition.volumes = [
     {
-        "name": "realm-server-storage",
+        "name": volumeName,
         "efsVolumeConfiguration": {
-            "fileSystemId": "fs-07b96c537c8c42381",
+            "fileSystemId": fileSystemId,
             "rootDirectory": "/",
             "transitEncryption": "ENABLED",
             "authorizationConfig": {
-                "accessPointId": "fsap-05f6f7e465f171f43",
+                "accessPointId": accessPointId,
                 "iam": "ENABLED"
             }
         }
@@ -24,8 +24,8 @@ function addVolume(cluster, service) {
   ];
 
   taskDefinition.taskDefinition.containerDefinitions[0].mountPoints = [{
-    containerPath: '/persistent',
-    sourceVolume: 'realm-server-storage',
+    containerPath: containerPath,
+    sourceVolume: volumeName,
   }];
 
   delete taskDefinition.taskDefinition.taskDefinitionArn;
@@ -58,7 +58,7 @@ function addVolume(cluster, service) {
 }
 
 function main() {
-  const [appName, ...extraArgs] = process.argv.slice(2);
+  const [appName, volumeName, fileSystemId, accessPointId, containerPath, ...extraArgs] = process.argv.slice(2);
   const waypointConfigFilePath = extraArgs.length > 0 ? extraArgs[0] : 'waypoint.hcl';
 
   const config = getAppConfig(waypointConfigFilePath, appName);
@@ -67,7 +67,7 @@ function main() {
   const services = getServices(config.cluster, appName);
   const latestService = services[0];
 
-  addVolume(config.cluster, latestService);
+  addVolume(config.cluster, latestService, volumeName, fileSystemId, accessPointId, containerPath);
 }
 
 try {
