@@ -28,6 +28,7 @@ function addVolume(cluster, service, volumeName, fileSystemId, accessPointId, co
     sourceVolume: volumeName,
   }];
 
+  // Remove post-deployment attributes from the fetched task definition, they cannot be specified in a new one
   delete taskDefinition.taskDefinition.taskDefinitionArn;
   delete taskDefinition.taskDefinition.revision;
   delete taskDefinition.taskDefinition.status;
