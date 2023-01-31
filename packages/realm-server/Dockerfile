@@ -6,7 +6,7 @@ ENV realm_server_script=$realm_server_script
 
 WORKDIR /realm-server
 
-RUN curl -f https://get.pnpm.io/v6.16.js | node - add --global pnpm
+RUN wget -qO /bin/pnpm "https://github.com/pnpm/pnpm/releases/latest/download/pnpm-linuxstatic-x64" && chmod +x /bin/pnpm
 
 COPY pnpm-lock.yaml ./
 
