@@ -39,14 +39,6 @@ runs:
     - uses: pnpm/action-setup@v2
       with:
         version: ${{ inputs.pnpm_version }}
-
-    - name: Remove unused packages
-      shell: bash
-      run: |
-        rm -rf packages/boxel-motion
-        rm -rf packages/boxel-motion-demo-app
-        rm -rf packages/boxel-motion-test-app
-
     - uses: actions/setup-node@v3
       with:
         node-version: ${{ inputs.node_version }}

@@ -17,7 +17,7 @@ COPY vendor/ ./vendor
 ADD . ./
 
 RUN pnpm fetch
-RUN pnpm install -r --prefer-offline
+RUN pnpm install -r --offline
 
 EXPOSE 3000
 
