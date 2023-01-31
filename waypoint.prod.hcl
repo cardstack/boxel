@@ -41,7 +41,12 @@ app "realm-base" {
 
     hook {
       when    = "after"
-      command = ["node", "./scripts/waypoint-ecs-add-tags-and-grace.mjs", "realm-base"]
+      command = ["node", "./scripts/waypoint-ecs-add-tags.mjs", "realm-base"]
+    }
+
+    hook {
+      when    = "after"
+      command = ["node", "./scripts/waypoint-ecs-add-efs.mjs", "realm-base", "realm-server-storage", "fs-01beb05ea57cb4894", "fsap-0e1180270a9526966", "/persistent"]
     }
 
     hook {
@@ -95,7 +100,12 @@ app "realm-demo" {
 
     hook {
       when    = "after"
-      command = ["node", "./scripts/waypoint-ecs-add-tags-and-grace.mjs", "realm-demo"]
+      command = ["node", "./scripts/waypoint-ecs-add-tags.mjs", "realm-demo"]
+    }
+
+    hook {
+      when    = "after"
+      command = ["node", "./scripts/waypoint-ecs-add-efs.mjs", "realm-demo", "realm-server-storage", "fs-01beb05ea57cb4894", "fsap-0e1180270a9526966", "/persistent"]
     }
 
     hook {
