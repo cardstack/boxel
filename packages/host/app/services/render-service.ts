@@ -50,8 +50,6 @@ export default class RenderService extends Service {
   renderError: Error | undefined;
   owner: Owner = getOwner(this)!;
 
-  // Note that we use a document instead of a resource, since the included could
-  // save us some work for fields that are already loaded
   async renderCard(params: RenderCardParams): Promise<string> {
     let {
       card,
