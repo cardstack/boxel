@@ -14,6 +14,10 @@ export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
+    res.on('finish', () => {
+      console.log(`${req.method} ${req.url}: ${res.statusCode}`);;
+    });
+
     let isStreaming = false;
     try {
       if (handleCors(req, res)) {
@@ -26,6 +30,15 @@ export function createRealmServer(realms: Realm[]) {
       let realm = realms.find((r) =>
         req.url!.startsWith(new URL(r.url).pathname)
       );
+
+      // Respond to AWS ELB health check
+      if (requestIsHealthCheck(req)) {
+        res.statusCode = 200;
+        res.statusMessage = 'OK';
+        res.write('OK');
+        res.end();
+        return;
+      }
 
       if (!realm) {
         res.statusCode = 404;
@@ -130,4 +143,10 @@ function detectRealmCollision(realms: Realm[]): void {
       )}`
     );
   }
+}
+
+function requestIsHealthCheck(req: http.IncomingMessage) {
+  return req.url === '/' &&
+    req.method === 'GET' &&
+    req.headers["user-agent"]?.startsWith('ELB-HealthChecker');
 }

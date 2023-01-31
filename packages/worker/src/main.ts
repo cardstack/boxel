@@ -17,11 +17,10 @@ livenessWatcher.registerShutdownListener(async () => {
   await fetchHandler.dropCaches();
 });
 
-// This is the locally served base realm
-Loader.addURLMapping(
-  new URL(baseRealm.url),
-  new URL('http://localhost:4201/base/')
-);
+//@ts-expect-error webpack replaces process.env at build time
+let resolvedBaseRealmURL = process.env.RESOLVED_BASE_REALM_URL;
+console.log(`service worker resolvedBaseRealmURL=${resolvedBaseRealmURL}`);
+Loader.addURLMapping(new URL(baseRealm.url), new URL(resolvedBaseRealmURL));
 
 // TODO: this should be a more event-driven capability driven from the message
 // handler

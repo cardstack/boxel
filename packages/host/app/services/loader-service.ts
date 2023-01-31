@@ -2,6 +2,7 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm, createResponse } from '@cardstack/runtime-common';
+import config from '@cardstack/host/config/environment';
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
@@ -22,15 +23,9 @@ export default class LoaderService extends Service {
     }
 
     let loader = Loader.createLoaderFromGlobal();
-    // TODO we need to think about the best way to do this. Basically we need to
-    // provide the service worker the same kind of resolution mapping config
-    // that we provide the realm server running in node. it's probably not a
-    // good idea to hard code this to the local dev setup. This will be a
-    // requirement if we want to have a hosted env be able to run in a "creator"
-    // mode where the user can build cards from their local system.
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL(config.resolvedBaseRealmURL)
     );
     return this.makeProxiedLoader(loader);
   }
