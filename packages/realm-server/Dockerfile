@@ -1,14 +1,13 @@
 # syntax=docker/dockerfile:1
 
-FROM node:18-alpine
+FROM node:18-slim
 ARG realm_server_script
 ENV realm_server_script=$realm_server_script
 
 WORKDIR /realm-server
 
-# Required for pnpm to install Node on Alpine
-RUN apk add build-base libc6-compat gcompat
-RUN wget -qO /bin/pnpm "https://github.com/pnpm/pnpm/releases/latest/download/pnpm-linuxstatic-x64" && chmod +x /bin/pnpm
+RUN apt-get update && apt-get install -y ca-certificates curl
+RUN curl -f https://get.pnpm.io/v6.16.js | node - add --global pnpm
 
 COPY pnpm-lock.yaml ./
 
