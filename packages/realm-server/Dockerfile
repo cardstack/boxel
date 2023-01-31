@@ -6,6 +6,8 @@ ENV realm_server_script=$realm_server_script
 
 WORKDIR /realm-server
 
+# Required for pnpm to install Node on Alpine
+RUN apk install build-base libc6-compat gcompat
 RUN wget -qO /bin/pnpm "https://github.com/pnpm/pnpm/releases/latest/download/pnpm-linuxstatic-x64" && chmod +x /bin/pnpm
 
 COPY pnpm-lock.yaml ./
