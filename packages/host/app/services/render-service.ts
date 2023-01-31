@@ -98,7 +98,7 @@ export default class RenderService extends Service {
         }
       }
 
-      // TODO make sure to break for fields that can't be loaded
+      // TODO make a test that shows we throw for fields that can't be loaded (broken links)
     } while (notLoaded || notReady);
 
     let serializer = new Serializer(voidMap);
