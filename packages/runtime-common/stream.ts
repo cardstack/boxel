@@ -89,12 +89,19 @@ export async function getFileWithFallbacks(
   return undefined;
 }
 
+let writers = new WeakMap<WritableStream, WritableStreamDefaultWriter>();
+
 export async function writeToStream(
   stream: WritableStream,
   chunk: string
 ): Promise<void> {
   if (typeof stream.getWriter === "function") {
-    return stream.getWriter().write(chunk);
+    let writer = writers.get(stream);
+    if (!writer) {
+      writer = stream.getWriter();
+      writers.set(stream, writer);
+    }
+    return writer.write(chunk);
   } else {
     if (!isNode) {
       throw new Error(`cannot handle node-streams when not in node`);
