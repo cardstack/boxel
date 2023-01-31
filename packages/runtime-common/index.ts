@@ -84,9 +84,7 @@ export {
 
 import type { Card } from "https://cardstack.com/base/card-api";
 
-// TODO hardcoding link traversal depth to 5 for now, eventually this will be
-// based on the fields used by the card's template, and/or fields requested in
-// JSONAPI request
+// TODO it's time to remove this
 export const maxLinkDepth = 5;
 
 export interface CardChooser {

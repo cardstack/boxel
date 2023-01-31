@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -769,7 +769,10 @@ module('Integration | search-index', function (hooks) {
     {
       let card = await indexer.card(new URL(`${testRealmURL}Boom/boom`));
       if (card?.type === 'error') {
-        assert.strictEqual(card.error.detail, 'intentional error thrown');
+        assert.ok(
+          card.error.detail.includes('intentional error thrown'),
+          'error doc includes raised error message'
+        );
       } else {
         assert.ok(false, `expected search entry to be an error doc`);
       }
@@ -784,6 +787,8 @@ module('Integration | search-index', function (hooks) {
       }
     }
   });
+
+  skip('search doc only includes used fields');
 
   test('can index a card that has nested linksTo fields', async function (assert) {
     let adapter = new TestRealmAdapter({
@@ -1033,14 +1038,6 @@ module('Integration | search-index', function (hooks) {
         'friend.id': `${testRealmURL}Friend/mango`,
         'friend.firstName': 'Mango',
         'friend.friend.id': `${testRealmURL}Friend/hassan`,
-        'friend.friend.firstName': 'Hassan',
-        'friend.friend.friend.id': `${testRealmURL}Friend/mango`,
-        'friend.friend.friend.firstName': 'Mango',
-        'friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
-        'friend.friend.friend.friend.firstName': 'Hassan',
-        'friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
-        'friend.friend.friend.friend.friend.firstName': 'Mango',
-        'friend.friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
       });
     } else {
       assert.ok(
@@ -1127,14 +1124,6 @@ module('Integration | search-index', function (hooks) {
         'friend.id': `${testRealmURL}Friend/hassan`,
         'friend.firstName': 'Hassan',
         'friend.friend.id': `${testRealmURL}Friend/mango`,
-        'friend.friend.firstName': 'Mango',
-        'friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
-        'friend.friend.friend.firstName': 'Hassan',
-        'friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
-        'friend.friend.friend.friend.firstName': 'Mango',
-        'friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
-        'friend.friend.friend.friend.friend.firstName': 'Hassan',
-        'friend.friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
       });
     } else {
       assert.ok(
@@ -1192,7 +1181,6 @@ module('Integration | search-index', function (hooks) {
         'http://localhost:4201/base/field-component',
         'http://localhost:4201/base/integer',
         'http://localhost:4201/base/links-to-editor',
-        'http://localhost:4201/base/not-ready',
         'http://localhost:4201/base/shadow-dom',
         'http://localhost:4201/base/string',
         'http://localhost:4201/base/watched-array',

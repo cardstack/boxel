@@ -35,6 +35,8 @@ export default class LoaderService extends Service {
     return this.makeProxiedLoader(loader);
   }
 
+  // TODO no more need to proxy the loader--this was a side effect of not using
+  // render driven indexing
   private makeProxiedLoader(loader: Loader) {
     return new Proxy(loader, {
       get: (target, property, received) => {

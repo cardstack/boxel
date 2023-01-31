@@ -19,7 +19,6 @@ import {
   CardError,
   NotLoaded,
   NotReady,
-  maxLinkDepth,
   getField,
   isField,
   primitive,
@@ -683,32 +682,26 @@ export class Card {
     }
   }
 
-  static [queryableValue](value: any, linksToDepth = 0): any {
+  static [queryableValue](value: any, stack: Card[] = []): any {
     if (primitive in this) {
       return value;
     } else {
       if (value == null) {
         return null;
       }
+      if (stack.includes(value)) {
+        return { id: value.id};
+      }
       return Object.fromEntries(
-        Object.entries(getFields(value, { includeComputeds: true }))
+        Object.entries(getFields(value, { includeComputeds: true, usedFieldsOnly: true }))
           .map(([fieldName, field]) => {
             let rawValue = peekAtField(value, fieldName);
             if (isNotLoadedValue(rawValue)) {
               return [fieldName, { id: rawValue.reference }];
             }
-            let nextLinksToDepth = linksToDepth;
-            if (field!.fieldType === 'linksTo') {
-              nextLinksToDepth++;
-            }
-            if (nextLinksToDepth <= maxLinkDepth) {
-              return [fieldName, getQueryableValue(field!.card, value[fieldName], nextLinksToDepth)];
-            } else if (field!.fieldType === 'linksTo') {
-              return [fieldName, { id: value[fieldName].id }];
-            } else {
-              return [];
-            }
-          })
+              return [fieldName, getQueryableValue(field!.card, value[fieldName], [value,...stack])];
+          }
+        )
       );
     }
   }
@@ -779,6 +772,10 @@ function getDataBucket(instance: Card): Map<string, any> {
   return deserialized;
 }
 
+function getUsedFields(instance: Card): string[] {
+  return [...getDataBucket(instance)?.keys()];
+}
+
 type Scalar = string | number | boolean | null | undefined |
   (string | null | undefined)[] |
   (number | null | undefined)[] |
@@ -798,7 +795,7 @@ export function isSaved(instance: Card): boolean {
   return instance[isSavedInstance] === true;
 }
 
-export function getQueryableValue(fieldCard: typeof Card, value: any, linksToDepth = 0): any {
+export function getQueryableValue(fieldCard: typeof Card, value: any, stack: Card[] = []): any {
   if ((primitive in fieldCard)) {
     let result = (fieldCard as any)[queryableValue](value);
     assertScalar(result, fieldCard);
@@ -810,7 +807,7 @@ export function getQueryableValue(fieldCard: typeof Card, value: any, linksToDep
 
   // this recurses through the fields of the compound card via
   // the base card's queryableValue implementation
-  return flatten((fieldCard as any)[queryableValue](value, linksToDepth), { safe: true });
+  return flatten((fieldCard as any)[queryableValue](value, stack), { safe: true });
 }
 
 function peekAtField(instance: Card, fieldName: string): any {
@@ -891,7 +888,8 @@ function serializeCardResource(
   model: Card,
   doc: JSONAPISingleResourceDocument,
   opts?: {
-    includeComputeds?: boolean
+    includeComputeds?: boolean;
+    usedFieldsOnly?: boolean;
   },
   visited: Set<string> = new Set()
 ): LooseCardResource {
@@ -908,10 +906,14 @@ function serializeCardResource(
   }, model.id ? { id: model.id } : undefined);
 }
 
+// TODO maybe we want to have a stronger opinion about only serializing used fields
+// (and perhaps making an option for tests that will still permit us to serialize 
+// all fields, including unused fields?)
 export function serializeCard(
   model: Card,
   opts?: {
-    includeComputeds?: boolean
+    includeComputeds?: boolean;
+    usedFieldsOnly?: boolean;
   }
 ): LooseSingleCardDocument {
   let doc = { data: { type: 'card', ...(model.id != null ? { id: model.id }: {}) } };
@@ -1053,7 +1055,6 @@ async function _updateFromSerialized<T extends CardConstructor>(
 }
 
 export async function searchDoc<CardT extends CardConstructor>(instance: InstanceType<CardT>): Promise<Record<string, any>> {
-  await recompute(instance);
   return getQueryableValue(instance.constructor, instance) as Record<string, any>;
 }
 
@@ -1150,6 +1151,8 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
   }
 
   async function _loadModel<T extends Card>(model: T, stack: Card[] = []): Promise<void> {
+    // TODO probably we should only do recomputes on used fields.
+    // the act of rendering the card informs us which fields are used....
     let pendingFields = new Set<string>(Object.keys(getFields(model, { includeComputeds: true })));
     do {
       for (let fieldName of [...pendingFields]) {
@@ -1268,13 +1271,15 @@ async function loadMissingField(
   return instance;
 }
 
-export function getFields(card: typeof Card, opts?: { includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> };
-export function getFields<T extends Card>(card: T, opts?: { includeComputeds?: boolean }): { [P in keyof T]?: Field<CardConstructor> };
-export function getFields(cardInstanceOrClass: Card | typeof Card, opts?: { includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> } {
+export function getFields(card: typeof Card, opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> };
+export function getFields<T extends Card>(card: T, opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean }): { [P in keyof T]?: Field<CardConstructor> };
+export function getFields(cardInstanceOrClass: Card | typeof Card, opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> } {
   let obj: object | null;
+  let usedFields: string[] = [];
   if (isCard(cardInstanceOrClass)) {
     // this is a card instance
     obj = Reflect.getPrototypeOf(cardInstanceOrClass);
+    usedFields = getUsedFields(cardInstanceOrClass);
   } else {
     // this is a card class
     obj = (cardInstanceOrClass as typeof Card).prototype;
@@ -1284,6 +1289,9 @@ export function getFields(cardInstanceOrClass: Card | typeof Card, opts?: { incl
     let descs = Object.getOwnPropertyDescriptors(obj);
     let currentFields = flatMap(Object.keys(descs), maybeFieldName => {
       if (maybeFieldName !== 'constructor') {
+        if (opts?.usedFieldsOnly && !usedFields.includes(maybeFieldName)) {
+          return [];
+        }
         let maybeField = getField((isCard(cardInstanceOrClass) ? cardInstanceOrClass.constructor : cardInstanceOrClass) as typeof Card, maybeFieldName);
         if (maybeField?.computeVia && !opts?.includeComputeds) {
           return [];
