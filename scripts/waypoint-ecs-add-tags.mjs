@@ -8,7 +8,7 @@ function execute(command, options = {}) {
   return execSync(command, options).toString().trim();
 }
 
-function getAppConfig(waypointConfigFilePath, appName) {
+export function getAppConfig(waypointConfigFilePath, appName) {
   const waypointHcl = fs.readFileSync(waypointConfigFilePath, 'utf8');
   const waypointConfig = hcl.parseToObject(waypointHcl)[0];
   const waypointApp = waypointConfig.app[appName][0];
@@ -17,13 +17,13 @@ function getAppConfig(waypointConfigFilePath, appName) {
   return { cluster };
 }
 
-function getAppNameFromServiceArn(serviceArn) {
+export function getAppNameFromServiceArn(serviceArn) {
   const arnPattern = /^.*\/(.*)-[^-]*$/;
   const matches = serviceArn.match(arnPattern);
   return matches && matches.length > 1 ? matches[1] : '';
 }
 
-function getServices(cluster, appName) {
+export function getServices(cluster, appName) {
   let serviceArns = [];
   let nextToken = null;
   do {
@@ -74,24 +74,13 @@ function isTagged(service, tags) {
   return service.enableECSManagedTags && service.propagateTags === 'SERVICE';
 }
 
-function tagResourcesAndAddGracePeriod(cluster, service, tags) {
+function tagResources(cluster, service, tags) {
   const tagsArgs = Object.entries(tags)
     .map(([key, val]) => `key=${key},value=${val}`)
     .join(' ');
 
   console.log(`-> Tagging service: ${service.serviceName}`);
   execute(`aws ecs tag-resource --resource-arn ${service.serviceArn} --tags ${tagsArgs}`);
-
-  console.log(`-> Updating service to propagate tags to tasks: ${service.serviceName}`);
-  execute(
-    `aws ecs update-service` +
-      ` --cluster ${cluster}` +
-      ` --service ${service.serviceArn}` +
-      ` --force-new-deployment` +
-      ` --health-check-grace-period-seconds 240` +
-      ` --enable-ecs-managed-tags` +
-      ` --propagate-tags SERVICE`
-  );
 }
 
 function main() {
@@ -110,12 +99,15 @@ function main() {
   const latestService = services[0];
 
   if (!isTagged(latestService, tags)) {
-    tagResourcesAndAddGracePeriod(config.cluster, latestService, tags);
+    tagResources(config.cluster, latestService, tags);
   }
 }
 
 try {
-  main();
+  // Avoid running main if the add-efs script is consuming exports
+  if (process.argv[1].includes('waypoint-ecs-add-tags')) {
+    main();
+  }
 } catch (err) {
   console.error(err);
 }

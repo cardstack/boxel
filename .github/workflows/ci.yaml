@@ -119,7 +119,7 @@ jobs:
   host-deploy:
     name: Deploy host to staging
     needs: host-test
-    if: github.event.push.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -132,7 +132,7 @@ jobs:
   realm-server-deploy:
     name: Deploy realm server to staging
     needs: realm-server-test
-    if: github.event.push.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

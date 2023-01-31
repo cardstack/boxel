@@ -9,14 +9,14 @@ app "realm-base" {
       context = "./"
 
       build_args = {
-        realm_server_script = "start:base:staging"
+        realm_server_script = "start:base:production"
       }
     }
 
     registry {
       use "aws-ecr" {
         region     = "us-east-1"
-        repository = "realm-base-staging"
+        repository = "realm-base-production"
         tag        = "latest"
       }
     }
@@ -26,16 +26,16 @@ app "realm-base" {
     use "aws-ecs" {
       region              = "us-east-1"
       memory              = 2048
-      cluster             = "realm-base-staging"
+      cluster             = "realm-base-production"
       count               = 1
-      subnets             = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
+      subnets             = ["subnet-06c640c2bc3b46c6a", "subnet-0ca4ab0b29849bfff"]
       task_role_name      = "realm-base-ecs-task"
       execution_role_name = "realm-base-ecs-task-execution"
-      security_group_ids  = ["sg-0c6700e72bc20f766"]
+      security_group_ids  = ["sg-0086ae7f442318880"]
 
       alb {
-        subnets     = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
-        certificate = "arn:aws:acm:us-east-1:680542703984:certificate/11ae7191-23fc-4101-a8ad-aab2e4cb520e"
+        subnets     = ["subnet-06c640c2bc3b46c6a", "subnet-0ca4ab0b29849bfff"]
+        certificate = "arn:aws:acm:us-east-1:120317779495:certificate/40a693b2-c1f9-4ae0-a8ed-c9960eae0a05"
       }
     }
 
@@ -46,7 +46,7 @@ app "realm-base" {
 
     hook {
       when    = "after"
-      command = ["node", "./scripts/waypoint-ecs-add-efs.mjs", "realm-base", "realm-server-storage", "fs-07b96c537c8c42381", "fsap-05f6f7e465f171f43", "/persistent"]
+      command = ["node", "./scripts/waypoint-ecs-add-efs.mjs", "realm-base", "realm-server-storage", "fs-01beb05ea57cb4894", "fsap-0e1180270a9526966", "/persistent"]
     }
 
     hook {
@@ -68,14 +68,14 @@ app "realm-demo" {
       context = "./"
 
       build_args = {
-        realm_server_script = "start:demo:staging"
+        realm_server_script = "start:demo:production"
       }
     }
 
     registry {
       use "aws-ecr" {
         region     = "us-east-1"
-        repository = "realm-demo-staging"
+        repository = "realm-demo-production"
         tag        = "latest"
       }
     }
@@ -85,16 +85,16 @@ app "realm-demo" {
     use "aws-ecs" {
       region              = "us-east-1"
       memory              = 2048
-      cluster             = "realm-demo-staging"
+      cluster             = "realm-demo-production"
       count               = 1
-      subnets             = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
+      subnets             = ["subnet-06c640c2bc3b46c6a", "subnet-0ca4ab0b29849bfff"]
       task_role_name      = "realm-demo-ecs-task"
       execution_role_name = "realm-demo-ecs-task-execution"
-      security_group_ids  = ["sg-0c6700e72bc20f766"]
+      security_group_ids  = ["sg-0086ae7f442318880"]
 
       alb {
-        subnets     = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
-        certificate = "arn:aws:acm:us-east-1:680542703984:certificate/4eccc35e-049b-4bbd-b007-575ffa3cb752"
+        subnets     = ["subnet-06c640c2bc3b46c6a", "subnet-0ca4ab0b29849bfff"]
+        certificate = "arn:aws:acm:us-east-1:120317779495:certificate/22684ad3-ee95-48b7-8a1b-77d3364129e0"
       }
     }
 
@@ -105,7 +105,7 @@ app "realm-demo" {
 
     hook {
       when    = "after"
-      command = ["node", "./scripts/waypoint-ecs-add-efs.mjs", "realm-demo", "realm-server-storage", "fs-07b96c537c8c42381", "fsap-05f6f7e465f171f43", "/persistent"]
+      command = ["node", "./scripts/waypoint-ecs-add-efs.mjs", "realm-demo", "realm-server-storage", "fs-01beb05ea57cb4894", "fsap-0e1180270a9526966", "/persistent"]
     }
 
     hook {

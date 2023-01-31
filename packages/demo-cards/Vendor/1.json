@@ -5,7 +5,7 @@
       "vendor": {
         "name": "Smart Contract",
         "description": "SmartContract is the leading provider of secure and reliable open-source oracle solutions, enabling smart contracts to access anything outside their native blockchain, such off-chain data feeds, web APIs, and traditional bank payments. We are dedicated to the development and integration of Chainlink as the standard decentralized oracle framework used by smart contracts across numerous blockchains. We empower the Chainlink community and build world-class Chainlink-based solutions for large enterprises such as Google and Oracle, as well as leading smart contract development teams such as Synthetix, Loopring, Aave, OpenLaw, Conflux, Polkadot and many more.",
-        "logoURL": "http://local-realm/invoice-assets/vendor-logo-smart-contract.png",
+        "logoURL": "/invoice-assets/vendor-logo-smart-contract.png",
         "email": "finance@smartcontract.com",
         "cardXYZ": "smartcontractinc"
       },
@@ -83,12 +83,12 @@
     "relationships": {
       "preferredPaymentMethod.cryptoPayment.chain": {
         "links": {
-          "self": "http://local-realm/Chain/1"
+          "self": "/Chain/1"
         }
       },
       "preferredPaymentMethod.cryptoPayment.token": {
         "links": {
-          "self": "http://local-realm/Token/1"
+          "self": "/Token/1"
         }
       },
       "preferredPaymentMethod.wireTransfer.currency": {
@@ -108,17 +108,17 @@
       },
       "alternatePaymentMethod.0.wireTransfer.currency": {
         "links": {
-          "self": "http://local-realm/Currency/1"
+          "self": "/Currency/1"
         }
       },
       "alternatePaymentMethod.1.cryptoPayment.chain": {
         "links": {
-          "self": "http://local-realm/Chain/1"
+          "self": "/Chain/1"
         }
       },
       "alternatePaymentMethod.1.cryptoPayment.token": {
         "links": {
-          "self": "http://local-realm/Token/2"
+          "self": "/Token/2"
         }
       },
       "alternatePaymentMethod.1.wireTransfer.currency": {
@@ -128,12 +128,12 @@
       },
       "alternatePaymentMethod.2.cryptoPayment.chain": {
         "links": {
-          "self": "http://local-realm/Chain/2"
+          "self": "/Chain/2"
         }
       },
       "alternatePaymentMethod.2.cryptoPayment.token": {
         "links": {
-          "self": "http://local-realm/Token/3"
+          "self": "/Token/3"
         }
       },
       "alternatePaymentMethod.2.wireTransfer.currency": {
@@ -144,7 +144,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/vendor",
+        "module": "/vendor",
         "name": "Vendor"
       }
     }

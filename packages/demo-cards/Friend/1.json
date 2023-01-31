@@ -7,13 +7,13 @@
     "relationships": {
       "friend": {
         "links": {
-          "self": "http://local-realm/Friend/2"
+          "self": "/Friend/2"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/friend",
+        "module": "/friend",
         "name": "Friend"
       }
     }

@@ -88,7 +88,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
         }
       }
     };
-    this.newEntry = await this.cardService.createFromSerialized(resource, { data: resource });
+    this.newEntry = await this.cardService.createFromSerialized(resource, { data: resource }, this.cardService.defaultURL);
   }
 
   @action

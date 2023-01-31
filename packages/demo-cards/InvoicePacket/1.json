@@ -4,7 +4,7 @@
     "relationships": {
       "vendor": {
         "links": {
-          "self": "http://local-realm/Vendor/1"
+          "self": "/Vendor/1"
         }
       }
     },
@@ -48,7 +48,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/invoice-packet",
+        "module": "/invoice-packet",
         "name": "InvoicePacket"
       }
     }

@@ -2,24 +2,24 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Token from http://local-realm/asset",
-      "description": "Catalog entry for Token from http://local-realm/asset",
+      "title": "Token from /asset",
+      "description": "Catalog entry for Token from /asset",
       "ref": {
-        "module": "http://local-realm/asset",
+        "module": "/asset",
         "name": "Token"
       },
       "demo": {
         "address": "eth:0x514910771af9ca656af840dff83e8264ecf986ca",
         "name": "ChainLink Token",
         "symbol": "LINK",
-        "logoURL": "http://local-realm/invoice-assets/currency-link.png"
+        "logoURL": "/invoice-assets/currency-link.png"
       }
     },
     "meta": {
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://local-realm/asset",
+            "module": "/asset",
             "name": "Token"
           }
         }
