@@ -15,8 +15,7 @@ export function createRealmServer(realms: Realm[]) {
 
   let server = http.createServer(async (req, res) => {
     res.on("finish", () => {
-      // TODO uncomment when done debugging
-      // console.log(`${req.method} ${req.url}: ${res.statusCode}`);;
+      console.log(`${req.method} ${req.url}: ${res.statusCode}`);
     });
 
     let isStreaming = false;
