@@ -319,7 +319,11 @@ export class Loader {
       });
       // TODO remove debug log
       console.log(
-        `loader issuing native fetch for resolved url (cloned req) ${request.url}`
+        `loader issuing native fetch for resolved url (cloned req) ${
+          request.url
+        }. (url mappings: ${[...this.urlMappings.entries()].map(
+          ([from, to]) => `${from} => ${to}`
+        )})`
       );
       return getNativeFetch()(request);
     } else {
@@ -344,7 +348,9 @@ export class Loader {
       console.log(
         `loader issuing native fetch for resolved url ${
           this.resolve(unresolvedURL).href
-        }`
+        }. (url mappings: ${[...this.urlMappings.entries()].map(
+          ([from, to]) => `${from} => ${to}`
+        )})`
       );
       return getNativeFetch()(this.resolve(unresolvedURL).href, init);
     }
