@@ -13,7 +13,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "/friend",
+        "module": "../friend",
         "name": "Friend"
       }
     }

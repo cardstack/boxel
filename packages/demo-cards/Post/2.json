@@ -12,13 +12,13 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "/post",
+        "module": "../post",
         "name": "Post"
       },
       "fields": {
         "author": {
           "adoptsFrom": {
-            "module": "/employee",
+            "module": "../employee",
             "name": "Employee"
           }
         }
