@@ -319,9 +319,7 @@ export class Loader {
       });
       // TODO remove debug log
       console.log(
-        `loader issuing native fetch for resolved url ${
-          this.resolve(request.url).href
-        }`
+        `loader issuing native fetch for resolved url (cloned req) ${request.url}`
       );
       return getNativeFetch()(request);
     } else {
