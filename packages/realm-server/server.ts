@@ -14,8 +14,9 @@ export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
-    res.on('finish', () => {
-      console.log(`${req.method} ${req.url}: ${res.statusCode}`);;
+    res.on("finish", () => {
+      // TODO uncomment when done debugging
+      // console.log(`${req.method} ${req.url}: ${res.statusCode}`);;
     });
 
     let isStreaming = false;
@@ -34,8 +35,8 @@ export function createRealmServer(realms: Realm[]) {
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
-        res.statusMessage = 'OK';
-        res.write('OK');
+        res.statusMessage = "OK";
+        res.write("OK");
         res.end();
         return;
       }
@@ -146,7 +147,9 @@ function detectRealmCollision(realms: Realm[]): void {
 }
 
 function requestIsHealthCheck(req: http.IncomingMessage) {
-  return req.url === '/' &&
-    req.method === 'GET' &&
-    req.headers["user-agent"]?.startsWith('ELB-HealthChecker');
+  return (
+    req.url === "/" &&
+    req.method === "GET" &&
+    req.headers["user-agent"]?.startsWith("ELB-HealthChecker")
+  );
 }
