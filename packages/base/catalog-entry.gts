@@ -29,6 +29,9 @@ export class CatalogEntry extends Card {
     // it is not useful to treat as a composite card (for the purposes of creating new card instances).
     return primitive in card || isEqual(baseCardRef, this.ref);
   }});
+  @field moduleHref = contains(StringCard, { computeVia: function(this: CatalogEntry) {
+    return new URL(this.ref.module, this[relativeTo]).href;
+  }})
   @field demo = contains(Card);
 
   get showDemo() {
@@ -61,7 +64,9 @@ export class CatalogEntry extends Card {
     <template>
       <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h2><@fields.title/></h2>
-        <div><@fields.ref/></div>
+        <div data-test-ref>
+          Module: <@fields.moduleHref/> Name: {{@model.ref.name}}
+        </div>
         {{#if @model.showDemo}}
           <div data-test-demo-embedded><@fields.demo/></div>
         {{/if}}
@@ -74,7 +79,9 @@ export class CatalogEntry extends Card {
       <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
         <h1 data-test-title><@fields.title/></h1>
         <em data-test-description><@fields.description/></em>
-        <div><@fields.ref/></div>
+        <div data-test-ref>
+          Module: <@fields.moduleHref/> Name: {{@model.ref.name}}
+        </div>
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo/></div>
         {{/if}}
