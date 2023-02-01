@@ -317,6 +317,12 @@ export class Loader {
         headers: urlOrRequest.headers,
         body: urlOrRequest.body,
       });
+      // TODO remove debug log
+      console.log(
+        `loader issuing native fetch for resolved url ${
+          this.resolve(request.url).href
+        }`
+      );
       return getNativeFetch()(request);
     } else {
       let unresolvedURL =
@@ -336,6 +342,12 @@ export class Loader {
           return await handle(request);
         }
       }
+      // TODO remove debug log
+      console.log(
+        `loader issuing native fetch for resolved url ${
+          this.resolve(unresolvedURL).href
+        }`
+      );
       return getNativeFetch()(this.resolve(unresolvedURL).href, init);
     }
   }
