@@ -12,15 +12,11 @@ export default class MessageService extends Service {
   }
 
   start() {
-    let realmPath = new RealmPaths(this.cardService.defaultURL);
     if (!this.eventSource || this.isClosed) {
+      let realmPath = new RealmPaths(this.cardService.defaultURL);
       this.eventSource = new EventSource(`${realmPath.url}_message`);
       console.log('Created new event source');
     }
-
-    this.eventSource.onopen = (_ev: Event) => {
-      console.log('Connection open');
-    };
 
     this.eventSource.onerror = (_ev: Event) => {
       if (this.eventSource?.readyState == EventSource.CONNECTING) {
@@ -46,8 +42,8 @@ export default class MessageService extends Service {
       this.eventSource.close();
       if (this.isClosed) {
         console.log('Connection closed');
+        this.eventSource = undefined;
       }
-      this.eventSource = undefined;
     }
   }
 }

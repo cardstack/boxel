@@ -224,7 +224,7 @@ export class Realm {
     }
     if (
       accept?.includes("application/vnd.api+json") ||
-      accept === "text/event-stream"
+      accept?.includes("text/event-stream")
     ) {
       // local requests are allowed to query the realm as the index is being built up
       if (!request.isLocal && url.host !== "local-realm") {
@@ -674,9 +674,10 @@ export class Realm {
     return data;
   }
 
-  private listeningClients: WritableStream[] = [];
+  // TODO: string type is a placeholder until a we have a better key
+  private listeningClients = new Map<string, WritableStream>();
 
-  private async subscribe(_req: Request): Promise<Response> {
+  private async subscribe(req: Request): Promise<Response> {
     let headers = {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -699,14 +700,15 @@ export class Realm {
       res.nodeStream = readable;
     }
 
-    this.listeningClients.push(writable);
+    this.listeningClients.set(req.url, writable);
+
     return res;
   }
 
   private async sendUpdateMessages(): Promise<void> {
-    console.log(`sending updates to ${this.listeningClients.length} clients`);
+    console.log(`sending updates to ${this.listeningClients.size} clients`);
     await Promise.all(
-      this.listeningClients.map((client) =>
+      [...this.listeningClients.values()].map((client) =>
         writeToStream(client, "data: new server event\n\n")
       )
     );

@@ -6,8 +6,12 @@ import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import type LocalRealm from '../services/local-realm';
 import type CardService from '../services/card-service';
+import type MessageService from '../services/message-service';
 import { RealmPaths } from '@cardstack/runtime-common';
 import type { Format } from 'https://cardstack.com/base/card-api';
+import ENV from '@cardstack/host/config/environment';
+
+const { demoRealmURL } = ENV;
 
 interface Model {
   path: string | undefined;
@@ -30,6 +34,7 @@ export default class Index extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare localRealm: LocalRealm;
+  @service declare messageService: MessageService;
   @service declare fastboot: { isFastBoot: boolean };
 
   async model(args: {
@@ -52,7 +57,7 @@ export default class Index extends Route<Model> {
     }
 
     await this.localRealm.startedUp;
-    if (!this.localRealm.isAvailable && !this.cardService.defaultURL) {
+    if (!this.localRealm.isAvailable && !demoRealmURL) {
       return {
         path,
         openFile,
@@ -75,6 +80,7 @@ export default class Index extends Route<Model> {
       );
       return { path, openFile, openDirs, isFastBoot };
     }
+    this.messageService.start();
     // The server may have responded with a redirect which we need to pay
     // attention to. As part of responding to us, the server will hand us a
     // resolved URL in response.url. We need to reverse that resolution in order
