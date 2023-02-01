@@ -107,8 +107,8 @@ jobs:
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          DEMO_REALM_URL: https://realm-demo.cardstack.com/demo/
-          RESOLVED_BASE_REALM_URL: https://realm-base.cardstack.com/base/
+          DEMO_REALM_URL: https://realm-demo.cardstack.com/
+          RESOLVED_BASE_REALM_URL: https://realm-base.cardstack.com/
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.cardstack.com
           AWS_S3_BUCKET: boxel-host-preview.cardstack.com
           AWS_REGION: us-east-1
