@@ -54,7 +54,7 @@ jobs:
           files: |
             ^packages/host
 
-  deploy-safe-tools-preview-staging:
+  deploy-host-preview-staging:
     name: Deploy a boxel-host staging preview to S3
     runs-on: ubuntu-latest
     # github.event.pull_request.head.repo.full_name == github.repository: true if pr is from the original repo, false if it's from a fork
@@ -90,7 +90,7 @@ jobs:
           package: boxel-host
           environment: staging
 
-  deploy-safe-tools-preview-production:
+  deploy-host-preview-production:
     name: Deploy a boxel-host production preview to S3
     runs-on: ubuntu-latest
     # github.event.pull_request.head.repo.full_name == github.repository: true if pr is from the original repo, false if it's from a fork
