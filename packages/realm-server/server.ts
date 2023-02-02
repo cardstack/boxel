@@ -29,10 +29,6 @@ export function createRealmServer(realms: Realm[]) {
         throw new Error(`bug: missing URL in request`);
       }
 
-      let realm = realms.find((r) =>
-        req.url!.startsWith(new URL(r.url).pathname)
-      );
-
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
@@ -41,6 +37,10 @@ export function createRealmServer(realms: Realm[]) {
         res.end();
         return;
       }
+
+      let realm = realms.find((r) =>
+        req.url!.startsWith(new URL(r.url).pathname)
+      );
 
       if (!realm) {
         res.statusCode = 404;
