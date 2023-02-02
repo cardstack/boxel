@@ -461,6 +461,7 @@ export class CurrentRun {
       console.warn(
         `encountered error indexing card instance ${path}: ${error.error.detail}`
       );
+      console.log(`error doc: ${JSON.stringify(error)}`);
       this.setInstance(instanceURL, error);
       deferred.fulfill();
     }
