@@ -52,7 +52,7 @@ export default class Index extends Route<Model> {
     }
 
     await this.localRealm.startedUp;
-    if (!this.localRealm.isAvailable && !this.cardService.defaultURL) {
+    if (!this.localRealm.isAvailable && !this.cardService.demoRealmAvailable) {
       return { path, openFile, polling, openDirs, isFastBoot };
     }
 
