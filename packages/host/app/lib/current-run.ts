@@ -417,6 +417,7 @@ export class CurrentRun {
         instanceURL.href,
         JSON.stringify(cachedDoc, null, 2)
       );
+      // TODO uncomment this
       // html = await this.#renderCard(instanceURL, this.#staticResponses);
     } catch (err: any) {
       uncaughtError = err;
