@@ -218,7 +218,6 @@ export class Realm {
       if (!this.searchIndex) {
         return systemError("search index is not available");
       }
-      console.log(`calling handle request`, request);
       return this.#jsonAPIRouter.handle(request);
     } else if (
       request.headers.get("Accept")?.includes("application/vnd.card+source")
@@ -572,11 +571,8 @@ export class Realm {
 
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
-    console.log(`gdl, request.url: ${request.url}`);
     let localPath: LocalPath = this.paths.local(new URL(request.url));
-    console.log(`localPath`, localPath);
     let url = this.paths.directoryURL(localPath);
-    console.log('url', url);
     let entries = await this.directoryEntries(url);
     if (!entries) {
       console.log(`can't find directory ${url.href}`);
