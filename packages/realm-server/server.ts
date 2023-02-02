@@ -47,7 +47,10 @@ export function createRealmServer(realms: Realm[]) {
         // let inReversedRealm = reversedResolutionPaths.inRealm(reconstructedUrl);
         // console.log(`in reversed realm? ${inReversedRealm}`);
 
-        let inRealmReversed = r.paths.inRealm(Loader.reverseResolution(reconstructedUrl.toString()));
+        let reversedResolution = Loader.reverseResolution(reconstructedUrl.toString());
+        console.log('reversed resolution', reversedResolution);
+
+        let inRealmReversed = r.paths.inRealm(reversedResolution);
         console.log(`in realm reversed? ${inRealmReversed}`);
         return inRealmReversed;
     });
