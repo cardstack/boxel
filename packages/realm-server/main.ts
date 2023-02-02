@@ -104,7 +104,13 @@ console.log(`Using host dist path: '${distPath}' for card pre-rendering`);
   for (let realm of realms) {
     console.log(`Starting realm ${realm.url}...`);
     await realm.start();
-    console.log(`Realm ${realm.url} has started`);
+    console.log(
+      `Realm ${realm.url} has started (${JSON.stringify(
+        realm.searchIndex.stats,
+        null,
+        2
+      )})`
+    );
   }
 })().catch((e: any) => {
   console.error(
