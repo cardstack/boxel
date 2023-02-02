@@ -4,6 +4,7 @@ import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
 import "@cardstack/runtime-common/externals-global";
+import util from 'util';
 
 export interface RealmConfig {
   realmURL: string;
@@ -27,9 +28,29 @@ export function createRealmServer(realms: Realm[]) {
         throw new Error(`bug: missing URL in request`);
       }
 
-      let realm = realms.find((r) =>
-        r.paths.inRealm(Loader.reverseResolution(new URL(`http://${req.headers.host}${req.url}`).toString()))
-      );
+      console.log(util.inspect(req));
+
+      console.log(`looking for realm: ${req.url}`);
+      let realm = realms.find((r) => {
+        let realmPathname = new URL(r.url).pathname;
+        console.log(`realm url: ${r.url}`);
+        console.log(`realm pathname: ${realmPathname}`)
+        let matches = req.url!.startsWith(new URL(r.url).pathname);
+        console.log(`matches? ${matches}`);
+
+        let reconstructedUrl = new URL(`http://${req.headers.host}${req.url}`);
+        console.log(`reconstructedUrl: ${reconstructedUrl}`);
+        let inRealm = r.paths.inRealm(reconstructedUrl);
+        console.log(`inrealm? ${inRealm}`);
+
+        // let reversedResolutionPaths = new RealmPaths(Loader.reverseResolution(r.paths.url));
+        // let inReversedRealm = reversedResolutionPaths.inRealm(reconstructedUrl);
+        // console.log(`in reversed realm? ${inReversedRealm}`);
+
+        let inRealmReversed = r.paths.inRealm(Loader.reverseResolution(reconstructedUrl.toString()));
+        console.log(`in realm reversed? ${inRealmReversed}`);
+        return inRealmReversed;
+    });
 
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
@@ -41,6 +62,7 @@ export function createRealmServer(realms: Realm[]) {
       }
 
       if (!realm) {
+        console.log('404!');
         res.statusCode = 404;
         res.statusMessage = "Not Found";
         res.end();
