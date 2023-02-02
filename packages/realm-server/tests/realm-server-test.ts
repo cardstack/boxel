@@ -418,3 +418,79 @@ module("Realm Server", function (hooks) {
     assert.deepEqual(testCard.ref, ref, "card data is correct");
   });
 });
+
+module("Realm Server serving from root", function (hooks) {
+  let server: Server;
+  let request: SuperTest<Test>;
+  let dir: DirResult;
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
+
+  hooks.beforeEach(async function () {
+    Loader.destroy();
+    shimExternals();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4201/")
+    );
+    dir = dirSync();
+    copySync(join(__dirname, "cards"), dir.name);
+
+    let testRealm = createRealm(dir.name, undefined, testRealmHref);
+    await testRealm.ready;
+    server = createRealmServer([testRealm]);
+    server.listen(testRealmURL.port);
+    request = supertest(server);
+  });
+
+  hooks.afterEach(function () {
+    server.close();
+  });
+
+  test("serves a directory GET request", async function (assert) {
+    let response = await request
+      .get("/")
+      .set("Accept", "application/vnd.api+json");
+
+    assert.strictEqual(response.status, 200, "HTTP 200 status");
+    let json = response.body;
+    assert.deepEqual(
+      json,
+      {
+        data: {
+          id: `${testRealmHref}/`,
+          type: "directory",
+          relationships: {
+            "bar.txt": {
+              links: {
+                related: `${testRealmHref}/bar.txt`,
+              },
+              meta: {
+                kind: "file",
+              },
+            },
+            "foo.txt": {
+              links: {
+                related: `${testRealmHref}/foo.txt`,
+              },
+              meta: {
+                kind: "file",
+              },
+            },
+            "subdir/": {
+              links: {
+                related: `${testRealmHref}/subdir/`,
+              },
+              meta: {
+                kind: "directory",
+              },
+            },
+          },
+        },
+      },
+      "the directory response is correct"
+    );
+  });
+});
