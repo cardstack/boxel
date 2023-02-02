@@ -278,6 +278,7 @@ module('Integration | search-index', function (hooks) {
         attributes: {
           title: 'Person Card',
           description: 'Catalog entry for Person card',
+          moduleHref: `${testRealmURL}person`,
           isPrimitive: false,
           ref: {
             module: `./person`,

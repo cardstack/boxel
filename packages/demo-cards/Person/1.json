@@ -10,13 +10,13 @@
     "relationships": {
       "pet": {
         "links": {
-          "self": "/Pet/2"
+          "self": "../Pet/2"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "/person",
+        "module": "../person",
         "name": "Person"
       }
     }

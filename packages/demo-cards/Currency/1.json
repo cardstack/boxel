@@ -9,7 +9,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "/asset",
+        "module": "../asset",
         "name": "Currency"
       }
     }
