@@ -213,7 +213,10 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
+  async handle(
+    request: MaybeLocalRequest,
+    connections: Response[]
+  ): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
     let accept = request.headers.get("Accept");
     if (url.search.length > 0) {
@@ -233,11 +236,11 @@ export class Realm {
       if (!this.searchIndex) {
         return systemError("search index is not available");
       }
-      return this.#jsonAPIRouter.handle(request);
+      return this.#jsonAPIRouter.handle(request, connections);
     } else if (
       request.headers.get("Accept")?.includes("application/vnd.card+source")
     ) {
-      return this.#cardSourceRouter.handle(request);
+      return this.#cardSourceRouter.handle(request, connections);
     }
 
     let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
@@ -674,10 +677,12 @@ export class Realm {
     return data;
   }
 
-  // TODO: string type is a placeholder until a we have a better key
-  private listeningClients = new Map<string, WritableStream>();
+  private listeningClients = new Map<Response, WritableStream>();
 
-  private async subscribe(req: Request): Promise<Response> {
+  private async subscribe(
+    _req: Request,
+    connections: Response[]
+  ): Promise<Response> {
     let headers = {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -691,18 +696,20 @@ export class Realm {
       body = readable;
     }
 
-    let res = createResponse(body, {
+    let response = createResponse(body, {
       status: 200,
       headers,
     }) as ResponseWithNodeStream;
 
     if (isNode) {
-      res.nodeStream = readable;
+      response.nodeStream = readable;
     }
 
-    this.listeningClients.set(req.url, writable);
+    let clients = new Map<Response, WritableStream>();
+    connections.map((c) => clients.set(c, writable));
+    this.listeningClients = clients;
 
-    return res;
+    return response;
   }
 
   private async sendUpdateMessages(): Promise<void> {

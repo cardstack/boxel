@@ -13,6 +13,8 @@ export interface RealmConfig {
 export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
+  let connections: http.ServerResponse[] = [];
+  let responses: Response[] = [];
   let server = http.createServer(async (req, res) => {
     res.on('finish', () => {
       console.log(`${req.method} ${req.url}: ${res.statusCode}`);
@@ -54,6 +56,23 @@ export function createRealmServer(realms: Realm[]) {
           ? realm.paths.directoryURL(local)
           : realm.paths.fileURL(local);
 
+      if (req.headers["accept"] === "text/event-stream") {
+        connections.push(res);
+        res.on("close", async () => {
+          connections.splice(connections.indexOf(res), 1);
+          let reqBody = await nodeStreamToText(req);
+          let request = new Request(url, {
+            method: req.method,
+            headers: req.headers as { [name: string]: string },
+            ...(reqBody ? { body: reqBody } : {}),
+          });
+          responses = connections.map(() => new Response());
+          realm?.handle(request, responses);
+          return;
+        });
+        responses = connections.map(() => new Response());
+      }
+
       let reqBody = await nodeStreamToText(req);
       let request = new Request(url.href, {
         method: req.method,
@@ -61,7 +80,7 @@ export function createRealmServer(realms: Realm[]) {
         ...(reqBody ? { body: reqBody } : {}),
       });
       let { status, statusText, headers, body, nodeStream } =
-        await realm.handle(request);
+        await realm.handle(request, responses);
       res.statusCode = status;
       res.statusMessage = statusText;
       for (let [header, value] of headers.entries()) {
