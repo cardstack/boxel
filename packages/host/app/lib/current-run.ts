@@ -420,6 +420,7 @@ export class CurrentRun {
       html = await this.#renderCard(instanceURL, this.#staticResponses);
     } catch (err: any) {
       uncaughtError = err;
+      console.error(`error during indexing`, err);
     }
     // if we already encountered an uncaught error then no need to deal with this
     if (!uncaughtError && cardType) {
