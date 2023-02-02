@@ -137,7 +137,7 @@ class MessageStream {
     if (this.pendingRead) {
       let { controller, deferred } = this.pendingRead;
       this.pendingRead = undefined;
-      controller.enqueue(chunk);
+      controller.enqueue(Uint8Array.from(chunk, (x) => x.charCodeAt(0)));
       deferred.fulfill();
     } else {
       this.pendingWrite = { chunk, deferred: new Deferred() };
