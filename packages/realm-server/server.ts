@@ -1,5 +1,5 @@
 import http, { IncomingMessage, ServerResponse } from "http";
-import { Realm } from "@cardstack/runtime-common";
+import { Loader, Realm } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
@@ -28,7 +28,7 @@ export function createRealmServer(realms: Realm[]) {
       }
 
       let realm = realms.find((r) =>
-        req.url!.startsWith(new URL(r.url).pathname)
+        r.paths.inRealm(Loader.reverseResolution(new URL(`http://${req.headers.host}${req.url}`).toString()))
       );
 
       // Respond to AWS ELB health check
