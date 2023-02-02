@@ -74,8 +74,7 @@ runs:
       run: pnpm install --frozen-lockfile
     - name: Build host dist/ for fastboot
       shell: bash
-      # TODO revert this back to a production build
-      run: pnpm build
+      run: pnpm build:production
       working-directory: packages/host
 
     - name: Deploy ${{ inputs.app_name }}
