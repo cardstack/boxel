@@ -110,7 +110,7 @@ export interface RealmAdapter {
   createStreamingResponse(
     req: Request,
     init: ResponseInit,
-    cleanup: () => void,
+    cleanup: () => void
   ): {
     response: Response;
     writable: WritableStream;
@@ -691,15 +691,18 @@ export class Realm {
       Connection: "keep-alive",
     };
 
-    let { response, writable } = this.#adapter.createStreamingResponse(req, {
-      status: 200,
-      headers,
+    let { response, writable } = this.#adapter.createStreamingResponse(
+      req,
+      {
+        status: 200,
+        headers,
+      },
       () => {
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable
         );
       }
-    });
+    );
 
     this.listeningClients.push(writable);
 
