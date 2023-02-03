@@ -30,8 +30,8 @@ runs:
           echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/boxel-host" >> $GITHUB_ENV
           echo "AWS_S3_BUCKET=cardstack-boxel-host-production" >> $GITHUB_ENV
           echo "AWS_CLOUDFRONT_DISTRIBUTION=E2DDEHLJXF5LQ8" >> $GITHUB_ENV
-          echo "DEMO_REALM_URL=https://realm-demo.cardstack.com/" >> $GITHUB_ENV
-          echo "RESOLVED_BASE_REALM_URL=https://realm-base.cardstack.com/" >> $GITHUB_ENV
+          echo "DEMO_REALM_URL=https://realm-demo.cardstack.com/demo/" >> $GITHUB_ENV
+          echo "RESOLVED_BASE_REALM_URL=https://realm-base.cardstack.com/base/" >> $GITHUB_ENV
         elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
           echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
           echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-host" >> $GITHUB_ENV
