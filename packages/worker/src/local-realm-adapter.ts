@@ -102,11 +102,21 @@ export class LocalRealmAdapter implements RealmAdapter {
     return dirHandle.removeEntry(fileName!);
   }
 
-  createStreamingResponse(_request: Request, responseInit: ResponseInit) {
+  createStreamingResponse(
+    _request: Request,
+    responseInit: ResponseInit,
+    cleanup: () => void
+  ): { response: Response; writable: WritableStream } {
     let s = new MessageStream();
     let response = createResponse(s.readable, responseInit);
+    setupCloseHandler(s.readable, cleanup);
     return { response, writable: s.writable };
   }
+}
+
+const closeHandlers: WeakMap<ReadableStream, () => void> = new WeakMap();
+export function setupCloseHandler(stream: ReadableStream, fn: () => void) {
+  closeHandlers.set(stream, fn);
 }
 
 class MessageStream {
@@ -144,7 +154,15 @@ class MessageStream {
     if (this.pendingRead) {
       let { controller, deferred } = this.pendingRead;
       this.pendingRead = undefined;
-      controller.enqueue(Uint8Array.from(chunk, (x) => x.charCodeAt(0)));
+      try {
+        controller.enqueue(Uint8Array.from(chunk, (x) => x.charCodeAt(0)));
+      } catch (err) {
+        let cleanup = closeHandlers.get(this.readable);
+        if (!cleanup) {
+          throw new Error('no cleanup function found');
+        }
+        cleanup();
+      }
       deferred.fulfill();
     } else {
       this.pendingWrite = { chunk, deferred: new Deferred() };

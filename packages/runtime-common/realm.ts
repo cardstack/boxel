@@ -708,7 +708,11 @@ export class Realm {
 
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
-    waitForClose(writable).finally();
+    waitForClose(writable).finally(/* () => {
+      this.listeningClients = this.listeningClients.filter(
+        (w) => w !== writable
+      );
+    }*/);
 
     return response;
   }
