@@ -6,7 +6,7 @@ import {
 } from "./error";
 import { RealmPaths } from "./paths";
 
-type Handler = (request: Request, connections: Response[]) => Promise<Response>;
+type Handler = (request: Request) => Promise<Response>;
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
 function isHTTPMethod(method: any): method is Method {
@@ -49,7 +49,7 @@ export class Router {
     routes.set(path, handler);
   }
 
-  async handle(request: Request, connections: Response[]): Promise<Response> {
+  async handle(request: Request): Promise<Response> {
     if (!isHTTPMethod(request.method)) {
       return methodNotAllowed(request);
     }
@@ -72,7 +72,7 @@ export class Router {
       let routeRegExp = new RegExp(`^${route.replace("/", "\\/")}$`);
       if (routeRegExp.test(requestPath)) {
         try {
-          return await handler(request, connections);
+          return await handler(request);
         } catch (err) {
           if (err instanceof CardError) {
             return responseWithError(err);

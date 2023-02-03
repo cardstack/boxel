@@ -1,5 +1,12 @@
-import { RealmAdapter, Kind, FileRef } from "@cardstack/runtime-common";
+import {
+  RealmAdapter,
+  Kind,
+  FileRef,
+  createResponse,
+  type ResponseWithNodeStream,
+} from "@cardstack/runtime-common";
 import { LocalPath } from "@cardstack/runtime-common/paths";
+import { ServerResponse } from "http";
 
 import {
   readdirSync,
@@ -85,13 +92,26 @@ export class NodeAdapter implements RealmAdapter {
     removeSync(absolutePath);
   }
 
-  createDuplexStream() {
+  createStreamingResponse(
+    request: Request,
+    responseInit: ResponseInit,
+    cleanup: () => void
+  ) {
     let s = new MessageStream();
-    return {
-      readable: s as unknown as ReadableStream,
-      writable: s as unknown as WritableStream,
-    };
+    let response = createResponse(null, responseInit) as ResponseWithNodeStream;
+    response.nodeStream = s;
+    onClose(request, cleanup);
+    return { response, writable: s as unknown as WritableStream };
   }
+}
+
+export function onClose(request: Request, fn: () => void) {
+  closeHandlers.get(request)!.on("close", fn);
+}
+
+const closeHandlers: WeakMap<Request, ServerResponse> = new WeakMap();
+export function setupCloseHandler(res: ServerResponse, request: Request) {
+  closeHandlers.set(request, res);
 }
 
 class MessageStream extends Duplex {

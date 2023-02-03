@@ -72,10 +72,7 @@ export interface MaybeLocalRequest extends Request {
 
 export class Loader {
   private modules = new Map<string, Module>();
-  private urlHandlers = new Map<
-    string,
-    (req: Request, connections: Response[]) => Promise<Response>
-  >();
+  private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
   private urlMappings = new Map<string, string>();
   private moduleShims = new Map<string, Record<string, any>>();
   private identities = new WeakMap<
@@ -162,16 +159,13 @@ export class Loader {
 
   static registerURLHandler(
     url: URL,
-    handler: (req: Request, connections: Response[]) => Promise<Response>
+    handler: (req: Request) => Promise<Response>
   ) {
     let loader = Loader.getLoader();
     loader.registerURLHandler(url, handler);
   }
 
-  registerURLHandler(
-    url: URL,
-    handler: (req: Request, connections: Response[]) => Promise<Response>
-  ) {
+  registerURLHandler(url: URL, handler: (req: Request) => Promise<Response>) {
     this.urlHandlers.set(url.href, handler);
   }
 
@@ -300,8 +294,7 @@ export class Loader {
 
   async fetch(
     urlOrRequest: string | URL | Request,
-    init?: RequestInit,
-    connections: Response[] = []
+    init?: RequestInit
   ): Promise<Response> {
     let requestURL = new URL(
       urlOrRequest instanceof Request
@@ -316,7 +309,7 @@ export class Loader {
         if (path.inRealm(requestURL)) {
           let request = urlOrRequest as MaybeLocalRequest;
           request.isLocal = true;
-          return await handle(request, connections);
+          return await handle(request);
         }
       }
       let request = new Request(this.resolve(requestURL).href, {
@@ -340,7 +333,7 @@ export class Loader {
             init
           ) as MaybeLocalRequest;
           request.isLocal = true;
-          return await handle(request, connections);
+          return await handle(request);
         }
       }
       return getNativeFetch()(this.resolve(unresolvedURL).href, init);

@@ -33,6 +33,7 @@ import {
   readFileAsText,
   getFileWithFallbacks,
   writeToStream,
+  waitForClose,
 } from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
@@ -65,7 +66,7 @@ export interface FileRef {
   lastModified: number;
 }
 
-interface ResponseWithNodeStream extends Response {
+export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
 
@@ -106,7 +107,14 @@ export interface RealmAdapter {
 
   remove(path: LocalPath): Promise<void>;
 
-  createDuplexStream(): { readable: ReadableStream; writable: WritableStream };
+  createStreamingResponse(
+    req: Request,
+    init: ResponseInit,
+    cleanup: () => void,
+  ): {
+    response: Response;
+    writable: WritableStream;
+  };
 }
 
 interface Options {
@@ -213,10 +221,7 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async handle(
-    request: MaybeLocalRequest,
-    connections: Response[]
-  ): Promise<ResponseWithNodeStream> {
+  async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
     let accept = request.headers.get("Accept");
     if (url.search.length > 0) {
@@ -236,11 +241,11 @@ export class Realm {
       if (!this.searchIndex) {
         return systemError("search index is not available");
       }
-      return this.#jsonAPIRouter.handle(request, connections);
+      return this.#jsonAPIRouter.handle(request);
     } else if (
       request.headers.get("Accept")?.includes("application/vnd.card+source")
     ) {
-      return this.#cardSourceRouter.handle(request, connections);
+      return this.#cardSourceRouter.handle(request);
     }
 
     let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
@@ -677,45 +682,38 @@ export class Realm {
     return data;
   }
 
-  private listeningClients = new Map<Response, WritableStream>();
+  private listeningClients: WritableStream[] = [];
 
-  private async subscribe(
-    _req: Request,
-    connections: Response[]
-  ): Promise<Response> {
+  private async subscribe(req: Request): Promise<Response> {
     let headers = {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     };
 
-    let body = null;
-    let { readable, writable } = this.#adapter.createDuplexStream();
-
-    if (!isNode) {
-      body = readable;
-    }
-
-    let response = createResponse(body, {
+    let { response, writable } = this.#adapter.createStreamingResponse(req, {
       status: 200,
       headers,
-    }) as ResponseWithNodeStream;
+      () => {
+        this.listeningClients = this.listeningClients.filter(
+          (w) => w !== writable
+        );
+      }
+    });
 
-    if (isNode) {
-      response.nodeStream = readable;
-    }
+    this.listeningClients.push(writable);
 
-    let clients = new Map<Response, WritableStream>();
-    connections.map((c) => clients.set(c, writable));
-    this.listeningClients = clients;
+    // TODO: We may need to store something else here to do cleanup to keep
+    // tests consistent
+    waitForClose(writable).finally();
 
     return response;
   }
 
   private async sendUpdateMessages(): Promise<void> {
-    console.log(`sending updates to ${this.listeningClients.size} clients`);
+    console.log(`sending updates to ${this.listeningClients.length} clients`);
     await Promise.all(
-      [...this.listeningClients.values()].map((client) =>
+      this.listeningClients.map((client) =>
         writeToStream(client, "data: new server event\n\n")
       )
     );

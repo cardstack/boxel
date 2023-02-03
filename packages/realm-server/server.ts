@@ -3,6 +3,7 @@ import { Realm } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
+import { setupCloseHandler } from "./node-realm";
 import "@cardstack/runtime-common/externals-global";
 
 export interface RealmConfig {
@@ -13,10 +14,8 @@ export interface RealmConfig {
 export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
-  let connections: http.ServerResponse[] = [];
-  let responses: Response[] = [];
   let server = http.createServer(async (req, res) => {
-    res.on('finish', () => {
+    res.on("finish", () => {
       console.log(`${req.method} ${req.url}: ${res.statusCode}`);
     });
 
@@ -36,8 +35,8 @@ export function createRealmServer(realms: Realm[]) {
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
-        res.statusMessage = 'OK';
-        res.write('OK');
+        res.statusMessage = "OK";
+        res.write("OK");
         res.end();
         return;
       }
@@ -56,31 +55,17 @@ export function createRealmServer(realms: Realm[]) {
           ? realm.paths.directoryURL(local)
           : realm.paths.fileURL(local);
 
-      if (req.headers["accept"] === "text/event-stream") {
-        connections.push(res);
-        res.on("close", async () => {
-          connections.splice(connections.indexOf(res), 1);
-          let reqBody = await nodeStreamToText(req);
-          let request = new Request(url, {
-            method: req.method,
-            headers: req.headers as { [name: string]: string },
-            ...(reqBody ? { body: reqBody } : {}),
-          });
-          responses = connections.map(() => new Response());
-          realm?.handle(request, responses);
-          return;
-        });
-        responses = connections.map(() => new Response());
-      }
-
       let reqBody = await nodeStreamToText(req);
       let request = new Request(url.href, {
         method: req.method,
         headers: req.headers as { [name: string]: string },
         ...(reqBody ? { body: reqBody } : {}),
       });
+
+      setupCloseHandler(res, request);
+
       let { status, statusText, headers, body, nodeStream } =
-        await realm.handle(request, responses);
+        await realm.handle(request);
       res.statusCode = status;
       res.statusMessage = statusText;
       for (let [header, value] of headers.entries()) {
@@ -165,7 +150,9 @@ function detectRealmCollision(realms: Realm[]): void {
 }
 
 function requestIsHealthCheck(req: http.IncomingMessage) {
-  return req.url === '/' &&
-    req.method === 'GET' &&
-    req.headers["user-agent"]?.startsWith('ELB-HealthChecker');
+  return (
+    req.url === "/" &&
+    req.method === "GET" &&
+    req.headers["user-agent"]?.startsWith("ELB-HealthChecker")
+  );
 }

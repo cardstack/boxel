@@ -55,7 +55,13 @@ export const isNode =
 
 export { Realm } from "./realm";
 export { Loader } from "./loader";
-export type { Kind, RealmAdapter, FileRef, FastBootInstance } from "./realm";
+export type {
+  Kind,
+  RealmAdapter,
+  FileRef,
+  FastBootInstance,
+  ResponseWithNodeStream,
+} from "./realm";
 
 import type { Saved } from "./card-document";
 

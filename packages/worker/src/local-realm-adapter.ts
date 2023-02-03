@@ -1,4 +1,9 @@
-import { RealmAdapter, Kind, FileRef } from '@cardstack/runtime-common';
+import {
+  RealmAdapter,
+  Kind,
+  FileRef,
+  createResponse,
+} from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 
@@ -97,8 +102,10 @@ export class LocalRealmAdapter implements RealmAdapter {
     return dirHandle.removeEntry(fileName!);
   }
 
-  createDuplexStream() {
-    return new MessageStream();
+  createStreamingResponse(_request: Request, responseInit: ResponseInit) {
+    let s = new MessageStream();
+    let response = createResponse(s.readable, responseInit);
+    return { response, writable: s.writable };
   }
 }
 
