@@ -5,7 +5,7 @@
       "title": "InvoicePacket from /invoice-packet",
       "description": "Catalog entry for InvoicePacket from /invoice-packet",
       "ref": {
-        "module": "/invoice-packet",
+        "module": "../invoice-packet",
         "name": "InvoicePacket"
       },
       "demo": {
@@ -32,7 +32,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "/invoice-packet",
+            "module": "../invoice-packet",
             "name": "InvoicePacket"
           }
         }

@@ -15,8 +15,18 @@ export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
+<<<<<<< HEAD
     res.on("finish", () => {
       console.log(`${req.method} ${req.url}: ${res.statusCode}`);
+||||||| 6aea3b57
+    res.on('finish', () => {
+      console.log(`${req.method} ${req.url}: ${res.statusCode}`);;
+=======
+    res.on("finish", () => {
+      console.log(
+        `${req.method} ${req.url}: ${res.statusCode} (user agent: ${req.headers["user-agent"]})`
+      );
+>>>>>>> origin/main
     });
 
     let isStreaming = false;

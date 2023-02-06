@@ -41,10 +41,16 @@ export default class CardService extends Service {
     return this.apiModule.module as typeof CardAPI;
   }
 
+  get demoRealmAvailable(): boolean {
+    return demoRealmURL != undefined && demoRealmURL.trim().length !== 0;
+  }
+
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
   get defaultURL(): URL {
-    return demoRealmURL ? new URL(demoRealmURL) : this.localRealm.url;
+    return this.demoRealmAvailable
+      ? new URL(demoRealmURL)
+      : this.localRealm.url;
   }
 
   private async fetchJSON(
@@ -140,7 +146,8 @@ export default class CardService extends Service {
     }
     return await Promise.all(
       json.data.map(
-        async (doc) => await this.createFromSerialized(doc, json, realmURL)
+        async (doc) =>
+          await this.createFromSerialized(doc, json, new URL(doc.id))
       )
     );
   }

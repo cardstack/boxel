@@ -9,9 +9,6 @@ import type CardService from '../services/card-service';
 import type MessageService from '../services/message-service';
 import { RealmPaths } from '@cardstack/runtime-common';
 import type { Format } from 'https://cardstack.com/base/card-api';
-import ENV from '@cardstack/host/config/environment';
-
-const { demoRealmURL } = ENV;
 
 interface Model {
   path: string | undefined;
@@ -57,13 +54,8 @@ export default class Index extends Route<Model> {
     }
 
     await this.localRealm.startedUp;
-    if (!this.localRealm.isAvailable && !demoRealmURL) {
-      return {
-        path,
-        openFile,
-        openDirs,
-        isFastBoot,
-      };
+    if (!this.localRealm.isAvailable && !this.cardService.demoRealmAvailable) {
+      return { path, openFile, openDirs, isFastBoot };
     }
 
     let realmPath = new RealmPaths(this.cardService.defaultURL);

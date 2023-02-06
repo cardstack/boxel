@@ -1,7 +1,7 @@
 import { Resource } from 'ember-resources/core';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import type { Relationship } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
@@ -23,11 +23,13 @@ export interface Entry {
 export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
   private url: string | undefined;
+  private polling = false;
   private declare realmPath: RealmPaths;
 
   @service declare loaderService: LoaderService;
 
   modify(_positional: never[], named: Args['named']) {
+    this.polling = named.polling !== 'off';
     if (named.url) {
       if (!named.url.endsWith('/')) {
         throw new Error(`A directory URL must end with a "/"`);
@@ -42,15 +44,18 @@ export class DirectoryResource extends Resource<Args> {
     if (!this.url) {
       return;
     }
-    let entries = await this.getEntries(this.realmPath, this.url);
-    entries.sort((a, b) => {
-      // need to re-insert the leading and trailing /'s in order to get a sort
-      // that can organize the paths correctly
-      let pathA = `/${a.path}${a.kind === 'directory' ? '/' : ''}`;
-      let pathB = `/${b.path}${b.kind === 'directory' ? '/' : ''}`;
-      return pathA.localeCompare(pathB);
-    });
-    this.entries = entries;
+    do {
+      let entries = await this.getEntries(this.realmPath, this.url);
+      entries.sort((a, b) => {
+        // need to re-insert the leading and trailing /'s in order to get a sort
+        // that can organize the paths correctly
+        let pathA = `/${a.path}${a.kind === 'directory' ? '/' : ''}`;
+        let pathB = `/${b.path}${b.kind === 'directory' ? '/' : ''}`;
+        return pathA.localeCompare(pathB);
+      });
+      this.entries = entries;
+      await timeout(1000);
+    } while (this.polling);
   }
 
   private async getEntries(

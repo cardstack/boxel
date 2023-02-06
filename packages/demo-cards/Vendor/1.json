@@ -83,12 +83,12 @@
     "relationships": {
       "preferredPaymentMethod.cryptoPayment.chain": {
         "links": {
-          "self": "/Chain/1"
+          "self": "../Chain/1"
         }
       },
       "preferredPaymentMethod.cryptoPayment.token": {
         "links": {
-          "self": "/Token/1"
+          "self": "../Token/1"
         }
       },
       "preferredPaymentMethod.wireTransfer.currency": {
@@ -108,17 +108,17 @@
       },
       "alternatePaymentMethod.0.wireTransfer.currency": {
         "links": {
-          "self": "/Currency/1"
+          "self": "../Currency/1"
         }
       },
       "alternatePaymentMethod.1.cryptoPayment.chain": {
         "links": {
-          "self": "/Chain/1"
+          "self": "../Chain/1"
         }
       },
       "alternatePaymentMethod.1.cryptoPayment.token": {
         "links": {
-          "self": "/Token/2"
+          "self": "../Token/2"
         }
       },
       "alternatePaymentMethod.1.wireTransfer.currency": {
@@ -128,12 +128,12 @@
       },
       "alternatePaymentMethod.2.cryptoPayment.chain": {
         "links": {
-          "self": "/Chain/2"
+          "self": "../Chain/2"
         }
       },
       "alternatePaymentMethod.2.cryptoPayment.token": {
         "links": {
-          "self": "/Token/3"
+          "self": "../Token/3"
         }
       },
       "alternatePaymentMethod.2.wireTransfer.currency": {
@@ -144,7 +144,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "/vendor",
+        "module": "../vendor",
         "name": "Vendor"
       }
     }
