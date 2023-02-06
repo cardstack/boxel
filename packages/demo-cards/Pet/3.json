@@ -10,7 +10,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "/pet",
+        "module": "../pet",
         "name": "Pet"
       }
     }

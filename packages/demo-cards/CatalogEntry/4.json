@@ -5,7 +5,7 @@
       "title": "Token from /asset",
       "description": "Catalog entry for Token from /asset",
       "ref": {
-        "module": "/asset",
+        "module": "../asset",
         "name": "Token"
       },
       "demo": {
@@ -19,7 +19,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "/asset",
+            "module": "../asset",
             "name": "Token"
           }
         }

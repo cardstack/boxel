@@ -146,7 +146,8 @@ export default class CardService extends Service {
     }
     return await Promise.all(
       json.data.map(
-        async (doc) => await this.createFromSerialized(doc, json, realmURL)
+        async (doc) =>
+          await this.createFromSerialized(doc, json, new URL(doc.id))
       )
     );
   }
