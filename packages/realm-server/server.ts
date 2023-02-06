@@ -45,7 +45,6 @@ export function createRealmServer(realms: Realm[]) {
       }
 
       if (!realm) {
-        console.log('404!');
         res.statusCode = 404;
         res.statusMessage = "Not Found";
         res.end();
