@@ -152,14 +152,6 @@ export class Realm {
       runnerOptsMgr
     );
 
-    setInterval(async () => {
-      try {
-        await this.sendUpdateMessages();
-      } catch (err) {
-        console.log("error while sendUpdateMessages", err);
-      }
-    }, 1000);
-
     this.#jsonAPIRouter = new Router(new URL(url))
       .post("/", this.createCard.bind(this))
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
@@ -701,27 +693,24 @@ export class Realm {
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable
         );
+        this.sendUpdateMessages("clean up called");
       }
     );
 
     this.listeningClients.push(writable);
-
+    this.sendUpdateMessages("updated clients");
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
-    waitForClose(writable).finally(/* () => {
-      this.listeningClients = this.listeningClients.filter(
-        (w) => w !== writable
-      );
-    }*/);
+    waitForClose(writable);
 
     return response;
   }
 
-  private async sendUpdateMessages(): Promise<void> {
+  private async sendUpdateMessages(message: string): Promise<void> {
     console.log(`sending updates to ${this.listeningClients.length} clients`);
     await Promise.all(
       this.listeningClients.map((client) =>
-        writeToStream(client, "data: new server event\n\n")
+        writeToStream(client, `data: ${message}\n\n`)
       )
     );
   }
