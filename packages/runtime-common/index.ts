@@ -84,7 +84,6 @@ export {
 
 import type { Card } from "https://cardstack.com/base/card-api";
 
-// TODO it's time to remove this
 export const maxLinkDepth = 5;
 
 export interface CardChooser {

@@ -197,11 +197,6 @@ export class SearchIndex {
     return this.#index;
   }
 
-  // TODO remove this
-  get index() {
-    return this.#index;
-  }
-
   async run() {
     await this.setupRunner(async () => {
       if (!this.#fromScratch) {
