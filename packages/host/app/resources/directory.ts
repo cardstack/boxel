@@ -11,6 +11,7 @@ interface Args {
   named: {
     url: string | undefined;
     openDirs: string | undefined;
+    polling: 'off' | undefined;
   };
 }
 
@@ -90,9 +91,10 @@ export class DirectoryResource extends Resource<Args> {
 export function directory(
   parent: object,
   url: () => string | undefined,
-  openDirs: () => string | undefined
+  openDirs: () => string | undefined,
+  polling: () => 'off' | undefined
 ) {
   return DirectoryResource.from(parent, () => ({
-    named: { url: url(), openDirs: openDirs() },
+    named: { url: url(), openDirs: openDirs(), polling: polling() },
   })) as DirectoryResource;
 }

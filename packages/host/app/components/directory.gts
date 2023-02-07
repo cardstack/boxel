@@ -15,6 +15,7 @@ import { cached } from '@glimmer/tracking';
 interface Args {
   Args: {
     openDirs: string | undefined;
+    polling: 'off' | undefined;
     url: string;
     path: string | undefined;
   }
@@ -37,6 +38,7 @@ export default class Directory extends Component<Args> {
               <Directory
                 @path={{@path}}
                 @openDirs={{@openDirs}}
+                @polling={{@polling}}
                 @url="{{@url}}{{entry.path}}/"
               />
             {{/if}}
@@ -47,7 +49,7 @@ export default class Directory extends Component<Args> {
   </template>
 
 
-  listing = directory(this, () => this.args.url, () => this.args.openDirs);
+  listing = directory(this, () => this.args.url, () => this.args.openDirs, () => this.args.polling);
   @service declare router: RouterService;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
