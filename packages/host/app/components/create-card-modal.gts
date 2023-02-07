@@ -81,7 +81,7 @@ export default class CreateCardModal extends Component {
 
   @action save(card?: Card): void {
     if (this.currentRequest) {
-      this.currentRequest.deferred.resolve(card);
+      this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;
     }
   }
