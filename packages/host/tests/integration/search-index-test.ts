@@ -77,20 +77,6 @@ module('Integration | search-index', function (hooks) {
 
   test('can recover from indexing a card with a broken link', async function (assert) {
     let adapter = new TestRealmAdapter({
-      // 'Person/owner.json': {
-      //   data: {
-      //     id: `${testRealmURL}Person/owner`,
-      //     attributes: {
-      //       firstName: 'Hassan',
-      //     },
-      //     meta: {
-      //       adoptsFrom: {
-      //         module: 'http://localhost:4202/test/person',
-      //         name: 'Person',
-      //       },
-      //     },
-      //   },
-      // },
       'Pet/mango.json': {
         data: {
           id: `${testRealmURL}Pet/mango`,
