@@ -53,7 +53,7 @@ export function createRealmServer(realms: Realm[]) {
 
       let reqBody = await nodeStreamToText(req);
 
-      let reversedResolution = Loader.reverseResolution(fullRequestUrl.toString());
+      let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
       let request = new Request(reversedResolution.href, {
         method: req.method,
