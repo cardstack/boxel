@@ -1,13 +1,10 @@
 import Service, { service } from '@ember/service';
 import { Deferred } from '@cardstack/runtime-common/deferred';
-import { isCardError } from '@cardstack/runtime-common/error';
-import {
-  isNotReadyError,
-  type NotReady,
-} from '@cardstack/runtime-common/not-ready';
+import { isCardError, CardError } from '@cardstack/runtime-common/error';
+import { isNotReadyError, NotReady } from '@cardstack/runtime-common/not-ready';
 import {
   isNotLoadedError,
-  type NotLoaded,
+  NotLoaded,
 } from '@cardstack/runtime-common/not-loaded';
 import Serializer from '@simple-dom/serializer';
 import voidMap from '@simple-dom/void-map';
@@ -41,6 +38,7 @@ interface RenderCardParams {
 }
 export type RenderCard = (params: RenderCardParams) => Promise<string>;
 
+const maxRenderThreshold = 10000;
 export default class RenderService extends Service {
   // @ts-expect-error the types for this invocation of @service() don't work
   @service('-document') document: SimpleDocument;
@@ -63,11 +61,10 @@ export default class RenderService extends Service {
     });
 
     let element = getIsolatedRenderElement(this.document);
-    // this loop looks really similar to the API's recompute's
-    // _loadModel(). The primary difference is that we are letting the render
-    // drive the field load as opposed to the card schema
+    // TODO: consider consolidating the NotReady and NotLoaded objects into a single object
     let notReady: NotReady | undefined;
     let notLoaded: NotLoaded | undefined;
+    let tries = 0;
     do {
       notReady = undefined;
       notLoaded = undefined;
@@ -81,13 +78,20 @@ export default class RenderService extends Service {
           isNotLoadedError(e)
         ) as NotLoaded | undefined;
         if (isCardError(err) && (notReady || notLoaded)) {
-          card = notReady?.model ?? card; // a nested card may be the card that is not ready
+          let errorInstance = notReady?.instance ?? notLoaded?.instance;
+          if (!errorInstance) {
+            throw new Error(
+              `bug: could not determine NotLoaded/NotReady card instance`
+            );
+          }
           let fieldName = notReady?.fieldName ?? notLoaded?.fieldName;
           if (!fieldName) {
-            throw new Error(`bug: should never get here`);
+            throw new Error(
+              `bug: could not determine NotLoaded/NotReady field`
+            );
           }
           await this.resolveField({
-            card,
+            card: errorInstance,
             fieldName,
             identityContext,
             visit,
@@ -99,7 +103,16 @@ export default class RenderService extends Service {
       }
 
       // TODO make a test that shows we throw for fields that can't be loaded (broken links)
-    } while (notLoaded || notReady);
+    } while ((notLoaded || notReady) && tries++ <= maxRenderThreshold);
+
+    // TODO--probably need a better way to determine if we are trapped in a cycle
+    if (tries > maxRenderThreshold) {
+      let error = new CardError(
+        `detected a cycle trying to render card ${card.constructor.name} (id: ${card.id})`
+      );
+      error.additionalErrors = [(notLoaded ?? notReady)!];
+      throw error;
+    }
 
     let serializer = new Serializer(voidMap);
     let html = serializer.serialize(element);

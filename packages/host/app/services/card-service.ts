@@ -73,7 +73,12 @@ export default class CardService extends Service {
     let card = await this.api.createFromSerialized(resource, doc, relativeTo, {
       loader: this.loaderService.loader,
     });
-    await this.api.recompute(card);
+    // it's important that we absorb the field async here so that glimmer won't
+    // encounter NotReady errors, since we don't have the luxury of the indexer
+    // being able to inform us of which fields are used or not at this point.
+    // (this is something that the card compiler could optimize for us in the
+    // future)
+    await this.api.recompute(card, { recomputeAllFields: true });
     return card;
   }
 

@@ -17,7 +17,7 @@ export async function renderComponent(C: ComponentLike) {
 
 export async function renderCard(card: Card, format: Format) {
   let api = await cardApi();
-  await api.recompute(card);
+  await api.recompute(card, { recomputeAllFields: true });
   await renderComponent(api.getComponent(card, format));
   return (getContext() as { element: Element }).element.children[0]!
     .shadowRoot!;

@@ -177,7 +177,7 @@ export interface Field<CardT extends CardConstructor> {
   name: string;
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
-  serialize(value: any, doc: JSONAPISingleResourceDocument, visited: Set<string>): JSONAPIResource;
+  serialize(value: any, doc: JSONAPISingleResourceDocument, visited: Set<string>, opts?: SerializeOpts): JSONAPIResource;
   deserialize(
     value: any,
     doc: LooseSingleCardDocument | CardDocument,
@@ -193,9 +193,15 @@ export interface Field<CardT extends CardConstructor> {
   getter(instance: Card): CardInstanceType<CardT>;
 }
 
-function callSerializeHook(card: typeof Card, value: any, doc: JSONAPISingleResourceDocument, visited: Set<string> = new Set()) {
+function callSerializeHook(
+  card: typeof Card,
+  value: any,
+  doc: JSONAPISingleResourceDocument,
+  visited: Set<string> = new Set(),
+  opts?: SerializeOpts
+) {
   if (value != null) {
-    return card[serialize](value, doc, visited);
+    return card[serialize](value, doc, visited, opts);
   } else {
     return null;
   }
@@ -238,7 +244,7 @@ function getter<CardT extends CardConstructor>(instance: Card, field: Field<Card
       value = field.computeVia.bind(instance)();
       deserialized.set(field.name, value);
     } else if (!deserialized.has(field.name) && (typeof field.computeVia === 'string' || typeof field.computeVia === 'function')) {
-      throw new NotReady(instance, field.name, field.computeVia, instance.constructor.name);
+      throw new NotReady(instance, field.name, field.computeVia);
     }
     return value;
   } else {
@@ -267,13 +273,18 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return getter(instance, this);
   }
 
-  serialize(values: CardInstanceType<FieldT>[], doc: JSONAPISingleResourceDocument): JSONAPIResource {
+  serialize(
+    values: CardInstanceType<FieldT>[],
+    doc: JSONAPISingleResourceDocument,
+    _visited: Set<string>,
+    opts?: SerializeOpts
+  ): JSONAPIResource {
     if (primitive in this.card) {
-      return { attributes: { [this.name]:  values.map(value => callSerializeHook(this.card, value, doc)) } };
+      return { attributes: { [this.name]:  values.map(value => callSerializeHook(this.card, value, doc, undefined, opts)) } };
     } else {
       let relationships: Record<string, Relationship> = {};
       let serialized = values.map((value, index) => {
-        let resource: JSONAPISingleResourceDocument['data'] = callSerializeHook(this.card, value, doc);
+        let resource: JSONAPISingleResourceDocument['data'] = callSerializeHook(this.card, value, doc, undefined, opts);
         if (resource.relationships) {
           for (let [fieldName, relationship] of Object.entries(resource.relationships as Record<string, Relationship>)) {
             relationships[`${this.name}.${index}.${fieldName}`] = relationship; // warning side-effect
@@ -501,12 +512,17 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
-      throw new NotLoaded(maybeNotLoaded.reference, this.name, instance.constructor.name);
+      throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
     }
     return getter(instance, this);
   }
 
-  serialize(value: InstanceType<CardT>, doc: JSONAPISingleResourceDocument, visited: Set<string>) {
+  serialize(
+    value: InstanceType<CardT>,
+    doc: JSONAPISingleResourceDocument,
+    visited: Set<string>,
+    opts?: SerializeOpts
+  ) {
     if (isNotLoadedValue(value)) {
       return {
         relationships: {
@@ -537,7 +553,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     }
     visited.add(value.id);
 
-    let serialized = callSerializeHook(this.card, value, doc, visited) as (JSONAPIResource & { id: string; type: string }) | null;
+    let serialized = callSerializeHook(this.card, value, doc, visited, opts) as (JSONAPIResource & { id: string; type: string }) | null;
     if (serialized) {
       if (!value[isSavedInstance]) {
         throw new Error(`the linksTo field '${this.name}' cannot be serialized with an unsaved card`);
@@ -682,7 +698,11 @@ export class Card {
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
 
-  static [serialize](value: any, doc: JSONAPISingleResourceDocument, visited?: Set<string>, opts?: { includeComputeds?: boolean}): any {
+  static [serialize](
+    value: any,
+    doc: JSONAPISingleResourceDocument,
+    visited?: Set<string>,
+    opts?: SerializeOpts): any {
     if (primitive in this) {
       // primitive cards can override this as need be
       return value;
@@ -865,13 +885,14 @@ function serializedGet<CardT extends CardConstructor>(
   model: InstanceType<CardT>,
   fieldName: string,
   doc: JSONAPISingleResourceDocument,
-  visited: Set<string>
+  visited: Set<string>,
+  opts?: SerializeOpts
 ): JSONAPIResource {
   let field = getField(model.constructor, fieldName);
   if (!field) {
     throw new Error(`tried to serializedGet field ${fieldName} which does not exist in card ${model.constructor.name}`);
   }
-  return field.serialize(peekAtField(model, fieldName), doc, visited);
+  return field.serialize(peekAtField(model, fieldName), doc, visited, opts);
 }
 
 async function getDeserializedValue<CardT extends CardConstructor>({
@@ -901,37 +922,34 @@ async function getDeserializedValue<CardT extends CardConstructor>({
   return result;
 }
 
+interface SerializeOpts {
+  includeComputeds?: boolean;
+  includeUnrenderedFields?: boolean;
+}
+
 function serializeCardResource(
   model: Card,
   doc: JSONAPISingleResourceDocument,
-  opts?: {
-    includeComputeds?: boolean;
-    usedFieldsOnly?: boolean;
-  },
+  opts?: SerializeOpts,
   visited: Set<string> = new Set()
 ): LooseCardResource {
   let adoptsFrom = identifyCard(model.constructor);
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
-  let { id: removedIdField, ...fields } = getFields(model, opts);
+  let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
+  let { id: removedIdField, ...fields } = getFields(model, {...fieldOpts, usedFieldsOnly: !opts?.includeUnrenderedFields });
   let fieldResources = Object.keys(fields)
-    .map(fieldName => serializedGet(model, fieldName, doc, visited));
+    .map(fieldName => serializedGet(model, fieldName, doc, visited, opts));
   return merge({}, ...fieldResources, {
     type: 'card',
     meta: { adoptsFrom }
   }, model.id ? { id: model.id } : undefined);
 }
 
-// TODO maybe we want to have a stronger opinion about only serializing used fields
-// (and perhaps making an option for tests that will still permit us to serialize 
-// all fields, including unused fields?)
 export function serializeCard(
   model: Card,
-  opts?: {
-    includeComputeds?: boolean;
-    usedFieldsOnly?: boolean;
-  }
+  opts?: SerializeOpts
 ): LooseSingleCardDocument {
   let doc = { data: { type: 'card', ...(model.id != null ? { id: model.id }: {}) } };
   let data = serializeCardResource(model, doc, opts);
@@ -1156,6 +1174,10 @@ export function getComponent(model: Card, format: Format, opts?: ComponentOption
 
 interface RecomputeOptions {
   loadFields?: true;
+  // for host initiated renders (vs indexer initiated renders), glimmer will expect
+  // all the fields to be available synchronously, in which case we need to buffer the
+  // async in the recompute using this option
+  recomputeAllFields?: true;
 }
 export async function recompute(card: Card, opts?: RecomputeOptions): Promise<void> {
   // Note that after each async step we check to see if we are still the
@@ -1171,9 +1193,14 @@ export async function recompute(card: Card, opts?: RecomputeOptions): Promise<vo
   }
 
   async function _loadModel<T extends Card>(model: T, stack: Card[] = []): Promise<void> {
-    // TODO probably we should only do recomputes on used fields.
-    // the act of rendering the card informs us which fields are used....
-    let pendingFields = new Set<string>(Object.keys(getFields(model, { includeComputeds: true })));
+    let pendingFields = new Set<string>(
+      Object.keys(
+        getFields(model, {
+          includeComputeds: true,
+          usedFieldsOnly: !opts?.recomputeAllFields
+        })
+      )
+    );
     do {
       for (let fieldName of [...pendingFields]) {
         let value = await getIfReady(model, fieldName as keyof T, undefined, opts);
@@ -1246,13 +1273,13 @@ export async function getIfReady<T extends Card, K extends keyof T>(
         if (!field) {
           throw new Error(`the field '${fieldName as string} does not exist in card ${card.name}'`);
         }
-        let fieldValue = await loadMissingField(card, field, e, identityContext, instance[relativeTo]);
+        let fieldValue = await loadMissingField(instance, field, e, identityContext, instance[relativeTo]);
         deserialized.set(fieldName as string, fieldValue);
         result = fieldValue as T[K];
       }
       return result;
     } else if (isNotReadyError(e)) {
-      let { model: depModel, computeVia, fieldName: depField } = e;
+      let { instance: depModel, computeVia, fieldName: depField } = e;
       let nestedCompute = typeof computeVia === 'function' ? computeVia.bind(depModel) : () => depModel[computeVia as string]();
       await getIfReady(depModel, depField, nestedCompute, opts);
       return { type: 'not-ready', instance, fieldName: fieldName as string };
@@ -1266,14 +1293,14 @@ export async function getIfReady<T extends Card, K extends keyof T>(
 }
 
 async function loadMissingField(
-  card: typeof Card,
+  instance: Card,
   field: Field<typeof Card>,
   notLoaded: NotLoadedValue | NotLoaded,
   identityContext: IdentityContext,
   relativeTo: URL | undefined
 ): Promise<Card> {
   if (field.fieldType !== "linksTo") {
-    throw new Error(`cannot load missing field for non-linksTo field ${card.name}.${field.name}`);
+    throw new Error(`cannot load missing field for non-linksTo field ${instance.constructor.name}.${field.name}`);
   }
   let { reference: maybeRelativeReference } = notLoaded;
   let reference = new URL(maybeRelativeReference, relativeTo).href;
@@ -1282,15 +1309,15 @@ async function loadMissingField(
   if (!response.ok) {
     let cardError = await CardError.fromFetchResponse(reference, response);
     cardError.deps = [reference];
-    cardError.additionalErrors = [new NotLoaded(reference, field.name, card.name)];
+    cardError.additionalErrors = [new NotLoaded(instance, reference, field.name)];
     throw cardError;
   }
   let json = await response.json();
   if (!isSingleCardDocument(json)) {
     throw new Error(`instance ${reference} is not a card document. it is: ${JSON.stringify(json, null, 2)}`);
   }
-  let instance = await createFromSerialized(json.data, json, undefined, { loader, identityContext });
-  return instance;
+  let fieldInstance = await createFromSerialized(json.data, json, undefined, { loader, identityContext });
+  return fieldInstance;
 }
 
 export function getFields(card: typeof Card, opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean }): { [fieldName: string]: Field<CardConstructor> };
