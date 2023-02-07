@@ -22,6 +22,7 @@ import {
   type EntrySetter,
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
+import { LocalRealmAdapter } from '@cardstack/worker/src/local-realm-adapter';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -45,7 +46,7 @@ export interface CardDocFiles {
 
 // We use a rendered component to facilitate our indexing (this emulates
 // the work that the service worker renderer is doing), which means that the
-// `setupRenderingTest(hooks)` from ember-qunit must be used in your tests. 
+// `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
 export const TestRealm = {
   async create(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
@@ -353,5 +354,12 @@ export class TestRealmAdapter implements RealmAdapter {
       dir = dir[name];
     }
     return dir;
+  }
+
+  createStreamingResponse(request: Request,
+    responseInit: ResponseInit,
+    cleanup: () => void) {
+    let localRealmAdapter = new LocalRealmAdapter(this.#files as unknown as FileSystemDirectoryHandle);
+    return localRealmAdapter.createStreamingResponse(request, responseInit, cleanup);
   }
 }

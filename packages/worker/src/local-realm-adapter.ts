@@ -137,7 +137,7 @@ class MessageStream {
     if (this.pendingWrite) {
       let { chunk, deferred } = this.pendingWrite;
       this.pendingWrite = undefined;
-      // TODO: a better way to state the encoding
+      // TODO: better way to handle encoding
       controller.enqueue(Uint8Array.from(chunk, (x) => x.charCodeAt(0)));
       deferred.fulfill();
     } else {
@@ -156,7 +156,7 @@ class MessageStream {
       let { controller, deferred } = this.pendingRead;
       this.pendingRead = undefined;
       try {
-        // TODO: a better way to state the encoding
+        // TODO: better way to handle encoding
         controller.enqueue(Uint8Array.from(chunk, (x) => x.charCodeAt(0)));
       } catch (err) {
         let cleanup = closeHandlers.get(this.readable);
