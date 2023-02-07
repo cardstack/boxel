@@ -3,7 +3,6 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
-import { registerDestructor } from '@ember/destroyable';
 import LoaderService from '../services/loader-service';
 
 interface Args {
@@ -12,7 +11,6 @@ interface Args {
     content: string | undefined;
     lastModified: string | undefined;
     onStateChange?: (state: FileResource['state']) => void;
-    polling: 'off' | undefined;
   };
 }
 
@@ -38,7 +36,6 @@ export type FileResource =
     };
 
 class _FileResource extends Resource<Args> {
-  private interval: ReturnType<typeof setInterval> | undefined;
   private declare _url: string;
   private lastModified: string | undefined;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
@@ -47,7 +44,7 @@ class _FileResource extends Resource<Args> {
   @service declare loaderService: LoaderService;
 
   modify(_positional: never[], named: Args['named']) {
-    let { url, content, lastModified, onStateChange, polling } = named;
+    let { url, content, lastModified, onStateChange } = named;
     this._url = url;
     this.onStateChange = onStateChange;
     if (content !== undefined) {
@@ -56,12 +53,6 @@ class _FileResource extends Resource<Args> {
     } else {
       // get the initial content if we haven't already been seeded with initial content
       taskFor(this.read).perform();
-    }
-    if (polling !== 'off') {
-      this.interval = setInterval(() => taskFor(this.read).perform(), 1000);
-      registerDestructor(this, () => clearInterval(this.interval!));
-    } else if (this.interval) {
-      clearInterval(this.interval);
     }
   }
 
@@ -75,12 +66,6 @@ class _FileResource extends Resource<Args> {
 
   get loading() {
     return taskFor(this.read).last;
-  }
-
-  close() {
-    if (this.interval) {
-      clearInterval(this.interval);
-    }
   }
 
   @restartableTask private async read() {

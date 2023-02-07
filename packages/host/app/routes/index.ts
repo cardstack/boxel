@@ -1,6 +1,5 @@
 import Route from '@ember/routing/route';
 import { service } from '@ember/service';
-import { action } from '@ember/object';
 import { file, FileResource } from '../resources/file';
 import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
@@ -13,7 +12,6 @@ import type { Format } from 'https://cardstack.com/base/card-api';
 interface Model {
   path: string | undefined;
   openFile: FileResource | undefined;
-  polling: 'off' | undefined;
   openDirs: string | undefined;
   isFastBoot: boolean;
 }
@@ -21,9 +19,6 @@ interface Model {
 export default class Index extends Route<Model> {
   queryParams = {
     path: {
-      refreshModel: true,
-    },
-    polling: {
       refreshModel: true,
     },
     openDirs: {
@@ -40,22 +35,26 @@ export default class Index extends Route<Model> {
 
   async model(args: {
     path?: string;
-    polling?: 'off';
     openDirs: string;
     url?: string;
     format?: Format;
   }): Promise<Model> {
-    let { path, polling, openDirs } = args;
+    let { path, openDirs } = args;
     let { isFastBoot } = this.fastboot;
 
     let openFile: FileResource | undefined;
     if (!path) {
-      return { path, openFile, polling, openDirs, isFastBoot };
+      return {
+        path,
+        openFile,
+        openDirs,
+        isFastBoot,
+      };
     }
 
     await this.localRealm.startedUp;
     if (!this.localRealm.isAvailable && !this.cardService.demoRealmAvailable) {
-      return { path, openFile, polling, openDirs, isFastBoot };
+      return { path, openFile, openDirs, isFastBoot };
     }
 
     let realmPath = new RealmPaths(this.cardService.defaultURL);
@@ -70,7 +69,7 @@ export default class Index extends Route<Model> {
       console.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
-      return { path, openFile, polling, openDirs, isFastBoot };
+      return { path, openFile, openDirs, isFastBoot };
     }
     this.messageService.start();
     // The server may have responded with a redirect which we need to pay
@@ -82,7 +81,6 @@ export default class Index extends Route<Model> {
       this.router.transitionTo('application', {
         queryParams: {
           path: realmPath.local(responseURL),
-          polling,
           openDirs,
         },
       });
@@ -97,24 +95,20 @@ export default class Index extends Route<Model> {
             this.router.transitionTo('application', {
               queryParams: {
                 path: undefined,
-                polling: undefined,
                 openDirs: undefined,
               },
             });
           }
         },
-        polling,
       }));
       await openFile.loading;
     }
 
-    return { path, openFile, polling, openDirs, isFastBoot };
-  }
-
-  @action
-  willTransition(transition: any) {
-    if (transition.from?.attributes.openFile) {
-      transition.from.attributes.openFile.close();
-    }
+    return {
+      path,
+      openFile,
+      openDirs,
+      isFastBoot,
+    };
   }
 }
