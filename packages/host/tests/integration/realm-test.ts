@@ -265,9 +265,6 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -1385,9 +1382,6 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
