@@ -11,7 +11,6 @@ export class Person extends Card {
     await new Promise(resolve => setTimeout(resolve, 10));
     return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
   }});
-  // Note that "fullName" is not used in a template so it will not be part of this card's search doc
   static isolated = class Isolated extends Component<typeof this> {
     <template><h1><@fields.firstName/></h1></template>
   }

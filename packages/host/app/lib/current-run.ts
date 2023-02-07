@@ -221,7 +221,9 @@ export class CurrentRun {
     let localPath = this.#realmPaths.local(url);
     let fileRef = await this.#reader.readFileAsText(localPath);
     if (!fileRef) {
-      throw new Error(`missing file ${localPath}`);
+      let error = new CardError(`missing file ${url.href}`, { status: 404 });
+      error.deps = [url.href];
+      throw error;
     }
     if (!identityContext) {
       let api = await this.#loader.import<typeof CardAPI>(
@@ -377,7 +379,12 @@ export class CurrentRun {
               ? serializableError(uncaughtError)
               : { detail: `${uncaughtError.message}` },
         };
-        error.error.deps = [moduleURL];
+        error.error.deps = [
+          moduleURL,
+          ...(uncaughtError instanceof CardError
+            ? uncaughtError.deps ?? []
+            : []),
+        ];
       } else if (typesMaybeError?.type === 'error') {
         error = { type: 'error', error: typesMaybeError.error };
       } else {
@@ -494,10 +501,10 @@ function invalidate(
   let invalidatedInstances = [...instances]
     .filter(([instanceURL, item]) => {
       if (item.type === 'error') {
-        for (let errorModule of item.error.deps ?? []) {
+        for (let errorDep of item.error.deps ?? []) {
           if (
-            errorModule === url.href ||
-            errorModule === trimExecutableExtension(url).href
+            errorDep === url.href ||
+            errorDep === trimExecutableExtension(url).href
           ) {
             instances.remove(instanceURL); // note this is a side-effect
             return true;

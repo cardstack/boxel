@@ -101,11 +101,9 @@ export default class RenderService extends Service {
           throw err;
         }
       }
-
-      // TODO make a test that shows we throw for fields that can't be loaded (broken links)
     } while ((notLoaded || notReady) && tries++ <= maxRenderThreshold);
 
-    // TODO--probably need a better way to determine if we are trapped in a cycle
+    // This guards against bugs that may trigger render cycles
     if (tries > maxRenderThreshold) {
       let error = new CardError(
         `detected a cycle trying to render card ${card.constructor.name} (id: ${card.id})`

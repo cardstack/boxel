@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -15,6 +15,7 @@ import {
   baseRealm,
   baseCardRef,
   type CardRef,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -72,6 +73,114 @@ module('Integration | search-index', function (hooks) {
         },
       },
     ]);
+  });
+
+  test('can recover from indexing a card with a broken link', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      // 'Person/owner.json': {
+      //   data: {
+      //     id: `${testRealmURL}Person/owner`,
+      //     attributes: {
+      //       firstName: 'Hassan',
+      //     },
+      //     meta: {
+      //       adoptsFrom: {
+      //         module: 'http://localhost:4202/test/person',
+      //         name: 'Person',
+      //       },
+      //     },
+      //   },
+      // },
+      'Pet/mango.json': {
+        data: {
+          id: `${testRealmURL}Pet/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}Person/owner`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    {
+      let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
+      if (mango?.type === 'error') {
+        assert.deepEqual(
+          mango.error.detail,
+          `missing file ${testRealmURL}Person/owner.json`
+        );
+        assert.deepEqual(mango.error.deps, [
+          'http://localhost:4202/test/pet',
+          `${testRealmURL}Person/owner.json`,
+        ]);
+      } else {
+        assert.ok(false, `expected search entry to be an error doc`);
+      }
+    }
+    await realm.write(
+      'Person/owner.json',
+      JSON.stringify({
+        data: {
+          id: `${testRealmURL}Person/owner`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument)
+    );
+    {
+      let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
+      if (mango?.type === 'doc') {
+        assert.deepEqual(mango.doc.data, {
+          id: `${testRealmURL}Pet/mango`,
+          type: 'card',
+          links: {
+            self: `${testRealmURL}Pet/mango`,
+          },
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}Person/owner`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/pet',
+              name: 'Pet',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Pet/mango.json`
+            ),
+          },
+        });
+      } else {
+        assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
+      }
+    }
   });
 
   test('can index card with linkTo field', async function (assert) {
@@ -950,7 +1059,44 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
-  skip('search doc only includes used fields');
+  test('search doc only includes used fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Person/hassan.json': {
+        data: {
+          id: `${testRealmURL}Person/hassan`,
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            email: 'hassan@cardstack.com',
+            posts: 100,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let entry = await indexer.searchEntry(
+      new URL(`${testRealmURL}Person/hassan`)
+    );
+    assert.deepEqual(
+      entry?.searchData,
+      {
+        id: `${testRealmURL}Person/hassan`,
+        firstName: 'Hassan',
+        lastName: 'Abdel-Rahman',
+        email: 'hassan@cardstack.com',
+        posts: 100,
+      },
+      `search doc does not include fullName field`
+    );
+  });
 
   test('can index a card that has nested linksTo fields', async function (assert) {
     let adapter = new TestRealmAdapter({
