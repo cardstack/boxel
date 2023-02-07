@@ -418,3 +418,159 @@ module("Realm Server", function (hooks) {
     assert.deepEqual(testCard.ref, ref, "card data is correct");
   });
 });
+
+module("Realm Server serving from root", function (hooks) {
+  let server: Server;
+  let request: SuperTest<Test>;
+  let dir: DirResult;
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
+
+  hooks.beforeEach(async function () {
+    Loader.destroy();
+    shimExternals();
+    Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL("http://localhost:4203/")
+    );
+    dir = dirSync();
+    copySync(join(__dirname, "cards"), dir.name);
+
+    let testRealm = createRealm(dir.name, undefined, testRealmHref);
+    await testRealm.ready;
+    server = createRealmServer([testRealm]);
+    server.listen(testRealmURL.port);
+    request = supertest(server);
+  });
+
+  hooks.afterEach(function () {
+    server.close();
+  });
+
+  test("serves a root directory GET request", async function (assert) {
+    let response = await request
+      .get("/")
+      .set("Accept", "application/vnd.api+json");
+
+    assert.strictEqual(response.status, 200, "HTTP 200 status");
+    let json = response.body;
+    assert.deepEqual(
+      json,
+      {
+        "data": {
+          "id": testRealmHref,
+          "type": "directory",
+          "relationships": {
+            "a.js": {
+              "links": {
+                "related": `${testRealmHref}a.js`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "b.js": {
+              "links": {
+                "related": `${testRealmHref}b.js`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "c.js": {
+              "links": {
+                "related": `${testRealmHref}c.js`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "card-ref-test.gts": {
+              "links": {
+                "related": `${testRealmHref}card-ref-test.gts`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "cycle-one.js": {
+              "links": {
+                "related": `${testRealmHref}cycle-one.js`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "cycle-two.js": {
+              "links": {
+                "related": `${testRealmHref}cycle-two.js`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "d.js": {
+              "links": {
+                "related": `${testRealmHref}d.js`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "dir/": {
+              "links": {
+                "related": `${testRealmHref}dir/`
+              },
+              "meta": {
+                "kind": "directory"
+              }
+            },
+            "e.js": {
+              "links": {
+                "related": `${testRealmHref}e.js`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "person-1.json": {
+              "links": {
+                "related": `${testRealmHref}person-1.json`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "person-2.json": {
+              "links": {
+                "related": `${testRealmHref}person-2.json`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "person.gts": {
+              "links": {
+                "related": `${testRealmHref}person.gts`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            },
+            "unused-card.gts": {
+              "links": {
+                "related": `${testRealmHref}unused-card.gts`
+              },
+              "meta": {
+                "kind": "file"
+              }
+            }
+          }
+        }
+      },
+      "the directory response is correct"
+    );
+  });
+});

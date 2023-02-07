@@ -1,7 +1,6 @@
 import http, { IncomingMessage, ServerResponse } from "http";
-import { Realm } from "@cardstack/runtime-common";
+import { Loader, Realm } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
-import { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
 import "@cardstack/runtime-common/externals-global";
 
@@ -29,9 +28,12 @@ export function createRealmServer(realms: Realm[]) {
         throw new Error(`bug: missing URL in request`);
       }
 
-      let realm = realms.find((r) =>
-        req.url!.startsWith(new URL(r.url).pathname)
-      );
+      let fullRequestUrl = new URL(`http://${req.headers.host}${req.url}`);
+
+      let realm = realms.find((r) => {
+        let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
+        return r.paths.inRealm(reversedResolution);
+      });
 
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
@@ -49,15 +51,11 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
-      // despite the name, req.url is actually the pathname for the request URL
-      let local: LocalPath = req.url === "/" ? "" : req.url;
-      let url =
-        local.endsWith("/") || local === ""
-          ? realm.paths.directoryURL(local)
-          : realm.paths.fileURL(local);
-
       let reqBody = await nodeStreamToText(req);
-      let request = new Request(url.href, {
+
+      let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
+
+      let request = new Request(reversedResolution.href, {
         method: req.method,
         headers: req.headers as { [name: string]: string },
         ...(reqBody ? { body: reqBody } : {}),
