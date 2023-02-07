@@ -1,10 +1,8 @@
 import http, { IncomingMessage, ServerResponse } from "http";
 import { Loader, Realm } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
-import { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
 import "@cardstack/runtime-common/externals-global";
-import util from 'util';
 
 export interface RealmConfig {
   realmURL: string;
