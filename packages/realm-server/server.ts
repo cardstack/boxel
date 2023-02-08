@@ -44,11 +44,11 @@ export function createRealmServer(realms: Realm[]) {
       }
 
       let fullRequestUrl = new URL(`http://${req.headers.host}${req.url}`);
+      let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
-      log.debug(`Looking for realm to handle request with full URL: ${fullRequestUrl.href}`);
+      log.debug(`Looking for realm to handle request with full URL: ${fullRequestUrl.href} (reversed: ${reversedResolution.href})`);
 
       let realm = realms.find((r) => {
-        let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
         let inRealm = r.paths.inRealm(reversedResolution);
 
         log.debug(`In realm ${JSON.stringify({url: r.url, paths: r.paths})}: ${inRealm}`);
@@ -63,8 +63,6 @@ export function createRealmServer(realms: Realm[]) {
       }
 
       let reqBody = await nodeStreamToText(req);
-
-      let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
       let request = new Request(reversedResolution.href, {
         method: req.method,
