@@ -23,6 +23,7 @@ export function createRealmServer(realms: Realm[]) {
       log.info(
         `${req.method} ${req.url}: ${res.statusCode} (user agent: ${req.headers["user-agent"]})`
       );
+      log.debug(JSON.stringify(req.headers));
     });
 
     let isStreaming = false;
