@@ -4,6 +4,7 @@ import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { Readable } from "stream";
 import { setupCloseHandler } from "./node-realm";
 import "@cardstack/runtime-common/externals-global";
+import log from 'loglevel';
 
 export interface RealmConfig {
   realmURL: string;
@@ -15,7 +16,7 @@ export function createRealmServer(realms: Realm[]) {
 
   let server = http.createServer(async (req, res) => {
     res.on("finish", () => {
-      console.log(
+      log.info(
         `${req.method} ${req.url}: ${res.statusCode} (user agent: ${req.headers["user-agent"]})`
       );
     });
