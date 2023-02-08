@@ -17,10 +17,6 @@ export default class MessageService extends Service {
     return this.eventSource?.readyState === EventSource.CLOSED;
   }
 
-  clearMessage() {
-    this.message = undefined;
-  }
-
   start() {
     if (!this.eventSource || this.isClosed) {
       let realmPath = new RealmPaths(this.cardService.defaultURL);
@@ -55,12 +51,20 @@ export default class MessageService extends Service {
     });
 
     this.eventSource.addEventListener('remove', (e: MessageEvent) => {
-      this.message = { url: e.data, event: 'remove' };
+      if (!this.message || this.message.url !== e.data) {
+        this.message = { url: e.data, event: 'remove' };
+      } else {
+        this.clearMessage();
+      }
     });
 
     this.eventSource.onmessage = (e: MessageEvent) => {
       console.log('Event: message, data: ' + e.data);
     };
+  }
+
+  clearMessage() {
+    this.message = undefined;
   }
 
   stop() {

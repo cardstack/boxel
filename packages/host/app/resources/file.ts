@@ -57,6 +57,13 @@ class _FileResource extends Resource<Args> {
     if (content !== undefined && !message) {
       this.content = content;
       this.lastModified = lastModified;
+    } else if (
+      message?.event === 'remove' &&
+      message?.url === url &&
+      this.onStateChange
+    ) {
+      this.state = 'not-found';
+      this.onStateChange(this.state);
     } else {
       // get the initial content if we haven't already been seeded with initial content
       taskFor(this.read)
@@ -82,16 +89,6 @@ class _FileResource extends Resource<Args> {
   }
 
   @restartableTask private async read() {
-    if (
-      this.messageService.message?.event === 'remove' &&
-      this.messageService.message?.url === this.url &&
-      this.onStateChange
-    ) {
-      this.state = 'not-found';
-      this.onStateChange(this.state);
-      return;
-    }
-
     let prevState = this.state;
     let response = await this.loaderService.loader.fetch(this.url, {
       headers: {
