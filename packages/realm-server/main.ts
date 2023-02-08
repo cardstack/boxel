@@ -6,6 +6,7 @@ import { createRealmServer } from "./server";
 import { resolve, join } from "path";
 import { makeFastBootIndexRunner } from "./fastboot";
 import { RunnerOptionsManager } from "@cardstack/runtime-common/search-index";
+import log, { LogLevelNames } from 'loglevel';
 
 let {
   port,
@@ -13,6 +14,7 @@ let {
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
+  logLevel,
 } = yargs(process.argv.slice(2))
   .usage("Start realm server")
   .options({
@@ -41,6 +43,12 @@ let {
         "the dist/ folder of the host app. Defaults to '../host/dist'",
       type: "string",
     },
+    logLevel: {
+      description:
+        "how detailed log output should be",
+      choices: ['trace', 'debug', 'info', 'warn', 'error'],
+      default: 'debug'
+    },
   })
   .parseSync();
 
@@ -56,6 +64,9 @@ if (fromUrls.length < paths.length) {
   );
   process.exit(-1);
 }
+
+log.setLevel(logLevel as LogLevelNames);
+log.info(`Set log level to ${logLevel}`);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),
