@@ -51,7 +51,7 @@ export function createRealmServer(realms: Realm[]) {
         let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
         let inRealm = r.paths.inRealm(reversedResolution);
 
-        log.debug(`In realm ${r.url}: ${inRealm}`);
+        log.debug(`In realm ${JSON.stringify({url: r.url, paths: r.paths})}: ${inRealm}`);
         return inRealm;
       });
 
