@@ -132,6 +132,7 @@ jobs:
           filters: |
             host:
               - 'packages/host/**'
+              - 'packages/base/**'
               - 'packages/boxel-ui/**'
               - 'packages/runtime-common/**'
               - 'packages/worker/**'
@@ -141,6 +142,7 @@ jobs:
               - 'pnpm-lock.yaml'
             realm-server:
               - 'packages/realm-server/**'
+              - 'packages/base/**'
               - 'packages/host/**'
               - 'packages/runtime-common/**'
               - '.github/workflows/ci.yaml'
