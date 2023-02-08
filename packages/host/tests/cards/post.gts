@@ -11,6 +11,6 @@ export class Post extends Card {
   @field views = contains(IntegerCard);
   @field createdAt = contains(DatetimeCard);
   static isolated = class Isolated extends Component<typeof this> {
-    <template><h1><@fields.title/> by <@fields.author.firstName/></h1></template>
+    <template><h1><@fields.title/> by <@fields.author.firstName/> (<@fields.author.fullName/>)</h1></template>
   }
 }

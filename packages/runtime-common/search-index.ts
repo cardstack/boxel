@@ -604,10 +604,13 @@ export async function loadLinks({
     if (!relationship.links.self) {
       continue;
     }
-    let linkURL = new URL(relationship.links.self);
+    let linkURL = new URL(
+      relationship.links.self,
+      resource.id ? new URL(resource.id) : realmURL
+    );
     let linkResource: CardResource<Saved> | undefined;
     if (realmPath.inRealm(linkURL)) {
-      let maybeEntry = instances.get(new URL(relationship.links.self));
+      let maybeEntry = instances.get(linkURL);
       linkResource =
         maybeEntry?.type === "entry" ? maybeEntry.entry.resource : undefined;
     } else {
@@ -632,6 +635,9 @@ export async function loadLinks({
       linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
     }
     let foundLinks = false;
+    // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
+    // index based on keeping track of the rendered fields and invalidate the
+    // index as consumed cards change
     if (linkResource && stack.length <= maxLinkDepth) {
       for (let includedResource of await loadLinks({
         realmURL,

@@ -15,6 +15,7 @@ import {
   baseRealm,
   baseCardRef,
   type CardRef,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -72,6 +73,100 @@ module('Integration | search-index', function (hooks) {
         },
       },
     ]);
+  });
+
+  test('can recover from indexing a card with a broken link', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Pet/mango.json': {
+        data: {
+          id: `${testRealmURL}Pet/mango`,
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}Person/owner`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    {
+      let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
+      if (mango?.type === 'error') {
+        assert.deepEqual(
+          mango.error.detail,
+          `missing file ${testRealmURL}Person/owner.json`
+        );
+        assert.deepEqual(mango.error.deps, [
+          'http://localhost:4202/test/pet',
+          `${testRealmURL}Person/owner.json`,
+        ]);
+      } else {
+        assert.ok(false, `expected search entry to be an error doc`);
+      }
+    }
+    await realm.write(
+      'Person/owner.json',
+      JSON.stringify({
+        data: {
+          id: `${testRealmURL}Person/owner`,
+          attributes: {
+            firstName: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument)
+    );
+    {
+      let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
+      if (mango?.type === 'doc') {
+        assert.deepEqual(mango.doc.data, {
+          id: `${testRealmURL}Pet/mango`,
+          type: 'card',
+          links: {
+            self: `${testRealmURL}Pet/mango`,
+          },
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: `${testRealmURL}Person/owner`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/pet',
+              name: 'Pet',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Pet/mango.json`
+            ),
+          },
+        });
+      } else {
+        assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
+      }
+    }
   });
 
   test('can index card with linkTo field', async function (assert) {
@@ -932,7 +1027,10 @@ module('Integration | search-index', function (hooks) {
     {
       let card = await indexer.card(new URL(`${testRealmURL}Boom/boom`));
       if (card?.type === 'error') {
-        assert.strictEqual(card.error.detail, 'intentional error thrown');
+        assert.ok(
+          card.error.detail.includes('intentional error thrown'),
+          'error doc includes raised error message'
+        );
       } else {
         assert.ok(false, `expected search entry to be an error doc`);
       }
@@ -946,6 +1044,45 @@ module('Integration | search-index', function (hooks) {
         assert.ok(false, `search entry was an error: ${card?.error.detail}`);
       }
     }
+  });
+
+  test('search doc only includes used fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Person/hassan.json': {
+        data: {
+          id: `${testRealmURL}Person/hassan`,
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            email: 'hassan@cardstack.com',
+            posts: 100,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let entry = await indexer.searchEntry(
+      new URL(`${testRealmURL}Person/hassan`)
+    );
+    assert.deepEqual(
+      entry?.searchData,
+      {
+        id: `${testRealmURL}Person/hassan`,
+        firstName: 'Hassan',
+        lastName: 'Abdel-Rahman',
+        email: 'hassan@cardstack.com',
+        posts: 100,
+      },
+      `search doc does not include fullName field`
+    );
   });
 
   test('can index a card that has nested linksTo fields', async function (assert) {
@@ -1196,14 +1333,6 @@ module('Integration | search-index', function (hooks) {
         'friend.id': `${testRealmURL}Friend/mango`,
         'friend.firstName': 'Mango',
         'friend.friend.id': `${testRealmURL}Friend/hassan`,
-        'friend.friend.firstName': 'Hassan',
-        'friend.friend.friend.id': `${testRealmURL}Friend/mango`,
-        'friend.friend.friend.firstName': 'Mango',
-        'friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
-        'friend.friend.friend.friend.firstName': 'Hassan',
-        'friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
-        'friend.friend.friend.friend.friend.firstName': 'Mango',
-        'friend.friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
       });
     } else {
       assert.ok(
@@ -1290,14 +1419,6 @@ module('Integration | search-index', function (hooks) {
         'friend.id': `${testRealmURL}Friend/hassan`,
         'friend.firstName': 'Hassan',
         'friend.friend.id': `${testRealmURL}Friend/mango`,
-        'friend.friend.firstName': 'Mango',
-        'friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
-        'friend.friend.friend.firstName': 'Hassan',
-        'friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
-        'friend.friend.friend.friend.firstName': 'Mango',
-        'friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/hassan`,
-        'friend.friend.friend.friend.friend.firstName': 'Hassan',
-        'friend.friend.friend.friend.friend.friend.id': `${testRealmURL}Friend/mango`,
       });
     } else {
       assert.ok(
@@ -1355,7 +1476,6 @@ module('Integration | search-index', function (hooks) {
         'http://localhost:4201/base/field-component',
         'http://localhost:4201/base/integer',
         'http://localhost:4201/base/links-to-editor',
-        'http://localhost:4201/base/not-ready',
         'http://localhost:4201/base/shadow-dom',
         'http://localhost:4201/base/string',
         'http://localhost:4201/base/watched-array',

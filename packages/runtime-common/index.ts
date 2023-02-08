@@ -44,6 +44,7 @@ export {
 } from "./constants";
 export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from "./not-loaded";
+export { NotReady, isNotReadyError } from "./not-ready";
 
 export const executableExtensions = [".js", ".gjs", ".ts", ".gts"];
 export { createResponse } from "./create-response";
@@ -89,9 +90,6 @@ export {
 
 import type { Card } from "https://cardstack.com/base/card-api";
 
-// TODO hardcoding link traversal depth to 5 for now, eventually this will be
-// based on the fields used by the card's template, and/or fields requested in
-// JSONAPI request
 export const maxLinkDepth = 5;
 
 export interface CardChooser {

@@ -3,22 +3,21 @@
 export class NotReady extends Error {
   isNotReadyError: true = true;
   constructor(
-    readonly model: any,
+    readonly instance: any,
     readonly fieldName: string,
-    readonly computeVia: string | Function,
-    readonly cardName: string
+    readonly computeVia: string | Function
   ) {
-    super(`The field ${cardName}.${fieldName} is not ready`);
+    super(`The field ${instance.constructor.name}.${fieldName} is not ready`);
   }
 }
 
 export function isNotReadyError(err: any): err is NotReady {
   return (
     err != null &&
-    typeof err === 'object' &&
+    typeof err === "object" &&
     err.isNotReadyError &&
-    'fieldName' in err &&
-    'computeVia' in err &&
-    'model' in err
+    "fieldName" in err &&
+    "computeVia" in err &&
+    "instance" in err
   );
 }

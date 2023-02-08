@@ -402,12 +402,12 @@ module('Integration | computeds', function (hooks) {
         new Person({ firstName: "Van Gogh", age: 6 })
       ]
     });
-    await recompute(family);
+    await recompute(family, { recomputeAllFields: true });
     assert.strictEqual(family.totalAge, 9, 'computed is correct');
     family.people[0].age = 4;
     family.people = [...family.people];
 
-    await recompute(family);
+    await recompute(family, { recomputeAllFields: true });
     assert.strictEqual(family.totalAge, 10, 'computed is correct');
   });
 
