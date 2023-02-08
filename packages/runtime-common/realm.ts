@@ -448,6 +448,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
+    this.sendUpdateMessages(`event: create\n` + `data: ${fileURL}\n\n`);
     return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
@@ -512,6 +513,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
+    this.sendUpdateMessages(`event: patch\n` + `data: ${instanceURL}.json\n\n`);
     return createResponse(JSON.stringify(doc, null, 2), {
       headers: {
         "content-type": "application/vnd.api+json",
@@ -556,6 +558,7 @@ export class Realm {
     }
     let localPath = this.paths.local(url) + ".json";
     await this.delete(localPath);
+    this.sendUpdateMessages(`event: remove\n` + `data: ${url.href}.json\n\n`);
     return createResponse(null, { status: 204 });
   }
 
@@ -693,12 +696,12 @@ export class Realm {
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable
         );
-        this.sendUpdateMessages("clean up called");
+        this.sendUpdateMessages("data: clean up called\n\n");
       }
     );
 
     this.listeningClients.push(writable);
-    this.sendUpdateMessages("updated clients");
+    this.sendUpdateMessages("data: updated clients\n\n");
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
     waitForClose(writable);
@@ -709,9 +712,7 @@ export class Realm {
   private async sendUpdateMessages(message: string): Promise<void> {
     console.log(`sending updates to ${this.listeningClients.length} clients`);
     await Promise.all(
-      this.listeningClients.map((client) =>
-        writeToStream(client, `data: ${message}\n\n`)
-      )
+      this.listeningClients.map((client) => writeToStream(client, message))
     );
   }
 }

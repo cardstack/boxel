@@ -4,6 +4,8 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import LoaderService from '../services/loader-service';
+import type MessageService from '../services/message-service';
+import type { EventMessage } from '../services/message-service';
 
 interface Args {
   named: {
@@ -42,17 +44,28 @@ class _FileResource extends Resource<Args> {
   @tracked content: string | undefined;
   @tracked state: FileResource['state'] = 'ready';
   @service declare loaderService: LoaderService;
+  @service declare messageService: MessageService;
 
   modify(_positional: never[], named: Args['named']) {
+    let message: EventMessage | undefined;
+    if (this.messageService.message) {
+      message = this.messageService.message;
+    }
     let { url, content, lastModified, onStateChange } = named;
     this._url = url;
     this.onStateChange = onStateChange;
-    if (content !== undefined) {
+    if (content !== undefined && !message) {
       this.content = content;
       this.lastModified = lastModified;
     } else {
       // get the initial content if we haven't already been seeded with initial content
-      taskFor(this.read).perform();
+      taskFor(this.read)
+        .perform()
+        .then(() => {
+          if (message) {
+            this.messageService.clearMessage();
+          }
+        });
     }
   }
 
@@ -69,6 +82,16 @@ class _FileResource extends Resource<Args> {
   }
 
   @restartableTask private async read() {
+    if (
+      this.messageService.message?.event === 'remove' &&
+      this.messageService.message?.url === this.url &&
+      this.onStateChange
+    ) {
+      this.state = 'not-found';
+      this.onStateChange(this.state);
+      return;
+    }
+
     let prevState = this.state;
     let response = await this.loaderService.loader.fetch(this.url, {
       headers: {

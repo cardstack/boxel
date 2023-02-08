@@ -93,10 +93,7 @@ export default class Index extends Route<Model> {
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.router.transitionTo('application', {
-              queryParams: {
-                path: undefined,
-                openDirs: undefined,
-              },
+              queryParams: { path: undefined, openDirs },
             });
           }
         },
