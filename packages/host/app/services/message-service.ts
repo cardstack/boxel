@@ -50,17 +50,25 @@ export default class MessageService extends Service {
       }
     });
 
+    this.eventSource.addEventListener('upsert', (e: MessageEvent) => {
+      if (!this.message || this.message.url !== e.data) {
+        this.message = { url: e.data, event: 'upsert' };
+      }
+    });
+
     this.eventSource.addEventListener('remove', (e: MessageEvent) => {
       if (!this.message || this.message.url !== e.data) {
         this.message = { url: e.data, event: 'remove' };
-      } else {
-        this.clearMessage();
       }
     });
 
     this.eventSource.onmessage = (e: MessageEvent) => {
       console.log('Event: message, data: ' + e.data);
     };
+
+    this.eventSource.addEventListener('reset', (_e: MessageEvent) => {
+      this.clearMessage();
+    });
   }
 
   clearMessage() {
