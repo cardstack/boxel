@@ -124,9 +124,8 @@ export default class RenderService extends Service {
     let api = await this.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`
     );
-    let value: any;
     try {
-      value = await api.getIfReady(card, fieldName as keyof Card, undefined, {
+      await api.getIfReady(card, fieldName as keyof Card, undefined, {
         loadFields: true,
       });
     } catch (err: any) {
@@ -145,22 +144,6 @@ export default class RenderService extends Service {
       } else {
         throw err;
       }
-    }
-
-    if (Array.isArray(value)) {
-      for (let item of value) {
-        if (item && api.isCard(item)) {
-          await this.renderCard({
-            card: item,
-            visit,
-            realmPath,
-            identityContext,
-          });
-        }
-      }
-    }
-    if (api.isCard(value)) {
-      await this.renderCard({ card: value, visit, realmPath, identityContext });
     }
   }
 }
