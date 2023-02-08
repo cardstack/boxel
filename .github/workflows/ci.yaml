@@ -116,10 +116,43 @@ jobs:
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
 
+  change-check:
+    name: Check which packages changed
+    needs: [host-test, realm-server-test]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      host: ${{ steps.filter.outputs.host }}
+      realm-server: ${{ steps.filter.outputs.realm-server }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            host:
+              - 'packages/host/**'
+              - 'packages/boxel-ui/**'
+              - 'packages/runtime-common/**'
+              - 'packages/worker/**'
+              - '.github/workflows/ci.yaml'
+              - '.github/actions/deploy-boxel-host/**'
+              - '.github/actions/deploy-ember-preview/**'
+              - 'pnpm-lock.yaml'
+            realm-server:
+              - 'packages/realm-server/**'
+              - 'packages/host/**'
+              - 'packages/runtime-common/**'
+              - '.github/workflows/ci.yaml'
+              - '.github/actions/deploy-realm-server/**'
+              - '.github/actions/waypoint-deploy/**'
+              - 'pnpm-lock.yaml'
+
+
   host-deploy:
     name: Deploy host to staging
-    needs: host-test
-    if: github.ref == 'refs/heads/main'
+    needs: change-check
+    if: ${{ needs.change-check.outputs.host == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -131,8 +164,8 @@ jobs:
 
   realm-server-deploy:
     name: Deploy realm server to staging
-    needs: realm-server-test
-    if: github.ref == 'refs/heads/main'
+    needs: change-check
+    if: ${{ needs.change-check.outputs.realm-server == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
