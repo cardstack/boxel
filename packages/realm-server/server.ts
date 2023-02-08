@@ -30,6 +30,15 @@ export function createRealmServer(realms: Realm[]) {
         throw new Error(`bug: missing URL in request`);
       }
 
+      // Respond to AWS ELB health check
+      if (requestIsHealthCheck(req)) {
+        res.statusCode = 200;
+        res.statusMessage = "OK";
+        res.write("OK");
+        res.end();
+        return;
+      }
+
       let fullRequestUrl = new URL(`http://${req.headers.host}${req.url}`);
 
       log.trace(`Looking for realm to handle request with full URL: ${fullRequestUrl.href}`);
@@ -41,15 +50,6 @@ export function createRealmServer(realms: Realm[]) {
         log.trace(`In realm ${r.url}: ${inRealm}`);
         return inRealm;
       });
-
-      // Respond to AWS ELB health check
-      if (requestIsHealthCheck(req)) {
-        res.statusCode = 200;
-        res.statusMessage = "OK";
-        res.write("OK");
-        res.end();
-        return;
-      }
 
       if (!realm) {
         res.statusCode = 404;
