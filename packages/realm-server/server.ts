@@ -2,6 +2,7 @@ import http, { IncomingMessage, ServerResponse } from "http";
 import { Loader, Realm } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { Readable } from "stream";
+import { setupCloseHandler } from "./node-realm";
 import "@cardstack/runtime-common/externals-global";
 
 export interface RealmConfig {
@@ -60,6 +61,9 @@ export function createRealmServer(realms: Realm[]) {
         headers: req.headers as { [name: string]: string },
         ...(reqBody ? { body: reqBody } : {}),
       });
+
+      setupCloseHandler(res, request);
+
       let { status, statusText, headers, body, nodeStream } =
         await realm.handle(request);
       res.statusCode = status;

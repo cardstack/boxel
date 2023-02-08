@@ -88,3 +88,51 @@ export async function getFileWithFallbacks(
   }
   return undefined;
 }
+
+let writers = new WeakMap<WritableStream, WritableStreamDefaultWriter>();
+
+export async function writeToStream(
+  stream: WritableStream,
+  chunk: string
+): Promise<void> {
+  if (typeof stream.getWriter === "function") {
+    let writer = writers.get(stream);
+    if (!writer) {
+      writer = stream.getWriter();
+      writers.set(stream, writer);
+    }
+    return writer.write(chunk);
+  } else {
+    if (!isNode) {
+      throw new Error(`cannot handle node-streams when not in node`);
+    }
+    return new Promise<void>((resolve, reject) => {
+      (stream as any).write(chunk, null, (err: unknown) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+}
+
+export async function waitForClose(stream: WritableStream): Promise<void> {
+  if (typeof stream.getWriter === "function") {
+    let writer = writers.get(stream);
+    if (!writer) {
+      writer = stream.getWriter();
+      writers.set(stream, writer);
+    }
+    await writer.closed;
+  } else {
+    if (!isNode) {
+      throw new Error(`cannot handle node-streams when not in node`);
+    }
+    return new Promise((resolve, reject) => {
+      (stream as any).on("close", () => resolve());
+      (stream as any).on("error", (err: unknown) => reject(err));
+    });
+  }
+}

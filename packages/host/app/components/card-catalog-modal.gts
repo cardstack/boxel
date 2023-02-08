@@ -94,7 +94,7 @@ export default class CardCatalogModal extends Component {
 
   @action pick(card?: Card): void {
     if (this.currentRequest) {
-      this.currentRequest.deferred.resolve(card);
+      this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;
     }
   }

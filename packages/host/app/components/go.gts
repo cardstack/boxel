@@ -31,8 +31,8 @@ interface Signature {
   Args: {
     openFile: FileResource | undefined;
     openDirs: string | undefined;
-    path: string | undefined,
-    polling: 'off' | undefined,
+    path: string | undefined;
+    polling: 'off' | undefined;
   }
 }
 

@@ -32,6 +32,8 @@ import {
   fileContentToText,
   readFileAsText,
   getFileWithFallbacks,
+  writeToStream,
+  waitForClose,
 } from "./stream";
 import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
 import * as babel from "@babel/core";
@@ -64,7 +66,7 @@ export interface FileRef {
   lastModified: number;
 }
 
-interface ResponseWithNodeStream extends Response {
+export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
 
@@ -104,6 +106,15 @@ export interface RealmAdapter {
   write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
 
   remove(path: LocalPath): Promise<void>;
+
+  createStreamingResponse(
+    req: Request,
+    init: ResponseInit,
+    cleanup: () => void
+  ): {
+    response: Response;
+    writable: WritableStream;
+  };
 }
 
 interface Options {
@@ -145,6 +156,7 @@ export class Realm {
       .post("/", this.createCard.bind(this))
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
       .get("/_search", this.search.bind(this))
+      .get("/_message", this.subscribe.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
       .delete("/.+(?<!.json)", this.removeCard.bind(this));
@@ -210,7 +222,10 @@ export class Realm {
         accept = acceptHeader;
       }
     }
-    if (accept?.includes("application/vnd.api+json")) {
+    if (
+      accept?.includes("application/vnd.api+json") ||
+      accept?.includes("text/event-stream")
+    ) {
       // local requests are allowed to query the realm as the index is being built up
       if (!request.isLocal && url.host !== "local-realm") {
         await this.ready;
@@ -657,6 +672,47 @@ export class Realm {
       delete relationship.data;
     }
     return data;
+  }
+
+  private listeningClients: WritableStream[] = [];
+
+  private async subscribe(req: Request): Promise<Response> {
+    let headers = {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    };
+
+    let { response, writable } = this.#adapter.createStreamingResponse(
+      req,
+      {
+        status: 200,
+        headers,
+      },
+      () => {
+        this.listeningClients = this.listeningClients.filter(
+          (w) => w !== writable
+        );
+        this.sendUpdateMessages("clean up called");
+      }
+    );
+
+    this.listeningClients.push(writable);
+    this.sendUpdateMessages("updated clients");
+    // TODO: We may need to store something else here to do cleanup to keep
+    // tests consistent
+    waitForClose(writable);
+
+    return response;
+  }
+
+  private async sendUpdateMessages(message: string): Promise<void> {
+    console.log(`sending updates to ${this.listeningClients.length} clients`);
+    await Promise.all(
+      this.listeningClients.map((client) =>
+        writeToStream(client, `data: ${message}\n\n`)
+      )
+    );
   }
 }
 

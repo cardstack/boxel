@@ -1,5 +1,12 @@
-import { RealmAdapter, Kind, FileRef } from "@cardstack/runtime-common";
+import {
+  RealmAdapter,
+  Kind,
+  FileRef,
+  createResponse,
+  type ResponseWithNodeStream,
+} from "@cardstack/runtime-common";
 import { LocalPath } from "@cardstack/runtime-common/paths";
+import { ServerResponse } from "http";
 
 import {
   readdirSync,
@@ -13,6 +20,7 @@ import {
   ReadStream,
 } from "fs-extra";
 import { join } from "path";
+import { Duplex } from "node:stream";
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -82,5 +90,69 @@ export class NodeAdapter implements RealmAdapter {
   async remove(path: LocalPath): Promise<void> {
     let absolutePath = join(this.realmDir, path);
     removeSync(absolutePath);
+  }
+
+  createStreamingResponse(
+    request: Request,
+    responseInit: ResponseInit,
+    cleanup: () => void
+  ) {
+    let s = new MessageStream();
+    let response = createResponse(null, responseInit) as ResponseWithNodeStream;
+    response.nodeStream = s;
+    onClose(request, cleanup);
+    return { response, writable: s as unknown as WritableStream };
+  }
+}
+
+export function onClose(request: Request, fn: () => void) {
+  closeHandlers.get(request)!.on("close", fn);
+}
+
+const closeHandlers: WeakMap<Request, ServerResponse> = new WeakMap();
+export function setupCloseHandler(res: ServerResponse, request: Request) {
+  closeHandlers.set(request, res);
+}
+
+class MessageStream extends Duplex {
+  private pendingWrite:
+    | { chunk: string; callback: (err: null | Error) => void }
+    | undefined;
+
+  private pendingRead = false;
+
+  _read() {
+    if (this.pendingRead) {
+      throw new Error(
+        "bug: did not expect node to call read until after we push data from the prior read"
+      );
+    }
+    if (this.pendingWrite) {
+      let { chunk, callback } = this.pendingWrite;
+      this.pendingWrite = undefined;
+      this.push(chunk);
+      callback(null);
+    } else {
+      this.pendingRead = true;
+    }
+  }
+
+  _write(
+    chunk: string,
+    _encoding: string,
+    callback: (err: null | Error) => void
+  ) {
+    if (this.pendingWrite) {
+      throw new Error(
+        "bug: did not expect node to call write until after we call the callback"
+      );
+    }
+    if (this.pendingRead) {
+      this.pendingRead = false;
+      this.push(chunk);
+      callback(null);
+    } else {
+      this.pendingWrite = { chunk, callback };
+    }
   }
 }
