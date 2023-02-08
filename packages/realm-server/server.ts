@@ -32,9 +32,14 @@ export function createRealmServer(realms: Realm[]) {
 
       let fullRequestUrl = new URL(`http://${req.headers.host}${req.url}`);
 
+      log.trace(`Looking for realm to handle request with full URL: ${fullRequestUrl.href}`);
+
       let realm = realms.find((r) => {
         let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
-        return r.paths.inRealm(reversedResolution);
+        let inRealm = r.paths.inRealm(reversedResolution);
+
+        log.trace(`In realm ${r.url}: ${inRealm}`);
+        return inRealm;
       });
 
       // Respond to AWS ELB health check
