@@ -38,10 +38,11 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
-      let fullRequestUrl = new URL(`http://${req.headers.host}${req.url}`);
+      let protocol = req.headers.host?.includes('localhost') ? 'http' : 'https';
+      let fullRequestUrl = new URL(`${protocol}://${req.headers.host}${req.url}`);
+      let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
       let realm = realms.find((r) => {
-        let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
         return r.paths.inRealm(reversedResolution);
       });
 
@@ -53,8 +54,6 @@ export function createRealmServer(realms: Realm[]) {
       }
 
       let reqBody = await nodeStreamToText(req);
-
-      let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
       let request = new Request(reversedResolution.href, {
         method: req.method,
