@@ -37,7 +37,7 @@
     "start:base:staging": "pnpm setup:base-in-deployment && NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=3000 --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --fromUrl='https://realm-base-staging.stack.cards/base/' --toUrl='/base/'",
     "start:demo:staging": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=3000 --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --path='/persistent/demo' --fromUrl='/demo/' --toUrl='/demo/' --fromUrl='https://cardstack.com/base/' --toUrl='https://realm-demo-staging.stack.cards/base/' --fromUrl='/demo/' --toUrl='https://realm-demo-staging.stack.cards/demo/'",
     "start:base:production": "pnpm setup:base-in-deployment && NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=3000 --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --fromUrl='https://realm-base.cardstack.com/base/' --toUrl='/base/' ",
-    "start:demo:production": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=3000 --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --path='/persistent/demo' --fromUrl='https://realm-demo.cardstack.com/demo/' --toUrl='/demo/'",
+    "start:demo:production": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=3000 --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --path='/persistent/demo' --fromUrl='/demo/' --toUrl='/demo/' --fromUrl='https://cardstack.com/base/' --toUrl='https://realm-demo.cardstack.com/base/' --fromUrl='/demo/ --toUrl='https://realm-demo.cardstack.com/demo/'",
     "wait": "sleep 10000000",
     "lint": "glint"
   }
