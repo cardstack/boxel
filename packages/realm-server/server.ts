@@ -44,7 +44,8 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
-      let fullRequestUrl = new URL(`http://${req.headers.host}${req.url}`);
+      let protocol = req.headers.host?.includes('localhost') ? 'http' : 'https';
+      let fullRequestUrl = new URL(`${protocol}://${req.headers.host}${req.url}`);
       let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
       log.debug(`Looking for realm to handle request with full URL: ${fullRequestUrl.href} (reversed: ${reversedResolution.href})`);
