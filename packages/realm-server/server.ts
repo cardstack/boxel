@@ -52,9 +52,9 @@ export function createRealmServer(realms: Realm[]) {
       console.log(
         `full request URL=${fullRequestUrl}, reversed resolution=${Loader.reverseResolution(
           fullRequestUrl.href
-        )}, Loader.resolutions=${Loader.getLoader().urlMappings.join()}, realms=${realms
+        )}, Loader.resolutions=[${Loader.getLoader().urlMappings.join()}], realms=[${realms
           .map((r) => r.url)
-          .join()}`
+          .join()}]`
       );
 
       let realm = realms.find((r) => {
