@@ -965,6 +965,17 @@ export type LoaderType = NonNullable<
   NonNullable<Parameters<typeof createFromSerialized>[3]>["loader"]
 >;
 
+// TODO Currently our deserialization process performs 2 tasks that probably
+// need to be disentangled:
+// 1. convert the data from a wire format to the native format
+// 2. absorb async to load computeds
+// 
+// Consider the scenario where the server is providing the client the card JSON,
+// in this case the server has already processed the computed, and all we really 
+// need to do is purely the conversion of the data from the wire format to the 
+// native format which should be async. Instead our client is re-doing the work
+// to calculate the computeds that the server has already done.
+
 // use an interface loader and not the class Loader
 export async function createFromSerialized<T extends CardConstructor>(
   resource: LooseCardResource,
