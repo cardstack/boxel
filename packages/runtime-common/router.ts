@@ -5,6 +5,7 @@ import {
   responseWithError,
 } from "./error";
 import { RealmPaths } from "./paths";
+import log from "loglevel";
 
 type Handler = (request: Request) => Promise<Response>;
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
@@ -77,7 +78,7 @@ export class Router {
           if (err instanceof CardError) {
             return responseWithError(err);
           }
-          console.error(err);
+          log.error(err);
           return new Response(`unexpected exception in realm ${err}`, {
             status: 500,
           });

@@ -979,6 +979,7 @@ importers:
       ignore: ^5.2.0
       json-typescript: ^1.1.2
       lodash: ^4.17.21
+      loglevel: ^1.8.1
       qs: ^6.10.5
       qunit: ^2.18.0
       transform-modules-amd-plugin: workspace:*
@@ -1013,6 +1014,7 @@ importers:
       ignore: 5.2.0
       json-typescript: 1.1.2
       lodash: 4.17.21
+      loglevel: 1.8.1
       qs: 6.11.0
       qunit: 2.19.3
       transform-modules-amd-plugin: link:../../vendor/transform-modules-amd-plugin
@@ -3922,8 +3924,8 @@ packages:
     dependencies:
       '@glimmer/component': 1.1.2_@babel+core@7.20.2
       '@types/ember': 4.0.2_@babel+core@7.20.2
-      '@types/ember__engine': 4.0.4_@babel+core@7.20.2
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__engine': 4.0.4
+      '@types/ember__object': 4.0.5
       '@types/ember__owner': 4.0.2
       '@types/ember__routing': 4.0.12_@babel+core@7.20.2
     transitivePeerDependencies:
@@ -3935,7 +3937,7 @@ packages:
     resolution: {integrity: sha512-G6kbLaS3ke4QspHkgLlGY0t1v0G22hGavyphezZucj7LLk1N+r11w913CYkBg3cJsJD+TG2Wo4eVbgRcotvuvQ==}
     dependencies:
       '@types/ember': 4.0.2_@babel+core@7.20.2
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -3945,7 +3947,7 @@ packages:
     resolution: {integrity: sha512-iwFf+qYBsGp9SycIb0lxGkdZPYpKxMcBoV5kCJbWyC6azuX2xPDXHx8n2lm8O9GrEFVJXfYC5bSXf33rdpy5Sw==}
     dependencies:
       '@types/ember': 4.0.2_@babel+core@7.20.2
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -3978,6 +3980,13 @@ packages:
 
   /@types/ember__destroyable/4.0.1:
     resolution: {integrity: sha512-U497H5zW2bfdwmX1rktaSe+IsOrcqLn7jtrHI2dNnf9le38e1Wcnes8amA9PCv4lOhH+Mc3nkNIdQx38DwflXA==}
+    dev: true
+
+  /@types/ember__engine/4.0.4:
+    resolution: {integrity: sha512-dxQf3ESRjTJtCHbd42/ReUpQUAUsn/VtI6+S07jrsgCbAQEr8Qkh/dJpd9Cta8N+DpbY1CUH58D4HxdOC4Ip3A==}
+    dependencies:
+      '@types/ember__object': 4.0.5
+      '@types/ember__owner': 4.0.2
     dev: true
 
   /@types/ember__engine/4.0.4_@babel+core@7.20.2:
@@ -9327,7 +9336,7 @@ packages:
       ember-cli: ^3.2.0 || ^4.0.0
     dependencies:
       chalk: 2.4.2
-      ember-cli: 4.6.0_lodash@4.17.21
+      ember-cli: 4.6.0
       find-yarn-workspace-root: 1.2.1
       is-git-url: 1.0.0
       resolve: 1.22.1
@@ -20353,6 +20362,7 @@ packages:
       ignore: 5.2.0
       json-typescript: 1.1.2
       lodash: 4.17.21
+      loglevel: 1.8.1
       parse5: 7.1.2
       qs: 6.11.0
       qunit: 2.19.3
@@ -20408,6 +20418,7 @@ packages:
       ignore: 5.2.0
       json-typescript: 1.1.2
       lodash: 4.17.21
+      loglevel: 1.8.1
       parse5: 7.1.2
       qs: 6.11.0
       qunit: 2.19.3
