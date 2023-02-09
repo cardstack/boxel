@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
+import type MessageService from '../services/message-service';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -47,10 +48,11 @@ export default class Directory extends Component<Args> {
   </template>
 
 
-  listing = directory(this, () => this.args.url, () => this.args.openDirs);
+  listing = directory(this, () => this.args.url, () => this.args.openDirs, () => this.messageService.message);
   @service declare router: RouterService;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
+  @service declare messageService: MessageService;
 
   @cached
   get realmPath() {

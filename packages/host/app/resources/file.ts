@@ -5,7 +5,6 @@ import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-import type { EventMessage } from '../services/message-service';
 
 interface Args {
   named: {
@@ -59,7 +58,7 @@ class _FileResource extends Resource<Args> {
       message?.url === url &&
       this.onStateChange
     ) {
-      console.log('remove', message);
+      console.log(message);
       this.state = 'not-found';
       this.onStateChange(this.state);
     } else {

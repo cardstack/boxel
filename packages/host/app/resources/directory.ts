@@ -6,6 +6,8 @@ import { taskFor } from 'ember-concurrency-ts';
 import type { Relationship } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../services/loader-service';
+import type MessageService from '../services/message-service';
+import type { EventMessage } from '../services/message-service';
 
 interface Args {
   named: {
@@ -26,6 +28,7 @@ export class DirectoryResource extends Resource<Args> {
   private declare realmPath: RealmPaths;
 
   @service declare loaderService: LoaderService;
+  @service declare messageService: MessageService;
 
   modify(_positional: never[], named: Args['named']) {
     if (named.url) {
@@ -70,6 +73,7 @@ export class DirectoryResource extends Resource<Args> {
       );
       return [];
     }
+    this.messageService.start();
     let {
       data: { relationships: _relationships },
     } = await response.json();
@@ -85,9 +89,10 @@ export class DirectoryResource extends Resource<Args> {
 export function directory(
   parent: object,
   url: () => string | undefined,
-  openDirs: () => string | undefined
+  openDirs: () => string | undefined,
+  message: () => EventMessage | undefined
 ) {
   return DirectoryResource.from(parent, () => ({
-    named: { url: url(), openDirs: openDirs() },
+    named: { url: url(), openDirs: openDirs(), message: message() },
   })) as DirectoryResource;
 }

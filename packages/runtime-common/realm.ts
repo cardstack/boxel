@@ -705,12 +705,12 @@ export class Realm {
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable
         );
-        this.sendUpdateMessages("data: clean up called\n\n");
+        this.sendUpdateMessages(`data: client clean up\n\n`);
       }
     );
 
     this.listeningClients.push(writable);
-    this.sendUpdateMessages("data: updated clients\n\n");
+    this.sendUpdateMessages(`data: updated clients\n\n`);
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
     waitForClose(writable);
