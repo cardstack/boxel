@@ -1,4 +1,5 @@
 export default config;
+import { LogLevelNames } from 'loglevel';
 
 /**
  * Type declarations for
@@ -13,4 +14,5 @@ declare const config: {
   APP: Record<string, unknown>;
   demoRealmURL: string;
   resolvedBaseRealmURL: string;
+  logLevel: LogLevelNames;
 };
