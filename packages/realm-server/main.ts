@@ -6,7 +6,7 @@ import { createRealmServer } from "./server";
 import { resolve, join } from "path";
 import { makeFastBootIndexRunner } from "./fastboot";
 import { RunnerOptionsManager } from "@cardstack/runtime-common/search-index";
-import log, { LogLevelNames } from 'loglevel';
+import log, { LogLevelNames } from "loglevel";
 
 let {
   port,
@@ -44,10 +44,9 @@ let {
       type: "string",
     },
     logLevel: {
-      description:
-        "how detailed log output should be",
-      choices: ['trace', 'debug', 'info', 'warn', 'error'],
-      default: 'debug'
+      description: "how detailed log output should be",
+      choices: ["trace", "debug", "info", "warn", "error"],
+      default: "debug",
     },
   })
   .parseSync();

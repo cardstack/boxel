@@ -4,7 +4,7 @@ import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { Readable } from "stream";
 import { setupCloseHandler } from "./node-realm";
 import "@cardstack/runtime-common/externals-global";
-import log from 'loglevel';
+import log from "loglevel";
 
 export interface RealmConfig {
   realmURL: string;
@@ -44,16 +44,26 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
-      let protocol = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-      let fullRequestUrl = new URL(`${protocol}://${req.headers.host}${req.url}`);
+      let protocol =
+        req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      let fullRequestUrl = new URL(
+        `${protocol}://${req.headers.host}${req.url}`
+      );
       let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
-      log.debug(`Looking for realm to handle request with full URL: ${fullRequestUrl.href} (reversed: ${reversedResolution.href})`);
+      log.debug(
+        `Looking for realm to handle request with full URL: ${fullRequestUrl.href} (reversed: ${reversedResolution.href})`
+      );
 
       let realm = realms.find((r) => {
         let inRealm = r.paths.inRealm(reversedResolution);
 
-        log.debug(`In realm ${JSON.stringify({url: r.url, paths: r.paths})}: ${inRealm}`);
+        log.debug(
+          `In realm ${JSON.stringify({
+            url: r.url,
+            paths: r.paths,
+          })}: ${inRealm}`
+        );
         return inRealm;
       });
 
