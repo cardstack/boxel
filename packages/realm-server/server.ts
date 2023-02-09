@@ -15,14 +15,15 @@ export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
-    if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
-      res.setHeader('X-ECS-Container-Metadata-URI-v4', process.env['ECS_CONTAINER_METADATA_URI_V4']);
+    if (process.env["ECS_CONTAINER_METADATA_URI_V4"]) {
+      res.setHeader(
+        "X-ECS-Container-Metadata-URI-v4",
+        process.env["ECS_CONTAINER_METADATA_URI_V4"]
+      );
     }
 
     res.on("finish", () => {
-      log.info(
-        `${req.method} ${req.url}: ${res.statusCode} (user agent: ${req.headers["user-agent"]})`
-      );
+      log.info(`${req.method} ${req.url}: ${res.statusCode}`);
       log.debug(JSON.stringify(req.headers));
     });
 
