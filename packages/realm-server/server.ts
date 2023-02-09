@@ -29,13 +29,6 @@ export function createRealmServer(realms: Realm[]) {
         throw new Error(`bug: missing URL in request`);
       }
 
-      let fullRequestUrl = new URL(`http://${req.headers.host}${req.url}`);
-
-      let realm = realms.find((r) => {
-        let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
-        return r.paths.inRealm(reversedResolution);
-      });
-
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
@@ -44,6 +37,13 @@ export function createRealmServer(realms: Realm[]) {
         res.end();
         return;
       }
+
+      let fullRequestUrl = new URL(`http://${req.headers.host}${req.url}`);
+
+      let realm = realms.find((r) => {
+        let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
+        return r.paths.inRealm(reversedResolution);
+      });
 
       if (!realm) {
         res.statusCode = 404;
