@@ -42,7 +42,7 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
-      let protocol = req.headers.host?.includes('localhost') ? 'http' : 'https';
+      let protocol = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
       let fullRequestUrl = new URL(`${protocol}://${req.headers.host}${req.url}`);
       let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
