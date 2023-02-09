@@ -14,6 +14,10 @@ export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
+    if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
+      res.setHeader('X-ECS-Container-Metadata-URI-v4', process.env['ECS_CONTAINER_METADATA_URI_V4']);
+    }
+
     res.on("finish", () => {
       console.log(
         `${req.method} ${req.url}: ${res.statusCode} (user agent: ${req.headers["user-agent"]})`
@@ -29,13 +33,6 @@ export function createRealmServer(realms: Realm[]) {
         throw new Error(`bug: missing URL in request`);
       }
 
-      let fullRequestUrl = new URL(`http://${req.headers.host}${req.url}`);
-
-      let realm = realms.find((r) => {
-        let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
-        return r.paths.inRealm(reversedResolution);
-      });
-
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
@@ -45,6 +42,14 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
+      let protocol = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      let fullRequestUrl = new URL(`${protocol}://${req.headers.host}${req.url}`);
+      let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
+
+      let realm = realms.find((r) => {
+        return r.paths.inRealm(reversedResolution);
+      });
+
       if (!realm) {
         res.statusCode = 404;
         res.statusMessage = "Not Found";
@@ -53,8 +58,6 @@ export function createRealmServer(realms: Realm[]) {
       }
 
       let reqBody = await nodeStreamToText(req);
-
-      let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
       let request = new Request(reversedResolution.href, {
         method: req.method,
