@@ -14,8 +14,11 @@ export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
-    if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
-      res.setHeader('X-ECS-Container-Metadata-URI-v4', process.env['ECS_CONTAINER_METADATA_URI_V4']);
+    if (process.env["ECS_CONTAINER_METADATA_URI_V4"]) {
+      res.setHeader(
+        "X-ECS-Container-Metadata-URI-v4",
+        process.env["ECS_CONTAINER_METADATA_URI_V4"]
+      );
     }
 
     res.on("finish", () => {
@@ -42,9 +45,19 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
-      let protocol = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-      let fullRequestUrl = new URL(`${protocol}://${req.headers.host}${req.url}`);
+      let protocol =
+        req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      let fullRequestUrl = new URL(
+        `${protocol}://${req.headers.host}${req.url}`
+      );
       let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
+      console.log(
+        `full request URL=${fullRequestUrl}, reversed resolution=${Loader.reverseResolution(
+          fullRequestUrl.href
+        )}, Loader.resolutions=${Loader.getLoader().urlMappings.join()}, realms=${realms
+          .map((r) => r.url)
+          .join()}`
+      );
 
       let realm = realms.find((r) => {
         return r.paths.inRealm(reversedResolution);

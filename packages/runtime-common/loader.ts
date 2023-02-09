@@ -79,7 +79,7 @@ export class Loader {
   // wanting to communicate via localhost resolved URL's, but also a browser
   // that talks to the realm (we need to reverse the resolution in the server.ts
   // to figure out which realm the request is talking to)
-  private urlMappings: [string, string][] = [];
+  urlMappings: [string, string][] = [];
   private moduleShims = new Map<string, Record<string, any>>();
   private identities = new WeakMap<
     Function,
