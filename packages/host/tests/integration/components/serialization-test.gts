@@ -1281,7 +1281,7 @@ module('Integration | serialization', function (hooks) {
     };
     let firstPost = await createFromSerialized<typeof Post>(doc.data, doc, undefined);
     await renderCard(firstPost, 'isolated');
-    assert.shadowDOM('[data-test]').hasText('Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM'); // a no break space is serialized between the time and the AM/PM
+    assert.shadowDOM('[data-test]').hasText('Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM'); // a non-breaking space is serialized between the time and the AM/PM
   });
 
   test('can serialize a composite field', async function(assert) {
