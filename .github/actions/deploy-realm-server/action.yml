@@ -74,8 +74,7 @@ runs:
       run: pnpm install --frozen-lockfile
     - name: Build host dist/ for fastboot
       shell: bash
-      # TODO production built app is causing errors in fastboot during indexing
-      run: pnpm build
+      run: pnpm build:production
       working-directory: packages/host
 
     - name: Deploy ${{ inputs.app_name }}
