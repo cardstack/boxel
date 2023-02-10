@@ -1,5 +1,5 @@
-import Route from "@ember/routing/route";
-import { service } from "@ember/service";
+import Route from '@ember/routing/route';
+import { service } from '@ember/service';
 import type LogService from '../services/log';
 
 interface Model {
