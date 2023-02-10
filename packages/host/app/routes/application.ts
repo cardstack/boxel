@@ -11,7 +11,7 @@ export default class Application extends Route<Model> {
   @service declare log: LogService;
 
   beforeModel() {
-    console.log(`Log level: ${this.log.log.getLevel()}`);
+    console.log(`Log level: ${this.log?.log?.getLevel()}`);
   }
 
   async model(): Promise<Model> {
