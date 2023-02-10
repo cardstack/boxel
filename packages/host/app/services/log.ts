@@ -2,12 +2,9 @@ import Service from '@ember/service';
 import ENV from '@cardstack/host/config/environment';
 import log from 'loglevel';
 
-export default class LogService extends Service {
-  constructor() {
-    super();
-    log.setDefaultLevel(ENV.logLevel);
-  }
+log.setDefaultLevel(ENV.logLevel);
 
+export default class LogService extends Service {
   get log() {
     return log;
   }
