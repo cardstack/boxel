@@ -1,4 +1,5 @@
 import { timeout } from './util';
+import log from 'loglevel';
 
 export class LivenessWatcher {
   private isAlive = true;
@@ -31,7 +32,7 @@ export class LivenessWatcher {
       try {
         this.isAlive = await this.backendIsOurs();
       } catch (err) {
-        console.log(
+        log.error(
           `Encountered error performing aliveness check (server is probably not running):`,
           err
         );

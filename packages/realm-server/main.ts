@@ -97,24 +97,24 @@ for (let [i, path] of paths.entries()) {
 
 let server = createRealmServer(realms);
 server.listen(port);
-console.log(`Realm server listening on port ${port}:`);
+log.info(`Realm server listening on port ${port}:`);
 let additionalMappings = hrefs.slice(paths.length);
 for (let [index, { url }] of realms.entries()) {
-  console.log(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
+  log.info(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
 }
 if (additionalMappings.length) {
-  console.log("Additional URL mappings:");
+  log.info("Additional URL mappings:");
   for (let [from, to] of additionalMappings) {
-    console.log(`    ${from} => ${to}`);
+    log.info(`    ${from} => ${to}`);
   }
 }
-console.log(`Using host dist path: '${distPath}' for card pre-rendering`);
+log.info(`Using host dist path: '${distPath}' for card pre-rendering`);
 
 (async () => {
   for (let realm of realms) {
-    console.log(`Starting realm ${realm.url}...`);
+    log.info(`Starting realm ${realm.url}...`);
     await realm.start();
-    console.log(
+    log.info(
       `Realm ${realm.url} has started (${JSON.stringify(
         realm.searchIndex.stats,
         null,
