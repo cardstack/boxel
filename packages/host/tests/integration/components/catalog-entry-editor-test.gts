@@ -88,11 +88,15 @@ module('Integration | catalog-entry-editor', function (hooks) {
     // to trigger a timeout error using the default timeout
     await waitFor('[data-test-ref]', { timeout: 5000 });
 
+    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').exists();
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
+    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').exists();
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry for Pet card');
     assert.shadowDOM('[data-test-ref]').exists();
     assert.shadowDOM('[data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
+    assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').exists();
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').hasText('');
+    assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(2) input').exists();
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(2) input').isChecked();
 
     await fillIn('[data-test-field="title"] input', 'Pet test');
@@ -202,13 +206,19 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await waitFor('[data-test-format-button="edit"]');
     await click('[data-test-format-button="edit"]');
 
+    assert.dom('[data-test-catalog-entry-id]').exists();
     assert.dom('[data-test-catalog-entry-id]').hasText(`${testRealmURL}pet-catalog-entry`);
+    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').exists();
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
+    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').exists();
     assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry');
     assert.shadowDOM('[data-test-ref]').exists();
     assert.shadowDOM('[data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
+    assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').exists();
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').hasValue('Jackie');
+    assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(1) input').exists();
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(1) input').isChecked();
+    assert.shadowDOM('[data-test-field="demo"] [data-test-field="owner"] [data-test-field="firstName"] input').exists();
     assert.shadowDOM('[data-test-field="demo"] [data-test-field="owner"] [data-test-field="firstName"] input').hasValue('BN');
 
     await fillIn('[data-test-field="title"] input', 'test title');
@@ -219,9 +229,13 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await click('button[data-test-save-card]');
     await waitUntil(() => !(document.querySelector('[data-test-saving]')));
 
+    assert.shadowDOM('[data-test-title]').exists();
     assert.shadowDOM('[data-test-title]').hasText('test title');
+    assert.shadowDOM('[data-test-description]').exists();
     assert.shadowDOM('[data-test-description]').hasText('test description');
+    assert.shadowDOM('[data-test-demo] [data-test-pet-name]').exists();
     assert.shadowDOM('[data-test-demo] [data-test-pet-name]').hasText('Jackie Wackie');
+    assert.shadowDOM('[data-test-demo] [data-test-pet-owner]').exists();
     assert.shadowDOM('[data-test-demo] [data-test-pet-owner]').hasText('EA');
 
     let maybeError = await realm.searchIndex.card(new URL(`${testRealmURL}pet-catalog-entry`));
@@ -483,12 +497,15 @@ module('Integration | catalog-entry-editor', function (hooks) {
     );
 
     await waitFor('[data-test-ref]');
+    assert.shadowDOM(`[data-test-ref]`).exists();
     assert.shadowDOM(`[data-test-ref]`).hasText(`Module: ${testRealmURL}nice-person Name: NicePerson`);
 
     await waitFor('[data-test-person-name]');
+    assert.shadowDOM('[data-test-person-name]').exists();
     assert.shadowDOM('[data-test-person-name]').hasText('Burcu Noyan');
 
     await waitFor('[data-test-pet-name]');
+    assert.shadowDOM('[data-test-pet-name]').exists();
     assert.shadowDOM('[data-test-pet-name]').hasText('Jackie');
   });
 

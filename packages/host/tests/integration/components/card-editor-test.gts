@@ -266,18 +266,21 @@ module('Integration | card-editor', function (hooks) {
       }
     )
     await waitFor('[data-test-isolated-firstName]'); // we need to wait for the card instance to load
+    assert.shadowDOM('[data-test-isolated-firstName]').exists();
     assert.shadowDOM('[data-test-isolated-firstName]').hasText('Mango');
     assert.shadowDOM('[data-test-embedded-firstName]').doesNotExist();
     assert.shadowDOM('[data-test-edit-firstName]').doesNotExist();
 
     await click('.format-button.embedded');
     assert.shadowDOM('[data-test-isolated-firstName]').doesNotExist();
+    assert.shadowDOM('[data-test-embedded-firstName]').exists();
     assert.shadowDOM('[data-test-embedded-firstName]').hasText('Mango');
     assert.shadowDOM('[data-test-edit-firstName]').doesNotExist();
 
     await click('.format-button.edit');
     assert.shadowDOM('[data-test-isolated-firstName]').doesNotExist();
     assert.shadowDOM('[data-test-embedded-firstName]').doesNotExist();
+    assert.shadowDOM('[data-test-edit-firstName] input').exists();
     assert.shadowDOM('[data-test-edit-firstName] input').hasValue('Mango');
   });
 
@@ -312,9 +315,11 @@ module('Integration | card-editor', function (hooks) {
     await fillIn('[data-test-edit-firstName] input', 'Van Gogh');
 
     await click('.format-button.embedded');
+    assert.shadowDOM('[data-test-embedded-firstName]').exists();
     assert.shadowDOM('[data-test-embedded-firstName]').hasText('Van Gogh');
 
     await click('.format-button.isolated');
+    assert.shadowDOM('[data-test-isolated-firstName]').exists();
     assert.shadowDOM('[data-test-isolated-firstName]').hasText('Van Gogh');
   });
 
@@ -428,6 +433,7 @@ module('Integration | card-editor', function (hooks) {
     await click('[data-test-save-card]');
 
     await waitFor('[data-test-person="Mariko"]');
+    assert.shadowDOM('[data-test-person="Mariko"]').exists();
     assert.shadowDOM('[data-test-person="Mariko"]').hasText('Mariko');
     assert.shadowDOM('[data-test-pet="Simba"]').exists();
     assert.shadowDOM('[data-test-pet="Simba"]').hasText('Simba');
