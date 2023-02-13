@@ -1,7 +1,6 @@
 import http, { IncomingMessage, ServerResponse } from "http";
-import { Realm } from "@cardstack/runtime-common";
+import { Loader, Realm } from "@cardstack/runtime-common";
 import { webStreamToText } from "@cardstack/runtime-common/stream";
-import { LocalPath } from "@cardstack/runtime-common/paths";
 import { Readable } from "stream";
 import { setupCloseHandler } from "./node-realm";
 import "@cardstack/runtime-common/externals-global";
@@ -15,10 +14,15 @@ export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
-    res.on("finish", () => {
-      console.log(
-        `${req.method} ${req.url}: ${res.statusCode} (user agent: ${req.headers["user-agent"]})`
+    if (process.env["ECS_CONTAINER_METADATA_URI_V4"]) {
+      res.setHeader(
+        "X-ECS-Container-Metadata-URI-v4",
+        process.env["ECS_CONTAINER_METADATA_URI_V4"]
       );
+    }
+
+    res.on("finish", () => {
+      console.log(`${req.method} ${req.url}: ${res.statusCode}`);
     });
 
     let isStreaming = false;
@@ -30,10 +34,6 @@ export function createRealmServer(realms: Realm[]) {
         throw new Error(`bug: missing URL in request`);
       }
 
-      let realm = realms.find((r) =>
-        req.url!.startsWith(new URL(r.url).pathname)
-      );
-
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
@@ -43,6 +43,17 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
+      let protocol =
+        req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      let fullRequestUrl = new URL(
+        `${protocol}://${req.headers.host}${req.url}`
+      );
+      let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
+
+      let realm = realms.find((r) => {
+        return r.paths.inRealm(reversedResolution);
+      });
+
       if (!realm) {
         res.statusCode = 404;
         res.statusMessage = "Not Found";
@@ -50,15 +61,9 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
-      // despite the name, req.url is actually the pathname for the request URL
-      let local: LocalPath = req.url === "/" ? "" : req.url;
-      let url =
-        local.endsWith("/") || local === ""
-          ? realm.paths.directoryURL(local)
-          : realm.paths.fileURL(local);
-
       let reqBody = await nodeStreamToText(req);
-      let request = new Request(url.href, {
+
+      let request = new Request(reversedResolution.href, {
         method: req.method,
         headers: req.headers as { [name: string]: string },
         ...(reqBody ? { body: reqBody } : {}),

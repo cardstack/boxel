@@ -21,8 +21,6 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
   let layout = (getComponentTemplate as any)(root)(_owner).asLayout();
   let iterator = renderMain(_runtime, _context, _owner, self, _builder(_runtime.env, { element }), layout);
   let vm = (iterator as any).vm;
-  let initialState = vm.env.debugRenderTree.stack.current;
-  let initialStackSize = vm.env.debugRenderTree.stack.stack.length;
 
   try {
     inTransaction(_runtime.env, () => vm._execute());
@@ -39,14 +37,6 @@ export function render(C: ComponentLike, element: SimpleElement, owner: Owner): 
     let stackSize = stacks.cache.stack.length
     for (let i = 0; i < stackSize; i++) {
       vm.commitCacheGroup();
-    }
-
-    // Unwind the render tree stack until we get back to the initial state
-    while (vm.env.debugRenderTree.stack.current!== initialState && vm.env.debugRenderTree.stack.size > 0) {
-      vm.env.debugRenderTree.exit();
-    }
-    if (vm.env.debugRenderTree.stack.size === 0 && initialStackSize > 0) {
-      throw new Error(`could not unwind the glimmer render tree stack back to the initial state`);
     }
   
     let error = new CardError(`Encountered error rendering HTML for card: ${err.message}`);

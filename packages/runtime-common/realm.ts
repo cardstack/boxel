@@ -351,7 +351,8 @@ export class Realm {
                 precompile: etc.precompile,
               },
             ]
-          : (makeEmberTemplatePlugin as any)(() => etc.precompile),
+          : // TODO type this better
+            (makeEmberTemplatePlugin as any)(() => etc.precompile),
         loaderPlugin,
       ],
     })!.code!;

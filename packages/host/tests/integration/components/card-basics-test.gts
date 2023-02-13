@@ -363,8 +363,8 @@ module('Integration | card-basics', function (hooks) {
       }
     });
 
-    await cardApi.recompute(nonPrimitiveEntry);
-    await cardApi.recompute(primitiveEntry);
+    await cardApi.recompute(nonPrimitiveEntry, { recomputeAllFields: true });
+    await cardApi.recompute(primitiveEntry, { recomputeAllFields: true });
 
     assert.strictEqual(nonPrimitiveEntry.isPrimitive, false, 'isPrimitive is correct');
     assert.strictEqual(primitiveEntry.isPrimitive, true, 'isPrimitive is correct');

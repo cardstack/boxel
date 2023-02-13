@@ -69,13 +69,19 @@ module("indexing", function (hooks) {
         }
       `,
       "post.gts": `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
         export class Post extends Card {
           @field author = contains(Person);
           @field message = contains(StringCard);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.message/></h1>
+              <h2><@fields.author/></h2>
+            </template>
+          }
         }
       `,
       "boom.gts": `
@@ -412,18 +418,21 @@ module("indexing", function (hooks) {
     await realm.write(
       "person.gts",
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
+          import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-        @field nickName = contains(StringCard, {
-          computeVia: function() {
-            return this.firstName + '-poo';
+          export class Person extends Card {
+            @field firstName = contains(StringCard);
+            @field nickName = contains(StringCard, {
+              computeVia: function() {
+                return this.firstName + '-poo';
+              }
+            })
+            static embedded = class Embedded extends Component<typeof this> {
+              <template><@fields.firstName/> (<@fields.nickName/>)</template>
+            }
           }
-        })
-      }
-    `
+        `
     );
 
     let { data: result } = await realm.searchIndex.search({
