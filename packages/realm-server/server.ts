@@ -6,6 +6,8 @@ import { setupCloseHandler } from "./node-realm";
 import "@cardstack/runtime-common/externals-global";
 import log from "loglevel";
 
+let requestLog = log.getLogger('realm:requests');
+
 export interface RealmConfig {
   realmURL: string;
   path: string;
@@ -23,8 +25,8 @@ export function createRealmServer(realms: Realm[]) {
     }
 
     res.on("finish", () => {
-      log.info(`${req.method} ${req.url}: ${res.statusCode}`);
-      log.debug(JSON.stringify(req.headers));
+      requestLog.info(`${req.method} ${req.url}: ${res.statusCode}`);
+      requestLog.debug(JSON.stringify(req.headers));
     });
 
     let isStreaming = false;
@@ -52,14 +54,14 @@ export function createRealmServer(realms: Realm[]) {
       );
       let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
-      log.debug(
+      requestLog.debug(
         `Looking for realm to handle request with full URL: ${fullRequestUrl.href} (reversed: ${reversedResolution.href})`
       );
 
       let realm = realms.find((r) => {
         let inRealm = r.paths.inRealm(reversedResolution);
 
-        log.debug(
+        requestLog.debug(
           `In realm ${JSON.stringify({
             url: r.url,
             paths: r.paths,

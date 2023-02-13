@@ -15,6 +15,7 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   logLevel,
+  requestLogLevel,
 } = yargs(process.argv.slice(2))
   .usage("Start realm server")
   .options({
@@ -48,6 +49,11 @@ let {
       choices: ["trace", "debug", "info", "warn", "error"],
       default: "debug",
     },
+    requestLogLevel: {
+      description: "how detailed request log output should be",
+      choices: ["trace", "debug", "info", "warn", "error"],
+      default: "info",
+    }
   })
   .parseSync();
 
@@ -66,6 +72,10 @@ if (fromUrls.length < paths.length) {
 
 log.setLevel(logLevel as LogLevelNames);
 log.info(`Set log level to ${logLevel}`);
+
+let requestLog = log.getLogger('realm:requests');
+requestLog.setLevel(requestLogLevel as LogLevelNames);
+requestLog.info(`Set request log level to ${requestLogLevel}`);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),

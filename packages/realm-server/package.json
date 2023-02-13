@@ -30,7 +30,7 @@
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.api%2Bjson' 'test'",
     "setup:base-in-deployment": "rm -rf /persistent/base && cp -R ../base /persistent",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
-    "start:base": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/'",
+    "start:base": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4201 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --requestLogLevel=debug",
     "start:base:root": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4203 --path='../base' --fromUrl='https://cardstack.com/base/' --toUrl='/'",
     "start:test-realms": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4202 --path='./tests/cards' --fromUrl='/node-test/' --toUrl='/node-test/' --path='../host/tests/cards' --fromUrl='/test/' --toUrl='/test/' --fromUrl='https://cardstack.com/base/' --toUrl='http://localhost:4201/base/'",
     "start:all": "NODE_NO_WARNINGS=1 start-server-and-test 'run-p start:base start:base:root' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.api%2Bjson|http-get://localhost:4203/fields/boolean-field?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run start:test-realms' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.api%2Bjson' 'wait'",
