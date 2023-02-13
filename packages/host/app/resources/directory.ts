@@ -74,6 +74,11 @@ export class DirectoryResource extends Resource<Args> {
       return [];
     }
     this.messageService.start();
+    // subscribe to message service here
+    // service will need a map of resources listening (active subscriptions and list of listeners)
+    // register detroyable along with the subscription
+    // have a callback for the unsubscribe
+    // use the ember destroyable api for the unsubscribe
     let {
       data: { relationships: _relationships },
     } = await response.json();

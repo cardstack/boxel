@@ -454,8 +454,11 @@ export class Realm {
         meta: { lastModified },
       },
     });
+    // this will need to be specific to the adapter
+    // ie. we can use the file watching
+    // in sw adapter, we'll still need polling (just fs polling, not in the network tab)
     this.sendUpdateMessages(`event: create\n` + `data: ${fileURL}\n\n`);
-    this.sendUpdateMessages(`event: reset\n` + `data: reset\n\n`);
+    // this.sendUpdateMessages(`event: reset\n` + `data: reset\n\n`);
     return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
