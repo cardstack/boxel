@@ -37,6 +37,7 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
     ENV.logLevel = 'debug';
+    ENV.currentRunLogLevel = 'error';
   }
 
   if (environment === 'test') {
@@ -54,6 +55,7 @@ module.exports = function (environment) {
   if (environment === 'production') {
     // here you can enable a production-specific feature
     ENV.logLevel = 'warn';
+    ENV.currentRunLogLevel = 'info';
   }
 
   return ENV;

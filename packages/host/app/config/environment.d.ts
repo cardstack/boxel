@@ -15,4 +15,5 @@ declare const config: {
   demoRealmURL: string;
   resolvedBaseRealmURL: string;
   logLevel: LogLevelNames;
+  currentRunLogLevel: LogLevelNames;
 };

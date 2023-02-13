@@ -4,9 +4,16 @@ import log from 'loglevel';
 
 log.setDefaultLevel(ENV.logLevel);
 
+let currentRunLog = log.getLogger('host:current-run');
+currentRunLog.setDefaultLevel(ENV.currentRunLogLevel);
+
 export default class LogService extends Service {
   get log() {
     return log;
+  }
+
+  get currentRunLog() {
+    return currentRunLog;
   }
 }
 
