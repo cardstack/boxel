@@ -29,43 +29,42 @@ module('Integration | catalog-entry-editor', function (hooks) {
       new URL('http://localhost:4201/base/')
     );
     shimExternals();
-    adapter = new TestRealmAdapter({});
+    adapter = new TestRealmAdapter({
+      'person.gts': `
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><@fields.firstName/></template>
+          }
+        }
+      `,
+      'pet.gts': `
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        import BooleanCard from "https://cardstack.com/base/boolean";
+        import DateCard from "https://cardstack.com/base/date";
+        import { Person } from "./person";
+        export class Pet extends Card {
+          @field name = contains(StringCard);
+          @field lovesWalks = contains(BooleanCard);
+          @field birthday = contains(DateCard);
+          @field owner = contains(Person);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <h2 data-test-pet-name><@fields.name/></h2>
+              <div data-test-pet-owner><@fields.owner/></div>
+              <div data-test-pet-owner><@fields.birthday/></div>
+            </template>
+          }
+        }
+      `
+    });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
-
-    await realm.write('person.gts', `
-      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-        static embedded = class Embedded extends Component<typeof this> {
-          <template><@fields.firstName/></template>
-        }
-      }
-    `);
-
-    await realm.write('pet.gts', `
-      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import BooleanCard from "https://cardstack.com/base/boolean";
-      import DateCard from "https://cardstack.com/base/date";
-      import { Person } from "./person";
-      export class Pet extends Card {
-        @field name = contains(StringCard);
-        @field lovesWalks = contains(BooleanCard);
-        @field birthday = contains(DateCard);
-        @field owner = contains(Person);
-        static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <h2 data-test-pet-name><@fields.name/></h2>
-            <div data-test-pet-owner><@fields.owner/></div>
-            <div data-test-pet-owner><@fields.birthday/></div>
-          </template>
-        }
-      }
-    `);
   });
 
   hooks.afterEach(function() {
