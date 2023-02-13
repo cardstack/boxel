@@ -4,6 +4,7 @@ import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
 import { CurrentRun } from '../lib/current-run';
 import { readFileAsText as _readFileAsText } from "@cardstack/runtime-common/stream";
+import { hasExecutableExtension } from '@cardstack/runtime-common';
 import {
   type EntrySetter,
   type Reader,
@@ -38,6 +39,7 @@ export default class CardPrerender extends Component {
   }
 
   private async fromScratch(realmURL: URL): Promise<RunState> {
+    this.loaderService.reset();
     try {
       let state = await taskFor(this.doFromScratch).perform(realmURL);
       return state
@@ -50,6 +52,9 @@ export default class CardPrerender extends Component {
   }
 
   private async incremental(prev: RunState, url: URL, operation: 'delete' | 'update'): Promise<RunState> {
+    if (hasExecutableExtension(url.href)) {
+      this.loaderService.reset();
+    }
     try {
       let state = await taskFor(this.doIncremental).perform(prev, url, operation);
       return state;
