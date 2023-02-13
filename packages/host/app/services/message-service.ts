@@ -1,7 +1,6 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import type CardService from '../services/card-service';
-import { RealmPaths } from '@cardstack/runtime-common';
 
 export interface EventMessage {
   url: string;
@@ -11,17 +10,23 @@ export interface EventMessage {
 export default class MessageService extends Service {
   @service declare cardService: CardService;
   @tracked eventSource: EventSource | undefined;
-  @tracked message: EventMessage | undefined;
 
   get isClosed() {
     return this.eventSource?.readyState === EventSource.CLOSED;
   }
 
-  start() {
+  subscribe(realmURL: string) {
+    this.start(realmURL);
+  }
+
+  unsubscribe(realmURL: string) {
+    this.stop(realmURL);
+  }
+
+  start(realmURL: string) {
     if (!this.eventSource || this.isClosed) {
-      let realmPath = new RealmPaths(this.cardService.defaultURL);
-      this.eventSource = new EventSource(`${realmPath.url}_message`);
-      console.log('Created new event source');
+      this.eventSource = new EventSource(`${realmURL}_message`);
+      console.log(`Created new event source for realm ${realmURL}`);
     }
 
     this.eventSource.onerror = (_ev: Event) => {
@@ -38,44 +43,13 @@ export default class MessageService extends Service {
       }
     };
 
-    this.eventSource.addEventListener('create', (e: MessageEvent) => {
-      if (!this.message || this.message.url !== e.data) {
-        this.message = { url: e.data, event: 'create' };
-      }
-    });
-
-    this.eventSource.addEventListener('patch', (e: MessageEvent) => {
-      if (!this.message || this.message.url !== e.data) {
-        this.message = { url: e.data, event: 'patch' };
-      }
-    });
-
-    this.eventSource.addEventListener('upsert', (e: MessageEvent) => {
-      if (!this.message || this.message.url !== e.data) {
-        this.message = { url: e.data, event: 'upsert' };
-      }
-    });
-
-    this.eventSource.addEventListener('remove', (e: MessageEvent) => {
-      if (!this.message || this.message.url !== e.data) {
-        this.message = { url: e.data, event: 'remove' };
-      }
-    });
-
     this.eventSource.onmessage = (e: MessageEvent) => {
       console.log('Event: message, data: ' + e.data);
     };
-
-    this.eventSource.addEventListener('reset', (_e: MessageEvent) => {
-      this.clearMessage();
-    });
   }
 
-  clearMessage() {
-    this.message = undefined;
-  }
-
-  stop() {
+  stop(_realmURL: string) {
+    // we will map realmURL to eventSource and close accordingly
     if (this.eventSource) {
       this.eventSource.close();
       if (this.isClosed) {

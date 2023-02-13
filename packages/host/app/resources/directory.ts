@@ -5,9 +5,10 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import type { Relationship } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-import type { EventMessage } from '../services/message-service';
+// import type { EventMessage } from '../services/message-service';
 
 interface Args {
   named: {
@@ -73,12 +74,10 @@ export class DirectoryResource extends Resource<Args> {
       );
       return [];
     }
-    this.messageService.start();
-    // subscribe to message service here
-    // service will need a map of resources listening (active subscriptions and list of listeners)
-    // register detroyable along with the subscription
-    // have a callback for the unsubscribe
-    // use the ember destroyable api for the unsubscribe
+    this.messageService.subscribe(realmPath.url);
+    registerDestructor(this, () =>
+      this.messageService.unsubscribe(realmPath.url)
+    );
     let {
       data: { relationships: _relationships },
     } = await response.json();
@@ -94,10 +93,9 @@ export class DirectoryResource extends Resource<Args> {
 export function directory(
   parent: object,
   url: () => string | undefined,
-  openDirs: () => string | undefined,
-  message: () => EventMessage | undefined
+  openDirs: () => string | undefined
 ) {
   return DirectoryResource.from(parent, () => ({
-    named: { url: url(), openDirs: openDirs(), message: message() },
+    named: { url: url(), openDirs: openDirs() },
   })) as DirectoryResource;
 }

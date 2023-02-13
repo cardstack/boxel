@@ -48,7 +48,7 @@ export default class Directory extends Component<Args> {
   </template>
 
 
-  listing = directory(this, () => this.args.url, () => this.args.openDirs, () => this.messageService.message);
+  listing = directory(this, () => this.args.url, () => this.args.openDirs);
   @service declare router: RouterService;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
