@@ -39,7 +39,6 @@ export default class CardPrerender extends Component {
   }
 
   private async fromScratch(realmURL: URL): Promise<RunState> {
-    this.loaderService.reset();
     try {
       let state = await taskFor(this.doFromScratch).perform(realmURL);
       return state
