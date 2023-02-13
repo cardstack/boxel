@@ -39,6 +39,9 @@ export default class CardPrerender extends Component {
   }
 
   private async fromScratch(realmURL: URL): Promise<RunState> {
+    if (!this.fastboot.isFastBoot) {
+      this.loaderService.reset();
+    }
     try {
       let state = await taskFor(this.doFromScratch).perform(realmURL);
       return state
@@ -51,7 +54,7 @@ export default class CardPrerender extends Component {
   }
 
   private async incremental(prev: RunState, url: URL, operation: 'delete' | 'update'): Promise<RunState> {
-    if (hasExecutableExtension(url.href)) {
+    if (hasExecutableExtension(url.href) && !this.fastboot.isFastBoot) {
       this.loaderService.reset();
     }
     try {
