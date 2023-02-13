@@ -8,7 +8,6 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-// import type { EventMessage } from '../services/message-service';
 
 interface Args {
   named: {

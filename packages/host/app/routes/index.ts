@@ -5,7 +5,6 @@ import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import type LocalRealm from '../services/local-realm';
 import type CardService from '../services/card-service';
-import type MessageService from '../services/message-service';
 import { RealmPaths } from '@cardstack/runtime-common';
 import type { Format } from 'https://cardstack.com/base/card-api';
 
@@ -30,7 +29,6 @@ export default class Index extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare localRealm: LocalRealm;
-  @service declare messageService: MessageService;
   @service declare fastboot: { isFastBoot: boolean };
 
   async model(args: {
@@ -44,12 +42,7 @@ export default class Index extends Route<Model> {
 
     let openFile: FileResource | undefined;
     if (!path) {
-      return {
-        path,
-        openFile,
-        openDirs,
-        isFastBoot,
-      };
+      return { path, openFile, openDirs, isFastBoot };
     }
 
     await this.localRealm.startedUp;
@@ -71,7 +64,6 @@ export default class Index extends Route<Model> {
       );
       return { path, openFile, openDirs, isFastBoot };
     }
-    this.messageService.start();
     // The server may have responded with a redirect which we need to pay
     // attention to. As part of responding to us, the server will hand us a
     // resolved URL in response.url. We need to reverse that resolution in order
@@ -101,11 +93,6 @@ export default class Index extends Route<Model> {
       await openFile.loading;
     }
 
-    return {
-      path,
-      openFile,
-      openDirs,
-      isFastBoot,
-    };
+    return { path, openFile, openDirs, isFastBoot };
   }
 }

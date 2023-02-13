@@ -46,23 +46,13 @@ class _FileResource extends Resource<Args> {
   @service declare messageService: MessageService;
 
   modify(_positional: never[], named: Args['named']) {
-    let message = this.messageService.message;
     let { url, content, lastModified, onStateChange } = named;
     this._url = url;
     this.onStateChange = onStateChange;
-    if (content !== undefined && !message) {
+    if (content !== undefined) {
       this.content = content;
       this.lastModified = lastModified;
-    } else if (
-      message?.event === 'remove' &&
-      message?.url === url &&
-      this.onStateChange
-    ) {
-      console.log(message);
-      this.state = 'not-found';
-      this.onStateChange(this.state);
     } else {
-      console.log(message);
       // get the initial content if we haven't already been seeded with initial content
       taskFor(this.read).perform();
     }
