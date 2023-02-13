@@ -73,10 +73,14 @@ export class DirectoryResource extends Resource<Args> {
       );
       return [];
     }
-    this.messageService.subscribe(realmPath.url);
+
+    this.messageService.subscribe(realmPath.url, (_message) =>
+      taskFor(this.readdir).perform()
+    );
     registerDestructor(this, () =>
       this.messageService.unsubscribe(realmPath.url)
     );
+
     let {
       data: { relationships: _relationships },
     } = await response.json();

@@ -1,61 +1,52 @@
-import Service, { service } from '@ember/service';
+import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import type CardService from '../services/card-service';
-
-export interface EventMessage {
-  url: string;
-  event: string;
-}
 
 export default class MessageService extends Service {
-  @service declare cardService: CardService;
-  @tracked eventSource: EventSource | undefined;
+  @tracked subscriptionsMap: Map<string, EventSource> = new Map();
 
-  get isClosed() {
-    return this.eventSource?.readyState === EventSource.CLOSED;
-  }
-
-  subscribe(realmURL: string) {
-    this.start(realmURL);
-  }
-
-  unsubscribe(realmURL: string) {
-    this.stop(realmURL);
-  }
-
-  start(realmURL: string) {
-    if (!this.eventSource || this.isClosed) {
-      this.eventSource = new EventSource(`${realmURL}_message`);
-      console.log(`Created new event source for realm ${realmURL}`);
+  subscribe(url: string, cb: (ev: MessageEvent) => void) {
+    if (!this.subscriptionsMap.has(url)) {
+      this.subscriptionsMap.set(url, new EventSource(`${url}_message`));
+      console.log(`Created new event source for ${url}`);
     }
+    let eventSource = this.subscriptionsMap.get(url);
+    if (!eventSource) {
+      throw new Error('No event source found. This should not happen.');
+    }
+    this.start(eventSource, cb);
+  }
 
-    this.eventSource.onerror = (_ev: Event) => {
-      if (this.eventSource?.readyState == EventSource.CONNECTING) {
-        console.log(
-          `Reconnecting (readyState=${this.eventSource.readyState})...`
-        );
-      } else if (this.isClosed) {
-        console.log(
-          `Connection closed (readyState=${this.eventSource?.readyState})`
-        );
+  unsubscribe(url: string) {
+    let eventSource = this.subscriptionsMap.get(url);
+    if (!eventSource) {
+      throw new Error('No event source found for unsubscribe.');
+    }
+    this.stop(eventSource);
+  }
+
+  start(eventSource: EventSource, cb: (ev: MessageEvent) => void) {
+    eventSource.onerror = (_ev: Event) => {
+      if (eventSource.readyState == EventSource.CONNECTING) {
+        console.log(`Reconnecting to ${eventSource.url}...`);
+      } else if (eventSource.readyState == EventSource.CLOSED) {
+        console.log(`Connection closed for ${eventSource.url}`);
       } else {
-        console.log(`An error has occured`);
+        console.log(`An error has occured for ${eventSource.url}`);
       }
     };
 
-    this.eventSource.onmessage = (e: MessageEvent) => {
+    eventSource.onmessage = (e: MessageEvent) => {
       console.log('Event: message, data: ' + e.data);
+      cb(e);
     };
   }
 
-  stop(_realmURL: string) {
-    // we will map realmURL to eventSource and close accordingly
-    if (this.eventSource) {
-      this.eventSource.close();
-      if (this.isClosed) {
-        console.log('Connection closed');
-        this.eventSource = undefined;
-      }
+  stop(eventSource: EventSource) {
+    eventSource.close();
+    if (eventSource.readyState !== EventSource.CLOSED) {
+      throw new Error('EventSource did not close');
     }
+    this.subscriptionsMap.delete(eventSource.url);
+    console.log(`Unsubscribed ${eventSource.url}`);
   }
 }
