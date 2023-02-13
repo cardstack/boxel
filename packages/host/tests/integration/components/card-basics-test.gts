@@ -735,18 +735,21 @@ module('Integration | card-basics', function (hooks) {
     assert.shadowDOM('[data-test-field="title"]').hasText('Title');
     assert.shadowDOM('[data-test-field="title"] input').exists();
     assert.shadowDOM('[data-test-field="title"] input').hasValue('My Post');
-    assert.shadowDOM('[data-test-field="author"] [data-test-field="firstName"]').exists();
-    assert.shadowDOM('[data-test-field="author"] [data-test-field="firstName"]').hasText('First Name');
-    assert.shadowDOM('[data-test-field="author"] input').exists();
-    assert.shadowDOM('[data-test-field="author"] input').hasValue('Arthur');
+    let authorEl = shadowQuerySelector('[data-test-field="author"]');
+    let firstNameEl = shadowQuerySelector('[data-test-field="firstName"]', authorEl);
+    assert.strictEqual(cleanWhiteSpace(firstNameEl.textContent!), 'First Name');
+    let authorInput = shadowQuerySelector('input', authorEl) as HTMLInputElement;
+    assert.strictEqual(authorInput.value, 'Arthur');
 
     await fillIn('[data-test-field="title"] input', 'New Post');
     await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
 
     assert.shadowDOM('[data-test-field="title"] input').exists();
     assert.shadowDOM('[data-test-field="title"] input').hasValue('New Post');
-    assert.shadowDOM('[data-test-field="author"] input').exists();
+    authorEl = shadowQuerySelector('[data-test-field="author"]');
     assert.shadowDOM('[data-test-field="author"] input').hasValue('Carl Stack');
+    authorInput = shadowQuerySelector('input', authorEl) as HTMLInputElement;
+    assert.strictEqual(authorInput.value, 'Carl Stack');
   });
 
   test('renders field name for boolean default view values', async function (assert) {
