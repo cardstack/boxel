@@ -78,8 +78,8 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
         return Reflect.get(target, property, received);
       }
       let field = maybeField;
-      defaultFormat = getField(modelValue.constructor, property)?.computeVia ? 'embedded' : defaultFormat;
-      return field.component(model as unknown as Box<Card>, defaultFormat, opts);
+      let format = getField(modelValue.constructor, property)?.computeVia ? 'embedded' : defaultFormat;
+      return field.component(model as unknown as Box<Card>, format, opts);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
