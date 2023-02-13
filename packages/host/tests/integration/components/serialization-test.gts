@@ -1282,8 +1282,7 @@ module('Integration | serialization', function (hooks) {
     let firstPost = await createFromSerialized<typeof Post>(doc.data, doc, undefined);
     await renderCard(firstPost, 'isolated');
     let el = shadowQuerySelector('[data-test]');
-    // i'm seeing non-breaking spaces before the AM/PM in some envs
-    assert.strictEqual(cleanWhiteSpace(el.textContent!.replace(/ /g, ' ')), 'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM');
+    assert.strictEqual(cleanWhiteSpace(el.textContent!), 'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM');
   });
 
   test('can serialize a composite field', async function(assert) {
