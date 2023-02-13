@@ -9,6 +9,7 @@ import type CardService from '../services/card-service';
 import type MessageService from '../services/message-service';
 import { RealmPaths } from '@cardstack/runtime-common';
 import type { Format } from 'https://cardstack.com/base/card-api';
+import log from 'loglevel';
 
 interface Model {
   path: string | undefined;
@@ -67,7 +68,7 @@ export default class Index extends Route<Model> {
     });
     if (!response.ok) {
       // TODO should we have an error route?
-      console.error(
+      log.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
       return { path, openFile, polling, openDirs, isFastBoot };

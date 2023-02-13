@@ -34,6 +34,7 @@ import {
   type CardResource,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
+import log from 'loglevel';
 
 export { primitive, isField };
 export const serialize = Symbol('cardstack-serialize');
@@ -128,7 +129,7 @@ class Logger {
       try {
         await promise;
       } catch (e: any) {
-        console.error(`encountered error performing recompute on card`, e);
+        log.error(`encountered error performing recompute on card`, e);
       }
     })();
   }
@@ -137,9 +138,9 @@ class Logger {
     let results = await Promise.allSettled(this.promises);
     for (let result of results) {
       if (result.status === 'rejected') {
-        console.error(`Promise rejected`, result.reason);
+        log.error(`Promise rejected`, result.reason);
         if (result.reason instanceof Error) {
-          console.error(result.reason.stack);
+          log.error(result.reason.stack);
         }
       }
     }

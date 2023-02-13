@@ -67,6 +67,7 @@ importers:
       ember-concurrency: 2.2.1
       ember-concurrency-ts: ^0.3.1
       ember-modifier: ^3.2.1
+      loglevel: ^1.8.1
       tracked-built-ins: ^2.0.1
     devDependencies:
       '@babel/core': 7.20.2
@@ -85,6 +86,7 @@ importers:
       ember-concurrency: 2.2.1_@babel+core@7.20.2
       ember-concurrency-ts: 0.3.1_ember-concurrency@2.2.1
       ember-modifier: 3.2.7_@babel+core@7.20.2
+      loglevel: 1.8.1
       tracked-built-ins: 2.0.1
     dependenciesMeta:
       '@cardstack/runtime-common':

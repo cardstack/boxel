@@ -5,6 +5,7 @@ import { task } from 'ember-concurrency';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
+import log from 'loglevel';
 
 interface Args {
   named: { url: string; loader: Loader };
@@ -44,7 +45,7 @@ ${err}
 
 Check console log for more details`,
         };
-        console.error(err);
+        log.error(err);
       }
     }
   }

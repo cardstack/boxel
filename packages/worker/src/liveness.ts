@@ -40,7 +40,7 @@ export class LivenessWatcher {
       if (this.isAlive) {
         await timeout(10 * 1000);
       } else {
-        console.error('shutting down service worker.');
+        log.error('shutting down service worker.');
         await Promise.all([
           this.worker.registration.unregister(),
           ...this.listeners.map((l) => l()),
