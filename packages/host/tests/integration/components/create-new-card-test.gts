@@ -31,79 +31,79 @@ module('Integration | create-new-card', function (hooks) {
       new URL('http://localhost:4201/base/')
     );
     shimExternals();
-    adapter = new TestRealmAdapter({});
+    adapter = new TestRealmAdapter({
+      'person.gts': `
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          @field nickName = contains(StringCard, { computeVia: function() { return this.firstName + '-poo'; }});
+          static isolated = class Isolated extends Component<typeof this> {
+            <template><h1><@fields.firstName/></h1></template>
+          }
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><h3>Person: <@fields.firstName/></h3></template>
+          }
+        }
+      `,
+      'post.gts': `
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Post extends Card {
+          @field title = contains(StringCard);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template><h1><@fields.title/></h1></template>
+          }
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><h3>Person: <@fields.title/></h3></template>
+          }
+        }
+      `,
+      'person-entry.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Person',
+            description: 'Catalog entry',
+            ref: {
+              module: `${testRealmURL}person`,
+              name: 'Person'
+            }
+          },
+          meta: {
+            adoptsFrom: {
+              module:`${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry'
+            }
+          }
+        }
+      },
+      'post-entry.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Post',
+            description: 'Catalog entry',
+            ref: {
+              module: `${testRealmURL}post`,
+              name: 'Post'
+            }
+          },
+          meta: {
+            adoptsFrom: {
+              module:`${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry'
+            }
+          }
+        }
+      }
+    });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
-
-    await realm.write('person.gts', `
-      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-        @field nickName = contains(StringCard, { computeVia: function() { return this.firstName + '-poo'; }});
-        static isolated = class Isolated extends Component<typeof this> {
-          <template><h1><@fields.firstName/></h1></template>
-        }
-        static embedded = class Embedded extends Component<typeof this> {
-          <template><h3>Person: <@fields.firstName/></h3></template>
-        }
-      }
-    `);
-    await realm.write('post.gts', `
-      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Post extends Card {
-        @field title = contains(StringCard);
-        static isolated = class Isolated extends Component<typeof this> {
-          <template><h1><@fields.title/></h1></template>
-        }
-        static embedded = class Embedded extends Component<typeof this> {
-          <template><h3>Person: <@fields.title/></h3></template>
-        }
-      }
-    `);
-    await realm.write('person-entry.json', JSON.stringify({
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'Person',
-          description: 'Catalog entry',
-          ref: {
-            module: `${testRealmURL}person`,
-            name: 'Person'
-          }
-        },
-        meta: {
-          adoptsFrom: {
-            module:`${baseRealm.url}catalog-entry`,
-            name: 'CatalogEntry'
-          }
-        }
-      }
-    }));
-    await realm.write('post-entry.json', JSON.stringify({
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'Post',
-          description: 'Catalog entry',
-          ref: {
-            module: `${testRealmURL}post`,
-            name: 'Post'
-          }
-        },
-        meta: {
-          adoptsFrom: {
-            module:`${baseRealm.url}catalog-entry`,
-            name: 'CatalogEntry'
-          }
-        }
-      }
-    }));
   });
 
   hooks.afterEach(function() {

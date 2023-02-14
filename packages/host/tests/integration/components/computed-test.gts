@@ -115,7 +115,9 @@ module('Integration | computeds', function (hooks) {
     }
     let firstPost = new Post({ title: 'First Post' });
     await renderCard(firstPost, 'isolated');
+    assert.shadowDOM('[data-test="title"]').exists();
     assert.shadowDOM('[data-test="title"]').hasText('First Post');
+    assert.shadowDOM('[data-test="firstName"]').exists();
     assert.shadowDOM('[data-test="firstName"]').hasText('Mango');
   });
 
@@ -259,7 +261,9 @@ module('Integration | computeds', function (hooks) {
     }
     let firstPost = new Post({ title: 'First Post' });
     await renderCard(firstPost, 'isolated');
+    assert.shadowDOM('[data-test="title"]').exists();
     assert.shadowDOM('[data-test="title"]').hasText('First Post');
+    assert.shadowDOM('[data-test="firstName"]').exists();
     assert.shadowDOM('[data-test="firstName"]').hasText('Mango');
   });
 
