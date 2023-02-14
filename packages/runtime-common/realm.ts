@@ -59,7 +59,7 @@ import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
 import { createResponse } from "./create-response";
-import { isEqual } from "lodash";
+// import { isEqual } from "lodash";
 
 export interface FileRef {
   path: LocalPath;
@@ -566,24 +566,15 @@ export class Realm {
     return createResponse(null, { status: 204 });
   }
 
-  private entryPaths = new Map<LocalPath, LocalPath[]>(); // map of dirPath and its entries
+  private listeningClients = new Map<string, WritableStream>();
 
   private async getDirectoryUpdates(
-    path: LocalPath,
-    dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
+    url: string,
+    _dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
   ) {
-    let entries: LocalPath[] = [];
-    for await (let entry of dir) {
-      entries.push(entry.path);
-    }
-    if (!this.entryPaths.has(path)) {
-      this.entryPaths.set(path, entries);
-    }
-    if (!isEqual(this.entryPaths.get(path), entries)) {
-      this.sendUpdateMessages(
-        `event: update\n` + `data: '${path}/' directory updated\n\n`
-      );
-      this.entryPaths.set(path, entries);
+    let client = this.listeningClients.get(`${url}_message`);
+    if (client) {
+      writeToStream(client, `event: update\n` + `data: polling '${url}'\n\n`);
     }
   }
 
@@ -599,7 +590,7 @@ export class Realm {
     }
     let entries: { name: string; kind: Kind }[] = [];
     for await (let entry of this.#adapter.readdir(path, {
-      subscribe: this.getDirectoryUpdates.bind(this, path),
+      subscribe: this.getDirectoryUpdates.bind(this, url.href),
     })) {
       let innerPath = join(path, entry.name);
       let innerURL =
@@ -704,8 +695,6 @@ export class Realm {
     return data;
   }
 
-  private listeningClients: WritableStream[] = [];
-
   private async subscribe(req: Request): Promise<Response> {
     let headers = {
       "Content-Type": "text/event-stream",
@@ -720,15 +709,17 @@ export class Realm {
         headers,
       },
       () => {
-        this.listeningClients = this.listeningClients.filter(
-          (w) => w !== writable
-        );
+        this.listeningClients.delete(req.url);
         this.sendUpdateMessages(`data: client clean up\n\n`);
       }
     );
 
-    this.listeningClients.push(writable);
-    this.sendUpdateMessages(`data: updated clients\n\n`);
+    if (!this.listeningClients.has(req.url)) {
+      this.listeningClients.set(req.url, writable);
+      this.sendUpdateMessages(`data: updated clients\n\n`);
+    }
+
+    // this.sendUpdateMessages(`data: updated clients\n\n`);
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
     waitForClose(writable);
@@ -737,9 +728,11 @@ export class Realm {
   }
 
   private async sendUpdateMessages(message: string): Promise<void> {
-    console.log(`sending updates to ${this.listeningClients.length} clients`);
+    console.log(`sending updates to ${this.listeningClients.size} clients`);
     await Promise.all(
-      this.listeningClients.map((client) => writeToStream(client, message))
+      [...this.listeningClients].map(([_url, stream]) =>
+        writeToStream(stream, message)
+      )
     );
   }
 }

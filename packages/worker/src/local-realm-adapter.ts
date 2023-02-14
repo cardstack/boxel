@@ -32,14 +32,17 @@ export class LocalRealmAdapter implements RealmAdapter {
     }
 
     if (opts?.subscribe) {
-      if (!this.subscriptionsMap.has(path)) {
+      let subscriptionPath = `${path}/_message`;
+      let interval = this.subscriptionsMap.get(subscriptionPath);
+      if (!interval) {
         this.subscriptionsMap.set(
-          path,
+          subscriptionPath,
           setInterval(async () => {
             opts.subscribe!(this.readdir(path));
           }, 1000)
         );
       }
+      // TODO: unsubscribe
     }
   }
 
