@@ -26,6 +26,7 @@ import {
   type DirectoryEntryRelationship,
 } from "./index";
 import merge from "lodash/merge";
+import mergeWith from "lodash/mergeWith";
 import qs from "qs";
 import cloneDeep from "lodash/cloneDeep";
 import {
@@ -490,7 +491,16 @@ export class Realm {
     delete (patch as any).data.meta;
     delete (patch as any).data.type;
 
-    let card = merge({}, originalClone, patch);
+    let card = mergeWith(
+      originalClone,
+      patch,
+      (_objectValue: any, sourceValue: any) => {
+        // a patched array should overwrite the original array instead of merging
+        // into an original array, otherwise we won't be able to remove items in
+        // the original array
+        return Array.isArray(sourceValue) ? sourceValue : undefined;
+      }
+    );
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
     let { lastModified } = await this.write(
