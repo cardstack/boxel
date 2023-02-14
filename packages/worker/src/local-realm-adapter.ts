@@ -37,7 +37,7 @@ export class LocalRealmAdapter implements RealmAdapter {
           path,
           setInterval(async () => {
             opts.subscribe!(this.readdir(path));
-          }, 10000)
+          }, 1000)
         );
       }
     }

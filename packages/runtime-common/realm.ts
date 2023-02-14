@@ -59,6 +59,7 @@ import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
 import { createResponse } from "./create-response";
+import { isEqual } from "lodash";
 
 export interface FileRef {
   path: LocalPath;
@@ -576,6 +577,7 @@ export class Realm {
     return createResponse(null, { status: 204 });
   }
 
+  entryPaths = new Map<string, string[]>();
   private async directoryEntries(
     url: URL
   ): Promise<{ name: string; kind: Kind }[] | undefined> {
@@ -591,10 +593,18 @@ export class Realm {
       subscribe: async (
         dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
       ) => {
+        let newEntries: string[] = [];
         for await (let entry of dir) {
+          newEntries.push(entry.path);
+        }
+        if (!this.entryPaths.has(path)) {
+          this.entryPaths.set(path, newEntries);
+        }
+        if (!isEqual(this.entryPaths.get(path), newEntries)) {
           this.sendUpdateMessages(
-            `event: update\n` + `data: ${entry.name}\n\n`
+            `event: update\n` + `data: '${path}/' directory updated\n\n`
           );
+          this.entryPaths.set(path, newEntries);
         }
       },
     })) {

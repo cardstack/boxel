@@ -19,12 +19,9 @@ export default class MessageService extends Service {
 
   unsubscribe(url: string) {
     let eventSource = this.subscriptionsMap.get(this.mappedURL(url));
-    if (!eventSource) {
-      throw new Error(
-        `No event source found for unsubscribe ${this.mappedURL(url)}`
-      );
+    if (eventSource) {
+      this.stop(eventSource);
     }
-    this.stop(eventSource);
   }
 
   start(eventSource: EventSource, cb: (ev: MessageEvent) => void) {
