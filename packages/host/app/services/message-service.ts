@@ -37,8 +37,11 @@ export default class MessageService extends Service {
 
     eventSource.onmessage = (e: MessageEvent) => {
       console.log('Event: message, data: ' + e.data);
-      cb(e);
     };
+
+    eventSource.addEventListener('update', (e: MessageEvent) => {
+      cb(e);
+    });
   }
 
   stop(eventSource: EventSource) {

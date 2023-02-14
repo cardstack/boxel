@@ -449,7 +449,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    this.sendUpdateMessages(`data: created ${fileURL}\n\n`);
+    this.sendUpdateMessages(`event: update\n` + `data: created ${fileURL}\n\n`);
     return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
@@ -514,7 +514,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    this.sendUpdateMessages(`data: edited ${url}\n\n`);
+    this.sendUpdateMessages(`event: update\n` + `data: edited ${url.href}\n\n`);
     return createResponse(JSON.stringify(doc, null, 2), {
       headers: {
         "content-type": "application/vnd.api+json",
@@ -559,7 +559,9 @@ export class Realm {
     }
     let localPath = this.paths.local(url) + ".json";
     await this.delete(localPath);
-    this.sendUpdateMessages(`data: removed ${request.url}.json\n\n`);
+    this.sendUpdateMessages(
+      `event: update\n` + `data: removed ${request.url}.json\n\n`
+    );
     return createResponse(null, { status: 204 });
   }
 

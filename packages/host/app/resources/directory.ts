@@ -39,6 +39,13 @@ export class DirectoryResource extends Resource<Args> {
       this.url = named.url;
       taskFor(this.readdir).perform();
     }
+    this.messageService.subscribe(this.realmPath.url, (_ev) => {
+      console.log('Event: update, data: ' + _ev.data);
+      taskFor(this.readdir).perform();
+    });
+    registerDestructor(this, () =>
+      this.messageService.unsubscribe(this.realmPath.url)
+    );
   }
 
   @restartableTask private async readdir() {
@@ -73,13 +80,6 @@ export class DirectoryResource extends Resource<Args> {
       );
       return [];
     }
-
-    this.messageService.subscribe(realmPath.url, (_message) =>
-      taskFor(this.readdir).perform()
-    );
-    registerDestructor(this, () =>
-      this.messageService.unsubscribe(realmPath.url)
-    );
 
     let {
       data: { relationships: _relationships },
