@@ -156,7 +156,7 @@ export class Realm {
       .post("/", this.createCard.bind(this))
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
       .get("/_search", this.search.bind(this))
-      .get("/_message", this.subscribe.bind(this))
+      .get(".*/_message", this.subscribe.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
       .delete("/.+(?<!.json)", this.removeCard.bind(this));

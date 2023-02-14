@@ -4,22 +4,25 @@ import { tracked } from '@glimmer/tracking';
 export default class MessageService extends Service {
   @tracked subscriptionsMap: Map<string, EventSource> = new Map();
 
+  mappedURL(url: string) {
+    return `${url}_message`;
+  }
+
   subscribe(url: string, cb: (ev: MessageEvent) => void) {
-    if (!this.subscriptionsMap.has(url)) {
-      this.subscriptionsMap.set(url, new EventSource(`${url}_message`));
-      console.log(`Created new event source for ${url}`);
+    if (!this.subscriptionsMap.has(this.mappedURL(url))) {
+      let eventSource = new EventSource(this.mappedURL(url));
+      this.subscriptionsMap.set(this.mappedURL(url), eventSource);
+      console.log(`Created new event source for ${this.mappedURL(url)}`);
+      this.start(eventSource, cb);
     }
-    let eventSource = this.subscriptionsMap.get(url);
-    if (!eventSource) {
-      throw new Error('No event source found. This should not happen.');
-    }
-    this.start(eventSource, cb);
   }
 
   unsubscribe(url: string) {
-    let eventSource = this.subscriptionsMap.get(url);
+    let eventSource = this.subscriptionsMap.get(this.mappedURL(url));
     if (!eventSource) {
-      throw new Error('No event source found for unsubscribe.');
+      throw new Error(
+        `No event source found for unsubscribe ${this.mappedURL(url)}`
+      );
     }
     this.stop(eventSource);
   }
@@ -30,6 +33,7 @@ export default class MessageService extends Service {
         console.log(`Reconnecting to ${eventSource.url}...`);
       } else if (eventSource.readyState == EventSource.CLOSED) {
         console.log(`Connection closed for ${eventSource.url}`);
+        this.stop(eventSource);
       } else {
         console.log(`An error has occured for ${eventSource.url}`);
       }
