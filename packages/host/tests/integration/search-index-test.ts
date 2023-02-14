@@ -1085,6 +1085,70 @@ module('Integration | search-index', function (hooks) {
     );
   });
 
+  test('search doc normalizes containsMany composite fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'CatalogEntry/booking.json': {
+        data: {
+          attributes: {
+            title: 'Booking',
+            description: 'Catalog entry for Booking',
+            ref: {
+              module: 'http://localhost:4202/test/booking',
+              name: 'Booking',
+            },
+            demo: {
+              title: null,
+              venue: null,
+              startTime: null,
+              endTime: null,
+              hosts: [],
+              sponsors: [],
+            },
+          },
+          meta: {
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: 'http://localhost:4202/test/booking',
+                  name: 'Booking',
+                },
+              },
+            },
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/catalog-entry',
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let entry = await indexer.searchEntry(
+      new URL(`${testRealmURL}CatalogEntry/booking`)
+    );
+    assert.deepEqual(entry?.searchData, {
+      id: `${testRealmURL}CatalogEntry/booking`,
+      'demo.endTime': undefined,
+      'demo.hosts': {},
+      'demo.id': undefined,
+      'demo.sponsors': [],
+      'demo.startTime': undefined,
+      'demo.title': null,
+      'demo.venue': null,
+      description: 'Catalog entry for Booking',
+      isPrimitive: false,
+      moduleHref: 'http://localhost:4202/test/booking',
+      ref: 'http://localhost:4202/test/booking/Booking',
+      title: 'Booking',
+    });
+    // we should be able to perform a structured clone of the search doc (this
+    // emulates the limitations of the postMessage used to communicate between
+    // DOM and worker). Success is not throwing an error
+    structuredClone(entry?.searchData);
+  });
+
   test('can index a card that has nested linksTo fields', async function (assert) {
     let adapter = new TestRealmAdapter({
       'Friend/hassan.json': {
