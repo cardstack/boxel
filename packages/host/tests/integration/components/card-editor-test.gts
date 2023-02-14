@@ -233,6 +233,7 @@ module('Integration | card-editor', function (hooks) {
     assert.shadowDOM('[data-test-field="firstName"] input').hasValue('Mango');
     assert.shadowDOM('[data-test-field="nickName"]').exists();
     assert.shadowDOM('[data-test-field="nickName"]').containsText('Mango-poo');
+    assert.shadowDOM('[data-test-field="nickName"] input').doesNotExist('computeds do not have an input field');
     assert.shadowDOM('[data-test-field="lastName"] input').exists();
     assert.shadowDOM('[data-test-field="lastName"] input').hasValue('Abdel-Rahman');
   });
