@@ -289,6 +289,9 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
+    this.sendUpdateMessages(
+      `event: update\n` + `data: upsert ${request.url}\n\n`
+    );
     return createResponse(null, {
       status: 204,
       headers: { "last-modified": formatRFC7231(lastModified) },
@@ -320,6 +323,9 @@ export class Realm {
       return notFound(request, `${localName} not found`);
     }
     await this.delete(handle.path);
+    this.sendUpdateMessages(
+      `event: update\n` + `data: removed ${request.url}\n\n`
+    );
     return createResponse(null, { status: 204 });
   }
 
