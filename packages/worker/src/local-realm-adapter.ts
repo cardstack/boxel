@@ -10,17 +10,17 @@ import { LocalPath } from '@cardstack/runtime-common/paths';
 export class LocalRealmAdapter implements RealmAdapter {
   constructor(private fs: FileSystemDirectoryHandle) {}
 
-  subscriptionsMap = new Map<string, number>();
+  private subscriptionsMap = new Map<LocalPath, number>();
 
   async *readdir(
-    path: string,
+    path: LocalPath,
     opts?: {
       create?: true;
       subscribe?: (
         dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
       ) => void;
     }
-  ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
+  ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void> {
     let dirHandle = isTopPath(path)
       ? this.fs
       : await traverse(this.fs, path, 'directory', opts);

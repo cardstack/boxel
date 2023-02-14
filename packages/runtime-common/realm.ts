@@ -295,9 +295,6 @@ export class Realm {
       this.paths.local(new URL(request.url)),
       await request.text()
     );
-    this.sendUpdateMessages(
-      `event: update\n` + `data: upsert ${request.url}\n\n`
-    );
     return createResponse(null, {
       status: 204,
       headers: { "last-modified": formatRFC7231(lastModified) },
@@ -329,9 +326,6 @@ export class Realm {
       return notFound(request, `${localName} not found`);
     }
     await this.delete(handle.path);
-    this.sendUpdateMessages(
-      `event: update\n` + `data: removed ${request.url}\n\n`
-    );
     return createResponse(null, { status: 204 });
   }
 
@@ -461,7 +455,6 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    this.sendUpdateMessages(`event: update\n` + `data: created ${fileURL}\n\n`);
     return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
@@ -526,7 +519,6 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    this.sendUpdateMessages(`event: update\n` + `data: edited ${url.href}\n\n`);
     return createResponse(JSON.stringify(doc, null, 2), {
       headers: {
         "content-type": "application/vnd.api+json",
@@ -571,13 +563,30 @@ export class Realm {
     }
     let localPath = this.paths.local(url) + ".json";
     await this.delete(localPath);
-    this.sendUpdateMessages(
-      `event: update\n` + `data: removed ${request.url}.json\n\n`
-    );
     return createResponse(null, { status: 204 });
   }
 
-  entryPaths = new Map<string, string[]>();
+  private entryPaths = new Map<LocalPath, LocalPath[]>(); // map of dirPath and its entries
+
+  private async getDirectoryUpdates(
+    path: LocalPath,
+    dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
+  ) {
+    let entries: LocalPath[] = [];
+    for await (let entry of dir) {
+      entries.push(entry.path);
+    }
+    if (!this.entryPaths.has(path)) {
+      this.entryPaths.set(path, entries);
+    }
+    if (!isEqual(this.entryPaths.get(path), entries)) {
+      this.sendUpdateMessages(
+        `event: update\n` + `data: '${path}/' directory updated\n\n`
+      );
+      this.entryPaths.set(path, entries);
+    }
+  }
+
   private async directoryEntries(
     url: URL
   ): Promise<{ name: string; kind: Kind }[] | undefined> {
@@ -590,23 +599,7 @@ export class Realm {
     }
     let entries: { name: string; kind: Kind }[] = [];
     for await (let entry of this.#adapter.readdir(path, {
-      subscribe: async (
-        dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
-      ) => {
-        let newEntries: string[] = [];
-        for await (let entry of dir) {
-          newEntries.push(entry.path);
-        }
-        if (!this.entryPaths.has(path)) {
-          this.entryPaths.set(path, newEntries);
-        }
-        if (!isEqual(this.entryPaths.get(path), newEntries)) {
-          this.sendUpdateMessages(
-            `event: update\n` + `data: '${path}/' directory updated\n\n`
-          );
-          this.entryPaths.set(path, newEntries);
-        }
-      },
+      subscribe: this.getDirectoryUpdates.bind(this, path),
     })) {
       let innerPath = join(path, entry.name);
       let innerURL =
