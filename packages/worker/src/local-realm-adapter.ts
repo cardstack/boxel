@@ -10,9 +10,16 @@ import { LocalPath } from '@cardstack/runtime-common/paths';
 export class LocalRealmAdapter implements RealmAdapter {
   constructor(private fs: FileSystemDirectoryHandle) {}
 
+  subscriptionsMap = new Map<string, number>();
+
   async *readdir(
     path: string,
-    opts?: { create?: true }
+    opts?: {
+      create?: true;
+      subscribe?: (
+        dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
+      ) => void;
+    }
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
     let dirHandle = isTopPath(path)
       ? this.fs
@@ -22,6 +29,17 @@ export class LocalRealmAdapter implements RealmAdapter {
     >) {
       let innerPath = isTopPath(path) ? name : `${path}/${name}`;
       yield { name, path: innerPath, kind: handle.kind };
+    }
+
+    if (opts?.subscribe) {
+      if (!this.subscriptionsMap.has(path)) {
+        this.subscriptionsMap.set(
+          path,
+          setInterval(async () => {
+            opts.subscribe!(this.readdir(path));
+          }, 10000)
+        );
+      }
     }
   }
 

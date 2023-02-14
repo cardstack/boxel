@@ -96,7 +96,12 @@ export interface FastBootInstance {
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
-    opts?: { create?: true }
+    opts?: {
+      create?: true;
+      subscribe?: (
+        dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
+      ) => void;
+    }
   ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void>;
 
   openFile(path: LocalPath): Promise<FileRef | undefined>;
@@ -582,7 +587,17 @@ export class Realm {
       return undefined;
     }
     let entries: { name: string; kind: Kind }[] = [];
-    for await (let entry of this.#adapter.readdir(path)) {
+    for await (let entry of this.#adapter.readdir(path, {
+      subscribe: async (
+        dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
+      ) => {
+        for await (let entry of dir) {
+          this.sendUpdateMessages(
+            `event: update\n` + `data: ${entry.name}\n\n`
+          );
+        }
+      },
+    })) {
       let innerPath = join(path, entry.name);
       let innerURL =
         entry.kind === "directory"
