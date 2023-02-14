@@ -731,6 +731,117 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(cards.length, 1, 'search finds updated value');
   });
 
+  test('realm can remove item from containsMany field via PATCH request', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'ski-trip.json': {
+        data: {
+          attributes: {
+            title: 'Gore Mountain Ski Trip',
+            venue: 'Gore Mountain',
+            startTime: '2023-02-18T10:00:00.000Z',
+            endTime: '2023-02-19T02:00:00.000Z',
+            hosts: [{ firstName: 'Hassan' }, { firstName: 'Mango' }],
+            sponsors: ['Burton', 'Spy Optics'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/booking',
+              name: 'Booking',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(`${testRealmURL}ski-trip`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                hosts: [{ firstName: 'Hassan' }],
+                sponsors: ['Burton'],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4202/test/booking',
+                  name: 'Booking',
+                },
+              },
+            },
+          },
+          null,
+          2
+        ),
+      })
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let json = await response.json();
+    assert.deepEqual(json, {
+      data: {
+        type: 'card',
+        id: `${testRealmURL}ski-trip`,
+        links: {
+          self: `${testRealmURL}ski-trip`,
+        },
+        attributes: {
+          title: 'Gore Mountain Ski Trip',
+          venue: 'Gore Mountain',
+          startTime: '2023-02-18T10:00:00.000Z',
+          endTime: '2023-02-19T02:00:00.000Z',
+          hosts: [
+            {
+              firstName: 'Hassan',
+            },
+          ],
+          sponsors: ['Burton'],
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4202/test/booking',
+            name: 'Booking',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}ski-trip.json`
+          ),
+        },
+      },
+    });
+    let fileRef = await adapter.openFile('ski-trip.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      JSON.parse(fileRef.content as string),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Gore Mountain Ski Trip',
+            venue: 'Gore Mountain',
+            startTime: '2023-02-18T10:00:00.000Z',
+            endTime: '2023-02-19T02:00:00.000Z',
+            hosts: [{ firstName: 'Hassan' }],
+            sponsors: ['Burton'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/booking',
+              name: 'Booking',
+            },
+          },
+        },
+      },
+      'file contents are correct'
+    );
+  });
+
   test('realm can serve PATCH requests that include linksTo fields', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/hassan.json': {
