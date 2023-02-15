@@ -5,7 +5,7 @@
       "vendor": {
         "name": "Smart Contract",
         "description": "SmartContract is the leading provider of secure and reliable open-source oracle solutions, enabling smart contracts to access anything outside their native blockchain, such off-chain data feeds, web APIs, and traditional bank payments. We are dedicated to the development and integration of Chainlink as the standard decentralized oracle framework used by smart contracts across numerous blockchains. We empower the Chainlink community and build world-class Chainlink-based solutions for large enterprises such as Google and Oracle, as well as leading smart contract development teams such as Synthetix, Loopring, Aave, OpenLaw, Conflux, Polkadot and many more.",
-        "logoURL": "../invoice-assets/vendor-logo-smart-contract.png",
+        "logoURL": "./invoice-assets/vendor-logo-smart-contract.png",
         "email": "finance@smartcontract.com",
         "cardXYZ": "smartcontractinc"
       },
