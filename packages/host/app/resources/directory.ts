@@ -5,9 +5,10 @@ import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import type { Relationship } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { registerDestructor } from '@ember/destroyable';
+// import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
+import type CardService from '../services/card-service';
 
 interface Args {
   named: {
@@ -26,9 +27,11 @@ export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
   private url: string | undefined;
   private declare realmPath: RealmPaths;
+  private subscribers: string[] = [];
 
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
+  @service declare cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {
     if (named.url) {
@@ -39,13 +42,21 @@ export class DirectoryResource extends Resource<Args> {
       this.url = named.url;
       taskFor(this.readdir).perform();
     }
-    this.messageService.subscribe(this.realmPath.url, (_ev) => {
-      console.log('Event: update, data: ' + _ev.data);
-      taskFor(this.readdir).perform();
-    });
-    registerDestructor(this, () =>
-      this.messageService.unsubscribe(this.realmPath.url)
-    );
+
+    let path = `${
+      this.cardService.defaultURL.href
+    }_message${this.realmPath.local(new URL(this.realmPath.url))}`;
+    if (!this.subscribers.includes(path)) {
+      this.messageService.subscribe(path, (_ev: MessageEvent) =>
+        taskFor(this.readdir).perform()
+      );
+      this.subscribers.push(path);
+
+      // registerDestructor(this, () => {
+      //   this.messageService.unsubscribe(path);
+      //   this.subscribers = this.subscribers.filter((s) => s !== path);
+      // });
+    }
   }
 
   @restartableTask private async readdir() {

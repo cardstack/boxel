@@ -59,7 +59,7 @@ import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
 import { createResponse } from "./create-response";
-import { isEqual } from "lodash";
+// import { isEqual } from "lodash";
 
 export interface FileRef {
   path: LocalPath;
@@ -162,7 +162,7 @@ export class Realm {
       .post("/", this.createCard.bind(this))
       .patch("/.+(?<!.json)", this.patchCard.bind(this))
       .get("/_search", this.search.bind(this))
-      .get(".*/_message", this.subscribe.bind(this))
+      .get("/_message", this.subscribe.bind(this))
       .get(".*/", this.getDirectoryListing.bind(this))
       .get("/.+(?<!.json)", this.getCard.bind(this))
       .delete("/.+(?<!.json)", this.removeCard.bind(this));
@@ -566,35 +566,37 @@ export class Realm {
     return createResponse(null, { status: 204 });
   }
 
-  private listeningClients = new Map<
-    string,
-    { stream: WritableStream; entries: { name: string; kind: Kind }[] }
-  >();
+  private listeningClients: WritableStream[] = [];
+  // new Map<
+  //   string,
+  //   { stream: WritableStream; entries: { name: string; kind: Kind }[] }
+  // >();
 
   private async getDirectoryUpdates(
     url: string,
-    dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
+    _dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
   ) {
-    let currentEntries: { name: string; kind: Kind }[] = [];
-    for await (let entry of dir) {
-      currentEntries.push({ name: entry.name, kind: entry.kind });
-    }
+    this.sendUpdateMessages(`event: update\n` + `data: '${url}' updated\n\n`);
+    // let currentEntries: { name: string; kind: Kind }[] = [];
+    // for await (let entry of dir) {
+    // currentEntries.push({ name: entry.name, kind: entry.kind });
+    // }
 
-    let client = this.listeningClients.get(`${url}_message`);
-    if (client) {
-      if (!client.entries || client.entries.length === 0) {
-        client.entries = currentEntries;
-        return;
-      }
-      if (!isEqual(client.entries, currentEntries)) {
-        // TODO: this does not check for changes in the file content
-        writeToStream(
-          client.stream,
-          `event: update\n` + `data: '${url}' updated\n\n`
-        );
-        client.entries = currentEntries;
-      }
-    }
+    // let client = this.listeningClients.get(`${url}_message`);
+    // if (client) {
+    //   if (!client.entries || client.entries.length === 0) {
+    //     client.entries = currentEntries;
+    //     return;
+    //   }
+    //   if (!isEqual(client.entries, currentEntries)) {
+    //     // TODO: this does not check for changes in the file content
+    //     writeToStream(
+    //       client.stream,
+    //       `event: update\n` + `data: '${url}' updated\n\n`
+    //     );
+    //     client.entries = currentEntries;
+    //   }
+    // }
   }
 
   private async directoryEntries(
@@ -728,12 +730,16 @@ export class Realm {
         headers,
       },
       () => {
-        this.listeningClients.delete(req.url);
+        // this.listeningClients.delete(req.url);
+        this.listeningClients = this.listeningClients.filter(
+          (w) => w !== writable
+        );
         this.sendUpdateMessages(`data: client clean up\n\n`);
       }
     );
 
-    this.listeningClients.set(req.url, { stream: writable, entries: [] });
+    this.listeningClients.push(writable);
+    // this.listeningClients.set(req.url, { stream: writable, entries: [] });
     this.sendUpdateMessages(`data: updated clients\n\n`);
 
     // TODO: We may need to store something else here to do cleanup to keep
@@ -744,11 +750,10 @@ export class Realm {
   }
 
   private async sendUpdateMessages(message: string): Promise<void> {
-    console.log(`sending updates to ${this.listeningClients.size} clients`);
+    console.log(`sending updates to ${this.listeningClients.length} clients`);
+    // console.log(this.listeningClients);
     await Promise.all(
-      [...this.listeningClients].map(([_url, client]) =>
-        writeToStream(client.stream, message)
-      )
+      this.listeningClients.map((client) => writeToStream(client, message))
     );
   }
 }

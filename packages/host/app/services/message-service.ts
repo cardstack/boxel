@@ -2,35 +2,38 @@ import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 export default class MessageService extends Service {
-  @tracked subscriptionsMap: Map<string, EventSource> = new Map();
+  @tracked subscriptionsMap: Map<
+    string, // URL path
+    { eventSource: EventSource; callback: (ev: MessageEvent) => void }[]
+  > = new Map();
 
-  mappedURL(url: string) {
-    return `${url}_message`;
-  }
+  subscribe(path: string, cb: (ev: MessageEvent) => void) {
+    let info = this.subscriptionsMap.get(path) ?? [];
 
-  subscribe(url: string, cb: (ev: MessageEvent) => void) {
-    if (!this.subscriptionsMap.has(this.mappedURL(url))) {
-      let eventSource = new EventSource(this.mappedURL(url));
-      this.subscriptionsMap.set(this.mappedURL(url), eventSource);
-      console.log(`Created new event source for ${this.mappedURL(url)}`);
-      this.start(eventSource, cb);
+    if (
+      info.length === 0 ||
+      info.filter((s) => s.callback != cb).length === 0
+    ) {
+      info = [...info, { eventSource: new EventSource(path), callback: cb }];
+      for (let { eventSource, callback } of info) {
+        this.start(eventSource);
+        eventSource.addEventListener('update', (ev: MessageEvent) =>
+          callback(ev)
+        );
+      }
+
+      this.subscriptionsMap.set(path, info);
+      console.log(`Created new event source for ${path}`);
     }
   }
 
-  unsubscribe(url: string) {
-    let eventSource = this.subscriptionsMap.get(this.mappedURL(url));
-    if (eventSource) {
-      this.stop(eventSource);
-    }
-  }
-
-  start(eventSource: EventSource, cb: (ev: MessageEvent) => void) {
+  start(eventSource: EventSource) {
     eventSource.onerror = (_ev: Event) => {
       if (eventSource.readyState == EventSource.CONNECTING) {
         console.log(`Reconnecting to ${eventSource.url}...`);
       } else if (eventSource.readyState == EventSource.CLOSED) {
         console.log(`Connection closed for ${eventSource.url}`);
-        this.stop(eventSource);
+        eventSource.close();
       } else {
         console.log(`An error has occured for ${eventSource.url}`);
       }
@@ -39,18 +42,32 @@ export default class MessageService extends Service {
     eventSource.onmessage = (e: MessageEvent) => {
       console.log('Event: message, data: ' + e.data);
     };
-
-    eventSource.addEventListener('update', (e: MessageEvent) => {
-      cb(e);
-    });
   }
 
-  stop(eventSource: EventSource) {
-    eventSource.close();
-    if (eventSource.readyState !== EventSource.CLOSED) {
-      throw new Error('EventSource did not close');
+  // closeEventSource(eventSource: EventSource) {
+  //   eventSource.close();
+  //   let info = this.subscriptionsMap.get(eventSource.url);
+  //   if (!info) {
+  //     return;
+  //   }
+  //   info = info.filter(
+  //     (item) => item.eventSource.readyState === EventSource.OPEN
+  //   );
+  //   if (info.length === 0) {
+  //     this.subscriptionsMap.delete(eventSource.url);
+  //     console.log(`removing ${eventSource.url}`);
+  //   } else {
+  //     console.log(`new count for ${eventSource.url}: ${info.length}`);
+  //     this.subscriptionsMap.set(eventSource.url, info);
+  //   }
+  // }
+
+  unsubscribe(path: string) {
+    let info = this.subscriptionsMap.get(path);
+    if (info) {
+      info.map((item) => item.eventSource.close());
     }
-    this.subscriptionsMap.delete(eventSource.url);
-    console.log(`Unsubscribed ${eventSource.url}`);
+    this.subscriptionsMap.delete(path);
+    console.log(`Unsubscribed realm: ${path}`);
   }
 }
