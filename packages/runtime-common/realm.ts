@@ -99,9 +99,6 @@ export interface RealmAdapter {
     path: LocalPath,
     opts?: {
       create?: true;
-      subscribe?: (
-        dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
-      ) => void;
     }
   ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void>;
 
@@ -121,6 +118,11 @@ export interface RealmAdapter {
     response: Response;
     writable: WritableStream;
   };
+
+  subscribe(
+    path: LocalPath,
+    fn: (dir: { name: string; kind: Kind }[]) => void
+  ): void;
 }
 
 interface Options {
@@ -567,36 +569,15 @@ export class Realm {
   }
 
   private listeningClients: WritableStream[] = [];
-  // new Map<
-  //   string,
-  //   { stream: WritableStream; entries: { name: string; kind: Kind }[] }
-  // >();
 
-  private async getDirectoryUpdates(
-    url: string,
-    _dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
-  ) {
-    this.sendUpdateMessages(`event: update\n` + `data: '${url}' updated\n\n`);
-    // let currentEntries: { name: string; kind: Kind }[] = [];
-    // for await (let entry of dir) {
-    // currentEntries.push({ name: entry.name, kind: entry.kind });
-    // }
-
-    // let client = this.listeningClients.get(`${url}_message`);
-    // if (client) {
-    //   if (!client.entries || client.entries.length === 0) {
-    //     client.entries = currentEntries;
-    //     return;
-    //   }
-    //   if (!isEqual(client.entries, currentEntries)) {
-    //     // TODO: this does not check for changes in the file content
-    //     writeToStream(
-    //       client.stream,
-    //       `event: update\n` + `data: '${url}' updated\n\n`
-    //     );
-    //     client.entries = currentEntries;
-    //   }
-    // }
+  private async getDirectoryUpdates(entries: { name: string; kind: Kind }[]) {
+    for (let entry of entries) {
+      if (entry.kind === "directory") {
+        this.sendUpdateMessages(
+          `event: update\n` + `data: polling '${entry.name}'\n\n`
+        );
+      }
+    }
   }
 
   private async directoryEntries(
@@ -610,9 +591,7 @@ export class Realm {
       return undefined;
     }
     let entries: { name: string; kind: Kind }[] = [];
-    for await (let entry of this.#adapter.readdir(path, {
-      subscribe: this.getDirectoryUpdates.bind(this, url.href),
-    })) {
+    for await (let entry of this.#adapter.readdir(path)) {
       let innerPath = join(path, entry.name);
       let innerURL =
         entry.kind === "directory"
@@ -665,6 +644,12 @@ export class Realm {
         entry.name + (entry.kind === "directory" ? "/" : "")
       ] = relationship;
     }
+
+    let messagePath = `/_message/${dir}`;
+    this.#adapter.subscribe(
+      messagePath,
+      this.getDirectoryUpdates.bind(this, entries)
+    );
 
     return createResponse(JSON.stringify({ data }, null, 2), {
       headers: { "content-type": "application/vnd.api+json" },
@@ -751,7 +736,6 @@ export class Realm {
 
   private async sendUpdateMessages(message: string): Promise<void> {
     console.log(`sending updates to ${this.listeningClients.length} clients`);
-    // console.log(this.listeningClients);
     await Promise.all(
       this.listeningClients.map((client) => writeToStream(client, message))
     );

@@ -49,6 +49,13 @@ export class NodeAdapter implements RealmAdapter {
     }
   }
 
+  subscribe(
+    _path: string,
+    _fn: (dir: { name: string; path: string; kind: Kind }[]) => void
+  ): void {
+    // TODO
+  }
+
   async exists(path: string): Promise<boolean> {
     let absolutePath = join(this.realmDir, path);
     return existsSync(absolutePath);

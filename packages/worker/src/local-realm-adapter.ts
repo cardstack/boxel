@@ -16,9 +16,6 @@ export class LocalRealmAdapter implements RealmAdapter {
     path: LocalPath,
     opts?: {
       create?: true;
-      subscribe?: (
-        dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
-      ) => void;
     }
   ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void> {
     let dirHandle = isTopPath(path)
@@ -30,20 +27,20 @@ export class LocalRealmAdapter implements RealmAdapter {
       let innerPath = isTopPath(path) ? name : `${path}/${name}`;
       yield { name, path: innerPath, kind: handle.kind };
     }
+  }
 
-    if (opts?.subscribe) {
-      let subscriptionPath = `${path}/_message`;
-      let interval = this.subscriptionsMap.get(subscriptionPath);
-      if (!interval) {
-        this.subscriptionsMap.set(
-          subscriptionPath,
-          setInterval(async () => {
-            opts.subscribe!(this.readdir(path));
-          }, 1000)
-        );
-      }
-      // TODO: unsubscribe
+  subscribe(
+    path: LocalPath,
+    fn: (dir: { name: string; kind: Kind }[]) => void
+  ): void {
+    let interval = this.subscriptionsMap.get(path);
+    if (!interval) {
+      this.subscriptionsMap.set(
+        path,
+        setInterval(async () => fn([]), 5000)
+      );
     }
+    // TODO: unsubscribe
   }
 
   async exists(path: string): Promise<boolean> {
