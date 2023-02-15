@@ -5,7 +5,7 @@
       "vendor": {
         "name": "Best Bakery",
         "description": null,
-        "logoURL": "../invoice-assets/vendor-logo-best-bakery.png",
+        "logoURL": "./invoice-assets/vendor-logo-best-bakery.png",
         "email": "contact@bestbakery.com",
         "cardXYZ": null
       },
