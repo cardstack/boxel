@@ -59,7 +59,7 @@ import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
 import { createResponse } from "./create-response";
-// import { isEqual } from "lodash";
+import { isEqual } from "lodash";
 
 export interface FileRef {
   path: LocalPath;
@@ -566,15 +566,34 @@ export class Realm {
     return createResponse(null, { status: 204 });
   }
 
-  private listeningClients = new Map<string, WritableStream>();
+  private listeningClients = new Map<
+    string,
+    { stream: WritableStream; entries: { name: string; kind: Kind }[] }
+  >();
 
   private async getDirectoryUpdates(
     url: string,
-    _dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
+    dir: AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }>
   ) {
+    let currentEntries: { name: string; kind: Kind }[] = [];
+    for await (let entry of dir) {
+      currentEntries.push({ name: entry.name, kind: entry.kind });
+    }
+
     let client = this.listeningClients.get(`${url}_message`);
     if (client) {
-      writeToStream(client, `event: update\n` + `data: polling '${url}'\n\n`);
+      if (!client.entries || client.entries.length === 0) {
+        client.entries = currentEntries;
+        return;
+      }
+      if (!isEqual(client.entries, currentEntries)) {
+        // TODO: this does not check for changes in the file content
+        writeToStream(
+          client.stream,
+          `event: update\n` + `data: '${url}' updated\n\n`
+        );
+        client.entries = currentEntries;
+      }
     }
   }
 
@@ -714,12 +733,9 @@ export class Realm {
       }
     );
 
-    if (!this.listeningClients.has(req.url)) {
-      this.listeningClients.set(req.url, writable);
-      this.sendUpdateMessages(`data: updated clients\n\n`);
-    }
+    this.listeningClients.set(req.url, { stream: writable, entries: [] });
+    this.sendUpdateMessages(`data: updated clients\n\n`);
 
-    // this.sendUpdateMessages(`data: updated clients\n\n`);
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
     waitForClose(writable);
@@ -730,8 +746,8 @@ export class Realm {
   private async sendUpdateMessages(message: string): Promise<void> {
     console.log(`sending updates to ${this.listeningClients.size} clients`);
     await Promise.all(
-      [...this.listeningClients].map(([_url, stream]) =>
-        writeToStream(stream, message)
+      [...this.listeningClients].map(([_url, client]) =>
+        writeToStream(client.stream, message)
       )
     );
   }
