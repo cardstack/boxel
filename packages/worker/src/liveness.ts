@@ -1,4 +1,5 @@
 import { timeout } from './util';
+import log from 'loglevel';
 
 export class LivenessWatcher {
   private isAlive = true;
@@ -31,7 +32,7 @@ export class LivenessWatcher {
       try {
         this.isAlive = await this.backendIsOurs();
       } catch (err) {
-        console.log(
+        log.error(
           `Encountered error performing aliveness check (server is probably not running):`,
           err
         );
@@ -39,7 +40,7 @@ export class LivenessWatcher {
       if (this.isAlive) {
         await timeout(10 * 1000);
       } else {
-        console.error('shutting down service worker.');
+        log.error('shutting down service worker.');
         await Promise.all([
           this.worker.registration.unregister(),
           ...this.listeners.map((l) => l()),

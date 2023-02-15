@@ -60,6 +60,7 @@ import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
 import { createResponse } from "./create-response";
+import log from "loglevel";
 
 export interface FileRef {
   path: LocalPath;
@@ -601,7 +602,7 @@ export class Realm {
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
     if (!entries) {
-      console.log(`can't find directory ${url.href}`);
+      log.warn(`can't find directory ${url.href}`);
       return notFound(request);
     }
 
@@ -718,7 +719,7 @@ export class Realm {
   }
 
   private async sendUpdateMessages(message: string): Promise<void> {
-    console.log(`sending updates to ${this.listeningClients.length} clients`);
+    log.info(`sending updates to ${this.listeningClients.length} clients`);
     await Promise.all(
       this.listeningClients.map((client) =>
         writeToStream(client, `data: ${message}\n\n`)

@@ -5,6 +5,7 @@ import { trimExecutableExtension } from "./index";
 import { RealmPaths } from "./paths";
 import { CardError } from "./error";
 import { type RunnerOpts } from "./search-index";
+import log from "loglevel";
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
 
@@ -218,7 +219,7 @@ export class Loader {
           }
         }
       } catch (err: any) {
-        console.warn(
+        log.warn(
           `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`
         );
       }
@@ -620,7 +621,7 @@ export class Loader {
     try {
       response = await this.fetch(moduleURL);
     } catch (err) {
-      console.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
+      log.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a
       // "broken" state, since the server hosting the module is likely down. it
       // might be a good idea to be able to try again in this case...

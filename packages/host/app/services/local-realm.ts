@@ -20,6 +20,7 @@ import {
   type SearchEntryWithErrors,
   type RunState,
 } from '@cardstack/runtime-common/search-index';
+import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
 const { demoRealmURL } = ENV;
@@ -111,7 +112,7 @@ export default class LocalRealm extends Service {
           return;
         }
     }
-    console.log(`did not handle worker message`, data);
+    log.error(`did not handle worker message`, data);
   }
 
   setupIndexing(
@@ -331,7 +332,7 @@ export default class LocalRealm extends Service {
       await timeout(10);
     }
     navigator.serviceWorker.oncontrollerchange = () => {
-      console.log('worker changed');
+      log.info('worker changed');
       if ('worker' in this.state) {
         this.router.transitionTo('application', {
           queryParams: { path: undefined },

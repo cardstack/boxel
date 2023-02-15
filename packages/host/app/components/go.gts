@@ -23,6 +23,7 @@ import {
 import monaco from '../modifiers/monaco';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import InLocalRealm from './in-local-realm';
+import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
 const { demoRealmURL } = ENV;
@@ -93,7 +94,7 @@ export default class Go extends Component<Signature> {
         try {
           json = JSON.parse(content);
         } catch (err) {
-          console.warn(`content for ${this.args.path} is not valid JSON, skipping write`);
+          log.warn(`content for ${this.args.path} is not valid JSON, skipping write`);
           return;
         }
         if (isSingleCardDocument(json)) {

@@ -5,6 +5,7 @@ import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import LoaderService from '../services/loader-service';
+import log from 'loglevel';
 
 interface Args {
   named: {
@@ -91,7 +92,7 @@ class _FileResource extends Resource<Args> {
       },
     });
     if (!response.ok) {
-      console.error(
+      log.error(
         `Could not get file ${this.url}, status ${response.status}: ${
           response.statusText
         } - ${await response.text()}`
@@ -134,7 +135,7 @@ class _FileResource extends Resource<Args> {
       body: content,
     });
     if (!response.ok) {
-      console.error(
+      log.error(
         `Could not write file ${this.url}, status ${response.status}: ${
           response.statusText
         } - ${await response.text()}`

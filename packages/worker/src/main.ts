@@ -5,6 +5,7 @@ import { LocalRealmAdapter } from './local-realm-adapter';
 import { Realm, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
+import log from 'loglevel';
 import '@cardstack/runtime-common/externals-global';
 
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
@@ -19,7 +20,7 @@ livenessWatcher.registerShutdownListener(async () => {
 
 //@ts-expect-error webpack replaces process.env at build time
 let resolvedBaseRealmURL = process.env.RESOLVED_BASE_REALM_URL;
-console.log(`service worker resolvedBaseRealmURL=${resolvedBaseRealmURL}`);
+log.info(`service worker resolvedBaseRealmURL=${resolvedBaseRealmURL}`);
 Loader.addURLMapping(new URL(baseRealm.url), new URL(resolvedBaseRealmURL));
 
 // TODO: this should be a more event-driven capability driven from the message
@@ -42,7 +43,7 @@ let runnerOptsMgr = new RunnerOptionsManager();
     );
     fetchHandler.addRealm(realm);
   } catch (err) {
-    console.log(err);
+    log.error(err);
   }
 })();
 
@@ -54,7 +55,7 @@ worker.addEventListener('install', () => {
 worker.addEventListener('activate', () => {
   // takes over when there is *no* existing service worker
   worker.clients.claim();
-  console.log('activating service worker');
+  log.info('activating service worker');
 });
 
 worker.addEventListener('fetch', (event: FetchEvent) => {

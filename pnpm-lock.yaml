@@ -758,6 +758,7 @@ importers:
       ignore: ^5.2.0
       loader.js: ^4.7.0
       lodash: ^4.17.21
+      loglevel: ^1.8.1
       monaco-editor: ^0.33.0
       monaco-editor-webpack-plugin: ^7.0.1
       npm-run-all: ^4.1.5
@@ -873,6 +874,7 @@ importers:
       ignore: 5.2.0
       loader.js: 4.7.0
       lodash: 4.17.21
+      loglevel: 1.8.1
       monaco-editor: 0.33.0
       monaco-editor-webpack-plugin: 7.0.1_6ceyiwueenpb2ilpeyv6mhlqoe
       npm-run-all: 4.1.5
@@ -907,6 +909,7 @@ importers:
       fastboot: ^4.1.0
       fs-extra: ^10.1.0
       lodash: ^4.17.21
+      loglevel: ^1.8.1
       npm-run-all: ^4.1.5
       qs: ^6.10.5
       qunit: ^2.18.0
@@ -916,6 +919,8 @@ importers:
       ts-node: ^10.9.1
       typescript: ^4.5.2
       yargs: ^17.5.1
+    dependencies:
+      loglevel: 1.8.1
     devDependencies:
       '@cardstack/runtime-common': link:../runtime-common
       '@types/fs-extra': 9.0.13
@@ -974,6 +979,7 @@ importers:
       ignore: ^5.2.0
       json-typescript: ^1.1.2
       lodash: ^4.17.21
+      loglevel: ^1.8.1
       qs: ^6.10.5
       qunit: ^2.18.0
       transform-modules-amd-plugin: workspace:*
@@ -1008,6 +1014,7 @@ importers:
       ignore: 5.2.0
       json-typescript: 1.1.2
       lodash: 4.17.21
+      loglevel: 1.8.1
       qs: 6.11.0
       qunit: 2.19.3
       transform-modules-amd-plugin: link:../../vendor/transform-modules-amd-plugin
@@ -1028,6 +1035,7 @@ importers:
       babel-loader: ^8.2.4
       date-fns: ^2.28.0
       ember-cli-htmlbars: ^6.0.1
+      loglevel: ^1.8.1
       path-browserify: ^1.0.1
       qs: ^6.10.5
       webpack: ^5.69.1
@@ -1040,6 +1048,7 @@ importers:
       babel-loader: 8.3.0_npabyccmuonwo2rku4k53xo3hi
       date-fns: 2.29.3
       ember-cli-htmlbars: 6.1.1
+      loglevel: 1.8.1
       path-browserify: 1.0.1
       qs: 6.11.0
       webpack: 5.75.0_webpack-cli@4.10.0
@@ -15033,6 +15042,10 @@ packages:
       is-unicode-supported: 0.1.0
     dev: true
 
+  /loglevel/1.8.1:
+    resolution: {integrity: sha512-tCRIJM51SHjAayKwC+QAg8hT8vg6z7GSgLJKGvzuPb1Wc+hLzqtuVLxp6/HzSPOozuK+8ErAhy7U/sVzw8Dgfg==}
+    engines: {node: '>= 0.6.0'}
+
   /loose-envify/1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
     hasBin: true
@@ -20344,6 +20357,7 @@ packages:
       ignore: 5.2.0
       json-typescript: 1.1.2
       lodash: 4.17.21
+      loglevel: 1.8.1
       parse5: 7.1.2
       qs: 6.11.0
       qunit: 2.19.3
@@ -20399,6 +20413,7 @@ packages:
       ignore: 5.2.0
       json-typescript: 1.1.2
       lodash: 4.17.21
+      loglevel: 1.8.1
       parse5: 7.1.2
       qs: 6.11.0
       qunit: 2.19.3
