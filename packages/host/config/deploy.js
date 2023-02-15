@@ -5,7 +5,7 @@ module.exports = function (deployTarget) {
     pipeline: {
       activateOnDeploy: true,
     },
-    plugins: ['build', 'compress', 's3', 'cloudfront'],
+    plugins: ['build', 'compress', 'zip', 's3', 'cloudfront'],
     build: {},
     s3: {
       allowOverwrite: true,
@@ -16,6 +16,9 @@ module.exports = function (deployTarget) {
     cloudfront: {
       objectPaths: ['/*'],
       distribution: process.env.AWS_CLOUDFRONT_DISTRIBUTION,
+    },
+    zip: {
+      targetPath: 'dist',
     },
   };
 
