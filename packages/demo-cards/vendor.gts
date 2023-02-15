@@ -20,6 +20,9 @@ class VendorDetails extends Card {
   @field logoURL = contains(StringCard); // url format
   @field email = contains(StringCard); // email format
   @field cardXYZ = contains(StringCard);
+  @field logoHref = contains(StringCard, { computeVia: function(this: VendorDetails) {
+    return new URL(this.logoURL, import.meta.url).href
+  }});
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -98,12 +101,7 @@ export class Vendor extends Card {
           <@fields.mailingAddress/>
           <@fields.vendor.email/>
         </div>
-        {{!-- 
-          TODO: we need a better solution for images--this approach relies 
-          on absolute URL's and just doesn't work in a multi-environment system,
-          i.e. there is no value you can put here that will work in dev and staging 
-        --}}
-        <img src={{@model.vendor.logoURL}} />
+        <img src={{@model.vendor.logoHref}} />
       </CardContainer>
     </template>
   };

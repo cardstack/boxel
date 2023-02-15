@@ -30,16 +30,14 @@ class Asset extends Card {
   @field exchangeRate = contains(IntegerCard, { computeVia:
     function(this: Asset) { return EXCHANGE_RATES[this.symbol]; }
   });
+  @field logoHref = contains(StringCard, { computeVia: function(this: Asset) {
+    return new URL(this.logoURL, import.meta.url).href
+  }});
   static embedded = class Embedded extends Component<typeof Asset> {
     <template>
       <CardContainer {{attachStyles styles}}>
         {{#if @model.logoURL}}
-          {{!-- 
-            TODO: we need a better solution for images--this approach relies 
-            on absolute URL's and just doesn't work in a multi-environment system,
-            i.e. there is no value you can put here that will work in dev and staging 
-          --}}
-          <img src={{@model.logoURL}} width="20" height="20"/>
+          <img src={{@model.logoHref}} width="20" height="20"/>
         {{/if}}
         <div class="payment-method__currency"><@fields.symbol/></div>
       </CardContainer>
