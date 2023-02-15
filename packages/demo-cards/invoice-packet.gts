@@ -211,12 +211,14 @@ class Note extends Card {
   @field authorName = contains(StringCard); /* computed */
   @field authorImage = contains(StringCard); /* computed */
   @field timestamp = contains(DatetimeCard); /* computed */
-
+  @field authorImageHref = contains(StringCard, { computeVia: function(this: Note) {
+    return new URL(this.authorImage, import.meta.url).href
+  }});
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <Message
         @name={{@model.authorName}}
-        @imgURL={{@model.authorImage}}
+        @imgURL={{@model.authorImageHref}}
         @datetime={{@model.timestamp}}
       >
         <@fields.text/>
@@ -268,12 +270,7 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
                 <FieldContainer @label="Alternate Payment Methods" @vertical={{true}}>
                   <div>
                     {{#each @model.alternatePayment as |payment|}}
-                      {{!-- 
-                        TODO: we need a better solution for images--this approach relies 
-                        on absolute URL's and just doesn't work in a multi-environment system,
-                        i.e. there is no value you can put here that will work in dev and staging 
-                      --}}
-                      <div class="payment-method__item">{{#if payment.logoURL}}<img src={{payment.logoURL}}>{{/if}} {{payment.symbol}}</div>
+                      <div class="payment-method__item">{{#if payment.logoHref}}<img src={{payment.logoHref}}>{{/if}} {{payment.symbol}}</div>
                       <div class="payment-methods__bal">{{balanceInCurrency @model.balanceDue payment}}</div>
                     {{/each}}
                   </div>
