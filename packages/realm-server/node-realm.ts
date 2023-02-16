@@ -7,6 +7,7 @@ import {
 } from "@cardstack/runtime-common";
 import { LocalPath } from "@cardstack/runtime-common/paths";
 import { ServerResponse } from "http";
+import sane, { type Watcher } from "sane";
 
 import {
   readdirSync,
@@ -49,11 +50,30 @@ export class NodeAdapter implements RealmAdapter {
     }
   }
 
-  subscribe(
-    _path: string,
-    _fn: (dir: { name: string; path: string; kind: Kind }[]) => void
-  ): void {
-    // TODO
+  private subscribers = new Map<string, Watcher>();
+
+  subscribe(path: string, cb: (message: string) => void): void {
+    let absolutePath = join(this.realmDir, path);
+    if (this.subscribers.has(absolutePath)) {
+      return;
+    }
+    let watcher = sane(absolutePath);
+    this.subscribers.set(absolutePath, watcher);
+
+    watcher.on("change", function (filepath, _root, _stat) {
+      cb(`entry changed: ${filepath}`);
+    });
+    watcher.on("add", function (filepath, _root, _stat) {
+      cb(`entry added: ${filepath}`);
+    });
+    watcher.on("delete", function (filepath, _root) {
+      cb(`entry deleted: ${filepath}`);
+    });
+
+    watcher.on("error", (_filepath) => {
+      console.log("watcher error", absolutePath);
+      watcher.close(() => this.subscribers.delete(absolutePath));
+    });
   }
 
   async exists(path: string): Promise<boolean> {

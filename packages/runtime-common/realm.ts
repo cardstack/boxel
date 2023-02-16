@@ -119,10 +119,7 @@ export interface RealmAdapter {
     writable: WritableStream;
   };
 
-  subscribe(
-    path: LocalPath,
-    fn: (dir: { name: string; kind: Kind }[]) => void
-  ): void;
+  subscribe(path: LocalPath, cb: (message: string) => void): void;
 }
 
 interface Options {
@@ -570,16 +567,6 @@ export class Realm {
 
   private listeningClients: WritableStream[] = [];
 
-  private async getDirectoryUpdates(entries: { name: string; kind: Kind }[]) {
-    for (let entry of entries) {
-      if (entry.kind === "directory") {
-        this.sendUpdateMessages(
-          `event: update\n` + `data: polling '${entry.name}'\n\n`
-        );
-      }
-    }
-  }
-
   private async directoryEntries(
     url: URL
   ): Promise<{ name: string; kind: Kind }[] | undefined> {
@@ -645,11 +632,9 @@ export class Realm {
       ] = relationship;
     }
 
-    let messagePath = `/_message/${dir}`;
-    this.#adapter.subscribe(
-      messagePath,
-      this.getDirectoryUpdates.bind(this, entries)
-    );
+    this.#adapter.subscribe(dir, (message: string) => {
+      this.sendUpdateMessages(`event: update\n` + `data: ${message}\n\n`);
+    });
 
     return createResponse(JSON.stringify({ data }, null, 2), {
       headers: { "content-type": "application/vnd.api+json" },
@@ -715,7 +700,6 @@ export class Realm {
         headers,
       },
       () => {
-        // this.listeningClients.delete(req.url);
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable
         );
@@ -724,7 +708,6 @@ export class Realm {
     );
 
     this.listeningClients.push(writable);
-    // this.listeningClients.set(req.url, { stream: writable, entries: [] });
     this.sendUpdateMessages(`data: updated clients\n\n`);
 
     // TODO: We may need to store something else here to do cleanup to keep
