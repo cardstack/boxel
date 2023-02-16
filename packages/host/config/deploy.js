@@ -19,7 +19,7 @@ module.exports = function (deployTarget) {
     },
     'zip-new': {
       targetFile: 'host.zip',
-      targetPath: 'tmp/deploy-dist',
+      // targetPath: 'tmp/deploy-dist',
     },
   };
 
