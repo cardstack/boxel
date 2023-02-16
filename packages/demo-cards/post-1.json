@@ -11,7 +11,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/post",
+        "module": "./post",
         "name": "Post"
       }
     }
