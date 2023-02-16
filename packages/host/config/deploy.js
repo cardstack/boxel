@@ -11,7 +11,7 @@ module.exports = function (deployTarget) {
       allowOverwrite: true,
       bucket: process.env.AWS_S3_BUCKET,
       region: process.env.AWS_REGION,
-      filePattern: '**/*',
+      filePattern: '**/*.zip',
     },
     cloudfront: {
       objectPaths: ['/*'],
