@@ -21,7 +21,10 @@ class VendorDetails extends Card {
   @field email = contains(StringCard); // email format
   @field cardXYZ = contains(StringCard);
   @field logoHref = contains(StringCard, { computeVia: function(this: VendorDetails) {
-    return this[relativeTo] ? new URL(this.logoURL, this[relativeTo]).href : null;
+    if (!this.logoURL) {
+      return null;
+    }
+    return new URL(this.logoURL, this[relativeTo] || this.id).href;
   }});
 
   static embedded = class Embedded extends Component<typeof this> {
