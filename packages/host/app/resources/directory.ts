@@ -7,7 +7,6 @@ import type { Relationship } from '@cardstack/runtime-common';
 import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-import type CardService from '../services/card-service';
 
 interface Args {
   named: {
@@ -29,7 +28,6 @@ export class DirectoryResource extends Resource<Args> {
 
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
-  @service declare cardService: CardService;
 
   constructor(owner: unknown) {
     super(owner);

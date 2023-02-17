@@ -2,18 +2,15 @@ import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 export default class MessageService extends Service {
-  @tracked subscriptionsMap: Map<
-    string, // URL path
-    EventSource
-  > = new Map();
+  @tracked subscriptions: Map<string, EventSource> = new Map();
 
   subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
-    let maybeEventSource = this.subscriptionsMap.get(realmURL);
+    let maybeEventSource = this.subscriptions.get(realmURL);
 
     if (!maybeEventSource) {
       maybeEventSource = new EventSource(realmURL);
       this.start(maybeEventSource);
-      this.subscriptionsMap.set(realmURL, maybeEventSource);
+      this.subscriptions.set(realmURL, maybeEventSource);
     }
 
     let eventSource = maybeEventSource;
@@ -37,26 +34,8 @@ export default class MessageService extends Service {
       }
     };
 
-    eventSource.onmessage = (e: MessageEvent) => {
-      console.log('Event: message, data: ' + e.data);
+    eventSource.onmessage = (ev: MessageEvent) => {
+      console.log('Event: message, data: ' + ev.data);
     };
   }
-
-  // closeEventSource(eventSource: EventSource) {
-  //   eventSource.close();
-  //   let info = this.subscriptionsMap.get(eventSource.url);
-  //   if (!info) {
-  //     return;
-  //   }
-  //   info = info.filter(
-  //     (item) => item.eventSource.readyState === EventSource.OPEN
-  //   );
-  //   if (info.length === 0) {
-  //     this.subscriptionsMap.delete(eventSource.url);
-  //     console.log(`removing ${eventSource.url}`);
-  //   } else {
-  //     console.log(`new count for ${eventSource.url}: ${info.length}`);
-  //     this.subscriptionsMap.set(eventSource.url, info);
-  //   }
-  // }
 }

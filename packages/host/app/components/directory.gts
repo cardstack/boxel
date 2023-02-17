@@ -1,15 +1,11 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
-import type CardService from '../services/card-service';
-import type LoaderService from '../services/loader-service';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { directory, Entry } from '../resources/directory';
-//@ts-ignore cached not available yet in definitely typed
-import { cached } from '@glimmer/tracking';
 import { concat } from '@ember/helper';
 
 interface Args {
@@ -49,8 +45,6 @@ export default class Directory extends Component<Args> {
 
   listing = directory(this, () => this.args.relativePath, () => this.args.realmURL);
   @service declare router: RouterService;
-  @service declare cardService: CardService;
-  @service declare loaderService: LoaderService;
 
   @action
   openFile(entry: Entry) {
@@ -86,11 +80,10 @@ function editOpenDirsQuery(localPath: string, openDirs: string[]): string[] {
   return [...dirs, localPath];
 }
 
-function isSelected(localPath: string, path: string | undefined) {
-  return path?.startsWith(localPath);
+function isSelected(localPath: string, openFile: string | undefined) {
+  return openFile?.startsWith(localPath);
 }
 
 function isOpen(path: string, openDirs: string[]) {
   return openDirs.find(item => item.startsWith(path));
 }
-
