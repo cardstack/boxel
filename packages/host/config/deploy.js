@@ -11,7 +11,7 @@ module.exports = function (deployTarget) {
       allowOverwrite: true,
       bucket: process.env.AWS_S3_BUCKET,
       region: process.env.AWS_REGION,
-      filePattern: '**/*.zip',
+      filePattern: '**/*.{txt,zip}',
     },
     cloudfront: {
       objectPaths: ['/*'],
@@ -19,7 +19,7 @@ module.exports = function (deployTarget) {
     },
     'zip-new': {
       targetFile: 'host.zip',
-      // targetPath: 'tmp/deploy-dist',
+      targetPath: 'tmp/deploy-dist',
     },
   };
 
