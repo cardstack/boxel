@@ -21,23 +21,25 @@ export default class Directory extends Component<Args> {
   <template>
     {{#each this.listing.entries key="path" as |entry|}}
       <div class="directory-level">
-        {{#if (eq entry.kind 'file')}}
-          <div role="button" {{on "click" (fn this.openFile entry)}} class="file {{if (eq @relativePath @openFile) "selected"}}">
-            {{entry.name}}
-          </div>
-        {{else}}
-          <div role="button" {{on "click" (fn this.toggleDirectory entry)}} class="directory {{if (isSelected @relativePath @openFile) "selected"}}">
-            {{entry.name}}
-          </div>
-          {{#if (isOpen (concat @relativePath entry.name) @openDirs)}}
-            <Directory
-              @openFile={{@openFile}}
-              @openDirs={{@openDirs}}
-              @relativePath="{{@relativePath}}{{entry.name}}"
-              @realmURL={{@realmURL}}
-            />
+        {{#let (concat @relativePath entry.name) as |localPath|}}
+          {{#if (eq entry.kind 'file')}}
+            <div role="button" {{on "click" (fn this.openFile entry)}} class="file {{if (eq localPath @openFile) "selected"}}">
+              {{entry.name}}
+            </div>
+          {{else}}
+            <div role="button" {{on "click" (fn this.toggleDirectory entry)}} class="directory {{if (isSelected localPath @openFile) "selected"}}">
+              {{entry.name}}
+            </div>
+            {{#if (isOpen localPath @openDirs)}}
+              <Directory
+                @openFile={{@openFile}}
+                @openDirs={{@openDirs}}
+                @relativePath="{{@relativePath}}{{entry.name}}"
+                @realmURL={{@realmURL}}
+              />
+            {{/if}}
           {{/if}}
-        {{/if}}
+        {{/let}}
       </div>
     {{/each}}
   </template>
@@ -64,10 +66,10 @@ function editOpenDirsQuery(localPath: string, openDirs: string[]): string[] {
   let dirs = openDirs.slice();
   for (let i = 0; i < dirs.length; i++) {
     if (dirs[i].startsWith(localPath)) {
-      let localParts = localPath.split('/');
+      let localParts = localPath.split('/').filter(p => p.trim() != '');
       localParts.pop();
       if (localParts.length) {
-        dirs[i] = localParts.join('/');
+        dirs[i] = localParts.join('/') + '/';
       } else {
         dirs.splice(i, 1);
       }
