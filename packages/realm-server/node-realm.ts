@@ -50,30 +50,24 @@ export class NodeAdapter implements RealmAdapter {
     }
   }
 
-  private subscribers = new Map<string, Watcher>();
+  private watcher: Watcher | undefined = undefined;
 
-  subscribe(path: string, cb: (message: string) => void): void {
-    let absolutePath = join(this.realmDir, path);
-    if (this.subscribers.has(absolutePath)) {
-      return;
+  subscribe(cb: (message: string) => void): void {
+    if (this.watcher) {
+      throw new Error(`tried to subscribe to watcher twice`);
     }
-    let watcher = sane(absolutePath);
-    this.subscribers.set(absolutePath, watcher);
+    this.watcher = sane(join(this.realmDir, "/"));
+    this.watcher.on("change", (path) => cb(`entry changed: ${path}`));
+    this.watcher.on("add", (path) => cb(`entry added: ${path}`));
+    this.watcher.on("delete", (path) => cb(`entry deleted: ${path}`));
+    this.watcher.on("error", (err) => {
+      throw new Error(`watcher error: ${err}`);
+    });
+  }
 
-    watcher.on("change", function (filepath, _root, _stat) {
-      cb(`entry changed: ${filepath}`);
-    });
-    watcher.on("add", function (filepath, _root, _stat) {
-      cb(`entry added: ${filepath}`);
-    });
-    watcher.on("delete", function (filepath, _root) {
-      cb(`entry deleted: ${filepath}`);
-    });
-
-    watcher.on("error", (_filepath) => {
-      console.log("watcher error", absolutePath);
-      watcher.close(() => this.subscribers.delete(absolutePath));
-    });
+  unsubscribe(): void {
+    this.watcher?.close();
+    this.watcher = undefined;
   }
 
   async exists(path: string): Promise<boolean> {

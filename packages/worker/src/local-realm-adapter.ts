@@ -29,14 +29,15 @@ export class LocalRealmAdapter implements RealmAdapter {
     }
   }
 
-  subscribe(path: LocalPath, cb: (message: string) => void): void {
-    let interval = this.subscriptionsMap.get(path);
-    if (!interval) {
-      this.subscriptionsMap.set(
-        path,
-        setInterval(async () => cb(`polling '${path}/'`), 5000)
-      );
-    }
+  subscribe(_cb: (message: string) => void): void {
+    // TODO
+    // let interval = this.subscriptionsMap.get(path);
+    // if (!interval) {
+    //   this.subscriptionsMap.set(
+    //     path,
+    //     setInterval(async () => cb(`polling '${path}/'`), 5000)
+    //   );
+    // }
     // TODO: optimize polling
     // TODO: poll file content changes
     // TODO: unsubscribe closed dirs

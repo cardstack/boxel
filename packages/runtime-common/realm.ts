@@ -119,7 +119,9 @@ export interface RealmAdapter {
     writable: WritableStream;
   };
 
-  subscribe(path: LocalPath, cb: (message: string) => void): void;
+  subscribe(cb: (message: string) => void): void;
+
+  unsubscribe(): void;
 }
 
 interface Options {
@@ -632,10 +634,6 @@ export class Realm {
       ] = relationship;
     }
 
-    this.#adapter.subscribe(dir, (message: string) =>
-      this.sendUpdateMessages(`event: update\n` + `data: ${message}\n\n`)
-    );
-
     return createResponse(JSON.stringify({ data }, null, 2), {
       headers: { "content-type": "application/vnd.api+json" },
     });
@@ -703,12 +701,25 @@ export class Realm {
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable
         );
-        this.sendUpdateMessages(`data: client clean up\n\n`);
+        this.sendUpdateMessages(
+          `data: client clean up, count: ${this.listeningClients.length}\n\n`
+        );
+        if (this.listeningClients.length === 0) {
+          this.#adapter.unsubscribe();
+        }
       }
     );
 
+    if (this.listeningClients.length === 0) {
+      this.#adapter.subscribe((message: string) =>
+        this.sendUpdateMessages(`event: update\n` + `data: ${message}\n\n`)
+      );
+    }
+
     this.listeningClients.push(writable);
-    this.sendUpdateMessages(`data: updated clients\n\n`);
+    this.sendUpdateMessages(
+      `data: updated clients, count: ${this.listeningClients.length}\n\n`
+    );
 
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
