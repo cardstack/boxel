@@ -11,7 +11,7 @@ import type { Format } from 'https://cardstack.com/base/card-api';
 interface Model {
   path: string | undefined;
   openFile: FileResource | undefined;
-  openDirs: string | undefined;
+  openDirs: string[] | undefined;
   isFastBoot: boolean;
 }
 
@@ -33,11 +33,12 @@ export default class Index extends Route<Model> {
 
   async model(args: {
     path?: string;
-    openDirs: string;
+    openDirs: string | undefined;
     url?: string;
     format?: Format;
   }): Promise<Model> {
-    let { path, openDirs } = args;
+    let { path, openDirs: openDirsString } = args;
+    let openDirs = openDirsString ? openDirsString.split(',') : [];
     let { isFastBoot } = this.fastboot;
 
     let openFile: FileResource | undefined;

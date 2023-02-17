@@ -4,7 +4,6 @@ import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import type { Relationship } from '@cardstack/runtime-common';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
@@ -12,8 +11,8 @@ import type CardService from '../services/card-service';
 
 interface Args {
   named: {
-    url: string | undefined;
-    openDirs: string | undefined;
+    relativePath: string;
+    realmURL: string;
   };
 }
 
@@ -25,49 +24,49 @@ export interface Entry {
 
 export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
-  private url: string | undefined;
-  private declare realmPath: RealmPaths;
-  private subscribers: string[] = [];
+  private directoryURL: string | undefined;
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
   @service declare cardService: CardService;
 
+  constructor(owner: unknown) {
+    super(owner);
+    registerDestructor(this, () => {
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+        this.subscription = undefined;
+      }
+    });
+  }
+
   modify(_positional: never[], named: Args['named']) {
-    if (named.url) {
-      if (!named.url.endsWith('/')) {
-        throw new Error(`A directory URL must end with a "/"`);
-      }
-      this.realmPath = new RealmPaths(named.url);
-      this.url = named.url;
-      taskFor(this.readdir).perform();
+    this.directoryURL = new URL(named.relativePath, named.realmURL).href;
+    taskFor(this.readdir).perform();
 
-      // TODO: check if `this.realmPath.url` is a realm URL
-      // temporarily only using default realm URL here
-      if (this.realmPath.url === this.cardService.defaultURL.href) {
-        let path = `${this.realmPath.url}_message`;
+    let path = `${named.realmURL}_message`;
 
-        if (!this.subscribers.includes(path)) {
-          this.messageService.subscribe(path, (_ev: MessageEvent) =>
-            taskFor(this.readdir).perform()
-          );
+    if (this.subscription && this.subscription.url !== path) {
+      this.subscription.unsubscribe();
+      this.subscription = undefined;
+    }
 
-          this.subscribers.push(path);
-
-          registerDestructor(this, () => {
-            this.messageService.unsubscribe(path);
-            this.subscribers = this.subscribers.filter((s) => s !== path);
-          });
-        }
-      }
+    if (!this.subscription) {
+      this.subscription = {
+        url: path,
+        unsubscribe: this.messageService.subscribe(path, () =>
+          taskFor(this.readdir).perform()
+        ),
+      };
     }
   }
 
   @restartableTask private async readdir() {
-    if (!this.url) {
+    if (!this.directoryURL) {
       return;
     }
-    let entries = await this.getEntries(this.realmPath, this.url);
+    let entries = await this.getEntries(this.directoryURL);
     entries.sort((a, b) => {
       // need to re-insert the leading and trailing /'s in order to get a sort
       // that can organize the paths correctly
@@ -78,10 +77,7 @@ export class DirectoryResource extends Resource<Args> {
     this.entries = entries;
   }
 
-  private async getEntries(
-    realmPath: RealmPaths,
-    url: string
-  ): Promise<Entry[]> {
+  private async getEntries(url: string): Promise<Entry[]> {
     let response: Response | undefined;
     response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: 'application/vnd.api+json' },
@@ -103,17 +99,18 @@ export class DirectoryResource extends Resource<Args> {
     return Object.entries(relationships).map(([name, info]) => ({
       name,
       kind: info.meta!.kind,
-      path: realmPath.local(new URL(info.links!.related!)),
+      path: info.links!.related!,
     }));
   }
 }
 
 export function directory(
   parent: object,
-  url: () => string | undefined,
-  openDirs: () => string | undefined
+  relativePath: () => string | undefined,
+  realmURL: () => string
 ) {
   return DirectoryResource.from(parent, () => ({
-    named: { url: url(), openDirs: openDirs() },
+    relativePath: relativePath(),
+    realmURL: realmURL(),
   })) as DirectoryResource;
 }

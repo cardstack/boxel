@@ -4,27 +4,25 @@ import { tracked } from '@glimmer/tracking';
 export default class MessageService extends Service {
   @tracked subscriptionsMap: Map<
     string, // URL path
-    { eventSource: EventSource; callback: (ev: MessageEvent) => void }[]
+    EventSource
   > = new Map();
 
-  subscribe(path: string, cb: (ev: MessageEvent) => void) {
-    let info = this.subscriptionsMap.get(path) ?? [];
+  subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
+    let maybeEventSource = this.subscriptionsMap.get(realmURL);
 
-    if (
-      info.length === 0 ||
-      info.filter((s) => s.callback != cb).length === 0
-    ) {
-      info = [...info, { eventSource: new EventSource(path), callback: cb }];
-      for (let { eventSource, callback } of info) {
-        this.start(eventSource);
-        eventSource.addEventListener('update', (ev: MessageEvent) =>
-          callback(ev)
-        );
-      }
-
-      this.subscriptionsMap.set(path, info);
-      console.log(`Created new event source for ${path}`);
+    if (!maybeEventSource) {
+      maybeEventSource = new EventSource(realmURL);
+      this.start(maybeEventSource);
+      this.subscriptionsMap.set(realmURL, maybeEventSource);
     }
+
+    let eventSource = maybeEventSource;
+    eventSource.addEventListener('update', cb);
+    console.log(`Created new event source for ${realmURL}`);
+    return () => {
+      eventSource.removeEventListener('update', cb);
+      console.log(`Unsubscribed realm: ${realmURL}`);
+    };
   }
 
   start(eventSource: EventSource) {
@@ -61,13 +59,4 @@ export default class MessageService extends Service {
   //     this.subscriptionsMap.set(eventSource.url, info);
   //   }
   // }
-
-  unsubscribe(path: string) {
-    let info = this.subscriptionsMap.get(path);
-    if (info) {
-      info.map((item) => item.eventSource.close());
-    }
-    this.subscriptionsMap.delete(path);
-    console.log(`Unsubscribed realm: ${path}`);
-  }
 }

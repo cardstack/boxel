@@ -10,8 +10,8 @@ import Directory from './directory';
 interface Args {
   Args: {
     url: string;
-    path: string | undefined;
-    openDirs: string | undefined;
+    openFile: string | undefined;
+    openDirs: string[];
   }
 }
 
@@ -20,8 +20,9 @@ export default class FileTree extends Component<Args> {
     <nav>
       <Directory
         @openDirs={{@openDirs}}
-        @path={{@path}}
-        @url={{@url}}
+        @openFile={{@openFile}}
+        @relativePath=""
+        @realmURL={{@url}}
       />
     </nav>
     <button {{on "click" this.createNew}} type="button" data-test-create-new-card-button>

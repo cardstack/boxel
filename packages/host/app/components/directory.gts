@@ -7,72 +7,67 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { RealmPaths } from '@cardstack/runtime-common';
 import { directory, Entry } from '../resources/directory';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
+import { concat } from '@ember/helper';
 
 interface Args {
   Args: {
-    openDirs: string | undefined;
-    url: string;
-    path: string | undefined;
+    openDirs: string[];
+    realmURL: string;
+    relativePath: string;
+    openFile: string | undefined;
   }
 }
 
 export default class Directory extends Component<Args> {
   <template>
     {{#each this.listing.entries key="path" as |entry|}}
-      {{#let (getLocalPath @url entry.path this.realmPath) as |localPath|}}
-        <div class="directory-level">
-          {{#if (eq entry.kind 'file')}}
-            <div role="button" {{on "click" (fn this.openFile entry)}} class="file {{if (eq localPath @path) "selected"}}">
-              {{entry.name}}
-            </div>
-          {{else}}
-            <div role="button" {{on "click" (fn this.toggleDirectory entry)}} class="directory {{if (isSelected localPath @path) "selected"}}">
-              {{entry.name}}
-            </div>
-            {{#if (isOpen localPath @openDirs)}}
-              <Directory
-                @path={{@path}}
-                @openDirs={{@openDirs}}
-                @url="{{@url}}{{entry.path}}/"
-              />
-            {{/if}}
+      <div class="directory-level">
+        {{#if (eq entry.kind 'file')}}
+          <div role="button" {{on "click" (fn this.openFile entry)}} class="file {{if (eq @relativePath @openFile) "selected"}}">
+            {{entry.name}}
+          </div>
+        {{else}}
+          <div role="button" {{on "click" (fn this.toggleDirectory entry)}} class="directory {{if (isSelected @relativePath @openFile) "selected"}}">
+            {{entry.name}}
+          </div>
+          {{#if (isOpen (concat @relativePath entry.name) @openDirs)}}
+            <Directory
+              @openFile={{@openFile}}
+              @openDirs={{@openDirs}}
+              @relativePath="{{@relativePath}}{{entry.name}}"
+              @realmURL={{@realmURL}}
+            />
           {{/if}}
-        </div>
-      {{/let}}
+        {{/if}}
+      </div>
     {{/each}}
   </template>
 
 
-  listing = directory(this, () => this.args.url, () => this.args.openDirs);
+  listing = directory(this, () => this.args.relativePath, () => this.args.realmURL);
   @service declare router: RouterService;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 
-  @cached
-  get realmPath() {
-    return new RealmPaths(this.cardService.defaultURL);
-  }
-
   @action
   openFile(entry: Entry) {
-    let path = getLocalPath(this.args.url, entry.path, this.realmPath);
+    let path = this.args.relativePath +  entry.name;
     this.router.transitionTo({ queryParams: { path } });
   }
 
   @action
   toggleDirectory(entry: Entry) {
-    let entryPath = getLocalPath(this.args.url, entry.path, this.realmPath);
+    let entryPath = this.args.relativePath + entry.name;
     let openDirs = editOpenDirsQuery(entryPath, this.args.openDirs);
-    this.router.transitionTo({ queryParams: { openDirs } });
+    this.router.transitionTo({ queryParams: { openDirs: openDirs.length ? openDirs.join(',') : undefined } });
   }
 }
 
-function editOpenDirsQuery(localPath: string, openDirs: string | undefined): string | undefined {
-  let dirs = openDirs ? openDirs.split(',') : [];
+function editOpenDirsQuery(localPath: string, openDirs: string[]): string[] {
+  let dirs = openDirs.slice();
   for (let i = 0; i < dirs.length; i++) {
     if (dirs[i].startsWith(localPath)) {
       let localParts = localPath.split('/');
@@ -82,23 +77,20 @@ function editOpenDirsQuery(localPath: string, openDirs: string | undefined): str
       } else {
         dirs.splice(i, 1);
       }
-      return dirs.length ? dirs.join(',') : undefined;
+      return dirs;
     } else if (localPath.startsWith(dirs[i])) {
       dirs[i] = localPath;
-      return dirs.join(',');
+      return dirs;
     }
   }
-  return [...dirs, localPath].join(',');
+  return [...dirs, localPath];
 }
 
 function isSelected(localPath: string, path: string | undefined) {
   return path?.startsWith(localPath);
 }
 
-function isOpen(path: string, openDirs: string | undefined) {
-  return openDirs?.includes(path);
+function isOpen(path: string, openDirs: string[]) {
+  return openDirs.find(item => item.startsWith(path));
 }
 
-function getLocalPath(url: string, path: string, realmPath: RealmPaths) {
-  return realmPath.local(new URL(url + path));
-}
