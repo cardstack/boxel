@@ -27,21 +27,21 @@ export class LocalRealmAdapter implements RealmAdapter {
     }
   }
 
-  // private subscriptionsMap = new Map<LocalPath, number>();
+  private watcher: number | undefined = undefined;
 
-  subscribe(_cb: (message: string) => void): void {
-    // TODO
-    // let interval = this.subscriptionsMap.get(path);
-    // if (!interval) {
-    //   this.subscriptionsMap.set(
-    //     path,
-    //     setInterval(async () => cb(`polling '${path}/'`), 5000)
-    //   );
-    // }
+  subscribe(cb: (message: string) => void): void {
+    if (this.watcher) {
+      throw new Error(`tried to subscribe to watcher twice`);
+    }
+    this.watcher = setInterval(async () => cb(`polling '/'`), 5000);
+    console.log(`subscribed to watcher: ${this.watcher}`);
   }
 
   unsubscribe(): void {
-    // TODO
+    console.log(`closing watcher: ${this.watcher}`);
+    clearInterval(this.watcher);
+    this.watcher = undefined;
+    console.log(`unsubscribed from watcher`);
   }
 
   async exists(path: string): Promise<boolean> {
