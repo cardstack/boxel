@@ -43,6 +43,7 @@ module.exports = function (deployTarget) {
     deployTarget === 's3-preview-production'
   ) {
     ENV.s3.prefix = process.env.PR_BRANCH_NAME;
+    ENV['fastboot-s3'].prefix = process.env.PR_BRANCH_NAME;
   }
 
   return ENV;
