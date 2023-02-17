@@ -248,6 +248,14 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
+  subscribe(_cb: (message: string) => void): void {
+    // TODO
+  }
+
+  unsubscribe(): void {
+    // TODO
+  }
+
   async exists(path: string): Promise<boolean> {
     try {
       await this.#traverse(path.split('/'), 'directory');

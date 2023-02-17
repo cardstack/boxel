@@ -398,9 +398,9 @@ async function getFileResource(context: TestContext, adapter: TestRealmAdapter, 
   let paths = new RealmPaths(testRealmURL);
   let content = (await adapter.openFile(paths.local(new URL(fileURL))))?.content as string | undefined;
   return file(context, () => ({
-    url: fileURL,
+    relativePath: fileURL,
+    realmURL: paths.url,
     lastModified: undefined,
-    content,
-    polling: 'off'
+    content
   }));
 }
