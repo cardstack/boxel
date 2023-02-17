@@ -5,13 +5,17 @@ module.exports = function (deployTarget) {
     pipeline: {
       activateOnDeploy: true,
     },
-    plugins: ['build', 'compress', 'zip-new', 's3', 'cloudfront'],
+    plugins: ['build', 'revision-data', 'compress', 'zip-new', 's3', 'fastboot-s3', 'cloudfront'],
     build: {},
     s3: {
       allowOverwrite: true,
       bucket: process.env.AWS_S3_BUCKET,
       region: process.env.AWS_REGION,
-      filePattern: '**/*.{txt,zip}',
+      filePattern: '**/*',
+    },
+    'fastboot-s3': {
+      bucket: process.env.AWS_S3_BUCKET,
+      region: process.env.AWS_REGION,
     },
     cloudfront: {
       objectPaths: ['/*'],

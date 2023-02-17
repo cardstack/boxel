@@ -96,6 +96,8 @@
     "ember-cli-deploy": "^1.0.2",
     "ember-cli-deploy-build": "^2.0.0",
     "ember-cli-deploy-cloudfront": "^5.0.0",
+    "ember-cli-deploy-fastboot-s3": "^0.3.6",
+    "ember-cli-deploy-revision-data": "^2.0.0",
     "ember-cli-deploy-s3": "^3.1.0",
     "ember-cli-deploy-zip-new": "^2.0.2",
     "ember-cli-fastboot": "^4.1.0",
