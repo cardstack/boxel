@@ -10,8 +10,6 @@ import { LocalPath } from '@cardstack/runtime-common/paths';
 export class LocalRealmAdapter implements RealmAdapter {
   constructor(private fs: FileSystemDirectoryHandle) {}
 
-  private subscriptionsMap = new Map<LocalPath, number>();
-
   async *readdir(
     path: LocalPath,
     opts?: {
@@ -29,6 +27,8 @@ export class LocalRealmAdapter implements RealmAdapter {
     }
   }
 
+  // private subscriptionsMap = new Map<LocalPath, number>();
+
   subscribe(_cb: (message: string) => void): void {
     // TODO
     // let interval = this.subscriptionsMap.get(path);
@@ -38,9 +38,10 @@ export class LocalRealmAdapter implements RealmAdapter {
     //     setInterval(async () => cb(`polling '${path}/'`), 5000)
     //   );
     // }
-    // TODO: optimize polling
-    // TODO: poll file content changes
-    // TODO: unsubscribe closed dirs
+  }
+
+  unsubscribe(): void {
+    // TODO
   }
 
   async exists(path: string): Promise<boolean> {

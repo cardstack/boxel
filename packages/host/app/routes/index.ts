@@ -6,12 +6,11 @@ import type RouterService from '@ember/routing/router-service';
 import type LocalRealm from '../services/local-realm';
 import type CardService from '../services/card-service';
 import { RealmPaths } from '@cardstack/runtime-common';
-import type { Format } from 'https://cardstack.com/base/card-api';
 
 interface Model {
   path: string | undefined;
   openFile: FileResource | undefined;
-  openDirs: string[] | undefined;
+  openDirs: string[];
   isFastBoot: boolean;
 }
 
@@ -34,8 +33,6 @@ export default class Index extends Route<Model> {
   async model(args: {
     path?: string;
     openDirs: string | undefined;
-    url?: string;
-    format?: Format;
   }): Promise<Model> {
     let { path, openDirs: openDirsString } = args;
     let openDirs = openDirsString ? openDirsString.split(',') : [];
@@ -72,15 +69,14 @@ export default class Index extends Route<Model> {
     let responseURL = this.loaderService.loader.reverseResolution(response.url);
     if (responseURL.href !== url) {
       this.router.transitionTo('application', {
-        queryParams: {
-          path: realmPath.local(responseURL),
-          openDirs,
-        },
+        queryParams: { path: realmPath.local(responseURL), openDirs },
       });
     } else {
       let content = await response.text();
+      let relativePath = path;
       openFile = file(this, () => ({
-        url,
+        relativePath,
+        realmURL: realmPath.url,
         content,
         lastModified: response.headers.get('last-modified') || undefined,
         onStateChange: (state) => {

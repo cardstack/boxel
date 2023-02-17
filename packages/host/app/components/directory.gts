@@ -5,7 +5,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { directory, Entry } from '../resources/directory';
+import { directory } from '../resources/directory';
 import { concat } from '@ember/helper';
 
 interface Args {
@@ -21,16 +21,16 @@ export default class Directory extends Component<Args> {
   <template>
     {{#each this.listing.entries key="path" as |entry|}}
       <div class="directory-level">
-        {{#let (concat @relativePath entry.name) as |localPath|}}
+        {{#let (concat @relativePath entry.name) as |entryPath|}}
           {{#if (eq entry.kind 'file')}}
-            <div role="button" {{on "click" (fn this.openFile entry)}} class="file {{if (eq localPath @openFile) "selected"}}">
+            <div role="button" {{on "click" (fn this.openFile entryPath)}} class="file {{if (eq entryPath @openFile) "selected"}}">
               {{entry.name}}
             </div>
           {{else}}
-            <div role="button" {{on "click" (fn this.toggleDirectory entry)}} class="directory {{if (isSelected localPath @openFile) "selected"}}">
+            <div role="button" {{on "click" (fn this.toggleDirectory entryPath)}} class="directory {{if (isSelected entryPath @openFile) "selected"}}">
               {{entry.name}}
             </div>
-            {{#if (isOpen localPath @openDirs)}}
+            {{#if (isOpen entryPath @openDirs)}}
               <Directory
                 @openFile={{@openFile}}
                 @openDirs={{@openDirs}}
@@ -49,24 +49,22 @@ export default class Directory extends Component<Args> {
   @service declare router: RouterService;
 
   @action
-  openFile(entry: Entry) {
-    let path = this.args.relativePath +  entry.name;
-    this.router.transitionTo({ queryParams: { path } });
+  openFile(entryPath: string) {
+    this.router.transitionTo({ queryParams: { path: entryPath } });
   }
 
   @action
-  toggleDirectory(entry: Entry) {
-    let entryPath = this.args.relativePath + entry.name;
+  toggleDirectory(entryPath: string) {
     let openDirs = editOpenDirsQuery(entryPath, this.args.openDirs);
     this.router.transitionTo({ queryParams: { openDirs: openDirs.length ? openDirs.join(',') : undefined } });
   }
 }
 
-function editOpenDirsQuery(localPath: string, openDirs: string[]): string[] {
+function editOpenDirsQuery(entryPath: string, openDirs: string[]): string[] {
   let dirs = openDirs.slice();
   for (let i = 0; i < dirs.length; i++) {
-    if (dirs[i].startsWith(localPath)) {
-      let localParts = localPath.split('/').filter(p => p.trim() != '');
+    if (dirs[i].startsWith(entryPath)) {
+      let localParts = entryPath.split('/').filter(p => p.trim() != '');
       localParts.pop();
       if (localParts.length) {
         dirs[i] = localParts.join('/') + '/';
@@ -74,12 +72,12 @@ function editOpenDirsQuery(localPath: string, openDirs: string[]): string[] {
         dirs.splice(i, 1);
       }
       return dirs;
-    } else if (localPath.startsWith(dirs[i])) {
-      dirs[i] = localPath;
+    } else if (entryPath.startsWith(dirs[i])) {
+      dirs[i] = entryPath;
       return dirs;
     }
   }
-  return [...dirs, localPath];
+  return [...dirs, entryPath];
 }
 
 function isSelected(localPath: string, openFile: string | undefined) {

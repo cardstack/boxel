@@ -3,12 +3,14 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
+import { registerDestructor } from '@ember/destroyable';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 
 interface Args {
   named: {
-    url: string;
+    relativePath: string;
+    realmURL: string;
     content: string | undefined;
     lastModified: string | undefined;
     onStateChange?: (state: FileResource['state']) => void;
@@ -40,14 +42,26 @@ class _FileResource extends Resource<Args> {
   private declare _url: string;
   private lastModified: string | undefined;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
   @tracked content: string | undefined;
   @tracked state: FileResource['state'] = 'ready';
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
 
+  constructor(owner: unknown) {
+    super(owner);
+    registerDestructor(this, () => {
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+        this.subscription = undefined;
+      }
+    });
+  }
+
   modify(_positional: never[], named: Args['named']) {
-    let { url, content, lastModified, onStateChange } = named;
-    this._url = url;
+    let { relativePath, realmURL, content, lastModified, onStateChange } =
+      named;
+    this._url = realmURL + relativePath;
     this.onStateChange = onStateChange;
     if (content !== undefined) {
       this.content = content;
@@ -55,6 +69,22 @@ class _FileResource extends Resource<Args> {
     } else {
       // get the initial content if we haven't already been seeded with initial content
       taskFor(this.read).perform();
+    }
+
+    let path = `${realmURL}_message`;
+
+    if (this.subscription && this.subscription.url !== path) {
+      this.subscription.unsubscribe();
+      this.subscription = undefined;
+    }
+
+    if (!this.subscription) {
+      this.subscription = {
+        url: path,
+        unsubscribe: this.messageService.subscribe(path, () =>
+          taskFor(this.read).perform()
+        ),
+      };
     }
   }
 

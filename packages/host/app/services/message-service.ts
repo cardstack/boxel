@@ -18,12 +18,12 @@ export default class MessageService extends Service {
     console.log(`Created new event source for ${realmURL}`);
     return () => {
       eventSource.removeEventListener('update', cb);
-      console.log(`Unsubscribed realm: ${realmURL}`);
+      console.log(`Unsubscribed ${realmURL}`);
     };
   }
 
   start(eventSource: EventSource) {
-    eventSource.onerror = (_ev: Event) => {
+    eventSource.onerror = () => {
       if (eventSource.readyState == EventSource.CONNECTING) {
         console.log(`Reconnecting to ${eventSource.url}...`);
       } else if (eventSource.readyState == EventSource.CLOSED) {
