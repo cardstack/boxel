@@ -632,9 +632,9 @@ export class Realm {
       ] = relationship;
     }
 
-    this.#adapter.subscribe(dir, (message: string) => {
-      this.sendUpdateMessages(`event: update\n` + `data: ${message}\n\n`);
-    });
+    this.#adapter.subscribe(dir, (message: string) =>
+      this.sendUpdateMessages(`event: update\n` + `data: ${message}\n\n`)
+    );
 
     return createResponse(JSON.stringify({ data }, null, 2), {
       headers: { "content-type": "application/vnd.api+json" },
