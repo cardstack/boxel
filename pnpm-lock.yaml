@@ -728,7 +728,6 @@ importers:
       ember-cli-deploy-fastboot-s3: ^0.3.6
       ember-cli-deploy-revision-data: ^2.0.0
       ember-cli-deploy-s3: ^3.1.0
-      ember-cli-deploy-zip-new: ^2.0.2
       ember-cli-fastboot: ^4.1.0
       ember-cli-htmlbars: ^6.0.1
       ember-cli-inject-live-reload: ^2.1.0
@@ -847,7 +846,6 @@ importers:
       ember-cli-deploy-fastboot-s3: 0.3.6
       ember-cli-deploy-revision-data: 2.0.0
       ember-cli-deploy-s3: 3.2.0
-      ember-cli-deploy-zip-new: 2.0.2
       ember-cli-fastboot: 4.1.0
       ember-cli-htmlbars: 6.1.1
       ember-cli-inject-live-reload: 2.1.0
@@ -3976,7 +3974,7 @@ packages:
   /@types/ember__controller/4.0.3:
     resolution: {integrity: sha512-7+Lpgcsa/gjGZtUN0JfQoLzUStCT68p8o6t1e4LBXyC+a5DHg2NJYFZ0U3f8F8TgQJcgtFoUAuv8p77XY6FxwQ==}
     dependencies:
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
     dev: true
 
   /@types/ember__controller/4.0.3_@babel+core@7.20.2:
@@ -4823,11 +4821,6 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  /adm-zip/0.4.16:
-    resolution: {integrity: sha512-TFi4HBKSGfIKsK5YCkKaaFG2m4PEDyViZmEwof3MTIgzimHLto6muaHVpbrljdIvIrFZzEq/p4nafOeLcYegrg==}
-    engines: {node: '>=0.3.0'}
-    dev: true
-
   /agent-base/4.2.1:
     resolution: {integrity: sha512-JVwXMr9nHYTUXsBFKUqhJwvlcYU/blreOEUkhNR2eXZIvwd+c+o5V4MgDPKWnMS/56awN3TRzIP+KoPn+roQtg==}
     engines: {node: '>= 4.0.0'}
@@ -5629,7 +5622,7 @@ packages:
       '@babel/core': ^7.0.0
       webpack: '>=2'
     dependencies:
-      '@babel/core': 7.20.2_supports-color@8.1.1
+      '@babel/core': 7.20.2
       find-cache-dir: 3.3.2
       loader-utils: 2.0.4
       make-dir: 3.1.0
@@ -7422,7 +7415,7 @@ packages:
       mississippi: 3.0.0
       mkdirp: 0.5.6
       move-concurrently: 1.0.1
-      promise-inflight: 1.0.1_bluebird@3.7.2
+      promise-inflight: 1.0.1
       rimraf: 2.7.1
       ssri: 6.0.2
       unique-filename: 1.1.1
@@ -9546,15 +9539,6 @@ packages:
       - supports-color
     dev: true
 
-  /ember-cli-deploy-zip-new/2.0.2:
-    resolution: {integrity: sha512-7nh2Xr5kNcniWprSstHVC+f1/mM6AXCpLEQQrQ+SK1y6KTuxXXlbEY5Rbt4qS3Y8/wNQOkvgSOwUf3z4KL/+jA==}
-    engines: {node: '>= 12.0'}
-    dependencies:
-      adm-zip: 0.4.16
-      ember-cli-deploy-plugin: 0.2.9
-      parse-gitignore: 0.2.0
-    dev: true
-
   /ember-cli-deploy/1.0.2:
     resolution: {integrity: sha512-ERnOxUF6Ownhv+34ZN6xQBkrKBKYCdHNxihwZPW7aA4aKmadPC9CRbT1oWnSC/Em4T0dLyQInqyT0EZeSrZWbg==}
     engines: {node: '>= 0.10.0'}
@@ -11640,11 +11624,6 @@ packages:
     resolution: {integrity: sha512-+uw1inIHVPQoaVuHzRyXd21icM+cnt4CzD5rW+NC1wjOUSTOs+Te7FOv7AhN7vS9x/oIyhLP5PR1H+phQAHu5Q==}
     dependencies:
       once: 1.4.0
-
-  /ends-with/0.2.0:
-    resolution: {integrity: sha512-lRppY4dK3VkqBdR242sKcAJeYc8Gf/DhoX9AWvWI2RzccmLnqBQfwm2k4oSDv5MPDjUqawCauXhZkyWxkVhRsg==}
-    engines: {node: '>=0.10.0'}
-    dev: true
 
   /engine.io-parser/5.0.4:
     resolution: {integrity: sha512-+nVFp+5z1E3HcToEnO7ZIj3g+3k9389DvWtvJZz0T6/eOCPIyyxehFcedoYrZQrp0LgQbD9pPXhpMBKMd5QURg==}
@@ -14279,11 +14258,6 @@ packages:
       is-plain-object: 2.0.4
     dev: true
 
-  /is-extglob/1.0.0:
-    resolution: {integrity: sha512-7Q+VbVafe6x2T+Tu6NcOf6sRklazEPmBoB3IWk3WdGZM2iGUwU/Oe3Wtq5lSEkDTTlpp8yx+5t4pzO/i9Ty1ww==}
-    engines: {node: '>=0.10.0'}
-    dev: true
-
   /is-extglob/2.1.1:
     resolution: {integrity: sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ==}
     engines: {node: '>=0.10.0'}
@@ -14313,13 +14287,6 @@ packages:
   /is-git-url/1.0.0:
     resolution: {integrity: sha512-UCFta9F9rWFSavp9H3zHEHrARUfZbdJvmHKeEpds4BK3v7W2LdXoNypMtXXi5w5YBDEBCTYmbI+vsSwI8LYJaQ==}
     engines: {node: '>=0.8'}
-    dev: true
-
-  /is-glob/2.0.1:
-    resolution: {integrity: sha512-a1dBeB19NXsf/E0+FHqkagizel/LQw2DjSQpvQrj3zT+jYPpaUCryPnrQajXKFLCMuf4I6FhRpaGtw4lPrG6Eg==}
-    engines: {node: '>=0.10.0'}
-    dependencies:
-      is-extglob: 1.0.0
     dev: true
 
   /is-glob/3.1.0:
@@ -16539,15 +16506,6 @@ packages:
       is-hexadecimal: 1.0.4
     dev: true
 
-  /parse-gitignore/0.2.0:
-    resolution: {integrity: sha512-NB3206JVaagRmgpQCWymcXHd+bZyVxACtgehEL49jDptryTqGcDWo7YroucBXKePj9lGYz3guQVZIV/gqrsaOw==}
-    engines: {node: '>=0.10.0'}
-    dependencies:
-      ends-with: 0.2.0
-      is-glob: 2.0.1
-      starts-with: 1.0.2
-    dev: true
-
   /parse-json/4.0.0:
     resolution: {integrity: sha512-aOIos8bujGN93/8Ox/jPLh7RwVnPEysynVFE+fQZyg6jKELEHwzgKdLRFHUgXJL6kylijVSBC4BvN9OmsB48Rw==}
     engines: {node: '>=4'}
@@ -16934,17 +16892,6 @@ packages:
     peerDependenciesMeta:
       bluebird:
         optional: true
-    dev: true
-
-  /promise-inflight/1.0.1_bluebird@3.7.2:
-    resolution: {integrity: sha512-6zWPyEOFaQBJYcGMHBKTKJ3u6TBsnMFOIZSa6ce1e/ZrrsOlnHRHbabMjLiBYKp+n44X9eUI6VUPaukCXHuG4g==}
-    peerDependencies:
-      bluebird: '*'
-    peerDependenciesMeta:
-      bluebird:
-        optional: true
-    dependencies:
-      bluebird: 3.7.2
     dev: true
 
   /promise-map-series/0.2.3:
@@ -18452,10 +18399,6 @@ packages:
       wait-on: 6.0.0_debug@4.3.2
     transitivePeerDependencies:
       - supports-color
-    dev: true
-
-  /starts-with/1.0.2:
-    resolution: {integrity: sha512-QUw5X+IMTGDm1nrdowEdDaA0MNiUmRlQFwpTTXmhuPKQc+7b0h8fOHtlt1zZqcEK5x1Fsitrobo7KEusc+d1rg==}
     dev: true
 
   /static-extend/0.1.2:
