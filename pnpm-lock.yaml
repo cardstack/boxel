@@ -896,6 +896,7 @@ importers:
   packages/realm-server:
     specifiers:
       '@cardstack/runtime-common': workspace:*
+      '@types/eventsource': ^1.1.11
       '@types/fs-extra': ^9.0.13
       '@types/lodash': ^4.14.182
       '@types/node': ^18.6.0
@@ -905,6 +906,7 @@ importers:
       '@types/supertest': ^2.0.12
       '@types/tmp': ^0.2.3
       '@types/yargs': ^17.0.10
+      eventsource: ^2.0.2
       fastboot: ^4.1.0
       fs-extra: ^10.1.0
       lodash: ^4.17.21
@@ -920,6 +922,7 @@ importers:
       yargs: ^17.5.1
     devDependencies:
       '@cardstack/runtime-common': link:../runtime-common
+      '@types/eventsource': 1.1.11
       '@types/fs-extra': 9.0.13
       '@types/lodash': 4.14.189
       '@types/node': 18.11.9
@@ -929,6 +932,7 @@ importers:
       '@types/supertest': 2.0.12
       '@types/tmp': 0.2.3
       '@types/yargs': 17.0.13
+      eventsource: 2.0.2
       fastboot: 4.1.0_kizxbxhfcldguz4jcwonfduu2y
       fs-extra: 10.1.0
       lodash: 4.17.21
@@ -4133,6 +4137,10 @@ packages:
 
   /@types/estree/1.0.0:
     resolution: {integrity: sha512-WulqXMDUTYAXCjZnk6JtIHPigp55cVtDgDrO2gHRwhyJto21+1zbVCtOYB2L1F9w4qCQ0rOGWBnBe0FNTiEJIQ==}
+
+  /@types/eventsource/1.1.11:
+    resolution: {integrity: sha512-L7wLDZlWm5mROzv87W0ofIYeQP5K2UhoFnnUyEWLKM6UBb0ZNRgAqp98qE5DkgfBXdWfc2kYmw9KZm4NLjRbsw==}
+    dev: true
 
   /@types/express-serve-static-core/4.17.31:
     resolution: {integrity: sha512-DxMhY+NAsTwMMFHBTtJFNp5qiHKJ7TeqOo23zVEM9alT1Ml27Q3xcTH0xwxn7Q0BbMcVEJOs/7aQtUWupUQN3Q==}
@@ -12068,6 +12076,11 @@ packages:
   /events/3.3.0:
     resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
     engines: {node: '>=0.8.x'}
+
+  /eventsource/2.0.2:
+    resolution: {integrity: sha512-IzUmBGPR3+oUG9dUeXynyNmf91/3zUSJg1lCktzKw47OXuhco54U3r9B7O4XX+Rb1Itm9OZ2b0RkTs10bICOxA==}
+    engines: {node: '>=12.0.0'}
+    dev: true
 
   /evp_bytestokey/1.0.3:
     resolution: {integrity: sha512-/f2Go4TognH/KvCISP7OUsHn85hT9nUkxxA9BEWxFn+Oj9o8ZNLm/40hdlgSLyuOimsrTKLUMEorQexp/aPQeA==}
