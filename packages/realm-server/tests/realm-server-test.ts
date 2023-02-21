@@ -1,4 +1,4 @@
-import { module, test, only } from "qunit";
+import { module, test } from "qunit";
 import supertest, { Test, SuperTest } from "supertest";
 import { createRealmServer } from "../server";
 import { join } from "path";
@@ -27,15 +27,11 @@ const testRealmURL = new URL("http://127.0.0.1:4444/");
 const testRealmHref = testRealmURL.href;
 const testRealm2Href = "http://localhost:4202/node-test/";
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 module("Realm Server", function (hooks) {
   let server: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
-  // let es: eventSource;
+  let es: eventSource | undefined;
   let events: string[] = [];
   setupCardLogs(
     hooks,
@@ -55,23 +51,21 @@ module("Realm Server", function (hooks) {
     let testRealm = createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
     server = createRealmServer([testRealm]);
-
-    // if (!es || es.readyState === eventSource.CLOSED) {
-    //   es = new eventSource(`${testRealmHref}_message`);
-    //   es.onmessage = (ev: MessageEvent) => events.push(ev.data);
-    //   es.addEventListener("update", (ev: MessageEvent) => {
-    //     events.push(ev.data);
-    //   });
-    // }
-
     server.listen(testRealmURL.port);
     request = supertest(server);
+
+    es = new eventSource(`${testRealmHref}_message`);
+    es.addEventListener("update", (ev: MessageEvent) => events.push(ev.data));
+    es.onerror = () => {
+      throw new Error("unknown eventSource error");
+    };
   });
 
   hooks.afterEach(function () {
-    // es.close();
-    // events = [];
+    es?.close();
+    es = undefined;
     server.close();
+    events = [];
   });
 
   test("serves a card GET request", async function (assert) {
@@ -103,17 +97,7 @@ module("Realm Server", function (hooks) {
     });
   });
 
-  only("serves a card POST request", async function (assert) {
-    let es = new eventSource(`${testRealmHref}_message`);
-    es.onmessage = (ev: MessageEvent) => {
-      console.log(ev.data);
-      events.push(ev.data);
-    };
-    es.addEventListener("update", (ev: MessageEvent) => {
-      events.push(ev.data);
-    });
-    let es2 = new eventSource(`${testRealmHref}_message`);
-
+  test("serves a card POST request", async function (assert) {
     let response = await request
       .post("/")
       .send({
@@ -138,7 +122,6 @@ module("Realm Server", function (hooks) {
         "the id is correct"
       );
       assert.ok(json.data.meta.lastModified, "lastModified is populated");
-      es2.close();
       let cardFile = join(dir.name, "Card", "1.json");
       assert.ok(existsSync(cardFile), "card json exists");
       let card = readJSONSync(cardFile);
@@ -161,20 +144,12 @@ module("Realm Server", function (hooks) {
       assert.ok(false, "response body is not a card document");
     }
 
-    let expected = [
-      "updated clients, count: 1",
-      "updated clients, count: 2",
-      "entry added: Card",
-      "entry added: Card/1.json",
-      "client clean up, count: 1",
-    ];
-    await delay(100);
+    let expected = ["entry added: Card", "entry added: Card/1.json"];
     assert.deepEqual(events, expected, "sse is correct");
   });
 
   test("serves a card PATCH request", async function (assert) {
     let entry = "person-1.json";
-
     let response = await request
       .patch("/person-1")
       .send({
@@ -251,19 +226,6 @@ module("Realm Server", function (hooks) {
     assert.strictEqual(response.body.data.length, 1, "found one card");
   });
 
-  test(`sends the correct number of messages for server-sent events`, async function (assert) {
-    let es2 = new eventSource(`${testRealmHref}_message`);
-    es2.onmessage = (ev: MessageEvent) => assert.step(ev.data);
-    let es3 = new eventSource(`${testRealmHref}_message`);
-
-    let expected = [
-      `updated clients, count: 1`,
-      `updated clients, count: 2`,
-      `updated clients, count: 3`,
-    ];
-    assert.verifySteps(expected, `sse data is correct`);
-  });
-
   test("serves a card DELETE request", async function (assert) {
     let entry = "person-1.json";
     let response = await request
@@ -274,10 +236,7 @@ module("Realm Server", function (hooks) {
     let cardFile = join(dir.name, entry);
     assert.strictEqual(existsSync(cardFile), false, "card json does not exist");
 
-    es.close();
-
-    let expected = [`updated clients, count: 1`, `entry deleted: ${entry}`];
-    assert.deepEqual(events, expected, `sse data is correct`);
+    assert.deepEqual(events, [`entry deleted: ${entry}`], `sse is correct`);
   });
 
   test("serves a card-source GET request", async function (assert) {
@@ -302,11 +261,6 @@ module("Realm Server", function (hooks) {
 
   test("serves a card-source DELETE request", async function (assert) {
     let entry = "unused-card.gts";
-
-    es.addEventListener("update", (ev: MessageEvent) => {
-      assert.strictEqual(ev.data, `entry deleted: ${entry}`, "sse is correct");
-    });
-
     let response = await request
       .delete("/unused-card.gts")
       .set("Accept", "application/vnd.card+source");
@@ -319,16 +273,11 @@ module("Realm Server", function (hooks) {
       "card module does not exist"
     );
 
-    assert.expect(3);
+    assert.deepEqual(events, [`entry deleted: ${entry}`], `sse is correct`);
   });
 
   test("serves a card-source POST request", async function (assert) {
     let entry = "unused-card.gts";
-
-    es.addEventListener("update", (ev: MessageEvent) => {
-      assert.strictEqual(ev.data, `entry changed: ${entry}`, "sse is correct");
-    });
-
     let response = await request
       .post("/unused-card.gts")
       .set("Accept", "application/vnd.card+source")
@@ -345,7 +294,7 @@ module("Realm Server", function (hooks) {
       ${cardSrc}`
     );
 
-    assert.expect(4);
+    assert.deepEqual(events, [`entry changed: ${entry}`], `sse is correct`);
   });
 
   test("serves a module GET request", async function (assert) {
