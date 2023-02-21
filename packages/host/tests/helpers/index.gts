@@ -202,6 +202,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
+  #localRealmAdapter = new LocalRealmAdapter(this.#files as unknown as FileSystemDirectoryHandle);
 
   constructor(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
@@ -248,12 +249,12 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
-  subscribe(_cb: (message: string) => void): void {
-    // TODO
+  subscribe(cb: (message: string) => void): void {
+    this.#localRealmAdapter.subscribe(cb);
   }
 
   unsubscribe(): void {
-    // TODO
+    this.#localRealmAdapter.unsubscribe();
   }
 
   async exists(path: string): Promise<boolean> {
@@ -367,7 +368,6 @@ export class TestRealmAdapter implements RealmAdapter {
   createStreamingResponse(request: Request,
     responseInit: ResponseInit,
     cleanup: () => void) {
-    let localRealmAdapter = new LocalRealmAdapter(this.#files as unknown as FileSystemDirectoryHandle);
-    return localRealmAdapter.createStreamingResponse(request, responseInit, cleanup);
+    return this.#localRealmAdapter.createStreamingResponse(request, responseInit, cleanup);
   }
 }
