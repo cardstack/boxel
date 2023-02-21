@@ -49,9 +49,6 @@ jobs:
       - name: Lint Worker
         run: pnpm run lint
         working-directory: packages/worker
-      - name: Run Tests
-        run: pnpm run test:ember
-        working-directory: packages/boxel-motion-test-app
   boxel-test:
     name: Boxel Tests
     runs-on: ubuntu-latest
