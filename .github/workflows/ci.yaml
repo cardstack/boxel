@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main, realm/fetch-host-zip-cs-5076] # FIXME remove
-  pull_request:
+  # pull_request: FIXME restore
 
 env:
   PNPM_VERSION: 7.2.1
