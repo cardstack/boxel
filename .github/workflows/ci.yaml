@@ -147,7 +147,6 @@ jobs:
               - '.github/actions/waypoint-deploy/**'
               - 'pnpm-lock.yaml'
 
-
   host-deploy:
     name: Deploy host to staging
     needs: change-check
