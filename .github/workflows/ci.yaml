@@ -49,8 +49,8 @@ jobs:
       - name: Lint Worker
         run: pnpm run lint
         working-directory: packages/worker
-  boxel-test:
-    name: Boxel Tests
+  boxel-motion-test:
+    name: Boxel Motion Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
