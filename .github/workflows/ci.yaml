@@ -132,7 +132,7 @@ jobs:
         with:
           filters: |
             host:
-              - 'packages/host/**'
+              - 'scripts/**'
             realm-server:
               - 'packages/realm-server/**'
               - 'packages/base/**'
