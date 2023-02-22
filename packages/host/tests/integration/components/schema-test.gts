@@ -396,9 +396,10 @@ module('Integration | schema', function (hooks) {
 async function getFileResource(context: TestContext, adapter: TestRealmAdapter, ref: { name: string; module: string; }): Promise<FileResource> {
   let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
   let paths = new RealmPaths(testRealmURL);
-  let content = (await adapter.openFile(paths.local(new URL(fileURL))))?.content as string | undefined;
+  let relativePath = paths.local(new URL(fileURL));
+  let content = (await adapter.openFile(relativePath))?.content as string | undefined;
   return file(context, () => ({
-    relativePath: fileURL,
+    relativePath,
     realmURL: paths.url,
     lastModified: undefined,
     content
