@@ -147,12 +147,12 @@ jobs:
   host-deploy:
     name: Deploy host to staging
     needs: change-check
-    if: ${{ needs.change-check.outputs.host == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - run: echo "${{ toJSON(needs.change-check.outputs) }}"
       - uses: actions/checkout@v3
-      - name: Deploy boxel-host
+      - name: Deploy boxel-host if changes have happened
+        if: ${{ needs.change-check.outputs.host == 'true' }}
         uses: ./.github/actions/deploy-boxel-host
         with:
           environment: staging
