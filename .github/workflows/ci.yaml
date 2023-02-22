@@ -119,7 +119,7 @@ jobs:
   change-check:
     name: Check which packages changed
     needs: [host-test, realm-server-test]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/realm/fetch-host-zip-cs-5076' # FIXME restore to main
     runs-on: ubuntu-latest
     outputs:
       host: ${{ steps.filter.outputs.host }}
