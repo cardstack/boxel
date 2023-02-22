@@ -166,7 +166,7 @@ jobs:
 
   realm-server-deploy:
     name: Deploy realm server to staging
-    needs: change-check
+    needs: [change-check, host-deploy]
     if: ${{ needs.change-check.outputs.realm-server == 'true' }}
     runs-on: ubuntu-latest
     strategy:
