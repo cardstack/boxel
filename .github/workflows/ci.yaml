@@ -150,7 +150,7 @@ jobs:
     if: ${{ needs.change-check.outputs.host == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "${{ needs.change-check.outputs }}"
+      - run: echo "${{ toJSON(needs.change-check.outputs) }}"
       - uses: actions/checkout@v3
       - name: Deploy boxel-host
         uses: ./.github/actions/deploy-boxel-host
