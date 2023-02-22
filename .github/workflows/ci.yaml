@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, realm/fetch-host-zip-cs-5076] # FIXME remove
   pull_request:
 
 env:
