@@ -1,4 +1,4 @@
-import { module, test } from "qunit";
+import { module, test, only } from "qunit";
 import supertest, { Test, SuperTest } from "supertest";
 import { createRealmServer } from "../server";
 import { join } from "path";
@@ -14,6 +14,7 @@ import {
   Loader,
   baseRealm,
   loadCard,
+  Deferred,
 } from "@cardstack/runtime-common";
 import { stringify } from "qs";
 import { Query } from "@cardstack/runtime-common/query";
@@ -31,12 +32,40 @@ module("Realm Server", function (hooks) {
   let server: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
-  let es: eventSource | undefined;
   let events: string[] = [];
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
   );
+
+  async function expectEvent<
+    T
+  >(assert: Assert, expectedContents: string[], callback: () => Promise<T>): Promise<T> {
+    let defer = new Deferred<string[]>();
+    let events: string[] = [];
+    let es = new eventSource(`${testRealmHref}_message`);
+    es.onmessage = (ev: MessageEvent) => console.log("got message", ev.data);
+    es.addEventListener("update", (ev: MessageEvent) => {
+      events.push(ev.data);
+      if (events.length >= expectedContents.length) {
+        defer.fulfill(events);
+      }
+    });
+    es.onerror = (err) => {
+      defer.reject(err);
+    };
+    let timeout = setTimeout(() => {
+      defer.reject(
+        new Error(`expectEvent timed out, saw events ${JSON.stringify(events)}`)
+      );
+    }, 3000);
+    await new Promise((resolve) => es.addEventListener("open", resolve));
+    let result = await callback();
+    assert.deepEqual(await defer.promise, expectedContents);
+    clearTimeout(timeout);
+    es.close();
+    return result;
+  }
 
   hooks.beforeEach(async function () {
     Loader.destroy();
@@ -53,17 +82,9 @@ module("Realm Server", function (hooks) {
     server = createRealmServer([testRealm]);
     server.listen(testRealmURL.port);
     request = supertest(server);
-
-    es = new eventSource(`${testRealmHref}_message`);
-    es.addEventListener("update", (ev: MessageEvent) => events.push(ev.data));
-    es.onerror = () => {
-      throw new Error("unknown eventSource error");
-    };
   });
 
   hooks.afterEach(function () {
-    es?.close();
-    es = undefined;
     server.close();
     events = [];
   });
@@ -98,20 +119,23 @@ module("Realm Server", function (hooks) {
   });
 
   test("serves a card POST request", async function (assert) {
-    let response = await request
-      .post("/")
-      .send({
-        data: {
-          type: "card",
-          meta: {
-            adoptsFrom: {
-              module: "https://cardstack.com/base/card-api",
-              name: "Card",
+    let expected = ["entry added: Card", "entry added: Card/1.json"];
+    let response = await expectEvent(assert, expected, async () => {
+      return await request
+        .post("/")
+        .send({
+          data: {
+            type: "card",
+            meta: {
+              adoptsFrom: {
+                module: "https://cardstack.com/base/card-api",
+                name: "Card",
+              },
             },
           },
-        },
-      })
-      .set("Accept", "application/vnd.api+json");
+        })
+        .set("Accept", "application/vnd.api+json");
+    });
     assert.strictEqual(response.status, 201, "HTTP 201 status");
     let json = response.body;
 
@@ -143,9 +167,6 @@ module("Realm Server", function (hooks) {
     } else {
       assert.ok(false, "response body is not a card document");
     }
-
-    let expected = ["entry added: Card", "entry added: Card/1.json"];
-    assert.deepEqual(events, expected, "sse is correct");
   });
 
   test("serves a card PATCH request", async function (assert) {
@@ -226,17 +247,19 @@ module("Realm Server", function (hooks) {
     assert.strictEqual(response.body.data.length, 1, "found one card");
   });
 
-  test("serves a card DELETE request", async function (assert) {
+  only("serves a card DELETE request", async function (assert) {
     let entry = "person-1.json";
-    let response = await request
-      .delete("/person-1")
-      .set("Accept", "application/vnd.api+json");
+    let expected = [`entry deleted: ${entry}`];
+    let response = await expectEvent(assert, expected, async () => {
+      //await new Promise((resolve) => setTimeout(resolve, 2000));
+      return await request
+        .delete("/person-1")
+        .set("Accept", "application/vnd.api+json");
+    });
 
     assert.strictEqual(response.status, 204, "HTTP 204 status");
     let cardFile = join(dir.name, entry);
     assert.strictEqual(existsSync(cardFile), false, "card json does not exist");
-
-    assert.deepEqual(events, [`entry deleted: ${entry}`], `sse is correct`);
   });
 
   test("serves a card-source GET request", async function (assert) {

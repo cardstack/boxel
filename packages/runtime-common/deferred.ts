@@ -11,4 +11,7 @@ export class Deferred<T> {
   fulfill(result: T | Promise<T>): void {
     Promise.resolve(result).then(this.#resolve, this.#reject);
   }
+  reject(err: unknown): void {
+    this.#reject(err);
+  }
 }
