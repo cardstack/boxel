@@ -43,7 +43,7 @@ if (!path.endsWith("/")) {
   let key = json.key;
 
   let zipUrl = `${url}${key}`;
-  log.debug(`Fetching zip from ${zipUrl}`);
+  log.info(`Fetching zip from ${zipUrl}`);
 
   let zipResponse = await fetch(zipUrl);
   let zipBuffer = await zipResponse.arrayBuffer();
