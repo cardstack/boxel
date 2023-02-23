@@ -31,6 +31,10 @@ if (!path.endsWith("/")) {
   path = `${path}/`;
 }
 
+if (!url.endsWith("/")) {
+  url = `${url}/`;
+}
+
 (async () => {
   // FIXME this surely does nothing?
   try {
