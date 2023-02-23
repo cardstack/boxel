@@ -1,4 +1,4 @@
-import { contains, field, Card, Component, containsMany } from 'https://cardstack.com/base/card-api';
+import { contains, field, Card, Component, containsMany, relativeTo } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';
@@ -21,7 +21,10 @@ class VendorDetails extends Card {
   @field email = contains(StringCard); // email format
   @field cardXYZ = contains(StringCard);
   @field logoHref = contains(StringCard, { computeVia: function(this: VendorDetails) {
-    return new URL(this.logoURL, import.meta.url).href
+    if (!this.logoURL) {
+      return null;
+    }
+    return new URL(this.logoURL, this[relativeTo] || this.id).href;
   }});
 
   static embedded = class Embedded extends Component<typeof this> {
