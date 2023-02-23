@@ -28,13 +28,58 @@ export class LocalRealmAdapter implements RealmAdapter {
   }
 
   private watcher: number | undefined = undefined;
+  private entries: { path: string; lastModified?: number }[] = [];
 
-  subscribe(cb: (message: string) => void): void {
+  async subscribe(cb: (message: string) => void): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
     }
-    this.watcher = setInterval(async () => cb(`polling '/'`), 5000);
+    this.watcher = setInterval(async () => {
+      let currentEntries = await this.getDirEntries('', []);
+      if (this.entries.length > 0) {
+        let added = currentEntries.filter(
+          (entry) =>
+            !this.entries.find(
+              (e) =>
+                e.path === entry.path && e.lastModified == entry.lastModified
+            )
+        );
+        let removed = this.entries.filter(
+          (entry) =>
+            !currentEntries.find(
+              (e) =>
+                e.path === entry.path && e.lastModified == entry.lastModified
+            )
+        );
+
+        let diff = new Set([...added, ...removed].map((e) => e.path));
+        if (diff.size > 0) {
+          cb(`changed: ${[...diff].join(', ')}`);
+        }
+      }
+      this.entries = currentEntries;
+    }, 1000);
     console.log(`subscribed to watcher: ${this.watcher}`);
+  }
+
+  private async getDirEntries(
+    dirPath: string,
+    entries: { path: string; lastModified?: number }[]
+  ) {
+    let listing = this.readdir(dirPath);
+    for await (let entry of listing) {
+      if (entry.kind === 'directory') {
+        entries.push({ path: entry.path });
+        await this.getDirEntries(entry.path, entries);
+      } else {
+        let file = await this.openFile(entry.path);
+        if (file) {
+          let { lastModified } = file;
+          entries.push({ path: entry.path, lastModified });
+        }
+      }
+    }
+    return entries;
   }
 
   unsubscribe(): void {
@@ -138,7 +183,7 @@ export function setupCloseHandler(stream: ReadableStream, fn: () => void) {
   closeHandlers.set(stream, fn);
 }
 
-class MessageStream {
+export class MessageStream {
   private pendingWrite: { chunk: string; deferred: Deferred<void> } | undefined;
   private pendingRead:
     | { controller: ReadableStreamDefaultController; deferred: Deferred<void> }
