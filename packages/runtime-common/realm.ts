@@ -567,8 +567,6 @@ export class Realm {
     return createResponse(null, { status: 204 });
   }
 
-  private listeningClients: WritableStream[] = [];
-
   private async directoryEntries(
     url: URL
   ): Promise<{ name: string; kind: Kind }[] | undefined> {
@@ -683,6 +681,8 @@ export class Realm {
     }
     return data;
   }
+
+  private listeningClients: WritableStream[] = [];
 
   private async subscribe(req: Request): Promise<Response> {
     let headers = {

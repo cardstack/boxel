@@ -38,7 +38,8 @@ export interface Dir {
   [name: string]: string | Dir;
 }
 
-export const testRealmURL = 'http://test-realm/test/';
+// !!! TODO: revert this to `http://test-realm/test/`
+export const testRealmURL = 'http://localhost:4202/test/';
 
 export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
@@ -202,7 +203,6 @@ export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
-  #localRealmAdapter = new LocalRealmAdapter(this.#files as unknown as FileSystemDirectoryHandle);
 
   constructor(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
@@ -247,14 +247,6 @@ export class TestRealmAdapter implements RealmAdapter {
         kind: typeof content === 'string' ? 'file' : 'directory',
       };
     }
-  }
-
-  subscribe(cb: (message: string) => void): void {
-    this.#localRealmAdapter.subscribe(cb);
-  }
-
-  unsubscribe(): void {
-    this.#localRealmAdapter.unsubscribe();
   }
 
   async exists(path: string): Promise<boolean> {
@@ -368,6 +360,37 @@ export class TestRealmAdapter implements RealmAdapter {
   createStreamingResponse(request: Request,
     responseInit: ResponseInit,
     cleanup: () => void) {
-    return this.#localRealmAdapter.createStreamingResponse(request, responseInit, cleanup);
+      let adapter = new LocalRealmAdapter(this.#files as unknown as FileSystemDirectoryHandle);
+    return adapter.createStreamingResponse(request, responseInit, cleanup);
+  }
+
+  // subscribe(cb: (message: string) => void): void {
+  //   this.#localRealmAdapter.subscribe(cb);
+  // }
+
+  // unsubscribe(): void {
+  //   this.#localRealmAdapter.unsubscribe();
+  // }
+
+  private watcher: number | undefined = undefined;
+
+  subscribe(cb: (message: string, clients?: WritableStream[]) => Promise<void>, clients?: WritableStream[]): void {
+    if (this.watcher) {
+      throw new Error(`tried to subscribe to watcher twice`);
+    }
+    this.watcher = setInterval(async () => {
+      let listings = this.readdir('CatalogEntry');
+      for await (let { path } of listings) {
+        console.log(path);
+        cb(path, clients);
+      }
+    }, 500);
+    console.log(`WATCHER: ${this.watcher}`);
+  }
+
+  unsubscribe(): void {
+    clearInterval(this.watcher);
+    this.watcher = undefined;
+    console.log(`UNSUBSCRIBED FROM WATCHER`);
   }
 }
