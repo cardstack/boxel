@@ -14,7 +14,7 @@ import {
   badRequest,
   CardError,
 } from "./error";
-import { formatRFC7231, getTime } from "date-fns";
+import { formatRFC7231 } from "date-fns";
 import {
   isCardResource,
   executableExtensions,
@@ -59,7 +59,6 @@ import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
 import { createResponse } from "./create-response";
-// import { isEqual } from "lodash";
 
 export interface FileRef {
   path: LocalPath;
@@ -70,8 +69,6 @@ export interface FileRef {
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
-
-const updateRetentionMS = 5000;
 
 interface FastBootOptions {
   resilient?: boolean;
@@ -713,18 +710,12 @@ export class Realm {
     );
 
     if (this.listeningClients.length === 0) {
-      await this.#adapter.subscribe((message: string) => {
-        console.log(`received update message: ${message}`);
-        this.sendUpdateMessages(`event: update\n` + `data: ${message}\n\n`);
-      });
+      await this.#adapter.subscribe((message: string) =>
+        this.sendUpdateMessages(`event: update\n` + `data: ${message}\n\n`)
+      );
     }
 
     this.listeningClients.push(writable);
-
-    // new subscribers get resent any recent updates
-    for (let recentMessage of this.validRecentUpdates()) {
-      await writeToStream(writable, recentMessage);
-    }
 
     this.sendUpdateMessages(
       `data: updated clients, count: ${this.listeningClients.length}\n\n`
@@ -737,24 +728,8 @@ export class Realm {
     return response;
   }
 
-  private recentUpdates: { message: string; timestamp: Date }[] = [];
-
-  private pruneRecentUpdates(): void {
-    this.recentUpdates = this.recentUpdates.filter(
-      ({ timestamp }) =>
-        new Date().getTime() - timestamp.getTime() < updateRetentionMS
-    );
-  }
-
-  private validRecentUpdates(): string[] {
-    this.pruneRecentUpdates();
-    return this.recentUpdates.map(({ message }) => message);
-  }
-
   private async sendUpdateMessages(message: string): Promise<void> {
     console.log(`sending updates to ${this.listeningClients.length} clients`);
-    this.pruneRecentUpdates();
-    this.recentUpdates.push({ message, timestamp: new Date() });
     await Promise.all(
       this.listeningClients.map((client) => writeToStream(client, message))
     );
