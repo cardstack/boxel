@@ -27,68 +27,6 @@ export class LocalRealmAdapter implements RealmAdapter {
     }
   }
 
-  private watcher: number | undefined = undefined;
-  private entries: { path: string; lastModified?: number }[] = [];
-
-  async subscribe(cb: (message: string) => void): Promise<void> {
-    if (this.watcher) {
-      throw new Error(`tried to subscribe to watcher twice`);
-    }
-    this.watcher = setInterval(async () => {
-      let currentEntries = await this.getDirEntries('', []);
-      if (this.entries.length > 0) {
-        let added = currentEntries.filter(
-          (entry) =>
-            !this.entries.find(
-              (e) =>
-                e.path === entry.path && e.lastModified == entry.lastModified
-            )
-        );
-        let removed = this.entries.filter(
-          (entry) =>
-            !currentEntries.find(
-              (e) =>
-                e.path === entry.path && e.lastModified == entry.lastModified
-            )
-        );
-
-        let diff = new Set([...added, ...removed].map((e) => e.path));
-        if (diff.size > 0) {
-          cb(`changed: ${[...diff].join(', ')}`);
-        }
-      }
-      this.entries = currentEntries;
-    }, 1000);
-    console.log(`subscribed to watcher: ${this.watcher}`);
-  }
-
-  private async getDirEntries(
-    dirPath: string,
-    entries: { path: string; lastModified?: number }[]
-  ) {
-    let listing = this.readdir(dirPath);
-    for await (let entry of listing) {
-      if (entry.kind === 'directory') {
-        entries.push({ path: entry.path });
-        await this.getDirEntries(entry.path, entries);
-      } else {
-        let file = await this.openFile(entry.path);
-        if (file) {
-          let { lastModified } = file;
-          entries.push({ path: entry.path, lastModified });
-        }
-      }
-    }
-    return entries;
-  }
-
-  unsubscribe(): void {
-    console.log(`closing watcher: ${this.watcher}`);
-    clearInterval(this.watcher);
-    this.watcher = undefined;
-    console.log(`unsubscribed from watcher`);
-  }
-
   async exists(path: string): Promise<boolean> {
     try {
       await traverse(this.fs, path, 'directory');
@@ -175,6 +113,55 @@ export class LocalRealmAdapter implements RealmAdapter {
     let response = createResponse(s.readable, responseInit);
     setupCloseHandler(s.readable, cleanup);
     return { response, writable: s.writable };
+  }
+
+  private watcher: number | undefined = undefined;
+  private entries: { path: string; lastModified?: number }[] = [];
+
+  async subscribe(cb: (message: string) => void): Promise<void> {
+    if (this.watcher) {
+      throw new Error(`tried to subscribe to watcher twice`);
+    }
+    this.watcher = setInterval(async () => {
+      let currentEntries = await this.getDirectoryListings('', []);
+      if (this.entries.length > 0) {
+        let changes = diff(currentEntries, this.entries);
+        if (changes.size > 0) {
+          cb(`${[...changes].join(', ')}`);
+        }
+      }
+      this.entries = currentEntries;
+    }, 1000);
+    console.log(`watcher: ${this.watcher}`);
+  }
+
+  unsubscribe(): void {
+    if (!this.watcher) {
+      return;
+    }
+    clearInterval(this.watcher);
+    this.watcher = undefined;
+    console.log(`unsubscribed from watcher`);
+  }
+
+  private async getDirectoryListings(
+    dirPath: string,
+    entries: { path: string; lastModified?: number }[]
+  ) {
+    let listing = this.readdir(dirPath);
+    for await (let entry of listing) {
+      if (entry.kind === 'directory') {
+        entries.push({ path: entry.path });
+        await this.getDirectoryListings(entry.path, entries);
+      } else {
+        let fileRef = await this.openFile(entry.path);
+        if (fileRef) {
+          let { lastModified } = fileRef;
+          entries.push({ path: entry.path, lastModified });
+        }
+      }
+    }
+    return entries;
   }
 }
 
@@ -273,4 +260,22 @@ export async function traverse<Target extends Kind>(
     pathSegments[0],
     opts
   )) as HandleKind<Target>;
+}
+
+function hasItem(
+  arr: { path: string; lastModified?: number }[],
+  item: { path: string; lastModified?: number }
+) {
+  return arr.some(
+    (i) => i.path === item.path && i.lastModified == item.lastModified
+  );
+}
+
+function diff(
+  a: { path: string; lastModified?: number }[],
+  b: { path: string; lastModified?: number }[]
+) {
+  let added = b.filter((entry) => !hasItem(a, entry));
+  let removed = a.filter((entry) => !hasItem(b, entry));
+  return new Set([...added, ...removed].map((e) => e.path));
 }
