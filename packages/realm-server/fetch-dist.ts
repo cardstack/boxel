@@ -25,7 +25,7 @@ let { path, url, logLevel } = yargs(process.argv.slice(2))
   .parseSync();
 
 log.setLevel(logLevel as LogLevelNames);
-log.info(`Set log level to ${logLevel}`);
+log.info(`Set fetch-dist log level to ${logLevel}`);
 
 if (!path.endsWith("/")) {
   path = `${path}/`;
