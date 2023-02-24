@@ -1,4 +1,4 @@
-import { contains, field, Card, Component } from 'https://cardstack.com/base/card-api';
+import { contains, field, Card, Component, relativeTo } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
@@ -31,7 +31,10 @@ class Asset extends Card {
     function(this: Asset) { return EXCHANGE_RATES[this.symbol]; }
   });
   @field logoHref = contains(StringCard, { computeVia: function(this: Asset) {
-    return new URL(this.logoURL, import.meta.url).href
+    if (!this.logoURL) {
+      return null;
+    }
+    return new URL(this.logoURL, this[relativeTo] || this.id).href;
   }});
   static embedded = class Embedded extends Component<typeof Asset> {
     <template>
