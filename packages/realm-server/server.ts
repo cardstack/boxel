@@ -6,7 +6,7 @@ import { setupCloseHandler } from "./node-realm";
 import "@cardstack/runtime-common/externals-global";
 import log from "loglevel";
 
-let requestLog = log.getLogger('realm:requests');
+let requestLog = log.getLogger("realm:requests");
 
 export interface RealmConfig {
   realmURL: string;
