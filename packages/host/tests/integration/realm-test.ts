@@ -17,6 +17,7 @@ import { baseRealm, CardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import { Deferred } from '@cardstack/runtime-common/deferred';
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
@@ -25,6 +26,35 @@ module('Integration | realm', function (hooks) {
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
   );
+
+  async function expectEvent<
+    T
+  >(assert: Assert, expectedContents: string[], callback: () => Promise<T>) {
+    let defer = new Deferred<string[]>();
+    let events: string[] = [];
+    let es = new EventSource(`http://localhost:4202/test/_message`);
+    console.log(`created new es, ${es.readyState}`);
+    es.onmessage = (ev: MessageEvent) => console.log('message:', ev.data);
+    es.addEventListener('update', (ev: MessageEvent) => {
+      console.log(`UPDATE: ${ev.data}`);
+      events.push(ev.data);
+      if (events.length >= expectedContents.length) {
+        defer.fulfill(events);
+      }
+    });
+    es.onerror = (err) => defer.reject(err);
+    let timeout = setTimeout(() => {
+      defer.reject(
+        new Error(`expectEvent timed out, saw events ${JSON.stringify(events)}`)
+      );
+    }, 3000);
+    await new Promise((resolve) => es.addEventListener('open', resolve));
+    let result = await callback();
+    assert.deepEqual(await defer.promise, expectedContents);
+    clearTimeout(timeout);
+    es.close();
+    return result;
+  }
 
   hooks.beforeEach(async function () {
     Loader.destroy();
@@ -1043,15 +1073,18 @@ module('Integration | realm', function (hooks) {
     await realm.ready;
 
     {
-      let response = await realm.handle(
-        new Request(`${testRealmURL}dir/person.gts`, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/vnd.card+source',
-          },
-          body: cardSrc,
-        })
-      );
+      let expected = ['dir/person.gts'];
+      let response = await expectEvent(assert, expected, async () => {
+        return await realm.handle(
+          new Request(`${testRealmURL}dir/person.gts`, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/vnd.card+source',
+            },
+            body: cardSrc,
+          })
+        );
+      });
 
       assert.strictEqual(response.status, 204, 'HTTP status is 204');
       assert.ok(

@@ -170,7 +170,7 @@ export function setupCloseHandler(stream: ReadableStream, fn: () => void) {
   closeHandlers.set(stream, fn);
 }
 
-export class MessageStream {
+class MessageStream {
   private pendingWrite: { chunk: string; deferred: Deferred<void> } | undefined;
   private pendingRead:
     | { controller: ReadableStreamDefaultController; deferred: Deferred<void> }
@@ -262,12 +262,13 @@ export async function traverse<Target extends Kind>(
   )) as HandleKind<Target>;
 }
 
-function hasItem(
-  arr: { path: string; lastModified?: number }[],
-  item: { path: string; lastModified?: number }
+function hasEntry(
+  listings: { path: string; lastModified?: number }[],
+  entry: { path: string; lastModified?: number }
 ) {
-  return arr.some(
-    (i) => i.path === item.path && i.lastModified == item.lastModified
+  return listings.some(
+    (item) =>
+      item.path === entry.path && item.lastModified == entry.lastModified
   );
 }
 
@@ -275,7 +276,7 @@ function diff(
   a: { path: string; lastModified?: number }[],
   b: { path: string; lastModified?: number }[]
 ) {
-  let added = b.filter((entry) => !hasItem(a, entry));
-  let removed = a.filter((entry) => !hasItem(b, entry));
+  let added = b.filter((entry) => !hasEntry(a, entry));
+  let removed = a.filter((entry) => !hasEntry(b, entry));
   return new Set([...added, ...removed].map((e) => e.path));
 }

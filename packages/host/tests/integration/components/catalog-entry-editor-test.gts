@@ -16,15 +16,10 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
 module('Integration | catalog-entry-editor', function (hooks) {
-  let adapter: TestRealmAdapter
+  let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
   setupMockLocalRealm(hooks);
-
-  let es = new EventSource(`${testRealmURL}_message`);
-  console.log(`created event source`);
-  es.onerror = () => console.log(`error: `, es.readyState);
-  es.onmessage = (ev) => console.log(ev.data);
 
   hooks.beforeEach(async function() {
     // this seeds the loader used during index which obtains url mappings
@@ -39,17 +34,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
-
-    let req = new Request(`${testRealmURL}_message`, {
-      headers: {
-        'Accept': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
-      }
-    });
-    realm.subscribe(req);
-
-    es.addEventListener('update', (ev) => console.log(`UPDATE: ${ev.data}`));
 
     await realm.write('person.gts', `
       import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
@@ -85,7 +69,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   hooks.afterEach(function() {
-    adapter.unsubscribe();
     Loader.destroy();
   });
 
@@ -659,13 +642,3 @@ module('Integration | catalog-entry-editor', function (hooks) {
     }, 'newly created vendor file has correct meta.adoptsFrom');
   });
 });
-
-type Entry = { name: string; path: string; kind: 'file' | 'directory'; };
-async function getDirectoryResource(adapter: TestRealmAdapter, dirPath: string): Promise<Entry[]> {
-  let entries = adapter.readdir(dirPath);
-  let arr: Entry[] = []
-  for await (let entry of entries) {
-    arr.push(entry);
-  }
-  return arr;
-}
