@@ -5,6 +5,7 @@ import {
   FileRef,
   LooseSingleCardDocument,
   baseRealm,
+  createResponse,
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
 import { TestContext } from '@ember/test-helpers';
@@ -22,7 +23,6 @@ import {
   type EntrySetter,
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
-import { LocalRealmAdapter } from '@cardstack/worker/src/local-realm-adapter';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -202,7 +202,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
-  #localRealmAdapter = new LocalRealmAdapter(this.#files as unknown as FileSystemDirectoryHandle);
+  subscriber: EventSource | undefined;
 
   constructor(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
@@ -313,7 +313,22 @@ export class TestRealmAdapter implements RealmAdapter {
         : JSON.stringify(contents, null, 2);
     let lastModified = Date.now();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
+
+    if (this.subscriber) {
+      this.postUpdateEvent(path);
+    }
+
     return { lastModified };
+  }
+
+  initEventSource(url: string): EventSource {
+    let es = new EventSource(url);
+    this.subscriber = es;
+    return es;
+  }
+
+  postUpdateEvent(data: string) {
+    this.subscriber!.dispatchEvent(new MessageEvent('update', { data }));
   }
 
   async remove(path: LocalPath) {
@@ -324,6 +339,10 @@ export class TestRealmAdapter implements RealmAdapter {
       throw new Error(`tried to use file as directory`);
     }
     delete dir[name];
+
+    if (this.subscriber) {
+      this.postUpdateEvent(path);
+    }
   }
 
   #traverse(
@@ -357,17 +376,21 @@ export class TestRealmAdapter implements RealmAdapter {
     return dir;
   }
 
-  createStreamingResponse(request: Request,
+  createStreamingResponse(
+    _request: Request,
     responseInit: ResponseInit,
-    cleanup: () => void) {
-      return this.#localRealmAdapter.createStreamingResponse(request, responseInit, cleanup);
+    _cleanup: () => void) {
+      return {
+        response: createResponse(new ReadableStream(), responseInit),
+        writable: new WritableStream()
+      };
   }
 
-  async subscribe(cb: (message: string) => void): Promise<void> {
-    this.#localRealmAdapter.subscribe(cb);
+  async subscribe(_cb: (message: string) => void): Promise<void> {
+    return;
   }
 
   unsubscribe(): void {
-    this.#localRealmAdapter.unsubscribe();
+    this.subscriber = undefined;
   }
 }
