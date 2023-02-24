@@ -132,7 +132,6 @@ export class LocalRealmAdapter implements RealmAdapter {
       }
       this.entries = currentEntries;
     }, 1000);
-    console.log(`watcher: ${this.watcher}`);
   }
 
   unsubscribe(): void {
@@ -141,7 +140,6 @@ export class LocalRealmAdapter implements RealmAdapter {
     }
     clearInterval(this.watcher);
     this.watcher = undefined;
-    console.log(`unsubscribed from watcher`);
   }
 
   private async getDirectoryListings(
