@@ -49,6 +49,9 @@ import {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { type RenderCard } from '../services/render-service';
+import log from 'loglevel';
+
+let currentRunLog = log.getLogger('host:current-run');
 
 type TypesWithErrors =
   | { type: 'types'; types: string[] }
@@ -253,7 +256,7 @@ export class CurrentRun {
       module = await this.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
-      console.warn(
+      currentRunLog.warn(
         `encountered error loading module "${url.href}": ${err.message}`
       );
       let deps = await (
@@ -392,7 +395,7 @@ export class CurrentRun {
         deferred.fulfill();
         throw err;
       }
-      console.warn(
+      currentRunLog.warn(
         `encountered error indexing card instance ${path}: ${error.error.detail}`
       );
       this.setInstance(instanceURL, error);

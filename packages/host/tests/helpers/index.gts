@@ -27,7 +27,9 @@ import {
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
 export function cleanWhiteSpace(text: string) {
-  return text.replace(/\s+/g, ' ').trim();
+  // this also normalizes non-breaking space characters which seem
+  // to be appearing in date/time serialization in some envs
+  return text.replace(/[\s ]+/g, ' ').trim();
 }
 
 export function p(dateString: string): Date {

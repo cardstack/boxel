@@ -50,6 +50,7 @@ module('Integration | preview', function (hooks) {
       }
     )
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
+    assert.shadowDOM('[data-test-firstName]').exists();
     assert.shadowDOM('[data-test-firstName]').hasText('Mango');
   });
 });

@@ -8,7 +8,7 @@ import { renderComponent } from '../../helpers/render-component';
 import CatalogEntryEditor from '@cardstack/host/components/catalog-entry-editor';
 import { TestRealm, TestRealmAdapter, testRealmURL, setupMockLocalRealm } from '../../helpers';
 import waitUntil from '@ember/test-helpers/wait-until';
-import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
+import { waitFor, fillIn, click, shadowQuerySelector } from '../../helpers/shadow-assert';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
@@ -29,43 +29,42 @@ module('Integration | catalog-entry-editor', function (hooks) {
       new URL('http://localhost:4201/base/')
     );
     shimExternals();
-    adapter = new TestRealmAdapter({});
+    adapter = new TestRealmAdapter({
+      'person.gts': `
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template><@fields.firstName/></template>
+          }
+        }
+      `,
+      'pet.gts': `
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        import BooleanCard from "https://cardstack.com/base/boolean";
+        import DateCard from "https://cardstack.com/base/date";
+        import { Person } from "./person";
+        export class Pet extends Card {
+          @field name = contains(StringCard);
+          @field lovesWalks = contains(BooleanCard);
+          @field birthday = contains(DateCard);
+          @field owner = contains(Person);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <h2 data-test-pet-name><@fields.name/></h2>
+              <div data-test-pet-owner><@fields.owner/></div>
+              <div data-test-pet-owner><@fields.birthday/></div>
+            </template>
+          }
+        }
+      `
+    });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
-
-    await realm.write('person.gts', `
-      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-        static embedded = class Embedded extends Component<typeof this> {
-          <template><@fields.firstName/></template>
-        }
-      }
-    `);
-
-    await realm.write('pet.gts', `
-      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import BooleanCard from "https://cardstack.com/base/boolean";
-      import DateCard from "https://cardstack.com/base/date";
-      import { Person } from "./person";
-      export class Pet extends Card {
-        @field name = contains(StringCard);
-        @field lovesWalks = contains(BooleanCard);
-        @field birthday = contains(DateCard);
-        @field owner = contains(Person);
-        static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <h2 data-test-pet-name><@fields.name/></h2>
-            <div data-test-pet-owner><@fields.owner/></div>
-            <div data-test-pet-owner><@fields.birthday/></div>
-          </template>
-        }
-      }
-    `);
   });
 
   hooks.afterEach(function() {
@@ -89,12 +88,18 @@ module('Integration | catalog-entry-editor', function (hooks) {
     // to trigger a timeout error using the default timeout
     await waitFor('[data-test-ref]', { timeout: 5000 });
 
-    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
-    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry for Pet card');
+    let catalogEntryEl = shadowQuerySelector('[data-test-catalog-entry-editor]');
+    let titleEl = shadowQuerySelector('[data-test-field="title"] input', catalogEntryEl) as HTMLInputElement;
+    assert.ok(titleEl.value.includes('Pet'), 'title input field value is correct');
+    let descriptionEl = shadowQuerySelector('[data-test-field="description"] input') as HTMLInputElement;
+    assert.ok(descriptionEl.value.includes('Catalog entry for Pet'), 'description input field value is correct')
     assert.shadowDOM('[data-test-ref]').exists();
     assert.shadowDOM('[data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
-    assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').hasText('');
-    assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(2) input').isChecked();
+    let demoEl = shadowQuerySelector('[data-test-field="demo"]', catalogEntryEl);
+    let demoNameEl = shadowQuerySelector('[data-test-field="name"] input', demoEl) as HTMLInputElement;
+    assert.strictEqual(demoNameEl.value, '', 'demo card name input field is correct');
+    let lovesWalksEl = shadowQuerySelector('[data-test-field="lovesWalks"] label:nth-of-type(2) input') as HTMLInputElement;
+    assert.strictEqual(lovesWalksEl.checked, true, 'demo card lovesWalks input field is correct');
 
     await fillIn('[data-test-field="title"] input', 'Pet test');
     await fillIn('[data-test-field="description"] input', 'Test description');
@@ -203,14 +208,23 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await waitFor('[data-test-format-button="edit"]');
     await click('[data-test-format-button="edit"]');
 
+    assert.dom('[data-test-catalog-entry-id]').exists();
     assert.dom('[data-test-catalog-entry-id]').hasText(`${testRealmURL}pet-catalog-entry`);
-    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="title"] input').hasValue('Pet');
-    assert.shadowDOM('[data-test-catalog-entry-editor] [data-test-field="description"] input').hasValue('Catalog entry');
+    let catalogEntryEl = shadowQuerySelector('[data-test-catalog-entry-editor]');
+    let titleEl = shadowQuerySelector('[data-test-field="title"] input', catalogEntryEl) as HTMLInputElement;
+    assert.ok(titleEl.value.includes('Pet'), 'title input field value is correct');
+    let descriptionEl = shadowQuerySelector('[data-test-field="description"] input') as HTMLInputElement;
+    assert.ok(descriptionEl.value.includes('Catalog entry'), 'description input field value is correct')
     assert.shadowDOM('[data-test-ref]').exists();
     assert.shadowDOM('[data-test-ref]').containsText(`Module: ${testRealmURL}pet Name: Pet`);
-    assert.shadowDOM('[data-test-field="demo"] [data-test-field="name"] input').hasValue('Jackie');
-    assert.shadowDOM('[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(1) input').isChecked();
-    assert.shadowDOM('[data-test-field="demo"] [data-test-field="owner"] [data-test-field="firstName"] input').hasValue('BN');
+    let demoEl = shadowQuerySelector('[data-test-field="demo"]', catalogEntryEl);
+    let demoNameEl = shadowQuerySelector('[data-test-field="name"] input', demoEl) as HTMLInputElement;
+    assert.strictEqual(demoNameEl.value, 'Jackie', 'demo card name input field is correct');
+    let lovesWalksEl = shadowQuerySelector('[data-test-field="lovesWalks"] label:nth-of-type(1) input') as HTMLInputElement;
+    assert.strictEqual(lovesWalksEl.checked, true, 'demo card lovesWalks input field is correct');
+    let ownerEl = shadowQuerySelector('[data-test-field="owner"]', demoEl);
+    let ownerFirstNameEl = shadowQuerySelector('[data-test-field="firstName"] input', ownerEl) as HTMLInputElement;
+    assert.strictEqual(ownerFirstNameEl.value, 'BN', 'demo card owner first name input field is correct')
 
     await fillIn('[data-test-field="title"] input', 'test title');
     await fillIn('[data-test-field="description"] input', 'test description');
@@ -220,9 +234,13 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await click('button[data-test-save-card]');
     await waitUntil(() => !(document.querySelector('[data-test-saving]')));
 
+    assert.shadowDOM('[data-test-title]').exists();
     assert.shadowDOM('[data-test-title]').hasText('test title');
+    assert.shadowDOM('[data-test-description]').exists();
     assert.shadowDOM('[data-test-description]').hasText('test description');
+    assert.shadowDOM('[data-test-demo] [data-test-pet-name]').exists();
     assert.shadowDOM('[data-test-demo] [data-test-pet-name]').hasText('Jackie Wackie');
+    assert.shadowDOM('[data-test-demo] [data-test-pet-owner]').exists();
     assert.shadowDOM('[data-test-demo] [data-test-pet-owner]').hasText('EA');
 
     let maybeError = await realm.searchIndex.card(new URL(`${testRealmURL}pet-catalog-entry`));
@@ -484,12 +502,15 @@ module('Integration | catalog-entry-editor', function (hooks) {
     );
 
     await waitFor('[data-test-ref]');
+    assert.shadowDOM(`[data-test-ref]`).exists();
     assert.shadowDOM(`[data-test-ref]`).hasText(`Module: ${testRealmURL}nice-person Name: NicePerson`);
 
     await waitFor('[data-test-person-name]');
+    assert.shadowDOM('[data-test-person-name]').exists();
     assert.shadowDOM('[data-test-person-name]').hasText('Burcu Noyan');
 
     await waitFor('[data-test-pet-name]');
+    assert.shadowDOM('[data-test-pet-name]').exists();
     assert.shadowDOM('[data-test-pet-name]').hasText('Jackie');
   });
 

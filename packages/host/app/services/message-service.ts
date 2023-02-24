@@ -9,33 +9,14 @@ export default class MessageService extends Service {
 
     if (!maybeEventSource) {
       maybeEventSource = new EventSource(realmURL);
-      this.start(maybeEventSource);
+      maybeEventSource.onerror = () => eventSource.close();
       this.subscriptions.set(realmURL, maybeEventSource);
     }
 
     let eventSource = maybeEventSource;
     eventSource.addEventListener('update', cb);
-    console.log(`Created new event source for ${realmURL}`);
     return () => {
       eventSource.removeEventListener('update', cb);
-      console.log(`Unsubscribed ${realmURL}`);
-    };
-  }
-
-  start(eventSource: EventSource) {
-    eventSource.onerror = () => {
-      if (eventSource.readyState == EventSource.CONNECTING) {
-        console.log(`Reconnecting to ${eventSource.url}...`);
-      } else if (eventSource.readyState == EventSource.CLOSED) {
-        console.log(`Connection closed for ${eventSource.url}`);
-        eventSource.close();
-      } else {
-        console.log(`An error has occured for ${eventSource.url}`);
-      }
-    };
-
-    eventSource.onmessage = (ev: MessageEvent) => {
-      console.log('Event: message, data: ' + ev.data);
     };
   }
 }

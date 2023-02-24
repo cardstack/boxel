@@ -4,6 +4,9 @@ import { webStreamToText } from "@cardstack/runtime-common/stream";
 import { Readable } from "stream";
 import { setupCloseHandler } from "./node-realm";
 import "@cardstack/runtime-common/externals-global";
+import log from "loglevel";
+
+let requestLog = log.getLogger('realm:requests');
 
 export interface RealmConfig {
   realmURL: string;
@@ -22,7 +25,8 @@ export function createRealmServer(realms: Realm[]) {
     }
 
     res.on("finish", () => {
-      console.log(`${req.method} ${req.url}: ${res.statusCode}`);
+      requestLog.info(`${req.method} ${req.url}: ${res.statusCode}`);
+      requestLog.debug(JSON.stringify(req.headers));
     });
 
     let isStreaming = false;
@@ -50,8 +54,20 @@ export function createRealmServer(realms: Realm[]) {
       );
       let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
 
+      requestLog.debug(
+        `Looking for realm to handle request with full URL: ${fullRequestUrl.href} (reversed: ${reversedResolution.href})`
+      );
+
       let realm = realms.find((r) => {
-        return r.paths.inRealm(reversedResolution);
+        let inRealm = r.paths.inRealm(reversedResolution);
+
+        requestLog.debug(
+          `In realm ${JSON.stringify({
+            url: r.url,
+            paths: r.paths,
+          })}: ${inRealm}`
+        );
+        return inRealm;
       });
 
       if (!realm) {

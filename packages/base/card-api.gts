@@ -728,7 +728,7 @@ export class Card {
             if (isNotLoadedValue(rawValue)) {
               return [fieldName, { id: rawValue.reference }];
             }
-              return [fieldName, getQueryableValue(field!.card, value[fieldName], [value,...stack])];
+              return [fieldName, getQueryableValue(field!, value[fieldName], [value,...stack])];
           }
         )
       );
@@ -830,7 +830,25 @@ export function isSaved(instance: Card): boolean {
   return instance[isSavedInstance] === true;
 }
 
-export function getQueryableValue(fieldCard: typeof Card, value: any, stack: Card[] = []): any {
+export function getQueryableValue(field: Field<typeof Card>, value: any, stack?: Card[]): any;
+export function getQueryableValue(fieldCard: typeof Card, value: any, stack?: Card[]): any;
+export function getQueryableValue(fieldOrCard: Field<typeof Card> | typeof Card, value: any, stack: Card[] = []): any {
+  let fieldCard: typeof Card;
+  let field: Field<typeof Card> | undefined;
+  if ('baseCard' in fieldOrCard) {
+    fieldCard = fieldOrCard;
+  } else {
+    field = fieldOrCard;
+    fieldCard = fieldOrCard.card;
+  }
+
+  // Need to replace the WatchedArray proxy with an actual array because the
+  // WatchedArray proxy is not structuredClone-able, and hence cannot be
+  // communicated over the postMessage boundary between worker and DOM.
+  if (field?.fieldType === 'containsMany') {
+    value = [...value];
+  }
+
   if ((primitive in fieldCard)) {
     let result = (fieldCard as any)[queryableValue](value);
     assertScalar(result, fieldCard);

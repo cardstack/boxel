@@ -7,6 +7,7 @@ import type { Relationship } from '@cardstack/runtime-common';
 import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
+import log from 'loglevel';
 
 interface Args {
   named: {
@@ -82,7 +83,7 @@ export class DirectoryResource extends Resource<Args> {
     });
     if (!response.ok) {
       // the server takes a moment to become ready do be tolerant of errors at boot
-      console.log(
+      log.error(
         `Could not get directory listing ${url}, status ${response.status}: ${
           response.statusText
         } - ${await response.text()}`

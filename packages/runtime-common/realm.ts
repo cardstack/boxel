@@ -26,6 +26,7 @@ import {
   type DirectoryEntryRelationship,
 } from "./index";
 import merge from "lodash/merge";
+import mergeWith from "lodash/mergeWith";
 import qs from "qs";
 import cloneDeep from "lodash/cloneDeep";
 import {
@@ -59,6 +60,7 @@ import { Card } from "https://cardstack.com/base/card-api";
 import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
 import { createResponse } from "./create-response";
+import log from "loglevel";
 
 export interface FileRef {
   path: LocalPath;
@@ -496,7 +498,16 @@ export class Realm {
     delete (patch as any).data.meta;
     delete (patch as any).data.type;
 
-    let card = merge({}, originalClone, patch);
+    let card = mergeWith(
+      originalClone,
+      patch,
+      (_objectValue: any, sourceValue: any) => {
+        // a patched array should overwrite the original array instead of merging
+        // into an original array, otherwise we won't be able to remove items in
+        // the original array
+        return Array.isArray(sourceValue) ? sourceValue : undefined;
+      }
+    );
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
     let { lastModified } = await this.write(
@@ -597,7 +608,7 @@ export class Realm {
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
     if (!entries) {
-      console.log(`can't find directory ${url.href}`);
+      log.warn(`can't find directory ${url.href}`);
       return notFound(request);
     }
 
@@ -729,7 +740,7 @@ export class Realm {
   }
 
   private async sendUpdateMessages(message: string): Promise<void> {
-    console.log(`sending updates to ${this.listeningClients.length} clients`);
+    log.info(`sending updates to ${this.listeningClients.length} clients`);
     await Promise.all(
       this.listeningClients.map((client) => writeToStream(client, message))
     );

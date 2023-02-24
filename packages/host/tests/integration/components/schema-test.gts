@@ -62,8 +62,11 @@ module('Integration | schema', function (hooks) {
 
     await waitFor('[data-test-card-id]');
 
+    assert.dom('[data-test-card-id]').exists();
     assert.dom('[data-test-card-id]').hasText(`Card ID: ${testRealmURL}person/Person`);
+    assert.dom('[data-test-adopts-from').exists();
     assert.dom('[data-test-adopts-from').hasText('Adopts From: https://cardstack.com/base/card-api/Card');
+    assert.dom('[data-test-field="firstName"]').exists();
     assert.dom('[data-test-field="firstName"]').hasText('Delete firstName - contains - field card ID: https://cardstack.com/base/string/default');
   });
 
@@ -89,9 +92,13 @@ module('Integration | schema', function (hooks) {
 
     await waitFor('[data-test-card-id]');
 
+    assert.dom('[data-test-card-id]').exists();
     assert.dom('[data-test-card-id]').hasText(`Card ID: ${testRealmURL}friend/Friend`);
+    assert.dom('[data-test-adopts-from').exists();
     assert.dom('[data-test-adopts-from').hasText('Adopts From: https://cardstack.com/base/card-api/Card');
+    assert.dom('[data-test-field="firstName"]').exists();
     assert.dom('[data-test-field="firstName"]').hasText('Delete firstName - contains - field card ID: https://cardstack.com/base/string/default');
+    assert.dom('[data-test-field="friend"]').exists();
     assert.dom('[data-test-field="friend"]').hasText(`Delete friend - linksTo - field card ID: ${testRealmURL}friend/Friend (this card)`);
   });
 
@@ -289,6 +296,7 @@ module('Integration | schema', function (hooks) {
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
     await waitFor('.schema [data-test-field="author"]');
+    assert.dom('[data-test-field="author"]').exists();
     assert.dom('[data-test-field="author"]').hasText(`Delete author - contains - field card ID: ${testRealmURL}person/Person`);
 
     let fileRef = await adapter.openFile('post.gts');
@@ -334,6 +342,7 @@ module('Integration | schema', function (hooks) {
 
     await click(`[data-test-select="${baseRealm.url}fields/string-field"]`);
     await waitFor('[data-test-field="aliases"]');
+    assert.dom('[data-test-field="aliases"]').exists();
     assert.dom('[data-test-field="aliases"]').hasText(`Delete aliases - containsMany - field card ID: ${baseRealm.url}string/default`);
 
     let fileRef = await adapter.openFile('person.gts');
@@ -385,8 +394,10 @@ module('Integration | schema', function (hooks) {
     assert.dom('data-test-error-msg').doesNotExist('error message does not exist');
 
     await fillIn('[data-test-new-field-name]', 'department');
+    assert.dom('[data-test-error-msg').exists();
     assert.dom('[data-test-error-msg').hasText('The field name "department" already exists, please choose a different name.');
     await fillIn('[data-test-new-field-name]', 'firstName');
+    assert.dom('[data-test-error-msg').exists();
     assert.dom('[data-test-error-msg').hasText('The field name "firstName" already exists, please choose a different name.');
     await fillIn('[data-test-new-field-name]', 'newFieldName');
     assert.dom('data-test-error-msg').doesNotExist('error message does not exist');

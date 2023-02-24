@@ -6,6 +6,7 @@ import type RouterService from '@ember/routing/router-service';
 import type LocalRealm from '../services/local-realm';
 import type CardService from '../services/card-service';
 import { RealmPaths } from '@cardstack/runtime-common';
+import log from 'loglevel';
 
 interface Model {
   path: string | undefined;
@@ -57,7 +58,7 @@ export default class Index extends Route<Model> {
     });
     if (!response.ok) {
       // TODO should we have an error route?
-      console.error(
+      log.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
       return { path, openFile, openDirs, isFastBoot };

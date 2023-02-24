@@ -64,6 +64,7 @@ module('Integration | Modifier | attach-styles', function (hooks) {
     let person = new Person({ name: 'Jackie' });
     let root = await renderCard(person, 'isolated');
 
+    assert.shadowDOM('[data-test-name]').exists();
     assert.shadowDOM('[data-test-name]').hasText('Jackie');
     assert.strictEqual(root.adoptedStyleSheets.length, 0, 'no stylesheets attached');
 
@@ -151,6 +152,7 @@ module('Integration | Modifier | attach-styles', function (hooks) {
     let post = new Post({ title: 'Weather Report', author });
     let root = await renderCard(post, 'isolated');
 
+    assert.shadowDOM('[data-test-intro]').exists();
     assert.shadowDOM('[data-test-intro]').hasText('Latest Post');
     assert.strictEqual(root.adoptedStyleSheets.length, 0, 'no stylesheets in root');
 

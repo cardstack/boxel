@@ -731,16 +731,25 @@ module('Integration | card-basics', function (hooks) {
     });
 
     await renderCard(helloWorld, 'edit');
+    assert.shadowDOM('[data-test-field="title"]').exists();
     assert.shadowDOM('[data-test-field="title"]').hasText('Title');
+    assert.shadowDOM('[data-test-field="title"] input').exists();
     assert.shadowDOM('[data-test-field="title"] input').hasValue('My Post');
-    assert.shadowDOM('[data-test-field="author"] [data-test-field="firstName"]').hasText('First Name');
-    assert.shadowDOM('[data-test-field="author"] input').hasValue('Arthur');
+    let authorEl = shadowQuerySelector('[data-test-field="author"]');
+    let firstNameEl = shadowQuerySelector('[data-test-field="firstName"]', authorEl);
+    assert.strictEqual(cleanWhiteSpace(firstNameEl.textContent!), 'First Name');
+    let authorInput = shadowQuerySelector('input', authorEl) as HTMLInputElement;
+    assert.strictEqual(authorInput.value, 'Arthur');
 
     await fillIn('[data-test-field="title"] input', 'New Post');
     await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
 
+    assert.shadowDOM('[data-test-field="title"] input').exists();
     assert.shadowDOM('[data-test-field="title"] input').hasValue('New Post');
+    authorEl = shadowQuerySelector('[data-test-field="author"]');
     assert.shadowDOM('[data-test-field="author"] input').hasValue('Carl Stack');
+    authorInput = shadowQuerySelector('input', authorEl) as HTMLInputElement;
+    assert.strictEqual(authorInput.value, 'Carl Stack');
   });
 
   test('renders field name for boolean default view values', async function (assert) {
@@ -854,8 +863,11 @@ module('Integration | card-basics', function (hooks) {
     });
 
     await renderCard(helloWorld, 'edit');
+    assert.shadowDOM('[data-test-field="title"] input').exists();
     assert.shadowDOM('[data-test-field="title"] input').hasValue('First Post');
+    assert.shadowDOM('[data-test-field="reviews"] input').exists();
     assert.shadowDOM('[data-test-field="reviews"] input').hasValue('1');
+    assert.shadowDOM('[data-test-field="firstName"] input').exists();
     assert.shadowDOM('[data-test-field="firstName"] input').hasValue('Arthur');
     assert.shadowDOM('[data-test-field="id"] input').doesNotExist('contained card does not have an id input field');
 
@@ -863,8 +875,11 @@ module('Integration | card-basics', function (hooks) {
     await fillIn('[data-test-field="reviews"] input', '5');
     await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
 
+    assert.shadowDOM('[data-test-output="title"]').exists();
     assert.shadowDOM('[data-test-output="title"]').hasText('New Title');
+    assert.shadowDOM('[data-test-output="reviews"]').exists();
     assert.shadowDOM('[data-test-output="reviews"]').hasText('5');
+    assert.shadowDOM('[data-test-output="author.firstName"]').exists();
     assert.shadowDOM('[data-test-output="author.firstName"]').hasText('Carl Stack');
   });
 
@@ -942,6 +957,7 @@ module('Integration | card-basics', function (hooks) {
 
     // change japanese to italian
     await fillIn('[data-test-item="1"] input', 'italian');
+    assert.shadowDOM('[data-test-output]').exists();
     assert.shadowDOM('[data-test-output]').hasText('english italian');
 
     // remove english
@@ -1031,26 +1047,32 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(card, 'edit');
     assert.shadowDOM('[data-test-contains-many="dates"] [data-test-item]').exists({ count: 3 });
     assert.shadowDOM('[data-test-contains-many="dates"] [data-test-item="0"] input').hasValue('2022-05-12');
+    assert.shadowDOM('[data-test-output="dates"]').exists();
     assert.shadowDOM('[data-test-output="dates"]').hasText('2022-05-12 2022-05-11 2021-05-13');
 
     await click('[data-test-contains-many="dates"] [data-test-add-new]');
     await fillIn('[data-test-contains-many="dates"] [data-test-item="3"] input', '2022-06-01');
     assert.shadowDOM('[data-test-contains-many="dates"] [data-test-item]').exists({ count: 4 });
+    assert.shadowDOM('[data-test-output="dates"]').exists();
     assert.shadowDOM('[data-test-output="dates"]').hasText('2022-05-12 2022-05-11 2021-05-13 2022-06-01');
 
     await click('[data-test-contains-many="dates"] [data-test-remove="1"]');
     await click('[data-test-contains-many="dates"] [data-test-remove="2"]'); // note: after removing index=1, the previous indexes of the following items have shifted by 1
     assert.shadowDOM('[data-test-contains-many="dates"] [data-test-item]').exists({ count: 2 });
+    assert.shadowDOM('[data-test-output="dates"]').exists();
     assert.shadowDOM('[data-test-output="dates"]').hasText('2022-05-12 2021-05-13');
 
     await fillIn('[data-test-contains-many="dates"] [data-test-item="1"] input', '2022-04-10');
+    assert.shadowDOM('[data-test-output]').exists();
     assert.shadowDOM('[data-test-output]').hasText('2022-05-12 2022-04-10');
 
     assert.shadowDOM('[data-test-contains-many="appointments"] [data-test-item]').exists({ count: 2 });
     assert.strictEqual(getDateFromInput('[data-test-contains-many="appointments"] [data-test-item="0"] input')?.getTime(), parseISO('2022-05-13T13:00').getTime());
+    assert.shadowDOM('[data-test-output="appointments"]').exists();
     assert.shadowDOM('[data-test-output="appointments"]').hasText('2022-05-13 2021-05-30');
 
     await fillIn('[data-test-contains-many="appointments"] [data-test-item="0"] input', '2022-05-01T11:01');
+    assert.shadowDOM('[data-test-output="appointments"]').exists();
     assert.shadowDOM('[data-test-output="appointments"]').hasText('2022-05-01 2021-05-30');
   });
 

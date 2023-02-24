@@ -1,4 +1,4 @@
-import { contains, field, Card, Component, containsMany } from 'https://cardstack.com/base/card-api';
+import { contains, field, Card, Component, containsMany, relativeTo } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';
@@ -20,6 +20,12 @@ class VendorDetails extends Card {
   @field logoURL = contains(StringCard); // url format
   @field email = contains(StringCard); // email format
   @field cardXYZ = contains(StringCard);
+  @field logoHref = contains(StringCard, { computeVia: function(this: VendorDetails) {
+    if (!this.logoURL) {
+      return null;
+    }
+    return new URL(this.logoURL, this[relativeTo] || this.id).href;
+  }});
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -98,12 +104,7 @@ export class Vendor extends Card {
           <@fields.mailingAddress/>
           <@fields.vendor.email/>
         </div>
-        {{!-- 
-          TODO: we need a better solution for images--this approach relies 
-          on absolute URL's and just doesn't work in a multi-environment system,
-          i.e. there is no value you can put here that will work in dev and staging 
-        --}}
-        <img src={{@model.vendor.logoURL}} />
+        <img src={{@model.vendor.logoHref}} />
       </CardContainer>
     </template>
   };

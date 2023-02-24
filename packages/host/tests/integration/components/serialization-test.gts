@@ -5,7 +5,7 @@ import parseISO from 'date-fns/parseISO';
 import { p, cleanWhiteSpace, shimModule, setupCardLogs, saveCard } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm, NotLoaded, type LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
+import { shadowQuerySelectorAll, fillIn, shadowQuerySelector } from '../../helpers/shadow-assert';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -1281,7 +1281,8 @@ module('Integration | serialization', function (hooks) {
     };
     let firstPost = await createFromSerialized<typeof Post>(doc.data, doc, undefined);
     await renderCard(firstPost, 'isolated');
-    assert.shadowDOM('[data-test]').hasText('Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM');
+    let el = shadowQuerySelector('[data-test]');
+    assert.strictEqual(cleanWhiteSpace(el.textContent!), 'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM');
   });
 
   test('can serialize a composite field', async function(assert) {
