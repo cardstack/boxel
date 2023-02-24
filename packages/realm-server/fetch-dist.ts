@@ -36,39 +36,34 @@ if (!url.endsWith("/")) {
 }
 
 (async () => {
-  // FIXME this surely does nothing?
-  try {
-    let indirectionUrl = `${url}fastboot-deploy-info.json`;
+  let indirectionUrl = `${url}fastboot-deploy-info.json`;
 
-    log.debug(`Fetching deployment info from ${indirectionUrl}`);
-    let response = await fetch(indirectionUrl);
+  log.debug(`Fetching deployment info from ${indirectionUrl}`);
+  let response = await fetch(indirectionUrl);
 
-    let json = await response.json();
+  let json = await response.json();
 
-    log.debug(`JSON response: ${JSON.stringify(json, null, 2)}`);
-    let key = json.key;
+  log.debug(`JSON response: ${JSON.stringify(json, null, 2)}`);
+  let key = json.key;
 
-    let zipUrl = `${url}${key}`;
-    log.info(`Fetching zip from ${zipUrl}`);
+  let zipUrl = `${url}${key}`;
+  log.info(`Fetching zip from ${zipUrl}`);
 
-    let zipResponse = await fetch(zipUrl);
-    let zipBuffer = await zipResponse.arrayBuffer();
+  let zipResponse = await fetch(zipUrl);
+  let zipBuffer = await zipResponse.arrayBuffer();
 
-    process.chdir(path);
+  process.chdir(path);
 
-    let pathToZip = key;
+  let pathToZip = key;
 
-    log.debug(`Writing zip to ${pathToZip}`);
-    fs.writeFileSync(pathToZip, Buffer.from(zipBuffer));
+  log.debug(`Writing zip to ${pathToZip}`);
+  fs.writeFileSync(pathToZip, Buffer.from(zipBuffer));
 
-    log.debug(`Extracting zip`);
-    execSync(`unzip -q ${pathToZip}`);
+  log.debug(`Extracting zip`);
+  execSync(`unzip -q ${pathToZip}`);
 
-    log.debug(`Deleting zip`);
-    fs.rmSync(pathToZip);
-  } catch (e: any) {
-    console.log("error in try", e);
-  }
+  log.debug(`Deleting zip`);
+  fs.rmSync(pathToZip);
 })().catch((e: any) => {
   log.error(`Unexpected error fetching dist, stopping`, e);
   process.exit(1);
