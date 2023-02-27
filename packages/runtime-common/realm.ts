@@ -711,9 +711,10 @@ export class Realm {
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable
         );
-        this.sendUpdateMessages(
-          `data: client clean up, count: ${this.listeningClients.length}\n\n`
-        );
+        this.sendUpdateMessages({
+          type: "message",
+          data: `client clean up, count: ${this.listeningClients.length}`,
+        });
         if (this.listeningClients.length === 0) {
           this.#adapter.unsubscribe();
         }
@@ -722,15 +723,19 @@ export class Realm {
 
     if (this.listeningClients.length === 0) {
       await this.#adapter.subscribe((message: string) =>
-        this.sendUpdateMessages(`event: update\n` + `data: ${message}\n\n`)
+        this.sendUpdateMessages({
+          type: "update",
+          data: message,
+        })
       );
     }
 
     this.listeningClients.push(writable);
 
-    this.sendUpdateMessages(
-      `data: updated clients, count: ${this.listeningClients.length}\n\n`
-    );
+    this.sendUpdateMessages({
+      type: "message",
+      data: `updated clients, count: ${this.listeningClients.length}`,
+    });
 
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
@@ -739,10 +744,16 @@ export class Realm {
     return response;
   }
 
-  private async sendUpdateMessages(message: string): Promise<void> {
+  private async sendUpdateMessages(message: {
+    type: string;
+    data: string;
+    id?: string;
+  }): Promise<void> {
     log.info(`sending updates to ${this.listeningClients.length} clients`);
+    let { type, data, id } = message;
+    let chunk = sseToChunkData(type, data, id);
     await Promise.all(
-      this.listeningClients.map((client) => writeToStream(client, message))
+      this.listeningClients.map((client) => writeToStream(client, chunk))
     );
   }
 }
@@ -776,4 +787,12 @@ export interface CardDefinitionResource {
       };
     };
   };
+}
+
+function sseToChunkData(type: string, data: string, id?: string): string {
+  let info = [`event: ${type}`, `data: ${data}`];
+  if (id) {
+    info.push(`id: ${id}`);
+  }
+  return info.join("\n") + "\n\n";
 }

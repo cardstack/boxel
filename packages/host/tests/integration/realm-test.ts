@@ -39,7 +39,10 @@ module('Integration | realm', function (hooks) {
         defer.fulfill(events);
       }
     });
-    es.onerror = (err: Event) => defer.reject(err);
+    es.onerror = (err: Event) => {
+      defer.reject(err);
+      es.close();
+    };
     let timeout = setTimeout(() => {
       defer.reject(
         new Error(`expectEvent timed out, saw events ${JSON.stringify(events)}`)
