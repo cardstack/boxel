@@ -21,6 +21,7 @@ import { Query } from "@cardstack/runtime-common/query";
 import { setupCardLogs, createRealm } from "./helpers";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 import { shimExternals } from "@cardstack/runtime-common/externals-global";
+// @ts-ignore
 import eventSource from "eventsource";
 
 setGracefulCleanup();
@@ -49,7 +50,7 @@ module("Realm Server", function (hooks) {
         defer.fulfill(events);
       }
     });
-    es.onerror = (err) => defer.reject(err);
+    es.onerror = (err: Event) => defer.reject(err);
     let timeout = setTimeout(() => {
       defer.reject(
         new Error(`expectEvent timed out, saw events ${JSON.stringify(events)}`)
