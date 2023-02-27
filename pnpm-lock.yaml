@@ -6,6 +6,9 @@ overrides:
   ember-concurrency: 2.2.1
 
 patchedDependencies:
+  '@types/eventsource@1.1.11':
+    hash: itunl7o524papufrlp7tcpsoiu
+    path: patches/@types__eventsource@1.1.11.patch
   magic-string@0.25.9:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
@@ -927,7 +930,7 @@ importers:
       loglevel: 1.8.1
     devDependencies:
       '@cardstack/runtime-common': link:../runtime-common
-      '@types/eventsource': 1.1.11
+      '@types/eventsource': 1.1.11_itunl7o524papufrlp7tcpsoiu
       '@types/fs-extra': 9.0.13
       '@types/lodash': 4.14.189
       '@types/node': 18.11.9
@@ -1299,7 +1302,6 @@ packages:
       semver: 6.3.0
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/generator/7.20.4:
     resolution: {integrity: sha512-luCf7yk/cm7yab6CAW1aiFnmEfBJplb/JojV56MYEK7ziWfGmFlTfmL9Ehwfy4gFhbjBfWO1wj7/TuSbVNEEtA==}
@@ -1440,7 +1442,6 @@ packages:
       '@babel/types': 7.20.2
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/helper-optimise-call-expression/7.18.6:
     resolution: {integrity: sha512-HP59oD9/fEHQkdcbgFCnbmgH5vIQTJbxh2yf+CdM89/glUNnuzr87Q8GIjGEnOktTROemO0Pe0iPAYbqZuOUiA==}
@@ -1538,7 +1539,6 @@ packages:
       '@babel/types': 7.20.2
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/highlight/7.18.6:
     resolution: {integrity: sha512-u7stbOuYjaPezCuLj29hNW1v64M2Md2qupEKP1fHc7WdOA3DgLh37suiSrZYY7haUB7iBeQZ9P1uiRF359do3g==}
@@ -1675,7 +1675,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
       '@babel/plugin-syntax-nullish-coalescing-operator': 7.8.3_@babel+core@7.20.2
 
@@ -1718,7 +1718,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
       '@babel/helper-skip-transparent-expression-wrappers': 7.20.0
       '@babel/plugin-syntax-optional-chaining': 7.8.3_@babel+core@7.20.2
@@ -1839,7 +1839,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
 
   /@babel/plugin-syntax-numeric-separator/7.10.4_@babel+core@7.20.2:
@@ -1871,7 +1871,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
 
   /@babel/plugin-syntax-private-property-in-object/7.14.5_@babel+core@7.20.2:
@@ -2458,7 +2458,6 @@ packages:
       globals: 11.12.0
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/types/7.20.2:
     resolution: {integrity: sha512-FnnvsNWgZCr232sqtXggapvlkk/tuwR/qhGzcmxI0GXLCjmPYQPzio2FbdlWuY6y1sHFfQKk+rRbUZ9VStQMog==}
@@ -4147,9 +4146,10 @@ packages:
   /@types/estree/1.0.0:
     resolution: {integrity: sha512-WulqXMDUTYAXCjZnk6JtIHPigp55cVtDgDrO2gHRwhyJto21+1zbVCtOYB2L1F9w4qCQ0rOGWBnBe0FNTiEJIQ==}
 
-  /@types/eventsource/1.1.11:
+  /@types/eventsource/1.1.11_itunl7o524papufrlp7tcpsoiu:
     resolution: {integrity: sha512-L7wLDZlWm5mROzv87W0ofIYeQP5K2UhoFnnUyEWLKM6UBb0ZNRgAqp98qE5DkgfBXdWfc2kYmw9KZm4NLjRbsw==}
     dev: true
+    patched: true
 
   /@types/express-serve-static-core/4.17.31:
     resolution: {integrity: sha512-DxMhY+NAsTwMMFHBTtJFNp5qiHKJ7TeqOo23zVEM9alT1Ml27Q3xcTH0xwxn7Q0BbMcVEJOs/7aQtUWupUQN3Q==}
@@ -8750,7 +8750,6 @@ packages:
     dependencies:
       ms: 2.1.2
       supports-color: 8.1.1
-    dev: true
 
   /decamelize/1.2.0:
     resolution: {integrity: sha512-z2S+W9X73hAUUki+N+9Za2lBlun89zigOyGrsax+KUQ6wKW4ZoWpEYBkGhQjwAjjDCkWxhY0VKEhk8wzY7F5cA==}
