@@ -28,11 +28,9 @@ module('Integration | realm', function (hooks) {
   );
 
   function getUpdateData(message: string) {
-    let [type, data] = message
-      .split('\n')
-      .map((s) => s.trim().split(':')[1]?.trim());
-    if (type === 'update') {
-      return data;
+    let [type, data] = message.split('\n');
+    if (type.trim().split(':')[1].trim() === 'update') {
+      return data.split('data:')[1].trim();
     }
     return;
   }
@@ -393,7 +391,7 @@ module('Integration | realm', function (hooks) {
     let adapter = new TestRealmAdapter({});
     let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
-    let expected = ['Card/1.json', 'Card/2.json'];
+    let expected = ['added: Card/1.json', 'added: Card/2.json'];
     await expectEvent(assert, realm, adapter, expected, async () => {
       {
         let response = await realm.handle(
@@ -678,7 +676,7 @@ module('Integration | realm', function (hooks) {
     });
     let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
-    let expected = ['dir/card.json'];
+    let expected = ['updated: dir/card.json'];
     let response = await expectEvent(
       assert,
       realm,
@@ -1124,7 +1122,7 @@ module('Integration | realm', function (hooks) {
       'found card in index'
     );
 
-    let expected = ['cards/2.json'];
+    let expected = ['removed: cards/2.json'];
     let response = await expectEvent(
       assert,
       realm,
@@ -1228,7 +1226,7 @@ module('Integration | realm', function (hooks) {
     await realm.ready;
 
     {
-      let expected = ['dir/person.gts'];
+      let expected = ['added: dir/person.gts'];
       let response = await expectEvent(
         assert,
         realm,
@@ -1282,7 +1280,7 @@ module('Integration | realm', function (hooks) {
     let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
 
-    let expected = ['person.gts'];
+    let expected = ['removed: person.gts'];
     let response = await expectEvent(
       assert,
       realm,

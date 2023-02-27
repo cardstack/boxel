@@ -120,7 +120,7 @@ export interface RealmAdapter {
     writable: WritableStream;
   };
 
-  subscribe(cb: (message: string) => void): Promise<void>;
+  subscribe(cb: (message: Record<string, any>) => void): Promise<void>;
 
   unsubscribe(): void;
 }
@@ -713,7 +713,7 @@ export class Realm {
         );
         this.sendUpdateMessages({
           type: "message",
-          data: `client clean up, count: ${this.listeningClients.length}`,
+          data: { cleanup: `${this.listeningClients.length} clients` },
         });
         if (this.listeningClients.length === 0) {
           this.#adapter.unsubscribe();
@@ -722,19 +722,15 @@ export class Realm {
     );
 
     if (this.listeningClients.length === 0) {
-      await this.#adapter.subscribe((message: string) =>
-        this.sendUpdateMessages({
-          type: "update",
-          data: message,
-        })
+      await this.#adapter.subscribe((data: Record<string, any>) =>
+        this.sendUpdateMessages({ type: "update", data })
       );
     }
 
     this.listeningClients.push(writable);
-
     this.sendUpdateMessages({
       type: "message",
-      data: `updated clients, count: ${this.listeningClients.length}`,
+      data: { count: `${this.listeningClients.length} clients` },
     });
 
     // TODO: We may need to store something else here to do cleanup to keep
@@ -746,12 +742,16 @@ export class Realm {
 
   private async sendUpdateMessages(message: {
     type: string;
-    data: string;
+    data: Record<string, any>;
     id?: string;
   }): Promise<void> {
     log.info(`sending updates to ${this.listeningClients.length} clients`);
     let { type, data, id } = message;
-    let chunk = sseToChunkData(type, data, id);
+    let chunkArr = [];
+    for (let item in data) {
+      chunkArr.push(`${item}: ${data[item]}`);
+    }
+    let chunk = sseToChunkData(type, chunkArr.join(", "), id);
     await Promise.all(
       this.listeningClients.map((client) => writeToStream(client, chunk))
     );

@@ -115,7 +115,7 @@ module("Realm Server", function (hooks) {
   });
 
   test("serves a card POST request", async function (assert) {
-    let expected = ["entry added: Card", "entry added: Card/1.json"];
+    let expected = ["added: Card", "added: Card/1.json"];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .post("/")
@@ -167,7 +167,7 @@ module("Realm Server", function (hooks) {
 
   test("serves a card PATCH request", async function (assert) {
     let entry = "person-1.json";
-    let expected = [`entry changed: ${entry}`];
+    let expected = [`changed: ${entry}`];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .patch("/person-1")
@@ -247,7 +247,7 @@ module("Realm Server", function (hooks) {
 
   test("serves a card DELETE request", async function (assert) {
     let entry = "person-1.json";
-    let expected = [`entry deleted: ${entry}`];
+    let expected = [`removed: ${entry}`];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .delete("/person-1")
@@ -281,7 +281,7 @@ module("Realm Server", function (hooks) {
 
   test("serves a card-source DELETE request", async function (assert) {
     let entry = "unused-card.gts";
-    let expected = [`entry deleted: ${entry}`];
+    let expected = [`removed: ${entry}`];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .delete("/unused-card.gts")
@@ -299,7 +299,7 @@ module("Realm Server", function (hooks) {
 
   test("serves a card-source POST request", async function (assert) {
     let entry = "unused-card.gts";
-    let expected = [`entry changed: ${entry}`];
+    let expected = [`changed: ${entry}`];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .post("/unused-card.gts")

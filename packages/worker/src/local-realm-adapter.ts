@@ -121,16 +121,18 @@ export class LocalRealmAdapter implements RealmAdapter {
   private watcher: number | undefined = undefined;
   private entries: { path: string; lastModified?: number }[] = [];
 
-  async subscribe(cb: (message: string) => void): Promise<void> {
+  async subscribe(cb: (message: Record<string, any>) => void): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
     }
     this.watcher = setInterval(async () => {
       let currentEntries = await this.getDirectoryListings('', []);
       if (this.entries.length > 0) {
-        let changes = diff(currentEntries, this.entries);
-        if (changes.size > 0) {
-          cb(`${[...changes].join(', ')}`);
+        let changes = diff(this.entries, currentEntries);
+        for (let [key, val] of Object.entries(changes)) {
+          if (val.length > 0) {
+            cb({ [key]: val.join(', ') });
+          }
         }
       }
       this.entries = currentEntries;
@@ -204,21 +206,34 @@ export async function traverse<Target extends Kind>(
   )) as HandleKind<Target>;
 }
 
-function hasEntry(
+function changedEntry(
   listings: { path: string; lastModified?: number }[],
   entry: { path: string; lastModified?: number }
 ) {
   return listings.some(
     (item) =>
-      item.path === entry.path && item.lastModified == entry.lastModified
+      item.path === entry.path && item.lastModified != entry.lastModified
   );
 }
 
-function diff(
-  a: { path: string; lastModified?: number }[],
-  b: { path: string; lastModified?: number }[]
+function hasEntry(
+  listings: { path: string; lastModified?: number }[],
+  entry: { path: string; lastModified?: number }
 ) {
-  let added = b.filter((entry) => !hasEntry(a, entry));
-  let removed = a.filter((entry) => !hasEntry(b, entry));
-  return new Set([...added, ...removed].map((e) => e.path));
+  return listings.some((item) => item.path === entry.path);
+}
+
+export function diff(
+  prevEntries: { path: string; lastModified?: number }[],
+  currEntries: { path: string; lastModified?: number }[]
+) {
+  let changed = prevEntries.filter((entry) => changedEntry(currEntries, entry));
+  let added = currEntries.filter((entry) => !hasEntry(prevEntries, entry));
+  let removed = prevEntries.filter((entry) => !hasEntry(currEntries, entry));
+
+  return {
+    added: added.map((e) => e.path),
+    removed: removed.map((e) => e.path),
+    changed: changed.map((e) => e.path),
+  };
 }

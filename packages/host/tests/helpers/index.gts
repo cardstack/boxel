@@ -205,7 +205,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
-  #subscriber: ((message: string) => void) | undefined;
+  #subscriber: ((message: Record<string, any>) => void) | undefined;
 
   constructor(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
@@ -310,6 +310,8 @@ export class TestRealmAdapter implements RealmAdapter {
         `cannot write file over an existing directory at ${path}`
       );
     }
+
+    let type = dir[name] ? 'updated' : 'added';
     dir[name] =
       typeof contents === 'string'
         ? contents
@@ -317,12 +319,12 @@ export class TestRealmAdapter implements RealmAdapter {
     let lastModified = Date.now();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
 
-    this.postUpdateEvent(path);
+    this.postUpdateEvent({ [type]: [path] });
 
     return { lastModified };
   }
 
-  postUpdateEvent(data: string) {
+  postUpdateEvent(data: Record<string, any>) {
     this.#subscriber?.(data);
   }
 
@@ -334,7 +336,7 @@ export class TestRealmAdapter implements RealmAdapter {
       throw new Error(`tried to use file as directory`);
     }
     delete dir[name];
-    this.postUpdateEvent(path);
+    this.postUpdateEvent({ removed: path });
   }
 
   #traverse(
@@ -378,7 +380,7 @@ export class TestRealmAdapter implements RealmAdapter {
       return { response, writable: s.writable };
   }
 
-  async subscribe(cb: (message: string) => void): Promise<void> {
+  async subscribe(cb: (message: Record<string, any>) => void): Promise<void> {
     this.#subscriber = cb;
   }
 
