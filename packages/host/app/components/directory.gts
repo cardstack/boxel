@@ -18,20 +18,28 @@ interface Args {
     polling: 'off' | undefined;
     url: string;
     path: string | undefined;
-  }
+  };
 }
 
 export default class Directory extends Component<Args> {
   <template>
-    {{#each this.listing.entries key="path" as |entry|}}
+    {{#each this.listing.entries key='path' as |entry|}}
       {{#let (getLocalPath @url entry.path this.realmPath) as |localPath|}}
-        <div class="directory-level">
+        <div class='directory-level'>
           {{#if (eq entry.kind 'file')}}
-            <div role="button" {{on "click" (fn this.openFile entry)}} class="file {{if (eq localPath @path) "selected"}}">
+            <div
+              role='button'
+              {{on 'click' (fn this.openFile entry)}}
+              class='file {{if (eq localPath @path) "selected"}}'
+            >
               {{entry.name}}
             </div>
           {{else}}
-            <div role="button" {{on "click" (fn this.toggleDirectory entry)}} class="directory {{if (isSelected localPath @path) "selected"}}">
+            <div
+              role='button'
+              {{on 'click' (fn this.toggleDirectory entry)}}
+              class='directory {{if (isSelected localPath @path) "selected"}}'
+            >
               {{entry.name}}
             </div>
             {{#if (isOpen localPath @openDirs)}}
@@ -39,7 +47,7 @@ export default class Directory extends Component<Args> {
                 @path={{@path}}
                 @openDirs={{@openDirs}}
                 @polling={{@polling}}
-                @url="{{@url}}{{entry.path}}/"
+                @url='{{@url}}{{entry.path}}/'
               />
             {{/if}}
           {{/if}}
@@ -48,8 +56,12 @@ export default class Directory extends Component<Args> {
     {{/each}}
   </template>
 
-
-  listing = directory(this, () => this.args.url, () => this.args.openDirs, () => this.args.polling);
+  listing = directory(
+    this,
+    () => this.args.url,
+    () => this.args.openDirs,
+    () => this.args.polling
+  );
   @service declare router: RouterService;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
@@ -73,7 +85,10 @@ export default class Directory extends Component<Args> {
   }
 }
 
-function editOpenDirsQuery(localPath: string, openDirs: string | undefined): string | undefined {
+function editOpenDirsQuery(
+  localPath: string,
+  openDirs: string | undefined
+): string | undefined {
   let dirs = openDirs ? openDirs.split(',') : [];
   for (let i = 0; i < dirs.length; i++) {
     if (dirs[i].startsWith(localPath)) {

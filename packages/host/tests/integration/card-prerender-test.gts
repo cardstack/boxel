@@ -8,7 +8,7 @@ import {
   TestRealmAdapter,
   TestRealm,
   cleanWhiteSpace,
-  setupMockLocalRealm
+  setupMockLocalRealm,
 } from '../helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -72,7 +72,7 @@ module('Integration | card-prerender', function (hooks) {
             },
           },
         },
-      }
+      },
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
@@ -80,7 +80,9 @@ module('Integration | card-prerender', function (hooks) {
 
   test("can generate the card's pre-rendered HTML", async function (assert) {
     {
-      let entry = await realm.searchIndex.searchEntry(new URL(`${testRealmURL}Pet/mango`));
+      let entry = await realm.searchIndex.searchEntry(
+        new URL(`${testRealmURL}Pet/mango`)
+      );
       assert.strictEqual(
         cleanWhiteSpace(entry!.html!),
         cleanWhiteSpace(`
@@ -92,7 +94,9 @@ module('Integration | card-prerender', function (hooks) {
       );
     }
     {
-      let entry = await realm.searchIndex.searchEntry(new URL(`${testRealmURL}Pet/vangogh`));
+      let entry = await realm.searchIndex.searchEntry(
+        new URL(`${testRealmURL}Pet/vangogh`)
+      );
       assert.strictEqual(
         cleanWhiteSpace(entry!.html!),
         cleanWhiteSpace(`

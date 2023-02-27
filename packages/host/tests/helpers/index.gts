@@ -74,7 +74,7 @@ async function makeRenderer() {
   await renderComponent(
     class TestDriver extends GlimmerComponent {
       <template>
-        <CardPrerender/>
+        <CardPrerender />
       </template>
     }
   );
@@ -109,10 +109,12 @@ class MockLocalRealm extends Service {
   async setupIndexRunner(
     registerRunner: RunnerRegistration,
     entrySetter: EntrySetter,
-    adapter: RealmAdapter,
+    adapter: RealmAdapter
   ) {
     if (!this.#fromScratch || !this.#incremental) {
-      throw new Error(`fromScratch/incremental not registered with MockLocalRealm`);
+      throw new Error(
+        `fromScratch/incremental not registered with MockLocalRealm`
+      );
     }
     this.#entrySetter = entrySetter;
     this.#adapter = adapter;
@@ -136,7 +138,7 @@ class MockLocalRealm extends Service {
 }
 
 export function setupMockLocalRealm(hooks: NestedHooks) {
-  hooks.beforeEach(function() {
+  hooks.beforeEach(function () {
     this.owner.register('service:local-realm', MockLocalRealm);
   });
 }
@@ -152,7 +154,7 @@ function makeRealm(
     realmURL ?? testRealmURL,
     adapter,
     async (optsId) => {
-        let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
+      let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
       await localRealm.setupIndexRunner(registerRunner, entrySetter, adapter);
     },
     runnerOptsMgr
@@ -358,10 +360,18 @@ export class TestRealmAdapter implements RealmAdapter {
     return dir;
   }
 
-  createStreamingResponse(request: Request,
+  createStreamingResponse(
+    request: Request,
     responseInit: ResponseInit,
-    cleanup: () => void) {
-    let localRealmAdapter = new LocalRealmAdapter(this.#files as unknown as FileSystemDirectoryHandle);
-    return localRealmAdapter.createStreamingResponse(request, responseInit, cleanup);
+    cleanup: () => void
+  ) {
+    let localRealmAdapter = new LocalRealmAdapter(
+      this.#files as unknown as FileSystemDirectoryHandle
+    );
+    return localRealmAdapter.createStreamingResponse(
+      request,
+      responseInit,
+      cleanup
+    );
   }
 }

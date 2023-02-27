@@ -2,40 +2,60 @@ import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
-import { Realm } from "@cardstack/runtime-common/realm";
-import { Loader } from "@cardstack/runtime-common/loader";
-import CardEditor  from '@cardstack/host/components/card-editor';
+import { Realm } from '@cardstack/runtime-common/realm';
+import { Loader } from '@cardstack/runtime-common/loader';
+import CardEditor from '@cardstack/host/components/card-editor';
 import { renderComponent } from '../../helpers/render-component';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import { testRealmURL, shimModule, setupCardLogs, setupMockLocalRealm, TestRealmAdapter, TestRealm, saveCard } from '../../helpers';
+import {
+  testRealmURL,
+  shimModule,
+  setupCardLogs,
+  setupMockLocalRealm,
+  TestRealmAdapter,
+  TestRealm,
+  saveCard,
+} from '../../helpers';
 import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import { Card } from "https://cardstack.com/base/card-api";
+import { Card } from 'https://cardstack.com/base/card-api';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
-let cardApi: typeof import("https://cardstack.com/base/card-api");
-let string: typeof import ("https://cardstack.com/base/string");
-let updateFromSerialized: typeof cardApi["updateFromSerialized"];
+let cardApi: typeof import('https://cardstack.com/base/card-api');
+let string: typeof import('https://cardstack.com/base/string');
+let updateFromSerialized: typeof cardApi['updateFromSerialized'];
 
 module('Integration | card-editor', function (hooks) {
   let loader: Loader;
-  let adapter: TestRealmAdapter
+  let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
   setupMockLocalRealm(hooks);
-  setupCardLogs(hooks, async () => await Loader.import(`${baseRealm.url}card-api`));
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
 
   async function loadCard(url: string): Promise<Card> {
     let { createFromSerialized, recompute } = cardApi;
     let result = await realm.searchIndex.card(new URL(url));
     if (!result || result.type === 'error') {
-      throw new Error(`cannot get instance ${url} from the index: ${result ? result.error.detail : 'not found'}`);
+      throw new Error(
+        `cannot get instance ${url} from the index: ${
+          result ? result.error.detail : 'not found'
+        }`
+      );
     }
-    let card = await createFromSerialized<typeof Card>(result.doc.data, result.doc, undefined, {
-      loader: Loader.getLoaderFor(createFromSerialized)
-    });
+    let card = await createFromSerialized<typeof Card>(
+      result.doc.data,
+      result.doc,
+      undefined,
+      {
+        loader: Loader.getLoaderFor(createFromSerialized),
+      }
+    );
     await recompute(card, { loadFields: true });
     return card;
   }
@@ -46,7 +66,8 @@ module('Integration | card-editor', function (hooks) {
       new URL('http://localhost:4201/base/')
     );
     shimExternals();
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     updateFromSerialized = cardApi.updateFromSerialized;
@@ -107,30 +128,30 @@ module('Integration | card-editor', function (hooks) {
           type: 'card',
           id: `${testRealmURL}Pet/mango`,
           attributes: {
-            name: 'Mango'
+            name: 'Mango',
           },
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}pet`,
-              name: 'Pet'
-            }
-          }
-        }
+              name: 'Pet',
+            },
+          },
+        },
       },
       'Pet/vangogh.json': {
         data: {
           type: 'card',
           id: `${testRealmURL}Pet/vangogh`,
           attributes: {
-            name: 'Van Gogh'
+            name: 'Van Gogh',
           },
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}pet`,
-              name: 'Pet'
-            }
-          }
-        }
+              name: 'Pet',
+            },
+          },
+        },
       },
       'Pet/ringo.json': {
         data: {
@@ -143,55 +164,55 @@ module('Integration | card-editor', function (hooks) {
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}fancy-pet`,
-              name: 'FancyPet'
-            }
-          }
-        }
+              name: 'FancyPet',
+            },
+          },
+        },
       },
       'Person/hassan.json': {
         data: {
           type: 'card',
           id: `${testRealmURL}Person/hassan`,
           attributes: {
-            firstName: 'Hassan'
+            firstName: 'Hassan',
           },
           relationships: {
             pet: {
               links: {
-                self: `${testRealmURL}Pet/mango`
-              }
-            }
+                self: `${testRealmURL}Pet/mango`,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}person`,
-              name: 'Person'
-            }
-          }
-        }
+              name: 'Person',
+            },
+          },
+        },
       },
       'Person/mariko.json': {
         data: {
           type: 'card',
           id: `${testRealmURL}Person/mariko`,
           attributes: {
-            firstName: 'Mariko'
+            firstName: 'Mariko',
           },
           relationships: {
             pet: {
               links: {
-                self: null
-              }
-            }
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}person`,
-              name: 'Person'
-            }
-          }
-        }
-      }
+              name: 'Person',
+            },
+          },
+        },
+      },
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
@@ -200,72 +221,92 @@ module('Integration | card-editor', function (hooks) {
 
   test('renders card in edit (default) format', async function (assert) {
     let { field, contains, Card, Component } = cardApi;
-    let { default: StringCard} = string;
+    let { default: StringCard } = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
-      @field nickName = contains(StringCard, { computeVia: function(this: TestCard) {
-        return `${this.firstName}-poo`
-      }});
+      @field nickName = contains(StringCard, {
+        computeVia: function (this: TestCard) {
+          return `${this.firstName}-poo`;
+        },
+      });
       @field lastName = contains(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <div data-test-firstName><@fields.firstName/></div>
-          <div data-test-nickName><@fields.nickName/></div>
-          <div data-test-lastName><@fields.lastName/></div>
+          <div data-test-firstName><@fields.firstName /></div>
+          <div data-test-nickName><@fields.nickName /></div>
+          <div data-test-lastName><@fields.lastName /></div>
         </template>
-      }
+      };
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
-    let card = new TestCard({ firstName: "Mango", lastName: "Abdel-Rahman" });
-    await saveCard(card, `${testRealmURL}test-cards/test-card`, Loader.getLoaderFor(updateFromSerialized));
+    let card = new TestCard({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
+    await saveCard(
+      card,
+      `${testRealmURL}test-cards/test-card`,
+      Loader.getLoaderFor(updateFromSerialized)
+    );
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <CardEditor @card={{card}} />
-          <CardPrerender/>
+          <CardPrerender />
         </template>
       }
-    )
+    );
 
     await waitFor('[data-test-field="firstName"]'); // we need to wait for the card instance to load
     assert.shadowDOM('[data-test-field="firstName"] input').exists();
     assert.shadowDOM('[data-test-field="firstName"] input').hasValue('Mango');
     assert.shadowDOM('[data-test-field="nickName"]').exists();
     assert.shadowDOM('[data-test-field="nickName"]').containsText('Mango-poo');
-    assert.shadowDOM('[data-test-field="nickName"] input').doesNotExist('computeds do not have an input field');
+    assert
+      .shadowDOM('[data-test-field="nickName"] input')
+      .doesNotExist('computeds do not have an input field');
     assert.shadowDOM('[data-test-field="lastName"] input').exists();
-    assert.shadowDOM('[data-test-field="lastName"] input').hasValue('Abdel-Rahman');
+    assert
+      .shadowDOM('[data-test-field="lastName"] input')
+      .hasValue('Abdel-Rahman');
   });
 
   test('can change card format', async function (assert) {
     let { field, contains, Card, Component } = cardApi;
-    let { default: StringCard} = string;
+    let { default: StringCard } = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
-        <template> <div data-test-isolated-firstName><@fields.firstName/></div> </template>
-      }
+        <template>
+          <div data-test-isolated-firstName><@fields.firstName /></div>
+        </template>
+      };
       static embedded = class Embedded extends Component<typeof this> {
-        <template> <div data-test-embedded-firstName><@fields.firstName/></div> </template>
-      }
+        <template>
+          <div data-test-embedded-firstName><@fields.firstName /></div>
+        </template>
+      };
       static edit = class Edit extends Component<typeof this> {
-        <template> <div data-test-edit-firstName><@fields.firstName/></div> </template>
-      }
+        <template>
+          <div data-test-edit-firstName><@fields.firstName /></div>
+        </template>
+      };
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
 
-    let card = new TestCard({ firstName: "Mango" });
-    await saveCard(card, `${testRealmURL}test-cards/test-card`, Loader.getLoaderFor(updateFromSerialized));
+    let card = new TestCard({ firstName: 'Mango' });
+    await saveCard(
+      card,
+      `${testRealmURL}test-cards/test-card`,
+      Loader.getLoaderFor(updateFromSerialized)
+    );
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CardEditor @card={{card}} @format="isolated" />
-          <CardPrerender/>
+          <CardEditor @card={{card}} @format='isolated' />
+          <CardPrerender />
         </template>
       }
-    )
+    );
     await waitFor('[data-test-isolated-firstName]'); // we need to wait for the card instance to load
     assert.shadowDOM('[data-test-isolated-firstName]').exists();
     assert.shadowDOM('[data-test-isolated-firstName]').hasText('Mango');
@@ -287,30 +328,40 @@ module('Integration | card-editor', function (hooks) {
 
   test('edited card data is visible in different formats', async function (assert) {
     let { field, contains, Card, Component } = cardApi;
-    let { default: StringCard} = string;
+    let { default: StringCard } = string;
     class TestCard extends Card {
       @field firstName = contains(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
-        <template> <div data-test-isolated-firstName><@fields.firstName/></div> </template>
-      }
+        <template>
+          <div data-test-isolated-firstName><@fields.firstName /></div>
+        </template>
+      };
       static embedded = class Embedded extends Component<typeof this> {
-        <template> <div data-test-embedded-firstName><@fields.firstName/></div> </template>
-      }
+        <template>
+          <div data-test-embedded-firstName><@fields.firstName /></div>
+        </template>
+      };
       static edit = class Edit extends Component<typeof this> {
-        <template> <div data-test-edit-firstName><@fields.firstName/></div> </template>
-      }
+        <template>
+          <div data-test-edit-firstName><@fields.firstName /></div>
+        </template>
+      };
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
-    let card = new TestCard({ firstName: "Mango" });
-    await saveCard(card, `${testRealmURL}test-cards/test-card`, Loader.getLoaderFor(updateFromSerialized));
+    let card = new TestCard({ firstName: 'Mango' });
+    await saveCard(
+      card,
+      `${testRealmURL}test-cards/test-card`,
+      Loader.getLoaderFor(updateFromSerialized)
+    );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <CardEditor @card={{card}} />
-          <CardPrerender/>
+          <CardPrerender />
         </template>
       }
-    )
+    );
 
     await waitFor('[data-test-edit-firstName] input'); // we need to wait for the card instance to load
     await fillIn('[data-test-edit-firstName] input', 'Van Gogh');
@@ -324,44 +375,54 @@ module('Integration | card-editor', function (hooks) {
     assert.shadowDOM('[data-test-isolated-firstName]').hasText('Van Gogh');
   });
 
-  test('can choose a card for a linksTo field that has an existing value', async function(assert) {
+  test('can choose a card for a linksTo field that has an existing value', async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <CardEditor @card={{card}} />
           <CardCatalogModal />
-          <CardPrerender/>
+          <CardPrerender />
         </template>
       }
     );
 
     assert.shadowDOM('[data-test-pet="Mango"]').exists();
-    assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
+    assert.shadowDOM('[data-test-pet="Mango"]').containsText('Mango');
 
     await click('[data-test-remove-card]');
     await click('[data-test-choose-card]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
+    await waitFor(
+      '[data-test-card-catalog-modal] [data-test-card-catalog-item]'
+    );
 
-    assert.shadowDOM('[data-test-card-catalog-modal] [data-test-card-catalog-item]').exists({ count: 3 });
-    assert.shadowDOM(`[data-test-select="${testRealmURL}Pet/vangogh"]`).exists();
+    assert
+      .shadowDOM('[data-test-card-catalog-modal] [data-test-card-catalog-item]')
+      .exists({ count: 3 });
+    assert
+      .shadowDOM(`[data-test-select="${testRealmURL}Pet/vangogh"]`)
+      .exists();
     assert.shadowDOM(`[data-test-select="${testRealmURL}Pet/ringo"]`).exists();
-    assert.shadowDOM(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"`).exists();
+    assert
+      .shadowDOM(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"`)
+      .exists();
     await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
 
-    assert.shadowDOM('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
+    assert
+      .shadowDOM('[data-test-card-catalog-modal]')
+      .doesNotExist('card catalog modal dismissed');
     assert.shadowDOM('[data-test-pet="Van Gogh"]').exists();
-    assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
+    assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
   });
 
-  test('can choose a card for a linksTo field that has no existing value', async function(assert) {
+  test('can choose a card for a linksTo field that has no existing value', async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/mariko`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <CardEditor @card={{card}} />
           <CardCatalogModal />
-          <CardPrerender/>
+          <CardPrerender />
         </template>
       }
     );
@@ -370,13 +431,19 @@ module('Integration | card-editor', function (hooks) {
     assert.shadowDOM('button[data-test-remove-card]').doesNotExist();
 
     await click('[data-test-choose-card]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
+    await waitFor(
+      '[data-test-card-catalog-modal] [data-test-card-catalog-item]'
+    );
     await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
 
-    assert.shadowDOM('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
+    assert
+      .shadowDOM('[data-test-card-catalog-modal]')
+      .doesNotExist('card catalog modal dismissed');
     assert.shadowDOM('[data-test-pet="Van Gogh"]').exists();
-    assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
-    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', false, 'remove button is enabled');
+    assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
+    assert
+      .shadowDOM('button[data-test-remove-card]')
+      .hasProperty('disabled', false, 'remove button is enabled');
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
@@ -386,13 +453,13 @@ module('Integration | card-editor', function (hooks) {
         <template>
           <CardEditor @card={{card}} />
           <CardCatalogModal />
-          <CardPrerender/>
+          <CardPrerender />
         </template>
       }
     );
 
     assert.shadowDOM('[data-test-pet="Mango"]').exists();
-    assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
+    assert.shadowDOM('[data-test-pet="Mango"]').containsText('Mango');
     assert.shadowDOM('[data-test-choose-card]').doesNotExist();
 
     await click('[data-test-remove-card]');
@@ -411,7 +478,7 @@ module('Integration | card-editor', function (hooks) {
           <CardEditor @card={{card}} />
           <CardCatalogModal />
           <CreateCardModal />
-          <CardPrerender/>
+          <CardPrerender />
         </template>
       }
     );

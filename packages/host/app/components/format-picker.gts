@@ -9,7 +9,7 @@ interface Signature {
     formats: Format[] | undefined;
     setFormat: (format: Format) => void;
     format?: Format;
-  }
+  };
 }
 
 export default class FormatPicker extends Component<Signature> {
@@ -17,9 +17,10 @@ export default class FormatPicker extends Component<Signature> {
     <div>
       Format:
       {{#each @formats as |format|}}
-        <button {{on "click" (fn @setFormat format)}}
-          type="button"
-          class="format-button {{format}} {{if (eq @format format) "selected"}}"
+        <button
+          {{on 'click' (fn @setFormat format)}}
+          type='button'
+          class='format-button {{format}} {{if (eq @format format) "selected"}}'
           disabled={{eq @format format}}
           data-test-format-button={{format}}
         >
@@ -28,4 +29,4 @@ export default class FormatPicker extends Component<Signature> {
       {{/each}}
     </div>
   </template>
-};
+}
