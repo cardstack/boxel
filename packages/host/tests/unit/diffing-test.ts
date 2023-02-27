@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { diff } from '@cardstack/worker/src/local-realm-adapter';
+import { diff } from '@cardstack/runtime-common/diff';
 
 module('Unit | diffing', function () {
   let prevEntries = [
