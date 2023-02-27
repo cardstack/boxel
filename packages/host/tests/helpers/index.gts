@@ -23,6 +23,7 @@ import {
   type EntrySetter,
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
+import { WebMessageStream, messageCloseHandler } from '@cardstack/runtime-common/stream';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -204,7 +205,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
-  subscriber: EventSource | undefined;
+  #subscriber: ((message: string) => void) | undefined;
 
   constructor(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
@@ -316,21 +317,13 @@ export class TestRealmAdapter implements RealmAdapter {
     let lastModified = Date.now();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
 
-    if (this.subscriber) {
-      this.postUpdateEvent(path);
-    }
+    this.postUpdateEvent(path);
 
     return { lastModified };
   }
 
-  initEventSource(url: string): EventSource {
-    let es = new EventSource(url);
-    this.subscriber = es;
-    return es;
-  }
-
   postUpdateEvent(data: string) {
-    this.subscriber!.dispatchEvent(new MessageEvent('update', { data }));
+    this.#subscriber?.(data);
   }
 
   async remove(path: LocalPath) {
@@ -341,10 +334,7 @@ export class TestRealmAdapter implements RealmAdapter {
       throw new Error(`tried to use file as directory`);
     }
     delete dir[name];
-
-    if (this.subscriber) {
-      this.postUpdateEvent(path);
-    }
+    this.postUpdateEvent(path);
   }
 
   #traverse(
@@ -381,18 +371,18 @@ export class TestRealmAdapter implements RealmAdapter {
   createStreamingResponse(
     _request: Request,
     responseInit: ResponseInit,
-    _cleanup: () => void) {
-      return {
-        response: createResponse(new ReadableStream(), responseInit),
-        writable: new WritableStream()
-      };
+    cleanup: () => void) {
+      let s = new WebMessageStream();
+      let response = createResponse(s.readable, responseInit);
+      messageCloseHandler(s.readable, cleanup);
+      return { response, writable: s.writable };
   }
 
-  async subscribe(_cb: (message: string) => void): Promise<void> {
-    return;
+  async subscribe(cb: (message: string) => void): Promise<void> {
+    this.#subscriber = cb;
   }
 
   unsubscribe(): void {
-    this.subscriber = undefined;
+    this.#subscriber = undefined;
   }
 }
