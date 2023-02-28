@@ -489,11 +489,7 @@ module('Integration | search-index', function (hooks) {
             {};
           assert.strictEqual(
             cleanWhiteSpace(html!),
-            cleanWhiteSpace(`
-            <div data-test-shadow-boundary>
-              <h1> Van Gogh </h1>
-            </div>
-          `)
+            cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
           assert.ok(
@@ -546,11 +542,7 @@ module('Integration | search-index', function (hooks) {
             {};
           assert.strictEqual(
             cleanWhiteSpace(html!),
-            cleanWhiteSpace(`
-            <div data-test-shadow-boundary>
-              <h1> Van Gogh </h1>
-            </div>
-          `)
+            cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
           assert.ok(
@@ -669,11 +661,7 @@ module('Integration | search-index', function (hooks) {
             {};
           assert.strictEqual(
             cleanWhiteSpace(html!),
-            cleanWhiteSpace(`
-            <div data-test-shadow-boundary>
-              <h1> Van Gogh </h1>
-            </div>
-          `)
+            cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
           assert.ok(
@@ -796,11 +784,7 @@ module('Integration | search-index', function (hooks) {
             {};
           assert.strictEqual(
             cleanWhiteSpace(html!),
-            cleanWhiteSpace(`
-            <div data-test-shadow-boundary>
-              <h1> Van Gogh </h1>
-            </div>
-          `)
+            cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
           assert.ok(
@@ -1519,7 +1503,6 @@ module('Integration | search-index', function (hooks) {
       [...refs!.keys()].sort(),
       [
         '@cardstack/boxel-ui',
-        '@cardstack/boxel-ui/attach-styles',
         '@cardstack/boxel-ui/helpers/pick',
         '@cardstack/boxel-ui/helpers/truth-helpers',
         '@cardstack/runtime-common',
@@ -1529,10 +1512,8 @@ module('Integration | search-index', function (hooks) {
         '@ember/modifier',
         '@ember/template-factory',
         '@glimmer/component',
-        '@glimmer/tracking',
         'ember-concurrency',
         'ember-concurrency-ts',
-        'ember-modifier',
         'flat',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/contains-many-component',

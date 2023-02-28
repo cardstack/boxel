@@ -8,7 +8,7 @@ import CardEditor  from '@cardstack/host/components/card-editor';
 import { renderComponent } from '../../helpers/render-component';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import { testRealmURL, shimModule, setupCardLogs, setupMockLocalRealm, TestRealmAdapter, TestRealm, saveCard } from '../../helpers';
-import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
+import { waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Card } from "https://cardstack.com/base/card-api";
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
@@ -229,13 +229,10 @@ module('Integration | card-editor', function (hooks) {
     )
 
     await waitFor('[data-test-field="firstName"]'); // we need to wait for the card instance to load
-    assert.shadowDOM('[data-test-field="firstName"] input').exists();
-    assert.shadowDOM('[data-test-field="firstName"] input').hasValue('Mango');
-    assert.shadowDOM('[data-test-field="nickName"]').exists();
-    assert.shadowDOM('[data-test-field="nickName"]').containsText('Mango-poo');
-    assert.shadowDOM('[data-test-field="nickName"] input').doesNotExist('computeds do not have an input field');
-    assert.shadowDOM('[data-test-field="lastName"] input').exists();
-    assert.shadowDOM('[data-test-field="lastName"] input').hasValue('Abdel-Rahman');
+    assert.dom('[data-test-field="firstName"] input').hasValue('Mango');
+    assert.dom('[data-test-field="nickName"]').containsText('Mango-poo');
+    assert.dom('[data-test-field="nickName"] input').doesNotExist('computeds do not have an input field');
+    assert.dom('[data-test-field="lastName"] input').hasValue('Abdel-Rahman');
   });
 
   test('can change card format', async function (assert) {
@@ -267,22 +264,19 @@ module('Integration | card-editor', function (hooks) {
       }
     )
     await waitFor('[data-test-isolated-firstName]'); // we need to wait for the card instance to load
-    assert.shadowDOM('[data-test-isolated-firstName]').exists();
-    assert.shadowDOM('[data-test-isolated-firstName]').hasText('Mango');
-    assert.shadowDOM('[data-test-embedded-firstName]').doesNotExist();
-    assert.shadowDOM('[data-test-edit-firstName]').doesNotExist();
+    assert.dom('[data-test-isolated-firstName]').hasText('Mango');
+    assert.dom('[data-test-embedded-firstName]').doesNotExist();
+    assert.dom('[data-test-edit-firstName]').doesNotExist();
 
     await click('.format-button.embedded');
-    assert.shadowDOM('[data-test-isolated-firstName]').doesNotExist();
-    assert.shadowDOM('[data-test-embedded-firstName]').exists();
-    assert.shadowDOM('[data-test-embedded-firstName]').hasText('Mango');
-    assert.shadowDOM('[data-test-edit-firstName]').doesNotExist();
+    assert.dom('[data-test-isolated-firstName]').doesNotExist();
+    assert.dom('[data-test-embedded-firstName]').hasText('Mango');
+    assert.dom('[data-test-edit-firstName]').doesNotExist();
 
     await click('.format-button.edit');
-    assert.shadowDOM('[data-test-isolated-firstName]').doesNotExist();
-    assert.shadowDOM('[data-test-embedded-firstName]').doesNotExist();
-    assert.shadowDOM('[data-test-edit-firstName] input').exists();
-    assert.shadowDOM('[data-test-edit-firstName] input').hasValue('Mango');
+    assert.dom('[data-test-isolated-firstName]').doesNotExist();
+    assert.dom('[data-test-embedded-firstName]').doesNotExist();
+    assert.dom('[data-test-edit-firstName] input').hasValue('Mango');
   });
 
   test('edited card data is visible in different formats', async function (assert) {
@@ -316,12 +310,10 @@ module('Integration | card-editor', function (hooks) {
     await fillIn('[data-test-edit-firstName] input', 'Van Gogh');
 
     await click('.format-button.embedded');
-    assert.shadowDOM('[data-test-embedded-firstName]').exists();
-    assert.shadowDOM('[data-test-embedded-firstName]').hasText('Van Gogh');
+    assert.dom('[data-test-embedded-firstName]').hasText('Van Gogh');
 
     await click('.format-button.isolated');
-    assert.shadowDOM('[data-test-isolated-firstName]').exists();
-    assert.shadowDOM('[data-test-isolated-firstName]').hasText('Van Gogh');
+    assert.dom('[data-test-isolated-firstName]').hasText('Van Gogh');
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function(assert) {
@@ -336,22 +328,20 @@ module('Integration | card-editor', function (hooks) {
       }
     );
 
-    assert.shadowDOM('[data-test-pet="Mango"]').exists();
-    assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
+    assert.dom('[data-test-pet="Mango"]').containsText("Mango");
 
     await click('[data-test-remove-card]');
     await click('[data-test-choose-card]');
     await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
 
-    assert.shadowDOM('[data-test-card-catalog-modal] [data-test-card-catalog-item]').exists({ count: 3 });
-    assert.shadowDOM(`[data-test-select="${testRealmURL}Pet/vangogh"]`).exists();
-    assert.shadowDOM(`[data-test-select="${testRealmURL}Pet/ringo"]`).exists();
-    assert.shadowDOM(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"`).exists();
+    assert.dom('[data-test-card-catalog-modal] [data-test-card-catalog-item]').exists({ count: 3 });
+    assert.dom(`[data-test-select="${testRealmURL}Pet/vangogh"]`).exists();
+    assert.dom(`[data-test-select="${testRealmURL}Pet/ringo"]`).exists();
+    assert.dom(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"`).exists();
     await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
 
-    assert.shadowDOM('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
-    assert.shadowDOM('[data-test-pet="Van Gogh"]').exists();
-    assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
+    assert.dom('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
+    assert.dom('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
   });
 
   test('can choose a card for a linksTo field that has no existing value', async function(assert) {
@@ -366,17 +356,16 @@ module('Integration | card-editor', function (hooks) {
       }
     );
 
-    assert.shadowDOM('[data-test-empty-link]').exists();
-    assert.shadowDOM('button[data-test-remove-card]').doesNotExist();
+    assert.dom('[data-test-empty-link]').exists();
+    assert.dom('button[data-test-remove-card]').doesNotExist();
 
     await click('[data-test-choose-card]');
     await waitFor('[data-test-card-catalog-modal] [data-test-card-catalog-item]');
     await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
 
-    assert.shadowDOM('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
-    assert.shadowDOM('[data-test-pet="Van Gogh"]').exists();
-    assert.shadowDOM('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
-    assert.shadowDOM('button[data-test-remove-card]').hasProperty('disabled', false, 'remove button is enabled');
+    assert.dom('[data-test-card-catalog-modal]').doesNotExist('card catalog modal dismissed');
+    assert.dom('[data-test-pet="Van Gogh"]').containsText("Van Gogh");
+    assert.dom('button[data-test-remove-card]').hasProperty('disabled', false, 'remove button is enabled');
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
@@ -391,16 +380,15 @@ module('Integration | card-editor', function (hooks) {
       }
     );
 
-    assert.shadowDOM('[data-test-pet="Mango"]').exists();
-    assert.shadowDOM('[data-test-pet="Mango"]').containsText("Mango");
-    assert.shadowDOM('[data-test-choose-card]').doesNotExist();
+    assert.dom('[data-test-pet="Mango"]').containsText("Mango");
+    assert.dom('[data-test-choose-card]').doesNotExist();
 
     await click('[data-test-remove-card]');
 
-    assert.shadowDOM('[data-test-pet="Mango"]').doesNotExist();
-    assert.shadowDOM('[data-test-empty-link]').exists();
-    assert.shadowDOM('button[data-test-remove-card]').doesNotExist();
-    assert.shadowDOM('[data-test-choose-card]').exists();
+    assert.dom('[data-test-pet="Mango"]').doesNotExist();
+    assert.dom('[data-test-empty-link]').exists();
+    assert.dom('button[data-test-remove-card]').doesNotExist();
+    assert.dom('[data-test-choose-card]').exists();
   });
 
   test('can create a new card to populate a linksTo field', async function (assert) {
@@ -422,22 +410,20 @@ module('Integration | card-editor', function (hooks) {
 
     await waitFor('[data-test-create-new-card="Pet"]');
 
-    assert.shadowDOM('[data-test-field="name"] input').exists();
+    assert.dom('[data-test-field="name"] input').exists();
     await fillIn('[data-test-field="name"] input', 'Simba');
-    assert.shadowDOM('[data-test-field="name"] input').hasValue('Simba');
+    assert.dom('[data-test-field="name"] input').hasValue('Simba');
 
     await click('[data-test-create-new-card="Pet"] [data-test-save-card]');
     await waitFor('[data-test-pet="Simba"]');
-    assert.shadowDOM('[data-test-create-new-card="Pet"]').doesNotExist();
-    assert.shadowDOM('[data-test-remove-card]').exists();
+    assert.dom('[data-test-create-new-card="Pet"]').doesNotExist();
+    assert.dom('[data-test-remove-card]').exists();
 
     await click('[data-test-save-card]');
 
     await waitFor('[data-test-person="Mariko"]');
-    assert.shadowDOM('[data-test-person="Mariko"]').exists();
-    assert.shadowDOM('[data-test-person="Mariko"]').hasText('Mariko');
-    assert.shadowDOM('[data-test-pet="Simba"]').exists();
-    assert.shadowDOM('[data-test-pet="Simba"]').hasText('Simba');
+    assert.dom('[data-test-person="Mariko"]').hasText('Mariko');
+    assert.dom('[data-test-pet="Simba"]').hasText('Simba');
   });
 
   skip('can create a specialized a new card to populate a linksTo field');

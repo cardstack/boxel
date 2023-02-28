@@ -7,7 +7,7 @@ import Preview  from '@cardstack/host/components/preview';
 import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
 import { testRealmURL, shimModule } from '../../helpers';
-import { waitFor } from '../../helpers/shadow-assert';
+import { waitFor } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
@@ -30,7 +30,7 @@ module('Integration | preview', function (hooks) {
     string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-realm', MockLocalRealm);
   });
-  
+
   test('renders card', async function (assert) {
     let { field, contains, Card, Component } = cardApi;
     let { default: StringCard} = string;
@@ -50,7 +50,6 @@ module('Integration | preview', function (hooks) {
       }
     )
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
-    assert.shadowDOM('[data-test-firstName]').exists();
-    assert.shadowDOM('[data-test-firstName]').hasText('Mango');
+    assert.dom('[data-test-firstName]').hasText('Mango');
   });
 });

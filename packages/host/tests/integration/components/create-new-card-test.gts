@@ -9,8 +9,7 @@ import { TestRealm, TestRealmAdapter, testRealmURL, setupMockLocalRealm } from '
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import waitUntil from '@ember/test-helpers/wait-until';
-import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
+import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { on } from '@ember/modifier';
