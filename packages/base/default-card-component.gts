@@ -1,22 +1,12 @@
 import GlimmerComponent from '@glimmer/component';
 import { startCase } from 'lodash';
 import type { Card } from './card-api';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
-let styles = initStyleSheet(`
-  this {
-    --boxel-label-color: var(--boxel-dark);
-    padding: var(--boxel-sp);
-    display: grid;
-    gap: var(--boxel-sp);
-  }
-`);
-
 class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
+    <CardContainer class="isolated-card" @displayBoundaries={{true}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <Field />
@@ -28,7 +18,7 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Re
 
 class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
   <template>
-    <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
+    <CardContainer class="isolated-card" @displayBoundaries={{true}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           {{!-- @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') --}}

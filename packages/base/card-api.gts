@@ -5,7 +5,7 @@ import { WatchedArray } from './watched-array';
 import { flatten } from "flat";
 import { on } from '@ember/modifier';
 import pick from '@cardstack/boxel-ui/helpers/pick';
-import { getBoxComponent, type ComponentOptions } from './field-component';
+import { getBoxComponent } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { getLinksToEditor } from './links-to-editor';
 import {
@@ -189,7 +189,7 @@ export interface Field<CardT extends CardConstructor> {
   ): Promise<any>;
   emptyValue(instance: Card): any;
   validate(instance: Card, value: any): void;
-  component(model: Box<Card>, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }>;
+  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }>;
   getter(instance: Card): CardInstanceType<CardT>;
 }
 
@@ -376,7 +376,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return new WatchedArray(() => logger.log(recompute(instance)), value);
   }
 
-  component(model: Box<Card>, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
+  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
     let fieldName = this.name as keyof Card;
     let arrayField = model.field(fieldName, useIndexBasedKey in this.card) as unknown as Box<Card[]>;
     return getContainsManyComponent({
@@ -384,8 +384,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
       arrayField,
       field: this,
       format,
-      cardTypeFor,
-      opts
+      cardTypeFor
     });
   }
 }
@@ -492,8 +491,8 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
     return value;
   }
 
-  component(model: Box<Card>, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
-    return fieldComponent(this, model, format, opts);
+  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
+    return fieldComponent(this, model, format);
   }
 }
 
@@ -633,16 +632,16 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     return value;
   }
 
-  component(model: Box<Card>, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
+  component(model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(this.name as keyof Card) as unknown as Box<Card | null>;
       return getLinksToEditor(innerModel, this);
     }
-    return fieldComponent(this, model, format, opts);
+    return fieldComponent(this, model, format);
   }
 }
 
-function fieldComponent(field: Field<typeof Card>, model: Box<Card>, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
+function fieldComponent(field: Field<typeof Card>, model: Box<Card>, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
   let fieldName = field.name as keyof Card;
   let card: typeof Card;
   if (primitive in field.card) {
@@ -651,7 +650,7 @@ function fieldComponent(field: Field<typeof Card>, model: Box<Card>, format: For
     card = model.value[fieldName]?.constructor as typeof Card ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<Card>;
-  return getBoxComponent(card, format, innerModel, opts);
+  return getBoxComponent(card, format, innerModel);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -749,8 +748,8 @@ export class Card {
     return _createFromSerialized(this, data, doc,  relativeTo, identityContext);
   }
 
-  static getComponent(card: Card, format: Format, opts?: ComponentOptions) {
-    return getComponent(card, format, opts);
+  static getComponent(card: Card, format: Format) {
+    return getComponent(card, format);
   }
 
   constructor(data?: Record<string, any>) {
@@ -987,10 +986,10 @@ export type LoaderType = NonNullable<
 // need to be disentangled:
 // 1. convert the data from a wire format to the native format
 // 2. absorb async to load computeds
-// 
+//
 // Consider the scenario where the server is providing the client the card JSON,
-// in this case the server has already processed the computed, and all we really 
-// need to do is purely the conversion of the data from the wire format to the 
+// in this case the server has already processed the computed, and all we really
+// need to do is purely the conversion of the data from the wire format to the
 // native format which should be async. Instead our client is re-doing the work
 // to calculate the computeds that the server has already done.
 
@@ -1195,9 +1194,9 @@ function cardThunk<CardT extends CardConstructor>(cardOrThunk: CardT | (() => Ca
 
 export type SignatureFor<CardT extends CardConstructor> = { Args: { model: PartialCardInstanceType<CardT>; fields: FieldsTypeFor<InstanceType<CardT>>; set: Setter; fieldName: string | undefined } }
 
-export function getComponent(model: Card, format: Format, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
+export function getComponent(model: Card, format: Format): ComponentLike<{ Args: {}, Blocks: {} }> {
   let box = Box.create(model);
-  let component = getBoxComponent(model.constructor as CardConstructor, format, box, opts);
+  let component = getBoxComponent(model.constructor as CardConstructor, format, box);
   return component;
 }
 

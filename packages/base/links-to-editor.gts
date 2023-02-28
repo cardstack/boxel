@@ -14,7 +14,6 @@ import {
   identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer } from '@cardstack/boxel-ui';
 
 
@@ -25,27 +24,9 @@ interface Signature {
   }
 }
 
-let linksToEditorStyles = initStyleSheet(`
-  this {
-    padding: var(--boxel-spacing);
-  }
-  button {
-    margin-top: 1rem;
-    font: inherit;
-    font-weight: 600;
-    border: none;
-    background-color: white;
-    padding: 0.5em 0;
-    text-transform: capitalize;
-  }
-  button:hover {
-    color: var(--boxel-highlight);
-  }
-`);
-
 class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
-    <CardContainer @displayBoundaries={{true}} {{attachStyles linksToEditorStyles}}>
+    <CardContainer class="links-to-editor" @displayBoundaries={{true}}>
       {{#if this.isEmpty}}
         <div data-test-empty-link>{{!-- PLACEHOLDER CONTENT --}}</div>
         <button {{on "click" this.choose}} data-test-choose-card>

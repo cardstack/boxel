@@ -2,17 +2,10 @@ import { contains, field, Card, Component, containsMany, relativeTo } from 'http
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { startCase } from 'lodash';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { PaymentMethod } from './payment-method';
-
-let styles = initStyleSheet(`
-  .boxel-field + .boxel-field {
-    margin-top: var(--boxel-sp);
-  }
-`);
 
 class VendorDetails extends Card {
   @field name = contains(StringCard); // required
@@ -29,7 +22,7 @@ class VendorDetails extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles styles}}>
+      <CardContainer class="vendor-card">
         {{#each-in @fields as |key value|}}
           {{#unless (eq key 'id')}}
             <FieldContainer
@@ -57,7 +50,7 @@ class Contact extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles styles}}>
+      <CardContainer class="vendor-card">
         {{#each-in @fields as |key value|}}
           {{#unless (eq key 'id')}}
             <FieldContainer
@@ -83,12 +76,6 @@ class ContactMethod extends Card {
   };
 }
 
-let embeddedVendorStyles = initStyleSheet(`
-  this {
-    display: grid;
-    grid-template-columns: 1fr auto;
-  }
-`);
 export class Vendor extends Card {
   @field vendor = contains(VendorDetails); // required
   @field contact = contains(Contact); // required
@@ -98,7 +85,7 @@ export class Vendor extends Card {
   @field alternatePaymentMethod = containsMany(PaymentMethod);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles embeddedVendorStyles}}>
+      <CardContainer class="vendor-card--embedded">
         <div>
           <@fields.vendor.name/>
           <@fields.mailingAddress/>
@@ -110,7 +97,7 @@ export class Vendor extends Card {
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles styles}}>
+      <CardContainer class="vendor-card">
         <section>
           <h2>Vendor</h2>
           <@fields.vendor/>
@@ -142,7 +129,7 @@ export class Vendor extends Card {
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles styles}}>
+      <CardContainer class="vendor-card">
         <section>
           <h2>Vendor</h2>
           <@fields.vendor/>

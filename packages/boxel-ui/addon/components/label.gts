@@ -1,5 +1,4 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { initStyleSheet, attachStyles } from '../attach-styles';
 import element from '../helpers/element';
 
 interface Signature {
@@ -12,18 +11,9 @@ interface Signature {
   };
 }
 
-let labelStyles = initStyleSheet(`
-  .boxel-label {
-    color: var(--boxel-label-color);
-    font: 700 var(--boxel-font-xs);
-    letter-spacing: var(--boxel-lsp-xxl);
-    text-transform: uppercase;
-  }
-`);
-
 const Label: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
-    <Tag class="boxel-label" {{attachStyles labelStyles}} ...attributes>
+    <Tag class="boxel-label" ...attributes>
       {{yield}}
     </Tag>
   {{/let}}
