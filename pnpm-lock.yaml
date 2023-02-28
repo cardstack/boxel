@@ -915,6 +915,8 @@ importers:
       lodash: ^4.17.21
       loglevel: ^1.8.1
       npm-run-all: ^4.1.5
+      prettier: ^2.8.4
+      prettier-plugin-ember-template-tag: ^0.3.2
       qs: ^6.10.5
       qunit: ^2.18.0
       start-server-and-test: ^1.14.0
@@ -939,6 +941,8 @@ importers:
       fs-extra: 10.1.0
       lodash: 4.17.21
       npm-run-all: 4.1.5
+      prettier: 2.8.4
+      prettier-plugin-ember-template-tag: 0.3.2
       qs: 6.11.0
       qunit: 2.19.3
       start-server-and-test: 1.14.0
@@ -1531,7 +1535,7 @@ packages:
     resolution: {integrity: sha512-0NFvs3VkuSYbFi1x2Vd6tKrywq+z/cLeYC/RJNFrIX/30Bf5aiGYbtvGXolEktzJH8o5E5KJ3tT+nkxuuZFVlA==}
     engines: {node: '>=6.9.0'}
     dependencies:
-      '@babel/types': 7.20.2
+      '@babel/types': 7.21.2
 
   /@babel/helper-module-transforms/7.20.2:
     resolution: {integrity: sha512-zvBKyJXRbmK07XhMuujYoJ48B5yvvmM6+wcpv6Ivj4Yg6qO7NOZOSnvZN9CRl1zz1Z4cKf8YejmCMh8clOoOeA==}
