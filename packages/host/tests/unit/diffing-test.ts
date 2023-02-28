@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { diff } from '@cardstack/runtime-common/diff';
+import { diff } from '@cardstack/runtime-common/diff-entries';
 
 module('Unit | diffing', function () {
   let prevEntries = [
