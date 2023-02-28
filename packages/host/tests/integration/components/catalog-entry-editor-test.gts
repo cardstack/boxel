@@ -16,7 +16,7 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
 module('Integration | catalog-entry-editor', function (hooks) {
-  let adapter: TestRealmAdapter
+  let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
   setupMockLocalRealm(hooks);
@@ -301,8 +301,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Pet from http://test-realm/test/pet',
-            description: 'Catalog entry for Pet from http://test-realm/test/pet',
+            title: `Pet from ${testRealmURL}pet`,
+            description: `Catalog entry for Pet from ${testRealmURL}pet`,
             ref: {
               module: `${testRealmURL}pet`,
               name: 'Pet'
@@ -383,8 +383,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
             demo: {
               firstName: null,
             },
-            title: 'Person from http://test-realm/test/person',
-            description: 'Catalog entry for Person from http://test-realm/test/person',
+            title: `Person from ${testRealmURL}person`,
+            description: `Catalog entry for Person from ${testRealmURL}person`,
             ref: {
               module: `${testRealmURL}person`,
               name: 'Person'

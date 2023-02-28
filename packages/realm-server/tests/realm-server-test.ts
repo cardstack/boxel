@@ -14,12 +14,15 @@ import {
   Loader,
   baseRealm,
   loadCard,
+  Deferred,
 } from "@cardstack/runtime-common";
 import { stringify } from "qs";
 import { Query } from "@cardstack/runtime-common/query";
 import { setupCardLogs, createRealm } from "./helpers";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 import { shimExternals } from "@cardstack/runtime-common/externals-global";
+// @ts-ignore
+import eventSource from "eventsource";
 
 setGracefulCleanup();
 const testRealmURL = new URL("http://127.0.0.1:4444/");
@@ -34,6 +37,32 @@ module("Realm Server", function (hooks) {
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
   );
+
+  async function expectEvent<
+    T
+  >(assert: Assert, expectedContents: string[], callback: () => Promise<T>): Promise<T> {
+    let defer = new Deferred<string[]>();
+    let events: string[] = [];
+    let es = new eventSource(`${testRealmHref}_message`);
+    es.addEventListener("update", (ev: MessageEvent) => {
+      events.push(ev.data);
+      if (events.length >= expectedContents.length) {
+        defer.fulfill(events);
+      }
+    });
+    es.onerror = (err: Event) => defer.reject(err);
+    let timeout = setTimeout(() => {
+      defer.reject(
+        new Error(`expectEvent timed out, saw events ${JSON.stringify(events)}`)
+      );
+    }, 3000);
+    await new Promise((resolve) => es.addEventListener("open", resolve));
+    let result = await callback();
+    assert.deepEqual(await defer.promise, expectedContents);
+    clearTimeout(timeout);
+    es.close();
+    return result;
+  }
 
   hooks.beforeEach(async function () {
     Loader.destroy();
@@ -86,20 +115,23 @@ module("Realm Server", function (hooks) {
   });
 
   test("serves a card POST request", async function (assert) {
-    let response = await request
-      .post("/")
-      .send({
-        data: {
-          type: "card",
-          meta: {
-            adoptsFrom: {
-              module: "https://cardstack.com/base/card-api",
-              name: "Card",
+    let expected = ["added: Card", "added: Card/1.json"];
+    let response = await expectEvent(assert, expected, async () => {
+      return await request
+        .post("/")
+        .send({
+          data: {
+            type: "card",
+            meta: {
+              adoptsFrom: {
+                module: "https://cardstack.com/base/card-api",
+                name: "Card",
+              },
             },
           },
-        },
-      })
-      .set("Accept", "application/vnd.api+json");
+        })
+        .set("Accept", "application/vnd.api+json");
+    });
     assert.strictEqual(response.status, 201, "HTTP 201 status");
     let json = response.body;
 
@@ -134,25 +166,30 @@ module("Realm Server", function (hooks) {
   });
 
   test("serves a card PATCH request", async function (assert) {
-    let response = await request
-      .patch("/person-1")
-      .send({
-        data: {
-          type: "card",
-          attributes: {
-            firstName: "Van Gogh",
-          },
-          meta: {
-            adoptsFrom: {
-              module: "./person.gts",
-              name: "Person",
+    let entry = "person-1.json";
+    let expected = [`changed: ${entry}`];
+    let response = await expectEvent(assert, expected, async () => {
+      return await request
+        .patch("/person-1")
+        .send({
+          data: {
+            type: "card",
+            attributes: {
+              firstName: "Van Gogh",
+            },
+            meta: {
+              adoptsFrom: {
+                module: "./person.gts",
+                name: "Person",
+              },
             },
           },
-        },
-      })
-      .set("Accept", "application/vnd.api+json");
+        })
+        .set("Accept", "application/vnd.api+json");
+    });
 
-    // assert.strictEqual(response.status, 200, "HTTP 200 status");
+    assert.strictEqual(response.status, 200, "HTTP 200 status");
+
     let json = response.body;
     assert.ok(json.data.meta.lastModified, "lastModified exists");
     if (isSingleCardDocument(json)) {
@@ -163,7 +200,7 @@ module("Realm Server", function (hooks) {
       );
       assert.ok(json.data.meta.lastModified, "lastModified is populated");
       delete json.data.meta.lastModified;
-      let cardFile = join(dir.name, "person-1.json");
+      let cardFile = join(dir.name, entry);
       assert.ok(existsSync(cardFile), "card json exists");
       let card = readJSONSync(cardFile);
       assert.deepEqual(
@@ -209,12 +246,16 @@ module("Realm Server", function (hooks) {
   });
 
   test("serves a card DELETE request", async function (assert) {
-    let response = await request
-      .delete("/person-1")
-      .set("Accept", "application/vnd.api+json");
+    let entry = "person-1.json";
+    let expected = [`removed: ${entry}`];
+    let response = await expectEvent(assert, expected, async () => {
+      return await request
+        .delete("/person-1")
+        .set("Accept", "application/vnd.api+json");
+    });
 
     assert.strictEqual(response.status, 204, "HTTP 204 status");
-    let cardFile = join(dir.name, "person-1.json");
+    let cardFile = join(dir.name, entry);
     assert.strictEqual(existsSync(cardFile), false, "card json does not exist");
   });
 
@@ -239,12 +280,16 @@ module("Realm Server", function (hooks) {
   });
 
   test("serves a card-source DELETE request", async function (assert) {
-    let response = await request
-      .delete("/unused-card.gts")
-      .set("Accept", "application/vnd.card+source");
+    let entry = "unused-card.gts";
+    let expected = [`removed: ${entry}`];
+    let response = await expectEvent(assert, expected, async () => {
+      return await request
+        .delete("/unused-card.gts")
+        .set("Accept", "application/vnd.card+source");
+    });
 
     assert.strictEqual(response.status, 204, "HTTP 204 status");
-    let cardFile = join(dir.name, "unused-card.gts");
+    let cardFile = join(dir.name, entry);
     assert.strictEqual(
       existsSync(cardFile),
       false,
@@ -253,13 +298,18 @@ module("Realm Server", function (hooks) {
   });
 
   test("serves a card-source POST request", async function (assert) {
-    let response = await request
-      .post("/unused-card.gts")
-      .set("Accept", "application/vnd.card+source")
-      .send(`//TEST UPDATE\n${cardSrc}`);
+    let entry = "unused-card.gts";
+    let expected = [`changed: ${entry}`];
+    let response = await expectEvent(assert, expected, async () => {
+      return await request
+        .post("/unused-card.gts")
+        .set("Accept", "application/vnd.card+source")
+        .send(`//TEST UPDATE\n${cardSrc}`);
+    });
+
     assert.strictEqual(response.status, 204, "HTTP 204 status");
 
-    let srcFile = join(dir.name, "unused-card.gts");
+    let srcFile = join(dir.name, entry);
     assert.ok(existsSync(srcFile), "card src exists");
     let src = readFileSync(srcFile, { encoding: "utf8" });
     assert.codeEqual(
@@ -459,116 +509,116 @@ module("Realm Server serving from root", function (hooks) {
     assert.deepEqual(
       json,
       {
-        "data": {
-          "id": testRealmHref,
-          "type": "directory",
-          "relationships": {
+        data: {
+          id: testRealmHref,
+          type: "directory",
+          relationships: {
             "a.js": {
-              "links": {
-                "related": `${testRealmHref}a.js`
+              links: {
+                related: `${testRealmHref}a.js`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "b.js": {
-              "links": {
-                "related": `${testRealmHref}b.js`
+              links: {
+                related: `${testRealmHref}b.js`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "c.js": {
-              "links": {
-                "related": `${testRealmHref}c.js`
+              links: {
+                related: `${testRealmHref}c.js`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "card-ref-test.gts": {
-              "links": {
-                "related": `${testRealmHref}card-ref-test.gts`
+              links: {
+                related: `${testRealmHref}card-ref-test.gts`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "cycle-one.js": {
-              "links": {
-                "related": `${testRealmHref}cycle-one.js`
+              links: {
+                related: `${testRealmHref}cycle-one.js`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "cycle-two.js": {
-              "links": {
-                "related": `${testRealmHref}cycle-two.js`
+              links: {
+                related: `${testRealmHref}cycle-two.js`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "d.js": {
-              "links": {
-                "related": `${testRealmHref}d.js`
+              links: {
+                related: `${testRealmHref}d.js`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "dir/": {
-              "links": {
-                "related": `${testRealmHref}dir/`
+              links: {
+                related: `${testRealmHref}dir/`,
               },
-              "meta": {
-                "kind": "directory"
-              }
+              meta: {
+                kind: "directory",
+              },
             },
             "e.js": {
-              "links": {
-                "related": `${testRealmHref}e.js`
+              links: {
+                related: `${testRealmHref}e.js`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "person-1.json": {
-              "links": {
-                "related": `${testRealmHref}person-1.json`
+              links: {
+                related: `${testRealmHref}person-1.json`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "person-2.json": {
-              "links": {
-                "related": `${testRealmHref}person-2.json`
+              links: {
+                related: `${testRealmHref}person-2.json`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "person.gts": {
-              "links": {
-                "related": `${testRealmHref}person.gts`
+              links: {
+                related: `${testRealmHref}person.gts`,
               },
-              "meta": {
-                "kind": "file"
-              }
+              meta: {
+                kind: "file",
+              },
             },
             "unused-card.gts": {
-              "links": {
-                "related": `${testRealmHref}unused-card.gts`
+              links: {
+                related: `${testRealmHref}unused-card.gts`,
               },
-              "meta": {
-                "kind": "file"
-              }
-            }
-          }
-        }
+              meta: {
+                kind: "file",
+              },
+            },
+          },
+        },
       },
       "the directory response is correct"
     );

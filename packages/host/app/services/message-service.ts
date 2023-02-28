@@ -1,48 +1,22 @@
-import Service, { service } from '@ember/service';
+import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import type CardService from '../services/card-service';
-import { RealmPaths } from '@cardstack/runtime-common';
-import log from 'loglevel';
 
 export default class MessageService extends Service {
-  @service declare cardService: CardService;
-  @tracked eventSource: EventSource | undefined = undefined;
+  @tracked subscriptions: Map<string, EventSource> = new Map();
 
-  get isClosed() {
-    return this.eventSource?.readyState === EventSource.CLOSED;
-  }
+  subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
+    let maybeEventSource = this.subscriptions.get(realmURL);
 
-  start() {
-    if (!this.eventSource || this.isClosed) {
-      let realmPath = new RealmPaths(this.cardService.defaultURL);
-      this.eventSource = new EventSource(`${realmPath.url}_message`);
-      log.info('Created new event source');
+    if (!maybeEventSource) {
+      maybeEventSource = new EventSource(realmURL);
+      maybeEventSource.onerror = () => eventSource.close();
+      this.subscriptions.set(realmURL, maybeEventSource);
     }
 
-    this.eventSource.onerror = (_ev: Event) => {
-      if (this.eventSource?.readyState == EventSource.CONNECTING) {
-        log.info(`Reconnecting (readyState=${this.eventSource.readyState})...`);
-      } else if (this.isClosed) {
-        log.info(
-          `Connection closed (readyState=${this.eventSource?.readyState})`
-        );
-      } else {
-        log.info(`An error has occured`);
-      }
+    let eventSource = maybeEventSource;
+    eventSource.addEventListener('update', cb);
+    return () => {
+      eventSource.removeEventListener('update', cb);
     };
-
-    this.eventSource.onmessage = (e: MessageEvent) => {
-      log.info('Event: message, data: ' + e.data);
-    };
-  }
-
-  stop() {
-    if (this.eventSource) {
-      this.eventSource.close();
-      if (this.isClosed) {
-        log.info('Connection closed');
-        this.eventSource = undefined;
-      }
-    }
   }
 }

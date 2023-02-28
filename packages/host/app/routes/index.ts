@@ -1,30 +1,23 @@
 import Route from '@ember/routing/route';
 import { service } from '@ember/service';
-import { action } from '@ember/object';
 import { file, FileResource } from '../resources/file';
 import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import type LocalRealm from '../services/local-realm';
 import type CardService from '../services/card-service';
-import type MessageService from '../services/message-service';
 import { RealmPaths } from '@cardstack/runtime-common';
-import type { Format } from 'https://cardstack.com/base/card-api';
 import log from 'loglevel';
 
 interface Model {
   path: string | undefined;
   openFile: FileResource | undefined;
-  polling: 'off' | undefined;
-  openDirs: string | undefined;
+  openDirs: string[];
   isFastBoot: boolean;
 }
 
 export default class Index extends Route<Model> {
   queryParams = {
     path: {
-      refreshModel: true,
-    },
-    polling: {
       refreshModel: true,
     },
     openDirs: {
@@ -36,27 +29,24 @@ export default class Index extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare localRealm: LocalRealm;
-  @service declare messageService: MessageService;
   @service declare fastboot: { isFastBoot: boolean };
 
   async model(args: {
     path?: string;
-    polling?: 'off';
-    openDirs: string;
-    url?: string;
-    format?: Format;
+    openDirs: string | undefined;
   }): Promise<Model> {
-    let { path, polling, openDirs } = args;
+    let { path, openDirs: openDirsString } = args;
+    let openDirs = openDirsString ? openDirsString.split(',') : [];
     let { isFastBoot } = this.fastboot;
 
     let openFile: FileResource | undefined;
     if (!path) {
-      return { path, openFile, polling, openDirs, isFastBoot };
+      return { path, openFile, openDirs, isFastBoot };
     }
 
     await this.localRealm.startedUp;
     if (!this.localRealm.isAvailable && !this.cardService.demoRealmAvailable) {
-      return { path, openFile, polling, openDirs, isFastBoot };
+      return { path, openFile, openDirs, isFastBoot };
     }
 
     let realmPath = new RealmPaths(this.cardService.defaultURL);
@@ -71,9 +61,8 @@ export default class Index extends Route<Model> {
       log.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
-      return { path, openFile, polling, openDirs, isFastBoot };
+      return { path, openFile, openDirs, isFastBoot };
     }
-    this.messageService.start();
     // The server may have responded with a redirect which we need to pay
     // attention to. As part of responding to us, the server will hand us a
     // resolved URL in response.url. We need to reverse that resolution in order
@@ -81,41 +70,27 @@ export default class Index extends Route<Model> {
     let responseURL = this.loaderService.loader.reverseResolution(response.url);
     if (responseURL.href !== url) {
       this.router.transitionTo('application', {
-        queryParams: {
-          path: realmPath.local(responseURL),
-          polling,
-          openDirs,
-        },
+        queryParams: { path: realmPath.local(responseURL), openDirs },
       });
     } else {
       let content = await response.text();
+      let relativePath = path;
       openFile = file(this, () => ({
-        url,
+        relativePath,
+        realmURL: realmPath.url,
         content,
         lastModified: response.headers.get('last-modified') || undefined,
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.router.transitionTo('application', {
-              queryParams: {
-                path: undefined,
-                polling: undefined,
-                openDirs: undefined,
-              },
+              queryParams: { path: undefined, openDirs },
             });
           }
         },
-        polling,
       }));
       await openFile.loading;
     }
 
-    return { path, openFile, polling, openDirs, isFastBoot };
-  }
-
-  @action
-  willTransition(transition: any) {
-    if (transition.from?.attributes.openFile) {
-      transition.from.attributes.openFile.close();
-    }
+    return { path, openFile, openDirs, isFastBoot };
   }
 }

@@ -5,15 +5,16 @@ import { restartableTask, TaskInstance } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import LoaderService from '../services/loader-service';
+import type MessageService from '../services/message-service';
 import log from 'loglevel';
 
 interface Args {
   named: {
-    url: string;
+    relativePath: string;
+    realmURL: string;
     content: string | undefined;
     lastModified: string | undefined;
     onStateChange?: (state: FileResource['state']) => void;
-    polling: 'off' | undefined;
   };
 }
 
@@ -39,17 +40,29 @@ export type FileResource =
     };
 
 class _FileResource extends Resource<Args> {
-  private interval: ReturnType<typeof setInterval> | undefined;
   private declare _url: string;
   private lastModified: string | undefined;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
   @tracked content: string | undefined;
   @tracked state: FileResource['state'] = 'ready';
   @service declare loaderService: LoaderService;
+  @service declare messageService: MessageService;
+
+  constructor(owner: unknown) {
+    super(owner);
+    registerDestructor(this, () => {
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+        this.subscription = undefined;
+      }
+    });
+  }
 
   modify(_positional: never[], named: Args['named']) {
-    let { url, content, lastModified, onStateChange, polling } = named;
-    this._url = url;
+    let { relativePath, realmURL, content, lastModified, onStateChange } =
+      named;
+    this._url = realmURL + relativePath;
     this.onStateChange = onStateChange;
     if (content !== undefined) {
       this.content = content;
@@ -58,11 +71,21 @@ class _FileResource extends Resource<Args> {
       // get the initial content if we haven't already been seeded with initial content
       taskFor(this.read).perform();
     }
-    if (polling !== 'off') {
-      this.interval = setInterval(() => taskFor(this.read).perform(), 1000);
-      registerDestructor(this, () => clearInterval(this.interval!));
-    } else if (this.interval) {
-      clearInterval(this.interval);
+
+    let path = `${realmURL}_message`;
+
+    if (this.subscription && this.subscription.url !== path) {
+      this.subscription.unsubscribe();
+      this.subscription = undefined;
+    }
+
+    if (!this.subscription) {
+      this.subscription = {
+        url: path,
+        unsubscribe: this.messageService.subscribe(path, () =>
+          taskFor(this.read).perform()
+        ),
+      };
     }
   }
 
@@ -76,12 +99,6 @@ class _FileResource extends Resource<Args> {
 
   get loading() {
     return taskFor(this.read).last;
-  }
-
-  close() {
-    if (this.interval) {
-      clearInterval(this.interval);
-    }
   }
 
   @restartableTask private async read() {
