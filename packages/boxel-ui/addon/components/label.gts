@@ -8,7 +8,7 @@ interface Signature {
     tag?: keyof HTMLElementTagNameMap;
   };
   Blocks: {
-    default: [],
+    default: [];
   };
 }
 
@@ -23,7 +23,7 @@ let labelStyles = initStyleSheet(`
 
 const Label: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
-    <Tag class="boxel-label" {{attachStyles labelStyles}} ...attributes>
+    <Tag class='boxel-label' {{attachStyles labelStyles}} ...attributes>
       {{yield}}
     </Tag>
   {{/let}}
