@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  PNPM_VERSION: 7.2.1
+  PNPM_VERSION: 7.28.0
 
   # This controls what version of node first boots pnpm, but pnpm itself will
   # read the .npmrc file and download a different version if they don't match.
@@ -149,7 +149,6 @@ jobs:
               - '.github/actions/deploy-realm-server/**'
               - '.github/actions/waypoint-deploy/**'
               - 'pnpm-lock.yaml'
-
 
   host-deploy:
     name: Deploy host to staging
