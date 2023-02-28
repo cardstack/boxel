@@ -137,13 +137,10 @@ class _FileResource extends Resource<Args> {
   }
 
   async write(content: string, flushLoader?: true) {
-    await taskFor(this.doWrite).perform(content);
-    if (flushLoader) {
-      this.loaderService.reset();
-    }
+    taskFor(this.doWrite).perform(content, flushLoader);
   }
 
-  @restartableTask private async doWrite(content: string) {
+  @restartableTask private async doWrite(content: string, flushLoader?: true) {
     let response = await this.loaderService.loader.fetch(this.url, {
       method: 'POST',
       headers: {
@@ -168,6 +165,9 @@ class _FileResource extends Resource<Args> {
 
     this.content = content;
     this.lastModified = response.headers.get('last-modified') || undefined;
+    if (flushLoader) {
+      this.loaderService.reset();
+    }
   }
 }
 
