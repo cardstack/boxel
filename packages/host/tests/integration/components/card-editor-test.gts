@@ -25,7 +25,7 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
-let updateFromSerialized: typeof cardApi['updateFromSerialized'];
+let updateFromSerialized: (typeof cardApi)['updateFromSerialized'];
 
 module('Integration | card-editor', function (hooks) {
   let loader: Loader;

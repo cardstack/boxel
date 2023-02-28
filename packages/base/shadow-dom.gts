@@ -1,4 +1,4 @@
-import Modifier from "ember-modifier";
+import Modifier from 'ember-modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -8,24 +8,22 @@ interface Signature {
     default: [];
   };
   Args: {
-    opts?: ShadowDOMOptions
-  }
+    opts?: ShadowDOMOptions;
+  };
 }
 
 interface ModifierSignature {
   element: HTMLElement;
   Args: {
-    Positional: [
-      setShadow: (shadow: ShadowRoot) => void
-    ];
+    Positional: [setShadow: (shadow: ShadowRoot) => void];
   };
 }
 
 export interface ShadowDOMOptions {
-  disableShadowDOM?: true
+  disableShadowDOM?: true;
 }
 
-const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
+const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 // TODO when encountering this component as part of card pre-render,
 // we'll need to think about how the consumers of this HTML fragment
@@ -61,8 +59,11 @@ export default class ShadowDOM extends Component<Signature> {
 }
 
 class ShadowRootModifier extends Modifier<ModifierSignature> {
-  modify(element: HTMLElement, [setShadow]: ModifierSignature["Args"]["Positional"]) {
-    const shadow = element.attachShadow({ mode: "open" });
+  modify(
+    element: HTMLElement,
+    [setShadow]: ModifierSignature['Args']['Positional']
+  ) {
+    const shadow = element.attachShadow({ mode: 'open' });
     setShadow(shadow);
   }
 }

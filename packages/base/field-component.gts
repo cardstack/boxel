@@ -3,19 +3,27 @@ import {
   type Card,
   type Box,
   type Format,
-  type FieldsTypeFor
+  type FieldsTypeFor,
 } from './card-api';
 import { defaultComponent } from './default-card-component';
 import ShadowDOM, { type ShadowDOMOptions } from './shadow-dom';
-import { getField } from "@cardstack/runtime-common";
+import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 
-const componentCache = new WeakMap<Box<Card>, ComponentLike<{ Args: {}; Blocks: {}; }>>();
+const componentCache = new WeakMap<
+  Box<Card>,
+  ComponentLike<{ Args: {}; Blocks: {} }>
+>();
 
 // union with any other future options
 export type ComponentOptions = ShadowDOMOptions;
 
-export function getBoxComponent(card: typeof Card, format: Format, model: Box<Card>, opts?: ComponentOptions): ComponentLike<{ Args: {}, Blocks: {} }> {
+export function getBoxComponent(
+  card: typeof Card,
+  format: Format,
+  model: Box<Card>,
+  opts?: ComponentOptions
+): ComponentLike<{ Args: {}; Blocks: {} }> {
   let stable = componentCache.get(model);
   if (stable) {
     return stable;
@@ -25,18 +33,33 @@ export function getBoxComponent(card: typeof Card, format: Format, model: Box<Ca
 
   // *inside* our own component, @fields is a proxy object that looks
   // up our fields on demand.
-  let internalFields = fieldsComponentsFor({}, model, defaultFieldFormat(format), opts);
-  
+  let internalFields = fieldsComponentsFor(
+    {},
+    model,
+    defaultFieldFormat(format),
+    opts
+  );
+
   let isPrimitive = primitive in card;
-  let component: ComponentLike<{ Args: {}, Blocks: {} }> = <template>
+  let component: ComponentLike<{ Args: {}; Blocks: {} }> = <template>
     {{#if isPrimitive}}
-      <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
+      <Implementation
+        @model={{model.value}}
+        @fields={{internalFields}}
+        @set={{model.set}}
+        @fieldName={{model.name}}
+      />
     {{else}}
       <ShadowDOM @opts={{opts}}>
-        <Implementation @model={{model.value}} @fields={{internalFields}} @set={{model.set}} @fieldName={{model.name}} />
+        <Implementation
+          @model={{model.value}}
+          @fields={{internalFields}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+        />
       </ShadowDOM>
     {{/if}}
-  </template>
+  </template>;
 
   // when viewed from *outside*, our component is both an invokable component
   // and a proxy that makes our fields available for nested invocation, like
@@ -45,8 +68,12 @@ export function getBoxComponent(card: typeof Card, format: Format, model: Box<Ca
   // It would be possible to use `externalFields` in place of `internalFields` above,
   // avoiding the need for two separate Proxies. But that has the uncanny property of
   // making `<@fields />` be an infinite recursion.
-  let externalFields = fieldsComponentsFor(component, model, defaultFieldFormat(format), opts);
-
+  let externalFields = fieldsComponentsFor(
+    component,
+    model,
+    defaultFieldFormat(format),
+    opts
+  );
 
   // This cast is safe because we're returning a proxy that wraps component.
   stable = externalFields as unknown as typeof component;
@@ -64,10 +91,19 @@ function defaultFieldFormat(format: Format): Format {
   }
 }
 
-function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defaultFormat: Format, opts?: ComponentOptions): FieldsTypeFor<T> {
+function fieldsComponentsFor<T extends Card>(
+  target: object,
+  model: Box<T>,
+  defaultFormat: Format,
+  opts?: ComponentOptions
+): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
-      if (typeof property === 'symbol' || model == null || model.value == null) {
+      if (
+        typeof property === 'symbol' ||
+        model == null ||
+        model.value == null
+      ) {
         // don't handle symbols or nulls
         return Reflect.get(target, property, received);
       }
@@ -78,7 +114,9 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
         return Reflect.get(target, property, received);
       }
       let field = maybeField;
-      let format = getField(modelValue.constructor, property)?.computeVia ? 'embedded' : defaultFormat;
+      let format = getField(modelValue.constructor, property)?.computeVia
+        ? 'embedded'
+        : defaultFormat;
       return field.component(model as unknown as Box<Card>, format, opts);
     },
     getPrototypeOf() {
@@ -88,7 +126,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       // Ember's template lookup respects inheritance.
       return target;
     },
-    ownKeys(target)  {
+    ownKeys(target) {
       let keys = Reflect.ownKeys(target);
       for (let name in model.value) {
         let field = getField(model.value.constructor, name);
@@ -99,7 +137,11 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
       return keys;
     },
     getOwnPropertyDescriptor(target, property) {
-      if (typeof property === 'symbol' || model == null || model.value == null) {
+      if (
+        typeof property === 'symbol' ||
+        model == null ||
+        model.value == null
+      ) {
         // don't handle symbols, undefined, or nulls
         return Reflect.getOwnPropertyDescriptor(target, property);
       }
@@ -113,8 +155,7 @@ function fieldsComponentsFor<T extends Card>(target: object, model: Box<T>, defa
         enumerable: true,
         writable: true,
         configurable: true,
-      }
+      };
     },
-
   }) as any;
 }

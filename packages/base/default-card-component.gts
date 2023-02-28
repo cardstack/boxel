@@ -1,7 +1,10 @@
 import GlimmerComponent from '@glimmer/component';
 import { startCase } from 'lodash';
 import type { Card } from './card-api';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
+import {
+  initStyleSheet,
+  attachStyles,
+} from '@cardstack/boxel-ui/attach-styles';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
@@ -14,7 +17,9 @@ let styles = initStyleSheet(`
   }
 `);
 
-class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
+class DefaultIsolated extends GlimmerComponent<{
+  Args: { model: Card; fields: Record<string, new () => GlimmerComponent> };
+}> {
   <template>
     <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
       {{#each-in @fields as |key Field|}}
@@ -23,26 +28,34 @@ class DefaultIsolated extends GlimmerComponent<{ Args: { model: Card; fields: Re
         {{/unless}}
       {{/each-in}}
     </CardContainer>
-  </template>;
+  </template>
 }
 
-class DefaultEdit extends GlimmerComponent<{ Args: { model: Card; fields: Record<string, new() => GlimmerComponent>}}> {
+class DefaultEdit extends GlimmerComponent<{
+  Args: { model: Card; fields: Record<string, new () => GlimmerComponent> };
+}> {
   <template>
     <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
-          {{!-- @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') --}}
-          <FieldContainer @vertical={{true}} @label={{startCase key}} data-test-field={{key}}>
+          {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
+          <FieldContainer
+            @vertical={{true}}
+            @label={{startCase key}}
+            data-test-field={{key}}
+          >
             <Field />
           </FieldContainer>
         {{/unless}}
       {{/each-in}}
     </CardContainer>
-  </template>;
+  </template>
 }
 
 export const defaultComponent = {
-  embedded: <template><!-- Inherited from base card embedded view. Did your card forget to specify its embedded component? --></template>,
+  embedded: <template>
+    <!-- Inherited from base card embedded view. Did your card forget to specify its embedded component? -->
+  </template>,
   isolated: DefaultIsolated,
   edit: DefaultEdit,
-}
+};

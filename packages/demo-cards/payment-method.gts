@@ -1,8 +1,17 @@
-import { contains, field, Card, Component, linksTo } from "https://cardstack.com/base/card-api";
+import {
+  contains,
+  field,
+  Card,
+  Component,
+  linksTo,
+} from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import { Chain } from './chain';
 import { Token, Currency } from './asset';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
+import {
+  initStyleSheet,
+  attachStyles,
+} from '@cardstack/boxel-ui/attach-styles';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { FieldContainer } from '@cardstack/boxel-ui';
 
@@ -19,28 +28,28 @@ class CryptoPayment extends Card {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div {{attachStyles styles}}>
-        <FieldContainer @label="Chain">
-          <@fields.chain/>
+        <FieldContainer @label='Chain'>
+          <@fields.chain />
         </FieldContainer>
         {{#if @model.chain.chainId}}
-          <FieldContainer @label="Token">
-            <@fields.token/>
+          <FieldContainer @label='Token'>
+            <@fields.token />
           </FieldContainer>
           {{#if @model.token}}
-            <FieldContainer @label="Token Name">
+            <FieldContainer @label='Token Name'>
               {{@model.token.name}}
             </FieldContainer>
-            <FieldContainer @label="Token Address">
+            <FieldContainer @label='Token Address'>
               {{@model.token.address}}
             </FieldContainer>
-            <FieldContainer @label="To Address">
-              <@fields.toAddress/>
+            <FieldContainer @label='To Address'>
+              <@fields.toAddress />
             </FieldContainer>
           {{/if}}
         {{/if}}
       </div>
     </template>
-  }
+  };
   static embedded = this.edit;
 }
 
@@ -50,43 +59,43 @@ class WireTransfer extends Card {
   @field bic = contains(StringCard); // BIC format
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div><@fields.iban/></div>
-      <div><@fields.bic/></div>
+      <div><@fields.iban /></div>
+      <div><@fields.bic /></div>
     </template>
-  }
+  };
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div {{attachStyles styles}}>
-        <FieldContainer @label="Currency">
-          <@fields.currency/>
+        <FieldContainer @label='Currency'>
+          <@fields.currency />
         </FieldContainer>
-        <FieldContainer @label="IBAN">
-          <@fields.iban/>
+        <FieldContainer @label='IBAN'>
+          <@fields.iban />
         </FieldContainer>
-        <FieldContainer @label="BIC">
-          <@fields.bic/>
+        <FieldContainer @label='BIC'>
+          <@fields.bic />
         </FieldContainer>
       </div>
     </template>
-  }
+  };
   static embedded = this.edit;
 }
 
 class EditPaymentMethod extends Component<typeof PaymentMethod> {
   <template>
     <div {{attachStyles styles}}>
-      <FieldContainer @label="Payment Method">
-        <@fields.type/>
+      <FieldContainer @label='Payment Method'>
+        <@fields.type />
       </FieldContainer>
-      {{#if (eq @model.type "Crypto Payment")}}
-        <@fields.cryptoPayment/>
-      {{else if (eq @model.type "Wire Transfer")}}
-        {{!-- TODO: uncommenting the below causes the app to crash --}}
-        {{!-- <@fields.wireTransfer/> --}}
+      {{#if (eq @model.type 'Crypto Payment')}}
+        <@fields.cryptoPayment />
+      {{else if (eq @model.type 'Wire Transfer')}}
+        {{! TODO: uncommenting the below causes the app to crash }}
+        {{! <@fields.wireTransfer/> }}
       {{/if}}
     </div>
   </template>
-};
+}
 export class PaymentMethod extends Card {
   @field type = contains(StringCard); // dropdown
   @field cryptoPayment = contains(CryptoPayment);

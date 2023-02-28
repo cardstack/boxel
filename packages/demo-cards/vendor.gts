@@ -1,8 +1,18 @@
-import { contains, field, Card, Component, containsMany, relativeTo } from 'https://cardstack.com/base/card-api';
+import {
+  contains,
+  field,
+  Card,
+  Component,
+  containsMany,
+  relativeTo,
+} from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
+import {
+  initStyleSheet,
+  attachStyles,
+} from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { startCase } from 'lodash';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
@@ -20,12 +30,14 @@ class VendorDetails extends Card {
   @field logoURL = contains(StringCard); // url format
   @field email = contains(StringCard); // email format
   @field cardXYZ = contains(StringCard);
-  @field logoHref = contains(StringCard, { computeVia: function(this: VendorDetails) {
-    if (!this.logoURL) {
-      return null;
-    }
-    return new URL(this.logoURL, this[relativeTo] || this.id).href;
-  }});
+  @field logoHref = contains(StringCard, {
+    computeVia: function (this: VendorDetails) {
+      if (!this.logoURL) {
+        return null;
+      }
+      return new URL(this.logoURL, this[relativeTo] || this.id).href;
+    },
+  });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -33,11 +45,12 @@ class VendorDetails extends Card {
         {{#each-in @fields as |key value|}}
           {{#unless (eq key 'id')}}
             <FieldContainer
-              {{!-- @glint-ignore --}}
+              {{! @glint-ignore }}
               @label={{startCase key}}
-              @vertical={{true}}>
-                {{value}}
-              </FieldContainer>
+              @vertical={{true}}
+            >
+              {{value}}
+            </FieldContainer>
           {{/unless}}
         {{/each-in}}
       </CardContainer>
@@ -61,16 +74,17 @@ class Contact extends Card {
         {{#each-in @fields as |key value|}}
           {{#unless (eq key 'id')}}
             <FieldContainer
-              {{!-- @glint-ignore --}}
+              {{! @glint-ignore }}
               @label={{startCase key}}
-              @vertical={{true}}>
-                {{value}}
-              </FieldContainer>
+              @vertical={{true}}
+            >
+              {{value}}
+            </FieldContainer>
           {{/unless}}
         {{/each-in}}
       </CardContainer>
     </template>
-  }
+  };
 }
 
 class ContactMethod extends Card {
@@ -78,7 +92,7 @@ class ContactMethod extends Card {
   @field username = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.platform/>: <@fields.username/>
+      <@fields.platform />: <@fields.username />
     </template>
   };
 }
@@ -100,9 +114,9 @@ export class Vendor extends Card {
     <template>
       <CardContainer {{attachStyles embeddedVendorStyles}}>
         <div>
-          <@fields.vendor.name/>
-          <@fields.mailingAddress/>
-          <@fields.vendor.email/>
+          <@fields.vendor.name />
+          <@fields.mailingAddress />
+          <@fields.vendor.email />
         </div>
         <img src={{@model.vendor.logoHref}} />
       </CardContainer>
@@ -113,28 +127,28 @@ export class Vendor extends Card {
       <CardContainer {{attachStyles styles}}>
         <section>
           <h2>Vendor</h2>
-          <@fields.vendor/>
+          <@fields.vendor />
         </section>
         <section>
           <h2>Contact</h2>
-          <@fields.contact/>
+          <@fields.contact />
         </section>
         {{#if @model.contactMethod.length}}
           <section>
             <h2>Contact Method</h2>
-            <@fields.contactMethod/>
+            <@fields.contactMethod />
           </section>
         {{/if}}
         <section>
           <h2>Mailing Address</h2>
-          <@fields.mailingAddress/>
+          <@fields.mailingAddress />
         </section>
         <section>
           <h2>Preferred Payment Method</h2>
-          <@fields.preferredPaymentMethod/>
+          <@fields.preferredPaymentMethod />
           {{#if @model.alternatePaymentMethod.length}}
             <h2>Alternate Payment Method</h2>
-            <@fields.alternatePaymentMethod/>
+            <@fields.alternatePaymentMethod />
           {{/if}}
         </section>
       </CardContainer>
@@ -145,27 +159,27 @@ export class Vendor extends Card {
       <CardContainer {{attachStyles styles}}>
         <section>
           <h2>Vendor</h2>
-          <@fields.vendor/>
+          <@fields.vendor />
         </section>
         <section>
           <h2>Contact</h2>
-          <@fields.contact/>
+          <@fields.contact />
         </section>
         {{#if @model.contactMethod.length}}
           <section>
             <h2>Contact Method</h2>
-            <@fields.contactMethod/>
+            <@fields.contactMethod />
           </section>
         {{/if}}
         <section>
           <h2>Mailing Address</h2>
-          <@fields.mailingAddress/>
+          <@fields.mailingAddress />
         </section>
         <section>
           <h2>Preferred Payment Method</h2>
-          <@fields.preferredPaymentMethod/>
+          <@fields.preferredPaymentMethod />
           <h2>Alternate Payment Method</h2>
-          <@fields.alternatePaymentMethod/>
+          <@fields.alternatePaymentMethod />
         </section>
       </CardContainer>
     </template>
