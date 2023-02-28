@@ -5,112 +5,10 @@ import DateCard from 'https://cardstack.com/base/date';
 import DatetimeCard from "https://cardstack.com/base/datetime";
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { Vendor } from './vendor';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { formatUSD, balanceInCurrency } from './currency-format';
 import { CardContainer, FieldContainer, Label, Message } from '@cardstack/boxel-ui';
 import { Token, Currency } from './asset';
 
-let invoiceStyles = initStyleSheet(`
-  this {
-    max-width: 50rem;
-    font: var(--boxel-font-sm);
-    letter-spacing: var(--boxel-lsp-xs);
-    overflow: hidden;
-  }
-  .invoice-template-editor {
-    --boxel-label-color: var(--boxel-dark);
-  }
-  .invoice {
-    padding: var(--boxel-sp-xl);
-    display: grid;
-    gap: var(--boxel-sp-xxl) 0;
-  }
-  h2 {
-    margin-top: 0;
-    margin-bottom: var(--boxel-sp);
-    font: 700 var(--boxel-font);
-  }
-
-  .line-items__title-row {
-    display: grid;
-    grid-template-columns: 3fr 1fr 2fr;
-    margin-bottom: var(--boxel-sp-xxxs);
-  }
-  .line-items__title-row > *:nth-child(2) {
-    justify-self: center;
-  }
-  .line-items__title-row > *:last-child {
-    justify-self: end;
-  }
-  .line-items__rows {
-    padding: var(--boxel-sp-lg) 0;
-    border-top: 1px solid var(--boxel-200);
-    border-bottom: 1px solid var(--boxel-200);
-  }
-  .line-items__rows > * + * {
-    margin-top: var(--boxel-sp-xs);
-  }
-
-  .payment,
-  .payment-methods {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0 var(--boxel-sp-xs);
-  }
-  .payment-method__item {
-    display: inline-grid;
-    grid-template-columns: var(--boxel-sp) 1fr;
-    gap: var(--boxel-sp-xxxs);
-    font: 700 var(--boxel-font);
-  }
-  .payment-methods__bal {
-    margin-left: var(--boxel-sp-lg);
-  }
-
-  .balance-due {
-    justify-items: end;
-    text-align: right;
-  }
-  .balance-due__total {
-    font: 700 var(--boxel-font-lg);
-  }
-
-  .extras {
-    padding: var(--boxel-sp-xl);
-    display: grid;
-    gap: var(--boxel-sp-xxl) 0;
-    background-color: var(--boxel-100);
-  }
-
-  .notes,
-  .history {
-    --boxel-border-radius: 20px;
-    padding: var(--boxel-sp);
-  }
-  .notes > * + *,
-  .history > * + * {
-    margin-top: var(--boxel-sp);
-    padding-top: var(--boxel-sp);
-    border-top: 1px solid var(--boxel-200);
-  }
-`);
-
-let detailsStyles = initStyleSheet(`
-  this {
-    --boxel-field-label-size: 35%;
-    --boxel-field-label-align: center;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--boxel-sp-xl);
-  }
-  .details--edit {
-    padding: var(--boxel-sp);
-  }
-  .details__fields {
-    display: grid;
-    grid-gap: var(--boxel-sp) 0;
-  }
-`);
 class Details extends Card {
   @field invoiceNo = contains(StringCard);
   @field invoiceDate = contains(DateCard);
@@ -120,7 +18,7 @@ class Details extends Card {
   @field memo = contains(TextAreaCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles detailsStyles}}>
+      <CardContainer class="details">
         <div class="details__fields">
           <FieldContainer @label="Invoice No."><@fields.invoiceNo/></FieldContainer>
           <FieldContainer @label="Invoice Date"><@fields.invoiceDate/></FieldContainer>
@@ -134,7 +32,7 @@ class Details extends Card {
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer class="details--edit" @displayBoundaries={{true}} {{attachStyles detailsStyles}}>
+      <CardContainer class="details details--edit" @displayBoundaries={{true}}>
         <div class="details__fields">
           <FieldContainer @tag="label" @label="Invoice No."><@fields.invoiceNo/></FieldContainer>
           <FieldContainer @tag="label" @label="Invoice Date"><@fields.invoiceDate/></FieldContainer>
@@ -148,30 +46,6 @@ class Details extends Card {
   };
 }
 
-let lineItemStyles = initStyleSheet(`
-  this {
-    display: grid;
-    grid-template-columns: 3fr 1fr 2fr;
-  }
-  .line-item__qty {
-    justify-self: center;
-  }
-  .line-item__amount {
-    justify-self: end;
-  }
-`);
-let lineItemEditStyles = initStyleSheet(`
-  this {
-    display: grid;
-    gap: var(--boxel-sp-sm);
-  }
-  .line-item__row {
-    display: grid;
-    grid-template-columns: 3fr 1fr 2fr;
-    gap: var(--boxel-sp);
-    align-items: end;
-  }
-`);
 class LineItem extends Card {
   @field name = contains(StringCard);
   @field quantity = contains(IntegerCard);
@@ -180,7 +54,7 @@ class LineItem extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles lineItemStyles}}>
+      <CardContainer class="line-item">
         <div>
           <div><strong><@fields.name/></strong></div>
           <@fields.description/>
@@ -192,9 +66,10 @@ class LineItem extends Card {
       </CardContainer>
     </template>
   };
+
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer {{attachStyles lineItemEditStyles}}>
+      <CardContainer class="line-item--edit">
         <div class="line-item__row">
           <FieldContainer class="line-item__field" @tag="label" @label="Goods / Services Rendered" @vertical={{true}}><@fields.name/></FieldContainer>
           <FieldContainer class="line-item__field" @tag="label" @label="Qty" @vertical={{true}}><@fields.quantity/></FieldContainer>
@@ -230,9 +105,9 @@ class Note extends Card {
 class InvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
     <CardContainer
+      class="invoice-template"
       @displayBoundaries={{true}}
       @title="Invoice"
-      {{attachStyles invoiceStyles}}
     >
       <section class="invoice">
         <section>
@@ -304,8 +179,7 @@ class EditTemplate extends Component<typeof InvoicePacket> {
     <CardContainer
       @displayBoundaries={{true}}
       @title="Edit Invoice"
-      class="invoice-template-editor"
-      {{attachStyles invoiceStyles}}
+      class="invoice-template invoice-template--edit"
     >
       <section class="invoice">
         <section>

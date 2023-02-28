@@ -5,16 +5,6 @@ import CardRefCard from './card-ref';
 import { baseCardRef, loadCard } from "@cardstack/runtime-common";
 import { isEqual } from 'lodash';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
-
-let styles = initStyleSheet(`
-  this {
-    padding: var(--boxel-sp);
-    display: grid;
-    gap: var(--boxel-sp);
-  }
-  h1, h2 { margin: 0; }
-`);
 
 export class CatalogEntry extends Card {
   @field title = contains(StringCard);
@@ -43,7 +33,7 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
+      <CardContainer class="catalog-entry catalog-entry--edit" @displayBoundaries={{true}}>
         <FieldContainer @tag="label" @label="Title" data-test-field="title">
           <@fields.title/>
         </FieldContainer>
@@ -62,7 +52,7 @@ export class CatalogEntry extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
+      <CardContainer class="catalog-entry" @displayBoundaries={{true}}>
         <h2><@fields.title/></h2>
         <div data-test-ref>
           Module: <@fields.moduleHref/> Name: {{@model.ref.name}}
@@ -76,7 +66,7 @@ export class CatalogEntry extends Card {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CardContainer @displayBoundaries={{true}} {{attachStyles styles}}>
+      <CardContainer class="catalog-entry" @displayBoundaries={{true}}>
         <h1 data-test-title><@fields.title/></h1>
         <em data-test-description><@fields.description/></em>
         <div data-test-ref>
