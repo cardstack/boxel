@@ -21,7 +21,6 @@ import { Query } from "@cardstack/runtime-common/query";
 import { setupCardLogs, createRealm } from "./helpers";
 import "@cardstack/runtime-common/helpers/code-equality-assertion";
 import { shimExternals } from "@cardstack/runtime-common/externals-global";
-// @ts-ignore
 import eventSource from "eventsource";
 
 setGracefulCleanup();
