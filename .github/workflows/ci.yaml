@@ -49,11 +49,8 @@ jobs:
       - name: Lint Worker
         run: pnpm run lint
         working-directory: packages/worker
-      - name: Run Tests
-        run: pnpm run test:ember
-        working-directory: packages/boxel-motion-test-app
-  boxel-test:
-    name: Boxel Tests
+  boxel-motion-test:
+    name: Boxel Motion Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -153,11 +150,11 @@ jobs:
   host-deploy:
     name: Deploy host to staging
     needs: change-check
-    if: ${{ needs.change-check.outputs.host == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Deploy boxel-host
+      - name: Deploy boxel-host if changes have happened
+        if: ${{ needs.change-check.outputs.host == 'true' }}
         uses: ./.github/actions/deploy-boxel-host
         with:
           environment: staging
@@ -165,7 +162,7 @@ jobs:
 
   realm-server-deploy:
     name: Deploy realm server to staging
-    needs: change-check
+    needs: [change-check, host-deploy]
     if: ${{ needs.change-check.outputs.realm-server == 'true' }}
     runs-on: ubuntu-latest
     strategy:
