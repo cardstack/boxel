@@ -42,7 +42,9 @@ export let Person = (_class = (_class2 = class Person extends Card {
 
 }, _defineProperty(_class2, "isolated", setComponentTemplate(createTemplateFactory(
 /*
-  <h1><@fields.firstName/></h1>
+  
+      <h1><@fields.firstName /></h1>
+    
 */
 {
   "id": ${id},
