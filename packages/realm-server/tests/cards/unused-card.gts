@@ -3,8 +3,8 @@ import {
   field,
   Component,
   Card,
-} from "https://cardstack.com/base/card-api";
-import StringCard from "https://cardstack.com/base/string";
+} from 'https://cardstack.com/base/card-api';
+import StringCard from 'https://cardstack.com/base/string';
 
 export class UnusedCard extends Card {
   @field firstName = contains(StringCard);
