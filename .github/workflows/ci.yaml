@@ -49,11 +49,8 @@ jobs:
       - name: Lint Worker
         run: pnpm run lint
         working-directory: packages/worker
-      - name: Run Tests
-        run: pnpm run test:ember
-        working-directory: packages/boxel-motion-test-app
-  boxel-test:
-    name: Boxel Tests
+  boxel-motion-test:
+    name: Boxel Motion Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -149,7 +146,6 @@ jobs:
               - '.github/actions/deploy-realm-server/**'
               - '.github/actions/waypoint-deploy/**'
               - 'pnpm-lock.yaml'
-
 
   host-deploy:
     name: Deploy host to staging

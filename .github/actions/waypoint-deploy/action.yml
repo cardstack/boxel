@@ -23,8 +23,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: volta-cli/action@v4
-
     - name: Install dependencies
       shell: bash
       run: |
