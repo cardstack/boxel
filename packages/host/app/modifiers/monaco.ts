@@ -2,7 +2,6 @@ import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 import * as monaco from 'monaco-editor';
 import { restartableTask, timeout } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 
 interface Signature {
@@ -43,12 +42,12 @@ export default class Monaco extends Modifier<Signature> {
       this.model = this.editor.getModel()!;
 
       this.model.onDidChangeContent(() =>
-        taskFor(this.onContentChanged).perform(contentChanged)
+        this.onContentChanged.perform(contentChanged)
       );
 
       // To be consistent call this immediately since the initial content
       // was set before we had a chance to register our listener
-      taskFor(this.onContentChanged).perform(contentChanged);
+      this.onContentChanged.perform(contentChanged);
 
       monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
         monacoTypescriptOptions

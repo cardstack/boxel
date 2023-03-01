@@ -16,7 +16,6 @@ import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
 import * as emberResources from 'ember-resources';
 import * as emberConcurrency from 'ember-concurrency';
-import * as emberConcurrencyTS from 'ember-concurrency-ts';
 import * as emberModifier2 from 'ember-modifier';
 import * as flat from 'flat';
 import * as lodash from 'lodash';

@@ -1,6 +1,5 @@
 import { Resource } from 'ember-resources/core';
 import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import {
   identifyCard,
@@ -37,7 +36,7 @@ export class CardType extends Resource<Args> {
   modify(_positional: never[], named: Args['named']) {
     let { card, loader } = named;
     this.loader = loader;
-    taskFor(this.assembleType).perform(card);
+    this.assembleType.perform(card);
   }
 
   @restartableTask private async assembleType(card: typeof Card) {

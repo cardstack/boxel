@@ -2,7 +2,6 @@ import { Resource } from 'ember-resources/core';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, TaskInstance } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
@@ -69,7 +68,7 @@ class _FileResource extends Resource<Args> {
       this.lastModified = lastModified;
     } else {
       // get the initial content if we haven't already been seeded with initial content
-      taskFor(this.read).perform();
+      this.read.perform();
     }
 
     let path = `${realmURL}_message`;
@@ -83,7 +82,7 @@ class _FileResource extends Resource<Args> {
       this.subscription = {
         url: path,
         unsubscribe: this.messageService.subscribe(path, () =>
-          taskFor(this.read).perform()
+          this.read.perform()
         ),
       };
     }
@@ -98,7 +97,7 @@ class _FileResource extends Resource<Args> {
   }
 
   get loading() {
-    return taskFor(this.read).last;
+    return this.read.last;
   }
 
   @restartableTask private async read() {
@@ -137,7 +136,7 @@ class _FileResource extends Resource<Args> {
   }
 
   async write(content: string, flushLoader?: true) {
-    taskFor(this.doWrite).perform(content, flushLoader);
+    this.doWrite.perform(content, flushLoader);
   }
 
   @restartableTask private async doWrite(content: string, flushLoader?: true) {

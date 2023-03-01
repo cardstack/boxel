@@ -1,6 +1,5 @@
 import Component from '@glimmer/component';
 import { didCancel, enqueueTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
 import { CurrentRun } from '../lib/current-run';
 import { readFileAsText as _readFileAsText } from "@cardstack/runtime-common/stream";
@@ -26,7 +25,7 @@ export default class CardPrerender extends Component {
     super(owner, args);
     if (this.fastboot.isFastBoot) {
       try {
-        taskFor(this.doRegistration).perform();
+        this.doRegistration.perform();
       } catch (e: any) {
         if (!didCancel(e)) {
           throw e;
@@ -40,7 +39,7 @@ export default class CardPrerender extends Component {
 
   private async fromScratch(realmURL: URL): Promise<RunState> {
     try {
-      let state = await taskFor(this.doFromScratch).perform(realmURL);
+      let state = await this.doFromScratch.perform(realmURL);
       return state
     } catch (e: any) {
       if (!didCancel(e)) {
@@ -55,7 +54,7 @@ export default class CardPrerender extends Component {
       this.loaderService.reset();
     }
     try {
-      let state = await taskFor(this.doIncremental).perform(prev, url, operation);
+      let state = await this.doIncremental.perform(prev, url, operation);
       return state;
     } catch (e: any) {
       if (!didCancel(e)) {
