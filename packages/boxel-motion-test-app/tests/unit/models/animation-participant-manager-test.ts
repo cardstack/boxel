@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { IContext } from '@cardstack/boxel-motion/addon/models/animator';
 import {
   AnimationParticipant,
@@ -36,6 +37,7 @@ function fakeAnimation(element: Element, playState = 'running') {
       target: element,
     } as unknown as KeyframeEffect,
     cancel() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this as any).playState = 'idle';
     },
   } as unknown as Animation;

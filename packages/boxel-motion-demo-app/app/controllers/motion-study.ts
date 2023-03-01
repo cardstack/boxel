@@ -1,4 +1,3 @@
-import SpringBehavior from '@cardstack/boxel-motion/behaviors/spring';
 import StaticBehavior from '@cardstack/boxel-motion/behaviors/static';
 import TweenBehavior from '@cardstack/boxel-motion/behaviors/tween';
 import WaitBehavior from '@cardstack/boxel-motion/behaviors/wait';
