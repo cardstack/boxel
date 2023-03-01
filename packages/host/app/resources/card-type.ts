@@ -39,13 +39,13 @@ export class CardType extends Resource<Args> {
     this.assembleType.perform(card);
   }
 
-  @restartableTask private async assembleType(card: typeof Card) {
+  private assembleType = restartableTask(async (card: typeof Card) => {
     let maybeType = await this.toType(card);
     if (isCardRef(maybeType)) {
       throw new Error(`bug: should never get here`);
     }
     this.type = maybeType;
-  }
+  });
 
   async toType(
     card: typeof Card,

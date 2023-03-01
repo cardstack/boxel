@@ -60,7 +60,7 @@ export class DirectoryResource extends Resource<Args> {
     }
   }
 
-  @restartableTask private async readdir() {
+  private readdir = restartableTask(async () => {
     if (!this.directoryURL) {
       return;
     }
@@ -73,7 +73,7 @@ export class DirectoryResource extends Resource<Args> {
       return pathA.localeCompare(pathB);
     });
     this.entries = entries;
-  }
+  });
 
   private async getEntries(url: string): Promise<Entry[]> {
     let response: Response | undefined;

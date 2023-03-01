@@ -126,7 +126,7 @@ export default class LocalRealm extends Service {
     this.#incremental = incremental;
   }
 
-  @restartableTask private async setup(): Promise<void> {
+  private setup = restartableTask(async () => {
     if (this.fastboot.isFastBoot) {
       this.state = { type: 'fastboot', worker: undefined };
       return;
@@ -159,7 +159,7 @@ export default class LocalRealm extends Service {
     } else {
       this.state = { type: 'empty', worker: this.state.worker };
     }
-  }
+  });
 
   private maybeSetup() {
     if (this.state.type === 'starting-up') {
@@ -268,7 +268,7 @@ export default class LocalRealm extends Service {
     this.state = { type: 'empty', worker: this.state.worker };
   }
 
-  @restartableTask private async openDirectory(cb?: () => void) {
+  private openDirectory = restartableTask(async (cb?: () => void) => {
     let handle = await showDirectoryPicker();
 
     // write a sacrificial file in order to prompt the browser to ask the user
@@ -310,7 +310,7 @@ export default class LocalRealm extends Service {
     if (cb) {
       cb();
     }
-  }
+  });
 
   private async ensureWorker() {
     let registration = await navigator.serviceWorker.register('./worker.js', {

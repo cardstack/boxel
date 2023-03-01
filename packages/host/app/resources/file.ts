@@ -100,7 +100,7 @@ class _FileResource extends Resource<Args> {
     return this.read.last;
   }
 
-  @restartableTask private async read() {
+  private read = restartableTask(async () => {
     let prevState = this.state;
     let response = await this.loaderService.loader.fetch(this.url, {
       headers: {
@@ -133,13 +133,13 @@ class _FileResource extends Resource<Args> {
     if (this.onStateChange && this.state !== prevState) {
       this.onStateChange(this.state);
     }
-  }
+  });
 
   async write(content: string, flushLoader?: true) {
     this.doWrite.perform(content, flushLoader);
   }
 
-  @restartableTask private async doWrite(content: string, flushLoader?: true) {
+  private doWrite = restartableTask(async (content: string, flushLoader?: true) => {
     let response = await this.loaderService.loader.fetch(this.url, {
       method: 'POST',
       headers: {
@@ -167,7 +167,7 @@ class _FileResource extends Resource<Args> {
     if (flushLoader) {
       this.loaderService.reset();
     }
-  }
+  });
 }
 
 export function file(parent: object, args: () => Args['named']): FileResource {

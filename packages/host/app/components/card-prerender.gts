@@ -64,16 +64,16 @@ export default class CardPrerender extends Component {
     throw new Error(`card-prerender component is being destroyed before incremental index of ${url} was completed`);
   }
 
-  @enqueueTask private async doRegistration(): Promise<void> {
+  private doRegistration = enqueueTask(async () => {
     let optsId = (globalThis as any).runnerOptsId;
     if (optsId == null) {
       throw new Error(`Runner Options Identifier was not set`);
     }
     let register = getRunnerOpts(optsId).registerRunner;
     await register(this.fromScratch.bind(this), this.incremental.bind(this));
-  }
+  });
 
-  @enqueueTask private async doFromScratch(realmURL: URL): Promise<RunState> {
+  private doFromScratch = enqueueTask(async (realmURL: URL) => {
     let { reader, entrySetter } = this.getRunnerParams();
     let current = await CurrentRun.fromScratch(
       new CurrentRun({
@@ -86,9 +86,9 @@ export default class CardPrerender extends Component {
     );
     this.renderService.indexRunDeferred?.fulfill();
     return current;
-  }
+  });
 
-  @enqueueTask private async doIncremental(prev: RunState, url: URL, operation: 'delete' | 'update'): Promise<RunState> {
+  private doIncremental = enqueueTask(async (prev: RunState, url: URL, operation: 'delete' | 'update') => {
     let { reader, entrySetter } = this.getRunnerParams();
     let current = await CurrentRun.incremental({
         url,
@@ -101,7 +101,7 @@ export default class CardPrerender extends Component {
       });
     this.renderService.indexRunDeferred?.fulfill();
     return current;
-  }
+  });
 
   private getRunnerParams(): {
     reader: Reader;

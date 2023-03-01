@@ -23,7 +23,7 @@ export class Search extends Resource<Args> {
     this.search.perform(query);
   }
 
-  @restartableTask private async search(query: Query) {
+  private search = restartableTask(async (query: Query) => {
     // until we have realm index rollup, search all the realms as separate
     // queries that we merge together
     this.instances = flatMap(
@@ -34,7 +34,7 @@ export class Search extends Resource<Args> {
         )
       )
     );
-  }
+  });
 
   get isLoading() {
     return this.search.isRunning;
