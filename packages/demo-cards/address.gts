@@ -1,9 +1,4 @@
-import {
-  contains,
-  field,
-  Component,
-  Card,
-} from 'https://cardstack.com/base/card-api';
+import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 
 export class Address extends Card {
@@ -17,12 +12,9 @@ export class Address extends Card {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <address>
-        <div><@fields.streetAddress /></div>
-        <@fields.city />
-        <@fields.region />
-        <@fields.postalCode /><@fields.poBoxNumber />
-        <@fields.country />
+        <div><@fields.streetAddress/></div>
+        <@fields.city/> <@fields.region/> <@fields.postalCode/><@fields.poBoxNumber/> <@fields.country/>
       </address>
     </template>
-  };
+  }
 }

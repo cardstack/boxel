@@ -1,9 +1,4 @@
-import {
-  contains,
-  field,
-  Card,
-  Component,
-} from 'https://cardstack.com/base/card-api';
+import { contains, field, Card, Component } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import BooleanCard from 'https://cardstack.com/base/boolean';
@@ -17,23 +12,24 @@ export class Pet extends Card {
   @field sleepsOnTheCouch = contains(BooleanCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class='demo-card' @displayBoundaries={{true}}>
-        <h3><@fields.firstName /></h3>
-        <div><@fields.sleepsOnTheCouch /></div>
+      <CardContainer class="demo-card" @displayBoundaries={{true}}>
+        <h3><@fields.firstName/></h3>
+        <div><@fields.sleepsOnTheCouch/></div>
       </CardContainer>
     </template>
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CardContainer class='demo-card' @displayBoundaries={{true}}>
-        <h2><@fields.firstName /></h2>
+      <CardContainer class="demo-card" @displayBoundaries={{true}}>
+        <h2><@fields.firstName/></h2>
         <div>
-          <div><@fields.sleepsOnTheCouch /></div>
-          <div>Favorite Toy: <@fields.favoriteToy /></div>
-          <div>Favorite Treat: <@fields.favoriteTreat /></div>
-          <div>Cuteness Rating: <@fields.cutenessRating /></div>
+          <div><@fields.sleepsOnTheCouch/></div>
+          <div>Favorite Toy: <@fields.favoriteToy/></div>
+          <div>Favorite Treat: <@fields.favoriteTreat/></div>
+          <div>Cuteness Rating: <@fields.cutenessRating/></div>
         </div>
       </CardContainer>
     </template>
   };
+
 }

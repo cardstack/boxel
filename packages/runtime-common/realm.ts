@@ -98,7 +98,9 @@ export interface FastBootInstance {
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
-    opts?: { create?: true }
+    opts?: {
+      create?: true;
+    }
   ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void>;
 
   openFile(path: LocalPath): Promise<FileRef | undefined>;
@@ -117,6 +119,10 @@ export interface RealmAdapter {
     response: Response;
     writable: WritableStream;
   };
+
+  subscribe(cb: (message: Record<string, any>) => void): Promise<void>;
+
+  unsubscribe(): void;
 }
 
 interface Options {
@@ -705,12 +711,28 @@ export class Realm {
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable
         );
-        this.sendUpdateMessages("clean up called");
+        this.sendUpdateMessages({
+          type: "message",
+          data: { cleanup: `${this.listeningClients.length} clients` },
+        });
+        if (this.listeningClients.length === 0) {
+          this.#adapter.unsubscribe();
+        }
       }
     );
 
+    if (this.listeningClients.length === 0) {
+      await this.#adapter.subscribe((data: Record<string, any>) =>
+        this.sendUpdateMessages({ type: "update", data })
+      );
+    }
+
     this.listeningClients.push(writable);
-    this.sendUpdateMessages("updated clients");
+    this.sendUpdateMessages({
+      type: "message",
+      data: { count: `${this.listeningClients.length} clients` },
+    });
+
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
     waitForClose(writable);
@@ -718,12 +740,20 @@ export class Realm {
     return response;
   }
 
-  private async sendUpdateMessages(message: string): Promise<void> {
+  private async sendUpdateMessages(message: {
+    type: string;
+    data: Record<string, any>;
+    id?: string;
+  }): Promise<void> {
     log.info(`sending updates to ${this.listeningClients.length} clients`);
+    let { type, data, id } = message;
+    let chunkArr = [];
+    for (let item in data) {
+      chunkArr.push(`${item}: ${data[item]}`);
+    }
+    let chunk = sseToChunkData(type, chunkArr.join(", "), id);
     await Promise.all(
-      this.listeningClients.map((client) =>
-        writeToStream(client, `data: ${message}\n\n`)
-      )
+      this.listeningClients.map((client) => writeToStream(client, chunk))
     );
   }
 }
@@ -757,4 +787,12 @@ export interface CardDefinitionResource {
       };
     };
   };
+}
+
+function sseToChunkData(type: string, data: string, id?: string): string {
+  let info = [`event: ${type}`, `data: ${data}`];
+  if (id) {
+    info.push(`id: ${id}`);
+  }
+  return info.join("\n") + "\n\n";
 }

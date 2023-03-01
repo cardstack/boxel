@@ -189,11 +189,7 @@ module("indexing", function (hooks) {
     );
     assert.strictEqual(
       cleanWhiteSpace(entry!.html!),
-      cleanWhiteSpace(`
-          <div data-test-shadow-boundary>
-            <h1> Mango </h1>
-          </div>
-        `),
+      cleanWhiteSpace(`<h1> Mango </h1>`),
       "pre-rendered html is correct"
     );
   });
@@ -221,11 +217,7 @@ module("indexing", function (hooks) {
           )) ?? {};
         assert.strictEqual(
           cleanWhiteSpace(html!),
-          cleanWhiteSpace(`
-            <div data-test-shadow-boundary>
-              <h1> Van Gogh </h1>
-            </div>
-          `)
+          cleanWhiteSpace(`<h1> Van Gogh </h1>`)
         );
       } else {
         assert.ok(

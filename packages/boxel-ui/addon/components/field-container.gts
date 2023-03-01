@@ -3,7 +3,6 @@ import cn from '../helpers/cn';
 import element from '../helpers/element';
 import { eq, not, or } from '../helpers/truth-helpers';
 import { svgJar } from '../helpers/svg-jar';
-import { initStyleSheet, attachStyles } from '../attach-styles';
 import Label from './label';
 
 export interface Signature {
@@ -22,57 +21,6 @@ export interface Signature {
   };
 }
 
-let styles = initStyleSheet(`
-  .boxel-field {
-    --boxel-field-label-align: normal;
-    --boxel-field-label-padding-top: 0;
-
-    display: grid;
-    gap: var(--boxel-sp-xs) 0;
-  }
-
-  .boxel-field--vertical {
-    grid-template-rows: auto 1fr;
-  }
-
-  .boxel-field--centered-display {
-    justify-items: center;
-  }
-
-  .boxel-field--centered-display > *:last-child {
-    order: -1;
-  }
-
-  .boxel-field--horizontal {
-    grid-template-columns: var(--boxel-field-label-size, minmax(4rem, 25%)) 1fr;
-    gap: 0 var(--boxel-sp-lg);
-  }
-
-  .boxel-field--small-label {
-    --boxel-field-label-size: minmax(4rem, 10%);
-  }
-
-  .boxel-field__label {
-    display: flex;
-    align-items: var(--boxel-field-label-align);
-    padding-top: var(--boxel-field-label-padding-top);
-  }
-
-  .boxel-field--with-icon {
-    display: flex;
-  }
-
-  .boxel-field__icon {
-    width: var(--boxel-icon-sm);
-    height: var(--boxel-icon-sm);
-    margin-right: var(--boxel-sp-xxs);
-  }
-
-  .boxel-field__yield--with-icon {
-    width: 100%;
-  }
-`);
-
 const FieldContainer: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
     <Tag
@@ -83,7 +31,6 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
         boxel-field--small-label=(eq @horizontalLabelSize 'small')
         boxel-field--centered-display=@centeredDisplay
       }}
-      {{attachStyles styles}}
       data-test-boxel-field
       data-test-boxel-field-id={{@fieldId}}
       ...attributes
