@@ -5,6 +5,7 @@ import {
   FileRef,
   LooseSingleCardDocument,
   baseRealm,
+  createResponse,
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
 import { TestContext } from '@ember/test-helpers';
@@ -22,7 +23,7 @@ import {
   type EntrySetter,
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
-import { LocalRealmAdapter } from '@cardstack/worker/src/local-realm-adapter';
+import { WebMessageStream, messageCloseHandler } from '@cardstack/runtime-common/stream';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -40,7 +41,7 @@ export interface Dir {
   [name: string]: string | Dir;
 }
 
-export const testRealmURL = 'http://test-realm/test/';
+export const testRealmURL = `http://test-realm/test/`;
 
 export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
@@ -74,7 +75,7 @@ async function makeRenderer() {
   await renderComponent(
     class TestDriver extends GlimmerComponent {
       <template>
-        <CardPrerender />
+        <CardPrerender/>
       </template>
     }
   );
@@ -109,12 +110,10 @@ class MockLocalRealm extends Service {
   async setupIndexRunner(
     registerRunner: RunnerRegistration,
     entrySetter: EntrySetter,
-    adapter: RealmAdapter
+    adapter: RealmAdapter,
   ) {
     if (!this.#fromScratch || !this.#incremental) {
-      throw new Error(
-        `fromScratch/incremental not registered with MockLocalRealm`
-      );
+      throw new Error(`fromScratch/incremental not registered with MockLocalRealm`);
     }
     this.#entrySetter = entrySetter;
     this.#adapter = adapter;
@@ -138,7 +137,7 @@ class MockLocalRealm extends Service {
 }
 
 export function setupMockLocalRealm(hooks: NestedHooks) {
-  hooks.beforeEach(function () {
+  hooks.beforeEach(function() {
     this.owner.register('service:local-realm', MockLocalRealm);
   });
 }
@@ -154,7 +153,7 @@ function makeRealm(
     realmURL ?? testRealmURL,
     adapter,
     async (optsId) => {
-      let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
+        let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
       await localRealm.setupIndexRunner(registerRunner, entrySetter, adapter);
     },
     runnerOptsMgr
@@ -206,6 +205,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
+  #subscriber: ((message: Record<string, any>) => void) | undefined;
 
   constructor(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
@@ -310,13 +310,22 @@ export class TestRealmAdapter implements RealmAdapter {
         `cannot write file over an existing directory at ${path}`
       );
     }
+
+    let type = dir[name] ? 'updated' : 'added';
     dir[name] =
       typeof contents === 'string'
         ? contents
         : JSON.stringify(contents, null, 2);
     let lastModified = Date.now();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
+
+    this.postUpdateEvent({ [type]: [path] });
+
     return { lastModified };
+  }
+
+  postUpdateEvent(data: Record<string, any>) {
+    this.#subscriber?.(data);
   }
 
   async remove(path: LocalPath) {
@@ -327,6 +336,7 @@ export class TestRealmAdapter implements RealmAdapter {
       throw new Error(`tried to use file as directory`);
     }
     delete dir[name];
+    this.postUpdateEvent({ removed: path });
   }
 
   #traverse(
@@ -361,17 +371,20 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   createStreamingResponse(
-    request: Request,
+    _request: Request,
     responseInit: ResponseInit,
-    cleanup: () => void
-  ) {
-    let localRealmAdapter = new LocalRealmAdapter(
-      this.#files as unknown as FileSystemDirectoryHandle
-    );
-    return localRealmAdapter.createStreamingResponse(
-      request,
-      responseInit,
-      cleanup
-    );
+    cleanup: () => void) {
+      let s = new WebMessageStream();
+      let response = createResponse(s.readable, responseInit);
+      messageCloseHandler(s.readable, cleanup);
+      return { response, writable: s.writable };
+  }
+
+  async subscribe(cb: (message: Record<string, any>) => void): Promise<void> {
+    this.#subscriber = cb;
+  }
+
+  unsubscribe(): void {
+    this.#subscriber = undefined;
   }
 }

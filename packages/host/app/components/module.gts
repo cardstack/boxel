@@ -9,8 +9,8 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
-    file: FileResource;
-  };
+    file: FileResource
+  }
 }
 
 export default class Module extends Component<Signature> {
@@ -18,11 +18,7 @@ export default class Module extends Component<Signature> {
     <ImportModule @url={{this.args.file.url}}>
       <:ready as |module|>
         {{#each (cardsFromModule module) as |card|}}
-          <Schema
-            @card={{card}}
-            @file={{this.args.file}}
-            @moduleSyntax={{this.moduleSyntax}}
-          />
+          <Schema @card={{card}} @file={{this.args.file}} @moduleSyntax={{this.moduleSyntax}}/>
         {{/each}}
       </:ready>
       <:error as |error|>
@@ -45,7 +41,6 @@ function cardsFromModule(
   module: Record<string, any>,
   _never?: never // glint insists that w/o this last param that there are actually no params
 ): (typeof Card)[] {
-  return Object.values(module).filter(
-    (maybeCard) => typeof maybeCard === 'function' && 'baseCard' in maybeCard
-  );
+  return Object.values(module).filter((maybeCard) =>
+    typeof maybeCard === "function" && "baseCard" in maybeCard);
 }

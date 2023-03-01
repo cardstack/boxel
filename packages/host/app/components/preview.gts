@@ -5,7 +5,7 @@ interface Signature {
   Args: {
     card: Card;
     format?: Format;
-  };
+  }
 }
 
 export default class Preview extends Component<Signature> {
@@ -14,9 +14,6 @@ export default class Preview extends Component<Signature> {
   </template>
 
   get renderedCard() {
-    return this.args.card.constructor.getComponent(
-      this.args.card,
-      this.args.format ?? 'isolated'
-    );
+    return this.args.card.constructor.getComponent(this.args.card, this.args.format ?? 'isolated');
   }
 }

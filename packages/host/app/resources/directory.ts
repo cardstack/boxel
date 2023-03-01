@@ -1,18 +1,18 @@
 import { Resource } from 'ember-resources/core';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
-import { restartableTask, timeout } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import { taskFor } from 'ember-concurrency-ts';
 import type { Relationship } from '@cardstack/runtime-common';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
+import type MessageService from '../services/message-service';
 import log from 'loglevel';
 
 interface Args {
   named: {
-    url: string | undefined;
-    openDirs: string | undefined;
-    polling: 'off' | undefined;
+    relativePath: string;
+    realmURL: string;
   };
 }
 
@@ -24,46 +24,59 @@ export interface Entry {
 
 export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
-  private url: string | undefined;
-  private polling = false;
-  private declare realmPath: RealmPaths;
+  private directoryURL: string | undefined;
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   @service declare loaderService: LoaderService;
+  @service declare messageService: MessageService;
+
+  constructor(owner: unknown) {
+    super(owner);
+    registerDestructor(this, () => {
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+        this.subscription = undefined;
+      }
+    });
+  }
 
   modify(_positional: never[], named: Args['named']) {
-    this.polling = named.polling !== 'off';
-    if (named.url) {
-      if (!named.url.endsWith('/')) {
-        throw new Error(`A directory URL must end with a "/"`);
-      }
-      this.realmPath = new RealmPaths(named.url);
-      this.url = named.url;
-      taskFor(this.readdir).perform();
+    this.directoryURL = new URL(named.relativePath, named.realmURL).href;
+    taskFor(this.readdir).perform();
+
+    let path = `${named.realmURL}_message`;
+
+    if (this.subscription && this.subscription.url !== path) {
+      this.subscription.unsubscribe();
+      this.subscription = undefined;
+    }
+
+    if (!this.subscription) {
+      this.subscription = {
+        url: path,
+        unsubscribe: this.messageService.subscribe(path, () =>
+          taskFor(this.readdir).perform()
+        ),
+      };
     }
   }
 
   @restartableTask private async readdir() {
-    if (!this.url) {
+    if (!this.directoryURL) {
       return;
     }
-    do {
-      let entries = await this.getEntries(this.realmPath, this.url);
-      entries.sort((a, b) => {
-        // need to re-insert the leading and trailing /'s in order to get a sort
-        // that can organize the paths correctly
-        let pathA = `/${a.path}${a.kind === 'directory' ? '/' : ''}`;
-        let pathB = `/${b.path}${b.kind === 'directory' ? '/' : ''}`;
-        return pathA.localeCompare(pathB);
-      });
-      this.entries = entries;
-      await timeout(1000);
-    } while (this.polling);
+    let entries = await this.getEntries(this.directoryURL);
+    entries.sort((a, b) => {
+      // need to re-insert the leading and trailing /'s in order to get a sort
+      // that can organize the paths correctly
+      let pathA = `/${a.path}${a.kind === 'directory' ? '/' : ''}`;
+      let pathB = `/${b.path}${b.kind === 'directory' ? '/' : ''}`;
+      return pathA.localeCompare(pathB);
+    });
+    this.entries = entries;
   }
 
-  private async getEntries(
-    realmPath: RealmPaths,
-    url: string
-  ): Promise<Entry[]> {
+  private async getEntries(url: string): Promise<Entry[]> {
     let response: Response | undefined;
     response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: 'application/vnd.api+json' },
@@ -77,6 +90,7 @@ export class DirectoryResource extends Resource<Args> {
       );
       return [];
     }
+
     let {
       data: { relationships: _relationships },
     } = await response.json();
@@ -84,18 +98,18 @@ export class DirectoryResource extends Resource<Args> {
     return Object.entries(relationships).map(([name, info]) => ({
       name,
       kind: info.meta!.kind,
-      path: realmPath.local(new URL(info.links!.related!)),
+      path: info.links!.related!,
     }));
   }
 }
 
 export function directory(
   parent: object,
-  url: () => string | undefined,
-  openDirs: () => string | undefined,
-  polling: () => 'off' | undefined
+  relativePath: () => string | undefined,
+  realmURL: () => string
 ) {
   return DirectoryResource.from(parent, () => ({
-    named: { url: url(), openDirs: openDirs(), polling: polling() },
+    relativePath: relativePath(),
+    realmURL: realmURL(),
   })) as DirectoryResource;
 }

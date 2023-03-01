@@ -361,3 +361,552 @@ nav > .directory-level {
 .error {
   color: var(--boxel-error-100);
 }
+
+
+/* Catalog Entry */
+.catalog-entry {
+  padding: var(--boxel-sp);
+  display: grid;
+  gap: var(--boxel-sp);
+}
+.catalog-entry > h1,
+.catalog-entry > h2 {
+  margin: 0;
+}
+.catalog-entry--edit {
+  --boxel-label-color: var(--boxel-dark);
+}
+
+/* Default Card Component */
+.isolated-card {
+  --boxel-label-color: var(--boxel-dark);
+  padding: var(--boxel-sp);
+  display: grid;
+  gap: var(--boxel-sp);
+}
+
+/* LinksTo Editor */
+.links-to-editor {
+  padding: var(--boxel-sp);
+}
+.links-to-editor button {
+  display: block;
+  margin-top: var(--boxel-sp-sm);
+  font: inherit;
+  font-weight: 600;
+  border: none;
+  background-color: var(--boxel-light);
+  padding: var(--boxel-sp-xxs) 0;
+  text-transform: capitalize;
+}
+.links-to-editor button:hover {
+  color: var(--boxel-highlight);
+}
+
+/* ContainsMany Editor */
+.contains-many-editor {
+  padding: var(--boxel-sp);
+}
+.contains-many-editor ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.contains-many-editor ul > li + li {
+  margin-top: var(--boxel-sp);
+  padding-top: var(--boxel-sp);
+  border-top: 1px solid var(--boxel-border-color);
+}
+.contains-many-editor button {
+  display: block;
+  margin-top: var(--boxel-sp-sm);
+  font: inherit;
+  font-weight: 600;
+  border: none;
+  background-color: var(--boxel-light);
+  padding: var(--boxel-sp-xxs) 0;
+  text-transform: capitalize;
+}
+.contains-many-editor button:hover {
+  color: var(--boxel-highlight);
+}
+
+/* Boxel Card Container */
+.boxel-card-container {
+  position: relative;
+  background-color: var(--boxel-light);
+  border-radius: var(--boxel-border-radius);
+  transition:
+    max-width var(--boxel-transition),
+    box-shadow var(--boxel-transition);
+}
+.boxel-card-container--boundaries {
+  box-shadow: 0 0 0 1px var(--boxel-light-500);
+}
+.boxel-card-container--highlighted {
+  box-shadow: 0 0 0 2px var(--boxel-highlight);
+}
+
+/* Boxel Header */
+.boxel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
+  min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
+  background-color: var(--boxel-header-background-color, var(--boxel-100));
+  color: var(--boxel-header-text-color, var(--boxel-dark));
+  border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
+  border-top-left-radius: calc(var(--boxel-border-radius) - 1px);
+  font: 600 var(--boxel-font-xs);
+  letter-spacing: var(--boxel-lsp-xl);
+  text-transform: uppercase;
+  transition:
+    background-color var(--boxel-transition),
+    color var(--boxel-transition);
+}
+.boxel-header--large {
+  padding: var(--boxel-sp-xl);
+  font: 700 var(--boxel-font-lg);
+  letter-spacing: normal;
+  text-transform: none;
+}
+.boxel-header--no-background {
+  background-color: transparent;
+}
+.boxel-header--highlighted {
+  background-color: var(--boxel-highlight);
+}
+.boxel-header__content {
+  display: flex;
+  align-items: center;
+}
+.boxel-header__content button {
+  --boxel-icon-button-width: var(--boxel-header-min-height, 1.875rem);
+  --boxel-icon-button-height: var(--boxel-header-min-height, 1.875rem);
+
+  min-height: var(--boxel-icon-button-height);
+  padding: 0 var(--boxel-sp-xxxs);
+  background: none;
+  border: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+/* Boxel Field */
+.boxel-field {
+  --boxel-field-label-align: normal;
+  --boxel-field-label-padding-top: 0;
+
+  display: grid;
+  gap: var(--boxel-sp-xs) 0;
+}
+
+.boxel-field--vertical {
+  grid-template-rows: auto 1fr;
+}
+
+.boxel-field--centered-display {
+  justify-items: center;
+}
+
+.boxel-field--centered-display > *:last-child {
+  order: -1;
+}
+
+.boxel-field--horizontal {
+  grid-template-columns: var(--boxel-field-label-size, minmax(4rem, 25%)) 1fr;
+  gap: 0 var(--boxel-sp-lg);
+}
+
+.boxel-field--small-label {
+  --boxel-field-label-size: minmax(4rem, 10%);
+}
+
+.boxel-field__label {
+  display: flex;
+  align-items: var(--boxel-field-label-align);
+  padding-top: var(--boxel-field-label-padding-top);
+}
+
+.boxel-field--with-icon {
+  display: flex;
+}
+
+.boxel-field__icon {
+  width: var(--boxel-icon-sm);
+  height: var(--boxel-icon-sm);
+  margin-right: var(--boxel-sp-xxs);
+}
+
+.boxel-field__yield--with-icon {
+  width: 100%;
+}
+
+/* Boxel Label */
+.boxel-label {
+  color: var(--boxel-label-color);
+  font: 700 var(--boxel-font-xs);
+  letter-spacing: var(--boxel-lsp-xxl);
+  text-transform: uppercase;
+}
+
+/* Boxel Input */
+.boxel-input {
+  --boxel-input-height: var(--boxel-form-control-height);
+
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--boxel-input-height);
+  padding: var(--boxel-sp-xxs) 0 var(--boxel-sp-xxs) var(--boxel-sp-xxs);
+  border: 1px solid var(--boxel-form-control-border-color);
+  border-radius: var(--boxel-form-control-border-radius);
+  font: var(--boxel-font-sm);
+  font-weight: 400;
+  letter-spacing: var(--boxel-lsp-xs);
+  transition: border-color var(--boxel-transition);
+}
+
+.boxel-input:disabled {
+  background-color: var(--boxel-light);
+  border-color: var(--boxel-purple-300);
+  color: rgb(0 0 0 / 50%);
+  opacity: 0.5;
+}
+
+.boxel-input:hover:not(:disabled) {
+  border-color: var(--boxel-dark);
+}
+
+.boxel-input--invalid {
+  border-color: var(--boxel-error-100);
+  box-shadow: 0 0 0 1px var(--boxel-error-100);
+}
+
+.boxel-input--invalid:focus {
+  outline: 1px solid transparent;  /* Make sure that we make the invalid state visible */
+  box-shadow: 0 0 0 1.5px var(--boxel-error-100);
+}
+
+.boxel-input--invalid:hover:not(:disabled) {
+  border-color: var(--boxel-error-100);
+}
+
+.boxel-input__optional {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  margin-bottom: var(--boxel-sp-xxxs);
+  color: rgb(0 0 0 / 75%);
+  font: var(--boxel-font-sm);
+  font-style: oblique;
+  letter-spacing: var(--boxel-lsp);
+  text-align: right;
+}
+
+.boxel-input__error-message {
+  grid-column: 2;
+  margin-top: var(--boxel-sp-xs);
+  margin-left: var(--boxel-sp-xs);
+  color: var(--boxel-error-100);
+  font: var(--boxel-font-sm);
+  letter-spacing: var(--boxel-lsp);
+}
+
+.boxel-input__helper-text {
+  grid-column: 2;
+  margin-top: var(--boxel-sp-xs);
+  margin-left: var(--boxel-sp-xs);
+  color: rgb(0 0 0 / 75%);
+  font: var(--boxel-font-sm);
+  letter-spacing: var(--boxel-lsp);
+}
+
+.boxel-input:disabled ~ .boxel-input__error-message,
+.boxel-input:disabled ~ .boxel-input__helper-text {
+  display: none;
+}
+
+/* Boxel Message */
+.boxel-thread-message {
+  /* Note: avatar size should not be set to be larger than 60px or smaller than 20px. */
+  --boxel-thread-message-avatar-size: 2.5rem; /* 40px. */
+  --boxel-thread-message-meta-height: 1.25rem; /* 20px */
+  --boxel-thread-message-gap: var(--boxel-sp);
+  --boxel-thread-message-margin-left: calc(var(--boxel-thread-message-avatar-size) + var(--boxel-thread-message-gap));
+}
+
+.boxel-thread-message--hide-meta {
+  min-height: 0;
+}
+
+.boxel-thread-message__meta {
+  display: grid;
+  grid-template-columns: var(--boxel-thread-message-avatar-size) 1fr;
+  grid-template-rows: var(--boxel-thread-message-meta-height);
+  align-items: start;
+  gap: var(--boxel-thread-message-gap);
+}
+
+.boxel-thread-message--full-width .boxel-thread-message__meta {
+  align-items: center;
+}
+
+.boxel-thread-message__avatar-img {
+  width: var(--boxel-thread-message-avatar-size);
+  height: var(--boxel-thread-message-avatar-size);
+  border-radius: 100px;
+}
+
+.boxel-thread-message__avatar-img--not-round {
+  border-radius: initial;
+}
+
+.boxel-thread-message__info {
+  display: flex;
+  white-space: nowrap;
+  margin: 0;
+  font: var(--boxel-font-sm);
+  letter-spacing: var(--boxel-lsp-sm);
+}
+
+.boxel-thread-message__name {
+  margin-right: var(--boxel-sp);
+  font-weight: 700;
+}
+
+.boxel-thread-message__time {
+  color: var(--boxel-500);
+}
+
+.boxel-thread-message__content {
+  /* mimic the grid using margins */
+  margin-left: var(--boxel-thread-message-margin-left);
+  margin-top: 3px;
+  line-height: 1.5;
+}
+
+.boxel-thread-message--full-width .boxel-thread-message__content {
+  margin-left: 0;
+  margin-top: var(--boxel-sp);
+}
+
+/* spacing for sequential thread messages */
+.boxel-thread-message + .boxel-thread-message {
+  margin-top: var(--boxel-sp-xl);
+}
+
+.boxel-thread-message + .boxel-thread-message--hide-meta {
+  margin-top: var(--boxel-sp);
+}
+
+/* Boxel Modal */
+.boxel-modal {
+  /* Unit is required to be used on calc */
+  --boxel-modal-offset-top: 0px;
+  --boxel-modal-offset-left: 0px;
+  --boxel-modal-offset-right: 0px;
+
+  position: fixed;
+  width: 100%;
+  height: calc(100vh - var(--boxel-modal-offset-top));
+  top: var(--boxel-modal-offset-top);
+  left: var(--boxel-modal-offset-left);
+  right: var(--boxel-modal-offset-right);
+  padding: 0 var(--boxel-sp);
+  background: none;
+  border: none;
+  overflow: hidden;
+  z-index: var(--boxel-modal-z-index);
+  pointer-events: none;
+}
+
+.boxel-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background-color: rgb(0 0 0 / 75%);
+  text-align: left;
+  z-index: calc(var(--boxel-modal-z-index) - 1);
+}
+
+.boxel-modal--small {
+  --boxel-modal-max-width: 36.25rem; /* 580px */
+}
+
+.boxel-modal--medium {
+  --boxel-modal-max-width: 43.75rem; /* 700px */
+}
+
+.boxel-modal--large {
+  --boxel-modal-offset-top: var(--boxel-sp-lg);
+  --boxel-modal-max-width: 65rem; /* 1040px */
+}
+
+.boxel-modal__inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  margin: auto;
+  max-width: var(--boxel-modal-max-width, 65rem);
+}
+.boxel-modal__inner > * {
+  width: 100%;
+  pointer-events: auto;
+}
+
+/* Invoice Packet */
+.invoice-template {
+  max-width: 50rem;
+  font: var(--boxel-font-sm);
+  letter-spacing: var(--boxel-lsp-xs);
+  overflow: hidden;
+}
+.invoice-template h2 {
+  margin-top: 0;
+  margin-bottom: var(--boxel-sp);
+  font: 700 var(--boxel-font);
+}
+.invoice-template--edit {
+  --boxel-label-color: var(--boxel-dark);
+}
+.invoice {
+  padding: var(--boxel-sp-xl);
+  display: grid;
+  gap: var(--boxel-sp-xxl) 0;
+}
+
+.line-items__title-row {
+  display: grid;
+  grid-template-columns: 3fr 1fr 2fr;
+  margin-bottom: var(--boxel-sp-xxxs);
+}
+.line-items__title-row > *:nth-child(2) {
+  justify-self: center;
+}
+.line-items__title-row > *:last-child {
+  justify-self: end;
+}
+.line-items__rows {
+  padding: var(--boxel-sp-lg) 0;
+  border-top: 1px solid var(--boxel-200);
+  border-bottom: 1px solid var(--boxel-200);
+}
+.line-items__rows > * + * {
+  margin-top: var(--boxel-sp-xs);
+}
+
+.payment,
+.payment-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 var(--boxel-sp-xs);
+}
+.payment-method__item {
+  display: inline-grid;
+  grid-template-columns: var(--boxel-sp) 1fr;
+  gap: var(--boxel-sp-xxxs);
+  font: 700 var(--boxel-font);
+}
+.payment-methods__bal {
+  margin-left: var(--boxel-sp-lg);
+}
+
+.balance-due {
+  justify-items: end;
+  text-align: right;
+}
+.balance-due__total {
+  font: 700 var(--boxel-font-lg);
+}
+
+.extras {
+  padding: var(--boxel-sp-xl);
+  background-color: var(--boxel-100);
+}
+
+.notes,
+.history {
+  --boxel-border-radius: 20px;
+  padding: var(--boxel-sp);
+}
+.notes > * + *,
+.history > * + * {
+  margin-top: var(--boxel-sp);
+  padding-top: var(--boxel-sp);
+  border-top: 1px solid var(--boxel-200);
+}
+
+.details {
+  --boxel-field-label-size: 35%;
+  --boxel-field-label-align: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--boxel-sp-xl);
+}
+.details--edit {
+  padding: var(--boxel-sp);
+}
+.details__fields {
+  display: grid;
+  grid-gap: var(--boxel-sp) 0;
+}
+
+.line-item {
+  display: grid;
+  grid-template-columns: 3fr 1fr 2fr;
+}
+.line-item__qty {
+  justify-self: center;
+}
+.line-item__amount {
+  justify-self: end;
+}
+
+.line-item--edit {
+  display: grid;
+  gap: var(--boxel-sp-sm);
+}
+.line-item__row {
+  display: grid;
+  grid-template-columns: 3fr 1fr 2fr;
+  gap: var(--boxel-sp);
+  align-items: end;
+}
+
+/* DEMO-CARDS */
+.asset-card {
+  display: inline-grid;
+  grid-template-columns: var(--boxel-sp) 1fr;
+  gap: var(--boxel-sp-xxxs);
+}
+.payment-method__currency {
+  font: 700 var(--boxel-font);
+}
+.payment-method-card .boxel-field {
+  margin-top: var(--boxel-sp);
+}
+.vendor-card .boxel-field + .boxel-field {
+  margin-top: var(--boxel-sp);
+}
+.vendor-card--embedded {
+  display: grid;
+  grid-template-columns: 1fr auto;
+}
+
+.demo-card {
+  padding: var(--boxel-sp);
+  display: grid;
+  gap: var(--boxel-sp);
+}
+.demo-card h2,
+.demo-card h3 {
+  margin: 0;
+}

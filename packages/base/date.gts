@@ -1,13 +1,4 @@
-import {
-  Component,
-  primitive,
-  serialize,
-  deserialize,
-  queryableValue,
-  Card,
-  CardInstanceType,
-  CardConstructor,
-} from './card-api';
+import { Component, primitive, serialize, deserialize, queryableValue, Card, CardInstanceType, CardConstructor } from './card-api';
 import { parse, format } from 'date-fns';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui';
@@ -28,10 +19,7 @@ export default class DateCard extends Card {
     return format(date, dateFormat);
   }
 
-  static async [deserialize]<T extends CardConstructor>(
-    this: T,
-    date: any
-  ): Promise<CardInstanceType<T>> {
+  static async [deserialize]<T extends CardConstructor>(this: T, date: any): Promise<CardInstanceType<T>> {
     if (date == null) {
       return date;
     }
@@ -46,24 +34,18 @@ export default class DateCard extends Card {
   }
 
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{this.formatted}}
-    </template>
+    <template>{{this.formatted}}</template>
     get formatted() {
       if (this.args.model == null) {
         return '[no date]';
       }
       return this.args.model ? Format.format(this.args.model) : undefined;
     }
-  };
+  }
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <BoxelInput
-        type='date'
-        @value={{this.formatted}}
-        @onInput={{fn this.parseInput @set}}
-      />
+      <BoxelInput type="date" @value={{this.formatted}} @onInput={{fn this.parseInput @set}} />
     </template>
 
     parseInput(set: Function, date: string) {
@@ -76,5 +58,5 @@ export default class DateCard extends Card {
       }
       return DateCard[serialize](this.args.model);
     }
-  };
+  }
 }

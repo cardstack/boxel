@@ -5,13 +5,9 @@ export default class StringCard extends Card {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
+    <template>{{@model}}</template>
+  }
   static edit = class Edit extends Component<typeof this> {
-    <template>
-      <BoxelInput @value={{@model}} @onInput={{@set}} />
-    </template>
+    <template><BoxelInput @value={{@model}} @onInput={{@set}}/></template>
   };
 }

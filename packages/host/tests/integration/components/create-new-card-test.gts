@@ -1,38 +1,28 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { Realm } from '@cardstack/runtime-common/realm';
+import { Loader } from "@cardstack/runtime-common/loader";
+import { Realm } from "@cardstack/runtime-common/realm";
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import {
-  TestRealm,
-  TestRealmAdapter,
-  testRealmURL,
-  setupMockLocalRealm,
-} from '../../helpers';
+import { TestRealm, TestRealmAdapter, testRealmURL, setupMockLocalRealm } from '../../helpers';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import waitUntil from '@ember/test-helpers/wait-until';
-import { waitFor, fillIn, click } from '../../helpers/shadow-assert';
+import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { on } from '@ember/modifier';
-import {
-  chooseCard,
-  catalogEntryRef,
-  createNewCard,
-} from '@cardstack/runtime-common';
+import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
 module('Integration | create-new-card', function (hooks) {
-  let adapter: TestRealmAdapter;
+  let adapter: TestRealmAdapter
   let realm: Realm;
   setupRenderingTest(hooks);
   setupMockLocalRealm(hooks);
 
-  hooks.beforeEach(async function () {
+  hooks.beforeEach(async function() {
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     Loader.addURLMapping(
@@ -78,16 +68,16 @@ module('Integration | create-new-card', function (hooks) {
             description: 'Catalog entry',
             ref: {
               module: `${testRealmURL}person`,
-              name: 'Person',
-            },
+              name: 'Person'
+            }
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
-            },
-          },
-        },
+              module:`${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry'
+            }
+          }
+        }
       },
       'post-entry.json': {
         data: {
@@ -97,26 +87,25 @@ module('Integration | create-new-card', function (hooks) {
             description: 'Catalog entry',
             ref: {
               module: `${testRealmURL}post`,
-              name: 'Post',
-            },
+              name: 'Post'
+            }
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
-            },
-          },
-        },
-      },
+              module:`${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry'
+            }
+          }
+        }
+      }
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService).loader;
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
   });
 
-  hooks.afterEach(function () {
+  hooks.afterEach(function() {
     Loader.destroy();
   });
 
@@ -126,7 +115,7 @@ module('Integration | create-new-card', function (hooks) {
         filter: {
           on: catalogEntryRef,
           eq: { isPrimitive: false },
-        },
+        }
       });
       if (!card) {
         return;
@@ -136,40 +125,22 @@ module('Integration | create-new-card', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <button
-            {{on 'click' createNew}}
-            type='button'
-            data-test-create-button
-          >
+          <button {{on "click" createNew}} type="button" data-test-create-button>
             Create New Card
           </button>
           <CreateCardModal />
           <CardCatalogModal />
-          <CardPrerender />
+          <CardPrerender/>
         </template>
       }
     );
     await click('[data-test-create-button]');
     await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
 
-    assert
-      .dom('[data-test-card-catalog] li')
-      .exists({ count: 2 }, 'number of catalog items is correct');
-    assert
-      .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`
-      )
-      .exists('first item is correct');
-    assert
-      .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`
-      )
-      .exists('second item is correct');
-    assert
-      .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`
-      )
-      .doesNotExist('primitive field cards are not displayed');
+    assert.dom('[data-test-card-catalog] li').exists({ count: 2 }, 'number of catalog items is correct');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`).exists('first item is correct');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`).exists('second item is correct');
+    assert.dom(`[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`).doesNotExist('primitive field cards are not displayed');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
     await waitFor(`[data-test-create-new-card="Person"]`);
@@ -177,11 +148,9 @@ module('Integration | create-new-card', function (hooks) {
 
     await fillIn('[data-test-field="firstName"] input', 'Jackie');
     await click('[data-test-save-card]');
-    await waitUntil(() => !document.querySelector('[data-test-saving]'));
+    await waitUntil(() => !(document.querySelector('[data-test-saving]')));
 
-    let entry = await realm.searchIndex.card(
-      new URL(`${testRealmURL}Person/1`)
-    );
+    let entry = await realm.searchIndex.card(new URL(`${testRealmURL}Person/1`));
     assert.ok(entry, 'the new person card was created');
 
     let fileRef = await adapter.openFile('Person/1.json');

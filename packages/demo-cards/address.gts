@@ -1,16 +1,5 @@
-import {
-  contains,
-  field,
-  Component,
-  Card,
-} from 'https://cardstack.com/base/card-api';
+import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-import {
-  initStyleSheet,
-  attachStyles,
-} from '@cardstack/boxel-ui/attach-styles';
-
-let styles = initStyleSheet(`this { font-style: normal; }`);
 
 export class Address extends Card {
   @field streetAddress = contains(StringCard); // required
@@ -22,13 +11,10 @@ export class Address extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <address {{attachStyles styles}}>
-        <div><@fields.streetAddress /></div>
-        <@fields.city />
-        <@fields.region />
-        <@fields.postalCode /><@fields.poBoxNumber />
-        <@fields.country />
+      <address>
+        <div><@fields.streetAddress/></div>
+        <@fields.city/> <@fields.region/> <@fields.postalCode/><@fields.poBoxNumber/> <@fields.country/>
       </address>
     </template>
-  };
+  }
 }

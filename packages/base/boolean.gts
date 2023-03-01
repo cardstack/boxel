@@ -1,11 +1,4 @@
-import {
-  primitive,
-  serialize,
-  queryableValue,
-  Component,
-  Card,
-  useIndexBasedKey,
-} from './card-api';
+import { primitive, serialize, queryableValue, Component, Card, useIndexBasedKey } from './card-api';
 import { on } from '@ember/modifier';
 import Modifier from 'ember-modifier';
 import { fn } from '@ember/helper';
@@ -16,9 +9,7 @@ import pick from '@cardstack/boxel-ui/helpers/pick';
 let groupNumber = 0;
 
 class View extends Component<typeof BooleanCard> {
-  <template>
-    {{this.fieldName}}: {{@model}}
-  </template>
+  <template>{{this.fieldName}}: {{@model}}</template>
 
   get fieldName() {
     if (typeof this.args.fieldName === 'string') {
@@ -47,26 +38,24 @@ export default class BooleanCard extends Card {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div data-test-radio-group={{@fieldName}}>
-        <label for='{{this.radioGroup}}_true'>
+        <label for="{{this.radioGroup}}_true">
           True
-          <input
-            type='radio'
+          <input type="radio"
             {{RadioInitializer @model true}}
-            id='{{this.radioGroup}}_true'
-            name='{{this.radioGroup}}'
+            id="{{this.radioGroup}}_true"
+            name="{{this.radioGroup}}"
             checked={{@model}}
-            {{on 'change' (pick 'target.value' (fn @set true))}}
+            {{on "change" (pick "target.value" (fn @set true))}}
           />
         </label>
-        <label for='{{this.radioGroup}}_false'>
+        <label for="{{this.radioGroup}}_false">
           False
-          <input
-            type='radio'
+          <input type="radio"
             {{RadioInitializer @model false}}
-            id='{{this.radioGroup}}_false'
-            name='{{this.radioGroup}}'
+            id="{{this.radioGroup}}_false"
+            name="{{this.radioGroup}}"
             checked={{not @model}}
-            {{on 'change' (pick 'target.value' (fn @set false))}}
+            {{on "change" (pick "target.value" (fn @set false))}}
           />
         </label>
       </div>
@@ -80,24 +69,25 @@ export default class BooleanCard extends Card {
         this.args.set(false);
       }
     }
-  };
+  }
 }
 
 function not(val: any) {
   return !val;
 }
 
+
 interface Signature {
   element: HTMLInputElement;
   Args: {
     Positional: [model: boolean | null, inputType: boolean];
-  };
+  }
 }
 
 class RadioInitializer extends Modifier<Signature> {
   modify(
     element: HTMLInputElement,
-    [model, inputType]: Signature['Args']['Positional']
+    [model, inputType]: Signature["Args"]["Positional"]
   ) {
     element.checked = model === inputType;
   }
