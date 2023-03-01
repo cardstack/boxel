@@ -150,11 +150,11 @@ jobs:
   host-deploy:
     name: Deploy host to staging
     needs: change-check
-    if: ${{ needs.change-check.outputs.host == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Deploy boxel-host
+      - name: Deploy boxel-host if changes have happened
+        if: ${{ needs.change-check.outputs.host == 'true' }}
         uses: ./.github/actions/deploy-boxel-host
         with:
           environment: staging
@@ -162,7 +162,7 @@ jobs:
 
   realm-server-deploy:
     name: Deploy realm server to staging
-    needs: change-check
+    needs: [change-check, host-deploy]
     if: ${{ needs.change-check.outputs.realm-server == 'true' }}
     runs-on: ubuntu-latest
     strategy:

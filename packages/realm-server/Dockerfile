@@ -6,7 +6,7 @@ ENV realm_server_script=$realm_server_script
 
 WORKDIR /realm-server
 
-RUN apt-get update && apt-get install -y ca-certificates curl
+RUN apt-get update && apt-get install -y ca-certificates curl unzip
 RUN curl -f https://get.pnpm.io/v6.16.js | node - add --global pnpm
 
 COPY pnpm-lock.yaml ./
