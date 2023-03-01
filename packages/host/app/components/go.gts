@@ -121,14 +121,17 @@ export default class Go extends Component<Signature> {
       }
       if (isCardDocument(maybeCard)) {
         let url = this.args.openFile?.url.replace(/\.json$/, '');
-        taskFor(this.loadCard).perform(url);
+        if (!url) {
+          return undefined;
+        }
+        taskFor(this.loadCard).perform(new URL(url));
         return maybeCard;
       }
     }
     return undefined;
   }
 
-  @restartableTask private async loadCard(url: string | undefined): Promise<void> {
+  @restartableTask private async loadCard(url: URL): Promise<void> {
     this.card = await this.cardService.loadModel(url);
   }
 

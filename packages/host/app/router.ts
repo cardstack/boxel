@@ -9,4 +9,5 @@ export default class Router extends EmberRouter {
 Router.map(function () {
   this.route('code');
   this.route('indexer', { path: '/indexer/:id' });
+  this.route('render-card', { path: '/*path' });
 });

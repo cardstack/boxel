@@ -88,10 +88,7 @@ export default class CardService extends Service {
     return card;
   }
 
-  async loadModel(url: string | URL | undefined): Promise<Card | undefined> {
-    if (!url) {
-      return;
-    }
+  async loadModel(url: URL): Promise<Card> {
     await this.apiModule.loaded;
     let json = await this.fetchJSON(url);
     if (!isSingleCardDocument(json)) {
