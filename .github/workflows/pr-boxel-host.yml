@@ -29,7 +29,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: volta-cli/action@v4
       - uses: pnpm/action-setup@v2
         with:
           version: ${{ env.PNPM_VERSION }}
