@@ -1,7 +1,6 @@
 import { contains, field, Card, Component, relativeTo } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { CardContainer } from '@cardstack/boxel-ui';
 
 let EXCHANGE_RATES: Record<string, number> = {
@@ -11,17 +10,6 @@ let EXCHANGE_RATES: Record<string, number> = {
   "LINK": 0.16995055,
   "EUR": 0.94
 }
-
-let styles = initStyleSheet(`
-  this {
-    display: inline-grid;
-    grid-template-columns: var(--boxel-sp) 1fr;
-    gap: var(--boxel-sp-xxxs);
-  }
-  .payment-method__currency {
-    font: 700 var(--boxel-font);
-  }
-`);
 
 class Asset extends Card {
   @field name = contains(StringCard);
@@ -38,7 +26,7 @@ class Asset extends Card {
   }});
   static embedded = class Embedded extends Component<typeof Asset> {
     <template>
-      <CardContainer {{attachStyles styles}}>
+      <CardContainer class="asset-card">
         {{#if @model.logoURL}}
           <img src={{@model.logoHref}} width="20" height="20"/>
         {{/if}}

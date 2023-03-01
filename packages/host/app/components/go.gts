@@ -31,9 +31,8 @@ const { demoRealmURL } = ENV;
 interface Signature {
   Args: {
     openFile: FileResource | undefined;
-    openDirs: string | undefined;
+    openDirs: string[];
     path: string | undefined;
-    polling: 'off' | undefined;
   }
 }
 
@@ -42,10 +41,10 @@ export default class Go extends Component<Signature> {
     <div class="main">
       <div class="main__column">
         {{#if demoRealmURL}}
-          <FileTree @url={{demoRealmURL}} @path={{@path}} @openDirs={{@openDirs}} @polling={{@polling}} />
+          <FileTree @url={{demoRealmURL}} @openFile={{@path}} @openDirs={{@openDirs}} />
         {{else}}
           <InLocalRealm as |url|>
-            <FileTree @url={{url}} @path={{@path}} @openDirs={{@openDirs}} @polling={{@polling}} />
+            <FileTree @url={{url}} @openFile={{@path}} @openDirs={{@openDirs}} />
           </InLocalRealm>
         {{/if}}
       </div>

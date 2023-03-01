@@ -2,7 +2,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import * as runtime from '@cardstack/runtime-common';
 import * as boxelUI from '@cardstack/boxel-ui';
-import * as boxelAttachStyles from '@cardstack/boxel-ui/attach-styles';
 import * as boxelPickHelper from '@cardstack/boxel-ui/helpers/pick';
 import * as boxelTruthHelpers from '@cardstack/boxel-ui/helpers/truth-helpers';
 import * as glimmerComponent from '@glimmer/component';
@@ -27,7 +26,6 @@ import * as dateFns from 'date-fns';
 export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/runtime-common', runtime);
   loader.shimModule('@cardstack/boxel-ui', boxelUI);
-  loader.shimModule('@cardstack/boxel-ui/attach-styles', boxelAttachStyles);
   loader.shimModule('@cardstack/boxel-ui/helpers/pick', boxelPickHelper);
   loader.shimModule(
     '@cardstack/boxel-ui/helpers/truth-helpers',

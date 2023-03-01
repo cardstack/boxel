@@ -56,9 +56,7 @@ export default class RenderService extends Service {
       identityContext,
       realmPath,
     } = params;
-    let component = card.constructor.getComponent(card, format, {
-      disableShadowDOM: true,
-    });
+    let component = card.constructor.getComponent(card, format);
 
     let element = getIsolatedRenderElement(this.document);
     // TODO: consider consolidating the NotReady and NotLoaded objects into a single object

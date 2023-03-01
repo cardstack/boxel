@@ -2,15 +2,8 @@ import { contains, field, Card, Component, linksTo } from "https://cardstack.com
 import StringCard from 'https://cardstack.com/base/string';
 import { Chain } from './chain';
 import { Token, Currency } from './asset';
-import { initStyleSheet, attachStyles } from '@cardstack/boxel-ui/attach-styles';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { FieldContainer } from '@cardstack/boxel-ui';
-
-let styles = initStyleSheet(`
-  .boxel-field {
-    margin-top: var(--boxel-sp);
-  }
-`);
 
 class CryptoPayment extends Card {
   @field chain = linksTo(Chain); // dropdown
@@ -18,7 +11,7 @@ class CryptoPayment extends Card {
   @field toAddress = contains(StringCard);
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div {{attachStyles styles}}>
+      <div class="payment-method-card">
         <FieldContainer @label="Chain">
           <@fields.chain/>
         </FieldContainer>
@@ -56,7 +49,7 @@ class WireTransfer extends Card {
   }
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div {{attachStyles styles}}>
+      <div class="payment-method-card">
         <FieldContainer @label="Currency">
           <@fields.currency/>
         </FieldContainer>
@@ -74,7 +67,7 @@ class WireTransfer extends Card {
 
 class EditPaymentMethod extends Component<typeof PaymentMethod> {
   <template>
-    <div {{attachStyles styles}}>
+    <div class="payment-method-card">
       <FieldContainer @label="Payment Method">
         <@fields.type/>
       </FieldContainer>

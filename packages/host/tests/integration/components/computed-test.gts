@@ -1,11 +1,10 @@
 import { module, test, skip } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from 'ember-qunit';
-import waitUntil from '@ember/test-helpers/wait-until';
+import { waitUntil, fillIn } from '@ember/test-helpers';
 import { cleanWhiteSpace, testRealmURL, shimModule, setupCardLogs } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
-import { shadowQuerySelector, shadowQuerySelectorAll, fillIn } from '../../helpers/shadow-assert';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import("https://cardstack.com/base/card-api");
@@ -115,10 +114,8 @@ module('Integration | computeds', function (hooks) {
     }
     let firstPost = new Post({ title: 'First Post' });
     await renderCard(firstPost, 'isolated');
-    assert.shadowDOM('[data-test="title"]').exists();
-    assert.shadowDOM('[data-test="title"]').hasText('First Post');
-    assert.shadowDOM('[data-test="firstName"]').exists();
-    assert.shadowDOM('[data-test="firstName"]').hasText('Mango');
+    assert.dom('[data-test="title"]').hasText('First Post');
+    assert.dom('[data-test="firstName"]').hasText('Mango');
   });
 
   test('can render an asynchronous computed field', async function(assert) {
@@ -261,10 +258,8 @@ module('Integration | computeds', function (hooks) {
     }
     let firstPost = new Post({ title: 'First Post' });
     await renderCard(firstPost, 'isolated');
-    assert.shadowDOM('[data-test="title"]').exists();
-    assert.shadowDOM('[data-test="title"]').hasText('First Post');
-    assert.shadowDOM('[data-test="firstName"]').exists();
-    assert.shadowDOM('[data-test="firstName"]').hasText('Mango');
+    assert.dom('[data-test="title"]').hasText('First Post');
+    assert.dom('[data-test="firstName"]').hasText('Mango');
   });
 
   test('can render a containsMany computed primitive field', async function(assert) {
@@ -349,7 +344,7 @@ module('Integration | computeds', function (hooks) {
 
     await renderCard(abdelRahmans, 'isolated');
     assert.deepEqual(
-      shadowQuerySelectorAll('[data-test-firstName]', this.element).map(element => element.textContent?.trim()),
+      [...this.element.querySelectorAll('[data-test-firstName]')].map(element => element.textContent?.trim()),
       ['Mango',  'Van Gogh', 'Hassan', 'Mariko',  'Yume',  'Sakura']
     );
   });
@@ -425,9 +420,8 @@ module('Integration | computeds', function (hooks) {
 
     let person = new Person({ firstName: 'Mango' });
     await renderCard(person, 'edit');
-    assert.shadowDOM('[data-test-field=alias]').exists();
-    assert.shadowDOM('[data-test-field=alias]').containsText('Mango');
-    assert.shadowDOM('[data-test-field=alias] input').doesNotExist('input field not rendered for computed')
+    assert.dom('[data-test-field=alias]').containsText('Mango');
+    assert.dom('[data-test-field=alias] input').doesNotExist('input field not rendered for computed')
   });
 
   test('can maintain data consistency for async computed fields', async function(assert) {
@@ -471,26 +465,21 @@ module('Integration | computeds', function (hooks) {
     });
 
     await renderCard(person, 'edit');
-    assert.shadowDOM('[data-test-field="slowName"]').exists();
-    assert.shadowDOM('[data-test-field="slowName"]').containsText('Mango');
+    assert.dom('[data-test-field="slowName"]').containsText('Mango');
     await fillIn('[data-test-field="firstName"] input', 'Van Gogh');
     // We want to ensure data consistency, so that when the template rerenders,
     // the template is always showing consistent field values
     await waitUntil(() =>
-      shadowQuerySelector('[data-test-dep-field="firstName"]')?.textContent?.includes('Van Gogh')
+      document.querySelector('[data-test-dep-field="firstName"]')?.textContent?.includes('Van Gogh')
     );
-    assert.shadowDOM('[data-test-field="slowName"]').exists();
-    assert.shadowDOM('[data-test-field="slowName"]').containsText('Van Gogh');
+    assert.dom('[data-test-field="slowName"]').containsText('Van Gogh');
+    assert.dom('[data-test-field="slowHomeTown"] [data-test-location]').containsText('Bronxville');
 
-    // this targets the slowHomeTown field which is the only Location card rendered in a nested shadow root
-    assert.shadowDOM('[data-test-location]').exists();
-    assert.shadowDOM('[data-test-location]').containsText('Bronxville');
     await fillIn('[data-test-field="homeTown"] input', 'Scarsdale');
     await waitUntil(() =>
-      shadowQuerySelector('[data-test-dep-field="homeTown"]')?.textContent?.includes('Scarsdale')
+      document.querySelector('[data-test-dep-field="homeTown"]')?.textContent?.includes('Scarsdale')
     );
-    assert.shadowDOM('[data-test-location]').exists();
-    assert.shadowDOM('[data-test-location]').containsText('Scarsdale');
+    assert.dom('[data-test-field="slowHomeTown"] [data-test-location]').containsText('Scarsdale');
   });
 
   skip('can render a computed linksTo relationship');

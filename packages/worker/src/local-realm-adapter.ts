@@ -4,16 +4,22 @@ import {
   FileRef,
   createResponse,
 } from '@cardstack/runtime-common';
-import { Deferred } from '@cardstack/runtime-common/deferred';
 import { LocalPath } from '@cardstack/runtime-common/paths';
+import {
+  WebMessageStream,
+  messageCloseHandler,
+} from '@cardstack/runtime-common/stream';
+import { diff } from '@cardstack/runtime-common/diff';
 
 export class LocalRealmAdapter implements RealmAdapter {
   constructor(private fs: FileSystemDirectoryHandle) {}
 
   async *readdir(
-    path: string,
-    opts?: { create?: true }
-  ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
+    path: LocalPath,
+    opts?: {
+      create?: true;
+    }
+  ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void> {
     let dirHandle = isTopPath(path)
       ? this.fs
       : await traverse(this.fs, path, 'directory', opts);
@@ -107,69 +113,59 @@ export class LocalRealmAdapter implements RealmAdapter {
     responseInit: ResponseInit,
     cleanup: () => void
   ): { response: Response; writable: WritableStream } {
-    let s = new MessageStream();
+    let s = new WebMessageStream();
     let response = createResponse(s.readable, responseInit);
-    setupCloseHandler(s.readable, cleanup);
+    messageCloseHandler(s.readable, cleanup);
     return { response, writable: s.writable };
   }
-}
 
-const closeHandlers: WeakMap<ReadableStream, () => void> = new WeakMap();
-export function setupCloseHandler(stream: ReadableStream, fn: () => void) {
-  closeHandlers.set(stream, fn);
-}
+  private watcher: number | undefined = undefined;
+  private entries: { path: string; lastModified?: number }[] = [];
 
-class MessageStream {
-  private pendingWrite: { chunk: string; deferred: Deferred<void> } | undefined;
-  private pendingRead:
-    | { controller: ReadableStreamDefaultController; deferred: Deferred<void> }
-    | undefined;
-
-  readable: ReadableStream = new ReadableStream(this);
-  writable: WritableStream = new WritableStream(this);
-
-  async pull(controller: ReadableStreamDefaultController) {
-    if (this.pendingRead) {
-      throw new Error(
-        'bug: did not expect node to call read until after we push data from the prior read'
-      );
+  async subscribe(cb: (message: Record<string, any>) => void): Promise<void> {
+    if (this.watcher) {
+      throw new Error(`tried to subscribe to watcher twice`);
     }
-    if (this.pendingWrite) {
-      let { chunk, deferred } = this.pendingWrite;
-      this.pendingWrite = undefined;
-      // TODO: better way to handle encoding
-      controller.enqueue(Uint8Array.from(chunk, (x) => x.charCodeAt(0)));
-      deferred.fulfill();
-    } else {
-      this.pendingRead = { controller, deferred: new Deferred() };
-      await this.pendingRead.deferred.promise;
-    }
+    this.watcher = setInterval(async () => {
+      let currentEntries = await this.getDirectoryListings('', []);
+      if (this.entries.length > 0) {
+        let changes = diff(this.entries, currentEntries);
+        for (let [key, val] of Object.entries(changes)) {
+          if (val.length > 0) {
+            cb({ [key]: val.join(', ') });
+          }
+        }
+      }
+      this.entries = currentEntries;
+    }, 1000);
   }
 
-  async write(chunk: string, _controller: WritableStreamDefaultController) {
-    if (this.pendingWrite) {
-      throw new Error(
-        'bug: did not expect node to call write until after we call the callback'
-      );
+  unsubscribe(): void {
+    if (!this.watcher) {
+      return;
     }
-    if (this.pendingRead) {
-      let { controller, deferred } = this.pendingRead;
-      this.pendingRead = undefined;
-      try {
-        // TODO: better way to handle encoding
-        controller.enqueue(Uint8Array.from(chunk, (x) => x.charCodeAt(0)));
-      } catch (err) {
-        let cleanup = closeHandlers.get(this.readable);
-        if (!cleanup) {
-          throw new Error('no cleanup function found');
+    clearInterval(this.watcher);
+    this.watcher = undefined;
+  }
+
+  private async getDirectoryListings(
+    dirPath: string,
+    entries: { path: string; lastModified?: number }[]
+  ) {
+    let listing = this.readdir(dirPath);
+    for await (let entry of listing) {
+      if (entry.kind === 'directory') {
+        entries.push({ path: entry.path });
+        await this.getDirectoryListings(entry.path, entries);
+      } else {
+        let fileRef = await this.openFile(entry.path);
+        if (fileRef) {
+          let { lastModified } = fileRef;
+          entries.push({ path: entry.path, lastModified });
         }
-        cleanup();
       }
-      deferred.fulfill();
-    } else {
-      this.pendingWrite = { chunk, deferred: new Deferred() };
-      await this.pendingWrite.deferred.promise;
     }
+    return entries;
   }
 }
 
