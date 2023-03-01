@@ -392,7 +392,7 @@ export class CurrentRun {
         error = { type: 'error', error: typesMaybeError.error };
       } else {
         let err = new Error(`bug: should never get here`);
-        deferred.fulfill();
+        deferred.reject(err);
         throw err;
       }
       currentRunLog.warn(

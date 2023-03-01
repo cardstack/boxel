@@ -9,7 +9,7 @@ import {
   WebMessageStream,
   messageCloseHandler,
 } from '@cardstack/runtime-common/stream';
-import { diff } from '@cardstack/runtime-common/diff';
+import { diff } from '@cardstack/runtime-common/diff-entries';
 
 export class LocalRealmAdapter implements RealmAdapter {
   constructor(private fs: FileSystemDirectoryHandle) {}

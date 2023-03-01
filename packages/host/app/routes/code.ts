@@ -69,7 +69,7 @@ export default class Index extends Route<Model> {
     // to see if we have been given a redirect.
     let responseURL = this.loaderService.loader.reverseResolution(response.url);
     if (responseURL.href !== url) {
-      this.router.transitionTo('application', {
+      this.router.transitionTo('code', {
         queryParams: { path: realmPath.local(responseURL), openDirs },
       });
     } else {
@@ -82,7 +82,7 @@ export default class Index extends Route<Model> {
         lastModified: response.headers.get('last-modified') || undefined,
         onStateChange: (state) => {
           if (state === 'not-found') {
-            this.router.transitionTo('application', {
+            this.router.transitionTo('code', {
               queryParams: { path: undefined, openDirs },
             });
           }
