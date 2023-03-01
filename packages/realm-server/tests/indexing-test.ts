@@ -1,17 +1,17 @@
-import { module, test } from "qunit";
-import { dirSync, setGracefulCleanup } from "tmp";
+import { module, test } from 'qunit';
+import { dirSync, setGracefulCleanup } from 'tmp';
 import {
   Loader,
   baseRealm,
   LooseSingleCardDocument,
   Realm,
-} from "@cardstack/runtime-common";
-import { createRealm, testRealm, setupCardLogs } from "./helpers";
-import isEqual from "lodash/isEqual";
-import { shimExternals } from "@cardstack/runtime-common/externals-global";
+} from '@cardstack/runtime-common';
+import { createRealm, testRealm, setupCardLogs } from './helpers';
+import isEqual from 'lodash/isEqual';
+import { shimExternals } from '@cardstack/runtime-common/externals-global';
 
 function cleanWhiteSpace(text: string) {
-  return text.replace(/\s+/g, " ").trim();
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 setGracefulCleanup();
@@ -19,7 +19,7 @@ setGracefulCleanup();
 // loading of cards necessary for indexing and the ability to manipulate the
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
-module("indexing", function (hooks) {
+module('indexing', function (hooks) {
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
@@ -33,12 +33,12 @@ module("indexing", function (hooks) {
     shimExternals();
     Loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL("http://localhost:4201/base/")
+      new URL('http://localhost:4201/base/')
     );
     dir = dirSync().name;
 
     realm = createRealm(dir, {
-      "person.gts": `
+      'person.gts': `
         import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
@@ -51,7 +51,7 @@ module("indexing", function (hooks) {
           }
         }
       `,
-      "pet.gts": `
+      'pet.gts': `
         import { contains, field, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
@@ -59,7 +59,7 @@ module("indexing", function (hooks) {
           @field firstName = contains(StringCard);
         }
       `,
-      "fancy-person.gts": `
+      'fancy-person.gts': `
         import { contains, field, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
@@ -68,7 +68,7 @@ module("indexing", function (hooks) {
           @field favoriteColor = contains(StringCard);
         }
       `,
-      "post.gts": `
+      'post.gts': `
         import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
@@ -84,7 +84,7 @@ module("indexing", function (hooks) {
           }
         }
       `,
-      "boom.gts": `
+      'boom.gts': `
         import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
@@ -100,81 +100,81 @@ module("indexing", function (hooks) {
           }
         }
       `,
-      "mango.json": {
+      'mango.json': {
         data: {
           attributes: {
-            firstName: "Mango",
+            firstName: 'Mango',
           },
           meta: {
             adoptsFrom: {
-              module: "./person",
-              name: "Person",
+              module: './person',
+              name: 'Person',
             },
           },
         },
       },
-      "vangogh.json": {
+      'vangogh.json': {
         data: {
           attributes: {
-            firstName: "Van Gogh",
+            firstName: 'Van Gogh',
           },
           meta: {
             adoptsFrom: {
-              module: "./person",
-              name: "Person",
+              module: './person',
+              name: 'Person',
             },
           },
         },
       },
-      "ringo.json": {
+      'ringo.json': {
         data: {
           attributes: {
-            firstName: "Ringo",
+            firstName: 'Ringo',
           },
           meta: {
             adoptsFrom: {
-              module: "./pet",
-              name: "Pet",
+              module: './pet',
+              name: 'Pet',
             },
           },
         },
       },
-      "post-1.json": {
+      'post-1.json': {
         data: {
           attributes: {
             author: {
-              firstName: "Van Gogh",
+              firstName: 'Van Gogh',
             },
-            message: "Who wants to fetch?!",
+            message: 'Who wants to fetch?!',
           },
           meta: {
             adoptsFrom: {
-              module: "./post",
-              name: "Post",
+              module: './post',
+              name: 'Post',
             },
           },
         },
       },
-      "boom.json": {
+      'boom.json': {
         data: {
           attributes: {
-            firstName: "Boom!",
+            firstName: 'Boom!',
           },
           meta: {
             adoptsFrom: {
-              module: "./boom",
-              name: "Boom",
+              module: './boom',
+              name: 'Boom',
             },
           },
         },
       },
-      "empty.json": {
+      'empty.json': {
         data: {
           attributes: {},
           meta: {
             adoptsFrom: {
-              module: "https://cardstack.com/base/card-api",
-              name: "Card",
+              module: 'https://cardstack.com/base/card-api',
+              name: 'Card',
             },
           },
         },
@@ -183,34 +183,34 @@ module("indexing", function (hooks) {
     await realm.ready;
   });
 
-  test("can store card pre-rendered html in the index", async function (assert) {
+  test('can store card pre-rendered html in the index', async function (assert) {
     let entry = await realm.searchIndex.searchEntry(
       new URL(`${testRealm}mango`)
     );
     assert.strictEqual(
       cleanWhiteSpace(entry!.html!),
       cleanWhiteSpace(`<h1> Mango </h1>`),
-      "pre-rendered html is correct"
+      'pre-rendered html is correct'
     );
   });
 
-  test("can recover from rendering a card that has a template error", async function (assert) {
+  test('can recover from rendering a card that has a template error', async function (assert) {
     {
       let entry = await realm.searchIndex.card(new URL(`${testRealm}boom`));
-      if (entry?.type === "error") {
+      if (entry?.type === 'error') {
         assert.strictEqual(
           entry.error.detail,
-          "Encountered error rendering HTML for card: intentional error"
+          'Encountered error rendering HTML for card: intentional error'
         );
         assert.deepEqual(entry.error.deps, [`${testRealm}boom`]);
       } else {
-        assert.ok("false", "expected search entry to be an error document");
+        assert.ok('false', 'expected search entry to be an error document');
       }
     }
     {
       let entry = await realm.searchIndex.card(new URL(`${testRealm}vangogh`));
-      if (entry?.type === "doc") {
-        assert.deepEqual(entry.doc.data.attributes?.firstName, "Van Gogh");
+      if (entry?.type === 'doc') {
+        assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
         let { html } =
           (await realm.searchIndex.searchEntry(
             new URL(`${testRealm}vangogh`)
@@ -228,18 +228,18 @@ module("indexing", function (hooks) {
     }
   });
 
-  test("can incrementally index updated instance", async function (assert) {
+  test('can incrementally index updated instance', async function (assert) {
     await realm.write(
-      "mango.json",
+      'mango.json',
       JSON.stringify({
         data: {
           attributes: {
-            firstName: "Mang-Mang",
+            firstName: 'Mang-Mang',
           },
           meta: {
             adoptsFrom: {
-              module: "./person.gts",
-              name: "Person",
+              module: './person.gts',
+              name: 'Person',
             },
           },
         },
@@ -248,11 +248,11 @@ module("indexing", function (hooks) {
 
     let { data: result } = await realm.searchIndex.search({
       filter: {
-        on: { module: `${testRealm}person`, name: "Person" },
-        eq: { firstName: "Mang-Mang" },
+        on: { module: `${testRealm}person`, name: 'Person' },
+        eq: { firstName: 'Mang-Mang' },
       },
     });
-    assert.strictEqual(result.length, 1, "found updated document");
+    assert.strictEqual(result.length, 1, 'found updated document');
     assert.ok(
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
@@ -260,15 +260,15 @@ module("indexing", function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      "indexed correct number of files"
+      'indexed correct number of files'
     );
   });
 
-  test("can recover from a card error after error is removed from card source", async function (assert) {
+  test('can recover from a card error after error is removed from card source', async function (assert) {
     // introduce errors into 2 cards and observe that invalidation doesn't
     // blindly invalidate all cards are in an error state
     await realm.write(
-      "pet.gts",
+      'pet.gts',
       `
           import { contains, field, Card } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
@@ -285,10 +285,10 @@ module("indexing", function (hooks) {
         instanceErrors: 1,
         moduleErrors: 1,
       }),
-      "indexed correct number of files"
+      'indexed correct number of files'
     );
     await realm.write(
-      "person.gts",
+      'person.gts',
       `
           // syntax error
           export class IntentionallyThrownError {
@@ -301,20 +301,20 @@ module("indexing", function (hooks) {
         instanceErrors: 3, // 1 post, 2 persons
         moduleErrors: 3, // post, fancy person, person
       }),
-      "indexed correct number of files"
+      'indexed correct number of files'
     );
     let { data: result } = await realm.searchIndex.search({
       filter: {
-        type: { module: `${testRealm}person`, name: "Person" },
+        type: { module: `${testRealm}person`, name: 'Person' },
       },
     });
     assert.deepEqual(
       result,
       [],
-      "the broken type results in no instance results"
+      'the broken type results in no instance results'
     );
     await realm.write(
-      "person.gts",
+      'person.gts',
       `
           import { contains, field, Card } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
@@ -331,32 +331,32 @@ module("indexing", function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      "indexed correct number of files"
+      'indexed correct number of files'
     );
     result = (
       await realm.searchIndex.search({
         filter: {
-          type: { module: `${testRealm}person`, name: "Person" },
+          type: { module: `${testRealm}person`, name: 'Person' },
         },
       })
     ).data;
     assert.strictEqual(
       result.length,
       2,
-      "correct number of instances returned"
+      'correct number of instances returned'
     );
   });
 
-  test("can incrementally index deleted instance", async function (assert) {
-    await realm.delete("mango.json");
+  test('can incrementally index deleted instance', async function (assert) {
+    await realm.delete('mango.json');
 
     let { data: result } = await realm.searchIndex.search({
       filter: {
-        on: { module: `${testRealm}person`, name: "Person" },
-        eq: { firstName: "Mango" },
+        on: { module: `${testRealm}person`, name: 'Person' },
+        eq: { firstName: 'Mango' },
       },
     });
-    assert.strictEqual(result.length, 0, "found no documents");
+    assert.strictEqual(result.length, 0, 'found no documents');
     assert.ok(
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
@@ -364,13 +364,13 @@ module("indexing", function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      "index did not touch any files"
+      'index did not touch any files'
     );
   });
 
-  test("can incrementally index instance that depends on updated card source", async function (assert) {
+  test('can incrementally index instance that depends on updated card source', async function (assert) {
     await realm.write(
-      "post.gts",
+      'post.gts',
       `
         import { contains, field, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
@@ -390,11 +390,11 @@ module("indexing", function (hooks) {
 
     let { data: result } = await realm.searchIndex.search({
       filter: {
-        on: { module: `${testRealm}post`, name: "Post" },
-        eq: { nickName: "Van Gogh-poo" },
+        on: { module: `${testRealm}post`, name: 'Post' },
+        eq: { nickName: 'Van Gogh-poo' },
       },
     });
-    assert.strictEqual(result.length, 1, "found updated document");
+    assert.strictEqual(result.length, 1, 'found updated document');
     assert.ok(
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
@@ -402,13 +402,13 @@ module("indexing", function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      "indexed correct number of files"
+      'indexed correct number of files'
     );
   });
 
-  test("can incrementally index instance that depends on updated card source consumed by other card sources", async function (assert) {
+  test('can incrementally index instance that depends on updated card source consumed by other card sources', async function (assert) {
     await realm.write(
-      "person.gts",
+      'person.gts',
       `
           import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
@@ -429,11 +429,11 @@ module("indexing", function (hooks) {
 
     let { data: result } = await realm.searchIndex.search({
       filter: {
-        on: { module: `${testRealm}post`, name: "Post" },
-        eq: { "author.nickName": "Van Gogh-poo" },
+        on: { module: `${testRealm}post`, name: 'Post' },
+        eq: { 'author.nickName': 'Van Gogh-poo' },
       },
     });
-    assert.strictEqual(result.length, 1, "found updated document");
+    assert.strictEqual(result.length, 1, 'found updated document');
     assert.ok(
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
       isEqual(realm.searchIndex.stats, {
@@ -441,46 +441,46 @@ module("indexing", function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      "indexed correct number of files"
+      'indexed correct number of files'
     );
   });
 
-  test("can incrementally index instance that depends on deleted card source", async function (assert) {
-    await realm.delete("post.gts");
+  test('can incrementally index instance that depends on deleted card source', async function (assert) {
+    await realm.delete('post.gts');
     {
       let { data: result } = await realm.searchIndex.search({
         filter: {
-          type: { module: `${testRealm}post`, name: "Post" },
+          type: { module: `${testRealm}post`, name: 'Post' },
         },
       });
       assert.deepEqual(
         result,
         [],
-        "the deleted type results in no card instance results"
+        'the deleted type results in no card instance results'
       );
     }
     let actual = await realm.searchIndex.card(new URL(`${testRealm}post-1`));
-    if (actual?.type === "error") {
-      assert.ok(actual.error.stack, "stack trace is included");
+    if (actual?.type === 'error') {
+      assert.ok(actual.error.stack, 'stack trace is included');
       delete actual.error.stack;
       assert.ok(
         // assert.deepEqual returns false because despite having the same shape, the constructors are different
         isEqual(await realm.searchIndex.card(new URL(`${testRealm}post-1`)), {
-          type: "error",
+          type: 'error',
           error: {
             isCardError: true,
             additionalErrors: null,
-            detail: "http://test-realm/post not found",
+            detail: 'http://test-realm/post not found',
             source: undefined,
             status: 404,
-            title: "Not Found",
-            deps: ["http://test-realm/post"],
+            title: 'Not Found',
+            deps: ['http://test-realm/post'],
           },
         }),
-        "card instance is an error document"
+        'card instance is an error document'
       );
     } else {
-      assert.ok(false, "search index entry is not an error document");
+      assert.ok(false, 'search index entry is not an error document');
     }
     assert.ok(
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
@@ -489,12 +489,12 @@ module("indexing", function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
       }),
-      "indexed correct number of files"
+      'indexed correct number of files'
     );
 
     // when the definitions is created again, the instance should mend its broken link
     await realm.write(
-      "post.gts",
+      'post.gts',
       `
         import { contains, field, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
@@ -514,11 +514,11 @@ module("indexing", function (hooks) {
     {
       let { data: result } = await realm.searchIndex.search({
         filter: {
-          on: { module: `${testRealm}post`, name: "Post" },
-          eq: { nickName: "Van Gogh-poo" },
+          on: { module: `${testRealm}post`, name: 'Post' },
+          eq: { nickName: 'Van Gogh-poo' },
         },
       });
-      assert.strictEqual(result.length, 1, "found the post instance");
+      assert.strictEqual(result.length, 1, 'found the post instance');
     }
     assert.ok(
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
@@ -527,7 +527,7 @@ module("indexing", function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      "indexed correct number of files"
+      'indexed correct number of files'
     );
   });
 });

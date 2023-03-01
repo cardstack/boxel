@@ -1,25 +1,25 @@
-import yargs from "yargs";
-import log, { LogLevelNames } from "loglevel";
-import fs from "fs";
-import { execSync } from "child_process";
+import yargs from 'yargs';
+import log, { LogLevelNames } from 'loglevel';
+import fs from 'fs';
+import { execSync } from 'child_process';
 
 let { path, url, logLevel } = yargs(process.argv.slice(2))
-  .usage("Fetch host Fastboot assets")
+  .usage('Fetch host Fastboot assets')
   .options({
     url: {
-      description: "URL to fetch assets from",
+      description: 'URL to fetch assets from',
       demandOption: true,
-      type: "string",
+      type: 'string',
     },
     path: {
-      description: "Path to unzip assets into",
-      type: "string",
-      default: "./",
+      description: 'Path to unzip assets into',
+      type: 'string',
+      default: './',
     },
     logLevel: {
-      description: "how detailed log output should be",
-      choices: ["trace", "debug", "info", "warn", "error"],
-      default: "info",
+      description: 'how detailed log output should be',
+      choices: ['trace', 'debug', 'info', 'warn', 'error'],
+      default: 'info',
     },
   })
   .parseSync();
@@ -27,11 +27,11 @@ let { path, url, logLevel } = yargs(process.argv.slice(2))
 log.setLevel(logLevel as LogLevelNames);
 log.info(`Set fetch-dist log level to ${logLevel}`);
 
-if (!path.endsWith("/")) {
+if (!path.endsWith('/')) {
   path = `${path}/`;
 }
 
-if (!url.endsWith("/")) {
+if (!url.endsWith('/')) {
   url = `${url}/`;
 }
 
