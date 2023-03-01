@@ -7,13 +7,13 @@ interface Signature {
     tag?: keyof HTMLElementTagNameMap;
   };
   Blocks: {
-    default: [],
+    default: [];
   };
 }
 
 const Label: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
-    <Tag class="boxel-label" ...attributes>
+    <Tag class='boxel-label' ...attributes>
       {{yield}}
     </Tag>
   {{/let}}
