@@ -343,7 +343,6 @@ export class Realm {
       compact: false, // this helps for readability when debugging
       plugins: [
         glimmerTemplatePlugin,
-        emberConcurrencyAsyncPlugin,
         [typescriptPlugin, { allowDeclareFields: true }],
         [decoratorsProposalPlugin, { legacy: true }],
         classPropertiesProposalPlugin,
