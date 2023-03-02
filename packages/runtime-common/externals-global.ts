@@ -71,7 +71,6 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
     task() {},
     restartableTask() {},
   });
-  // FIXME fix in another branch?
   // import * as emberConcurrency from 'ember-concurrency';
   loader.shimModule("ember-modifier", {
     default: class {},
