@@ -81,7 +81,13 @@ export class ModuleSyntax {
       throw new Error(`the field "${fieldName}" already exists`);
     }
 
-    let newField = makeNewField(card.path, fieldRef, fieldType, fieldName);
+    let newField = makeNewField(
+      card.path,
+      fieldRef,
+      fieldType,
+      fieldName,
+      cardName.name
+    );
     let src = this.code();
     this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
 
@@ -107,11 +113,9 @@ export class ModuleSyntax {
 
     // we use string manipulation to add the field into the src so that we
     // don't have to suffer babel's decorator transpilation
-    src = `
-      ${src.substring(0, insertPosition)}
-      ${newField}
-      ${src.substring(insertPosition)}
-    `;
+    src = `${src.substring(0, insertPosition)} ${newField} ${src.substring(
+      insertPosition
+    )}`;
     // analyze one more time to incorporate the new field
     this.analyze(src);
   }
@@ -195,7 +199,8 @@ function makeNewField(
   target: NodePath<t.Node>,
   fieldRef: { name: string; module: string },
   fieldType: FieldType,
-  fieldName: string
+  fieldName: string,
+  cardName: string
 ): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -219,6 +224,11 @@ function makeNewField(
     fieldRef.name,
     suggestedCardName(fieldRef)
   );
+
+  if (fieldType === "linksTo" && cardName === fieldRef.name) {
+    // syntax for when a card has a linksTo field to a card with the same type as itself
+    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldCardIdentifier.name});`;
+  }
 
   return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
 }
