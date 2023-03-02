@@ -15,7 +15,6 @@ import { LinkTo } from '@ember/routing';
 import { hash } from '@ember/helper';
 import CatalogEntryEditor from './catalog-entry-editor';
 import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import Modifier from 'ember-modifier';
 import type LoaderService from '../services/loader-service';
 import type CardService from '../services/card-service';
@@ -188,7 +187,7 @@ export default class Schema extends Component<Signature> {
 
   @action
   addField() {
-    taskFor(this.makeField).perform();
+    this.makeField.perform();
   }
 
   @action
@@ -197,7 +196,7 @@ export default class Schema extends Component<Signature> {
       { type: 'exportedName', name: this.ref.name },
       fieldName
     );
-    taskFor(this.write).perform(this.args.moduleSyntax.code());
+    this.write.perform(this.args.moduleSyntax.code());
   }
 
   @action
@@ -210,7 +209,7 @@ export default class Schema extends Component<Signature> {
     this.newFieldType = fieldType;
   }
 
-  @restartableTask private async makeField() {
+  private makeField = restartableTask(async () => {
     let fieldEntry: CatalogEntry | undefined = await chooseCard({
       filter: {
         on: catalogEntryRef,
@@ -233,18 +232,18 @@ export default class Schema extends Component<Signature> {
       fieldEntry.ref,
       this.newFieldType
     );
-    await taskFor(this.write).perform(this.args.moduleSyntax.code());
-  }
+    await this.write.perform(this.args.moduleSyntax.code();
+  });
 
-  @restartableTask private async write(src: string): Promise<void> {
+  private write = restartableTask(async (src: string) => {
     if (this.args.file.state !== 'ready') {
       throw new Error(`the file ${this.args.file.url} is not open`);
     }
     // note that this write will cause the component to rerender, so
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
-    await this.args.file.write(src, true);
-  }
+    this.args.file.write(src, true);
+  });
 }
 
 function cardId(card: Type | CardRef): string {

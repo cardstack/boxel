@@ -4,7 +4,6 @@ import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { registerDestructor } from '@ember/destroyable';
-import { taskFor } from 'ember-concurrency-ts';
 import { enqueueTask } from 'ember-concurrency';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -75,7 +74,7 @@ export default class CardCatalogModal extends Component {
 
   async chooseCard<T extends Card>(query: Query, opts?: { offerToCreate?: CardRef }): Promise<undefined | T> {
     this.incrementZIndex();
-    return await taskFor(this._chooseCard).perform(query, opts) as T | undefined;
+    return await this._chooseCard.perform(query, opts) as T | undefined;
   }
 
   private _chooseCard = enqueueTask(async <T extends Card>(query: Query, opts: { offerToCreate?: CardRef } = {}) => {
