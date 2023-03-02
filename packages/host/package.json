@@ -106,8 +106,6 @@
     "ember-cli-terser": "^4.0.2",
     "ember-cli-typescript-blueprints": "^3.0.0",
     "ember-concurrency": "^2.3.4",
-    "ember-concurrency-async": "^1.0.0",
-    "ember-concurrency-ts": "^0.3.1",
     "ember-data": "~4.2.0",
     "ember-export-application-global": "^2.0.1",
     "ember-functions-as-helper-polyfill": "^2.0.1",

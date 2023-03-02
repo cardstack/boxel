@@ -71,10 +71,6 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
     task() {},
     restartableTask() {},
   });
-  // import * as emberConcurrencyTS from 'ember-concurrency-ts';
-  loader.shimModule("ember-concurrency-ts", {
-    taskFor() {},
-  });
   // import * as emberConcurrency from 'ember-concurrency';
   loader.shimModule("ember-modifier", {
     default: class {},

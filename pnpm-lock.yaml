@@ -68,7 +68,6 @@ importers:
       '@types/lodash': ^4.14.182
       ember-cli-htmlbars: ^6.0.1
       ember-concurrency: ^2.3.4
-      ember-concurrency-ts: ^0.3.1
       ember-modifier: ^3.2.1
       tracked-built-ins: ^2.0.1
     devDependencies:
@@ -86,7 +85,6 @@ importers:
       '@types/lodash': 4.14.189
       ember-cli-htmlbars: 6.1.1
       ember-concurrency: 2.3.7_@babel+core@7.20.2
-      ember-concurrency-ts: 0.3.1_ember-concurrency@2.3.7
       ember-modifier: 3.2.7_@babel+core@7.20.2
       tracked-built-ins: 2.0.1
     dependenciesMeta:
@@ -131,7 +129,6 @@ importers:
       ember-cli-typescript: ^5.2.1
       ember-concurrency: ^2.3.4
       ember-concurrency-decorators: ^2.0.3
-      ember-concurrency-ts: ^0.2.2
       ember-modifier: ^3.2.7
       ember-template-imports: ^3.0.1
       ember-template-lint: ^4.3.0
@@ -155,7 +152,6 @@ importers:
       ember-cli-typescript: 5.2.1
       ember-concurrency: 2.3.7_@babel+core@7.20.2
       ember-concurrency-decorators: 2.0.3_@babel+core@7.20.2
-      ember-concurrency-ts: 0.2.2_pbc6wuy723ewnr3j3hko3moh74
       ember-modifier: 3.2.7_@babel+core@7.20.2
       macro-decorators: 0.1.2
       style-value-types: 5.1.2
@@ -252,7 +248,6 @@ importers:
       ember-cli-typescript-blueprints: ^3.0.0
       ember-concurrency: ^2.3.4
       ember-concurrency-decorators: ^2.0.3
-      ember-concurrency-ts: ^0.2.2
       ember-css-modules: ^2.0.1
       ember-export-application-global: ^2.0.1
       ember-fetch: ^8.1.1
@@ -331,7 +326,6 @@ importers:
       ember-cli-typescript-blueprints: 3.0.0
       ember-concurrency: 2.3.7_@babel+core@7.20.2
       ember-concurrency-decorators: 2.0.3_@babel+core@7.20.2
-      ember-concurrency-ts: 0.2.2_pbc6wuy723ewnr3j3hko3moh74
       ember-css-modules: 2.0.1
       ember-export-application-global: 2.0.1
       ember-fetch: 8.1.2
@@ -738,8 +732,6 @@ importers:
       ember-cli-terser: ^4.0.2
       ember-cli-typescript-blueprints: ^3.0.0
       ember-concurrency: ^2.3.4
-      ember-concurrency-async: ^1.0.0
-      ember-concurrency-ts: ^0.3.1
       ember-data: ~4.2.0
       ember-export-application-global: ^2.0.1
       ember-functions-as-helper-polyfill: ^2.0.1
@@ -856,8 +848,6 @@ importers:
       ember-cli-terser: 4.0.2
       ember-cli-typescript-blueprints: 3.0.0
       ember-concurrency: 2.3.7_@babel+core@7.20.2
-      ember-concurrency-async: 1.0.0_ember-concurrency@2.3.7
-      ember-concurrency-ts: 0.3.1_ember-concurrency@2.3.7
       ember-data: 4.2.0_npabyccmuonwo2rku4k53xo3hi
       ember-export-application-global: 2.0.1
       ember-functions-as-helper-polyfill: 2.1.1_ember-source@4.2.0
@@ -987,7 +977,6 @@ importers:
       date-fns: ^2.28.0
       diff: ^5.1.0
       ember-cli-htmlbars: ^6.0.1
-      ember-concurrency-async-plugin: workspace:*
       ember-source: ~4.2.0
       flat: ^5.0.2
       http-status-codes: ^2.2.0
@@ -1022,7 +1011,6 @@ importers:
       babel-plugin-ember-template-compilation: 1.0.2
       date-fns: 2.29.3
       diff: 5.1.0
-      ember-concurrency-async-plugin: link:../../vendor/ember-concurrency-async-plugin
       ember-source: 4.2.0_@babel+core@7.20.2
       flat: 5.0.2
       http-status-codes: 2.2.0
@@ -1071,12 +1059,6 @@ importers:
     dependenciesMeta:
       '@cardstack/runtime-common':
         injected: true
-
-  vendor/ember-concurrency-async-plugin:
-    specifiers:
-      '@babel/types': ^7.10.2
-    dependencies:
-      '@babel/types': 7.20.2
 
   vendor/ember-template-imports:
     specifiers:
@@ -10715,22 +10697,6 @@ packages:
       - '@babel/core'
       - supports-color
 
-  /ember-concurrency-async/1.0.0_ember-concurrency@2.3.7:
-    resolution: {integrity: sha512-otE1UcF+VYva8qdkYayHVBrGDG+Lt9oYLLMt3heEo98Mv9abdjrdaLzvSMMspzI3ncgKtmZsEwn+aubvq+Zhhw==}
-    engines: {node: ^10.17 || >= 12}
-    peerDependencies:
-      ember-concurrency: ^2.0.0-rc.1
-    dependencies:
-      '@babel/helper-plugin-utils': 7.20.2
-      '@babel/types': 7.20.2
-      ember-cli-babel: 7.26.11
-      ember-cli-babel-plugin-helpers: 1.1.1
-      ember-cli-htmlbars: 4.5.0
-      ember-concurrency: 2.3.7_@babel+core@7.20.2
-    transitivePeerDependencies:
-      - supports-color
-    dev: true
-
   /ember-concurrency-decorators/2.0.3_@babel+core@7.20.2:
     resolution: {integrity: sha512-r6O34YKI/slyYapVsuOPnmaKC4AsmBSwvgcadbdy+jHNj+mnryXPkm+3hhhRnFdlsKUKdEuXvl43lhjhYRLhhA==}
     engines: {node: 10.* || >= 12}
@@ -10742,33 +10708,6 @@ packages:
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
-
-  /ember-concurrency-ts/0.2.2_pbc6wuy723ewnr3j3hko3moh74:
-    resolution: {integrity: sha512-03/NEhXczd93tpg0ycusj3bgXZS15wymU0K8eMvWftyzWS4B+UE03RzimOFrtOxJmE2mNj64hLJUZR9P8LelFw==}
-    engines: {node: 10.* || >= 12}
-    peerDependencies:
-      ember-concurrency: ^1.2.1 || ^2.0.0-rc.1
-      ember-concurrency-decorators: ^2.0.0
-    dependencies:
-      ember-cli-babel: 7.26.11
-      ember-cli-htmlbars: 4.5.0
-      ember-concurrency: 2.3.7_@babel+core@7.20.2
-      ember-concurrency-decorators: 2.0.3_@babel+core@7.20.2
-    transitivePeerDependencies:
-      - supports-color
-
-  /ember-concurrency-ts/0.3.1_ember-concurrency@2.3.7:
-    resolution: {integrity: sha512-lE9uqPgK1Y9PN/0BJ5zE2a+h95izRCn6FCyt7qVV3012TlblTynsBaoUuAbN1T3KfzFsrJaXwsxzRbDjEde2Sw==}
-    engines: {node: 10.* || >= 12}
-    peerDependencies:
-      ember-concurrency: ^1.2.1 || ^2.0.0-rc.1
-    dependencies:
-      ember-cli-babel: 7.26.11
-      ember-cli-htmlbars: 4.5.0
-      ember-concurrency: 2.3.7_@babel+core@7.20.2
-    transitivePeerDependencies:
-      - supports-color
-    dev: true
 
   /ember-concurrency/2.3.7_@babel+core@7.20.2:
     resolution: {integrity: sha512-sz6sTIXN/CuLb5wdpauFa+rWXuvXXSnSHS4kuNzU5GSMDX1pLBWSuovoUk61FUe6CYRqBmT1/UushObwBGickQ==}

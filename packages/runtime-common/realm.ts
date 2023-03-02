@@ -50,8 +50,6 @@ import decoratorsProposalPlugin from "@babel/plugin-proposal-decorators";
 import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properties";
 //@ts-ignore ironically no types are available
 import typescriptPlugin from "@babel/plugin-transform-typescript";
-//@ts-ignore no types are available
-import emberConcurrencyAsyncPlugin from "ember-concurrency-async-plugin";
 import { Router } from "./router";
 import { parseQueryString } from "./query";
 //@ts-ignore service worker can't handle this
