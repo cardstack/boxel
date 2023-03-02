@@ -2,18 +2,18 @@ import Component from '@glimmer/component';
 import { didCancel, enqueueTask } from 'ember-concurrency';
 import { service } from '@ember/service';
 import { CurrentRun } from '../lib/current-run';
-import { readFileAsText as _readFileAsText } from "@cardstack/runtime-common/stream";
+import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import { hasExecutableExtension } from '@cardstack/runtime-common';
 import {
   type EntrySetter,
   type Reader,
   type RunState,
-  type RunnerOpts
+  type RunnerOpts,
 } from '@cardstack/runtime-common/search-index';
 import type RenderService from '../services/render-service';
 import type LoaderService from '../services/loader-service';
 import type LocalRealm from '../services/local-realm';
-import type { LocalPath } from "@cardstack/runtime-common/paths";
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 
 export default class CardPrerender extends Component {
   @service declare loaderService: LoaderService;
@@ -30,26 +30,37 @@ export default class CardPrerender extends Component {
         if (!didCancel(e)) {
           throw e;
         }
-        throw new Error(`card-prerender component is being destroyed before runner registration was completed`);
+        throw new Error(
+          `card-prerender component is being destroyed before runner registration was completed`
+        );
       }
     } else {
-      this.localRealm.setupIndexing(this.fromScratch.bind(this), this.incremental.bind(this));
+      this.localRealm.setupIndexing(
+        this.fromScratch.bind(this),
+        this.incremental.bind(this)
+      );
     }
   }
 
   private async fromScratch(realmURL: URL): Promise<RunState> {
     try {
       let state = await this.doFromScratch.perform(realmURL);
-      return state
+      return state;
     } catch (e: any) {
       if (!didCancel(e)) {
         throw e;
       }
     }
-    throw new Error(`card-prerender component is being destroyed before from scratch index of realm ${realmURL} was completed`);
+    throw new Error(
+      `card-prerender component is being destroyed before from scratch index of realm ${realmURL} was completed`
+    );
   }
 
-  private async incremental(prev: RunState, url: URL, operation: 'delete' | 'update'): Promise<RunState> {
+  private async incremental(
+    prev: RunState,
+    url: URL,
+    operation: 'delete' | 'update'
+  ): Promise<RunState> {
     if (hasExecutableExtension(url.href) && !this.fastboot.isFastBoot) {
       this.loaderService.reset();
     }
@@ -61,7 +72,9 @@ export default class CardPrerender extends Component {
         throw e;
       }
     }
-    throw new Error(`card-prerender component is being destroyed before incremental index of ${url} was completed`);
+    throw new Error(
+      `card-prerender component is being destroyed before incremental index of ${url} was completed`
+    );
   }
 
   private doRegistration = enqueueTask(async () => {
@@ -88,9 +101,10 @@ export default class CardPrerender extends Component {
     return current;
   });
 
-  private doIncremental = enqueueTask(async (prev: RunState, url: URL, operation: 'delete' | 'update') => {
-    let { reader, entrySetter } = this.getRunnerParams();
-    let current = await CurrentRun.incremental({
+  private doIncremental = enqueueTask(
+    async (prev: RunState, url: URL, operation: 'delete' | 'update') => {
+      let { reader, entrySetter } = this.getRunnerParams();
+      let current = await CurrentRun.incremental({
         url,
         operation,
         prev,
@@ -99,13 +113,14 @@ export default class CardPrerender extends Component {
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
       });
-    this.renderService.indexRunDeferred?.fulfill();
-    return current;
-  });
+      this.renderService.indexRunDeferred?.fulfill();
+      return current;
+    }
+  );
 
   private getRunnerParams(): {
     reader: Reader;
-    entrySetter: EntrySetter
+    entrySetter: EntrySetter;
   } {
     if (this.fastboot.isFastBoot) {
       let optsId = (globalThis as any).runnerOptsId;
@@ -114,11 +129,11 @@ export default class CardPrerender extends Component {
       }
       return {
         reader: getRunnerOpts(optsId).reader,
-        entrySetter: getRunnerOpts(optsId).entrySetter 
+        entrySetter: getRunnerOpts(optsId).entrySetter,
       };
     } else {
       let self = this;
-      function readFileAsText (
+      function readFileAsText(
         path: LocalPath,
         opts?: { withFallbacks?: true }
       ): Promise<{ content: string; lastModified: number } | undefined> {
@@ -129,18 +144,22 @@ export default class CardPrerender extends Component {
         );
       }
       return {
-        reader: { 
-          readdir: this.localRealm.adapter.readdir.bind(this.localRealm.adapter),
-          readFileAsText
+        reader: {
+          readdir: this.localRealm.adapter.readdir.bind(
+            this.localRealm.adapter
+          ),
+          readFileAsText,
         },
-        entrySetter: this.localRealm.setEntry.bind(this.localRealm)
+        entrySetter: this.localRealm.setEntry.bind(this.localRealm),
       };
     }
   }
 }
 
 function getRunnerOpts(optsId: number): RunnerOpts {
-  return ((globalThis as any).getRunnerOpts as (optsId: number) => RunnerOpts)(optsId);
+  return ((globalThis as any).getRunnerOpts as (optsId: number) => RunnerOpts)(
+    optsId
+  );
 }
 
 declare module '@glint/environment-ember-loose/registry' {

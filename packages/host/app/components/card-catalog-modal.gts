@@ -17,28 +17,40 @@ export default class CardCatalogModal extends Component {
   <template>
     {{#if this.currentRequest}}
       <Modal
-        @size="large"
+        @size='large'
         @isOpen={{true}}
         @onClose={{fn this.pick undefined}}
-        style="z-index:{{this.zIndex}}"
+        style='z-index:{{this.zIndex}}'
         data-test-card-catalog-modal
       >
-        <CardContainer class="dialog-box" @displayBoundaries={{true}}>
-          <Header @title="Card Catalog">
-            <button {{on "click" (fn this.pick undefined)}} class="dialog-box__close">x</button>
+        <CardContainer class='dialog-box' @displayBoundaries={{true}}>
+          <Header @title='Card Catalog'>
+            <button
+              {{on 'click' (fn this.pick undefined)}}
+              class='dialog-box__close'
+            >x</button>
           </Header>
-          <div class="dialog-box__content">
+          <div class='dialog-box__content'>
             {{#if this.currentRequest.search.isLoading}}
               Loading...
             {{else}}
               {{#if this.currentRequest.opts.offerToCreate}}
-                <button {{on "click" (fn this.createNew this.currentRequest.opts.offerToCreate)}} data-test-create-new>Create New</button>
+                <button
+                  {{on
+                    'click'
+                    (fn this.createNew this.currentRequest.opts.offerToCreate)
+                  }}
+                  data-test-create-new
+                >Create New</button>
               {{/if}}
-              <ul class="card-catalog" data-test-card-catalog>
+              <ul class='card-catalog' data-test-card-catalog>
                 {{#each this.currentRequest.search.instances as |card|}}
                   <li data-test-card-catalog-item={{card.id}}>
-                    <Preview @card={{card}} @format="embedded" />
-                    <button {{on "click" (fn this.pick card)}} data-test-select={{card.id}}>
+                    <Preview @card={{card}} @format='embedded' />
+                    <button
+                      {{on 'click' (fn this.pick card)}}
+                      data-test-select={{card.id}}
+                    >
                       Select
                     </button>
                   </li>
@@ -53,11 +65,13 @@ export default class CardCatalogModal extends Component {
     {{/if}}
   </template>
 
-  @tracked currentRequest: {
-    search: Search;
-    deferred: Deferred<Card | undefined>;
-    opts?: { offerToCreate?: CardRef };
-  } | undefined = undefined;
+  @tracked currentRequest:
+    | {
+        search: Search;
+        deferred: Deferred<Card | undefined>;
+        opts?: { offerToCreate?: CardRef };
+      }
+    | undefined = undefined;
 
   @tracked zIndex = 20;
   @action incrementZIndex() {
@@ -72,24 +86,32 @@ export default class CardCatalogModal extends Component {
     });
   }
 
-  async chooseCard<T extends Card>(query: Query, opts?: { offerToCreate?: CardRef }): Promise<undefined | T> {
+  async chooseCard<T extends Card>(
+    query: Query,
+    opts?: { offerToCreate?: CardRef }
+  ): Promise<undefined | T> {
     this.incrementZIndex();
-    return await this._chooseCard.perform(query, opts) as T | undefined;
+    return (await this._chooseCard.perform(query, opts)) as T | undefined;
   }
 
-  private _chooseCard = enqueueTask(async <T extends Card>(query: Query, opts: { offerToCreate?: CardRef } = {}) => {
-    this.currentRequest = {
-      search: getSearchResults(this, () => query),
-      deferred: new Deferred(),
-      opts
-    };
-    let card = await this.currentRequest.deferred.promise;
-    if (card) {
-      return card as T;
-    } else {
-      return undefined;
+  private _chooseCard = enqueueTask(
+    async <T extends Card>(
+      query: Query,
+      opts: { offerToCreate?: CardRef } = {}
+    ) => {
+      this.currentRequest = {
+        search: getSearchResults(this, () => query),
+        deferred: new Deferred(),
+        opts,
+      };
+      let card = await this.currentRequest.deferred.promise;
+      if (card) {
+        return card as T;
+      } else {
+        return undefined;
+      }
     }
-  });
+  );
 
   @action pick(card?: Card): void {
     if (this.currentRequest) {
@@ -107,5 +129,5 @@ export default class CardCatalogModal extends Component {
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
     CardCatalogModal: typeof CardCatalogModal;
-   }
+  }
 }
