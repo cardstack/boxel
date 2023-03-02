@@ -139,35 +139,37 @@ class _FileResource extends Resource<Args> {
     this.doWrite.perform(content, flushLoader);
   }
 
-  private doWrite = restartableTask(async (content: string, flushLoader?: true) => {
-    let response = await this.loaderService.loader.fetch(this.url, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/vnd.card+source',
-      },
-      body: content,
-    });
-    if (!response.ok) {
-      log.error(
-        `Could not write file ${this.url}, status ${response.status}: ${
-          response.statusText
-        } - ${await response.text()}`
-      );
-      return;
-    }
-    if (this.state === 'not-found') {
-      // TODO think about the "unauthorized" scenario
-      throw new Error(
-        'this should be impossible--we are creating the specified path'
-      );
-    }
+  private doWrite = restartableTask(
+    async (content: string, flushLoader?: true) => {
+      let response = await this.loaderService.loader.fetch(this.url, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+        body: content,
+      });
+      if (!response.ok) {
+        log.error(
+          `Could not write file ${this.url}, status ${response.status}: ${
+            response.statusText
+          } - ${await response.text()}`
+        );
+        return;
+      }
+      if (this.state === 'not-found') {
+        // TODO think about the "unauthorized" scenario
+        throw new Error(
+          'this should be impossible--we are creating the specified path'
+        );
+      }
 
-    this.content = content;
-    this.lastModified = response.headers.get('last-modified') || undefined;
-    if (flushLoader) {
-      this.loaderService.reset();
+      this.content = content;
+      this.lastModified = response.headers.get('last-modified') || undefined;
+      if (flushLoader) {
+        this.loaderService.reset();
+      }
     }
-  });
+  );
 }
 
 export function file(parent: object, args: () => Args['named']): FileResource {

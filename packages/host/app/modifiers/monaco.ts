@@ -56,13 +56,15 @@ export default class Monaco extends Modifier<Signature> {
     this.lastLanguage = language;
   }
 
-  private onContentChanged = restartableTask(async (contentChanged: (text: string) => void) => {
-    await timeout(500);
-    if (this.model) {
-      this.lastContent = this.model.getValue();
-      contentChanged(this.lastContent);
+  private onContentChanged = restartableTask(
+    async (contentChanged: (text: string) => void) => {
+      await timeout(500);
+      if (this.model) {
+        this.lastContent = this.model.getValue();
+        contentChanged(this.lastContent);
+      }
     }
-  });
+  );
 }
 
 const monacoTypescriptOptions: monaco.languages.typescript.CompilerOptions = {
