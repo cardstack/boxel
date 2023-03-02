@@ -13,37 +13,39 @@ interface Signature {
     isHighlighted?: boolean;
   };
   Blocks: {
-    default: [],
-    actions: [],
-  }
+    default: [];
+    actions: [];
+  };
 }
 
 const Header: TemplateOnlyComponent<Signature> = <template>
   <header
     class={{cn
-      "boxel-header"
+      'boxel-header'
       boxel-header--no-background=@noBackground
       boxel-header--highlighted=@isHighlighted
-      boxel-header--large=(or @title (eq @size "large"))
+      boxel-header--large=(or @title (eq @size 'large'))
     }}
     data-test-boxel-header
     ...attributes
   >
     {{#if (or @label @title)}}
       <div>
-        {{#if @label}}<Label data-test-boxel-header-label>{{@label}}</Label>{{/if}}
+        {{#if @label}}<Label
+            data-test-boxel-header-label
+          >{{@label}}</Label>{{/if}}
         {{#if @title}}{{@title}}{{/if}}
       </div>
     {{/if}}
 
     {{yield}}
 
-    {{#if (has-block "actions")}}
-      <div class="boxel-header__content" data-test-boxel-header-content>
-        {{yield to="actions"}}
+    {{#if (has-block 'actions')}}
+      <div class='boxel-header__content' data-test-boxel-header-content>
+        {{yield to='actions'}}
       </div>
     {{/if}}
   </header>
-</template>
+</template>;
 
 export default Header;

@@ -1,12 +1,12 @@
-import http, { IncomingMessage, ServerResponse } from "http";
-import { Loader, Realm } from "@cardstack/runtime-common";
-import { webStreamToText } from "@cardstack/runtime-common/stream";
-import { Readable } from "stream";
-import { setupCloseHandler } from "./node-realm";
-import "@cardstack/runtime-common/externals-global";
-import log from "loglevel";
+import http, { IncomingMessage, ServerResponse } from 'http';
+import { Loader, Realm } from '@cardstack/runtime-common';
+import { webStreamToText } from '@cardstack/runtime-common/stream';
+import { Readable } from 'stream';
+import { setupCloseHandler } from './node-realm';
+import '@cardstack/runtime-common/externals-global';
+import log from 'loglevel';
 
-let requestLog = log.getLogger("realm:requests");
+let requestLog = log.getLogger('realm:requests');
 
 export interface RealmConfig {
   realmURL: string;
@@ -17,14 +17,14 @@ export function createRealmServer(realms: Realm[]) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
-    if (process.env["ECS_CONTAINER_METADATA_URI_V4"]) {
+    if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
       res.setHeader(
-        "X-ECS-Container-Metadata-URI-v4",
-        process.env["ECS_CONTAINER_METADATA_URI_V4"]
+        'X-ECS-Container-Metadata-URI-v4',
+        process.env['ECS_CONTAINER_METADATA_URI_V4']
       );
     }
 
-    res.on("finish", () => {
+    res.on('finish', () => {
       requestLog.info(`${req.method} ${req.url}: ${res.statusCode}`);
       requestLog.debug(JSON.stringify(req.headers));
     });
@@ -41,14 +41,14 @@ export function createRealmServer(realms: Realm[]) {
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
-        res.statusMessage = "OK";
-        res.write("OK");
+        res.statusMessage = 'OK';
+        res.write('OK');
         res.end();
         return;
       }
 
       let protocol =
-        req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+        req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
       let fullRequestUrl = new URL(
         `${protocol}://${req.headers.host}${req.url}`
       );
@@ -72,7 +72,7 @@ export function createRealmServer(realms: Realm[]) {
 
       if (!realm) {
         res.statusCode = 404;
-        res.statusMessage = "Not Found";
+        res.statusMessage = 'Not Found';
         res.end();
         return;
       }
@@ -123,15 +123,15 @@ export function createRealmServer(realms: Realm[]) {
 }
 
 function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader('Access-Control-Allow-Origin', '*');
 
   if (
-    req.method === "OPTIONS" &&
-    req.headers["access-control-request-method"]
+    req.method === 'OPTIONS' &&
+    req.headers['access-control-request-method']
   ) {
     // preflight request
-    res.setHeader("Access-Control-Allow-Headers", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,DELETE,PATCH");
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,DELETE,PATCH');
     res.statusCode = 204;
     res.end();
     return true;
@@ -145,7 +145,7 @@ async function nodeStreamToText(stream: Readable): Promise<string> {
   for await (const chunk of stream as any) {
     chunks.push(Buffer.from(chunk));
   }
-  return Buffer.concat(chunks).toString("utf-8");
+  return Buffer.concat(chunks).toString('utf-8');
 }
 
 function detectRealmCollision(realms: Realm[]): void {
@@ -174,8 +174,8 @@ function detectRealmCollision(realms: Realm[]): void {
 
 function requestIsHealthCheck(req: http.IncomingMessage) {
   return (
-    req.url === "/" &&
-    req.method === "GET" &&
-    req.headers["user-agent"]?.startsWith("ELB-HealthChecker")
+    req.url === '/' &&
+    req.method === 'GET' &&
+    req.headers['user-agent']?.startsWith('ELB-HealthChecker')
   );
 }

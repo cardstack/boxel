@@ -4,7 +4,11 @@ import type RouterService from '@ember/routing/router-service';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import { chooseCard, catalogEntryRef, createNewCard } from '@cardstack/runtime-common';
+import {
+  chooseCard,
+  catalogEntryRef,
+  createNewCard,
+} from '@cardstack/runtime-common';
 import Directory from './directory';
 
 interface Args {
@@ -12,7 +16,7 @@ interface Args {
     url: string;
     openFile: string | undefined;
     openDirs: string[];
-  }
+  };
 }
 
 export default class FileTree extends Component<Args> {
@@ -21,11 +25,15 @@ export default class FileTree extends Component<Args> {
       <Directory
         @openDirs={{@openDirs}}
         @openFile={{@openFile}}
-        @relativePath=""
+        @relativePath=''
         @realmURL={{@url}}
       />
     </nav>
-    <button {{on "click" this.createNew}} type="button" data-test-create-new-card-button>
+    <button
+      {{on 'click' this.createNew}}
+      type='button'
+      data-test-create-new-card-button
+    >
       Create New Card
     </button>
   </template>
@@ -38,7 +46,7 @@ export default class FileTree extends Component<Args> {
       filter: {
         on: catalogEntryRef,
         eq: { isPrimitive: false },
-      }
+      },
     });
     if (!card) {
       return;

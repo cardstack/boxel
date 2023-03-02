@@ -14,27 +14,36 @@ interface Args {
     realmURL: string;
     relativePath: string;
     openFile: string | undefined;
-  }
+  };
 }
 
 export default class Directory extends Component<Args> {
   <template>
-    {{#each this.listing.entries key="path" as |entry|}}
-      <div class="directory-level">
+    {{#each this.listing.entries key='path' as |entry|}}
+      <div class='directory-level'>
         {{#let (concat @relativePath entry.name) as |entryPath|}}
           {{#if (eq entry.kind 'file')}}
-            <div role="button" {{on "click" (fn this.openFile entryPath)}} class="file {{if (eq entryPath @openFile) "selected"}}">
+            <div
+              role='button'
+              {{on 'click' (fn this.openFile entryPath)}}
+              class='file {{if (eq entryPath @openFile) "selected"}}'
+            >
               {{entry.name}}
             </div>
           {{else}}
-            <div role="button" {{on "click" (fn this.toggleDirectory entryPath)}} class="directory {{if (isSelected entryPath @openFile) "selected"}}">
+            <div
+              role='button'
+              {{on 'click' (fn this.toggleDirectory entryPath)}}
+              class='directory
+                {{if (isSelected entryPath @openFile) "selected"}}'
+            >
               {{entry.name}}
             </div>
             {{#if (isOpen entryPath @openDirs)}}
               <Directory
                 @openFile={{@openFile}}
                 @openDirs={{@openDirs}}
-                @relativePath="{{@relativePath}}{{entry.name}}"
+                @relativePath='{{@relativePath}}{{entry.name}}'
                 @realmURL={{@realmURL}}
               />
             {{/if}}
@@ -44,8 +53,11 @@ export default class Directory extends Component<Args> {
     {{/each}}
   </template>
 
-
-  listing = directory(this, () => this.args.relativePath, () => this.args.realmURL);
+  listing = directory(
+    this,
+    () => this.args.relativePath,
+    () => this.args.realmURL
+  );
   @service declare router: RouterService;
 
   @action
@@ -56,7 +68,11 @@ export default class Directory extends Component<Args> {
   @action
   toggleDirectory(entryPath: string) {
     let openDirs = editOpenDirsQuery(entryPath, this.args.openDirs);
-    this.router.transitionTo({ queryParams: { openDirs: openDirs.length ? openDirs.join(',') : undefined } });
+    this.router.transitionTo({
+      queryParams: {
+        openDirs: openDirs.length ? openDirs.join(',') : undefined,
+      },
+    });
   }
 }
 
@@ -64,7 +80,7 @@ function editOpenDirsQuery(entryPath: string, openDirs: string[]): string[] {
   let dirs = openDirs.slice();
   for (let i = 0; i < dirs.length; i++) {
     if (dirs[i].startsWith(entryPath)) {
-      let localParts = entryPath.split('/').filter(p => p.trim() != '');
+      let localParts = entryPath.split('/').filter((p) => p.trim() != '');
       localParts.pop();
       if (localParts.length) {
         dirs[i] = localParts.join('/') + '/';
@@ -85,5 +101,5 @@ function isSelected(localPath: string, openFile: string | undefined) {
 }
 
 function isOpen(path: string, openDirs: string[]) {
-  return openDirs.find(item => item.startsWith(path));
+  return openDirs.find((item) => item.startsWith(path));
 }

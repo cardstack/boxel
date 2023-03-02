@@ -1,9 +1,9 @@
-import { module, test } from "qunit";
-import { ModuleSyntax } from "@cardstack/runtime-common/module-syntax";
-import "@cardstack/runtime-common/helpers/code-equality-assertion";
+import { module, test } from 'qunit';
+import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module("module-syntax", function () {
-  test("can get the code for a card", async function (assert) {
+module('module-syntax', function () {
+  test('can get the code for a card', async function (assert) {
     let src = `
       import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -20,7 +20,7 @@ module("module-syntax", function () {
     assert.codeEqual(mod.code(), src);
   });
 
-  test("can add a field to a card", async function (assert) {
+  test('can add a field to a card', async function (assert) {
     let src = `
       import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -35,13 +35,13 @@ module("module-syntax", function () {
 
     let mod = new ModuleSyntax(src);
     mod.addField(
-      { type: "exportedName", name: "Person" },
-      "age",
+      { type: 'exportedName', name: 'Person' },
+      'age',
       {
-        module: "https://cardstack.com/base/integer",
-        name: "default",
+        module: 'https://cardstack.com/base/integer',
+        name: 'default',
       },
-      "contains"
+      'contains'
     );
 
     assert.codeEqual(
@@ -61,47 +61,47 @@ module("module-syntax", function () {
       `
     );
 
-    let card = mod.possibleCards.find((c) => c.exportedAs === "Person");
-    let field = card!.possibleFields.get("age");
-    assert.ok(field, "new field was added to syntax");
+    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let field = card!.possibleFields.get('age');
+    assert.ok(field, 'new field was added to syntax');
     assert.deepEqual(
       field?.card,
       {
-        type: "external",
-        module: "https://cardstack.com/base/integer",
-        name: "default",
+        type: 'external',
+        module: 'https://cardstack.com/base/integer',
+        name: 'default',
       },
-      "the field card is correct"
+      'the field card is correct'
     );
     assert.deepEqual(
       field?.type,
       {
-        type: "external",
-        module: "https://cardstack.com/base/card-api",
-        name: "contains",
+        type: 'external',
+        module: 'https://cardstack.com/base/card-api',
+        name: 'contains',
       },
-      "the field type is correct"
+      'the field type is correct'
     );
     assert.deepEqual(
       field?.decorator,
       {
-        type: "external",
-        module: "https://cardstack.com/base/card-api",
-        name: "field",
+        type: 'external',
+        module: 'https://cardstack.com/base/card-api',
+        name: 'field',
       },
-      "the field decorator is correct"
+      'the field decorator is correct'
     );
 
     // add another field which will assert that the field path is correct since
     // the new field must go after this field
     mod.addField(
-      { type: "exportedName", name: "Person" },
-      "lastName",
+      { type: 'exportedName', name: 'Person' },
+      'lastName',
       {
-        module: "https://cardstack.com/base/string",
-        name: "default",
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
       },
-      "contains"
+      'contains'
     );
     assert.codeEqual(
       mod.code(),
@@ -131,13 +131,13 @@ module("module-syntax", function () {
 
     let mod = new ModuleSyntax(src);
     mod.addField(
-      { type: "exportedName", name: "Person" },
-      "firstName",
+      { type: 'exportedName', name: 'Person' },
+      'firstName',
       {
-        module: "https://cardstack.com/base/string",
-        name: "default",
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
       },
-      "contains"
+      'contains'
     );
 
     assert.codeEqual(
@@ -153,7 +153,7 @@ module("module-syntax", function () {
     );
   });
 
-  test("can add a field to a card that is not exported", async function (assert) {
+  test('can add a field to a card that is not exported', async function (assert) {
     let src = `
       import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -172,13 +172,13 @@ module("module-syntax", function () {
 
     let mod = new ModuleSyntax(src);
     mod.addField(
-      { type: "localName", name: "Person" },
-      "age",
+      { type: 'localName', name: 'Person' },
+      'age',
       {
-        module: "https://cardstack.com/base/integer",
-        name: "default",
+        module: 'https://cardstack.com/base/integer',
+        name: 'default',
       },
-      "contains"
+      'contains'
     );
 
     assert.codeEqual(
@@ -203,7 +203,7 @@ module("module-syntax", function () {
     );
   });
 
-  test("can add a containsMany field", async function (assert) {
+  test('can add a containsMany field', async function (assert) {
     let src = `
       import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -218,13 +218,13 @@ module("module-syntax", function () {
 
     let mod = new ModuleSyntax(src);
     mod.addField(
-      { type: "exportedName", name: "Person" },
-      "aliases",
+      { type: 'exportedName', name: 'Person' },
+      'aliases',
       {
-        module: "https://cardstack.com/base/string",
-        name: "default",
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
       },
-      "containsMany"
+      'containsMany'
     );
 
     assert.codeEqual(
@@ -242,21 +242,21 @@ module("module-syntax", function () {
         }
       `
     );
-    let card = mod.possibleCards.find((c) => c.exportedAs === "Person");
-    let field = card!.possibleFields.get("aliases");
-    assert.ok(field, "new field was added to syntax");
+    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let field = card!.possibleFields.get('aliases');
+    assert.ok(field, 'new field was added to syntax');
     assert.deepEqual(
       field?.type,
       {
-        type: "external",
-        module: "https://cardstack.com/base/card-api",
-        name: "containsMany",
+        type: 'external',
+        module: 'https://cardstack.com/base/card-api',
+        name: 'containsMany',
       },
-      "the field type is correct"
+      'the field type is correct'
     );
   });
 
-  test("can handle field card declaration collisions when adding field", async function (assert) {
+  test('can handle field card declaration collisions when adding field', async function (assert) {
     let src = `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -270,13 +270,13 @@ module("module-syntax", function () {
 
     let mod = new ModuleSyntax(src);
     mod.addField(
-      { type: "exportedName", name: "Person" },
-      "age",
+      { type: 'exportedName', name: 'Person' },
+      'age',
       {
-        module: "https://cardstack.com/base/integer",
-        name: "default",
+        module: 'https://cardstack.com/base/integer',
+        name: 'default',
       },
-      "contains"
+      'contains'
     );
 
     assert.codeEqual(
@@ -299,7 +299,7 @@ module("module-syntax", function () {
   // At this level, we can only see this specific module. we'll need the
   // upstream caller to perform a field existence check on the card
   // definition to ensure this field does not already exist in the adoption chain
-  test("throws when adding a field with a name the card already has", async function (assert) {
+  test('throws when adding a field with a name the card already has', async function (assert) {
     let src = `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -311,24 +311,24 @@ module("module-syntax", function () {
     let mod = new ModuleSyntax(src);
     try {
       mod.addField(
-        { type: "exportedName", name: "Person" },
-        "firstName",
+        { type: 'exportedName', name: 'Person' },
+        'firstName',
         {
-          module: "https://cardstack.com/base/string",
-          name: "default",
+          module: 'https://cardstack.com/base/string',
+          name: 'default',
         },
-        "contains"
+        'contains'
       );
-      throw new Error("expected error was not thrown");
+      throw new Error('expected error was not thrown');
     } catch (err: any) {
       assert.ok(
         err.message.match(/field "firstName" already exists/),
-        "expected error was thrown"
+        'expected error was thrown'
       );
     }
   });
 
-  test("can remove a field from a card", async function (assert) {
+  test('can remove a field from a card', async function (assert) {
     let src = `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -339,7 +339,7 @@ module("module-syntax", function () {
       }
     `;
     let mod = new ModuleSyntax(src);
-    mod.removeField({ type: "exportedName", name: "Person" }, "firstName");
+    mod.removeField({ type: 'exportedName', name: 'Person' }, 'firstName');
 
     assert.codeEqual(
       mod.code(),
@@ -353,12 +353,12 @@ module("module-syntax", function () {
       `
     );
 
-    let card = mod.possibleCards.find((c) => c.exportedAs === "Person");
-    let field = card!.possibleFields.get("firstName");
-    assert.strictEqual(field, undefined, "field does not exist in syntax");
+    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let field = card!.possibleFields.get('firstName');
+    assert.strictEqual(field, undefined, 'field does not exist in syntax');
   });
 
-  test("can remove the last field from a card", async function (assert) {
+  test('can remove the last field from a card', async function (assert) {
     let src = `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -369,7 +369,7 @@ module("module-syntax", function () {
     `;
 
     let mod = new ModuleSyntax(src);
-    mod.removeField({ type: "exportedName", name: "Person" }, "firstName");
+    mod.removeField({ type: 'exportedName', name: 'Person' }, 'firstName');
 
     assert.codeEqual(
       mod.code(),
@@ -380,7 +380,7 @@ module("module-syntax", function () {
     );
   });
 
-  test("can remove the field from a card that is not exported", async function (assert) {
+  test('can remove the field from a card that is not exported', async function (assert) {
     let src = `
       import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -395,7 +395,7 @@ module("module-syntax", function () {
       }
     `;
     let mod = new ModuleSyntax(src);
-    mod.removeField({ type: "localName", name: "Person" }, "firstName");
+    mod.removeField({ type: 'localName', name: 'Person' }, 'firstName');
 
     assert.codeEqual(
       mod.code(),
@@ -414,7 +414,7 @@ module("module-syntax", function () {
     );
   });
 
-  test("throws when field to remove does not actually exist", async function (assert) {
+  test('throws when field to remove does not actually exist', async function (assert) {
     let src = `
       import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -426,12 +426,12 @@ module("module-syntax", function () {
 
     let mod = new ModuleSyntax(src);
     try {
-      mod.removeField({ type: "exportedName", name: "Person" }, "foo");
-      throw new Error("expected error was not thrown");
+      mod.removeField({ type: 'exportedName', name: 'Person' }, 'foo');
+      throw new Error('expected error was not thrown');
     } catch (err: any) {
       assert.ok(
         err.message.match(/field "foo" does not exist/),
-        "expected error was thrown"
+        'expected error was thrown'
       );
     }
   });

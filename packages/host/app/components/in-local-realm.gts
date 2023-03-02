@@ -8,18 +8,18 @@ import type RouterService from '@ember/routing/router-service';
 import type LocalRealm from '../services/local-realm';
 
 interface Signature {
-  Blocks: { default: [string] }
+  Blocks: { default: [string] };
 }
 
 export default class InLocalRealm extends Component<Signature> {
   <template>
     {{#if this.localRealm.isAvailable}}
-      <button {{on "click" this.closeRealm}} type="button">Close local realm</button>
+      <button {{on 'click' this.closeRealm}} type='button'>Close local realm</button>
       {{yield this.localRealm.url.href}}
     {{else if this.localRealm.isLoading}}
       ...
     {{else if this.localRealm.isEmpty}}
-      <button {{on "click" this.openRealm}}>Open a local realm</button>
+      <button {{on 'click' this.openRealm}}>Open a local realm</button>
     {{/if}}
   </template>
 
