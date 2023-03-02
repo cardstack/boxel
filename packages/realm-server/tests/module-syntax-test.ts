@@ -1,5 +1,8 @@
 import { module, test } from 'qunit';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+import { dirSync } from 'tmp';
+import { Loader, baseRealm, type Realm } from '@cardstack/runtime-common';
+import { testRealm, createRealm } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module('module-syntax', function () {
@@ -434,5 +437,115 @@ module('module-syntax', function () {
         'expected error was thrown'
       );
     }
+  });
+
+  module('linked fields', function (hooks) {
+    let realm: Realm;
+    let person = `
+      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `;
+    let pet = `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      export class Pet extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `;
+
+    hooks.beforeEach(async function () {
+      Loader.destroy();
+      Loader.addURLMapping(
+        new URL(baseRealm.url),
+        new URL('http://localhost:4201/base/')
+      );
+      realm = createRealm(dirSync().name, {
+        'pet.gts': pet,
+        'person.gts': person,
+      });
+      await realm.ready;
+    });
+
+    test('can add a linksTo field', async function (assert) {
+      let mod = new ModuleSyntax(person);
+      mod.addField(
+        { type: 'exportedName', name: 'Person' },
+        'pet',
+        {
+          module: `${testRealm}dir/pet`,
+          name: 'Pet',
+        },
+        'linksTo'
+      );
+
+      assert.codeEqual(
+        mod.code(),
+        `
+          import { Pet as PetCard } from "${testRealm}dir/pet";
+          import { contains, field, Component, Card, linksTo } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+
+          export class Person extends Card {
+            @field firstName = contains(StringCard);
+            @field pet = linksTo(PetCard);
+          }
+        `
+      );
+      let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+      let field = card!.possibleFields.get('pet');
+      assert.ok(field, 'new field was added to syntax');
+      assert.deepEqual(
+        field?.type,
+        {
+          type: 'external',
+          module: 'https://cardstack.com/base/card-api',
+          name: 'linksTo',
+        },
+        'the field type is correct'
+      );
+    });
+
+    test('can add a self-referencing linksTo field', async function (assert) {
+      let mod = new ModuleSyntax(person);
+      mod.addField(
+        { type: 'exportedName', name: 'Person' },
+        'friend',
+        {
+          module: `${testRealm}dir/person`,
+          name: 'Person',
+        },
+        'linksTo'
+      );
+
+      assert.codeEqual(
+        mod.code(),
+        `
+          import { Person as PersonCard } from "${testRealm}dir/person";
+          import { contains, field, Component, Card, linksTo } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+
+          export class Person extends Card {
+            @field firstName = contains(StringCard);
+            @field friend = linksTo(() => PersonCard);
+          }
+        `
+      );
+      let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+      let field = card!.possibleFields.get('friend');
+      assert.ok(field, 'new field was added to syntax');
+      assert.deepEqual(
+        field?.type,
+        {
+          type: 'external',
+          module: 'https://cardstack.com/base/card-api',
+          name: 'linksTo',
+        },
+        'the field type is correct'
+      );
+    });
   });
 });
