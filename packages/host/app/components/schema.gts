@@ -232,7 +232,7 @@ export default class Schema extends Component<Signature> {
       fieldEntry.ref,
       this.newFieldType
     );
-    await this.write.perform(this.args.moduleSyntax.code();
+    await this.write.perform(this.args.moduleSyntax.code());
   });
 
   private write = restartableTask(async (src: string) => {
