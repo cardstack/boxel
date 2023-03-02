@@ -235,6 +235,50 @@ module('Integration | schema', function (hooks) {
     );
   });
 
+  test('can delete a linksTo field that has the same type as the card', async function (assert) {
+    await realm.write(
+      'person.gts',
+      `
+      import { Person as PersonCard } from "${testRealmURL}person";
+      import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field name = contains(StringCard);
+        @field friend = linksTo(() => PersonCard);
+      }
+    `
+    );
+    let openFile = await getFileResource(this, adapter, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Module @file={{openFile}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-card-id]');
+    await click('[data-test-field="friend"] button[data-test-delete]');
+    let fileRef = await adapter.openFile('person.gts');
+    let src = fileRef?.content as string;
+    assert.codeEqual(
+      src,
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field name = contains(StringCard);
+      }
+    `
+    );
+  });
+
   test('does not include a delete button for fields that are inherited', async function (assert) {
     await realm.write(
       'person.gts',
