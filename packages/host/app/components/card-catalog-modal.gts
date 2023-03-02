@@ -78,7 +78,7 @@ export default class CardCatalogModal extends Component {
     return await taskFor(this._chooseCard).perform(query, opts) as T | undefined;
   }
 
-  @enqueueTask private async _chooseCard<T extends Card>(query: Query, opts: { offerToCreate?: CardRef } = {}): Promise<undefined | T> {
+  private _chooseCard = enqueueTask(async <T extends Card>(query: Query, opts: { offerToCreate?: CardRef } = {}) => {
     this.currentRequest = {
       search: getSearchResults(this, () => query),
       deferred: new Deferred(),
@@ -90,7 +90,7 @@ export default class CardCatalogModal extends Component {
     } else {
       return undefined;
     }
-  }
+  });
 
   @action pick(card?: Card): void {
     if (this.currentRequest) {

@@ -65,7 +65,7 @@ export default class CreateCardModal extends Component {
     return await taskFor(this._create).perform(ref) as T | undefined;
   }
 
-  @enqueueTask private async _create<T extends Card>(ref: CardRef): Promise<undefined | T> {
+  private _create = enqueueTask(async <T extends Card>(ref: CardRef) => {
     let doc = { data: { meta: { adoptsFrom: ref }}};
     this.currentRequest = {
       card: await this.cardService.createFromSerialized(doc.data, doc, this.cardService.defaultURL),
@@ -77,7 +77,7 @@ export default class CreateCardModal extends Component {
     } else {
       return undefined;
     }
-  }
+  });
 
   @action save(card?: Card): void {
     if (this.currentRequest) {
