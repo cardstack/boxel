@@ -15,7 +15,7 @@ interface Signature {
     format?: Format;
     onCancel?: () => void;
     onSave?: (card: Card) => void;
-  }
+  };
 }
 
 const formats: Format[] = ['isolated', 'embedded', 'edit'];
@@ -27,18 +27,23 @@ export default class CardEditor extends Component<Signature> {
       @format={{this.format}}
       @setFormat={{this.setFormat}}
     />
-    <Preview
-      @format={{this.format}}
-      @card={{@card}}
-    />
-    {{!-- @glint-ignore glint doesn't know about EC task properties --}}
+    <Preview @format={{this.format}} @card={{@card}} />
+    {{! @glint-ignore glint doesn't know about EC task properties }}
     {{#if this.write.last.isRunning}}
       <span data-test-saving>Saving...</span>
     {{else}}
       <div>
-        <button data-test-save-card {{on "click" this.save}} type="button">Save</button>
+        <button
+          data-test-save-card
+          {{on 'click' this.save}}
+          type='button'
+        >Save</button>
         {{#if @onCancel}}
-          <button data-test-cancel-create {{on "click" @onCancel}} type="button">Cancel</button>
+          <button
+            data-test-cancel-create
+            {{on 'click' @onCancel}}
+            type='button'
+          >Cancel</button>
         {{/if}}
       </div>
     {{/if}}

@@ -49,7 +49,7 @@ export class CardType extends Resource<Args> {
 
   async toType(
     card: typeof Card,
-    stack: typeof Card[] = []
+    stack: (typeof Card)[] = []
   ): Promise<Type | CardRef> {
     let maybeRef = identifyCard(card);
     if (!maybeRef) {

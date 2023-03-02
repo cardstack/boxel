@@ -7,5 +7,5 @@ export default class TextAreaCard extends StringCard {
     <template>
       <BoxelInput @value={{@model}} @onInput={{@set}} @multiline={{true}} />
     </template>
-  }
+  };
 }

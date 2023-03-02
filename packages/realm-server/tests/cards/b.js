@@ -1,5 +1,5 @@
-import { c } from "./c";
+import { c } from './c';
 
 export function b() {
-  return "b" + c();
+  return 'b' + c();
 }

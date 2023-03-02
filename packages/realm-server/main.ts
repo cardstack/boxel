@@ -1,59 +1,59 @@
-import { Realm } from "@cardstack/runtime-common";
-import { Loader } from "@cardstack/runtime-common/loader";
-import { NodeAdapter } from "./node-realm";
-import yargs from "yargs";
-import { createRealmServer } from "./server";
-import { resolve, join } from "path";
-import { makeFastBootIndexRunner } from "./fastboot";
-import { RunnerOptionsManager } from "@cardstack/runtime-common/search-index";
-import log, { LogLevelNames } from "loglevel";
+import { Realm } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { NodeAdapter } from './node-realm';
+import yargs from 'yargs';
+import { createRealmServer } from './server';
+import { resolve, join } from 'path';
+import { makeFastBootIndexRunner } from './fastboot';
+import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
+import log, { LogLevelNames } from 'loglevel';
 
 let {
   port,
-  dist = join(__dirname, "..", "host", "dist"),
+  dist = join(__dirname, '..', 'host', 'dist'),
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
   logLevel,
   requestLogLevel,
 } = yargs(process.argv.slice(2))
-  .usage("Start realm server")
+  .usage('Start realm server')
   .options({
     port: {
-      description: "port number",
+      description: 'port number',
       demandOption: true,
-      type: "number",
+      type: 'number',
     },
     fromUrl: {
-      description: "the source of the realm URL proxy",
+      description: 'the source of the realm URL proxy',
       demandOption: true,
-      type: "array",
+      type: 'array',
     },
     toUrl: {
-      description: "the target of the realm URL proxy",
+      description: 'the target of the realm URL proxy',
       demandOption: true,
-      type: "array",
+      type: 'array',
     },
     path: {
-      description: "realm directory path",
+      description: 'realm directory path',
       demandOption: true,
-      type: "array",
+      type: 'array',
     },
     dist: {
       description:
         "the dist/ folder of the host app. Defaults to '../host/dist'",
-      type: "string",
+      type: 'string',
     },
     logLevel: {
-      description: "how detailed log output should be",
-      choices: ["trace", "debug", "info", "warn", "error"],
-      default: "debug",
+      description: 'how detailed log output should be',
+      choices: ['trace', 'debug', 'info', 'warn', 'error'],
+      default: 'debug',
     },
     requestLogLevel: {
-      description: "how detailed request log output should be",
-      choices: ["trace", "debug", "info", "warn", "error"],
-      default: "info",
-    }
+      description: 'how detailed request log output should be',
+      choices: ['trace', 'debug', 'info', 'warn', 'error'],
+      default: 'info',
+    },
   })
   .parseSync();
 
@@ -113,7 +113,7 @@ for (let [index, { url }] of realms.entries()) {
   log.info(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
 }
 if (additionalMappings.length) {
-  log.info("Additional URL mappings:");
+  log.info('Additional URL mappings:');
   for (let [from, to] of additionalMappings) {
     log.info(`    ${from} => ${to}`);
   }

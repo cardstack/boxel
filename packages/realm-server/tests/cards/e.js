@@ -1,1 +1,1 @@
-throw new Error("intentional error thrown");
+throw new Error('intentional error thrown');

@@ -1,5 +1,9 @@
-
-import { contains, field, Card, containsMany } from 'https://cardstack.com/base/card-api';
+import {
+  contains,
+  field,
+  Card,
+  containsMany,
+} from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import { PaymentMethod } from './payment-method';
 

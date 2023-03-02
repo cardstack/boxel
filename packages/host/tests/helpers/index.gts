@@ -23,7 +23,10 @@ import {
   type EntrySetter,
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
-import { WebMessageStream, messageCloseHandler } from '@cardstack/runtime-common/stream';
+import {
+  WebMessageStream,
+  messageCloseHandler,
+} from '@cardstack/runtime-common/stream';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -75,7 +78,7 @@ async function makeRenderer() {
   await renderComponent(
     class TestDriver extends GlimmerComponent {
       <template>
-        <CardPrerender/>
+        <CardPrerender />
       </template>
     }
   );
@@ -110,10 +113,12 @@ class MockLocalRealm extends Service {
   async setupIndexRunner(
     registerRunner: RunnerRegistration,
     entrySetter: EntrySetter,
-    adapter: RealmAdapter,
+    adapter: RealmAdapter
   ) {
     if (!this.#fromScratch || !this.#incremental) {
-      throw new Error(`fromScratch/incremental not registered with MockLocalRealm`);
+      throw new Error(
+        `fromScratch/incremental not registered with MockLocalRealm`
+      );
     }
     this.#entrySetter = entrySetter;
     this.#adapter = adapter;
@@ -137,7 +142,7 @@ class MockLocalRealm extends Service {
 }
 
 export function setupMockLocalRealm(hooks: NestedHooks) {
-  hooks.beforeEach(function() {
+  hooks.beforeEach(function () {
     this.owner.register('service:local-realm', MockLocalRealm);
   });
 }
@@ -153,7 +158,7 @@ function makeRealm(
     realmURL ?? testRealmURL,
     adapter,
     async (optsId) => {
-        let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
+      let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
       await localRealm.setupIndexRunner(registerRunner, entrySetter, adapter);
     },
     runnerOptsMgr
@@ -373,11 +378,12 @@ export class TestRealmAdapter implements RealmAdapter {
   createStreamingResponse(
     _request: Request,
     responseInit: ResponseInit,
-    cleanup: () => void) {
-      let s = new WebMessageStream();
-      let response = createResponse(s.readable, responseInit);
-      messageCloseHandler(s.readable, cleanup);
-      return { response, writable: s.writable };
+    cleanup: () => void
+  ) {
+    let s = new WebMessageStream();
+    let response = createResponse(s.readable, responseInit);
+    messageCloseHandler(s.readable, cleanup);
+    return { response, writable: s.writable };
   }
 
   async subscribe(cb: (message: Record<string, any>) => void): Promise<void> {

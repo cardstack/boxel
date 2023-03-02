@@ -1,4 +1,10 @@
-import { contains, field, linksTo, Component, Card } from 'https://cardstack.com/base/card-api';
+import {
+  contains,
+  field,
+  linksTo,
+  Component,
+  Card,
+} from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
@@ -10,19 +16,21 @@ class BasicCard extends Card {
   @field title = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      Title: <@fields.title/>
+      Title: <@fields.title />
     </template>
-  }
+  };
 }
 
 class VeryBasicCard extends BasicCard {
   @field description = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      Title: <@fields.title/>
-      Description: <@fields.description/>
+      Title:
+      <@fields.title />
+      Description:
+      <@fields.description />
     </template>
-  }
+  };
 }
 
 export class Post extends Card {
@@ -34,17 +42,20 @@ export class Post extends Card {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <CardContainer>
-        <h1><@fields.title/><img src="{{imageURL}}"></h1>
-        <h3>by <@fields.author.firstName/> <@fields.author.lastName/></h3>
-        <p><@fields.body/></p>
+        <h1><@fields.title /><img src='{{imageURL}}' /></h1>
+        <h3>by <@fields.author.firstName /> <@fields.author.lastName /></h3>
+        <p><@fields.body /></p>
       </CardContainer>
     </template>
-  }
+  };
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer>
-        <em><@fields.title/></em> by <@fields.author.firstName/> <@fields.author.lastName/>
+        <em><@fields.title /></em>
+        by
+        <@fields.author.firstName />
+        <@fields.author.lastName />
       </CardContainer>
     </template>
-  }
+  };
 }
