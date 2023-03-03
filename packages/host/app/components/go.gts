@@ -26,7 +26,7 @@ import InLocalRealm from './in-local-realm';
 import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
-const { demoRealmURL } = ENV;
+const { ownRealmURL, localRealmEnabled } = ENV;
 
 interface Signature {
   Args: {
@@ -40,8 +40,9 @@ export default class Go extends Component<Signature> {
   <template>
     <div class="main">
       <div class="main__column">
-        {{#if demoRealmURL}}
-          <FileTree @url={{demoRealmURL}} @openFile={{@path}} @openDirs={{@openDirs}} />
+        {{!-- TODO Need a different test to determine if we are in the local realm --}}
+        {{#if ownRealmURL}}
+          <FileTree @url={{ownRealmURL}} @openFile={{@path}} @openDirs={{@openDirs}} />
         {{else}}
           <InLocalRealm as |url|>
             <FileTree @url={{url}} @openFile={{@path}} @openDirs={{@openDirs}} />

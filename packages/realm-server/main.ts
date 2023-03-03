@@ -1,4 +1,5 @@
 import { Realm } from "@cardstack/runtime-common";
+import { distDir } from "@cardstack/runtime-common/realm";
 import { Loader } from "@cardstack/runtime-common/loader";
 import { NodeAdapter } from "./node-realm";
 import yargs from "yargs";
@@ -6,6 +7,7 @@ import { createRealmServer } from "./server";
 import { resolve, join } from "path";
 import { makeFastBootIndexRunner } from "./fastboot";
 import { RunnerOptionsManager } from "@cardstack/runtime-common/search-index";
+import { ensureSymlinkSync } from "fs-extra";
 import log, { LogLevelNames } from "loglevel";
 
 let {
@@ -53,7 +55,7 @@ let {
       description: "how detailed request log output should be",
       choices: ["trace", "debug", "info", "warn", "error"],
       default: "info",
-    }
+    },
   })
   .parseSync();
 
@@ -73,7 +75,7 @@ if (fromUrls.length < paths.length) {
 log.setLevel(logLevel as LogLevelNames);
 log.info(`Set log level to ${logLevel}`);
 
-let requestLog = log.getLogger('realm:requests');
+let requestLog = log.getLogger("realm:requests");
 requestLog.setLevel(requestLogLevel as LogLevelNames);
 requestLog.info(`Set request log level to ${requestLogLevel}`);
 
@@ -89,6 +91,7 @@ let distPath = resolve(dist);
 
 let realms: Realm[] = [];
 for (let [i, path] of paths.entries()) {
+  ensureSymlinkSync(distPath, join(String(path), distDir));
   let manager = new RunnerOptionsManager();
   let getRunner = makeFastBootIndexRunner(
     distPath,
@@ -105,7 +108,7 @@ for (let [i, path] of paths.entries()) {
   );
 }
 
-let server = createRealmServer(realms);
+let server = createRealmServer(realms, distPath);
 server.listen(port);
 log.info(`Realm server listening on port ${port}:`);
 let additionalMappings = hrefs.slice(paths.length);

@@ -12,7 +12,8 @@ declare const config: {
   locationType: 'history' | 'hash' | 'none' | 'auto';
   rootURL: string;
   APP: Record<string, unknown>;
-  demoRealmURL: string;
+  ownRealmURL: string;
+  localRealmEnabled: string;
   resolvedBaseRealmURL: string;
   logLevel: LogLevelNames;
   currentRunLogLevel: LogLevelNames;

@@ -45,6 +45,7 @@ export default class Index extends Route<Model> {
     }
 
     await this.localRealm.startedUp;
+    // TODO rework this
     if (!this.localRealm.isAvailable && !this.cardService.demoRealmAvailable) {
       return { path, openFile, openDirs, isFastBoot };
     }

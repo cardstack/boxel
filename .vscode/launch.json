@@ -84,6 +84,28 @@
       "env": {
         "NODE_NO_WARNINGS": "1"
       }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "start demo realm",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "./node_modules/.bin/../../../../node_modules/.pnpm/ts-node@10.9.1_wup25etrarvlqkprac7h35hj7u/node_modules/ts-node/dist/bin.js",
+      "args": [
+        "--transpileOnly",
+        "main",
+        "--port=4202",
+        "--fromUrl='/'",
+        "--toUrl='/'",
+        "--path='../demo-cards'",
+        "--fromUrl='https://cardstack.com/base/'",
+        "--toUrl='http://localhost:4201/base/'"
+      ],
+      "cwd": "${workspaceFolder}/packages/realm-server",
+      "outFiles": ["${workspaceFolder}/**/*.js"],
+      "env": {
+        "NODE_NO_WARNINGS": "1"
+      }
     }
   ]
 }

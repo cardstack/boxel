@@ -20,6 +20,7 @@ import {
   executableExtensions,
   isNode,
   isSingleCardDocument,
+  baseRealm,
   type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -61,6 +62,8 @@ import type * as CardAPI from "https://cardstack.com/base/card-api";
 import type { LoaderType } from "https://cardstack.com/base/card-api";
 import { createResponse } from "./create-response";
 import log from "loglevel";
+
+export const distDir = `.dist`;
 
 export interface FileRef {
   path: LocalPath;
@@ -127,6 +130,7 @@ export interface RealmAdapter {
 
 interface Options {
   deferStartUp?: true;
+  enableLocalRealm?: true;
 }
 
 export class Realm {
@@ -235,6 +239,7 @@ export class Realm {
       accept?.includes("text/event-stream")
     ) {
       // local requests are allowed to query the realm as the index is being built up
+      // TODO the host name for the local realm is likely going to change
       if (!request.isLocal && url.host !== "local-realm") {
         await this.ready;
       }
@@ -242,10 +247,16 @@ export class Realm {
         return systemError("search index is not available");
       }
       return this.#jsonAPIRouter.handle(request);
-    } else if (
-      request.headers.get("Accept")?.includes("application/vnd.card+source")
-    ) {
+    } else if (accept?.includes("application/vnd.card+source")) {
       return this.#cardSourceRouter.handle(request);
+    } else if (accept?.includes("text/html")) {
+      let { content, handle } = await this.getIndexHTML();
+      return createResponse(content, {
+        headers: {
+          "content-type": "text/html",
+          "last-modified": formatRFC7231(handle.lastModified),
+        },
+      });
     }
 
     let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
@@ -263,6 +274,29 @@ export class Realm {
     } else {
       return await this.serveLocalFile(handle);
     }
+  }
+
+  async getIndexHTML(): Promise<{ content: string; handle: FileRef }> {
+    let handle = await this.#adapter.openFile(`${distDir}/index.html`);
+    if (!handle) {
+      throw new CardError(
+        `could not locate ${distDir}/index.html within the realm dir`
+      );
+    }
+    let indexHtml = await fileContentToText(handle);
+    let content = indexHtml.replace(
+      /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
+      (_match, g1, g2, g3) => {
+        let config = JSON.parse(decodeURIComponent(g2));
+        config = merge({}, config, {
+          ownRealmURL: this.url,
+          resolvedBaseRealmURL: this.#searchIndex.loader.resolve(baseRealm.url)
+            .href,
+        });
+        return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
+      }
+    );
+    return { content, handle };
   }
 
   private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {

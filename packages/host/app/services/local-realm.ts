@@ -23,7 +23,7 @@ import {
 import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
-const { demoRealmURL } = ENV;
+const { ownRealmURL, localRealmEnabled } = ENV;
 
 export default class LocalRealm extends Service {
   #setEntryDeferred: Deferred<void> | undefined;
@@ -38,7 +38,8 @@ export default class LocalRealm extends Service {
 
   constructor(properties: object) {
     super(properties);
-    if (!this.fastboot.isFastBoot && !demoRealmURL) {
+    // TODO ownRealmURL will always exist, we need to test to see if the local realm is enabled
+    if (!this.fastboot.isFastBoot && !ownRealmURL) {
       let handler = (event: MessageEvent) => this.handleMessage(event);
       navigator.serviceWorker.addEventListener('message', handler);
       registerDestructor(this, () =>
@@ -132,7 +133,8 @@ export default class LocalRealm extends Service {
       this.state = { type: 'fastboot', worker: undefined };
       return;
     }
-    if (demoRealmURL) {
+    // TODO this test should be changed to check if the local realm is enabled
+    if (ownRealmURL) {
       this.state = {
         type: 'demo-realm',
         worker: undefined,
@@ -334,7 +336,7 @@ export default class LocalRealm extends Service {
     navigator.serviceWorker.oncontrollerchange = () => {
       log.info('worker changed');
       if ('worker' in this.state) {
-        this.router.transitionTo('application', {
+        this.router.transitionTo('index', {
           queryParams: { path: undefined },
         });
         this.state = { type: 'starting-up' };

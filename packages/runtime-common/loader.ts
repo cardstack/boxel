@@ -347,11 +347,7 @@ export class Loader {
     }
   }
 
-  // This is intentionally private to prevent this capability from leaking outside of the loader
-  private resolve(
-    moduleIdentifier: string | URL,
-    relativeTo?: URL
-  ): ResolvedURL {
+  resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
     for (let [sourceURL, to] of this.urlMappings) {
       let sourcePath = new RealmPaths(new URL(sourceURL));

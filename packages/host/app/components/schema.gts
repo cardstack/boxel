@@ -59,7 +59,7 @@ export default class Schema extends Component<Signature> {
                   {{cardId field.card}} (this card)
                 {{else if (this.inRealm (cardModule field.card))}}
                   <LinkTo
-                    @route="application"
+                    @route="code"
                     @query={{hash path=(this.modulePath (cardModule field.card))}}
                   >
                     {{cardId field.card}}
