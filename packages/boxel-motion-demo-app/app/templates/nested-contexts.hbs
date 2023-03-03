@@ -8,26 +8,26 @@
     {{on 'click' (fn (mut this.showLevel3) (not this.showLevel3))}}
   >{{if this.showLevel3 'Hide' 'Show'}} level 3</button>
 
-  {{! @glint-expect-error: TODO: migrate this.level1Transition to return AnimationDefinition }}
   <AnimationContext
     @id='level-1'
+    {{! @glint-expect-error: TODO: migrate this.level1Transition to return AnimationDefinition }}
     @use={{this.level1Transition}}
     local-class='level-1-context'
   >
     {{#if this.showLevel2}}
       <div {{sprite id='level-2-sprite'}}>Level 2 Sprite</div>
-      {{! @glint-expect-error: TODO: migrate this.level2Transition to return AnimationDefinition }}
       <AnimationContext
         @id='level-2'
         {{sprite id='level-2-context'}}
+        {{! @glint-expect-error: TODO: migrate this.level2Transition to return AnimationDefinition }}
         @use={{this.level2Transition}}
         local-class='level-2-context'
       >
         {{#if this.showLevel3}}
-          {{! @glint-expect-error: TODO: migrate this.level3Transition to return AnimationDefinition }}
           <AnimationContext
             @id='level-3'
             {{sprite id='level-3-context'}}
+            {{! @glint-expect-error: TODO: migrate this.level3Transition to return AnimationDefinition }}
             @use={{this.level3Transition}}
             local-class='level-3-context'
           >
