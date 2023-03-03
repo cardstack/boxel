@@ -4,10 +4,10 @@ import {
   FileRef,
   createResponse,
   type ResponseWithNodeStream,
-} from "@cardstack/runtime-common";
-import { LocalPath } from "@cardstack/runtime-common/paths";
-import { ServerResponse } from "http";
-import sane, { type Watcher } from "sane";
+} from '@cardstack/runtime-common';
+import { LocalPath } from '@cardstack/runtime-common/paths';
+import { ServerResponse } from 'http';
+import sane, { type Watcher } from 'sane';
 
 import {
   readdirSync,
@@ -19,9 +19,9 @@ import {
   createReadStream,
   removeSync,
   ReadStream,
-} from "fs-extra";
-import { join } from "path";
-import { Duplex } from "node:stream";
+} from 'fs-extra';
+import { join } from 'path';
+import { Duplex } from 'node:stream';
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -45,7 +45,7 @@ export class NodeAdapter implements RealmAdapter {
       yield {
         name,
         path: join(path, name),
-        kind: isDirectory ? "directory" : "file",
+        kind: isDirectory ? 'directory' : 'file',
       };
     }
   }
@@ -56,15 +56,15 @@ export class NodeAdapter implements RealmAdapter {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
     }
-    this.watcher = sane(join(this.realmDir, "/"));
-    this.watcher.on("change", (path) => cb({ changed: path }));
-    this.watcher.on("add", (path) => cb({ added: path }));
-    this.watcher.on("delete", (path) => cb({ removed: path }));
-    this.watcher.on("error", (err) => {
+    this.watcher = sane(join(this.realmDir, '/'));
+    this.watcher.on('change', (path) => cb({ changed: path }));
+    this.watcher.on('add', (path) => cb({ added: path }));
+    this.watcher.on('delete', (path) => cb({ removed: path }));
+    this.watcher.on('error', (err) => {
       throw new Error(`watcher error: ${err}`);
     });
     await new Promise<void>((resolve) => {
-      this.watcher!.on("ready", resolve);
+      this.watcher!.on('ready', resolve);
     });
   }
 
@@ -130,7 +130,7 @@ export class NodeAdapter implements RealmAdapter {
 }
 
 export function onClose(request: Request, fn: () => void) {
-  closeHandlers.get(request)!.on("close", fn);
+  closeHandlers.get(request)!.on('close', fn);
 }
 
 const closeHandlers: WeakMap<Request, ServerResponse> = new WeakMap();
@@ -148,7 +148,7 @@ class MessageStream extends Duplex {
   _read() {
     if (this.pendingRead) {
       throw new Error(
-        "bug: did not expect node to call read until after we push data from the prior read"
+        'bug: did not expect node to call read until after we push data from the prior read'
       );
     }
     if (this.pendingWrite) {
@@ -168,7 +168,7 @@ class MessageStream extends Duplex {
   ) {
     if (this.pendingWrite) {
       throw new Error(
-        "bug: did not expect node to call write until after we call the callback"
+        'bug: did not expect node to call write until after we call the callback'
       );
     }
     if (this.pendingRead) {

@@ -1,16 +1,16 @@
-import http, { IncomingMessage, ServerResponse } from "http";
-import { Loader, Realm } from "@cardstack/runtime-common";
-import { webStreamToText } from "@cardstack/runtime-common/stream";
-import { Readable } from "stream";
-import { setupCloseHandler } from "./node-realm";
-import { existsSync, readFileSync } from "fs-extra";
-import { join, resolve } from "path";
-import { formatRFC7231 } from "date-fns";
-import mime from "mime-types";
-import "@cardstack/runtime-common/externals-global";
-import log from "loglevel";
+import http, { IncomingMessage, ServerResponse } from 'http';
+import { Loader, Realm } from '@cardstack/runtime-common';
+import { webStreamToText } from '@cardstack/runtime-common/stream';
+import { Readable } from 'stream';
+import { setupCloseHandler } from './node-realm';
+import { existsSync, readFileSync } from 'fs-extra';
+import { join, resolve } from 'path';
+import { formatRFC7231 } from 'date-fns';
+import mime from 'mime-types';
+import '@cardstack/runtime-common/externals-global';
+import log from 'loglevel';
 
-let requestLog = log.getLogger("realm:requests");
+let requestLog = log.getLogger('realm:requests');
 
 export interface RealmConfig {
   realmURL: string;
@@ -21,14 +21,14 @@ export function createRealmServer(realms: Realm[], distPath: string) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
-    if (process.env["ECS_CONTAINER_METADATA_URI_V4"]) {
+    if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
       res.setHeader(
-        "X-ECS-Container-Metadata-URI-v4",
-        process.env["ECS_CONTAINER_METADATA_URI_V4"]
+        'X-ECS-Container-Metadata-URI-v4',
+        process.env['ECS_CONTAINER_METADATA_URI_V4']
       );
     }
 
-    res.on("finish", () => {
+    res.on('finish', () => {
       requestLog.info(`${req.method} ${req.url}: ${res.statusCode}`);
       requestLog.debug(JSON.stringify(req.headers));
     });
@@ -45,8 +45,8 @@ export function createRealmServer(realms: Realm[], distPath: string) {
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
         res.statusCode = 200;
-        res.statusMessage = "OK";
-        res.write("OK");
+        res.statusMessage = 'OK';
+        res.write('OK');
         res.end();
         return;
       }
@@ -55,13 +55,13 @@ export function createRealmServer(realms: Realm[], distPath: string) {
       if (
         maybeAssetPath === distPath &&
         realms.length > 0 &&
-        req.headers.accept?.includes("text/html")
+        req.headers.accept?.includes('text/html')
       ) {
         // this would only be called when there is a single realm on this
         // server, in which case just use the first realm
         let { content, handle } = await realms[0].getIndexHTML();
-        res.setHeader("Content-Type", "text/html");
-        res.setHeader("last-modified", formatRFC7231(handle.lastModified));
+        res.setHeader('Content-Type', 'text/html');
+        res.setHeader('last-modified', formatRFC7231(handle.lastModified));
         res.write(content);
         res.end();
         return;
@@ -72,7 +72,7 @@ export function createRealmServer(realms: Realm[], distPath: string) {
       }
 
       let protocol =
-        req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+        req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
       let fullRequestUrl = new URL(
         `${protocol}://${req.headers.host}${req.url}`
       );
@@ -107,16 +107,16 @@ export function createRealmServer(realms: Realm[], distPath: string) {
 
       if (!realm) {
         res.statusCode = 404;
-        res.statusMessage = "Not Found";
+        res.statusMessage = 'Not Found';
         res.end();
         return;
       }
 
       // this one is unique in that it is requested in a manner that is relative
       // to the URL in the address bar as opposed to the absolute asset location
-      if (realm.paths.local(reversedResolution) === "worker.js") {
-        res.setHeader("Service-Worker-Allowed", "/");
-        assetResponse(join(distPath, "worker.js"), res);
+      if (realm.paths.local(reversedResolution) === 'worker.js') {
+        res.setHeader('Service-Worker-Allowed', '/');
+        assetResponse(join(distPath, 'worker.js'), res);
         return;
       }
 
@@ -166,15 +166,15 @@ export function createRealmServer(realms: Realm[], distPath: string) {
 }
 
 function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader('Access-Control-Allow-Origin', '*');
 
   if (
-    req.method === "OPTIONS" &&
-    req.headers["access-control-request-method"]
+    req.method === 'OPTIONS' &&
+    req.headers['access-control-request-method']
   ) {
     // preflight request
-    res.setHeader("Access-Control-Allow-Headers", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,DELETE,PATCH");
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,DELETE,PATCH');
     res.statusCode = 204;
     res.end();
     return true;
@@ -188,7 +188,7 @@ async function nodeStreamToText(stream: Readable): Promise<string> {
   for await (const chunk of stream as any) {
     chunks.push(Buffer.from(chunk));
   }
-  return Buffer.concat(chunks).toString("utf-8");
+  return Buffer.concat(chunks).toString('utf-8');
 }
 
 function detectRealmCollision(realms: Realm[]): void {
@@ -217,9 +217,9 @@ function detectRealmCollision(realms: Realm[]): void {
 
 function requestIsHealthCheck(req: http.IncomingMessage) {
   return (
-    req.url === "/" &&
-    req.method === "GET" &&
-    req.headers["user-agent"]?.startsWith("ELB-HealthChecker")
+    req.url === '/' &&
+    req.method === 'GET' &&
+    req.headers['user-agent']?.startsWith('ELB-HealthChecker')
   );
 }
 
@@ -228,7 +228,7 @@ function assetResponse(
   res: http.ServerResponse<http.IncomingMessage>
 ) {
   let mimeType = mime.lookup(assetPath);
-  res.setHeader("Content-Type", mimeType || "application/octet-stream");
+  res.setHeader('Content-Type', mimeType || 'application/octet-stream');
   // TODO we should stream this
   res.write(readFileSync(assetPath));
   res.end();

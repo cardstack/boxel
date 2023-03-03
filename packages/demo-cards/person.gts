@@ -1,4 +1,10 @@
-import { contains, linksTo, field, Component, Card } from 'https://cardstack.com/base/card-api';
+import {
+  contains,
+  linksTo,
+  field,
+  Component,
+  Card,
+} from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import { CardContainer } from '@cardstack/boxel-ui';
@@ -13,23 +19,23 @@ export class Person extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class="demo-card" @displayBoundaries={{true}}>
-        <h3><@fields.firstName/> <@fields.lastName/></h3>
-        {{#if @model.pet}}<div><@fields.pet/></div>{{/if}}
+      <CardContainer class='demo-card' @displayBoundaries={{true}}>
+        <h3><@fields.firstName /> <@fields.lastName /></h3>
+        {{#if @model.pet}}<div><@fields.pet /></div>{{/if}}
       </CardContainer>
     </template>
-  }
+  };
 
   static isolated = class Isolated extends Component<typeof Person> {
     <template>
-      <CardContainer class="demo-card" @displayBoundaries={{true}}>
-        <h2><@fields.firstName/> <@fields.lastName /></h2>
+      <CardContainer class='demo-card' @displayBoundaries={{true}}>
+        <h2><@fields.firstName /> <@fields.lastName /></h2>
         <div>
-          <div><@fields.isCool/></div>
-          <div><@fields.isHuman/></div>
+          <div><@fields.isCool /></div>
+          <div><@fields.isHuman /></div>
         </div>
-        {{#if @model.pet}}<@fields.pet/>{{/if}}
+        {{#if @model.pet}}<@fields.pet />{{/if}}
       </CardContainer>
     </template>
-  }
+  };
 }

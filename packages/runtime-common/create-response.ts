@@ -6,7 +6,7 @@ export function createResponse(
     ...init,
     headers: {
       ...init?.headers,
-      vary: "Accept",
+      vary: 'Accept',
     },
   });
 }

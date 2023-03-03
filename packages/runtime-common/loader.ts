@@ -1,13 +1,13 @@
-import TransformModulesAmdPlugin from "transform-modules-amd-plugin";
-import { transformSync } from "@babel/core";
-import { Deferred } from "./deferred";
-import { trimExecutableExtension } from "./index";
-import { RealmPaths } from "./paths";
-import { CardError } from "./error";
-import { type RunnerOpts } from "./search-index";
-import log from "loglevel";
+import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
+import { transformSync } from '@babel/core';
+import { Deferred } from './deferred';
+import { trimExecutableExtension } from './index';
+import { RealmPaths } from './paths';
+import { CardError } from './error';
+import { type RunnerOpts } from './search-index';
+import log from 'loglevel';
 
-const isFastBoot = typeof (globalThis as any).FastBoot !== "undefined";
+const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -16,7 +16,7 @@ export interface ResolvedURL extends URL {
 }
 
 function isResolvedURL(url: URL | ResolvedURL): url is ResolvedURL {
-  return "_isResolved" in url;
+  return '_isResolved' in url;
 }
 
 function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
@@ -26,7 +26,7 @@ function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
 }
 
 type RegisteredModule = {
-  state: "registered";
+  state: 'registered';
   dependencyList: string[];
   implementation: Function;
   consumedModules: Set<string>;
@@ -35,7 +35,7 @@ type RegisteredModule = {
 // a module is in this state until its own code *and the code for all its deps*
 // have been loaded. Modules move from fetching to registered depth-first.
 type FetchingModule = {
-  state: "fetching";
+  state: 'fetching';
 
   // if you encounter a module in this state, you should wait for the deferred
   // and then retry load where you're guarantee to see a new state
@@ -51,18 +51,18 @@ type Module =
       // evaluated. Because this is synchronous, you can rely on the fact that
       // encountering a load for a module that is in "preparing" means you have a
       // cycle.
-      state: "preparing";
+      state: 'preparing';
       implementation: Function;
       moduleInstance: object;
       consumedModules: Set<string>;
     }
   | {
-      state: "evaluated";
+      state: 'evaluated';
       moduleInstance: object;
       consumedModules: Set<string>;
     }
   | {
-      state: "broken";
+      state: 'broken';
       exception: any;
       consumedModules: Set<string>;
     };
@@ -187,7 +187,7 @@ export class Loader {
       this.createModuleProxy(module, moduleIdentifier)
     );
     this.setModule(moduleIdentifier, {
-      state: "evaluated",
+      state: 'evaluated',
       moduleInstance: module,
       consumedModules: new Set(),
     });
@@ -209,7 +209,7 @@ export class Loader {
     } else {
       module = this.getModule(moduleIdentifier);
     }
-    if (!module || module.state === "fetching") {
+    if (!module || module.state === 'fetching') {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
         let m = await this.import<Record<string, any>>(moduleIdentifier);
@@ -224,7 +224,7 @@ export class Loader {
         );
       }
     }
-    if (module?.state === "fetching") {
+    if (module?.state === 'fetching') {
       throw new Error(
         `bug: could not determine the consumed modules for ${moduleIdentifier} because it is still in "fetching" state`
       );
@@ -247,7 +247,7 @@ export class Loader {
   static identify(
     value: unknown
   ): { module: string; name: string } | undefined {
-    if (typeof value !== "function") {
+    if (typeof value !== 'function') {
       return undefined;
     }
     let loader = Loader.loaders.get(value);
@@ -259,7 +259,7 @@ export class Loader {
   }
 
   identify(value: unknown): { module: string; name: string } | undefined {
-    if (typeof value === "function") {
+    if (typeof value === 'function') {
       return this.identities.get(value);
     } else {
       return undefined;
@@ -267,7 +267,7 @@ export class Loader {
   }
 
   static getLoaderFor(value: unknown): Loader {
-    if (typeof value === "function") {
+    if (typeof value === 'function') {
       return Loader.loaders.get(value) ?? Loader.getLoader();
     }
     return Loader.getLoader();
@@ -284,15 +284,15 @@ export class Loader {
 
     let module = await this.fetchModule(resolvedModule);
     switch (module.state) {
-      case "fetching":
+      case 'fetching':
         await module.deferred.promise;
         return this.evaluateModule(resolvedModuleIdentifier);
-      case "preparing":
-      case "evaluated":
+      case 'preparing':
+      case 'evaluated':
         return module.moduleInstance as T;
-      case "broken":
+      case 'broken':
         throw module.exception;
-      case "registered":
+      case 'registered':
         return this.evaluateModule(resolvedModuleIdentifier);
       default:
         throw assertNever(module);
@@ -306,7 +306,7 @@ export class Loader {
     let requestURL = new URL(
       urlOrRequest instanceof Request
         ? urlOrRequest.url
-        : typeof urlOrRequest === "string"
+        : typeof urlOrRequest === 'string'
         ? urlOrRequest
         : urlOrRequest.href
     );
@@ -327,7 +327,7 @@ export class Loader {
       return getNativeFetch()(request);
     } else {
       let unresolvedURL =
-        typeof urlOrRequest === "string"
+        typeof urlOrRequest === 'string'
           ? new URL(urlOrRequest)
           : isResolvedURL(urlOrRequest)
           ? this.reverseResolution(urlOrRequest)
@@ -353,7 +353,7 @@ export class Loader {
       let sourcePath = new RealmPaths(new URL(sourceURL));
       if (sourcePath.inRealm(absoluteURL)) {
         let toPath = new RealmPaths(new URL(to));
-        if (absoluteURL.href.endsWith("/")) {
+        if (absoluteURL.href.endsWith('/')) {
           return makeResolvedURL(
             toPath.directoryURL(sourcePath.local(absoluteURL))
           );
@@ -374,7 +374,7 @@ export class Loader {
       let sourcePath = new RealmPaths(new URL(sourceURL));
       let destinationPath = new RealmPaths(to);
       if (destinationPath.inRealm(absoluteURL)) {
-        if (absoluteURL.href.endsWith("/")) {
+        if (absoluteURL.href.endsWith('/')) {
           return sourcePath.directoryURL(destinationPath.local(absoluteURL));
         } else {
           return sourcePath.fileURL(destinationPath.local(absoluteURL));
@@ -396,7 +396,7 @@ export class Loader {
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
-        if (typeof value === "function" && typeof property === "string") {
+        if (typeof value === 'function' && typeof property === 'string') {
           this.identities.set(value, {
             module: isUrlLike(moduleIdentifier)
               ? trimExecutableExtension(
@@ -420,7 +420,7 @@ export class Loader {
     stack: string[] = []
   ): Promise<Module> {
     let moduleIdentifier =
-      typeof moduleURL === "string" ? moduleURL : moduleURL.href;
+      typeof moduleURL === 'string' ? moduleURL : moduleURL.href;
     let module = this.getModule(moduleIdentifier);
     if (module) {
       // in the event of a cycle, we have already evaluated the
@@ -443,34 +443,34 @@ export class Loader {
       // being loaded. to make sure that the consumer will wait until the dep
       // has actually completed loading we need to return the deferred promise
       // of the cached module.
-      if (module.state === "fetching") {
+      if (module.state === 'fetching') {
         return module.deferred.promise;
       }
       return module;
     }
-    if (typeof moduleURL === "string") {
+    if (typeof moduleURL === 'string') {
       let exception = new Error(
         `the module '${moduleURL}' appears to be an npm package without a shim. We only support shimmed npm packages, otherwise provide a full URL to the module (e.g. unpkg url for module)`
       );
       this.setModule(moduleIdentifier, {
-        state: "broken",
+        state: 'broken',
         exception,
         consumedModules: new Set(),
       });
       throw exception;
     }
     module = {
-      state: "fetching",
+      state: 'fetching',
       deferred: new Deferred<Module>(),
     };
     this.setModule(moduleIdentifier, module);
 
-    let src: string;
+    let src: string | null | undefined;
     try {
       src = await this.load(moduleURL);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
-        state: "broken",
+        state: 'broken',
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
@@ -483,9 +483,12 @@ export class Loader {
           { noInterop: true, moduleId: moduleIdentifier },
         ],
       ],
-      sourceMaps: "inline",
+      sourceMaps: 'inline',
       filename: moduleIdentifier,
-    })?.code!;
+    })?.code;
+    if (!src) {
+      throw new Error(`bug: should never get here`);
+    }
 
     let dependencyList: string[];
     let implementation: Function;
@@ -495,10 +498,10 @@ export class Loader {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     let define = (_mid: string, depList: string[], impl: Function) => {
       dependencyList = depList.map((depId) => {
-        if (depId === "exports") {
-          return "exports";
-        } else if (depId === "__import_meta__") {
-          return "__import_meta__";
+        if (depId === 'exports') {
+          return 'exports';
+        } else if (depId === '__import_meta__') {
+          return '__import_meta__';
         } else if (isUrlLike(depId)) {
           return this.resolve(depId, new URL(moduleIdentifier)).href;
         } else {
@@ -512,7 +515,7 @@ export class Loader {
       eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
-        state: "broken",
+        state: 'broken',
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
@@ -521,7 +524,7 @@ export class Loader {
 
     await Promise.all(
       dependencyList!.map(async (depId) => {
-        if (depId !== "exports" && depId !== "__import_meta__") {
+        if (depId !== 'exports' && depId !== '__import_meta__') {
           return await this.fetchModule(
             isUrlLike(depId) ? makeResolvedURL(depId) : depId,
             [...stack, moduleIdentifier]
@@ -532,12 +535,12 @@ export class Loader {
     );
 
     let registeredModule: RegisteredModule = {
-      state: "registered",
+      state: 'registered',
       dependencyList: dependencyList!,
       implementation: implementation!,
       consumedModules: new Set(
         dependencyList!.filter(
-          (d) => !["exports", "__import_meta__"].includes(d)
+          (d) => !['exports', '__import_meta__'].includes(d)
         )
       ),
     };
@@ -555,16 +558,16 @@ export class Loader {
       );
     }
     switch (module.state) {
-      case "fetching":
+      case 'fetching':
         throw new Error(
           `bug in module loader: module still in fetching state. ${moduleIdentifier} should have been registered before entering evaluateModule`
         );
-      case "preparing":
-      case "evaluated":
+      case 'preparing':
+      case 'evaluated':
         return module.moduleInstance as T;
-      case "broken":
+      case 'broken':
         throw module.exception;
-      case "registered":
+      case 'registered':
         return this.evaluate(moduleIdentifier, module);
       default:
         throw assertNever(module);
@@ -578,7 +581,7 @@ export class Loader {
       moduleIdentifier
     );
     this.setModule(moduleIdentifier, {
-      state: "preparing",
+      state: 'preparing',
       implementation: module.implementation,
       moduleInstance,
       consumedModules: module.consumedModules,
@@ -586,9 +589,9 @@ export class Loader {
 
     try {
       let dependencies = module.dependencyList.map((dependencyIdentifier) => {
-        if (dependencyIdentifier === "exports") {
+        if (dependencyIdentifier === 'exports') {
           return privateModuleInstance;
-        } else if (dependencyIdentifier === "__import_meta__") {
+        } else if (dependencyIdentifier === '__import_meta__') {
           return { url: moduleIdentifier, loader: this };
         } else {
           return this.evaluateModule(dependencyIdentifier);
@@ -597,14 +600,14 @@ export class Loader {
 
       module.implementation(...dependencies);
       this.setModule(moduleIdentifier, {
-        state: "evaluated",
+        state: 'evaluated',
         moduleInstance,
         consumedModules: module.consumedModules,
       });
       return moduleInstance;
     } catch (exception) {
       this.setModule(moduleIdentifier, {
-        state: "broken",
+        state: 'broken',
         exception,
         consumedModules: module.consumedModules,
       });
@@ -652,9 +655,9 @@ function assertNever(value: never) {
 
 function isUrlLike(moduleIdentifier: string): boolean {
   return (
-    moduleIdentifier.startsWith(".") ||
-    moduleIdentifier.startsWith("/") ||
-    moduleIdentifier.startsWith("http://") ||
-    moduleIdentifier.startsWith("https://")
+    moduleIdentifier.startsWith('.') ||
+    moduleIdentifier.startsWith('/') ||
+    moduleIdentifier.startsWith('http://') ||
+    moduleIdentifier.startsWith('https://')
   );
 }

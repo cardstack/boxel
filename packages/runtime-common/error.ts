@@ -1,5 +1,5 @@
-import { getReasonPhrase } from "http-status-codes";
-import { createResponse } from "./create-response";
+import { getReasonPhrase } from 'http-status-codes';
+import { createResponse } from './create-response';
 export interface ErrorDetails {
   status?: number;
   title?: string;
@@ -14,7 +14,7 @@ export interface SerializedError {
   detail: string;
   status: number;
   title?: string;
-  source?: ErrorDetails["source"];
+  source?: ErrorDetails['source'];
   additionalErrors: any[] | null;
   isCardError?: true;
   deps?: string[];
@@ -25,7 +25,7 @@ export class CardError extends Error implements SerializedError {
   detail: string;
   status: number;
   title?: string;
-  source?: ErrorDetails["source"];
+  source?: ErrorDetails['source'];
   isCardError: true = true;
   additionalErrors: (CardError | Error)[] | null = null;
   deps?: string[];
@@ -48,7 +48,7 @@ export class CardError extends Error implements SerializedError {
   }
 
   static fromSerializableError(err: any): any {
-    if (!err || typeof err !== "object" || !isCardError(err)) {
+    if (!err || typeof err !== 'object' || !isCardError(err)) {
       return err;
     }
     let result = new CardError(err.detail, {
@@ -70,12 +70,7 @@ export class CardError extends Error implements SerializedError {
     response: Response
   ): Promise<CardError> {
     if (!response.ok) {
-      let text: string | undefined;
-      try {
-        text = await response.text();
-      } catch (err) {
-        throw err;
-      }
+      let text = await response.text();
       let maybeErrorJSON: any;
       try {
         maybeErrorJSON = text ? JSON.parse(text) : undefined;
@@ -84,15 +79,15 @@ export class CardError extends Error implements SerializedError {
       }
       if (
         maybeErrorJSON &&
-        typeof maybeErrorJSON === "object" &&
-        "errors" in maybeErrorJSON &&
+        typeof maybeErrorJSON === 'object' &&
+        'errors' in maybeErrorJSON &&
         Array.isArray(maybeErrorJSON.errors) &&
         maybeErrorJSON.errors.length > 0
       ) {
         return CardError.fromSerializableError(maybeErrorJSON.errors[0]);
       }
       return new CardError(
-        `unable to fetch ${url}${!maybeErrorJSON ? ": " + text : ""}`,
+        `unable to fetch ${url}${!maybeErrorJSON ? ': ' + text : ''}`,
         {
           title: response.statusText,
           status: response.status,
@@ -108,7 +103,7 @@ export class CardError extends Error implements SerializedError {
 }
 
 export function isCardError(err: any): err is CardError {
-  return err != null && typeof err === "object" && err.isCardError;
+  return err != null && typeof err === 'object' && err.isCardError;
 }
 
 export function printCompilerError(err: any) {
@@ -120,11 +115,11 @@ export function printCompilerError(err: any) {
 }
 
 function isAcceptableError(err: any) {
-  return err.isCardstackError || err.code === "BABEL_PARSE_ERROR";
+  return err.isCardstackError || err.code === 'BABEL_PARSE_ERROR';
 }
 
 export function serializableError(err: any): any {
-  if (!err || typeof err !== "object" || !isCardError(err)) {
+  if (!err || typeof err !== 'object' || !isCardError(err)) {
     // rely on the best-effort serialization that we'll get from, for example,
     // "pg" as it puts this object into jsonb
     return err;
@@ -142,7 +137,7 @@ export function responseWithError(error: CardError): Response {
     {
       status: error.status,
       statusText: error.title,
-      headers: { "content-type": "application/vnd.api+json" },
+      headers: { 'content-type': 'application/vnd.api+json' },
     }
   );
 }

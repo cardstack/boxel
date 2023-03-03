@@ -2,10 +2,10 @@ import {
   type Card,
   type CardConstructor,
   type Field,
-} from "https://cardstack.com/base/card-api";
-import { Loader } from "./loader";
-import { isField } from "./constants";
-import { CardError } from "./error";
+} from 'https://cardstack.com/base/card-api';
+import { Loader } from './loader';
+import { isField } from './constants';
+import { CardError } from './error';
 
 export type CardRef =
   | {
@@ -13,11 +13,11 @@ export type CardRef =
       name: string;
     }
   | {
-      type: "ancestorOf";
+      type: 'ancestorOf';
       card: CardRef;
     }
   | {
-      type: "fieldOf";
+      type: 'fieldOf';
       card: CardRef;
       field: string;
     };
@@ -25,29 +25,29 @@ export type CardRef =
 // we don't track ExportedCardRef because Loader.identify already handles those
 let localIdentities = new WeakMap<
   typeof Card,
-  | { type: "ancestorOf"; card: typeof Card }
-  | { type: "fieldOf"; card: typeof Card; field: string }
+  | { type: 'ancestorOf'; card: typeof Card }
+  | { type: 'fieldOf'; card: typeof Card; field: string }
 >();
 
 export function isCardRef(ref: any): ref is CardRef {
-  if (typeof ref !== "object") {
+  if (typeof ref !== 'object') {
     return false;
   }
-  if (!("type" in ref)) {
-    if (!("module" in ref) || !("name" in ref)) {
+  if (!('type' in ref)) {
+    if (!('module' in ref) || !('name' in ref)) {
       return false;
     }
-    return typeof ref.module === "string" && typeof ref.name === "string";
-  } else if (ref.type === "ancestorOf") {
-    if (!("card" in ref)) {
+    return typeof ref.module === 'string' && typeof ref.name === 'string';
+  } else if (ref.type === 'ancestorOf') {
+    if (!('card' in ref)) {
       return false;
     }
     return isCardRef(ref.card);
-  } else if (ref.type === "fieldOf") {
-    if (!("card" in ref) || !("field" in ref)) {
+  } else if (ref.type === 'fieldOf') {
+    if (!('card' in ref) || !('field' in ref)) {
       return false;
     }
-    if (typeof ref.card !== "object" || typeof ref.field !== "string") {
+    if (typeof ref.card !== 'object' || typeof ref.field !== 'string') {
       return false;
     }
     return isCardRef(ref.card);
@@ -56,7 +56,7 @@ export function isCardRef(ref: any): ref is CardRef {
 }
 
 export function isCard(card: any): card is typeof Card {
-  return typeof card === "function" && "baseCard" in card;
+  return typeof card === 'function' && 'baseCard' in card;
 }
 
 export async function loadCard(
@@ -65,15 +65,15 @@ export async function loadCard(
 ): Promise<typeof Card> {
   let maybeCard: unknown;
   let loader = opts?.loader ?? Loader.getLoader();
-  if (!("type" in ref)) {
+  if (!('type' in ref)) {
     let module = await loader.import<Record<string, any>>(
       new URL(ref.module, opts?.relativeTo).href
     );
     maybeCard = module[ref.name];
-  } else if (ref.type === "ancestorOf") {
+  } else if (ref.type === 'ancestorOf') {
     let child = await loadCard(ref.card, opts);
     maybeCard = getAncestor(child);
-  } else if (ref.type === "fieldOf") {
+  } else if (ref.type === 'fieldOf') {
     let parent = await loadCard(ref.card, opts);
     let field = getField(parent, ref.field);
     maybeCard = field?.card;
@@ -110,14 +110,14 @@ export function identifyCard(card: unknown): CardRef | undefined {
   if (!innerRef) {
     return undefined;
   }
-  if (local.type === "ancestorOf") {
+  if (local.type === 'ancestorOf') {
     return {
-      type: "ancestorOf",
+      type: 'ancestorOf',
       card: innerRef,
     };
   } else {
     return {
-      type: "fieldOf",
+      type: 'fieldOf',
       field: local.field,
       card: innerRef,
     };
@@ -136,7 +136,7 @@ export function getField<CardT extends CardConstructor>(
     ];
     if (result !== undefined && isCard(result.card)) {
       localIdentities.set(result.card, {
-        type: "fieldOf",
+        type: 'fieldOf',
         field: fieldName,
         card,
       });
@@ -153,7 +153,7 @@ export function getAncestor(
   let superCard = Reflect.getPrototypeOf(card);
   if (isCard(superCard)) {
     localIdentities.set(superCard, {
-      type: "ancestorOf",
+      type: 'ancestorOf',
       card,
     });
     return superCard;
@@ -162,7 +162,7 @@ export function getAncestor(
 }
 
 export function moduleFrom(ref: CardRef): string {
-  if (!("type" in ref)) {
+  if (!('type' in ref)) {
     return ref.module;
   } else {
     return moduleFrom(ref.card);
@@ -170,9 +170,9 @@ export function moduleFrom(ref: CardRef): string {
 }
 
 export function humanReadable(ref: CardRef): string {
-  if (!("type" in ref)) {
+  if (!('type' in ref)) {
     return `${ref.name} from ${ref.module}`;
-  } else if (ref.type === "ancestorOf") {
+  } else if (ref.type === 'ancestorOf') {
     return `Ancestor of ${humanReadable(ref.card)}`;
   } else {
     return `Field ${ref.field} of ${humanReadable(ref.card)}`;

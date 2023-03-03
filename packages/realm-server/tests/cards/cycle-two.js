@@ -1,4 +1,4 @@
-import { one } from "./cycle-one";
+import { one } from './cycle-one';
 
 export function two() {
   return 2;

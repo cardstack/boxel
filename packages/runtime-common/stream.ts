@@ -1,7 +1,7 @@
-import { isNode, executableExtensions } from "./index";
-import type { FileRef } from "./realm";
-import type { LocalPath } from "./paths";
-import { Deferred } from "./deferred";
+import { isNode, executableExtensions } from './index';
+import type { FileRef } from './realm';
+import type { LocalPath } from './paths';
+import { Deferred } from './deferred';
 
 export async function webStreamToText(
   stream: ReadableStream<Uint8Array>
@@ -9,6 +9,7 @@ export async function webStreamToText(
   let decoder = new TextDecoder();
   let pieces: string[] = [];
   let reader = stream.getReader();
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     let { done, value } = await reader.read();
     if (done) {
@@ -19,11 +20,11 @@ export async function webStreamToText(
       pieces.push(decoder.decode(value, { stream: true }));
     }
   }
-  return pieces.join("");
+  return pieces.join('');
 }
 
 export async function fileContentToText({ content }: FileRef): Promise<string> {
-  if (typeof content === "string") {
+  if (typeof content === 'string') {
     return content;
   }
   if (content instanceof Uint8Array) {
@@ -40,14 +41,14 @@ export async function fileContentToText({ content }: FileRef): Promise<string> {
     // build, but the worker build will try to resolve the buffer polyfill and
     // blow up since we don't include that library. So we're hiding from
     // webpack.
-    const B = (globalThis as any)["Buffer"];
+    const B = (globalThis as any)['Buffer'];
 
-    const chunks: typeof B[] = []; // Buffer is available from globalThis when in the node env, however tsc can't type check this for the worker
+    const chunks: (typeof B)[] = []; // Buffer is available from globalThis when in the node env, however tsc can't type check this for the worker
     // the types for Readable have not caught up to the fact these are async generators
     for await (const chunk of content as any) {
       chunks.push(B.from(chunk));
     }
-    return B.concat(chunks).toString("utf-8");
+    return B.concat(chunks).toString('utf-8');
   }
 }
 
@@ -96,7 +97,7 @@ export async function writeToStream(
   stream: WritableStream,
   chunk: string
 ): Promise<void> {
-  if (typeof stream.getWriter === "function") {
+  if (typeof stream.getWriter === 'function') {
     let writer = writers.get(stream);
     if (!writer) {
       writer = stream.getWriter();
@@ -120,7 +121,7 @@ export async function writeToStream(
 }
 
 export async function waitForClose(stream: WritableStream): Promise<void> {
-  if (typeof stream.getWriter === "function") {
+  if (typeof stream.getWriter === 'function') {
     let writer = writers.get(stream);
     if (!writer) {
       writer = stream.getWriter();
@@ -132,8 +133,8 @@ export async function waitForClose(stream: WritableStream): Promise<void> {
       throw new Error(`cannot handle node-streams when not in node`);
     }
     return new Promise((resolve, reject) => {
-      (stream as any).on("close", () => resolve());
-      (stream as any).on("error", (err: unknown) => reject(err));
+      (stream as any).on('close', () => resolve());
+      (stream as any).on('error', (err: unknown) => reject(err));
     });
   }
 }
@@ -155,7 +156,7 @@ export class WebMessageStream {
   async pull(controller: ReadableStreamDefaultController) {
     if (this.pendingRead) {
       throw new Error(
-        "bug: did not expect node to call read until after we push data from the prior read"
+        'bug: did not expect node to call read until after we push data from the prior read'
       );
     }
     if (this.pendingWrite) {
@@ -173,7 +174,7 @@ export class WebMessageStream {
   async write(chunk: string, _controller: WritableStreamDefaultController) {
     if (this.pendingWrite) {
       throw new Error(
-        "bug: did not expect node to call write until after we call the callback"
+        'bug: did not expect node to call write until after we call the callback'
       );
     }
     if (this.pendingRead) {
@@ -185,7 +186,7 @@ export class WebMessageStream {
       } catch (err) {
         let cleanup = closeHandlers.get(this.readable);
         if (!cleanup) {
-          throw new Error("no cleanup function found");
+          throw new Error('no cleanup function found');
         }
         cleanup();
       }

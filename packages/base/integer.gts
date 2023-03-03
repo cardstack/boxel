@@ -7,8 +7,10 @@ export default class IntegerCard extends Card {
   static [useIndexBasedKey]: never;
 
   static embedded = class Embedded extends Component<typeof this> {
-    <template>{{@model}}</template>
-  }
+    <template>
+      {{@model}}
+    </template>
+  };
 
   static edit = class Edit extends Component<typeof this> {
     <template>
@@ -18,5 +20,5 @@ export default class IntegerCard extends Card {
     parseInput(set: Function, value: string) {
       return set(Number(value));
     }
-  }
+  };
 }

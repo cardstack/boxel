@@ -1,14 +1,20 @@
 export const cardSrc = `
-import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-import StringCard from "https://cardstack.com/base/string";
+import {
+  contains,
+  field,
+  Component,
+  Card,
+} from 'https://cardstack.com/base/card-api';
+import StringCard from 'https://cardstack.com/base/string';
 
 export class Person extends Card {
   @field firstName = contains(StringCard);
   static isolated = class Isolated extends Component<typeof this> {
-    <template><h1><@fields.firstName/></h1></template>
-  }
-}
-`.trim();
+    <template>
+      <h1><@fields.firstName /></h1>
+    </template>
+  };
+}`.trim();
 
 export function compiledCard(id = "null") {
   return `
@@ -36,11 +42,13 @@ export let Person = (_class = (_class2 = class Person extends Card {
 
 }, _defineProperty(_class2, "isolated", setComponentTemplate(createTemplateFactory(
 /*
-  <h1><@fields.firstName/></h1>
+  
+      <h1><@fields.firstName /></h1>
+    
 */
 {
   "id": ${id},
-  "block": "[[[10,\\"h1\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13]],[\\"@fields\\"],false,[]]",
+  "block": "[[[1,\\"\\\\n      \\"],[10,\\"h1\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13],[1,\\"\\\\n    \\"]],[\\"@fields\\"],false,[]]",
   "moduleName": "(unknown template module)",
   "isStrictMode": true
 }), class Isolated extends Component {})), _class2), (_descriptor = _applyDecoratedDescriptor(_class.prototype, "firstName", [field], {
