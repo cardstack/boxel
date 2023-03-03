@@ -220,17 +220,18 @@ function makeNewField(
     `${baseRealm.url}card-api`,
     fieldType
   );
+
+  if (fieldType === 'linksTo' && cardName === fieldRef.name) {
+    // syntax for when a card has a linksTo field to a card with the same type as itself
+    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${cardName});`;
+  }
+
   let fieldCardIdentifier = importUtil.import(
     target as NodePath<any>,
     fieldRef.module,
     fieldRef.name,
     suggestedCardName(fieldRef)
   );
-
-  if (fieldType === "linksTo" && cardName === fieldRef.name) {
-    // syntax for when a card has a linksTo field to a card with the same type as itself
-    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldCardIdentifier.name});`;
-  }
 
   return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
 }

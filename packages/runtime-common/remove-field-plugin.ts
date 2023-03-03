@@ -144,18 +144,13 @@ function getOtherReferences(
     // we kinda got lucky that the 3 specific scenarios in which we search for
     // references all are 2 parents removed from the class property path
     let maybeClassProperty = p.parentPath?.parentPath?.node;
-    let result = checkMaybeClassProperty(maybeClassProperty, fieldName);
-    if (
-      result &&
-      maybeClassProperty?.type === 'CallExpression' &&
-      maybeClassProperty.arguments.length === 1 &&
-      maybeClassProperty.arguments[0].type === 'ArrowFunctionExpression'
-    ) {
-      // for linksTo that is an arrow function, we need to go one more level up
-      maybeClassProperty = p.parentPath?.parentPath?.parentPath?.node;
-      result = checkMaybeClassProperty(maybeClassProperty, fieldName);
+    if (maybeClassProperty?.type !== "ClassProperty") {
+      return true;
     }
-    return result;
+    if (maybeClassProperty.key.type !== "Identifier") {
+      return true;
+    }
+    return maybeClassProperty.key.name !== fieldName;
   });
 }
 
@@ -165,14 +160,4 @@ function getName(node: t.Identifier | t.StringLiteral) {
   } else {
     return node.value;
   }
-}
-
-function checkMaybeClassProperty(node: t.Node | undefined, fieldName: string) {
-  if (node?.type !== 'ClassProperty') {
-    return true;
-  }
-  if (node.key.type !== 'Identifier') {
-    return true;
-  }
-  return node.key.name !== fieldName;
 }

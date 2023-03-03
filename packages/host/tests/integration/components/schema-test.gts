@@ -235,17 +235,16 @@ module('Integration | schema', function (hooks) {
     );
   });
 
-  test('can delete a linksTo field with the same type as the card', async function (assert) {
+  test('can delete a linksTo field with the same type as its enclosing card', async function (assert) {
     await realm.write(
       'person.gts',
       `
-      import { Person as PersonCard } from "${testRealmURL}person";
       import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
       export class Person extends Card {
         @field name = contains(StringCard);
-        @field friend = linksTo(() => PersonCard);
+        @field friend = linksTo(() => Person);
       }
     `
     );
@@ -666,7 +665,7 @@ module('Integration | schema', function (hooks) {
     );
   });
 
-  test('it can add a linksTo field with the same type as the card', async function (assert) {
+  test('it can add a linksTo field with the same type as its enclosing card', async function (assert) {
     await realm.write(
       'person.gts',
       `
@@ -746,14 +745,13 @@ module('Integration | schema', function (hooks) {
     assert.codeEqual(
       src,
       `
-      import { Person as PersonCard } from "${testRealmURL}person";
       import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
       export class Person extends Card {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
-        @field friend = linksTo(() => PersonCard);
+        @field friend = linksTo(() => Person);
       }
     `
     );
