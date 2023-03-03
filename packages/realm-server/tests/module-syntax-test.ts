@@ -456,6 +456,15 @@ module('module-syntax', function () {
         @field firstName = contains(StringCard);
       }
     `;
+    let friend = `
+      import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Friend extends Card {
+        @field firstName = contains(StringCard);
+        @field friend = linksTo(() => Friend);
+      }
+    `;
 
     hooks.beforeEach(async function () {
       Loader.destroy();
@@ -466,6 +475,7 @@ module('module-syntax', function () {
       realm = createRealm(dirSync().name, {
         'pet.gts': pet,
         'person.gts': person,
+        'friend.gts': friend,
       });
       await realm.ready;
     });
@@ -509,7 +519,7 @@ module('module-syntax', function () {
       );
     });
 
-    test('can add a self-referencing linksTo field', async function (assert) {
+    test('can add a linksTo field with the same type as the card', async function (assert) {
       let mod = new ModuleSyntax(person);
       mod.addField(
         { type: 'exportedName', name: 'Person' },
@@ -546,6 +556,27 @@ module('module-syntax', function () {
         },
         'the field type is correct'
       );
+    });
+
+    test('can remove a linksTo field with the same type as the card', async function (assert) {
+      let mod = new ModuleSyntax(friend);
+      mod.removeField({ type: 'exportedName', name: 'Friend' }, 'friend');
+
+      assert.codeEqual(
+        mod.code(),
+        `
+          import { contains, field, Card } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+
+          export class Friend extends Card {
+            @field firstName = contains(StringCard);
+          }
+        `
+      );
+
+      let card = mod.possibleCards.find((c) => c.exportedAs === 'Friend');
+      let field = card!.possibleFields.get('friend');
+      assert.strictEqual(field, undefined, 'field does not exist in syntax');
     });
   });
 });

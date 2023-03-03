@@ -235,7 +235,7 @@ module('Integration | schema', function (hooks) {
     );
   });
 
-  test('can delete a linksTo field that has the same type as the card', async function (assert) {
+  test('can delete a linksTo field with the same type as the card', async function (assert) {
     await realm.write(
       'person.gts',
       `
@@ -666,7 +666,7 @@ module('Integration | schema', function (hooks) {
     );
   });
 
-  test('it can add a self-referencing linksTo field to a card', async function (assert) {
+  test('it can add a linksTo field with the same type as the card', async function (assert) {
     await realm.write(
       'person.gts',
       `
