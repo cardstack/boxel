@@ -1,9 +1,9 @@
 import type {
   PossibleCardClass,
   PossibleField,
-} from "./schema-analysis-plugin";
-import { types as t } from "@babel/core";
-import { NodePath } from "@babel/traverse";
+} from './schema-analysis-plugin';
+import { types as t } from '@babel/core';
+import { NodePath } from '@babel/traverse';
 
 interface State {
   opts: Options;
@@ -24,7 +24,7 @@ export function removeFieldPlugin() {
       },
       ClassProperty(path: NodePath<t.ClassProperty>, state: State) {
         if (
-          path.node.key.type === "Identifier" &&
+          path.node.key.type === 'Identifier' &&
           path.node.key.name ===
             (state.opts.field.path.node.key as t.Identifier).name
         ) {
@@ -86,7 +86,7 @@ function maybeRemoveFieldClassImport(
   state: State
 ) {
   if (
-    state.opts.field.card.type !== "external" ||
+    state.opts.field.card.type !== 'external' ||
     path.node.source.value !== state.opts.field.card.module
   ) {
     return;
@@ -101,7 +101,7 @@ function maybeRemoveFieldClassImport(
     (state.opts.field.path.node.key as t.Identifier).name
   );
   if (references?.length === 0) {
-    if (path.get("specifiers").length === 1) {
+    if (path.get('specifiers').length === 1) {
       path.remove();
     } else {
       specifier.remove();
@@ -116,18 +116,18 @@ function getImportSpecifier(
   | NodePath<t.ImportSpecifier>
   | NodePath<t.ImportDefaultSpecifier>
   | undefined {
-  if (name === "default") {
+  if (name === 'default') {
     return path
-      .get("specifiers")
-      .find((s) => s.node.type === "ImportDefaultSpecifier") as
+      .get('specifiers')
+      .find((s) => s.node.type === 'ImportDefaultSpecifier') as
       | NodePath<t.ImportDefaultSpecifier>
       | undefined;
   }
   return path
-    .get("specifiers")
+    .get('specifiers')
     .find(
       (s) =>
-        s.node.type === "ImportSpecifier" && getName(s.node.imported) === name
+        s.node.type === 'ImportSpecifier' && getName(s.node.imported) === name
     ) as NodePath<t.ImportSpecifier> | undefined;
 }
 
@@ -144,10 +144,10 @@ function getOtherReferences(
     // we kinda got lucky that the 3 specific scenarios in which we search for
     // references all are 2 parents removed from the class property path
     let maybeClassProperty = p.parentPath?.parentPath?.node;
-    if (maybeClassProperty?.type !== "ClassProperty") {
+    if (maybeClassProperty?.type !== 'ClassProperty') {
       return true;
     }
-    if (maybeClassProperty.key.type !== "Identifier") {
+    if (maybeClassProperty.key.type !== 'Identifier') {
       return true;
     }
     return maybeClassProperty.key.name !== fieldName;
@@ -155,7 +155,7 @@ function getOtherReferences(
 }
 
 function getName(node: t.Identifier | t.StringLiteral) {
-  if (node.type === "Identifier") {
+  if (node.type === 'Identifier') {
     return node.name;
   } else {
     return node.value;

@@ -3,29 +3,29 @@ import {
   functionExpression,
   isFunctionExpression,
   isArrowFunctionExpression,
-} from "@babel/types";
+} from '@babel/types';
 
 const TASK_DECORATORS = [
-  "task",
-  "restartableTask",
-  "dropTask",
-  "keepLatestTask",
-  "enqueueTask",
+  'task',
+  'restartableTask',
+  'dropTask',
+  'keepLatestTask',
+  'enqueueTask',
 ];
 
 function resolveImport(path) {
-  if (path.node.type === "Identifier") {
+  if (path.node.type === 'Identifier') {
     let binding = path.scope.getBinding(path.node.name);
 
-    if (binding && binding.kind === "module") {
+    if (binding && binding.kind === 'module') {
       let { node, parent } = binding.path;
 
       return {
         source: parent.source.value,
-        isNamespace: node.type === "ImportNamespaceSpecifier",
-        isDefault: node.type === "ImportDefaultSpecifier",
-        isNamed: node.type === "ImportSpecifier",
-        name: node.type === "ImportSpecifier" && node.imported.name,
+        isNamespace: node.type === 'ImportNamespaceSpecifier',
+        isDefault: node.type === 'ImportDefaultSpecifier',
+        isNamed: node.type === 'ImportSpecifier',
+        name: node.type === 'ImportSpecifier' && node.imported.name,
       };
     }
   }
@@ -34,13 +34,13 @@ function resolveImport(path) {
 function isTaskDecoratorImport(resolved) {
   return (
     resolved.isNamed &&
-    resolved.source === "ember-concurrency" &&
+    resolved.source === 'ember-concurrency' &&
     TASK_DECORATORS.includes(resolved.name)
   );
 }
 
 function isTaskDecoratorNamespaceImport(resolved) {
-  return resolved.isNamespace && resolved.source === "ember-concurrency";
+  return resolved.isNamespace && resolved.source === 'ember-concurrency';
 }
 
 function isTaskDecorator(path) {
@@ -48,18 +48,18 @@ function isTaskDecorator(path) {
     node = path.node;
 
   switch (node.type) {
-    case "Identifier": // @task async method() { ... }
+    case 'Identifier': // @task async method() { ... }
       if ((resolved = resolveImport(path))) {
         return isTaskDecoratorImport(resolved);
       }
 
       break;
 
-    case "MemberExpression": // @my.task
-      if ((resolved = resolveImport(path.get("object")))) {
+    case 'MemberExpression': // @my.task
+      if ((resolved = resolveImport(path.get('object')))) {
         if (isTaskDecoratorNamespaceImport(resolved)) {
           return (
-            path.node.property.type === "Identifier" &&
+            path.node.property.type === 'Identifier' &&
             TASK_DECORATORS.includes(path.node.property.name)
           );
         }
@@ -67,8 +67,8 @@ function isTaskDecorator(path) {
 
       break;
 
-    case "CallExpression": // @task(...) async method() { ... }
-      return isTaskDecorator(path.get("callee"));
+    case 'CallExpression': // @task(...) async method() { ... }
+      return isTaskDecorator(path.get('callee'));
   }
 
   return false;
@@ -89,8 +89,8 @@ function hasTaskDecorator(path) {
 function isTaskForImport(resolved) {
   return (
     resolved.isNamed &&
-    resolved.name === "taskFor" &&
-    resolved.source === "ember-concurrency-ts"
+    resolved.name === 'taskFor' &&
+    resolved.source === 'ember-concurrency-ts'
   );
 }
 
@@ -119,8 +119,8 @@ const TransformAsyncMethodsIntoGeneratorMethods = {
 
 const TaskProperty = {
   CallExpression(path) {
-    if (isTaskFor(path.get("callee"))) {
-      const firstArg = path.get("arguments.0");
+    if (isTaskFor(path.get('callee'))) {
+      const firstArg = path.get('arguments.0');
       if (firstArg && firstArg.node.async) {
         if (isFunctionExpression(firstArg)) {
           firstArg.node.async = false;
@@ -147,13 +147,13 @@ const TransformAwaitIntoYield = {
     path.skip();
   },
   AwaitExpression(path) {
-    path.replaceWith(yieldExpression(path.get("argument").node));
+    path.replaceWith(yieldExpression(path.get('argument').node));
   },
 };
 
 export default function main() {
   return {
-    name: "transform-ember-concurrency-async-tasks",
+    name: 'transform-ember-concurrency-async-tasks',
 
     // The decorator plugin removes the method decorators at the
     // class level, our code has to run before that to see them.

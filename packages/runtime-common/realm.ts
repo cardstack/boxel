@@ -1,20 +1,20 @@
-import { Deferred } from "./deferred";
+import { Deferred } from './deferred';
 import {
   SearchIndex,
   type IndexRunner,
   type RunnerOptionsManager,
-} from "./search-index";
-import { type SingleCardDocument } from "./card-document";
-import { Loader, type MaybeLocalRequest } from "./loader";
-import { RealmPaths, LocalPath, join } from "./paths";
+} from './search-index';
+import { type SingleCardDocument } from './card-document';
+import { Loader, type MaybeLocalRequest } from './loader';
+import { RealmPaths, LocalPath, join } from './paths';
 import {
   systemError,
   notFound,
   methodNotAllowed,
   badRequest,
   CardError,
-} from "./error";
-import { formatRFC7231 } from "date-fns";
+} from './error';
+import { formatRFC7231 } from 'date-fns';
 import {
   isCardResource,
   executableExtensions,
@@ -24,43 +24,43 @@ import {
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
-} from "./index";
-import merge from "lodash/merge";
-import mergeWith from "lodash/mergeWith";
-import qs from "qs";
-import cloneDeep from "lodash/cloneDeep";
+} from './index';
+import merge from 'lodash/merge';
+import mergeWith from 'lodash/mergeWith';
+import qs from 'qs';
+import cloneDeep from 'lodash/cloneDeep';
 import {
   fileContentToText,
   readFileAsText,
   getFileWithFallbacks,
   writeToStream,
   waitForClose,
-} from "./stream";
-import { preprocessEmbeddedTemplates } from "@cardstack/ember-template-imports/lib/preprocess-embedded-templates";
-import * as babel from "@babel/core";
-import makeEmberTemplatePlugin from "babel-plugin-ember-template-compilation";
+} from './stream';
+import { preprocessEmbeddedTemplates } from '@cardstack/ember-template-imports/lib/preprocess-embedded-templates';
+import * as babel from '@babel/core';
+import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation';
 //@ts-ignore no types are available
-import * as etc from "ember-source/dist/ember-template-compiler";
-import { loaderPlugin } from "./loader-plugin";
+import * as etc from 'ember-source/dist/ember-template-compiler';
+import { loaderPlugin } from './loader-plugin';
 //@ts-ignore no types are available
-import glimmerTemplatePlugin from "@cardstack/ember-template-imports/src/babel-plugin";
+import glimmerTemplatePlugin from '@cardstack/ember-template-imports/src/babel-plugin';
 //@ts-ignore no types are available
-import decoratorsProposalPlugin from "@babel/plugin-proposal-decorators";
+import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
 //@ts-ignore no types are available
-import classPropertiesProposalPlugin from "@babel/plugin-proposal-class-properties";
+import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
 //@ts-ignore ironically no types are available
-import typescriptPlugin from "@babel/plugin-transform-typescript";
+import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
-import emberConcurrencyAsyncPlugin from "ember-concurrency-async-plugin";
-import { Router } from "./router";
-import { parseQueryString } from "./query";
+import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
+import { Router } from './router';
+import { parseQueryString } from './query';
 //@ts-ignore service worker can't handle this
-import type { Readable } from "stream";
-import { Card } from "https://cardstack.com/base/card-api";
-import type * as CardAPI from "https://cardstack.com/base/card-api";
-import type { LoaderType } from "https://cardstack.com/base/card-api";
-import { createResponse } from "./create-response";
-import log from "loglevel";
+import type { Readable } from 'stream';
+import { Card } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { LoaderType } from 'https://cardstack.com/base/card-api';
+import { createResponse } from './create-response';
+import log from 'loglevel';
 
 export interface FileRef {
   path: LocalPath;
@@ -161,21 +161,21 @@ export class Realm {
     );
 
     this.#jsonAPIRouter = new Router(new URL(url))
-      .post("/", this.createCard.bind(this))
-      .patch("/.+(?<!.json)", this.patchCard.bind(this))
-      .get("/_search", this.search.bind(this))
-      .get("/_message", this.subscribe.bind(this))
-      .get(".*/", this.getDirectoryListing.bind(this))
-      .get("/.+(?<!.json)", this.getCard.bind(this))
-      .delete("/.+(?<!.json)", this.removeCard.bind(this));
+      .post('/', this.createCard.bind(this))
+      .patch('/.+(?<!.json)', this.patchCard.bind(this))
+      .get('/_search', this.search.bind(this))
+      .get('/_message', this.subscribe.bind(this))
+      .get('.*/', this.getDirectoryListing.bind(this))
+      .get('/.+(?<!.json)', this.getCard.bind(this))
+      .delete('/.+(?<!.json)', this.removeCard.bind(this));
 
     this.#cardSourceRouter = new Router(new URL(url))
       .post(
-        `/.+(${executableExtensions.map((e) => "\\" + e).join("|")})`,
+        `/.+(${executableExtensions.map((e) => '\\' + e).join('|')})`,
         this.upsertCardSource.bind(this)
       )
-      .get("/.+", this.getCardSourceOrRedirect.bind(this))
-      .delete("/.+", this.removeCardSource.bind(this));
+      .get('/.+', this.getCardSourceOrRedirect.bind(this))
+      .delete('/.+', this.removeCardSource.bind(this));
 
     this.#deferStartup = opts?.deferStartUp ?? false;
     if (!opts?.deferStartUp) {
@@ -223,27 +223,27 @@ export class Realm {
 
   async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
-    let accept = request.headers.get("Accept");
+    let accept = request.headers.get('Accept');
     if (url.search.length > 0) {
       let { acceptHeader } = qs.parse(url.search, { ignoreQueryPrefix: true });
-      if (acceptHeader && typeof acceptHeader === "string") {
+      if (acceptHeader && typeof acceptHeader === 'string') {
         accept = acceptHeader;
       }
     }
     if (
-      accept?.includes("application/vnd.api+json") ||
-      accept?.includes("text/event-stream")
+      accept?.includes('application/vnd.api+json') ||
+      accept?.includes('text/event-stream')
     ) {
       // local requests are allowed to query the realm as the index is being built up
-      if (!request.isLocal && url.host !== "local-realm") {
+      if (!request.isLocal && url.host !== 'local-realm') {
         await this.ready;
       }
       if (!this.searchIndex) {
-        return systemError("search index is not available");
+        return systemError('search index is not available');
       }
       return this.#jsonAPIRouter.handle(request);
     } else if (
-      request.headers.get("Accept")?.includes("application/vnd.card+source")
+      request.headers.get('Accept')?.includes('application/vnd.card+source')
     ) {
       return this.#cardSourceRouter.handle(request);
     }
@@ -269,11 +269,11 @@ export class Realm {
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||
-      typeof ref.content === "string"
+      typeof ref.content === 'string'
     ) {
       return createResponse(ref.content, {
         headers: {
-          "last-modified": formatRFC7231(ref.lastModified),
+          'last-modified': formatRFC7231(ref.lastModified),
         },
       });
     }
@@ -285,7 +285,7 @@ export class Realm {
     // add the node stream to the response which will get special handling in the node env
     let response = createResponse(null, {
       headers: {
-        "last-modified": formatRFC7231(ref.lastModified),
+        'last-modified': formatRFC7231(ref.lastModified),
       },
     }) as ResponseWithNodeStream;
     response.nodeStream = ref.content;
@@ -299,7 +299,7 @@ export class Realm {
     );
     return createResponse(null, {
       status: 204,
-      headers: { "last-modified": formatRFC7231(lastModified) },
+      headers: { 'last-modified': formatRFC7231(lastModified) },
     });
   }
 
@@ -335,8 +335,8 @@ export class Realm {
     content = preprocessEmbeddedTemplates(content, {
       relativePath: debugFilename,
       getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
-      templateTag: "template",
-      templateTagReplacement: "__GLIMMER_TEMPLATE",
+      templateTag: 'template',
+      templateTagReplacement: '__GLIMMER_TEMPLATE',
       includeSourceMaps: true,
       includeTemplateTokens: true,
     }).output;
@@ -374,12 +374,12 @@ export class Realm {
         // using "Not Acceptable" here because no text/javascript representation
         // can be made and we're sending text/html error page instead
         status: 406,
-        headers: { "content-type": "text/html" },
+        headers: { 'content-type': 'text/html' },
       });
     }
     return createResponse(content, {
       status: 200,
-      headers: { "content-type": "text/javascript" },
+      headers: { 'content-type': 'text/javascript' },
     });
   }
 
@@ -408,12 +408,12 @@ export class Realm {
     }
 
     let name: string;
-    if ("name" in resource.meta.adoptsFrom) {
+    if ('name' in resource.meta.adoptsFrom) {
       // new instances are created in a folder named after the card if it has an
       // exported name
       name = resource.meta.adoptsFrom.name;
     } else {
-      name = "cards";
+      name = 'cards';
     }
 
     let dirName = `/${join(new URL(this.url).pathname, name)}/`;
@@ -421,13 +421,13 @@ export class Realm {
     let index = 0;
     if (entries) {
       for (let { name, kind } of entries) {
-        if (kind === "directory") {
+        if (kind === 'directory') {
           continue;
         }
         if (!/^[\d]+\.json$/.test(name)) {
           continue;
         }
-        let num = parseInt(name.replace(".json", ""));
+        let num = parseInt(name.replace('.json', ''));
         index = Math.max(index, num);
       }
     }
@@ -438,11 +438,11 @@ export class Realm {
       localPath,
       JSON.stringify(await this.fileSerialization(json, fileURL), null, 2)
     );
-    let newURL = fileURL.href.replace(/\.json$/, "");
+    let newURL = fileURL.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.card(new URL(newURL), {
       loadLinks: true,
     });
-    if (!entry || entry?.type === "error") {
+    if (!entry || entry?.type === 'error') {
       let err = entry
         ? CardError.fromSerializableError(entry.error)
         : undefined;
@@ -460,7 +460,7 @@ export class Realm {
     return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
-        "content-type": "application/vnd.api+json",
+        'content-type': 'application/vnd.api+json',
         ...lastModifiedHeader(doc),
       },
     });
@@ -471,7 +471,7 @@ export class Realm {
     let localPath = this.paths.local(
       new URL(new URL(request.url).pathname, request.url)
     );
-    if (localPath.startsWith("_")) {
+    if (localPath.startsWith('_')) {
       return methodNotAllowed(request);
     }
 
@@ -480,7 +480,7 @@ export class Realm {
     if (!originalMaybeError) {
       return notFound(request);
     }
-    if (originalMaybeError.type === "error") {
+    if (originalMaybeError.type === 'error') {
       return systemError(
         `unable to patch card, cannot load original from index`,
         CardError.fromSerializableError(originalMaybeError.error)
@@ -514,11 +514,11 @@ export class Realm {
       path,
       JSON.stringify(await this.fileSerialization(card, url), null, 2)
     );
-    let instanceURL = url.href.replace(/\.json$/, "");
+    let instanceURL = url.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.card(new URL(instanceURL), {
       loadLinks: true,
     });
-    if (!entry || entry?.type === "error") {
+    if (!entry || entry?.type === 'error') {
       return systemError(
         `Unable to index card: can't find patched instance in index`,
         entry ? CardError.fromSerializableError(entry.error) : undefined
@@ -532,7 +532,7 @@ export class Realm {
     });
     return createResponse(JSON.stringify(doc, null, 2), {
       headers: {
-        "content-type": "application/vnd.api+json",
+        'content-type': 'application/vnd.api+json',
         ...lastModifiedHeader(doc),
       },
     });
@@ -548,7 +548,7 @@ export class Realm {
     if (!maybeError) {
       return notFound(request);
     }
-    if (maybeError.type === "error") {
+    if (maybeError.type === 'error') {
       return systemError(
         `cannot return card from index: ${maybeError.error.title} - ${maybeError.error.detail}`,
         CardError.fromSerializableError(maybeError.error)
@@ -558,8 +558,8 @@ export class Realm {
     card.data.links = { self: url.href };
     return createResponse(JSON.stringify(card, null, 2), {
       headers: {
-        "last-modified": formatRFC7231(card.data.meta.lastModified!),
-        "content-type": "application/vnd.api+json",
+        'last-modified': formatRFC7231(card.data.meta.lastModified!),
+        'content-type': 'application/vnd.api+json',
         ...lastModifiedHeader(card),
       },
     });
@@ -572,7 +572,7 @@ export class Realm {
     if (!result) {
       return notFound(request);
     }
-    let localPath = this.paths.local(url) + ".json";
+    let localPath = this.paths.local(url) + '.json';
     await this.delete(localPath);
     return createResponse(null, { status: 204 });
   }
@@ -591,7 +591,7 @@ export class Realm {
     for await (let entry of this.#adapter.readdir(path)) {
       let innerPath = join(path, entry.name);
       let innerURL =
-        entry.kind === "directory"
+        entry.kind === 'directory'
           ? this.paths.directoryURL(innerPath)
           : this.paths.fileURL(innerPath);
       if (await this.isIgnored(innerURL)) {
@@ -614,7 +614,7 @@ export class Realm {
 
     let data: ResourceObjectWithId = {
       id: url.href,
-      type: "directory",
+      type: 'directory',
       relationships: {},
     };
 
@@ -628,22 +628,22 @@ export class Realm {
       let relationship: DirectoryEntryRelationship = {
         links: {
           related:
-            entry.kind === "directory"
+            entry.kind === 'directory'
               ? this.paths.directoryURL(join(dir, entry.name)).href
               : this.paths.fileURL(join(dir, entry.name)).href,
         },
         meta: {
-          kind: entry.kind as "directory" | "file",
+          kind: entry.kind as 'directory' | 'file',
         },
       };
 
       data.relationships![
-        entry.name + (entry.kind === "directory" ? "/" : "")
+        entry.name + (entry.kind === 'directory' ? '/' : '')
       ] = relationship;
     }
 
     return createResponse(JSON.stringify({ data }, null, 2), {
-      headers: { "content-type": "application/vnd.api+json" },
+      headers: { 'content-type': 'application/vnd.api+json' },
     });
   }
 
@@ -669,7 +669,7 @@ export class Realm {
       { loadLinks: true }
     );
     return createResponse(JSON.stringify(doc, null, 2), {
-      headers: { "content-type": "application/vnd.api+json" },
+      headers: { 'content-type': 'application/vnd.api+json' },
     });
   }
 
@@ -678,7 +678,7 @@ export class Realm {
     relativeTo: URL
   ): Promise<LooseSingleCardDocument> {
     let api = await this.searchIndex.loader.import<typeof CardAPI>(
-      "https://cardstack.com/base/card-api"
+      'https://cardstack.com/base/card-api'
     );
     let card: Card = await api.createFromSerialized(doc.data, doc, relativeTo, {
       loader: this.searchIndex.loader as unknown as LoaderType,
@@ -696,9 +696,9 @@ export class Realm {
 
   private async subscribe(req: Request): Promise<Response> {
     let headers = {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
     };
 
     let { response, writable } = this.#adapter.createStreamingResponse(
@@ -712,7 +712,7 @@ export class Realm {
           (w) => w !== writable
         );
         this.sendUpdateMessages({
-          type: "message",
+          type: 'message',
           data: { cleanup: `${this.listeningClients.length} clients` },
         });
         if (this.listeningClients.length === 0) {
@@ -723,13 +723,13 @@ export class Realm {
 
     if (this.listeningClients.length === 0) {
       await this.#adapter.subscribe((data: Record<string, any>) =>
-        this.sendUpdateMessages({ type: "update", data })
+        this.sendUpdateMessages({ type: 'update', data })
       );
     }
 
     this.listeningClients.push(writable);
     this.sendUpdateMessages({
-      type: "message",
+      type: 'message',
       data: { count: `${this.listeningClients.length} clients` },
     });
 
@@ -751,28 +751,28 @@ export class Realm {
     for (let item in data) {
       chunkArr.push(`${item}: ${data[item]}`);
     }
-    let chunk = sseToChunkData(type, chunkArr.join(", "), id);
+    let chunk = sseToChunkData(type, chunkArr.join(', '), id);
     await Promise.all(
       this.listeningClients.map((client) => writeToStream(client, chunk))
     );
   }
 }
 
-export type Kind = "file" | "directory";
+export type Kind = 'file' | 'directory';
 
 function lastModifiedHeader(
   card: LooseSingleCardDocument
-): {} | { "last-modified": string } {
+): {} | { 'last-modified': string } {
   return (
     card.data.meta.lastModified != null
-      ? { "last-modified": formatRFC7231(card.data.meta.lastModified) }
+      ? { 'last-modified': formatRFC7231(card.data.meta.lastModified) }
       : {}
-  ) as {} | { "last-modified": string };
+  ) as {} | { 'last-modified': string };
 }
 
 export interface CardDefinitionResource {
   id: string;
-  type: "card-definition";
+  type: 'card-definition';
   attributes: {
     cardRef: CardRef;
   };
@@ -782,7 +782,7 @@ export interface CardDefinitionResource {
         related: string;
       };
       meta: {
-        type: "super" | "contains" | "containsMany";
+        type: 'super' | 'contains' | 'containsMany';
         ref: CardRef;
       };
     };
@@ -794,5 +794,5 @@ function sseToChunkData(type: string, data: string, id?: string): string {
   if (id) {
     info.push(`id: ${id}`);
   }
-  return info.join("\n") + "\n\n";
+  return info.join('\n') + '\n\n';
 }

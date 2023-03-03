@@ -1,36 +1,36 @@
 interface PreprocessOptionsEager {
-    getTemplateLocals: GetTemplateLocals;
-    importIdentifier?: string;
-    importPath?: string;
-    templateTag?: string;
-    templateTagReplacement?: string;
-    relativePath: string;
-    includeSourceMaps: boolean;
-    includeTemplateTokens: boolean;
+  getTemplateLocals: GetTemplateLocals;
+  importIdentifier?: string;
+  importPath?: string;
+  templateTag?: string;
+  templateTagReplacement?: string;
+  relativePath: string;
+  includeSourceMaps: boolean;
+  includeTemplateTokens: boolean;
 }
 interface PreprocessOptionsLazy {
-    getTemplateLocalsRequirePath: string;
-    getTemplateLocalsExportPath: string;
-    importIdentifier?: string;
-    importPath?: string;
-    templateTag?: string;
-    templateTagReplacement?: string;
-    relativePath: string;
-    includeSourceMaps: boolean;
-    includeTemplateTokens: boolean;
+  getTemplateLocalsRequirePath: string;
+  getTemplateLocalsExportPath: string;
+  importIdentifier?: string;
+  importPath?: string;
+  templateTag?: string;
+  templateTagReplacement?: string;
+  relativePath: string;
+  includeSourceMaps: boolean;
+  includeTemplateTokens: boolean;
 }
 declare type PreprocessOptions = PreprocessOptionsLazy | PreprocessOptionsEager;
 interface PreprocessedOutput {
-    output: string;
-    replacements: Replacement[];
+  output: string;
+  replacements: Replacement[];
 }
 interface Replacement {
-    type: 'start' | 'end';
-    index: number;
-    oldLength: number;
-    newLength: number;
-    originalLine: number;
-    originalCol: number;
+  type: 'start' | 'end';
+  index: number;
+  oldLength: number;
+  newLength: number;
+  originalLine: number;
+  originalCol: number;
 }
 declare type GetTemplateLocals = (template: string) => string[];
 /**
@@ -57,5 +57,8 @@ declare type GetTemplateLocals = (template: string) => string[];
  *
  *   hbs(`<MyComponent/>`, { scope() { return {MyComponent}; } });
  */
-export declare function preprocessEmbeddedTemplates(template: string, options: PreprocessOptions): PreprocessedOutput;
+export declare function preprocessEmbeddedTemplates(
+  template: string,
+  options: PreprocessOptions
+): PreprocessedOutput;
 export {};

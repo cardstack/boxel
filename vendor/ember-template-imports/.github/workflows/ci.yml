@@ -7,7 +7,7 @@ on:
       - 'v*'
   pull_request: {}
   schedule:
-  - cron:  '0 6 * * 0' # weekly, on sundays
+    - cron: '0 6 * * 0' # weekly, on sundays
 
 jobs:
   lint:
@@ -15,18 +15,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions/setup-node@v1
-      with:
-        node-version: 12.x
-    - name: install dependencies
-      run: yarn install
-    - name: build
-      run: yarn build
-    - name: lint:js
-      run: yarn lint:js
-    - name: lint:hbs
-      run: yarn lint:hbs
+      - uses: actions/checkout@v1
+      - uses: actions/setup-node@v1
+        with:
+          node-version: 12.x
+      - name: install dependencies
+        run: yarn install
+      - name: build
+        run: yarn build
+      - name: lint:js
+        run: yarn lint:js
+      - name: lint:hbs
+        run: yarn lint:hbs
 
   test:
     name: Tests
@@ -38,17 +38,17 @@ jobs:
         node-version: [12.x, 14.x, 16.x]
 
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions/setup-node@v1
-      with:
-        node-version: ${{ matrix.node-version }}
-    - name: install dependencies
-      # Dependency fetching in Windows Actions runners can be slow
-      run: yarn install --network-timeout 60000
-    - name: build
-      run: yarn build
-    - name: ember test
-      run: yarn test:ember
+      - uses: actions/checkout@v1
+      - uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: install dependencies
+        # Dependency fetching in Windows Actions runners can be slow
+        run: yarn install --network-timeout 60000
+      - name: build
+        run: yarn build
+      - name: ember test
+        run: yarn test:ember
 
   floating-dependencies:
     name: Floating Deps
@@ -57,16 +57,16 @@ jobs:
     needs: [test, lint]
 
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions/setup-node@v1
-      with:
-        node-version: 12.x
-    - name: install dependencies
-      run: yarn install --ignore-lockfile
-    - name: build
-      run: yarn build
-    - name: ember test
-      run: yarn test:ember
+      - uses: actions/checkout@v1
+      - uses: actions/setup-node@v1
+        with:
+          node-version: 12.x
+      - name: install dependencies
+        run: yarn install --ignore-lockfile
+      - name: build
+        run: yarn build
+      - name: ember test
+        run: yarn test:ember
 
   try-scenarios:
     name: ${{ matrix.ember-try-scenario }}
@@ -78,23 +78,23 @@ jobs:
     strategy:
       matrix:
         ember-try-scenario:
-         - ember-3.27
-         - ember-release
-         - ember-beta
-         - ember-canary
-         - embroider-safe
-         - embroider-optimized
+          - ember-3.27
+          - ember-release
+          - ember-beta
+          - ember-canary
+          - embroider-safe
+          - embroider-optimized
 
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions/setup-node@v1
-      with:
-        node-version: 12.x
-    - name: install dependencies
-      run: yarn install
-    - name: build
-      run: yarn build
-    - name: test
-      env:
-        EMBER_TRY_SCENARIO: ${{ matrix.ember-try-scenario }}
-      run: node_modules/.bin/ember try:one $EMBER_TRY_SCENARIO
+      - uses: actions/checkout@v1
+      - uses: actions/setup-node@v1
+        with:
+          node-version: 12.x
+      - name: install dependencies
+        run: yarn install
+      - name: build
+        run: yarn build
+      - name: test
+        env:
+          EMBER_TRY_SCENARIO: ${{ matrix.ember-try-scenario }}
+        run: node_modules/.bin/ember try:one $EMBER_TRY_SCENARIO
