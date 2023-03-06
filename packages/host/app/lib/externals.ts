@@ -16,6 +16,7 @@ import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
 import * as emberResources from 'ember-resources';
 import * as emberConcurrency from 'ember-concurrency';
+import * as emberConcurrencyTS from 'ember-concurrency-ts';
 import * as emberModifier2 from 'ember-modifier';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
@@ -44,6 +45,7 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@ember/modifier', emberModifier);
   loader.shimModule('ember-resources', emberResources);
   loader.shimModule('ember-concurrency', emberConcurrency);
+  loader.shimModule('ember-concurrency-ts', emberConcurrencyTS);
   loader.shimModule('ember-modifier', emberModifier2);
   loader.shimModule('flat', flat);
   loader.shimModule('lodash', lodash);

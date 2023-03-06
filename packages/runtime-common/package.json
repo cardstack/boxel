@@ -26,6 +26,7 @@
     "babel-plugin-ember-template-compilation": "^1.0.0",
     "date-fns": "^2.28.0",
     "diff": "^5.1.0",
+    "ember-concurrency-async-plugin": "workspace:*",
     "ember-source": "~4.2.0",
     "flat": "^5.0.2",
     "http-status-codes": "^2.2.0",
