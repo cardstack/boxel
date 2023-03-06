@@ -15,7 +15,6 @@
     "@types/supertest": "^2.0.12",
     "@types/tmp": "^0.2.3",
     "@types/yargs": "^17.0.10",
-    "date-fns": "^2.28.0",
     "eventsource": "^2.0.2",
     "fastboot": "^4.1.0",
     "fs-extra": "^10.1.0",
@@ -48,8 +47,9 @@
     "start:test-realms": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4202 --path='./tests/cards' --fromUrl='/node-test/' --toUrl='/node-test/' --path='../host/tests/cards' --fromUrl='/test/' --toUrl='/test/' --fromUrl='https://cardstack.com/base/' --toUrl='http://localhost:4201/base/'",
     "start:all": "NODE_NO_WARNINGS=1 start-server-and-test 'run-p start:base start:base:root' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.api%2Bjson|http-get://localhost:4203/fields/boolean-field?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run start:test-realms' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.api%2Bjson' 'wait'",
     "start:base:staging": "pnpm setup:base-in-deployment && pnpm fetch-dist:staging && NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=3000 --dist './dist' --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --fromUrl='https://realm-base-staging.stack.cards/base/' --toUrl='/base/' --logLevel=info",
-    "start:demo:staging": "pnpm fetch-dist:staging && NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=3000 --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --dist './dist' --path='/persistent/demo' --fromUrl='https://realm-demo-staging.stack.cards/demo/' --toUrl='/demo/' --fromUrl='https://cardstack.com/base/' --toUrl='https://realm-demo-staging.stack.cards/base/' --logLevel=info",
     "start:base:production": "pnpm setup:base-in-deployment && pnpm fetch-dist:production && NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=3000 --dist './dist' --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --fromUrl='https://realm-base.cardstack.com/base/' --toUrl='/base/' --logLevel=info",
+    "start:demo": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=4202 --path='../demo-cards' --fromUrl='/' --toUrl='/' --fromUrl='https://cardstack.com/base/' --toUrl='http://localhost:4201/base/'",
+    "start:demo:staging": "pnpm fetch-dist:staging && NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=3000 --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --dist './dist' --path='/persistent/demo' --fromUrl='https://realm-demo-staging.stack.cards/demo/' --toUrl='/demo/' --fromUrl='https://cardstack.com/base/' --toUrl='https://realm-demo-staging.stack.cards/base/' --logLevel=info",
     "start:demo:production": "pnpm fetch-dist:production && NODE_NO_WARNINGS=1 ts-node --transpileOnly main --port=3000 --dist './dist' --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='/base/' --path='/persistent/demo' --fromUrl='https://realm-demo.cardstack.com/demo/' --toUrl='/demo/' --fromUrl='https://cardstack.com/base/' --toUrl='https://realm-demo.cardstack.com/base/' --logLevel=info",
     "wait": "sleep 10000000",
     "lint": "glint"

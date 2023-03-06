@@ -63,8 +63,6 @@ import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import log from 'loglevel';
 
-export const distDir = `.dist`;
-
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
@@ -131,6 +129,7 @@ export interface RealmAdapter {
 interface Options {
   deferStartUp?: true;
   enableLocalRealm?: true;
+  indexHTML?: string;
 }
 
 export class Realm {
@@ -140,6 +139,7 @@ export class Realm {
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
   #deferStartup: boolean;
+  #indexHTML: string | undefined;
   readonly paths: RealmPaths;
 
   get url(): string {
@@ -154,6 +154,7 @@ export class Realm {
     opts?: Options
   ) {
     this.paths = new RealmPaths(url);
+    this.#indexHTML = opts?.indexHTML;
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
@@ -250,12 +251,8 @@ export class Realm {
     } else if (accept?.includes('application/vnd.card+source')) {
       return this.#cardSourceRouter.handle(request);
     } else if (accept?.includes('text/html')) {
-      let { content, handle } = await this.getIndexHTML();
-      return createResponse(content, {
-        headers: {
-          'content-type': 'text/html',
-          'last-modified': formatRFC7231(handle.lastModified),
-        },
+      return createResponse(await this.getIndexHTML(), {
+        headers: { 'content-type': 'text/html' },
       });
     }
 
@@ -276,15 +273,11 @@ export class Realm {
     }
   }
 
-  async getIndexHTML(): Promise<{ content: string; handle: FileRef }> {
-    let handle = await this.#adapter.openFile(`${distDir}/index.html`);
-    if (!handle) {
-      throw new CardError(
-        `could not locate ${distDir}/index.html within the realm dir`
-      );
+  async getIndexHTML(): Promise<string> {
+    if (!this.#indexHTML) {
+      throw new CardError('realm server not configured with index.html');
     }
-    let indexHtml = await fileContentToText(handle);
-    let content = indexHtml.replace(
+    return this.#indexHTML.replace(
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
@@ -296,7 +289,6 @@ export class Realm {
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       }
     );
-    return { content, handle };
   }
 
   private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {

@@ -1,5 +1,4 @@
 import { Realm } from '@cardstack/runtime-common';
-import { distDir } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -7,7 +6,7 @@ import { createRealmServer } from './server';
 import { resolve, join } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
-import { ensureSymlinkSync } from 'fs-extra';
+import { readFileSync } from 'fs-extra';
 import log, { LogLevelNames } from 'loglevel';
 
 let {
@@ -88,10 +87,10 @@ for (let [from, to] of urlMappings) {
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let distPath = resolve(dist);
+let indexHTML = readFileSync(join(distPath, 'index.html')).toString();
 
 let realms: Realm[] = [];
 for (let [i, path] of paths.entries()) {
-  ensureSymlinkSync(distPath, join(String(path), distDir));
   let manager = new RunnerOptionsManager();
   let getRunner = makeFastBootIndexRunner(
     distPath,
@@ -103,7 +102,7 @@ for (let [i, path] of paths.entries()) {
       new NodeAdapter(resolve(String(path))),
       getRunner,
       manager,
-      { deferStartUp: true }
+      { deferStartUp: true, indexHTML }
     )
   );
 }

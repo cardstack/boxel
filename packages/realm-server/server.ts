@@ -5,7 +5,6 @@ import { Readable } from 'stream';
 import { setupCloseHandler } from './node-realm';
 import { existsSync, readFileSync } from 'fs-extra';
 import { join, resolve } from 'path';
-import { formatRFC7231 } from 'date-fns';
 import mime from 'mime-types';
 import '@cardstack/runtime-common/externals-global';
 import log from 'loglevel';
@@ -59,10 +58,8 @@ export function createRealmServer(realms: Realm[], distPath: string) {
       ) {
         // this would only be called when there is a single realm on this
         // server, in which case just use the first realm
-        let { content, handle } = await realms[0].getIndexHTML();
         res.setHeader('Content-Type', 'text/html');
-        res.setHeader('last-modified', formatRFC7231(handle.lastModified));
-        res.write(content);
+        res.write(await realms[0].getIndexHTML());
         res.end();
         return;
       }
