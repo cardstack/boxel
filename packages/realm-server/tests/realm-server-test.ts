@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { createRealmServer } from '../server';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { Server } from 'http';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
 import { copySync, existsSync, readFileSync, readJSONSync } from 'fs-extra';
@@ -27,6 +27,8 @@ setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
 const testRealm2Href = 'http://localhost:4202/node-test/';
+const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
+console.log(`using host dist dir: ${distDir}`);
 
 module('Realm Server', function (hooks) {
   let server: Server;
@@ -75,7 +77,7 @@ module('Realm Server', function (hooks) {
 
     let testRealm = createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
-    server = createRealmServer([testRealm]);
+    server = createRealmServer([testRealm], distDir);
     server.listen(testRealmURL.port);
     request = supertest(server);
   });
@@ -489,7 +491,7 @@ module('Realm Server serving from root', function (hooks) {
 
     let testRealm = createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
-    server = createRealmServer([testRealm]);
+    server = createRealmServer([testRealm], distDir);
     server.listen(testRealmURL.port);
     request = supertest(server);
   });
