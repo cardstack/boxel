@@ -1513,6 +1513,7 @@ module('Integration | search-index', function (hooks) {
         '@ember/template-factory',
         '@glimmer/component',
         'ember-concurrency',
+        'ember-concurrency-ts',
         'flat',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/contains-many-component',
