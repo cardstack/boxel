@@ -1,10 +1,10 @@
-import fs from "fs";
-import { execSync } from "child_process";
+import fs from 'fs';
+import { execSync } from 'child_process';
 import {
   getAppConfig,
   getAppNameFromServiceArn,
   getServices,
-} from "./waypoint-ecs-add-tags.mjs";
+} from './waypoint-ecs-add-tags.mjs';
 
 function execute(command, options = {}) {
   return execSync(command, options).toString().trim();
@@ -28,11 +28,11 @@ function addVolume(
       name: volumeName,
       efsVolumeConfiguration: {
         fileSystemId: fileSystemId,
-        rootDirectory: "/",
-        transitEncryption: "ENABLED",
+        rootDirectory: '/',
+        transitEncryption: 'ENABLED',
         authorizationConfig: {
           accessPointId: accessPointId,
-          iam: "ENABLED",
+          iam: 'ENABLED',
         },
       },
     },
@@ -55,7 +55,7 @@ function addVolume(
   delete taskDefinition.taskDefinition.registeredBy;
 
   fs.writeFileSync(
-    "modified-task-definition.json",
+    'modified-task-definition.json',
     JSON.stringify(taskDefinition.taskDefinition, null, 2)
   );
 
@@ -90,11 +90,11 @@ function main() {
     ...extraArgs
   ] = process.argv.slice(2);
   const waypointConfigFilePath =
-    extraArgs.length > 0 ? extraArgs[0] : "waypoint.hcl";
+    extraArgs.length > 0 ? extraArgs[0] : 'waypoint.hcl';
 
   const config = getAppConfig(waypointConfigFilePath, appName);
 
-  console.log("\n» Adding volume to task definition…");
+  console.log('\n» Adding volume to task definition…');
   const services = getServices(config.cluster, appName);
   const latestService = services[0];
 

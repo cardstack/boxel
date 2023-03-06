@@ -1,16 +1,16 @@
-import { transform } from "@babel/core";
-import { NodePath } from "@babel/traverse";
-import { StringLiteral } from "@babel/types";
-import { createPatch } from "diff";
-import { isNode } from "../index";
+import { transform } from '@babel/core';
+import { NodePath } from '@babel/traverse';
+import { StringLiteral } from '@babel/types';
+import { createPatch } from 'diff';
+import { isNode } from '../index';
 //@ts-ignore unsure where these types live
-import decoratorsPlugin from "@babel/plugin-syntax-decorators";
+import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
-import classPropertiesPlugin from "@babel/plugin-syntax-class-properties";
+import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 //@ts-ignore unsure where these types live
-import typescriptPlugin from "@babel/plugin-syntax-typescript";
-import { parseTemplates } from "@cardstack/ember-template-imports/lib/parse-templates";
-import * as QUnit from "qunit";
+import typescriptPlugin from '@babel/plugin-syntax-typescript';
+import { parseTemplates } from '@cardstack/ember-template-imports/lib/parse-templates';
+import * as QUnit from 'qunit';
 
 declare global {
   interface Assert {
@@ -47,7 +47,7 @@ function standardize(code: string) {
 function preprocessTemplateTags(code: string): string {
   let output = [];
   let offset = 0;
-  let matches = parseTemplates(code, "no-filename", "template");
+  let matches = parseTemplates(code, 'no-filename', 'template');
   for (let match of matches) {
     output.push(code.slice(offset, match.start.index));
     // its super important that this not be the template function we use in the
@@ -55,24 +55,24 @@ function preprocessTemplateTags(code: string): string {
     // inadvertantly comparing precompiled source against an actual template.
     // rather we want to make sure we compare templates to templates (an apples
     // to apples comparison).
-    output.push("[template(`");
+    output.push('[template(`');
     output.push(
       code
         .slice(match.start.index! + match.start[0].length, match.end.index)
-        .replace(/`/g, "\\`")
+        .replace(/`/g, '\\`')
     );
-    output.push("`)]");
+    output.push('`)]');
     offset = match.end.index! + match.end[0].length;
   }
   output.push(code.slice(offset));
-  return output.join("");
+  return output.join('');
 }
 
 function codeEqual(
   this: Assert,
   actual: string,
   expected: string,
-  message = "code is not equal."
+  message = 'code is not equal.'
 ) {
   let parsedActual = standardize(actual)!;
   let parsedExpected = standardize(expected)!;
@@ -83,10 +83,10 @@ function codeEqual(
     msg = message;
     if (isNode) {
       msg = `${message}
-${createPatch("", parsedExpected, parsedActual)
-  .split("\n")
+${createPatch('', parsedExpected, parsedActual)
+  .split('\n')
   .slice(4)
-  .join("\n")}`;
+  .join('\n')}`;
     }
   } else {
     msg = message;
