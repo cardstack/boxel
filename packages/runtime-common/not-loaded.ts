@@ -14,10 +14,10 @@ export class NotLoaded extends Error {
 export function isNotLoadedError(err: any): err is NotLoaded {
   return (
     err != null &&
-    typeof err === "object" &&
+    typeof err === 'object' &&
     err.isNotLoadedError === true &&
-    "fieldName" in err &&
-    "reference" in err &&
-    "instance" in err
+    'fieldName' in err &&
+    'reference' in err &&
+    'instance' in err
   );
 }

@@ -3,11 +3,11 @@ export function assertJSONValue(v: any, pointer: string[]) {
     return;
   }
   switch (typeof v) {
-    case "string":
-    case "number":
-    case "boolean":
+    case 'string':
+    case 'number':
+    case 'boolean':
       return;
-    case "object":
+    case 'object':
       if (Array.isArray(v)) {
         v.every((value, index) =>
           assertJSONValue(value, pointer.concat(`[${index}]`))
@@ -19,7 +19,7 @@ export function assertJSONValue(v: any, pointer: string[]) {
       }
       return;
   }
-  throw new Error(`${pointer.join("/")}: value not allowed in json`);
+  throw new Error(`${pointer.join('/')}: value not allowed in json`);
 }
 
 export function assertJSONPrimitive(p: any, pointer: string[]) {
@@ -27,14 +27,14 @@ export function assertJSONPrimitive(p: any, pointer: string[]) {
     return;
   }
   switch (typeof p) {
-    case "string":
-    case "number":
-    case "boolean":
+    case 'string':
+    case 'number':
+    case 'boolean':
       return;
     default:
       throw new Error(
         `${pointer.join(
-          "/"
+          '/'
         )}: JSON primitive must be of type string, number, boolean, or null`
       );
   }

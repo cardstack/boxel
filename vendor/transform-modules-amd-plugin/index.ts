@@ -1,5 +1,5 @@
 // @ts-ignore
-import { declare } from "@babel/helper-plugin-utils";
+import { declare } from '@babel/helper-plugin-utils';
 import {
   isModule,
   rewriteModuleStatementsAndPrepareHeader,
@@ -11,13 +11,13 @@ import {
   wrapInterop,
   getModuleName,
   // @ts-ignore
-} from "@babel/helper-module-transforms";
-import { template, types as t } from "@babel/core";
+} from '@babel/helper-module-transforms';
+import { template, types as t } from '@babel/core';
 // @ts-ignore
-import { getImportSource } from "babel-plugin-dynamic-import-node/utils";
+import { getImportSource } from 'babel-plugin-dynamic-import-node/utils';
 // @ts-ignore
-import type { PluginOptions } from "@babel/helper-module-transforms";
-import type { NodePath } from "@babel/traverse";
+import type { PluginOptions } from '@babel/helper-module-transforms';
+import type { NodePath } from '@babel/traverse';
 
 const buildWrapper = template.statement(`
   define(MODULE_NAME, AMD_ARGUMENTS, function(IMPORT_NAMES) {
@@ -37,21 +37,21 @@ function injectWrapper(
   path.node.directives = [];
   path.node.body = [];
   const amdFactoryCall = path
-    .pushContainer("body", wrapper)[0]
-    .get("expression") as NodePath<t.CallExpression>;
-  const amdFactoryCallArgs = amdFactoryCall.get("arguments");
+    .pushContainer('body', wrapper)[0]
+    .get('expression') as NodePath<t.CallExpression>;
+  const amdFactoryCallArgs = amdFactoryCall.get('arguments');
   const amdFactory = (
     amdFactoryCallArgs[
       amdFactoryCallArgs.length - 1
     ] as NodePath<t.FunctionExpression>
-  ).get("body") as NodePath<t.BlockStatement>;
-  amdFactory.pushContainer("directives", directives);
-  amdFactory.pushContainer("body", body);
+  ).get('body') as NodePath<t.BlockStatement>;
+  amdFactory.pushContainer('directives', directives);
+  amdFactory.pushContainer('body', body);
 }
 
 export interface Options extends PluginOptions {
   allowTopLevelThis?: boolean;
-  importInterop?: RewriteModuleStatementsAndPrepareHeaderOptions["importInterop"];
+  importInterop?: RewriteModuleStatementsAndPrepareHeaderOptions['importInterop'];
   loose?: boolean;
   noInterop?: boolean;
   strict?: boolean;
@@ -72,49 +72,49 @@ export default declare<State>((api: any, options: Options) => {
     options;
 
   const constantReexports =
-    api.assumption("constantReexports") ?? options.loose;
+    api.assumption('constantReexports') ?? options.loose;
   const enumerableModuleMeta =
-    api.assumption("enumerableModuleMeta") ?? options.loose;
+    api.assumption('enumerableModuleMeta') ?? options.loose;
 
   return {
-    name: "transform-modules-amd",
+    name: 'transform-modules-amd',
 
     pre() {
       // @ts-ignore
-      this.file.set("@babel/plugin-transform-modules-*", "amd");
+      this.file.set('@babel/plugin-transform-modules-*', 'amd');
     },
 
     visitor: {
       MetaProperty(path: NodePath<t.MetaProperty>, state: State) {
         if (
-          path.node.meta.name === "import" &&
-          path.node.property.name === "meta"
+          path.node.meta.name === 'import' &&
+          path.node.property.name === 'meta'
         ) {
           if (!state.importMeta) {
-            state.importMeta = path.scope.generateUidIdentifier("import_meta");
+            state.importMeta = path.scope.generateUidIdentifier('import_meta');
           }
           path.replaceWith(state.importMeta);
         }
       },
       CallExpression(path: NodePath<t.CallExpression>, state: State) {
         // @ts-ignore
-        if (!this.file.has("@babel/plugin-proposal-dynamic-import")) return;
-        if (!path.get("callee").isImport()) return;
+        if (!this.file.has('@babel/plugin-proposal-dynamic-import')) return;
+        if (!path.get('callee').isImport()) return;
 
         let { requireId, resolveId, rejectId } = state;
         if (!requireId) {
-          requireId = path.scope.generateUidIdentifier("require");
+          requireId = path.scope.generateUidIdentifier('require');
           state.requireId = requireId;
         }
         if (!resolveId || !rejectId) {
-          resolveId = path.scope.generateUidIdentifier("resolve");
-          rejectId = path.scope.generateUidIdentifier("reject");
+          resolveId = path.scope.generateUidIdentifier('resolve');
+          rejectId = path.scope.generateUidIdentifier('reject');
           state.resolveId = resolveId;
           state.rejectId = rejectId;
         }
 
-        let result: t.Node = t.identifier("imported");
-        if (!noInterop) result = wrapInterop(path, result, "namespace");
+        let result: t.Node = t.identifier('imported');
+        if (!noInterop) result = wrapInterop(path, result, 'namespace');
 
         path.replaceWith(
           template.expression.ast`
@@ -145,12 +145,12 @@ export default declare<State>((api: any, options: Options) => {
           const amdArgs: t.StringLiteral[] = [];
           const importNames: t.Identifier[] = [];
           if (requireId) {
-            amdArgs.push(t.stringLiteral("require"));
+            amdArgs.push(t.stringLiteral('require'));
             importNames.push(t.cloneNode(requireId));
           }
 
           if (importMeta) {
-            amdArgs.push(t.stringLiteral("__import_meta__"));
+            amdArgs.push(t.stringLiteral('__import_meta__'));
             importNames.push(t.cloneNode(importMeta));
           }
 
@@ -174,7 +174,7 @@ export default declare<State>((api: any, options: Options) => {
           );
 
           if (hasExports(meta)) {
-            amdArgs.push(t.stringLiteral("exports"));
+            amdArgs.push(t.stringLiteral('exports'));
 
             importNames.push(t.identifier(meta.exportName));
           }
@@ -192,7 +192,7 @@ export default declare<State>((api: any, options: Options) => {
               if (interop) {
                 const header = t.expressionStatement(
                   t.assignmentExpression(
-                    "=",
+                    '=',
                     t.identifier(metadata.name),
                     interop
                   )
@@ -208,7 +208,7 @@ export default declare<State>((api: any, options: Options) => {
           }
 
           ensureStatementsHoisted(headers);
-          path.unshiftContainer("body", headers);
+          path.unshiftContainer('body', headers);
 
           injectWrapper(
             path,

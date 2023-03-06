@@ -1,4 +1,4 @@
-import { type CardRef, isCardRef } from "./card-ref";
+import { type CardRef, isCardRef } from './card-ref';
 
 export type Saved = string;
 export type Unsaved = string | undefined;
@@ -28,7 +28,7 @@ export type Relationship = {
 
 export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
-  type: "card";
+  type: 'card';
   attributes?: Record<string, any>;
   relationships?: {
     [fieldName: string]: Relationship;
@@ -52,25 +52,25 @@ export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
 export type CardDocument = SingleCardDocument | CardCollectionDocument;
 
 export function isCardResource(resource: any): resource is CardResource {
-  if (typeof resource !== "object" || resource == null) {
+  if (typeof resource !== 'object' || resource == null) {
     return false;
   }
-  if ("id" in resource && typeof resource.id !== "string") {
+  if ('id' in resource && typeof resource.id !== 'string') {
     return false;
   }
-  if ("type" in resource && resource.type !== "card") {
+  if ('type' in resource && resource.type !== 'card') {
     return false;
   }
-  if ("attributes" in resource && typeof resource.attributes !== "object") {
+  if ('attributes' in resource && typeof resource.attributes !== 'object') {
     return false;
   }
-  if ("relationships" in resource) {
+  if ('relationships' in resource) {
     let { relationships } = resource;
-    if (typeof relationships !== "object" || relationships == null) {
+    if (typeof relationships !== 'object' || relationships == null) {
       return false;
     }
     for (let [fieldName, relationship] of Object.entries(relationships)) {
-      if (typeof fieldName !== "string") {
+      if (typeof fieldName !== 'string') {
         return false;
       }
       if (!isRelationship(relationship)) {
@@ -78,18 +78,18 @@ export function isCardResource(resource: any): resource is CardResource {
       }
     }
   }
-  if (!("meta" in resource) || typeof resource.meta !== "object") {
+  if (!('meta' in resource) || typeof resource.meta !== 'object') {
     return false;
   }
   let { meta } = resource;
 
-  if ("fields" in meta) {
+  if ('fields' in meta) {
     if (!isCardFields(meta.fields)) {
       return false;
     }
   }
 
-  if (!("adoptsFrom" in meta) && typeof meta.adoptsFrom !== "object") {
+  if (!('adoptsFrom' in meta) && typeof meta.adoptsFrom !== 'object') {
     return false;
   }
   let { adoptsFrom } = meta;
@@ -97,13 +97,13 @@ export function isCardResource(resource: any): resource is CardResource {
 }
 
 export function isCardFields(fields: any): fields is CardFields {
-  if (typeof fields !== "object") {
+  if (typeof fields !== 'object') {
     return false;
   }
   for (let [fieldName, fieldItem] of Object.entries(
     fields as { [fieldName: string | symbol]: any }
   )) {
-    if (typeof fieldName !== "string") {
+    if (typeof fieldName !== 'string') {
       return false;
     }
     if (Array.isArray(fieldItem)) {
@@ -120,10 +120,10 @@ export function isCardFields(fields: any): fields is CardFields {
 export function isMeta(meta: any, allowPartial: true): meta is Partial<Meta>;
 export function isMeta(meta: any): meta is Meta;
 export function isMeta(meta: any, allowPartial = false) {
-  if (typeof meta !== "object" || meta == null) {
+  if (typeof meta !== 'object' || meta == null) {
     return false;
   }
-  if ("adoptsFrom" in meta) {
+  if ('adoptsFrom' in meta) {
     let { adoptsFrom } = meta;
     if (!isCardRef(adoptsFrom)) {
       return false;
@@ -133,7 +133,7 @@ export function isMeta(meta: any, allowPartial = false) {
       return false;
     }
   }
-  if ("fields" in meta) {
+  if ('fields' in meta) {
     if (!isCardFields(meta.fields)) {
       return false;
     }
@@ -144,37 +144,37 @@ export function isMeta(meta: any, allowPartial = false) {
 export function isRelationship(
   relationship: any
 ): relationship is Relationship {
-  if (typeof relationship !== "object" || relationship == null) {
+  if (typeof relationship !== 'object' || relationship == null) {
     return false;
   }
-  if ("meta" in relationship && typeof relationship.meta !== "object") {
+  if ('meta' in relationship && typeof relationship.meta !== 'object') {
     return false;
   }
-  if ("links" in relationship) {
+  if ('links' in relationship) {
     let { links } = relationship;
-    if (typeof links !== "object" || links == null) {
+    if (typeof links !== 'object' || links == null) {
       return false;
     }
-    if (!("self" in links)) {
+    if (!('self' in links)) {
       return false;
     }
     let { self } = links;
-    if (typeof self !== "string" && self !== null) {
+    if (typeof self !== 'string' && self !== null) {
       return false;
     }
-    if ("related" in links) {
-      if (typeof links.related !== "string" && links.related !== null) {
+    if ('related' in links) {
+      if (typeof links.related !== 'string' && links.related !== null) {
         return false;
       }
     }
-  } else if ("data" in relationship) {
+  } else if ('data' in relationship) {
     let { data } = relationship;
-    if (typeof data !== "object") {
+    if (typeof data !== 'object') {
       return false;
     }
-    if (data !== null && "type" in data && "id" in data) {
+    if (data !== null && 'type' in data && 'id' in data) {
       let { type, id } = data;
-      if (typeof type !== "string" || typeof id !== "string") {
+      if (typeof type !== 'string' || typeof id !== 'string') {
         return false;
       }
     }
@@ -189,17 +189,17 @@ export function isCardDocument(doc: any): doc is CardDocument {
 }
 
 export function isSingleCardDocument(doc: any): doc is SingleCardDocument {
-  if (typeof doc !== "object" || doc == null) {
+  if (typeof doc !== 'object' || doc == null) {
     return false;
   }
-  if (!("data" in doc)) {
+  if (!('data' in doc)) {
     return false;
   }
   let { data } = doc;
   if (Array.isArray(data)) {
     return false;
   }
-  if ("included" in doc) {
+  if ('included' in doc) {
     let { included } = doc;
     if (!isIncluded(included)) {
       return false;
@@ -211,17 +211,17 @@ export function isSingleCardDocument(doc: any): doc is SingleCardDocument {
 export function isCardCollectionDocument(
   doc: any
 ): doc is CardCollectionDocument {
-  if (typeof doc !== "object" || doc == null) {
+  if (typeof doc !== 'object' || doc == null) {
     return false;
   }
-  if (!("data" in doc)) {
+  if (!('data' in doc)) {
     return false;
   }
   let { data } = doc;
   if (!Array.isArray(data)) {
     return false;
   }
-  if ("included" in doc) {
+  if ('included' in doc) {
     let { included } = doc;
     if (!isIncluded(included)) {
       return false;
@@ -235,10 +235,10 @@ function isIncluded(included: any): included is CardResource<Saved>[] {
     return false;
   }
   for (let resource of included) {
-    if (typeof resource !== "object" || !resource) {
+    if (typeof resource !== 'object' || !resource) {
       return false;
     }
-    if (!("id" in resource) || typeof resource.id !== "string") {
+    if (!('id' in resource) || typeof resource.id !== 'string') {
       return false;
     }
     if (!isCardResource(resource)) {

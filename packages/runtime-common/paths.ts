@@ -3,10 +3,10 @@ export class RealmPaths {
 
   constructor(realmURL: string | URL) {
     this.url =
-      (typeof realmURL === "string" ? realmURL : realmURL.href).replace(
+      (typeof realmURL === 'string' ? realmURL : realmURL.href).replace(
         /\/$/,
-        ""
-      ) + "/";
+        ''
+      ) + '/';
   }
 
   local(url: URL): LocalPath {
@@ -18,7 +18,7 @@ export class RealmPaths {
     let local = url.href.slice(this.url.length);
 
     // this will remove any trailing slashes
-    local = local.replace(/\/+$/, "");
+    local = local.replace(/\/+$/, '');
 
     // the LocalPath has no leading nor trailing slashes
     return local;
@@ -29,11 +29,11 @@ export class RealmPaths {
   }
 
   directoryURL(local: LocalPath): URL {
-    if (local === "") {
+    if (local === '') {
       // this preserves a root that is not at the origin of the URL
       return new URL(this.url);
     }
-    return new URL(local + "/", this.url);
+    return new URL(local + '/', this.url);
   }
 
   inRealm(url: URL): boolean {
@@ -43,9 +43,9 @@ export class RealmPaths {
 
 export function join(...pathParts: string[]): LocalPath {
   return pathParts
-    .map((p) => p.replace(/^\//, "").replace(/\/$/, ""))
+    .map((p) => p.replace(/^\//, '').replace(/\/$/, ''))
     .filter(Boolean)
-    .join("/");
+    .join('/');
 }
 
 // Documenting that this represents a local path within realm, with no leading

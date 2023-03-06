@@ -16,7 +16,7 @@ export class Person extends Card {
   };
 }`.trim();
 
-export function compiledCard(id = "null") {
+export function compiledCard(id = 'null') {
   return `
 var _class, _descriptor, _class2;
 

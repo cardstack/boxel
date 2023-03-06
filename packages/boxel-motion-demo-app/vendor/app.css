@@ -5,7 +5,8 @@
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-family: system-ui,BlinkMacSystemFont,-apple-system,Segoe UI,Roboto,Oxygen,Ubuntu,Cantarell,Fira Sans,Droid Sans,Helvetica Neue,sans-serif;
+  font-family: system-ui, BlinkMacSystemFont, -apple-system, Segoe UI, Roboto,
+    Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
   font-size: 1rem;
   line-height: 1.625;
   color: #3d4852;
@@ -27,86 +28,125 @@ body {
 html {
   -webkit-text-size-adjust: 100%;
   box-sizing: border-box;
-  font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
-  line-height: 1.5
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  line-height: 1.5;
 }
 
-*,::after,::before {
+*,
+::after,
+::before {
   box-sizing: inherit;
   border-width: 0;
   border-style: solid;
-  border-color: #dae1e7
+  border-color: #dae1e7;
 }
 
-blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre {
-  margin: 0
+blockquote,
+dd,
+dl,
+figure,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+hr,
+p,
+pre {
+  margin: 0;
 }
 
 button {
-  background: 0 0
+  background: 0 0;
 }
 
 button:focus {
   outline: dotted 1px;
-  outline: -webkit-focus-ring-color auto 5px
+  outline: -webkit-focus-ring-color auto 5px;
 }
 
 fieldset {
   margin: 0;
-  padding: 0
+  padding: 0;
 }
 
-ol,ul {
+ol,
+ul {
   list-style: none;
   margin: 0;
-  padding: 0
+  padding: 0;
 }
 
 hr {
   box-sizing: content-box;
   height: 0;
-  border-top-width: 1px
+  border-top-width: 1px;
 }
 
 img {
-  border-style: solid
+  border-style: solid;
 }
 
-input::placeholder,textarea::placeholder {
-  color: #a0aec0
+input::placeholder,
+textarea::placeholder {
+  color: #a0aec0;
 }
 
-[role=button],button {
-  cursor: pointer
+[role='button'],
+button {
+  cursor: pointer;
 }
 
 table {
-  border-collapse: collapse
+  border-collapse: collapse;
 }
 
-h1,h2,h3,h4,h5,h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-size: inherit;
-  font-weight: inherit
+  font-weight: inherit;
 }
 
-button,input,optgroup,select,textarea {
+button,
+input,
+optgroup,
+select,
+textarea {
   padding: 0;
   line-height: inherit;
-  color: inherit
+  color: inherit;
 }
 
-code,kbd,pre,samp {
-  font-family: Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace
+code,
+kbd,
+pre,
+samp {
+  font-family: Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
 }
 
-audio,canvas,embed,iframe,img,object,svg,video {
+audio,
+canvas,
+embed,
+iframe,
+img,
+object,
+svg,
+video {
   display: block;
-  vertical-align: middle
+  vertical-align: middle;
 }
 
-img,video {
+img,
+video {
   max-width: 100%;
-  height: auto
+  height: auto;
 }
 
 .transition {
@@ -143,7 +183,7 @@ img,video {
 
 .detail-person-name {
   display: 'block';
-  font-size: 2.0rem;
+  font-size: 2rem;
   /* border: 1px solid purple; */
 }
 
@@ -154,28 +194,28 @@ img,video {
 }
 
 .ball-position-initial {
-  top:42%;
-  left:42%;
+  top: 42%;
+  left: 42%;
 }
 
 .ball-position-A {
-  top:4px;
-  left:4px;
+  top: 4px;
+  left: 4px;
 }
 
 .ball-position-B {
-  top:4px;
-  right:4px;
+  top: 4px;
+  right: 4px;
 }
 
 .ball-position-C {
-  bottom:4px;
-  left:4px;
+  bottom: 4px;
+  left: 4px;
 }
 
 .ball-position-D {
-  bottom:4px;
-  right:4px;
+  bottom: 4px;
+  right: 4px;
 }
 
 .isolation-layer {
