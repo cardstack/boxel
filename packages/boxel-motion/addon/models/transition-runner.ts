@@ -98,7 +98,6 @@ export default class TransitionRunner {
     return result;
   }
 
-  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   maybeTransitionTask = task(async (changeset: Changeset) => {
     assert('No changeset was passed to the TransitionRunner', !!changeset);
 
