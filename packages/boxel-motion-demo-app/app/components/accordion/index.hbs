@@ -1,4 +1,4 @@
-{{!--
+{{!
   This accordion component includes material copied from or derived from W3's Accordion Example (https://www.w3.org/TR/wai-aria-practices-1.1/examples/accordion/accordion.html).
   Copyright © 2022 W3C® (MIT, ERCIM, Keio, Beihang).
 
@@ -25,14 +25,14 @@
   Previous version: http://www.w3.org/Consortium/Legal/2002/copyright-software-20021231
 
   This version makes clear that the license is applicable to both software and text, by changing the name and substituting "work" for instances of "software and its documentation." It moves "notice of changes or modifications to the files" to the copyright notice, to make clear that the license is compatible with other liberal licenses.
---}}
+}}
 
 <div
-  local-class="Accordion {{if this.isTriggerFocused "focus"}}"
-  {{on "focusin" this.handleFocusin}}
-  {{on "focusout" this.handleFocusout}}
-  {{on-key-mod "ArrowUp" this.jumpToPreviousTrigger event="keyup"}}
-  {{on-key-mod "ArrowDown" this.jumpToNextTrigger event="keyup"}}
+  local-class='Accordion {{if this.isTriggerFocused "focus"}}'
+  {{on 'focusin' this.handleFocusin}}
+  {{on 'focusout' this.handleFocusout}}
+  {{on-key-mod 'ArrowUp' this.jumpToPreviousTrigger event='keyup'}}
+  {{on-key-mod 'ArrowDown' this.jumpToNextTrigger event='keyup'}}
 >
   {{#each this.items as |item|}}
     <Accordion::Panel

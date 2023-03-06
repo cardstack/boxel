@@ -1,17 +1,17 @@
 name: Prune dangling waypoint resources
-description: "Identify waypoint resources that is not in use and remove them"
+description: 'Identify waypoint resources that is not in use and remove them'
 inputs:
   app:
-    description: "Name of the app"
+    description: 'Name of the app'
     required: true
   waypoint_hcl_path:
-    description: "Path to waypoint.hcl"
+    description: 'Path to waypoint.hcl'
     required: false
     default: ./waypoint.hcl
   retain:
-    description: "Number of deployments to retain"
+    description: 'Number of deployments to retain'
     required: false
-    default: "0"
+    default: '0'
 runs:
-  using: "node12"
-  main: "index.js"
+  using: 'node12'
+  main: 'index.js'
