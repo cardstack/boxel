@@ -184,7 +184,7 @@ module('Integration | schema', function (hooks) {
 
     await waitFor('[data-test-card-id]');
     assert
-      .dom('[data-test-field="author"] a[href="/?path=person"]')
+      .dom('[data-test-field="author"] a[href="/code?path=person"]')
       .exists('link to person card exists');
     assert.dom('[data-test-field="title"]').exists('the title field exists');
     assert
