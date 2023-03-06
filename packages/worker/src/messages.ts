@@ -7,6 +7,7 @@ import {
 
 export interface RequestDirectoryHandle {
   type: 'requestDirectoryHandle';
+  indexHTML: string;
 }
 export interface SetDirectoryHandleAcknowledged {
   type: 'setDirectoryHandleAcknowledged';
@@ -22,6 +23,7 @@ export interface DirectoryHandleResponse {
 export interface SetDirectoryHandle {
   type: 'setDirectoryHandle';
   handle: FileSystemDirectoryHandle | null;
+  indexHTML: string;
 }
 
 export interface SetEntry {
@@ -88,12 +90,14 @@ export function isClientMessage(message: unknown): message is ClientMessage {
   switch (message.type) {
     case 'getRunStateRequest':
     case 'requestDirectoryHandle':
-      return true;
+      return 'indexHTML' in message && typeof message.indexHTML === 'string';
     case 'setDirectoryHandle':
       return (
         'handle' in message &&
         ((message as any).handle === null ||
-          (message as any).handle instanceof FileSystemDirectoryHandle)
+          (message as any).handle instanceof FileSystemDirectoryHandle) &&
+        'indexHTML' in message &&
+        typeof message.indexHTML === 'string'
       );
     case 'setEntry':
       return (

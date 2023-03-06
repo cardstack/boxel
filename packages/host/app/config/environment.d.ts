@@ -13,7 +13,7 @@ declare const config: {
   rootURL: string;
   APP: Record<string, unknown>;
   ownRealmURL: string;
-  localRealmEnabled: string;
+  localRealmEnabled: boolean;
   resolvedBaseRealmURL: string;
   logLevel: LogLevelNames;
   currentRunLogLevel: LogLevelNames;

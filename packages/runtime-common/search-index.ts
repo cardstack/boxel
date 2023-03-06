@@ -11,7 +11,7 @@ import { Query, Filter, Sort } from './query';
 import { CardError, type SerializedError } from './error';
 import { URLMap } from './url-map';
 import flatMap from 'lodash/flatMap';
-import { type Ignore } from 'ignore';
+import ignore, { type Ignore } from 'ignore';
 import { Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CardRef, getField, identifyCard, loadCard } from './card-ref';
@@ -43,6 +43,7 @@ export interface RunState {
   realmURL: URL;
   instances: URLMap<SearchEntryWithErrors>;
   ignoreMap: URLMap<Ignore>;
+  ignoreMapContents: URLMap<string>;
   modules: Map<string, ModuleWithErrors>;
   stats: Stats;
 }
@@ -50,7 +51,7 @@ export interface RunState {
 export interface SerializableRunState {
   realmURL: string;
   instances: [string, SearchEntryWithErrors][];
-  ignoreMap: [string, Ignore][];
+  ignoreMap: [string, string][];
   modules: [string, ModuleWithErrors][];
   stats: Stats;
 }
@@ -175,6 +176,7 @@ export class SearchIndex {
       realmURL: new URL(realm.url),
       loader: Loader.createLoaderFromGlobal(),
       ignoreMap: new URLMap(),
+      ignoreMapContents: new URLMap(),
       instances: new URLMap(),
       modules: new Map(),
       stats: {
@@ -231,6 +233,7 @@ export class SearchIndex {
         instances: current.instances,
         modules: current.modules,
         ignoreMap: current.ignoreMap,
+        ignoreMapContents: current.ignoreMapContents,
         realmURL: current.realmURL,
         stats: current.stats,
         loader: Loader.createLoaderFromGlobal(),
@@ -699,7 +702,13 @@ export function isIgnored(
 }
 
 export function serializeRunState(state: RunState): SerializableRunState {
-  let { modules, instances, realmURL, ignoreMap, stats } = state;
+  let {
+    modules,
+    instances,
+    realmURL,
+    ignoreMapContents: ignoreMap,
+    stats,
+  } = state;
   return {
     stats,
     realmURL: realmURL.href,
@@ -716,7 +725,10 @@ export function deserializeRunState(state: SerializableRunState): RunState {
     stats,
     modules: new Map(modules),
     instances: new URLMap(instances.map(([k, v]) => [new URL(k), v])),
-    ignoreMap: new URLMap(ignoreMap.map(([k, v]) => [new URL(k), v])),
+    ignoreMap: new URLMap(
+      ignoreMap.map(([k, v]) => [new URL(k), ignore().add(v)])
+    ),
+    ignoreMapContents: new URLMap(ignoreMap.map(([k, v]) => [new URL(k), v])),
   };
 }
 

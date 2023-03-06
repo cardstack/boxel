@@ -11,6 +11,8 @@ import {
 
 export class MessageHandler {
   fs: FileSystemDirectoryHandle | null = null;
+  indexHTML: string | undefined;
+  ownRealmURL: string | undefined;
   startingUp: Promise<void>;
   private finishedStarting!: () => void;
   private entrySetter: EntrySetter | undefined;
@@ -45,21 +47,26 @@ export class MessageHandler {
     switch (data.type) {
       case 'requestDirectoryHandle':
         {
+          let config = getConfigFromIndexHTML(data.indexHTML);
+          this.ownRealmURL = config.ownRealmURL;
           send(source, {
             type: 'directoryHandleResponse',
             handle: this.fs,
-            url: 'http://local-realm/', // TODO: this is hardcoded, should come from realm.url
+            url: config.ownRealmURL,
           });
         }
         return;
       case 'setDirectoryHandle':
         {
           this.fs = data.handle;
+          this.indexHTML = data.indexHTML;
+          let config = getConfigFromIndexHTML(data.indexHTML);
+          this.ownRealmURL = config.ownRealmURL;
           this.finishedStarting();
           if (this.fs) {
             send(source, {
               type: 'setDirectoryHandleAcknowledged',
-              url: 'http://local-realm/', // TODO: this is hardcoded, should come from realm.url
+              url: config.ownRealmURL,
             });
           }
         }
@@ -136,4 +143,17 @@ export class MessageHandler {
     });
     return this.incrementalDeferred.promise;
   }
+}
+
+// TODO we could do a better job typing this return value--the config types live
+// in the host package
+function getConfigFromIndexHTML(indexHTML: string) {
+  let match = indexHTML.match(
+    /<meta name="@cardstack\/host\/config\/environment" content="([^"].*)">/
+  );
+  let encodedConfig = match?.[1];
+  if (!encodedConfig) {
+    throw new Error(`Cannot determine config from index.html:\n${indexHTML}`);
+  }
+  return JSON.parse(decodeURIComponent(encodedConfig));
 }

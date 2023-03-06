@@ -43,14 +43,7 @@ export default class Go extends Component<Signature> {
   <template>
     <div class='main'>
       <div class='main__column'>
-        {{! TODO Need a different test to determine if we are in the local realm }}
-        {{#if ownRealmURL}}
-          <FileTree
-            @url={{ownRealmURL}}
-            @openFile={{@path}}
-            @openDirs={{@openDirs}}
-          />
-        {{else}}
+        {{#if localRealmEnabled}}
           <InLocalRealm as |url|>
             <FileTree
               @url={{url}}
@@ -58,6 +51,12 @@ export default class Go extends Component<Signature> {
               @openDirs={{@openDirs}}
             />
           </InLocalRealm>
+        {{else}}
+          <FileTree
+            @url={{ownRealmURL}}
+            @openFile={{@path}}
+            @openDirs={{@openDirs}}
+          />
         {{/if}}
       </div>
       {{#if this.openFile}}

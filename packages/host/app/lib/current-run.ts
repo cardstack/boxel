@@ -66,6 +66,7 @@ export class CurrentRun {
   #reader: Reader;
   #realmPaths: RealmPaths;
   #ignoreMap: URLMap<Ignore>;
+  #ignoreMapContents: URLMap<string>;
   #loader: Loader;
   #entrySetter: EntrySetter;
   #renderCard: RenderCard;
@@ -82,6 +83,7 @@ export class CurrentRun {
     instances = new URLMap(),
     modules = new Map(),
     ignoreMap = new URLMap(),
+    ignoreMapContents = new URLMap(),
     loader,
     entrySetter,
     renderCard,
@@ -91,6 +93,7 @@ export class CurrentRun {
     instances?: URLMap<SearchEntryWithErrors>;
     modules?: Map<string, ModuleWithErrors>;
     ignoreMap?: URLMap<Ignore>;
+    ignoreMapContents?: URLMap<string>;
     loader: Loader;
     entrySetter: EntrySetter;
     renderCard: RenderCard;
@@ -101,6 +104,7 @@ export class CurrentRun {
     this.#instances = instances;
     this.#modules = modules;
     this.#ignoreMap = ignoreMap;
+    this.#ignoreMapContents = ignoreMapContents;
     this.#loader = loader;
     this.#entrySetter = entrySetter;
     this.#renderCard = renderCard;
@@ -130,6 +134,7 @@ export class CurrentRun {
   }) {
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
+    let ignoreMapContents = new URLMap(prev.ignoreMapContents);
     let modules = new Map(prev.modules);
     instances.remove(new URL(url.href.replace(/\.json$/, '')));
 
@@ -147,6 +152,7 @@ export class CurrentRun {
       instances,
       modules,
       ignoreMap,
+      ignoreMapContents,
       loader,
       entrySetter,
       renderCard,
@@ -173,6 +179,10 @@ export class CurrentRun {
     return this.#ignoreMap;
   }
 
+  get ignoreMapContents() {
+    return this.#ignoreMapContents;
+  }
+
   get realmURL() {
     return this.#realmURL;
   }
@@ -187,6 +197,7 @@ export class CurrentRun {
     );
     if (ignorePatterns && ignorePatterns.content) {
       this.#ignoreMap.set(url, ignore().add(ignorePatterns.content));
+      this.#ignoreMapContents.set(url, ignorePatterns.content);
     }
 
     for await (let { path: innerPath, kind } of this.#reader.readdir(

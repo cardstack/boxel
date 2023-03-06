@@ -16,7 +16,7 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 
-const { ownRealmURL } = ENV;
+const { ownRealmURL, localRealmEnabled } = ENV;
 
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
@@ -41,15 +41,10 @@ export default class CardService extends Service {
     return this.apiModule.module as typeof CardAPI;
   }
 
-  // TODO probably this is not necessary anymore...
-  get demoRealmAvailable(): boolean {
-    return ownRealmURL != undefined && ownRealmURL.trim().length !== 0;
-  }
-
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
   get defaultURL(): URL {
-    return this.demoRealmAvailable ? new URL(ownRealmURL) : this.localRealm.url;
+    return localRealmEnabled ? this.localRealm.url : new URL(ownRealmURL);
   }
 
   private async fetchJSON(

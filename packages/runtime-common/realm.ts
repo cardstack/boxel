@@ -140,6 +140,7 @@ export class Realm {
   #cardSourceRouter: Router;
   #deferStartup: boolean;
   #indexHTML: string | undefined;
+  #localRealmEnabled = false;
   readonly paths: RealmPaths;
 
   get url(): string {
@@ -155,6 +156,7 @@ export class Realm {
   ) {
     this.paths = new RealmPaths(url);
     this.#indexHTML = opts?.indexHTML;
+    this.#localRealmEnabled = Boolean(opts?.enableLocalRealm);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
@@ -240,8 +242,7 @@ export class Realm {
       accept?.includes('text/event-stream')
     ) {
       // local requests are allowed to query the realm as the index is being built up
-      // TODO the host name for the local realm is likely going to change
-      if (!request.isLocal && url.host !== 'local-realm') {
+      if (!request.isLocal && !this.#localRealmEnabled) {
         await this.ready;
       }
       if (!this.searchIndex) {
@@ -285,6 +286,7 @@ export class Realm {
           ownRealmURL: this.url,
           resolvedBaseRealmURL: this.#searchIndex.loader.resolve(baseRealm.url)
             .href,
+          localRealmEnabled: this.#localRealmEnabled,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       }

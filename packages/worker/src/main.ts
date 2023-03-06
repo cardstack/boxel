@@ -32,14 +32,24 @@ let runnerOptsMgr = new RunnerOptionsManager();
     if (!messageHandler.fs) {
       throw new Error(`could not get FileSystem`);
     }
+    if (!messageHandler.indexHTML) {
+      throw new Error(`could not determine index.html for host app`);
+    }
+    if (!messageHandler.ownRealmURL) {
+      throw new Error(`could not determine own realm URL`);
+    }
     let realm = new Realm(
-      'http://local-realm/',
+      messageHandler.ownRealmURL,
       new LocalRealmAdapter(messageHandler.fs),
       async (optsId) => {
         let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
         await messageHandler.setupIndexRunner(registerRunner, entrySetter);
       },
-      runnerOptsMgr
+      runnerOptsMgr,
+      {
+        enableLocalRealm: true,
+        indexHTML: messageHandler.indexHTML,
+      }
     );
     fetchHandler.addRealm(realm);
   } catch (err) {
