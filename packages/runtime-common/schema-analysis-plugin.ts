@@ -145,13 +145,23 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
         }
 
         let [maybeFieldCard] = maybeCallExpression.arguments; // note that the 2nd argument is the computeVia
+        let maybeFieldCardName;
         if (maybeFieldCard.type !== 'Identifier') {
-          return;
+          if (
+            maybeFieldCard.type === 'ArrowFunctionExpression' &&
+            maybeFieldCard.body.type === 'Identifier'
+          ) {
+            maybeFieldCardName = maybeFieldCard.body.name;
+          } else {
+            return;
+          }
+        } else {
+          maybeFieldCardName = maybeFieldCard.name;
         }
 
         let fieldCard = makeClassReference(
           path.scope,
-          maybeFieldCard.name,
+          maybeFieldCardName,
           state
         );
         if (!fieldCard) {
