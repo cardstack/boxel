@@ -32,6 +32,7 @@ import BoxelInput from '@cardstack/boxel-ui/components/input';
 import FieldContainer from '@cardstack/boxel-ui/components/field-container';
 import CardContainer from '@cardstack/boxel-ui/components/card-container';
 import Label from '@cardstack/boxel-ui/components/label';
+import type { Filter } from '@cardstack/runtime-common/query';
 
 interface Signature {
   Args: {
@@ -102,35 +103,50 @@ export default class Schema extends Component<Signature> {
             />
           </FieldContainer>
           <FieldContainer @label='Field Type:'>
-            <div>
-              <label>
-                contains
-                <input
-                  data-test-new-field-contains
-                  {{RadioInitializer (eq this.newFieldType 'contains') true}}
-                  type='radio'
-                  disabled={{this.isNewFieldDisabled}}
-                  checked={{eq this.newFieldType 'contains'}}
-                  {{on 'change' (fn this.setNewFieldType 'contains')}}
-                  name='field-type'
-                />
-              </label>
-              <label>
-                containsMany
-                <input
-                  data-test-new-field-containsMany
-                  {{RadioInitializer
-                    (eq this.newFieldType 'containsMany')
-                    true
-                  }}
-                  type='radio'
-                  disabled={{this.isNewFieldDisabled}}
-                  checked={{eq this.newFieldType 'containsMany'}}
-                  {{on 'change' (fn this.setNewFieldType 'containsMany')}}
-                  name='field-type'
-                />
-              </label>
-            </div>
+            <ul class='schema__new-field-type'>
+              <li>
+                <label>
+                  <input
+                    data-test-new-field-contains
+                    {{RadioInitializer (eq this.newFieldType 'contains') true}}
+                    type='radio'
+                    checked={{eq this.newFieldType 'contains'}}
+                    {{on 'change' (fn this.setNewFieldType 'contains')}}
+                    name='field-type'
+                  />
+                  contains
+                </label>
+              </li>
+              <li>
+                <label>
+                  <input
+                    data-test-new-field-containsMany
+                    {{RadioInitializer
+                      (eq this.newFieldType 'containsMany')
+                      true
+                    }}
+                    type='radio'
+                    checked={{eq this.newFieldType 'containsMany'}}
+                    {{on 'change' (fn this.setNewFieldType 'containsMany')}}
+                    name='field-type'
+                  />
+                  containsMany
+                </label>
+              </li>
+              <li>
+                <label>
+                  <input
+                    data-test-new-field-linksTo
+                    {{RadioInitializer (eq this.newFieldType 'linksTo') true}}
+                    type='radio'
+                    checked={{eq this.newFieldType 'linksTo'}}
+                    {{on 'change' (fn this.setNewFieldType 'linksTo')}}
+                    name='field-type'
+                  />
+                  linksTo
+                </label>
+              </li>
+            </ul>
           </FieldContainer>
           <button
             data-test-add-field
@@ -242,14 +258,20 @@ export default class Schema extends Component<Signature> {
   }
 
   private makeField = restartableTask(async () => {
+    let filter: Filter =
+      this.newFieldType === 'linksTo'
+        ? {
+            on: catalogEntryRef,
+            eq: { isPrimitive: false },
+          }
+        : {
+            on: catalogEntryRef,
+            not: {
+              eq: { ref: this.ref },
+            },
+          };
     let fieldEntry: CatalogEntry | undefined = await chooseCard({
-      filter: {
-        on: catalogEntryRef,
-        // a "contains" field cannot be the same card as it's enclosing card (but it can for a linksTo)
-        not: {
-          eq: { ref: this.ref },
-        },
-      },
+      filter,
     });
     if (!fieldEntry) {
       return;

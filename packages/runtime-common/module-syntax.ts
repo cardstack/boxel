@@ -81,7 +81,13 @@ export class ModuleSyntax {
       throw new Error(`the field "${fieldName}" already exists`);
     }
 
-    let newField = makeNewField(card.path, fieldRef, fieldType, fieldName);
+    let newField = makeNewField(
+      card.path,
+      fieldRef,
+      fieldType,
+      fieldName,
+      cardName.name
+    );
     let src = this.code();
     this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
 
@@ -195,7 +201,8 @@ function makeNewField(
   target: NodePath<t.Node>,
   fieldRef: { name: string; module: string },
   fieldType: FieldType,
-  fieldName: string
+  fieldName: string,
+  cardName: string
 ): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -213,6 +220,12 @@ function makeNewField(
     `${baseRealm.url}card-api`,
     fieldType
   );
+
+  if (fieldType === 'linksTo' && cardName === fieldRef.name) {
+    // syntax for when a card has a linksTo field to a card with the same type as itself
+    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${cardName});`;
+  }
+
   let fieldCardIdentifier = importUtil.import(
     target as NodePath<any>,
     fieldRef.module,
