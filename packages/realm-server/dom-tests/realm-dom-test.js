@@ -3,22 +3,21 @@
 
 const { test } = QUnit;
 const testRealmURL = 'http://localhost:4202/node-test';
-const timeoutMs = 5000;
-console.log('Test running');
+const testContainerId = 'test-container';
 
 function cleanWhiteSpace(text) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
 function testDocument() {
-  let iframe = document.querySelector('#test-container iframe');
+  let iframe = document.querySelector(`#${testContainerId} iframe`);
   if (!iframe) {
     throw new Error(`cannot find test-container's iframe`);
   }
   return iframe.contentDocument;
 }
 
-async function waitFor(selector) {
+async function waitFor(selector, timeoutMs = 5000) {
   let startTime = Date.now();
   while (
     querySelector(selector) == null &&
@@ -42,22 +41,19 @@ function querySelectorAll(selector) {
 }
 
 async function boot(url, waitForSelector) {
-  let container = document.getElementById('test-container');
+  let container = document.getElementById(testContainerId);
   let iframe = document.createElement('iframe');
   iframe.setAttribute('src', url);
   container.append(iframe);
-  if (waitForSelector) {
-    try {
-      await waitFor(waitForSelector);
-    } catch (err) {
-      throw new Error(`error encountered while booting ${url}: ${err.message}`);
-    }
+  try {
+    await waitFor(waitForSelector);
+  } catch (err) {
+    throw new Error(`error encountered while booting ${url}: ${err.message}`);
   }
-  return iframe.contentDocument;
 }
 
 function resetTestContainer() {
-  let container = document.getElementById('test-container');
+  let container = document.getElementById(testContainerId);
   let iframes = container.querySelectorAll('iframe');
   iframes.forEach((iframe) => iframe.remove());
 }
