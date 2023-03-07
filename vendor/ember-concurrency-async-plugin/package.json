@@ -1,0 +1,13 @@
+{
+  "name": "ember-concurrency-async-plugin",
+  "version": "2.3.7",
+  "description": "Async task functions for ember-concurrency",
+  "repository": "https://github.com/machty/ember-concurrency/blob/b0acd665d08c0ba795c3f1cc13b2b7cf12b0b048/lib/babel-plugin-transform-ember-concurrency-async-tasks.js#L147-L153",
+  "license": "MIT",
+  "author": "Alex Matchneer",
+  "dependencies": {
+    "@babel/helper-module-imports": "^7.18.2",
+    "@babel/helper-plugin-utils": "^7.12.13",
+    "@babel/types": "^7.10.2"
+  }
+}
