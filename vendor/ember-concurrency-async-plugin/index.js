@@ -1,3 +1,5 @@
+// Adapted from https://github.com/machty/ember-concurrency/blob/b0acd665d08c0ba795c3f1cc13b2b7cf12b0b048/lib/babel-plugin-transform-ember-concurrency-async-tasks.js
+
 import { declare } from '@babel/helper-plugin-utils';
 import {
   yieldExpression,
