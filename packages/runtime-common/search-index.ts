@@ -3,25 +3,25 @@ import {
   baseRealm,
   internalKeyFor,
   type LooseCardResource,
-} from ".";
-import { Kind, Realm } from "./realm";
-import { LocalPath, RealmPaths } from "./paths";
-import { Loader } from "./loader";
-import { Query, Filter, Sort } from "./query";
-import { CardError, type SerializedError } from "./error";
-import { URLMap } from "./url-map";
-import flatMap from "lodash/flatMap";
-import { type Ignore } from "ignore";
-import { Card } from "https://cardstack.com/base/card-api";
-import type * as CardAPI from "https://cardstack.com/base/card-api";
-import { type CardRef, getField, identifyCard, loadCard } from "./card-ref";
+} from '.';
+import { Kind, Realm } from './realm';
+import { LocalPath, RealmPaths } from './paths';
+import { Loader } from './loader';
+import { Query, Filter, Sort } from './query';
+import { CardError, type SerializedError } from './error';
+import { URLMap } from './url-map';
+import flatMap from 'lodash/flatMap';
+import { type Ignore } from 'ignore';
+import { Card } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type CardRef, getField, identifyCard, loadCard } from './card-ref';
 import {
   isSingleCardDocument,
   type SingleCardDocument,
   type CardCollectionDocument,
   type CardResource,
   type Saved,
-} from "./card-document";
+} from './card-document';
 
 export interface Reader {
   readFileAsText: (
@@ -60,7 +60,7 @@ export type RunnerRegistration = (
   incremental: (
     prev: RunState,
     url: URL,
-    operation: "update" | "delete"
+    operation: 'update' | 'delete'
   ) => Promise<RunState>
 ) => Promise<void>;
 
@@ -83,16 +83,16 @@ export interface SearchEntry {
 }
 
 export type SearchEntryWithErrors =
-  | { type: "entry"; entry: SearchEntry }
-  | { type: "error"; error: SerializedError };
+  | { type: 'entry'; entry: SearchEntry }
+  | { type: 'error'; error: SerializedError };
 
 export interface Module {
   url: string;
   consumes: string[];
 }
 export type ModuleWithErrors =
-  | { type: "module"; module: Module }
-  | { type: "error"; moduleURL: string; error: SerializedError };
+  | { type: 'module'; module: Module }
+  | { type: 'error'; moduleURL: string; error: SerializedError };
 
 interface Options {
   loadLinks?: true;
@@ -100,11 +100,11 @@ interface Options {
 
 type SearchResult = SearchResultDoc | SearchResultError;
 interface SearchResultDoc {
-  type: "doc";
+  type: 'doc';
   doc: SingleCardDocument;
 }
 interface SearchResultError {
-  type: "error";
+  type: 'error';
   error: SerializedError;
 }
 
@@ -152,7 +152,7 @@ export class SearchIndex {
     | ((
         prev: RunState,
         url: URL,
-        operation: "update" | "delete"
+        operation: 'update' | 'delete'
       ) => Promise<RunState>)
     | undefined;
 
@@ -222,7 +222,7 @@ export class SearchIndex {
       let current = await this.#incremental(
         this.#index,
         url,
-        opts?.delete ? "delete" : "update"
+        opts?.delete ? 'delete' : 'update'
       );
       this.#index = {
         // we overwrite the instances in the incremental update, as there may
@@ -258,12 +258,12 @@ export class SearchIndex {
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
     let matcher = await this.buildMatcher(query.filter, {
       module: `${baseRealm.url}card-api`,
-      name: "Card",
+      name: 'Card',
     });
 
     let doc: CardCollectionDocument = {
       data: flatMap([...this.#index.instances.values()], (maybeError) =>
-        maybeError.type !== "error" ? [maybeError.entry] : []
+        maybeError.type !== 'error' ? [maybeError.entry] : []
       )
         .filter(matcher)
         .sort(this.buildSorter(query.sort))
@@ -303,7 +303,7 @@ export class SearchIndex {
     if (!card) {
       return undefined;
     }
-    if (card.type === "error") {
+    if (card.type === 'error') {
       return card;
     }
     let doc: SingleCardDocument = {
@@ -321,13 +321,13 @@ export class SearchIndex {
         doc.included = included;
       }
     }
-    return { type: "doc", doc };
+    return { type: 'doc', doc };
   }
 
   // this is meant for tests only
   async searchEntry(url: URL): Promise<SearchEntry | undefined> {
     let result = this.#index.instances.get(url);
-    if (result?.type !== "error") {
+    if (result?.type !== 'error') {
       return result?.entry;
     }
     return undefined;
@@ -351,10 +351,10 @@ export class SearchIndex {
     try {
       card = await loadCard(ref, { loader: this.loader });
     } catch (err: any) {
-      if (!("type" in ref)) {
+      if (!('type' in ref)) {
         throw new Error(
           `Your filter refers to nonexistent type: import ${
-            ref.name === "default" ? "default" : `{ ${ref.name} }`
+            ref.name === 'default' ? 'default' : `{ ${ref.name} }`
           } from "${ref.module}"`
         );
       } else {
@@ -367,7 +367,7 @@ export class SearchIndex {
         );
       }
     }
-    let segments = fieldPath.split(".");
+    let segments = fieldPath.split('.');
     while (segments.length) {
       let fieldName = segments.shift()!;
       let prevCard = card;
@@ -392,23 +392,23 @@ export class SearchIndex {
     let sorters = expressions.map(({ by, on, direction }) => {
       return (e1: SearchEntry, e2: SearchEntry) => {
         if (!this.cardHasType(e1, on)) {
-          return direction === "desc" ? -1 : 1;
+          return direction === 'desc' ? -1 : 1;
         }
         if (!this.cardHasType(e2, on)) {
-          return direction === "desc" ? 1 : -1;
+          return direction === 'desc' ? 1 : -1;
         }
         let a = e1.searchData[by];
         let b = e2.searchData[by];
         if (a === undefined) {
-          return direction === "desc" ? -1 : 1; // if descending, null position is before the rest
+          return direction === 'desc' ? -1 : 1; // if descending, null position is before the rest
         }
         if (b === undefined) {
-          return direction === "desc" ? 1 : -1; // `a` is not null
+          return direction === 'desc' ? 1 : -1; // `a` is not null
         }
         if (a < b) {
-          return direction === "desc" ? 1 : -1;
+          return direction === 'desc' ? 1 : -1;
         } else if (a > b) {
-          return direction === "desc" ? -1 : 1;
+          return direction === 'desc' ? -1 : 1;
         } else {
           return 0;
         }
@@ -438,27 +438,27 @@ export class SearchIndex {
       return (_entry) => true;
     }
 
-    if ("type" in filter) {
+    if ('type' in filter) {
       return (entry) => this.cardHasType(entry, filter.type);
     }
 
     let on = filter?.on ?? onRef;
 
-    if ("any" in filter) {
+    if ('any' in filter) {
       let matchers = await Promise.all(
         filter.any.map((f) => this.buildMatcher(f, on))
       );
       return (entry) => some(matchers, (m) => m(entry));
     }
 
-    if ("every" in filter) {
+    if ('every' in filter) {
       let matchers = await Promise.all(
         filter.every.map((f) => this.buildMatcher(f, on))
       );
       return (entry) => every(matchers, (m) => m(entry));
     }
 
-    if ("not" in filter) {
+    if ('not' in filter) {
       let matcher = await this.buildMatcher(filter.not, on);
       return (entry) => {
         let inner = matcher(entry);
@@ -471,7 +471,7 @@ export class SearchIndex {
       };
     }
 
-    if ("eq" in filter) {
+    if ('eq' in filter) {
       let ref: CardRef = on;
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
@@ -510,7 +510,7 @@ export class SearchIndex {
         });
     }
 
-    if ("range" in filter) {
+    if ('range' in filter) {
       let ref: CardRef = on;
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
@@ -565,7 +565,7 @@ export class SearchIndex {
         });
     }
 
-    throw new Error("Unknown filter");
+    throw new Error('Unknown filter');
   }
 }
 
@@ -612,10 +612,10 @@ export async function loadLinks({
     if (realmPath.inRealm(linkURL)) {
       let maybeEntry = instances.get(linkURL);
       linkResource =
-        maybeEntry?.type === "entry" ? maybeEntry.entry.resource : undefined;
+        maybeEntry?.type === 'entry' ? maybeEntry.entry.resource : undefined;
     } else {
       let response = await loader.fetch(linkURL, {
-        headers: { Accept: "application/vnd.api+json" },
+        headers: { Accept: 'application/vnd.api+json' },
       });
       if (!response.ok) {
         let cardError = await CardError.fromFetchResponse(
@@ -663,7 +663,7 @@ export async function loadLinks({
     }
     if (foundLinks || omit.includes(relationship.links.self)) {
       resource.relationships![fieldName].data = {
-        type: "card",
+        type: 'card',
         id: relationship.links.self,
       };
     }

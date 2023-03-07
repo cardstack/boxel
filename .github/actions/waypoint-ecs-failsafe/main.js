@@ -11,8 +11,12 @@ function getAppConfig(waypointConfigFilePath, appName) {
   const waypointConfig = hcl.parseToObject(waypointHcl)[0];
   const waypointApp = waypointConfig.app[appName][0];
   const cluster = waypointApp.deploy[0].use['aws-ecs'][0].cluster;
-  const disableAlb = Boolean(waypointApp.deploy[0].use['aws-ecs'][0].disable_alb);
-  const certificate = disableAlb ? null : waypointApp.deploy[0].use['aws-ecs'][0].alb[0].certificate;
+  const disableAlb = Boolean(
+    waypointApp.deploy[0].use['aws-ecs'][0].disable_alb
+  );
+  const certificate = disableAlb
+    ? null
+    : waypointApp.deploy[0].use['aws-ecs'][0].alb[0].certificate;
 
   return { cluster, certificate, disableAlb };
 }
@@ -28,19 +32,28 @@ function getServices(cluster, appName) {
   let nextToken = null;
   do {
     const startingTokenArg = nextToken ? `--starting-token ${nextToken}` : '';
-    const responseJson = execute(`aws ecs list-services --cluster ${cluster} ${startingTokenArg}`);
+    const responseJson = execute(
+      `aws ecs list-services --cluster ${cluster} ${startingTokenArg}`
+    );
     const response = JSON.parse(responseJson);
-    const filtered = response.serviceArns.filter((arn) => getAppNameFromServiceArn(arn) === appName);
+    const filtered = response.serviceArns.filter(
+      (arn) => getAppNameFromServiceArn(arn) === appName
+    );
     serviceArns = serviceArns.concat(filtered);
     nextToken = response.nextToken;
   } while (nextToken);
 
   let services = [];
   for (let i = 0; i < serviceArns.length; i += 10) {
-    const slicedServiceNames = serviceArns.slice(i, i + 10 > serviceArns.length ? serviceArns.length : i + 10);
+    const slicedServiceNames = serviceArns.slice(
+      i,
+      i + 10 > serviceArns.length ? serviceArns.length : i + 10
+    );
 
     const responseJson = execute(
-      `aws ecs describe-services --cluster ${cluster} --services ${slicedServiceNames.join(' ')}`
+      `aws ecs describe-services --cluster ${cluster} --services ${slicedServiceNames.join(
+        ' '
+      )}`
     );
     const response = JSON.parse(responseJson);
     services = services.concat(response.services);
@@ -60,14 +73,18 @@ function getServices(cluster, appName) {
 }
 
 function getLoadBalancer(appName) {
-  const responseJson = execute(`aws elbv2 describe-load-balancers --names waypoint-ecs-${appName}`);
+  const responseJson = execute(
+    `aws elbv2 describe-load-balancers --names waypoint-ecs-${appName}`
+  );
   const response = JSON.parse(responseJson);
   const loadBalancers = response.LoadBalancers;
   return loadBalancers[0];
 }
 
 function getListeners(loadBalancerArn) {
-  const responseJson = execute(`aws elbv2 describe-listeners --load-balancer-arn ${loadBalancerArn}`);
+  const responseJson = execute(
+    `aws elbv2 describe-listeners --load-balancer-arn ${loadBalancerArn}`
+  );
   const response = JSON.parse(responseJson);
   const listeners = response.Listeners;
   return listeners;
@@ -100,7 +117,11 @@ function main(appName, waypointConfigFilePath) {
     console.log(
       `Unable to find listener (port 443) for app '${appName}'. Creating a listener with the target group of the latest service: ${targetGroupArn}`
     );
-    createListener(loadBalancer.LoadBalancerArn, config.certificate, targetGroupArn);
+    createListener(
+      loadBalancer.LoadBalancerArn,
+      config.certificate,
+      targetGroupArn
+    );
   } else {
     console.log(`Listener (port 443) found for app '${appName}'`);
   }

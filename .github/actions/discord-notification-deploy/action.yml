@@ -19,7 +19,7 @@ inputs:
   is_ecs:
     description: If service is deployed with AWS ECS
     required: false
-    default: "false"
+    default: 'false'
 
 runs:
   using: composite

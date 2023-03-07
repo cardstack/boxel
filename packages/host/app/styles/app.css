@@ -1,18 +1,18 @@
 /** BOXEL STYLES **/
 
 @font-face {
-  font-family: "Open Sans";
-  src: url("/fonts/OpenSans-Regular.ttf");
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-Regular.ttf');
   font-weight: 400;
 }
 @font-face {
-  font-family: "Open Sans";
-  src: url("/fonts/OpenSans-SemiBold.ttf");
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-SemiBold.ttf');
   font-weight: 600;
 }
 @font-face {
-  font-family: "Open Sans";
-  src: url("/fonts/OpenSans-Bold.ttf");
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-Bold.ttf');
   font-weight: 700;
 }
 
@@ -32,7 +32,13 @@ body {
 body {
   margin: 0;
   color: var(--boxel-dark, #000);
-  font-family: var(--boxel-font-family, "Open Sans", Helvetica, Arial, sans-serif);
+  font-family: var(
+    --boxel-font-family,
+    'Open Sans',
+    Helvetica,
+    Arial,
+    sans-serif
+  );
   background-color: var(--boxel-light, #fff);
   font-size: 13px;
   line-height: calc(18 / 13);
@@ -73,17 +79,17 @@ a:focus:not(:focus-visible) {
 }
 
 button:hover:not(:disabled),
-[role="button"]:hover:not(:disabled, [aria-disabled="true"]) {
+[role='button']:hover:not(:disabled, [aria-disabled='true']) {
   cursor: pointer;
 }
 
 button:focus:not(:disabled),
-[role="button"]:focus:not(:disabled) {
+[role='button']:focus:not(:disabled) {
   outline: var(--boxel-outline);
 }
 
 button:focus:not(:focus-visible),
-[role="button"]:focus:not(:focus-visible) {
+[role='button']:focus:not(:focus-visible) {
   outline-color: transparent;
 }
 
@@ -109,18 +115,23 @@ textarea:focus {
 }
 
 :root {
-  --boxel-font-family: "Open Sans", helvetica, arial, sans-serif;
-  --boxel-monospace-font-family: "Roboto Mono", "Courier New", courier, monospace;
-  --boxel-font-xl: var(--boxel-font-size-xl)/calc(43 / 32) var(--boxel-font-family);
-  --boxel-font-lg: var(--boxel-font-size-lg)/calc(30 / 22) var(--boxel-font-family);
-  --boxel-font: var(--boxel-font-size)/calc(22 / 16) var(--boxel-font-family);        /* default */
-  --boxel-font-sm: var(--boxel-font-size-sm)/calc(18 / 13) var(--boxel-font-family);
-  --boxel-font-xs: var(--boxel-font-size-xs)/calc(15 / 11) var(--boxel-font-family);
+  --boxel-font-family: 'Open Sans', helvetica, arial, sans-serif;
+  --boxel-monospace-font-family: 'Roboto Mono', 'Courier New', courier,
+    monospace;
+  --boxel-font-xl: var(--boxel-font-size-xl) / calc(43 / 32)
+    var(--boxel-font-family);
+  --boxel-font-lg: var(--boxel-font-size-lg) / calc(30 / 22)
+    var(--boxel-font-family);
+  --boxel-font: var(--boxel-font-size) / calc(22 / 16) var(--boxel-font-family); /* default */
+  --boxel-font-sm: var(--boxel-font-size-sm) / calc(18 / 13)
+    var(--boxel-font-family);
+  --boxel-font-xs: var(--boxel-font-size-xs) / calc(15 / 11)
+    var(--boxel-font-family);
 
   /* font-sizes */
   --boxel-font-size-xl: 2rem;
   --boxel-font-size-lg: 1.375rem;
-  --boxel-font-size: 1rem;      /* default - 16px */
+  --boxel-font-size: 1rem; /* default - 16px */
   --boxel-font-size-sm: 0.8125rem;
   --boxel-font-size-xs: 0.6875rem;
 
@@ -135,22 +146,22 @@ textarea:focus {
 
   /* Modular scale for spacing */
   --boxel-spacing: 1.25rem; /* base size (20px) */
-  --boxel-ratio: 1.333;     /* scale (based on "Perfect Fourth" scale) */
+  --boxel-ratio: 1.333; /* scale (based on "Perfect Fourth" scale) */
   --boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio)); /* 6.33px */
-  --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio));   /* 8.44px */
-  --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio));    /* 11.26px */
-  --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio));       /* 15px */
-  --boxel-sp: var(--boxel-spacing);                                /* 20px */
-  --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio));       /* 26.66px */
-  --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio));    /* 35.54px */
-  --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio));   /* 47.37px */
+  --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio)); /* 8.44px */
+  --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio)); /* 11.26px */
+  --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio)); /* 15px */
+  --boxel-sp: var(--boxel-spacing); /* 20px */
+  --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio)); /* 26.66px */
+  --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio)); /* 35.54px */
+  --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 47.37px */
   --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio)); /* 63.15px */
 
   /* common icon sizes */
   --boxel-icon-sm: 1.25rem; /* 20px */
-  --boxel-icon-lg: 2.5rem;  /* 40px */
+  --boxel-icon-lg: 2.5rem; /* 40px */
   --boxel-icon-xl: 3.75rem; /* 60px */
-  --boxel-icon-xxl: 5rem;   /* 80px */
+  --boxel-icon-xxl: 5rem; /* 80px */
 
   /* other */
   --boxel-border-color: var(--boxel-light-500);
@@ -169,41 +180,40 @@ textarea:focus {
   /* Container sizes */
   --boxel-xxs-container: 15.625rem; /* 250px */
   --boxel-xs-container: 17.8125rem; /* 285px */
-  --boxel-sm-container: 36.25rem;   /* 580px */
-  --boxel-md-container: 40.625rem;  /* 650px */
-  --boxel-lg-container: 43.75rem;   /* 700px */
-  --boxel-xl-container: 65rem;      /* 1040px */
-  --boxel-xxl-container: 83.76rem;  /* 1340px */
+  --boxel-sm-container: 36.25rem; /* 580px */
+  --boxel-md-container: 40.625rem; /* 650px */
+  --boxel-lg-container: 43.75rem; /* 700px */
+  --boxel-xl-container: 65rem; /* 1040px */
+  --boxel-xxl-container: 83.76rem; /* 1340px */
 
   /* COLOR PALETTE */
 
   /**** Revisited Colors BOXEL-UI ****/
-    --boxel-100: #f8f7fa;
-    --boxel-200: #e8e8e8;
-    --boxel-300: #d1d1d1;
-    --boxel-400: #afafb7;
-    --boxel-500: #5a586a;
-    --boxel-600: #413e4e;
-    --boxel-700: #272330;
+  --boxel-100: #f8f7fa;
+  --boxel-200: #e8e8e8;
+  --boxel-300: #d1d1d1;
+  --boxel-400: #afafb7;
+  --boxel-500: #5a586a;
+  --boxel-600: #413e4e;
+  --boxel-700: #272330;
 
-    --boxel-cyan: #00ebe5;
-    --boxel-teal: #03c4bf;
-    --boxel-red: #ff5050;
-    --boxel-pink: #ff009d;
-    --boxel-orange: #ff7f00;
-    --boxel-yellow: #ffd800;
-    --boxel-lime: #c3fc33;
-    --boxel-green: #37eb77;
-    --boxel-dark-green: #00ac3d;
-    --boxel-lilac: #a66dfa;
-    --boxel-fuschia: #ac00ff;
-    --boxel-purple: #6638ff;
-    --boxel-blue: #0069f9;
-    --boxel-navy: #281e78;
+  --boxel-cyan: #00ebe5;
+  --boxel-teal: #03c4bf;
+  --boxel-red: #ff5050;
+  --boxel-pink: #ff009d;
+  --boxel-orange: #ff7f00;
+  --boxel-yellow: #ffd800;
+  --boxel-lime: #c3fc33;
+  --boxel-green: #37eb77;
+  --boxel-dark-green: #00ac3d;
+  --boxel-lilac: #a66dfa;
+  --boxel-fuschia: #ac00ff;
+  --boxel-purple: #6638ff;
+  --boxel-blue: #0069f9;
+  --boxel-navy: #281e78;
 
-    --boxel-label-color: #a0a0a0;
+  --boxel-label-color: #a0a0a0;
   /**** End of revisited colors ****/
-
 
   /* Primary colors */
   --boxel-light: #fff;
@@ -250,7 +260,7 @@ textarea:focus {
   --boxel-light-600: var(--boxel-300); /* 3 */
 
   /* Status colors */
-  --boxel-error-100: #f00;    /* alert - attention - error */
+  --boxel-error-100: #f00; /* alert - attention - error */
   --boxel-error-200: #ed0000;
   --boxel-warning-100: var(--boxel-yellow); /* warning - notification */
   --boxel-success-100: var(--boxel-green);
@@ -262,12 +272,11 @@ textarea:focus {
   --boxel-layer-modal-urgent: 20;
 
   /* Form control appearance */
-  --boxel-form-control-height: 2.5rem;  /* 40px */
+  --boxel-form-control-height: 2.5rem; /* 40px */
   --boxel-form-control-placeholder-color: var(--boxel-400);
   --boxel-form-control-border-color: var(--boxel-400);
   --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
 }
-
 
 /** HOST APP STYLES **/
 
@@ -367,7 +376,6 @@ nav > .directory-level {
   color: var(--boxel-error-100);
 }
 
-
 /* Catalog Entry */
 .catalog-entry {
   padding: var(--boxel-sp);
@@ -441,8 +449,7 @@ nav > .directory-level {
   position: relative;
   background-color: var(--boxel-light);
   border-radius: var(--boxel-border-radius);
-  transition:
-    max-width var(--boxel-transition),
+  transition: max-width var(--boxel-transition),
     box-shadow var(--boxel-transition);
 }
 .boxel-card-container--boundaries {
@@ -466,8 +473,7 @@ nav > .directory-level {
   font: 600 var(--boxel-font-xs);
   letter-spacing: var(--boxel-lsp-xl);
   text-transform: uppercase;
-  transition:
-    background-color var(--boxel-transition),
+  transition: background-color var(--boxel-transition),
     color var(--boxel-transition);
 }
 .boxel-header--large {
@@ -590,7 +596,7 @@ nav > .directory-level {
 }
 
 .boxel-input--invalid:focus {
-  outline: 1px solid transparent;  /* Make sure that we make the invalid state visible */
+  outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
   box-shadow: 0 0 0 1.5px var(--boxel-error-100);
 }
 
@@ -638,7 +644,9 @@ nav > .directory-level {
   --boxel-thread-message-avatar-size: 2.5rem; /* 40px. */
   --boxel-thread-message-meta-height: 1.25rem; /* 20px */
   --boxel-thread-message-gap: var(--boxel-sp);
-  --boxel-thread-message-margin-left: calc(var(--boxel-thread-message-avatar-size) + var(--boxel-thread-message-gap));
+  --boxel-thread-message-margin-left: calc(
+    var(--boxel-thread-message-avatar-size) + var(--boxel-thread-message-gap)
+  );
 }
 
 .boxel-thread-message--hide-meta {

@@ -28,19 +28,28 @@ export function getServices(cluster, appName) {
   let nextToken = null;
   do {
     const startingTokenArg = nextToken ? `--starting-token ${nextToken}` : '';
-    const responseJson = execute(`aws ecs list-services --cluster ${cluster} ${startingTokenArg}`);
+    const responseJson = execute(
+      `aws ecs list-services --cluster ${cluster} ${startingTokenArg}`
+    );
     const response = JSON.parse(responseJson);
-    const filtered = response.serviceArns.filter((arn) => getAppNameFromServiceArn(arn) === appName);
+    const filtered = response.serviceArns.filter(
+      (arn) => getAppNameFromServiceArn(arn) === appName
+    );
     serviceArns = serviceArns.concat(filtered);
     nextToken = response.nextToken;
   } while (nextToken);
 
   let services = [];
   for (let i = 0; i < serviceArns.length; i += 10) {
-    const slicedServiceNames = serviceArns.slice(i, i + 10 > serviceArns.length ? serviceArns.length : i + 10);
+    const slicedServiceNames = serviceArns.slice(
+      i,
+      i + 10 > serviceArns.length ? serviceArns.length : i + 10
+    );
 
     const responseJson = execute(
-      `aws ecs describe-services --include TAGS --cluster ${cluster} --services ${slicedServiceNames.join(' ')}`
+      `aws ecs describe-services --include TAGS --cluster ${cluster} --services ${slicedServiceNames.join(
+        ' '
+      )}`
     );
     const response = JSON.parse(responseJson);
     services = services.concat(response.services);
@@ -80,12 +89,15 @@ function tagResources(cluster, service, tags) {
     .join(' ');
 
   console.log(`-> Tagging service: ${service.serviceName}`);
-  execute(`aws ecs tag-resource --resource-arn ${service.serviceArn} --tags ${tagsArgs}`);
+  execute(
+    `aws ecs tag-resource --resource-arn ${service.serviceArn} --tags ${tagsArgs}`
+  );
 }
 
 function main() {
   const [appName, ...extraArgs] = process.argv.slice(2);
-  const waypointConfigFilePath = extraArgs.length > 0 ? extraArgs[0] : 'waypoint.hcl';
+  const waypointConfigFilePath =
+    extraArgs.length > 0 ? extraArgs[0] : 'waypoint.hcl';
 
   const config = getAppConfig(waypointConfigFilePath, appName);
 
