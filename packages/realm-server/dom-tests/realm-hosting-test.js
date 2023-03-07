@@ -1,7 +1,7 @@
 /* eslint-env browser */
 /* globals QUnit */
 
-const { module, test } = QUnit;
+const { test } = QUnit;
 const testRealmURL = 'http://localhost:4202/node-test';
 const timeoutMs = 5000;
 console.log('Test running');
@@ -39,13 +39,13 @@ function resetTestContainer() {
   iframes.forEach((iframe) => iframe.remove());
 }
 
-module('realm serving host app', function (hooks) {
+QUnit.module('realm serving host app', function (hooks) {
   hooks.beforeEach(resetTestContainer);
   hooks.afterEach(resetTestContainer);
 
   test('renders app', async function (assert) {
     let doc = await boot(testRealmURL, 'a');
-    assert.strictEqual(doc.location.href, 'http://localhost:4202/node-test');
+    assert.strictEqual(doc.location.href, `${testRealmURL}`);
     let p = doc.querySelector('p');
     assert.ok(p, '<p> element exists');
     assert.equal(
@@ -57,10 +57,7 @@ module('realm serving host app', function (hooks) {
 
   test('renders file tree', async function (assert) {
     let doc = await boot(`${testRealmURL}/code`, '.directory-level');
-    assert.strictEqual(
-      doc.location.href,
-      'http://localhost:4202/node-test/code'
-    );
+    assert.strictEqual(doc.location.href, `${testRealmURL}/code`);
     let nav = doc.querySelector('.main nav');
     assert.ok(nav, '<nav> element exists');
     let dirContents = nav.textContent;
