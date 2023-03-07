@@ -195,7 +195,7 @@ export class Realm {
     path: LocalPath,
     contents: string
   ): Promise<{ lastModified: number }> {
-    const results = await this.#adapter.write(path, contents);
+    let results = await this.#adapter.write(path, contents);
     await this.#searchIndex.update(this.paths.fileURL(path));
 
     return results;
@@ -222,12 +222,10 @@ export class Realm {
   }
 
   async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
-    const url = new URL(request.url);
+    let url = new URL(request.url);
     let accept = request.headers.get('Accept');
     if (url.search.length > 0) {
-      const { acceptHeader } = qs.parse(url.search, {
-        ignoreQueryPrefix: true,
-      });
+      let { acceptHeader } = qs.parse(url.search, { ignoreQueryPrefix: true });
       if (acceptHeader && typeof acceptHeader === 'string') {
         accept = acceptHeader;
       }
@@ -250,13 +248,13 @@ export class Realm {
       return this.#cardSourceRouter.handle(request);
     }
 
-    const maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
+    let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
 
     if (!maybeHandle) {
       return notFound(request, `${request.url} not found`);
     }
 
-    const handle = maybeHandle;
+    let handle = maybeHandle;
 
     if (
       executableExtensions.some((extension) => handle.path.endsWith(extension))
@@ -285,7 +283,7 @@ export class Realm {
     }
 
     // add the node stream to the response which will get special handling in the node env
-    const response = createResponse(null, {
+    let response = createResponse(null, {
       headers: {
         'last-modified': formatRFC7231(ref.lastModified),
       },
@@ -295,7 +293,7 @@ export class Realm {
   }
 
   private async upsertCardSource(request: Request): Promise<Response> {
-    const { lastModified } = await this.write(
+    let { lastModified } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text()
     );
@@ -308,8 +306,8 @@ export class Realm {
   private async getCardSourceOrRedirect(
     request: Request
   ): Promise<ResponseWithNodeStream> {
-    const localName = this.paths.local(new URL(request.url));
-    const handle = await this.getFileWithFallbacks(localName);
+    let localName = this.paths.local(new URL(request.url));
+    let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
       return notFound(request, `${localName} not found`);
     }
@@ -324,8 +322,8 @@ export class Realm {
   }
 
   private async removeCardSource(request: Request): Promise<Response> {
-    const localName = this.paths.local(new URL(request.url));
-    const handle = await this.getFileWithFallbacks(localName);
+    let localName = this.paths.local(new URL(request.url));
+    let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
       return notFound(request, `${localName} not found`);
     }
@@ -397,14 +395,14 @@ export class Realm {
   }
 
   private async createCard(request: Request): Promise<Response> {
-    const body = await request.text();
+    let body = await request.text();
     let json;
     try {
       json = JSON.parse(body);
     } catch (e) {
       return badRequest(`Request body is not valid card JSON-API`);
     }
-    const { data: resource } = json;
+    let { data: resource } = json;
     if (!isCardResource(resource)) {
       return badRequest(`Request body is not valid card JSON-API`);
     }
@@ -418,34 +416,34 @@ export class Realm {
       name = 'cards';
     }
 
-    const dirName = `/${join(new URL(this.url).pathname, name)}/`;
-    const entries = await this.directoryEntries(new URL(dirName, this.url));
+    let dirName = `/${join(new URL(this.url).pathname, name)}/`;
+    let entries = await this.directoryEntries(new URL(dirName, this.url));
     let index = 0;
     if (entries) {
-      for (const { name, kind } of entries) {
+      for (let { name, kind } of entries) {
         if (kind === 'directory') {
           continue;
         }
         if (!/^[\d]+\.json$/.test(name)) {
           continue;
         }
-        const num = parseInt(name.replace('.json', ''));
+        let num = parseInt(name.replace('.json', ''));
         index = Math.max(index, num);
       }
     }
-    const pathname = `${dirName}${++index}.json`;
-    const fileURL = this.paths.fileURL(pathname);
-    const localPath: LocalPath = this.paths.local(fileURL);
-    const { lastModified } = await this.write(
+    let pathname = `${dirName}${++index}.json`;
+    let fileURL = this.paths.fileURL(pathname);
+    let localPath: LocalPath = this.paths.local(fileURL);
+    let { lastModified } = await this.write(
       localPath,
       JSON.stringify(await this.fileSerialization(json, fileURL), null, 2)
     );
-    const newURL = fileURL.href.replace(/\.json$/, '');
-    const entry = await this.#searchIndex.card(new URL(newURL), {
+    let newURL = fileURL.href.replace(/\.json$/, '');
+    let entry = await this.#searchIndex.card(new URL(newURL), {
       loadLinks: true,
     });
     if (!entry || entry?.type === 'error') {
-      const err = entry
+      let err = entry
         ? CardError.fromSerializableError(entry.error)
         : undefined;
       return systemError(
@@ -453,7 +451,7 @@ export class Realm {
         err
       );
     }
-    const doc: SingleCardDocument = merge({}, entry.doc, {
+    let doc: SingleCardDocument = merge({}, entry.doc, {
       data: {
         links: { self: newURL },
         meta: { lastModified },
@@ -470,15 +468,15 @@ export class Realm {
 
   private async patchCard(request: Request): Promise<Response> {
     // strip off query params
-    const localPath = this.paths.local(
+    let localPath = this.paths.local(
       new URL(new URL(request.url).pathname, request.url)
     );
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request);
     }
 
-    const url = this.paths.fileURL(localPath);
-    const originalMaybeError = await this.#searchIndex.card(url);
+    let url = this.paths.fileURL(localPath);
+    let originalMaybeError = await this.#searchIndex.card(url);
     if (!originalMaybeError) {
       return notFound(request);
     }
@@ -488,11 +486,11 @@ export class Realm {
         CardError.fromSerializableError(originalMaybeError.error)
       );
     }
-    const { doc: original } = originalMaybeError;
-    const originalClone = cloneDeep(original);
+    let { doc: original } = originalMaybeError;
+    let originalClone = cloneDeep(original);
     delete originalClone.data.meta.lastModified;
 
-    const patch = await request.json();
+    let patch = await request.json();
     if (!isSingleCardDocument(patch)) {
       return badRequest(`The request body was not a card document`);
     }
@@ -500,7 +498,7 @@ export class Realm {
     delete (patch as any).data.meta;
     delete (patch as any).data.type;
 
-    const card = mergeWith(
+    let card = mergeWith(
       originalClone,
       patch,
       (_objectValue: any, sourceValue: any) => {
@@ -511,13 +509,13 @@ export class Realm {
       }
     );
     delete (card as any).data.id; // don't write the ID to the file
-    const path: LocalPath = `${localPath}.json`;
-    const { lastModified } = await this.write(
+    let path: LocalPath = `${localPath}.json`;
+    let { lastModified } = await this.write(
       path,
       JSON.stringify(await this.fileSerialization(card, url), null, 2)
     );
-    const instanceURL = url.href.replace(/\.json$/, '');
-    const entry = await this.#searchIndex.card(new URL(instanceURL), {
+    let instanceURL = url.href.replace(/\.json$/, '');
+    let entry = await this.#searchIndex.card(new URL(instanceURL), {
       loadLinks: true,
     });
     if (!entry || entry?.type === 'error') {
@@ -526,7 +524,7 @@ export class Realm {
         entry ? CardError.fromSerializableError(entry.error) : undefined
       );
     }
-    const doc: SingleCardDocument = merge({}, entry.doc, {
+    let doc: SingleCardDocument = merge({}, entry.doc, {
       data: {
         links: { self: instanceURL },
         meta: { lastModified },
@@ -542,11 +540,11 @@ export class Realm {
 
   private async getCard(request: Request): Promise<Response> {
     // strip off query params
-    const localPath = this.paths.local(
+    let localPath = this.paths.local(
       new URL(new URL(request.url).pathname, request.url)
     );
-    const url = this.paths.fileURL(localPath);
-    const maybeError = await this.#searchIndex.card(url, { loadLinks: true });
+    let url = this.paths.fileURL(localPath);
+    let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
       return notFound(request);
     }
@@ -556,7 +554,7 @@ export class Realm {
         CardError.fromSerializableError(maybeError.error)
       );
     }
-    const { doc: card } = maybeError;
+    let { doc: card } = maybeError;
     card.data.links = { self: url.href };
     return createResponse(JSON.stringify(card, null, 2), {
       headers: {
@@ -569,12 +567,12 @@ export class Realm {
 
   private async removeCard(request: Request): Promise<Response> {
     // strip off query params
-    const url = new URL(new URL(request.url).pathname, request.url);
-    const result = await this.#searchIndex.card(url);
+    let url = new URL(new URL(request.url).pathname, request.url);
+    let result = await this.#searchIndex.card(url);
     if (!result) {
       return notFound(request);
     }
-    const localPath = this.paths.local(url) + '.json';
+    let localPath = this.paths.local(url) + '.json';
     await this.delete(localPath);
     return createResponse(null, { status: 204 });
   }
@@ -585,14 +583,14 @@ export class Realm {
     if (await this.isIgnored(url)) {
       return undefined;
     }
-    const path = this.paths.local(url);
+    let path = this.paths.local(url);
     if (!(await this.#adapter.exists(path))) {
       return undefined;
     }
-    const entries: { name: string; kind: Kind }[] = [];
-    for await (const entry of this.#adapter.readdir(path)) {
-      const innerPath = join(path, entry.name);
-      const innerURL =
+    let entries: { name: string; kind: Kind }[] = [];
+    for await (let entry of this.#adapter.readdir(path)) {
+      let innerPath = join(path, entry.name);
+      let innerURL =
         entry.kind === 'directory'
           ? this.paths.directoryURL(innerPath)
           : this.paths.fileURL(innerPath);
@@ -606,28 +604,28 @@ export class Realm {
 
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
-    const localPath: LocalPath = this.paths.local(new URL(request.url));
-    const url = this.paths.directoryURL(localPath);
-    const entries = await this.directoryEntries(url);
+    let localPath: LocalPath = this.paths.local(new URL(request.url));
+    let url = this.paths.directoryURL(localPath);
+    let entries = await this.directoryEntries(url);
     if (!entries) {
       log.warn(`can't find directory ${url.href}`);
       return notFound(request);
     }
 
-    const data: ResourceObjectWithId = {
+    let data: ResourceObjectWithId = {
       id: url.href,
       type: 'directory',
       relationships: {},
     };
 
-    const dir = this.paths.local(url);
+    let dir = this.paths.local(url);
     // the entries are sorted such that the parent directory always
     // appears before the children
     entries.sort((a, b) =>
       `/${join(dir, a.name)}`.localeCompare(`/${join(dir, b.name)}`)
     );
-    for (const entry of entries) {
-      const relationship: DirectoryEntryRelationship = {
+    for (let entry of entries) {
+      let relationship: DirectoryEntryRelationship = {
         links: {
           related:
             entry.kind === 'directory'
@@ -666,7 +664,7 @@ export class Realm {
   }
 
   private async search(request: Request): Promise<Response> {
-    const doc = await this.#searchIndex.search(
+    let doc = await this.#searchIndex.search(
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true }
     );
@@ -679,21 +677,16 @@ export class Realm {
     doc: LooseSingleCardDocument,
     relativeTo: URL
   ): Promise<LooseSingleCardDocument> {
-    const api = await this.searchIndex.loader.import<typeof CardAPI>(
+    let api = await this.searchIndex.loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api'
     );
-    const card: Card = await api.createFromSerialized(
-      doc.data,
-      doc,
-      relativeTo,
-      {
-        loader: this.searchIndex.loader as unknown as LoaderType,
-      }
-    );
-    const data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
+    let card: Card = await api.createFromSerialized(doc.data, doc, relativeTo, {
+      loader: this.searchIndex.loader as unknown as LoaderType,
+    });
+    let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
     delete data.included;
-    for (const relationship of Object.values(data.data.relationships ?? {})) {
+    for (let relationship of Object.values(data.data.relationships ?? {})) {
       delete relationship.data;
     }
     return data;
@@ -702,13 +695,13 @@ export class Realm {
   private listeningClients: WritableStream[] = [];
 
   private async subscribe(req: Request): Promise<Response> {
-    const headers = {
+    let headers = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     };
 
-    const { response, writable } = this.#adapter.createStreamingResponse(
+    let { response, writable } = this.#adapter.createStreamingResponse(
       req,
       {
         status: 200,
@@ -753,12 +746,12 @@ export class Realm {
     id?: string;
   }): Promise<void> {
     log.info(`sending updates to ${this.listeningClients.length} clients`);
-    const { type, data, id } = message;
-    const chunkArr = [];
-    for (const item in data) {
+    let { type, data, id } = message;
+    let chunkArr = [];
+    for (let item in data) {
       chunkArr.push(`${item}: ${data[item]}`);
     }
-    const chunk = sseToChunkData(type, chunkArr.join(', '), id);
+    let chunk = sseToChunkData(type, chunkArr.join(', '), id);
     await Promise.all(
       this.listeningClients.map((client) => writeToStream(client, chunk))
     );
@@ -797,7 +790,7 @@ export interface CardDefinitionResource {
 }
 
 function sseToChunkData(type: string, data: string, id?: string): string {
-  const info = [`event: ${type}`, `data: ${data}`];
+  let info = [`event: ${type}`, `data: ${data}`];
   if (id) {
     info.push(`id: ${id}`);
   }
