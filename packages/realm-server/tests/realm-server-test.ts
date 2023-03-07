@@ -327,7 +327,7 @@ module('Realm Server', function (hooks) {
     let body = response.text.trim();
     assert.codeEqual(
       body,
-      compiledCard(`"x8zhsP0S"` /* id that glimmer assigns for the block */),
+      compiledCard(`"PRwgdZFk"` /* id that glimmer assigns for the block */),
       'module JS is correct'
     );
   });
