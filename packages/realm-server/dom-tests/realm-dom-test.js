@@ -10,24 +10,47 @@ function cleanWhiteSpace(text) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+function testDocument() {
+  let iframe = document.querySelector('#test-container iframe');
+  if (!iframe) {
+    throw new Error(`cannot find test-container's iframe`);
+  }
+  return iframe.contentDocument;
+}
+
+async function waitFor(selector) {
+  let startTime = Date.now();
+  while (
+    querySelector(selector) == null &&
+    Date.now() <= startTime + timeoutMs
+  ) {
+    await new Promise((res) => setTimeout(res, 100));
+  }
+  if (Date.now() > startTime + timeoutMs) {
+    throw new Error(`timed out waiting for selector '${selector}'`);
+  }
+}
+
+function querySelector(selector) {
+  let doc = testDocument();
+  return doc?.querySelector(selector);
+}
+
+function querySelectorAll(selector) {
+  let doc = testDocument();
+  return doc?.querySelectorAll(selector);
+}
+
 async function boot(url, waitForSelector) {
   let container = document.getElementById('test-container');
   let iframe = document.createElement('iframe');
   iframe.setAttribute('src', url);
   container.append(iframe);
   if (waitForSelector) {
-    let startTime = Date.now();
-    while (
-      (!iframe.contentDocument ||
-        iframe.contentDocument.querySelector(waitForSelector) == null) &&
-      Date.now() <= startTime + timeoutMs
-    ) {
-      await new Promise((res) => setTimeout(res, 100));
-    }
-    if (Date.now() > startTime + timeoutMs) {
-      throw new Error(
-        `timed out waiting for selector '${waitForSelector}' while booting ${url}`
-      );
+    try {
+      await waitFor(waitForSelector);
+    } catch (err) {
+      throw new Error(`error encountered while booting ${url}: ${err.message}`);
     }
   }
   return iframe.contentDocument;
@@ -44,9 +67,9 @@ QUnit.module('realm DOM tests', function (hooks) {
   hooks.afterEach(resetTestContainer);
 
   test('renders app', async function (assert) {
-    let doc = await boot(testRealmURL, 'a');
-    assert.strictEqual(doc.location.href, `${testRealmURL}`);
-    let p = doc.querySelector('p');
+    await boot(testRealmURL, 'a');
+    assert.strictEqual(testDocument().location.href, `${testRealmURL}`);
+    let p = querySelector('p');
     assert.ok(p, '<p> element exists');
     assert.equal(
       cleanWhiteSpace(p.textContent),
@@ -56,9 +79,9 @@ QUnit.module('realm DOM tests', function (hooks) {
   });
 
   test('renders file tree', async function (assert) {
-    let doc = await boot(`${testRealmURL}/code`, '.directory-level');
-    assert.strictEqual(doc.location.href, `${testRealmURL}/code`);
-    let nav = doc.querySelector('.main nav');
+    await boot(`${testRealmURL}/code`, '.directory-level');
+    assert.strictEqual(testDocument().location.href, `${testRealmURL}/code`);
+    let nav = querySelector('.main nav');
     assert.ok(nav, '<nav> element exists');
     let dirContents = nav.textContent;
     assert.ok(dirContents.includes('a.js'));
@@ -74,5 +97,64 @@ QUnit.module('realm DOM tests', function (hooks) {
     assert.ok(dirContents.includes('person-2.json'));
     assert.ok(dirContents.includes('person.gts'));
     assert.ok(dirContents.includes('unused-card.gts'));
+  });
+
+  test('renders card source', async function (assert) {
+    await boot(`${testRealmURL}/code?path=person.gts`, '[data-test-card-id]');
+    assert.strictEqual(
+      testDocument().location.href,
+      `${testRealmURL}/code?path=person.gts`
+    );
+    let cardId = querySelector('[data-test-card-id');
+    assert.ok(cardId, 'card ID element exists');
+    assert.strictEqual(
+      cleanWhiteSpace(cardId.textContent),
+      `Card ID: ${testRealmURL}/person/Person`,
+      'the card id is correct'
+    );
+
+    let fields = [...querySelectorAll('[data-test-field]')];
+    assert.strictEqual(fields.length, 1, 'number of fields is correct');
+    assert.strictEqual(
+      cleanWhiteSpace(fields[0].textContent),
+      `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
+      'field is correct'
+    );
+  });
+
+  test('renders card instance', async function (assert) {
+    await boot(`${testRealmURL}/code?path=person-2.json`, '[data-test-card]');
+    assert.strictEqual(
+      testDocument().location.href,
+      `${testRealmURL}/code?path=person-2.json`
+    );
+    let card = querySelector('[data-test-card]');
+    assert.strictEqual(
+      cleanWhiteSpace(card.textContent),
+      'Jackie',
+      'the card is rendered correctly'
+    );
+  });
+
+  test('can change routes', async function (assert) {
+    await boot(`${testRealmURL}/code`, '.directory-level');
+    let files = querySelectorAll('.main nav .file');
+    let instance = [...files].find(
+      (file) => cleanWhiteSpace(file.textContent) === 'person-1.json'
+    );
+    assert.ok(instance, 'card instance file element exists');
+    instance.click();
+
+    await waitFor('[data-test-card]');
+    assert.strictEqual(
+      testDocument().location.href,
+      `${testRealmURL}/code?path=person-1.json`
+    );
+    let card = querySelector('[data-test-card]');
+    assert.strictEqual(
+      cleanWhiteSpace(card.textContent),
+      'Mango',
+      'the card is rendered correctly'
+    );
   });
 });
