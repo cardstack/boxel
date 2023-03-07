@@ -32,23 +32,32 @@ function getServices(cluster, appName) {
   do {
     let responseJson;
     if (nextToken) {
-      responseJson = execute(`aws ecs list-services --cluster ${cluster} --starting-token ${nextToken}`);
+      responseJson = execute(
+        `aws ecs list-services --cluster ${cluster} --starting-token ${nextToken}`
+      );
     } else {
       responseJson = execute(`aws ecs list-services --cluster ${cluster}`);
     }
 
     const response = JSON.parse(responseJson);
-    const filtered = response.serviceArns.filter((arn) => getAppNameFromServiceArn(arn) === appName);
+    const filtered = response.serviceArns.filter(
+      (arn) => getAppNameFromServiceArn(arn) === appName
+    );
     serviceArns = serviceArns.concat(filtered);
     nextToken = response.nextToken;
   } while (nextToken);
 
   let services = [];
   for (let i = 0; i < serviceArns.length; i += 10) {
-    const slicedServiceNames = serviceArns.slice(i, i + 10 > serviceArns.length ? serviceArns.length : i + 10);
+    const slicedServiceNames = serviceArns.slice(
+      i,
+      i + 10 > serviceArns.length ? serviceArns.length : i + 10
+    );
 
     const servicesJson = execute(
-      `aws ecs describe-services --cluster ${cluster} --services ${slicedServiceNames.join(' ')}`
+      `aws ecs describe-services --cluster ${cluster} --services ${slicedServiceNames.join(
+        ' '
+      )}`
     );
     services = services.concat(JSON.parse(servicesJson).services);
   }
@@ -84,9 +93,14 @@ function getStoppedTasks(cluster, serviceArn) {
 
   let tasks = [];
   for (let i = 0; i < taskArns.length; i += 100) {
-    const sliced = taskArns.slice(i, i + 100 > taskArns.length ? taskArns.length : i + 100);
+    const sliced = taskArns.slice(
+      i,
+      i + 100 > taskArns.length ? taskArns.length : i + 100
+    );
 
-    const tasksJson = execute(`aws ecs describe-tasks --cluster ${cluster} --tasks ${sliced.join(' ')}`);
+    const tasksJson = execute(
+      `aws ecs describe-tasks --cluster ${cluster} --tasks ${sliced.join(' ')}`
+    );
     tasks = tasks.concat(JSON.parse(tasksJson).tasks);
   }
 

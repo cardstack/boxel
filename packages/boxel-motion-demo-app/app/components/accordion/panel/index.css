@@ -10,7 +10,8 @@
   border-color: hsl(216, 94%, 73%);
 }
 
-.accordion-panel-animation-context, .accordion-panel-body {
+.accordion-panel-animation-context,
+.accordion-panel-body {
   overflow-y: hidden;
 }
 
@@ -82,7 +83,7 @@
   border-color: hsl(216, 94%, 73%);
 }
 
-.Accordion-trigger[aria-expanded="true"] .Accordion-icon {
+.Accordion-trigger[aria-expanded='true'] .Accordion-icon {
   transform: translateY(-50%) rotate(-135deg);
 }
 

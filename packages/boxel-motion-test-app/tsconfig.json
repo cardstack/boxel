@@ -63,29 +63,17 @@
     "skipLibCheck": false,
     "baseUrl": ".",
     "paths": {
-      "@cardstack/boxel-motion": [
-        "node_modules/@cardstack/boxel-motion/addon"
-      ],
+      "@cardstack/boxel-motion": ["node_modules/@cardstack/boxel-motion/addon"],
       "@cardstack/boxel-motion/*": [
         "node_modules/@cardstack/boxel-motion/addon/*"
       ],
-      "boxel-motion-test-app/tests/*": [
-        "tests/*"
-      ],
-      "boxel-motion-test-app/*": [
-        "app/*"
-      ],
-      "*": [
-        "types/*"
-      ]
+      "boxel-motion-test-app/tests/*": ["tests/*"],
+      "boxel-motion-test-app/*": ["app/*"],
+      "*": ["types/*"]
     }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]
   },
-  "include": [
-    "app/**/*",
-    "tests/**/*",
-    "types/**/*"
-  ]
+  "include": ["app/**/*", "tests/**/*", "types/**/*"]
 }

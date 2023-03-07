@@ -15,7 +15,7 @@
   box-sizing: border-box;
   width: 100%;
   padding: 25px;
-  border: 2px solid #AAA;
+  border: 2px solid #aaa;
   border-radius: 20px;
 }
 
@@ -23,7 +23,7 @@
   box-sizing: border-box;
   width: 100%;
   padding: 25px;
-  border: 2px solid #DDD;
+  border: 2px solid #ddd;
   border-radius: 10px;
 }
 

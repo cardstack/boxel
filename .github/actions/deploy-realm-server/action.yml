@@ -80,5 +80,5 @@ runs:
         environment: ${{ inputs.environment }}
         discord_webhook: ${{ inputs.discord_webhook }}
       env:
-        WAYPOINT_SERVER_TLS: "1"
-        WAYPOINT_SERVER_TLS_SKIP_VERIFY: "1"
+        WAYPOINT_SERVER_TLS: '1'
+        WAYPOINT_SERVER_TLS_SKIP_VERIFY: '1'
