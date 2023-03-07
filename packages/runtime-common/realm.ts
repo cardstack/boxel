@@ -130,6 +130,7 @@ interface Options {
   deferStartUp?: true;
   enableLocalRealm?: true;
   indexHTML?: string;
+  useTestingDomain?: true;
 }
 
 export class Realm {
@@ -141,6 +142,7 @@ export class Realm {
   #deferStartup: boolean;
   #indexHTML: string | undefined;
   #localRealmEnabled = false;
+  #useTestingDomain = false;
   readonly paths: RealmPaths;
 
   get url(): string {
@@ -156,6 +158,7 @@ export class Realm {
   ) {
     this.paths = new RealmPaths(url);
     this.#indexHTML = opts?.indexHTML;
+    this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#localRealmEnabled = Boolean(opts?.enableLocalRealm);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
@@ -278,7 +281,7 @@ export class Realm {
     if (!this.#indexHTML) {
       throw new CardError('realm server not configured with index.html');
     }
-    return this.#indexHTML.replace(
+    let indexHTML = this.#indexHTML.replace(
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
@@ -291,6 +294,17 @@ export class Realm {
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       }
     );
+    // This setting relaxes the document.domain (by eliminating the port) so
+    // that we can do cross origin scripting in order to perform test assertions
+    if (this.#useTestingDomain) {
+      indexHTML = `
+        ${indexHTML}
+        <script>
+          document.domain = 'localhost';
+        </script>
+      `;
+    }
+    return indexHTML;
   }
 
   private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {

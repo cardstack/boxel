@@ -55,7 +55,8 @@
         "--fromUrl='/test/'",
         "--toUrl='/test/'",
         "--fromUrl='https://cardstack.com/base/'",
-        "--toUrl='http://localhost:4201/base/'"
+        "--toUrl='http://localhost:4201/base/'",
+        "--useTestingDomain"
       ],
       "cwd": "${workspaceFolder}/packages/realm-server",
       "outFiles": ["${workspaceFolder}/**/*.js"],
@@ -77,7 +78,8 @@
         "--toUrl='/node-test/'",
         "--path='./tests/cards'",
         "--fromUrl='https://cardstack.com/base/'",
-        "--toUrl='http://localhost:4201/base/'"
+        "--toUrl='http://localhost:4201/base/'",
+        "--useTestingDomain"
       ],
       "cwd": "${workspaceFolder}/packages/realm-server",
       "outFiles": ["${workspaceFolder}/**/*.js"],
