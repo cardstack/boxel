@@ -1,1 +1,1 @@
-import './realm-hosting-test.js';
+import './realm-dom-test.js';

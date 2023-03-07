@@ -39,7 +39,7 @@ function resetTestContainer() {
   iframes.forEach((iframe) => iframe.remove());
 }
 
-QUnit.module('realm serving host app', function (hooks) {
+QUnit.module('realm DOM tests', function (hooks) {
   hooks.beforeEach(resetTestContainer);
   hooks.afterEach(resetTestContainer);
 
