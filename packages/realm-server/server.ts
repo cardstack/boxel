@@ -59,6 +59,7 @@ export function createRealmServer(realms: Realm[], distPath: string) {
         // this would only be called when there is a single realm on this
         // server, in which case just use the first realm
         res.setHeader('Content-Type', 'text/html');
+        // note that a redirect won't work here since we need to rewrite the index.html
         res.write(await realms[0].getIndexHTML());
         res.end();
         return;

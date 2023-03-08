@@ -64,7 +64,7 @@ QUnit.module('realm DOM tests', function (hooks) {
 
   test('renders app', async function (assert) {
     await boot(testRealmURL, 'a');
-    assert.strictEqual(testDocument().location.href, `${testRealmURL}`);
+    assert.strictEqual(testDocument().location.href, `${testRealmURL}/`);
     let p = querySelector('p');
     assert.ok(p, '<p> element exists');
     assert.equal(
