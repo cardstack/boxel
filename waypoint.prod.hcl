@@ -25,7 +25,8 @@ app "realm-base" {
   deploy {
     use "aws-ecs" {
       region              = "us-east-1"
-      memory              = 2048
+      memory              = 4096
+      cpu                 = 2048 # 2 vCPU's
       cluster             = "realm-base-production"
       count               = 1
       subnets             = ["subnet-06c640c2bc3b46c6a", "subnet-0ca4ab0b29849bfff"]
@@ -84,7 +85,8 @@ app "realm-demo" {
   deploy {
     use "aws-ecs" {
       region              = "us-east-1"
-      memory              = 2048
+      memory              = 4096
+      cpu                 = 2048 # 2 vCPU's
       cluster             = "realm-demo-production"
       count               = 1
       subnets             = ["subnet-06c640c2bc3b46c6a", "subnet-0ca4ab0b29849bfff"]

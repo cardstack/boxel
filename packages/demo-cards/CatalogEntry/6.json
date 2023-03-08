@@ -5,7 +5,7 @@
       "title": "Friend from /friend",
       "description": "Catalog entry for Friend from /friend",
       "ref": {
-        "module": "/friend",
+        "module": "../friend",
         "name": "Friend"
       },
       "demo": {
@@ -23,7 +23,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "/friend",
+            "module": "../friend",
             "name": "Friend"
           }
         }

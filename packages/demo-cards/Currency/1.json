@@ -5,11 +5,11 @@
       "sign": "$",
       "name": "U.S. Dollar",
       "symbol": "USD",
-      "logoURL": "/invoice-assets/currency-usd.png"
+      "logoURL": "../invoice-assets/currency-usd.png"
     },
     "meta": {
       "adoptsFrom": {
-        "module": "/asset",
+        "module": "../asset",
         "name": "Currency"
       }
     }

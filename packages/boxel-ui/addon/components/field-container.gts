@@ -3,7 +3,6 @@ import cn from '../helpers/cn';
 import element from '../helpers/element';
 import { eq, not, or } from '../helpers/truth-helpers';
 import { svgJar } from '../helpers/svg-jar';
-import { initStyleSheet, attachStyles } from '../attach-styles';
 import Label from './label';
 
 export interface Signature {
@@ -18,83 +17,32 @@ export interface Signature {
     vertical?: boolean;
   };
   Blocks: {
-    default: [],
-  }
+    default: [];
+  };
 }
-
-let styles = initStyleSheet(`
-  .boxel-field {
-    --boxel-field-label-align: normal;
-    --boxel-field-label-padding-top: 0;
-
-    display: grid;
-    gap: var(--boxel-sp-xs) 0;
-  }
-
-  .boxel-field--vertical {
-    grid-template-rows: auto 1fr;
-  }
-
-  .boxel-field--centered-display {
-    justify-items: center;
-  }
-
-  .boxel-field--centered-display > *:last-child {
-    order: -1;
-  }
-
-  .boxel-field--horizontal {
-    grid-template-columns: var(--boxel-field-label-size, minmax(4rem, 25%)) 1fr;
-    gap: 0 var(--boxel-sp-lg);
-  }
-
-  .boxel-field--small-label {
-    --boxel-field-label-size: minmax(4rem, 10%);
-  }
-
-  .boxel-field__label {
-    display: flex;
-    align-items: var(--boxel-field-label-align);
-    padding-top: var(--boxel-field-label-padding-top);
-  }
-
-  .boxel-field--with-icon {
-    display: flex;
-  }
-
-  .boxel-field__icon {
-    width: var(--boxel-icon-sm);
-    height: var(--boxel-icon-sm);
-    margin-right: var(--boxel-sp-xxs);
-  }
-
-  .boxel-field__yield--with-icon {
-    width: 100%;
-  }
-`);
 
 const FieldContainer: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
     <Tag
-      class={{cn "boxel-field"
+      class={{cn
+        'boxel-field'
         boxel-field--vertical=(or @vertical @centeredDisplay)
         boxel-field--horizontal=(not (or @vertical @centeredDisplay))
-        boxel-field--small-label=(eq @horizontalLabelSize "small")
+        boxel-field--small-label=(eq @horizontalLabelSize 'small')
         boxel-field--centered-display=@centeredDisplay
       }}
-      {{attachStyles styles}}
       data-test-boxel-field
       data-test-boxel-field-id={{@fieldId}}
       ...attributes
     >
-      <Label class="boxel-field__label" data-test-boxel-field-label>
+      <Label class='boxel-field__label' data-test-boxel-field-label>
         {{@label}}
       </Label>
 
       {{#if @icon}}
-        <div class="boxel-field--with-icon">
-          {{svgJar @icon class="boxel-field__icon" role="presentation"}}
-          <div class="boxel-field__yield--with-icon">
+        <div class='boxel-field--with-icon'>
+          {{svgJar @icon class='boxel-field__icon' role='presentation'}}
+          <div class='boxel-field__yield--with-icon'>
             {{yield}}
           </div>
         </div>

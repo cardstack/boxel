@@ -1,45 +1,58 @@
-import { Realm } from "@cardstack/runtime-common";
-import { Loader } from "@cardstack/runtime-common/loader";
-import { NodeAdapter } from "./node-realm";
-import yargs from "yargs";
-import { createRealmServer } from "./server";
-import { resolve, join } from "path";
-import { makeFastBootIndexRunner } from "./fastboot";
-import { RunnerOptionsManager } from "@cardstack/runtime-common/search-index";
+import { Realm } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { NodeAdapter } from './node-realm';
+import yargs from 'yargs';
+import { createRealmServer } from './server';
+import { resolve, join } from 'path';
+import { makeFastBootIndexRunner } from './fastboot';
+import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
+import log, { LogLevelNames } from 'loglevel';
 
 let {
   port,
-  dist = join(__dirname, "..", "host", "dist"),
+  dist = join(__dirname, '..', 'host', 'dist'),
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
+  logLevel,
+  requestLogLevel,
 } = yargs(process.argv.slice(2))
-  .usage("Start realm server")
+  .usage('Start realm server')
   .options({
     port: {
-      description: "port number",
+      description: 'port number',
       demandOption: true,
-      type: "number",
+      type: 'number',
     },
     fromUrl: {
-      description: "the source of the realm URL proxy",
+      description: 'the source of the realm URL proxy',
       demandOption: true,
-      type: "array",
+      type: 'array',
     },
     toUrl: {
-      description: "the target of the realm URL proxy",
+      description: 'the target of the realm URL proxy',
       demandOption: true,
-      type: "array",
+      type: 'array',
     },
     path: {
-      description: "realm directory path",
+      description: 'realm directory path',
       demandOption: true,
-      type: "array",
+      type: 'array',
     },
     dist: {
       description:
         "the dist/ folder of the host app. Defaults to '../host/dist'",
-      type: "string",
+      type: 'string',
+    },
+    logLevel: {
+      description: 'how detailed log output should be',
+      choices: ['trace', 'debug', 'info', 'warn', 'error'],
+      default: 'debug',
+    },
+    requestLogLevel: {
+      description: 'how detailed request log output should be',
+      choices: ['trace', 'debug', 'info', 'warn', 'error'],
+      default: 'info',
     },
   })
   .parseSync();
@@ -56,6 +69,13 @@ if (fromUrls.length < paths.length) {
   );
   process.exit(-1);
 }
+
+log.setLevel(logLevel as LogLevelNames);
+log.info(`Set log level to ${logLevel}`);
+
+let requestLog = log.getLogger('realm:requests');
+requestLog.setLevel(requestLogLevel as LogLevelNames);
+requestLog.info(`Set request log level to ${requestLogLevel}`);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),
@@ -87,24 +107,30 @@ for (let [i, path] of paths.entries()) {
 
 let server = createRealmServer(realms);
 server.listen(port);
-console.log(`Realm server listening on port ${port}:`);
+log.info(`Realm server listening on port ${port}:`);
 let additionalMappings = hrefs.slice(paths.length);
 for (let [index, { url }] of realms.entries()) {
-  console.log(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
+  log.info(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
 }
 if (additionalMappings.length) {
-  console.log("Additional URL mappings:");
+  log.info('Additional URL mappings:');
   for (let [from, to] of additionalMappings) {
-    console.log(`    ${from} => ${to}`);
+    log.info(`    ${from} => ${to}`);
   }
 }
-console.log(`Using host dist path: '${distPath}' for card pre-rendering`);
+log.info(`Using host dist path: '${distPath}' for card pre-rendering`);
 
 (async () => {
   for (let realm of realms) {
-    console.log(`Starting realm ${realm.url}...`);
+    log.info(`Starting realm ${realm.url}...`);
     await realm.start();
-    console.log(`Realm ${realm.url} has started`);
+    log.info(
+      `Realm ${realm.url} has started (${JSON.stringify(
+        realm.searchIndex.stats,
+        null,
+        2
+      )})`
+    );
   }
 })().catch((e: any) => {
   console.error(

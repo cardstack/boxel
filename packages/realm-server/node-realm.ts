@@ -1,5 +1,13 @@
-import { RealmAdapter, Kind, FileRef } from "@cardstack/runtime-common";
-import { LocalPath } from "@cardstack/runtime-common/paths";
+import {
+  RealmAdapter,
+  Kind,
+  FileRef,
+  createResponse,
+  type ResponseWithNodeStream,
+} from '@cardstack/runtime-common';
+import { LocalPath } from '@cardstack/runtime-common/paths';
+import { ServerResponse } from 'http';
+import sane, { type Watcher } from 'sane';
 
 import {
   readdirSync,
@@ -11,8 +19,9 @@ import {
   createReadStream,
   removeSync,
   ReadStream,
-} from "fs-extra";
-import { join } from "path";
+} from 'fs-extra';
+import { join } from 'path';
+import { Duplex } from 'node:stream';
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -36,9 +45,32 @@ export class NodeAdapter implements RealmAdapter {
       yield {
         name,
         path: join(path, name),
-        kind: isDirectory ? "directory" : "file",
+        kind: isDirectory ? 'directory' : 'file',
       };
     }
+  }
+
+  private watcher: Watcher | undefined = undefined;
+
+  async subscribe(cb: (message: Record<string, any>) => void): Promise<void> {
+    if (this.watcher) {
+      throw new Error(`tried to subscribe to watcher twice`);
+    }
+    this.watcher = sane(join(this.realmDir, '/'));
+    this.watcher.on('change', (path) => cb({ changed: path }));
+    this.watcher.on('add', (path) => cb({ added: path }));
+    this.watcher.on('delete', (path) => cb({ removed: path }));
+    this.watcher.on('error', (err) => {
+      throw new Error(`watcher error: ${err}`);
+    });
+    await new Promise<void>((resolve) => {
+      this.watcher!.on('ready', resolve);
+    });
+  }
+
+  unsubscribe(): void {
+    this.watcher?.close();
+    this.watcher = undefined;
   }
 
   async exists(path: string): Promise<boolean> {
@@ -82,5 +114,69 @@ export class NodeAdapter implements RealmAdapter {
   async remove(path: LocalPath): Promise<void> {
     let absolutePath = join(this.realmDir, path);
     removeSync(absolutePath);
+  }
+
+  createStreamingResponse(
+    request: Request,
+    responseInit: ResponseInit,
+    cleanup: () => void
+  ) {
+    let s = new MessageStream();
+    let response = createResponse(null, responseInit) as ResponseWithNodeStream;
+    response.nodeStream = s;
+    onClose(request, cleanup);
+    return { response, writable: s as unknown as WritableStream };
+  }
+}
+
+export function onClose(request: Request, fn: () => void) {
+  closeHandlers.get(request)!.on('close', fn);
+}
+
+const closeHandlers: WeakMap<Request, ServerResponse> = new WeakMap();
+export function setupCloseHandler(res: ServerResponse, request: Request) {
+  closeHandlers.set(request, res);
+}
+
+class MessageStream extends Duplex {
+  private pendingWrite:
+    | { chunk: string; callback: (err: null | Error) => void }
+    | undefined;
+
+  private pendingRead = false;
+
+  _read() {
+    if (this.pendingRead) {
+      throw new Error(
+        'bug: did not expect node to call read until after we push data from the prior read'
+      );
+    }
+    if (this.pendingWrite) {
+      let { chunk, callback } = this.pendingWrite;
+      this.pendingWrite = undefined;
+      this.push(chunk);
+      callback(null);
+    } else {
+      this.pendingRead = true;
+    }
+  }
+
+  _write(
+    chunk: string,
+    _encoding: string,
+    callback: (err: null | Error) => void
+  ) {
+    if (this.pendingWrite) {
+      throw new Error(
+        'bug: did not expect node to call write until after we call the callback'
+      );
+    }
+    if (this.pendingRead) {
+      this.pendingRead = false;
+      this.push(chunk);
+      callback(null);
+    } else {
+      this.pendingWrite = { chunk, callback };
+    }
   }
 }

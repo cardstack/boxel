@@ -1,6 +1,5 @@
 import { Resource } from 'ember-resources/core';
 import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import {
   identifyCard,
@@ -37,20 +36,20 @@ export class CardType extends Resource<Args> {
   modify(_positional: never[], named: Args['named']) {
     let { card, loader } = named;
     this.loader = loader;
-    taskFor(this.assembleType).perform(card);
+    this.assembleType.perform(card);
   }
 
-  @restartableTask private async assembleType(card: typeof Card) {
+  private assembleType = restartableTask(async (card: typeof Card) => {
     let maybeType = await this.toType(card);
     if (isCardRef(maybeType)) {
       throw new Error(`bug: should never get here`);
     }
     this.type = maybeType;
-  }
+  });
 
   async toType(
     card: typeof Card,
-    stack: typeof Card[] = []
+    stack: (typeof Card)[] = []
   ): Promise<Type | CardRef> {
     let maybeRef = identifyCard(card);
     if (!maybeRef) {

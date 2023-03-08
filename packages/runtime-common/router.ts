@@ -3,17 +3,18 @@ import {
   notFound,
   CardError,
   responseWithError,
-} from "./error";
-import { RealmPaths } from "./paths";
+} from './error';
+import { RealmPaths } from './paths';
+import log from 'loglevel';
 
 type Handler = (request: Request) => Promise<Response>;
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 function isHTTPMethod(method: any): method is Method {
-  if (typeof method !== "string") {
+  if (typeof method !== 'string') {
     return false;
   }
-  return ["GET", "POST", "PATCH", "DELETE"].includes(method);
+  return ['GET', 'POST', 'PATCH', 'DELETE'].includes(method);
 }
 
 export class Router {
@@ -24,19 +25,19 @@ export class Router {
   }
 
   get(path: string, handler: Handler): Router {
-    this.setRoute("GET", path, handler);
+    this.setRoute('GET', path, handler);
     return this;
   }
   post(path: string, handler: Handler): Router {
-    this.setRoute("POST", path, handler);
+    this.setRoute('POST', path, handler);
     return this;
   }
   patch(path: string, handler: Handler): Router {
-    this.setRoute("PATCH", path, handler);
+    this.setRoute('PATCH', path, handler);
     return this;
   }
   delete(path: string, handler: Handler): Router {
-    this.setRoute("DELETE", path, handler);
+    this.setRoute('DELETE', path, handler);
     return this;
   }
 
@@ -63,13 +64,13 @@ export class Router {
     let requestPath = `/${this.#paths.local(new URL(url.pathname, url))}`;
     // add a leading and trailing slashes back so we can match on routing rules for directories.
     requestPath =
-      request.url.endsWith("/") && requestPath !== "/"
+      request.url.endsWith('/') && requestPath !== '/'
         ? `${requestPath}/`
         : requestPath;
     for (let [route, handler] of routes) {
       // let's take care of auto escaping '/' and anchoring in our route regex's
       // to make it more readable in our config
-      let routeRegExp = new RegExp(`^${route.replace("/", "\\/")}$`);
+      let routeRegExp = new RegExp(`^${route.replace('/', '\\/')}$`);
       if (routeRegExp.test(requestPath)) {
         try {
           return await handler(request);
@@ -77,7 +78,7 @@ export class Router {
           if (err instanceof CardError) {
             return responseWithError(err);
           }
-          console.error(err);
+          log.error(err);
           return new Response(`unexpected exception in realm ${err}`, {
             status: 500,
           });

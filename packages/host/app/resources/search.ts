@@ -1,6 +1,5 @@
 import { Resource } from 'ember-resources/core';
 import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { baseRealm } from '@cardstack/runtime-common';
 import { service } from '@ember/service';
@@ -21,10 +20,10 @@ export class Search extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { query } = named;
-    taskFor(this.search).perform(query);
+    this.search.perform(query);
   }
 
-  @restartableTask private async search(query: Query) {
+  private search = restartableTask(async (query: Query) => {
     // until we have realm index rollup, search all the realms as separate
     // queries that we merge together
     this.instances = flatMap(
@@ -35,10 +34,10 @@ export class Search extends Resource<Args> {
         )
       )
     );
-  }
+  });
 
   get isLoading() {
-    return taskFor(this.search).isRunning;
+    return this.search.isRunning;
   }
 }
 

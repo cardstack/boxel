@@ -1,5 +1,9 @@
 import Component from '@glimmer/component';
-import { catalogEntryRef, type CardRef, humanReadable } from '@cardstack/runtime-common';
+import {
+  catalogEntryRef,
+  type CardRef,
+  humanReadable,
+} from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -10,34 +14,41 @@ import { hash } from '@ember/helper';
 import { getSearchResults } from '../resources/search';
 import type CardService from '../services/card-service';
 import CardEditor from './card-editor';
-import { type Card } from "https://cardstack.com/base/card-api";
+import { type Card } from 'https://cardstack.com/base/card-api';
 import CardContainer from '@cardstack/boxel-ui/components/card-container';
 
 interface Signature {
   Args: {
     ref: CardRef;
-  }
+  };
 }
 
 export default class CatalogEntryEditor extends Component<Signature> {
   <template>
     <div data-test-catalog-entry-editor>
       {{#if this.card}}
-        <CardContainer @title="Edit Catalog Entry" @displayBoundaries={{true}}>
-          <div class="catalog-entry-editor">
-            <LinkTo @route="application" @query={{hash path=(ensureJsonExtension this.card.id)}} data-test-catalog-entry-id>
+        <CardContainer @title='Edit Catalog Entry' @displayBoundaries={{true}}>
+          <div class='catalog-entry-editor'>
+            <LinkTo
+              @route='application'
+              @query={{hash path=(ensureJsonExtension this.card.id)}}
+              data-test-catalog-entry-id
+            >
               {{this.card.id}}
             </LinkTo>
             <CardEditor
-              @format="embedded"
+              @format='embedded'
               @card={{this.card}}
               @onSave={{this.onSave}}
             />
           </div>
         </CardContainer>
       {{else if this.newEntry}}
-        <CardContainer @title="Create Catalog Entry" @displayBoundaries={{true}}>
-          <div class="catalog-entry-editor">
+        <CardContainer
+          @title='Create Catalog Entry'
+          @displayBoundaries={{true}}
+        >
+          <div class='catalog-entry-editor'>
             <CardEditor
               @card={{this.newEntry}}
               @onSave={{this.onSave}}
@@ -46,7 +57,11 @@ export default class CatalogEntryEditor extends Component<Signature> {
           </div>
         </CardContainer>
       {{else}}
-        <button {{on "click" this.createEntry}} type="button" data-test-catalog-entry-publish>
+        <button
+          {{on 'click' this.createEntry}}
+          type='button'
+          data-test-catalog-entry-publish
+        >
           Publish Card Type
         </button>
       {{/if}}
@@ -55,14 +70,12 @@ export default class CatalogEntryEditor extends Component<Signature> {
 
   @service declare cardService: CardService;
   catalogEntryRef = catalogEntryRef;
-  catalogEntry = getSearchResults(this,
-    () => ({
-      filter: {
-        on: this.catalogEntryRef,
-        eq: { ref: this.args.ref },
-      },
-    })
-  );
+  catalogEntry = getSearchResults(this, () => ({
+    filter: {
+      on: this.catalogEntryRef,
+      eq: { ref: this.args.ref },
+    },
+  }));
   @tracked entry: Card | undefined;
   @tracked newEntry: Card | undefined;
 
@@ -77,18 +90,22 @@ export default class CatalogEntryEditor extends Component<Signature> {
         title: humanReadable(this.args.ref),
         description: `Catalog entry for ${humanReadable(this.args.ref)}`,
         ref: this.args.ref,
-        demo: undefined
+        demo: undefined,
       },
       meta: {
         adoptsFrom: this.catalogEntryRef,
         fields: {
           demo: {
-            adoptsFrom: this.args.ref
-          }
-        }
-      }
+            adoptsFrom: this.args.ref,
+          },
+        },
+      },
     };
-    this.newEntry = await this.cardService.createFromSerialized(resource, { data: resource }, this.cardService.defaultURL);
+    this.newEntry = await this.cardService.createFromSerialized(
+      resource,
+      { data: resource },
+      this.cardService.defaultURL
+    );
   }
 
   @action

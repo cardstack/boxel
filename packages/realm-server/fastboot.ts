@@ -1,10 +1,10 @@
 //@ts-expect-error no types for fastboot
-import FastBoot from "fastboot";
-import { type FastBootInstance } from "@cardstack/runtime-common";
+import FastBoot from 'fastboot';
+import { type FastBootInstance } from '@cardstack/runtime-common';
 import {
   type IndexRunner,
   type RunnerOpts,
-} from "@cardstack/runtime-common/search-index";
+} from '@cardstack/runtime-common/search-index';
 
 export function makeFastBootIndexRunner(
   distPath: string,
@@ -26,7 +26,7 @@ export function makeFastBootIndexRunner(
   return async (optsId: number) => {
     await fastboot.visit(`/indexer/${optsId}`, {
       // TODO we'll need to configure this host origin as part of the hosted realm work
-      request: { headers: { host: "localhost:4200" } },
+      request: { headers: { host: 'localhost:4200' } },
     });
   };
 }
@@ -36,7 +36,7 @@ function btoa(str: string | Buffer) {
   if (str instanceof Buffer) {
     buffer = str;
   } else {
-    buffer = Buffer.from(str.toString(), "binary");
+    buffer = Buffer.from(str.toString(), 'binary');
   }
-  return buffer.toString("base64");
+  return buffer.toString('base64');
 }

@@ -8,11 +8,11 @@ inputs:
   retain:
     description: Number of deployments to retain
     required: false
-    default: "1"
+    default: '1'
   waypoint_version:
     description: Waypoint version to use
     required: false
-    default: "0.8.1"
+    default: '0.8.1'
   environment:
     description: Deployment environment
     required: true
@@ -23,8 +23,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: volta-cli/action@v4
-
     - name: Install dependencies
       shell: bash
       run: |
@@ -37,8 +35,8 @@ runs:
       run: waypoint up -app=${{ inputs.app }} -plain
       shell: bash
       env:
-        WAYPOINT_SERVER_TLS: "1"
-        WAYPOINT_SERVER_TLS_SKIP_VERIFY: "1"
+        WAYPOINT_SERVER_TLS: '1'
+        WAYPOINT_SERVER_TLS_SKIP_VERIFY: '1'
 
     - uses: ./.github/actions/waypoint-ecs-failsafe
       with:
@@ -58,4 +56,4 @@ runs:
         status: ${{ github.action_status }}
         environment: ${{ inputs.environment }}
         webhook: ${{ inputs.discord_webhook }}
-        is_ecs: "true"
+        is_ecs: 'true'

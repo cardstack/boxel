@@ -5,7 +5,7 @@
       "title": "Chain from /chain",
       "description": "Catalog entry for Chain from /chain",
       "ref": {
-        "module": "/chain",
+        "module": "../chain",
         "name": "Chain"
       },
       "demo": {
@@ -16,7 +16,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "/chain",
+            "module": "../chain",
             "name": "Chain"
           }
         }

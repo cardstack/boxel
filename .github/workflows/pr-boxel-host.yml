@@ -3,10 +3,10 @@ name: CI [boxel-host]
 on:
   pull_request:
     paths:
-      - "packages/host/**"
-      - ".github/workflows/pr-boxel-host.yml"
-      - "package.json"
-      - "pnpm-lock.yaml"
+      - 'packages/host/**'
+      - '.github/workflows/pr-boxel-host.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
 
 env:
   PNPM_VERSION: 7.2.1
@@ -29,7 +29,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: volta-cli/action@v4
       - uses: pnpm/action-setup@v2
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -54,7 +53,7 @@ jobs:
           files: |
             ^packages/host
 
-  deploy-safe-tools-preview-staging:
+  deploy-host-preview-staging:
     name: Deploy a boxel-host staging preview to S3
     runs-on: ubuntu-latest
     # github.event.pull_request.head.repo.full_name == github.repository: true if pr is from the original repo, false if it's from a fork
@@ -81,7 +80,7 @@ jobs:
         uses: ./.github/actions/deploy-ember-preview
         env:
           DEMO_REALM_URL: https://realm-demo-staging.stack.cards/demo/
-          RESOLVED_BASE_REALM_URL: https://realm-base-staging.stack.cards/base/
+          RESOLVED_BASE_REALM_URL: https://realm-demo-staging.stack.cards/base/
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
           AWS_REGION: us-east-1
@@ -90,7 +89,7 @@ jobs:
           package: boxel-host
           environment: staging
 
-  deploy-safe-tools-preview-production:
+  deploy-host-preview-production:
     name: Deploy a boxel-host production preview to S3
     runs-on: ubuntu-latest
     # github.event.pull_request.head.repo.full_name == github.repository: true if pr is from the original repo, false if it's from a fork
@@ -108,7 +107,7 @@ jobs:
         uses: ./.github/actions/deploy-ember-preview
         env:
           DEMO_REALM_URL: https://realm-demo.cardstack.com/demo/
-          RESOLVED_BASE_REALM_URL: https://realm-base.cardstack.com/base/
+          RESOLVED_BASE_REALM_URL: https://realm-demo.cardstack.com/base/
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.cardstack.com
           AWS_S3_BUCKET: boxel-host-preview.cardstack.com
           AWS_REGION: us-east-1

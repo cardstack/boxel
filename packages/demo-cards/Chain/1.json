@@ -6,7 +6,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "/chain",
+        "module": "../chain",
         "name": "Chain"
       }
     }

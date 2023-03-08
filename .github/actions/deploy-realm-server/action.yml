@@ -14,13 +14,13 @@ inputs:
   production_waypoint_server_token:
     description: Production Waypoint server token
     required: true
-  production_waypoint_server_addressess:
+  production_waypoint_server_address:
     description: Production Waypoint server address
     required: true
   staging_waypoint_server_token:
     description: Staging Waypoint server token
     required: true
-  staging_waypoint_server_addressess:
+  staging_waypoint_server_address:
     description: Staging Waypoint server address
     required: true
   pnpm_version:
@@ -72,10 +72,6 @@ runs:
     - name: Install Dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
-    - name: Build host dist/ for fastboot
-      shell: bash
-      run: pnpm build:production
-      working-directory: packages/host
 
     - name: Deploy ${{ inputs.app_name }}
       uses: ./.github/actions/waypoint-deploy
@@ -84,5 +80,5 @@ runs:
         environment: ${{ inputs.environment }}
         discord_webhook: ${{ inputs.discord_webhook }}
       env:
-        WAYPOINT_SERVER_TLS: "1"
-        WAYPOINT_SERVER_TLS_SKIP_VERIFY: "1"
+        WAYPOINT_SERVER_TLS: '1'
+        WAYPOINT_SERVER_TLS_SKIP_VERIFY: '1'

@@ -41,10 +41,16 @@ export default class CardService extends Service {
     return this.apiModule.module as typeof CardAPI;
   }
 
+  get demoRealmAvailable(): boolean {
+    return demoRealmURL != undefined && demoRealmURL.trim().length !== 0;
+  }
+
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
   get defaultURL(): URL {
-    return demoRealmURL ? new URL(demoRealmURL) : this.localRealm.url;
+    return this.demoRealmAvailable
+      ? new URL(demoRealmURL)
+      : this.localRealm.url;
   }
 
   private async fetchJSON(
@@ -73,7 +79,12 @@ export default class CardService extends Service {
     let card = await this.api.createFromSerialized(resource, doc, relativeTo, {
       loader: this.loaderService.loader,
     });
-    await this.api.recompute(card);
+    // it's important that we absorb the field async here so that glimmer won't
+    // encounter NotReady errors, since we don't have the luxury of the indexer
+    // being able to inform us of which fields are used or not at this point.
+    // (this is something that the card compiler could optimize for us in the
+    // future)
+    await this.api.recompute(card, { recomputeAllFields: true });
     return card;
   }
 
@@ -140,7 +151,8 @@ export default class CardService extends Service {
     }
     return await Promise.all(
       json.data.map(
-        async (doc) => await this.createFromSerialized(doc, json, realmURL)
+        async (doc) =>
+          await this.createFromSerialized(doc, json, new URL(doc.id))
       )
     );
   }

@@ -13,10 +13,11 @@ import {
 } from '../helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { stringify } from 'qs';
-import { baseRealm, CardRef } from '@cardstack/runtime-common';
+import { baseRealm, CardRef, Realm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import { Deferred } from '@cardstack/runtime-common/deferred';
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
@@ -25,6 +26,56 @@ module('Integration | realm', function (hooks) {
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
   );
+
+  function getUpdateData(message: string) {
+    let [type, data] = message.split('\n');
+    if (type.trim().split(':')[1].trim() === 'update') {
+      return data.split('data:')[1].trim();
+    }
+    return;
+  }
+
+  async function expectEvent<
+    T
+  >(assert: Assert, realm: Realm, adapter: TestRealmAdapter, expectedContents: string[], callback: () => Promise<T>) {
+    let defer = new Deferred<string[]>();
+    let events: string[] = [];
+    let response = await realm.handle(
+      new Request(`${testRealmURL}_message`, {
+        method: 'GET',
+        headers: {
+          Accept: 'text/event-stream',
+        },
+      })
+    );
+    if (!response.ok) {
+      throw new Error(`failed to connect to realm: ${response.status}`);
+    }
+    let reader = response.body!.getReader();
+    let timeout = setTimeout(() => {
+      defer.reject(
+        new Error(`expectEvent timed out, saw events ${JSON.stringify(events)}`)
+      );
+    }, 3000);
+    let result = await callback();
+    let decoder = new TextDecoder();
+    while (events.length < expectedContents.length) {
+      let { done, value } = await reader.read();
+      if (done) {
+        throw new Error('expected more events');
+      }
+      if (value) {
+        let data = getUpdateData(decoder.decode(value, { stream: true }));
+        if (data) {
+          events.push(data);
+        }
+      }
+    }
+    assert.deepEqual(events, expectedContents, 'sse response is correct');
+    clearTimeout(timeout);
+    adapter.unsubscribe();
+    return result;
+  }
 
   hooks.beforeEach(async function () {
     Loader.destroy();
@@ -171,9 +222,6 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -268,9 +316,6 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -346,14 +391,47 @@ module('Integration | realm', function (hooks) {
     let adapter = new TestRealmAdapter({});
     let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
-    {
-      let response = await realm.handle(
-        new Request(testRealmURL, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/vnd.api+json',
-          },
-          body: JSON.stringify(
+    let expected = ['added: Card/1.json', 'added: Card/2.json'];
+    await expectEvent(assert, realm, adapter, expected, async () => {
+      {
+        let response = await realm.handle(
+          new Request(testRealmURL, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/vnd.api+json',
+            },
+            body: JSON.stringify(
+              {
+                data: {
+                  type: 'card',
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/card-api',
+                      name: 'Card',
+                    },
+                  },
+                },
+              },
+              null,
+              2
+            ),
+          })
+        );
+        assert.strictEqual(response.status, 201, 'successful http status');
+        let json = await response.json();
+        if (isSingleCardDocument(json)) {
+          assert.strictEqual(
+            json.data.id,
+            `${testRealmURL}Card/1`,
+            'the id is correct'
+          );
+          assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+          let fileRef = await adapter.openFile('Card/1.json');
+          if (!fileRef) {
+            throw new Error('file not found');
+          }
+          assert.deepEqual(
+            JSON.parse(fileRef.content as string),
             {
               data: {
                 type: 'card',
@@ -365,111 +443,81 @@ module('Integration | realm', function (hooks) {
                 },
               },
             },
-            null,
-            2
-          ),
-        })
-      );
-      assert.strictEqual(response.status, 201, 'successful http status');
-      let json = await response.json();
-      if (isSingleCardDocument(json)) {
-        assert.strictEqual(
-          json.data.id,
-          `${testRealmURL}Card/1`,
-          'the id is correct'
-        );
-        assert.ok(json.data.meta.lastModified, 'lastModified is populated');
-        let fileRef = await adapter.openFile('Card/1.json');
-        if (!fileRef) {
-          throw new Error('file not found');
+            'file contents are correct'
+          );
+        } else {
+          assert.ok(false, 'response body is not a card document');
         }
-        assert.deepEqual(
-          JSON.parse(fileRef.content as string),
-          {
-            data: {
-              type: 'card',
-              meta: {
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
-                  name: 'Card',
-                },
-              },
+
+        let searchIndex = realm.searchIndex;
+        let result = await searchIndex.card(new URL(json.data.links.self));
+        if (result?.type === 'error') {
+          throw new Error(
+            `unexpected error when getting card from index: ${result.error.detail}`
+          );
+        }
+        assert.strictEqual(
+          result?.doc.data.id,
+          `${testRealmURL}Card/1`,
+          'found card in index'
+        );
+      }
+
+      // create second file
+      {
+        let response = await realm.handle(
+          new Request(testRealmURL, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/vnd.api+json',
             },
-          },
-          'file contents are correct'
-        );
-      } else {
-        assert.ok(false, 'response body is not a card document');
-      }
-
-      let searchIndex = realm.searchIndex;
-      let result = await searchIndex.card(new URL(json.data.links.self));
-      if (result?.type === 'error') {
-        throw new Error(
-          `unexpected error when getting card from index: ${result.error.detail}`
-        );
-      }
-      assert.strictEqual(
-        result?.doc.data.id,
-        `${testRealmURL}Card/1`,
-        'found card in index'
-      );
-    }
-
-    // create second file
-    {
-      let response = await realm.handle(
-        new Request(testRealmURL, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/vnd.api+json',
-          },
-          body: JSON.stringify(
-            {
-              data: {
-                type: 'card',
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'Card',
+            body: JSON.stringify(
+              {
+                data: {
+                  type: 'card',
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/card-api',
+                      name: 'Card',
+                    },
                   },
                 },
               },
-            },
-            null,
-            2
-          ),
-        })
-      );
-      assert.strictEqual(response.status, 201, 'successful http status');
-      let json = await response.json();
-      if (isSingleCardDocument(json)) {
-        assert.strictEqual(
-          json.data.id,
-          `${testRealmURL}Card/2`,
-          'the id is correct'
+              null,
+              2
+            ),
+          })
         );
-        assert.ok(
-          (await adapter.openFile('Card/2.json'))?.content,
-          'file contents exist'
-        );
-      } else {
-        assert.ok(false, 'response body is not a card document');
-      }
+        assert.strictEqual(response.status, 201, 'successful http status');
+        let json = await response.json();
+        if (isSingleCardDocument(json)) {
+          assert.strictEqual(
+            json.data.id,
+            `${testRealmURL}Card/2`,
+            'the id is correct'
+          );
+          assert.ok(
+            (await adapter.openFile('Card/2.json'))?.content,
+            'file contents exist'
+          );
+        } else {
+          assert.ok(false, 'response body is not a card document');
+        }
 
-      let searchIndex = realm.searchIndex;
-      let result = await searchIndex.card(new URL(json.data.links.self));
-      if (result?.type === 'error') {
-        throw new Error(
-          `unexpected error when getting card from index: ${result.error.detail}`
+        let searchIndex = realm.searchIndex;
+        let result = await searchIndex.card(new URL(json.data.links.self));
+        if (result?.type === 'error') {
+          throw new Error(
+            `unexpected error when getting card from index: ${result.error.detail}`
+          );
+        }
+        assert.strictEqual(
+          result?.doc.data.id,
+          `${testRealmURL}Card/2`,
+          'found card in index'
         );
       }
-      assert.strictEqual(
-        result?.doc.data.id,
-        `${testRealmURL}Card/2`,
-        'found card in index'
-      );
-    }
+    });
   });
 
   test('realm can serve POST requests that include linksTo fields', async function (assert) {
@@ -562,9 +610,6 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -631,31 +676,40 @@ module('Integration | realm', function (hooks) {
     });
     let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
-    let response = await realm.handle(
-      new Request(`${testRealmURL}dir/card`, {
-        method: 'PATCH',
-        headers: {
-          Accept: 'application/vnd.api+json',
-        },
-        body: JSON.stringify(
-          {
-            data: {
-              type: 'card',
-              attributes: {
-                firstName: 'Van Gogh',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'http://localhost:4202/test/person',
-                  name: 'Person',
+    let expected = ['updated: dir/card.json'];
+    let response = await expectEvent(
+      assert,
+      realm,
+      adapter,
+      expected,
+      async () => {
+        return await realm.handle(
+          new Request(`${testRealmURL}dir/card`, {
+            method: 'PATCH',
+            headers: {
+              Accept: 'application/vnd.api+json',
+            },
+            body: JSON.stringify(
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Van Gogh',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/test/person',
+                      name: 'Person',
+                    },
+                  },
                 },
               },
-            },
-          },
-          null,
-          2
-        ),
-      })
+              null,
+              2
+            ),
+          })
+        );
+      }
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -692,8 +746,6 @@ module('Integration | realm', function (hooks) {
             attributes: {
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
-              email: null,
-              posts: null,
             },
             meta: {
               adoptsFrom: {
@@ -740,6 +792,117 @@ module('Integration | realm', function (hooks) {
     });
 
     assert.strictEqual(cards.length, 1, 'search finds updated value');
+  });
+
+  test('realm can remove item from containsMany field via PATCH request', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'ski-trip.json': {
+        data: {
+          attributes: {
+            title: 'Gore Mountain Ski Trip',
+            venue: 'Gore Mountain',
+            startTime: '2023-02-18T10:00:00.000Z',
+            endTime: '2023-02-19T02:00:00.000Z',
+            hosts: [{ firstName: 'Hassan' }, { firstName: 'Mango' }],
+            sponsors: ['Burton', 'Spy Optics'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/booking',
+              name: 'Booking',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(`${testRealmURL}ski-trip`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                hosts: [{ firstName: 'Hassan' }],
+                sponsors: ['Burton'],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4202/test/booking',
+                  name: 'Booking',
+                },
+              },
+            },
+          },
+          null,
+          2
+        ),
+      })
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let json = await response.json();
+    assert.deepEqual(json, {
+      data: {
+        type: 'card',
+        id: `${testRealmURL}ski-trip`,
+        links: {
+          self: `${testRealmURL}ski-trip`,
+        },
+        attributes: {
+          title: 'Gore Mountain Ski Trip',
+          venue: 'Gore Mountain',
+          startTime: '2023-02-18T10:00:00.000Z',
+          endTime: '2023-02-19T02:00:00.000Z',
+          hosts: [
+            {
+              firstName: 'Hassan',
+            },
+          ],
+          sponsors: ['Burton'],
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4202/test/booking',
+            name: 'Booking',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}ski-trip.json`
+          ),
+        },
+      },
+    });
+    let fileRef = await adapter.openFile('ski-trip.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      JSON.parse(fileRef.content as string),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Gore Mountain Ski Trip',
+            venue: 'Gore Mountain',
+            startTime: '2023-02-18T10:00:00.000Z',
+            endTime: '2023-02-19T02:00:00.000Z',
+            hosts: [{ firstName: 'Hassan' }],
+            sponsors: ['Burton'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/booking',
+              name: 'Booking',
+            },
+          },
+        },
+      },
+      'file contents are correct'
+    );
   });
 
   test('realm can serve PATCH requests that include linksTo fields', async function (assert) {
@@ -869,9 +1032,6 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
-            fullName: 'Mariko Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -962,13 +1122,22 @@ module('Integration | realm', function (hooks) {
       'found card in index'
     );
 
-    let response = await realm.handle(
-      new Request(`${testRealmURL}cards/2`, {
-        method: 'DELETE',
-        headers: {
-          Accept: 'application/vnd.api+json',
-        },
-      })
+    let expected = ['removed: cards/2.json'];
+    let response = await expectEvent(
+      assert,
+      realm,
+      adapter,
+      expected,
+      async () => {
+        return await realm.handle(
+          new Request(`${testRealmURL}cards/2`, {
+            method: 'DELETE',
+            headers: {
+              Accept: 'application/vnd.api+json',
+            },
+          })
+        );
+      }
     );
     assert.strictEqual(response.status, 204, 'status was 204');
 
@@ -1057,14 +1226,23 @@ module('Integration | realm', function (hooks) {
     await realm.ready;
 
     {
-      let response = await realm.handle(
-        new Request(`${testRealmURL}dir/person.gts`, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/vnd.card+source',
-          },
-          body: cardSrc,
-        })
+      let expected = ['added: dir/person.gts'];
+      let response = await expectEvent(
+        assert,
+        realm,
+        adapter,
+        expected,
+        async () => {
+          return await realm.handle(
+            new Request(`${testRealmURL}dir/person.gts`, {
+              method: 'POST',
+              headers: {
+                Accept: 'application/vnd.card+source',
+              },
+              body: cardSrc,
+            })
+          );
+        }
       );
 
       assert.strictEqual(response.status, 204, 'HTTP status is 204');
@@ -1088,38 +1266,45 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve card source delete request', async function (assert) {
-    let realm = await TestRealm.create(
-      {
-        'person.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-        import StringCard from 'https://cardstack.com/base/string';
+    let adapter = new TestRealmAdapter({
+      'person.gts': `
+      import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+      import StringCard from 'https://cardstack.com/base/string';
 
-        export class Person extends Card {
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-        }
-      `,
-      },
-      this.owner
-    );
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+      }
+    `,
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
 
-    let response = await realm.handle(
-      new Request(`${testRealmURL}person`, {
-        headers: {
-          Accept: 'application/vnd.card+source',
-        },
-      })
-    );
-    assert.strictEqual(response.status, 302, 'file exists');
+    let expected = ['removed: person.gts'];
+    let response = await expectEvent(
+      assert,
+      realm,
+      adapter,
+      expected,
+      async () => {
+        let response = await realm.handle(
+          new Request(`${testRealmURL}person`, {
+            headers: {
+              Accept: 'application/vnd.card+source',
+            },
+          })
+        );
+        assert.strictEqual(response.status, 302, 'file exists');
 
-    response = await realm.handle(
-      new Request(`${testRealmURL}person`, {
-        method: 'DELETE',
-        headers: {
-          Accept: 'application/vnd.card+source',
-        },
-      })
+        return await realm.handle(
+          new Request(`${testRealmURL}person`, {
+            method: 'DELETE',
+            headers: {
+              Accept: 'application/vnd.card+source',
+            },
+          })
+        );
+      }
     );
     assert.strictEqual(response.status, 204, 'file is deleted');
 
@@ -1344,9 +1529,6 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
-            fullName: 'Mariko Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -1399,9 +1581,6 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {

@@ -2,7 +2,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import * as runtime from '@cardstack/runtime-common';
 import * as boxelUI from '@cardstack/boxel-ui';
-import * as boxelAttachStyles from '@cardstack/boxel-ui/attach-styles';
 import * as boxelPickHelper from '@cardstack/boxel-ui/helpers/pick';
 import * as boxelTruthHelpers from '@cardstack/boxel-ui/helpers/truth-helpers';
 import * as glimmerComponent from '@glimmer/component';
@@ -17,7 +16,8 @@ import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
 import * as emberResources from 'ember-resources';
 import * as emberConcurrency from 'ember-concurrency';
-import * as emberConcurrencyTS from 'ember-concurrency-ts';
+//@ts-ignore no types available
+import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
 import * as emberModifier2 from 'ember-modifier';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
@@ -27,7 +27,6 @@ import * as dateFns from 'date-fns';
 export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/runtime-common', runtime);
   loader.shimModule('@cardstack/boxel-ui', boxelUI);
-  loader.shimModule('@cardstack/boxel-ui/attach-styles', boxelAttachStyles);
   loader.shimModule('@cardstack/boxel-ui/helpers/pick', boxelPickHelper);
   loader.shimModule(
     '@cardstack/boxel-ui/helpers/truth-helpers',
@@ -47,7 +46,10 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@ember/modifier', emberModifier);
   loader.shimModule('ember-resources', emberResources);
   loader.shimModule('ember-concurrency', emberConcurrency);
-  loader.shimModule('ember-concurrency-ts', emberConcurrencyTS);
+  loader.shimModule(
+    'ember-concurrency/-private/async-arrow-runtime',
+    emberConcurrencyAsyncArrowRuntime
+  );
   loader.shimModule('ember-modifier', emberModifier2);
   loader.shimModule('flat', flat);
   loader.shimModule('lodash', lodash);

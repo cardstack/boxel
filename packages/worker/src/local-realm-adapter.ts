@@ -1,13 +1,25 @@
-import { RealmAdapter, Kind, FileRef } from '@cardstack/runtime-common';
+import {
+  RealmAdapter,
+  Kind,
+  FileRef,
+  createResponse,
+} from '@cardstack/runtime-common';
 import { LocalPath } from '@cardstack/runtime-common/paths';
+import {
+  WebMessageStream,
+  messageCloseHandler,
+} from '@cardstack/runtime-common/stream';
+import { diff } from '@cardstack/runtime-common/diff-entries';
 
 export class LocalRealmAdapter implements RealmAdapter {
   constructor(private fs: FileSystemDirectoryHandle) {}
 
   async *readdir(
-    path: string,
-    opts?: { create?: true }
-  ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
+    path: LocalPath,
+    opts?: {
+      create?: true;
+    }
+  ): AsyncGenerator<{ name: string; path: LocalPath; kind: Kind }, void> {
     let dirHandle = isTopPath(path)
       ? this.fs
       : await traverse(this.fs, path, 'directory', opts);
@@ -94,6 +106,66 @@ export class LocalRealmAdapter implements RealmAdapter {
       'directory'
     );
     return dirHandle.removeEntry(fileName!);
+  }
+
+  createStreamingResponse(
+    _request: Request,
+    responseInit: ResponseInit,
+    cleanup: () => void
+  ): { response: Response; writable: WritableStream } {
+    let s = new WebMessageStream();
+    let response = createResponse(s.readable, responseInit);
+    messageCloseHandler(s.readable, cleanup);
+    return { response, writable: s.writable };
+  }
+
+  private watcher: number | undefined = undefined;
+  private entries: { path: string; lastModified?: number }[] = [];
+
+  async subscribe(cb: (message: Record<string, any>) => void): Promise<void> {
+    if (this.watcher) {
+      throw new Error(`tried to subscribe to watcher twice`);
+    }
+    this.watcher = setInterval(async () => {
+      let currentEntries = await this.getDirectoryListings('', []);
+      if (this.entries.length > 0) {
+        let changes = diff(this.entries, currentEntries);
+        for (let [key, val] of Object.entries(changes)) {
+          if (val.length > 0) {
+            cb({ [key]: val.join(', ') });
+          }
+        }
+      }
+      this.entries = currentEntries;
+    }, 1000);
+  }
+
+  unsubscribe(): void {
+    if (!this.watcher) {
+      return;
+    }
+    clearInterval(this.watcher);
+    this.watcher = undefined;
+  }
+
+  private async getDirectoryListings(
+    dirPath: string,
+    entries: { path: string; lastModified?: number }[]
+  ) {
+    let listing = this.readdir(dirPath);
+    for await (let entry of listing) {
+      if (entry.kind === 'directory') {
+        entries.push({ path: entry.path });
+        await this.getDirectoryListings(entry.path, entries);
+      } else {
+        let fileRef = await this.openFile(entry.path);
+        if (fileRef) {
+          let { lastModified } = fileRef;
+          entries.push({ path: entry.path, lastModified });
+        }
+      }
+    }
+    return entries;
   }
 }
 

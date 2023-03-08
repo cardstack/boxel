@@ -1,5 +1,11 @@
 import Component from '@glimmer/component';
-import { chooseCard, catalogEntryRef, identifyCard, internalKeyFor, moduleFrom } from '@cardstack/runtime-common';
+import {
+  chooseCard,
+  catalogEntryRef,
+  identifyCard,
+  internalKeyFor,
+  moduleFrom,
+} from '@cardstack/runtime-common';
 import { isCardRef, type CardRef } from '@cardstack/runtime-common/card-ref';
 import { getCardType, type Type } from '../resources/card-type';
 import { action } from '@ember/object';
@@ -15,7 +21,6 @@ import { LinkTo } from '@ember/routing';
 import { hash } from '@ember/helper';
 import CatalogEntryEditor from './catalog-entry-editor';
 import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import Modifier from 'ember-modifier';
 import type LoaderService from '../services/loader-service';
 import type CardService from '../services/card-service';
@@ -27,23 +32,24 @@ import BoxelInput from '@cardstack/boxel-ui/components/input';
 import FieldContainer from '@cardstack/boxel-ui/components/field-container';
 import CardContainer from '@cardstack/boxel-ui/components/card-container';
 import Label from '@cardstack/boxel-ui/components/label';
+import type { Filter } from '@cardstack/runtime-common/query';
 
 interface Signature {
   Args: {
     card: typeof Card;
     file: FileResource;
     moduleSyntax: ModuleSyntax;
-  }
+  };
 }
 
 export default class Schema extends Component<Signature> {
   <template>
     {{#if this.cardType.type}}
-      <CardContainer @displayBoundaries={{true}} class="schema">
-        <FieldContainer @label="Card ID:" data-test-card-id>
+      <CardContainer @displayBoundaries={{true}} class='schema'>
+        <FieldContainer @label='Card ID:' data-test-card-id>
           {{this.cardType.type.id}}
         </FieldContainer>
-        <FieldContainer @label="Adopts From:" data-test-adopts-from>
+        <FieldContainer @label='Adopts From:' data-test-adopts-from>
           {{this.cardType.type.super.id}}
         </FieldContainer>
         <section>
@@ -52,15 +58,25 @@ export default class Schema extends Component<Signature> {
             {{#each this.cardType.type.fields as |field|}}
               <li data-test-field={{field.name}}>
                 {{#if (this.isOwnField field.name)}}
-                  <button type="button" {{on "click" (fn this.deleteField field.name)}} data-test-delete>Delete</button>
+                  <button
+                    type='button'
+                    {{on 'click' (fn this.deleteField field.name)}}
+                    data-test-delete
+                  >Delete</button>
                 {{/if}}
-                {{field.name}} - {{field.type}} - field card ID:
+                {{field.name}}
+                -
+                {{field.type}}
+                - field card ID:
                 {{#if (this.isThisCard field.card)}}
-                  {{cardId field.card}} (this card)
+                  {{cardId field.card}}
+                  (this card)
                 {{else if (this.inRealm (cardModule field.card))}}
                   <LinkTo
-                    @route="application"
-                    @query={{hash path=(this.modulePath (cardModule field.card))}}
+                    @route='application'
+                    @query={{hash
+                      path=(this.modulePath (cardModule field.card))
+                    }}
                   >
                     {{cardId field.card}}
                   </LinkTo>
@@ -71,54 +87,72 @@ export default class Schema extends Component<Signature> {
             {{/each}}
             <p>
               {{#if this.errorMsg}}
-                <div class="error" data-test-error-msg>{{this.errorMsg}}</div>
+                <div class='error' data-test-error-msg>{{this.errorMsg}}</div>
               {{/if}}
             </p>
           </ul>
         </section>
-        <fieldset class="add-new-field">
+        <fieldset class='add-new-field'>
           <legend>Add New Field</legend>
-          <FieldContainer @label="Field Name:" @tag="label">
+          <FieldContainer @label='Field Name:' @tag='label'>
             <BoxelInput
               data-test-new-field-name
-              type="text"
+              type='text'
               @value={{this.newFieldName}}
               @onInput={{this.setNewFieldName}}
             />
           </FieldContainer>
-          <FieldContainer @label="Field Type:">
-            <div>
-              <label>
-                contains
-                <input
-                  data-test-new-field-contains
-                  {{RadioInitializer (eq this.newFieldType "contains") true}}
-                  type="radio"
-                  disabled={{this.isNewFieldDisabled}}
-                  checked={{eq this.newFieldType "contains"}}
-                  {{on "change" (fn this.setNewFieldType "contains")}}
-                  name="field-type"
-                />
-              </label>
-              <label>
-                containsMany
-                <input
-                  data-test-new-field-containsMany
-                  {{RadioInitializer (eq this.newFieldType "containsMany") true}}
-                  type="radio"
-                  disabled={{this.isNewFieldDisabled}}
-                  checked={{eq this.newFieldType "containsMany"}}
-                  {{on "change" (fn this.setNewFieldType "containsMany")}}
-                  name="field-type"
-                />
-              </label>
-            </div>
+          <FieldContainer @label='Field Type:'>
+            <ul class='schema__new-field-type'>
+              <li>
+                <label>
+                  <input
+                    data-test-new-field-contains
+                    {{RadioInitializer (eq this.newFieldType 'contains') true}}
+                    type='radio'
+                    checked={{eq this.newFieldType 'contains'}}
+                    {{on 'change' (fn this.setNewFieldType 'contains')}}
+                    name='field-type'
+                  />
+                  contains
+                </label>
+              </li>
+              <li>
+                <label>
+                  <input
+                    data-test-new-field-containsMany
+                    {{RadioInitializer
+                      (eq this.newFieldType 'containsMany')
+                      true
+                    }}
+                    type='radio'
+                    checked={{eq this.newFieldType 'containsMany'}}
+                    {{on 'change' (fn this.setNewFieldType 'containsMany')}}
+                    name='field-type'
+                  />
+                  containsMany
+                </label>
+              </li>
+              <li>
+                <label>
+                  <input
+                    data-test-new-field-linksTo
+                    {{RadioInitializer (eq this.newFieldType 'linksTo') true}}
+                    type='radio'
+                    checked={{eq this.newFieldType 'linksTo'}}
+                    {{on 'change' (fn this.setNewFieldType 'linksTo')}}
+                    name='field-type'
+                  />
+                  linksTo
+                </label>
+              </li>
+            </ul>
           </FieldContainer>
           <button
             data-test-add-field
-            type="button"
+            type='button'
             disabled={{this.isNewFieldDisabled}}
-            {{on "click" this.addField}}
+            {{on 'click' this.addField}}
           >
             Add Field
           </button>
@@ -144,7 +178,11 @@ export default class Schema extends Component<Signature> {
 
   @cached
   get realmPath() {
-    return new RealmPaths(this.loaderService.loader.reverseResolution(this.cardService.defaultURL.href));
+    return new RealmPaths(
+      this.loaderService.loader.reverseResolution(
+        this.cardService.defaultURL.href
+      )
+    );
   }
 
   @cached
@@ -161,7 +199,11 @@ export default class Schema extends Component<Signature> {
     if (!this.newFieldName) {
       return;
     }
-    if (this.cardType.type?.fields.find(field => field.name === this.newFieldName)) {
+    if (
+      this.cardType.type?.fields.find(
+        (field) => field.name === this.newFieldName
+      )
+    ) {
       return `The field name "${this.newFieldName}" already exists, please choose a different name.`;
     }
     return;
@@ -169,11 +211,16 @@ export default class Schema extends Component<Signature> {
 
   @action
   isOwnField(fieldName: string): boolean {
-    return Object.keys(Object.getOwnPropertyDescriptors(this.args.card.prototype)).includes(fieldName);
+    return Object.keys(
+      Object.getOwnPropertyDescriptors(this.args.card.prototype)
+    ).includes(fieldName);
   }
   @action
   isThisCard(card: Type | CardRef): boolean {
-    return internalKeyFor(this.ref, undefined) === (isCardRef(card) ? internalKeyFor(card, undefined): card.id);
+    return (
+      internalKeyFor(this.ref, undefined) ===
+      (isCardRef(card) ? internalKeyFor(card, undefined) : card.id)
+    );
   }
 
   @action
@@ -188,7 +235,7 @@ export default class Schema extends Component<Signature> {
 
   @action
   addField() {
-    taskFor(this.makeField).perform();
+    this.makeField.perform();
   }
 
   @action
@@ -197,7 +244,7 @@ export default class Schema extends Component<Signature> {
       { type: 'exportedName', name: this.ref.name },
       fieldName
     );
-    taskFor(this.write).perform(this.args.moduleSyntax.code());
+    this.write.perform(this.args.moduleSyntax.code());
   }
 
   @action
@@ -210,15 +257,21 @@ export default class Schema extends Component<Signature> {
     this.newFieldType = fieldType;
   }
 
-  @restartableTask private async makeField() {
+  private makeField = restartableTask(async () => {
+    let filter: Filter =
+      this.newFieldType === 'linksTo'
+        ? {
+            on: catalogEntryRef,
+            eq: { isPrimitive: false },
+          }
+        : {
+            on: catalogEntryRef,
+            not: {
+              eq: { ref: this.ref },
+            },
+          };
     let fieldEntry: CatalogEntry | undefined = await chooseCard({
-      filter: {
-        on: catalogEntryRef,
-        // a "contains" field cannot be the same card as it's enclosing card (but it can for a linksTo)
-        not: {
-          eq: { ref: this.ref }
-        }
-      }
+      filter,
     });
     if (!fieldEntry) {
       return;
@@ -228,30 +281,30 @@ export default class Schema extends Component<Signature> {
       throw new Error('bug: new field name is not specified');
     }
     this.args.moduleSyntax.addField(
-      { type: 'exportedName', name: this.ref.name},
+      { type: 'exportedName', name: this.ref.name },
       this.newFieldName,
       fieldEntry.ref,
       this.newFieldType
     );
-    await taskFor(this.write).perform(this.args.moduleSyntax.code());
-  }
+    await this.write.perform(this.args.moduleSyntax.code());
+  });
 
-  @restartableTask private async write(src: string): Promise<void> {
+  private write = restartableTask(async (src: string) => {
     if (this.args.file.state !== 'ready') {
       throw new Error(`the file ${this.args.file.url} is not open`);
     }
     // note that this write will cause the component to rerender, so
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
-    await this.args.file.write(src, true);
-  }
+    this.args.file.write(src, true);
+  });
 }
 
 function cardId(card: Type | CardRef): string {
   if (isCardRef(card)) {
     return internalKeyFor(card, undefined);
   } else {
-    return card.id
+    return card.id;
   }
 }
 
@@ -267,13 +320,13 @@ interface RadioInitializerSignature {
   element: HTMLInputElement;
   Args: {
     Positional: [model: boolean, inputType: boolean];
-  }
+  };
 }
 
 class RadioInitializer extends Modifier<RadioInitializerSignature> {
   modify(
     element: HTMLInputElement,
-    [model, inputType]: RadioInitializerSignature["Args"]["Positional"]
+    [model, inputType]: RadioInitializerSignature['Args']['Positional']
   ) {
     element.checked = model === inputType;
   }
