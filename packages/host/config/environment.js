@@ -26,6 +26,7 @@ module.exports = function (environment) {
     },
     // This should be provided as an *unresolved* URL
     ownRealmURL: process.env.OWN_REALM_URL || 'http://localhost:4200/',
+    servedByRealm: false,
     localRealmEnabled: process.env.LOCAL_REALM_ENABLED === 'true',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',

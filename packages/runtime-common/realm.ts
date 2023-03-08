@@ -287,6 +287,7 @@ export class Realm {
           resolvedBaseRealmURL: this.#searchIndex.loader.resolve(baseRealm.url)
             .href,
           localRealmEnabled: this.#localRealmEnabled,
+          servedByRealm: true,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       }
