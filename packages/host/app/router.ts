@@ -1,6 +1,6 @@
 import EmberRouter from '@ember/routing/router';
 import config from '@cardstack/host/config/environment';
-const { ownRealmURL } = config;
+const { ownRealmURL, servedByRealm } = config;
 
 export default class Router extends EmberRouter {
   location = config.locationType;
@@ -11,7 +11,7 @@ let path = new URL(ownRealmURL).pathname.replace(/\/$/, '');
 
 Router.map(function () {
   this.route('indexer', { path: '/indexer/:id' });
-  if (!path) {
+  if (!path || !servedByRealm) {
     this.route('code');
   } else {
     this.route('index', { path });

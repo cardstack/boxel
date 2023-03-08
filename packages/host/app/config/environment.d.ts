@@ -15,6 +15,7 @@ declare const config: {
   ownRealmURL: string;
   localRealmEnabled: boolean;
   resolvedBaseRealmURL: string;
+  servedByRealm: boolean;
   logLevel: LogLevelNames;
   currentRunLogLevel: LogLevelNames;
 };
