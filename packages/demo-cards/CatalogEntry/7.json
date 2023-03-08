@@ -2,10 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Booking from http://local-realm/booking",
-      "description": "Catalog entry for Booking from http://local-realm/booking",
+      "title": "Booking Card",
+      "description": "Catalog entry for Booking Card",
       "ref": {
-        "module": "http://local-realm/booking",
+        "module": "../booking",
         "name": "Booking"
       },
       "demo": {
@@ -21,7 +21,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://local-realm/booking",
+            "module": "../booking",
             "name": "Booking"
           }
         }

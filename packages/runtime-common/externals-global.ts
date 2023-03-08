@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-empty-function */
+
 import { Loader } from './loader';
 
 // Note: even though cards are only run in the host context (via fastboot), we

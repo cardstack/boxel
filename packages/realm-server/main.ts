@@ -6,6 +6,7 @@ import { createRealmServer } from './server';
 import { resolve, join } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
+import { readFileSync } from 'fs-extra';
 import log, { LogLevelNames } from 'loglevel';
 
 let {
@@ -16,6 +17,7 @@ let {
   toUrl: toUrls,
   logLevel,
   requestLogLevel,
+  useTestingDomain,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -43,6 +45,11 @@ let {
       description:
         "the dist/ folder of the host app. Defaults to '../host/dist'",
       type: 'string',
+    },
+    useTestingDomain: {
+      description:
+        'relaxes document domain rules so that cross origin scripting can be used for test assertions across iframe boundaries',
+      type: 'boolean',
     },
     logLevel: {
       description: 'how detailed log output should be',
@@ -100,12 +107,20 @@ for (let [i, path] of paths.entries()) {
       new NodeAdapter(resolve(String(path))),
       getRunner,
       manager,
-      { deferStartUp: true }
+      async () => readFileSync(join(distPath, 'index.html')).toString(),
+      {
+        deferStartUp: true,
+        ...(useTestingDomain
+          ? {
+              useTestingDomain,
+            }
+          : {}),
+      }
     )
   );
 }
 
-let server = createRealmServer(realms);
+let server = createRealmServer(realms, distPath);
 server.listen(port);
 log.info(`Realm server listening on port ${port}:`);
 let additionalMappings = hrefs.slice(paths.length);

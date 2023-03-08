@@ -112,6 +112,9 @@ jobs:
       - name: realm server test suite
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
+      - name: realm server DOM tests
+        run: pnpm test:dom
+        working-directory: packages/realm-server
 
   change-check:
     name: Check which packages changed

@@ -3,6 +3,9 @@ import { Loader, Realm } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { Readable } from 'stream';
 import { setupCloseHandler } from './node-realm';
+import { existsSync, readFileSync } from 'fs-extra';
+import { join, resolve } from 'path';
+import mime from 'mime-types';
 import '@cardstack/runtime-common/externals-global';
 import log from 'loglevel';
 
@@ -13,7 +16,7 @@ export interface RealmConfig {
   path: string;
 }
 
-export function createRealmServer(realms: Realm[]) {
+export function createRealmServer(realms: Realm[], distPath: string) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
@@ -47,22 +50,47 @@ export function createRealmServer(realms: Realm[]) {
         return;
       }
 
+      let maybeAssetPath = resolve(join(distPath, req.url));
+      if (
+        maybeAssetPath === distPath &&
+        realms.length > 0 &&
+        req.headers.accept?.includes('text/html')
+      ) {
+        // this would only be called when there is a single realm on this
+        // server, in which case just use the first realm
+        res.setHeader('Content-Type', 'text/html');
+        // note that a redirect won't work here since we need to rewrite the index.html
+        res.write(await realms[0].getIndexHTML());
+        res.end();
+        return;
+      }
+      if (existsSync(maybeAssetPath) && maybeAssetPath !== distPath) {
+        assetResponse(maybeAssetPath, res);
+        return;
+      }
+
       let protocol =
         req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
       let fullRequestUrl = new URL(
         `${protocol}://${req.headers.host}${req.url}`
       );
+      // requests for the root of the realm without a trailing slash aren't
+      // technically inside the realm (as the realm includes the trailing '/').
+      // So issue a redirect in those scenarios.
+      if (realms.find((r) => `${fullRequestUrl.href}/` === r.url)) {
+        res.writeHead(302, { Location: `${fullRequestUrl.href}/` });
+        res.end();
+        return;
+      }
       let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
-
       requestLog.debug(
         `Looking for realm to handle request with full URL: ${fullRequestUrl.href} (reversed: ${reversedResolution.href})`
       );
 
       let realm = realms.find((r) => {
         let inRealm = r.paths.inRealm(reversedResolution);
-
         requestLog.debug(
-          `In realm ${JSON.stringify({
+          `${reversedResolution} in realm ${JSON.stringify({
             url: r.url,
             paths: r.paths,
           })}: ${inRealm}`
@@ -74,6 +102,17 @@ export function createRealmServer(realms: Realm[]) {
         res.statusCode = 404;
         res.statusMessage = 'Not Found';
         res.end();
+        return;
+      }
+
+      // this one is unique in that it is requested in a manner that is relative
+      // to the URL in the address bar as opposed to the absolute asset
+      // location. worker can't be served out of /assets because that would
+      // adversely effect the service worker scope--the service worker scope
+      // is always a subset of the path the service worker js is served from.
+      if (realm.paths.local(reversedResolution) === 'worker.js') {
+        res.setHeader('Service-Worker-Allowed', '/');
+        assetResponse(join(distPath, 'worker.js'), res);
         return;
       }
 
@@ -178,4 +217,16 @@ function requestIsHealthCheck(req: http.IncomingMessage) {
     req.method === 'GET' &&
     req.headers['user-agent']?.startsWith('ELB-HealthChecker')
   );
+}
+
+function assetResponse(
+  assetPath: string,
+  res: http.ServerResponse<http.IncomingMessage>
+) {
+  let mimeType = mime.lookup(assetPath);
+  res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+  // TODO we should stream this
+  res.write(readFileSync(assetPath));
+  res.end();
+  return;
 }

@@ -19,6 +19,7 @@ export class URLMap<T> {
     return this.#map.set(url.href, value);
   }
   get [Symbol.iterator]() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let self = this;
     return function* () {
       for (let [key, value] of self.#map) {
@@ -30,6 +31,7 @@ export class URLMap<T> {
     return this.#map.values();
   }
   keys() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let self = this;
     return {
       get [Symbol.iterator]() {

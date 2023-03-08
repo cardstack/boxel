@@ -48,7 +48,6 @@ export class MessageHandler {
           send(source, {
             type: 'directoryHandleResponse',
             handle: this.fs,
-            url: 'http://local-realm/', // TODO: this is hardcoded, should come from realm.url
           });
         }
         return;
@@ -59,7 +58,6 @@ export class MessageHandler {
           if (this.fs) {
             send(source, {
               type: 'setDirectoryHandleAcknowledged',
-              url: 'http://local-realm/', // TODO: this is hardcoded, should come from realm.url
             });
           }
         }

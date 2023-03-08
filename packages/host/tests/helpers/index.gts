@@ -155,13 +155,15 @@ function makeRealm(
 ) {
   let localRealm = owner.lookup('service:local-realm') as MockLocalRealm;
   return new Realm(
-    realmURL ?? testRealmURL,
+    realmURL,
     adapter,
     async (optsId) => {
       let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
       await localRealm.setupIndexRunner(registerRunner, entrySetter, adapter);
     },
-    runnerOptsMgr
+    runnerOptsMgr,
+    async () =>
+      `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`
   );
 }
 

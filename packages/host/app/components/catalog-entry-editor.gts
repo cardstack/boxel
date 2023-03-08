@@ -30,7 +30,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
         <CardContainer @title='Edit Catalog Entry' @displayBoundaries={{true}}>
           <div class='catalog-entry-editor'>
             <LinkTo
-              @route='application'
+              @route='code'
               @query={{hash path=(ensureJsonExtension this.card.id)}}
               data-test-catalog-entry-id
             >

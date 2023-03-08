@@ -70,12 +70,7 @@ export class CardError extends Error implements SerializedError {
     response: Response
   ): Promise<CardError> {
     if (!response.ok) {
-      let text: string | undefined;
-      try {
-        text = await response.text();
-      } catch (err) {
-        throw err;
-      }
+      let text = await response.text();
       let maybeErrorJSON: any;
       try {
         maybeErrorJSON = text ? JSON.parse(text) : undefined;

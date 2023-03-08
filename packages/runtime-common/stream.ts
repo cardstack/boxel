@@ -9,6 +9,7 @@ export async function webStreamToText(
   let decoder = new TextDecoder();
   let pieces: string[] = [];
   let reader = stream.getReader();
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     let { done, value } = await reader.read();
     if (done) {

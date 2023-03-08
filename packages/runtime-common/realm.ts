@@ -20,6 +20,7 @@ import {
   executableExtensions,
   isNode,
   isSingleCardDocument,
+  baseRealm,
   type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -127,6 +128,8 @@ export interface RealmAdapter {
 
 interface Options {
   deferStartUp?: true;
+  enableLocalRealm?: true;
+  useTestingDomain?: true;
 }
 
 export class Realm {
@@ -136,6 +139,9 @@ export class Realm {
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
   #deferStartup: boolean;
+  #localRealmEnabled = false;
+  #useTestingDomain = false;
+  #getIndexHTML: () => Promise<string>;
   readonly paths: RealmPaths;
 
   get url(): string {
@@ -147,9 +153,13 @@ export class Realm {
     adapter: RealmAdapter,
     indexRunner: IndexRunner,
     runnerOptsMgr: RunnerOptionsManager,
+    getIndexHTML: () => Promise<string>,
     opts?: Options
   ) {
     this.paths = new RealmPaths(url);
+    this.#getIndexHTML = getIndexHTML;
+    this.#useTestingDomain = Boolean(opts?.useTestingDomain);
+    this.#localRealmEnabled = Boolean(opts?.enableLocalRealm);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
@@ -235,17 +245,19 @@ export class Realm {
       accept?.includes('text/event-stream')
     ) {
       // local requests are allowed to query the realm as the index is being built up
-      if (!request.isLocal && url.host !== 'local-realm') {
+      if (!request.isLocal && !this.#localRealmEnabled) {
         await this.ready;
       }
       if (!this.searchIndex) {
         return systemError('search index is not available');
       }
       return this.#jsonAPIRouter.handle(request);
-    } else if (
-      request.headers.get('Accept')?.includes('application/vnd.card+source')
-    ) {
+    } else if (accept?.includes('application/vnd.card+source')) {
       return this.#cardSourceRouter.handle(request);
+    } else if (accept?.includes('text/html')) {
+      return createResponse(await this.getIndexHTML(), {
+        headers: { 'content-type': 'text/html' },
+      });
     }
 
     let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
@@ -263,6 +275,33 @@ export class Realm {
     } else {
       return await this.serveLocalFile(handle);
     }
+  }
+
+  async getIndexHTML(): Promise<string> {
+    let indexHTML = (await this.#getIndexHTML()).replace(
+      /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
+      (_match, g1, g2, g3) => {
+        let config = JSON.parse(decodeURIComponent(g2));
+        config = merge({}, config, {
+          ownRealmURL: this.url,
+          resolvedBaseRealmURL: this.#searchIndex.loader.resolve(baseRealm.url)
+            .href,
+          localRealmEnabled: this.#localRealmEnabled,
+        });
+        return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
+      }
+    );
+    // This setting relaxes the document.domain (by eliminating the port) so
+    // that we can do cross origin scripting in order to perform test assertions
+    if (this.#useTestingDomain) {
+      indexHTML = `
+        ${indexHTML}
+        <script>
+          document.domain = 'localhost';
+        </script>
+      `;
+    }
+    return indexHTML;
   }
 
   private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {
@@ -340,7 +379,7 @@ export class Realm {
       includeSourceMaps: true,
       includeTemplateTokens: true,
     }).output;
-    return babel.transformSync(content, {
+    let src = babel.transformSync(content, {
       filename: debugFilename,
       compact: false, // this helps for readability when debugging
       plugins: [
@@ -363,7 +402,11 @@ export class Realm {
             (makeEmberTemplatePlugin as any)(() => etc.precompile),
         loaderPlugin,
       ],
-    })!.code!;
+    })?.code;
+    if (!src) {
+      throw new Error('bug: should never get here');
+    }
+    return src;
   }
 
   private makeJS(content: string, debugFilename: string): Response {

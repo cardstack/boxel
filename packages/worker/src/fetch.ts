@@ -1,4 +1,5 @@
 import { Realm } from '@cardstack/runtime-common';
+import { createResponse } from '@cardstack/runtime-common/create-response';
 import { Loader } from '@cardstack/runtime-common/loader';
 import log from 'loglevel';
 
@@ -25,7 +26,23 @@ export class FetchHandler {
     if (!this.realm) {
       log.warn(`No realm is currently available`);
     } else if (this.realm.paths.inRealm(new URL(request.url))) {
-      return await this.realm.handle(request);
+      if (request.headers.get('Accept')?.includes('text/html')) {
+        return createResponse(await this.realm.getIndexHTML(), {
+          headers: { 'content-type': 'text/html' },
+        });
+      }
+      let response = await this.realm.handle(request);
+      if (response.status === 404) {
+        // if we can't find the resource, then perhaps this is a request for the
+        // backing web server, probably we should cache these... This is
+        // intentionally layered such that requests for the realm server are
+        // served first before trying the backing web server. This does mean
+        // that the realm might clobber an asset that should be delivered by the
+        // webserver--altho that is unlikely since those are mostly js chunks
+        // with pretty random names.
+        return await fetch(request);
+      }
+      return response;
     }
 
     return await Loader.fetch(request);

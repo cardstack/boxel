@@ -22,7 +22,7 @@ import {
 import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
-const { demoRealmURL } = ENV;
+const { localRealmEnabled, ownRealmURL } = ENV;
 
 export default class LocalRealm extends Service {
   #setEntryDeferred: Deferred<void> | undefined;
@@ -37,7 +37,7 @@ export default class LocalRealm extends Service {
 
   constructor(properties: object) {
     super(properties);
-    if (!this.fastboot.isFastBoot && !demoRealmURL) {
+    if (!this.fastboot.isFastBoot && localRealmEnabled) {
       let handler = (event: MessageEvent) => this.handleMessage(event);
       navigator.serviceWorker.addEventListener('message', handler);
       registerDestructor(this, () =>
@@ -60,7 +60,7 @@ export default class LocalRealm extends Service {
         break;
       case 'wait-for-worker-handle-receipt':
         if (data.type === 'setDirectoryHandleAcknowledged') {
-          this.state.wait.fulfill(new URL(data.url));
+          this.state.wait.fulfill();
           return;
         }
         break;
@@ -131,9 +131,9 @@ export default class LocalRealm extends Service {
       this.state = { type: 'fastboot', worker: undefined };
       return;
     }
-    if (demoRealmURL) {
+    if (!localRealmEnabled) {
       this.state = {
-        type: 'demo-realm',
+        type: 'remote-realm',
         worker: undefined,
       };
       return;
@@ -147,13 +147,12 @@ export default class LocalRealm extends Service {
       response: new Deferred<DirectoryHandleResponse>(),
     };
     send(this.state.worker, { type: 'requestDirectoryHandle' });
-    let { handle, url } = await this.state.response.promise;
-    if (handle && url) {
+    let { handle } = await this.state.response.promise;
+    if (handle) {
       this.state = {
         type: 'available',
         handle,
         worker: this.state.worker,
-        url: new URL(url),
         adapter: new LocalRealmAdapter(handle),
       };
     } else {
@@ -178,11 +177,10 @@ export default class LocalRealm extends Service {
       }
     | { type: 'empty'; worker: ServiceWorker }
     | { type: 'fastboot'; worker: undefined }
-    | { type: 'demo-realm'; worker: undefined }
+    | { type: 'remote-realm'; worker: undefined }
     | {
         type: 'available';
         handle: FileSystemDirectoryHandle;
-        url: URL;
         worker: ServiceWorker;
         adapter: LocalRealmAdapter;
       }
@@ -190,7 +188,7 @@ export default class LocalRealm extends Service {
         type: 'wait-for-worker-handle-receipt';
         worker: ServiceWorker;
         handle: FileSystemDirectoryHandle;
-        wait: Deferred<URL>;
+        wait: Deferred<void>;
       } = { type: 'starting-up' };
 
   @service declare router: RouterService;
@@ -217,10 +215,7 @@ export default class LocalRealm extends Service {
 
   get url(): URL {
     this.maybeSetup();
-    if (this.state.type !== 'available') {
-      throw new Error(`Cannot get url in state ${this.state.type}`);
-    }
-    return this.state.url;
+    return new URL(ownRealmURL);
   }
 
   get adapter(): LocalRealmAdapter {
@@ -265,7 +260,10 @@ export default class LocalRealm extends Service {
       type: 'setDirectoryHandle',
       handle: null,
     });
-    this.state = { type: 'empty', worker: this.state.worker };
+    this.state = {
+      type: 'empty',
+      worker: this.state.worker,
+    };
   }
 
   private openDirectory = restartableTask(async (cb?: () => void) => {
@@ -289,21 +287,20 @@ export default class LocalRealm extends Service {
       type: 'wait-for-worker-handle-receipt',
       handle,
       worker: this.state.worker,
-      wait: new Deferred<URL>(),
+      wait: new Deferred<void>(),
     };
 
     send(this.state.worker, {
       type: 'setDirectoryHandle',
       handle,
     });
-    let url = await this.state.wait.promise;
+    await this.state.wait.promise;
     let adapter = new LocalRealmAdapter(handle);
 
     this.state = {
       type: 'available',
       handle,
       worker: this.state.worker,
-      url,
       adapter,
     };
 
@@ -333,7 +330,7 @@ export default class LocalRealm extends Service {
     navigator.serviceWorker.oncontrollerchange = () => {
       log.info('worker changed');
       if ('worker' in this.state) {
-        this.router.transitionTo('application', {
+        this.router.transitionTo('index', {
           queryParams: { path: undefined },
         });
         this.state = { type: 'starting-up' };

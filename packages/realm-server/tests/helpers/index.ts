@@ -1,4 +1,4 @@
-import { writeFileSync, writeJSONSync } from 'fs-extra';
+import { writeFileSync, writeJSONSync, readFileSync } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
 import { resolve, join } from 'path';
 import { Realm, LooseSingleCardDocument } from '@cardstack/runtime-common';
@@ -7,10 +7,11 @@ import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export const testRealm = 'http://test-realm/';
+let distPath = resolve(__dirname, '..', '..', '..', 'host', 'dist');
 
 let manager = new RunnerOptionsManager();
 let getRunner = makeFastBootIndexRunner(
-  resolve(__dirname, '..', '..', '..', 'host', 'dist'),
+  distPath,
   manager.getOptions.bind(manager)
 );
 
@@ -26,7 +27,13 @@ export function createRealm(
       writeJSONSync(join(dir, filename), contents);
     }
   }
-  return new Realm(realmURL, new NodeAdapter(dir), getRunner, manager);
+  return new Realm(
+    realmURL,
+    new NodeAdapter(dir),
+    getRunner,
+    manager,
+    async () => readFileSync(join(distPath, 'index.html')).toString()
+  );
 }
 
 export function setupCardLogs(

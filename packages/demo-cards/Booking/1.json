@@ -36,7 +36,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://local-realm/booking",
+        "module": "../booking",
         "name": "Booking"
       }
     }

@@ -347,11 +347,7 @@ export class Loader {
     }
   }
 
-  // This is intentionally private to prevent this capability from leaking outside of the loader
-  private resolve(
-    moduleIdentifier: string | URL,
-    relativeTo?: URL
-  ): ResolvedURL {
+  resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
     for (let [sourceURL, to] of this.urlMappings) {
       let sourcePath = new RealmPaths(new URL(sourceURL));
@@ -469,7 +465,7 @@ export class Loader {
     };
     this.setModule(moduleIdentifier, module);
 
-    let src: string;
+    let src: string | null | undefined;
     try {
       src = await this.load(moduleURL);
     } catch (exception) {
@@ -489,7 +485,10 @@ export class Loader {
       ],
       sourceMaps: 'inline',
       filename: moduleIdentifier,
-    })?.code!;
+    })?.code;
+    if (!src) {
+      throw new Error(`bug: should never get here`);
+    }
 
     let dependencyList: string[];
     let implementation: Function;
