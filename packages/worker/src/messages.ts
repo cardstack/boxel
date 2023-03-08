@@ -7,23 +7,19 @@ import {
 
 export interface RequestDirectoryHandle {
   type: 'requestDirectoryHandle';
-  indexHTML: string;
 }
 export interface SetDirectoryHandleAcknowledged {
   type: 'setDirectoryHandleAcknowledged';
-  url: string;
 }
 
 export interface DirectoryHandleResponse {
   type: 'directoryHandleResponse';
   handle: FileSystemDirectoryHandle | null;
-  url: string | null;
 }
 
 export interface SetDirectoryHandle {
   type: 'setDirectoryHandle';
   handle: FileSystemDirectoryHandle | null;
-  indexHTML: string;
 }
 
 export interface SetEntry {
@@ -90,14 +86,12 @@ export function isClientMessage(message: unknown): message is ClientMessage {
   switch (message.type) {
     case 'getRunStateRequest':
     case 'requestDirectoryHandle':
-      return 'indexHTML' in message && typeof message.indexHTML === 'string';
+      return true;
     case 'setDirectoryHandle':
       return (
         'handle' in message &&
         ((message as any).handle === null ||
-          (message as any).handle instanceof FileSystemDirectoryHandle) &&
-        'indexHTML' in message &&
-        typeof message.indexHTML === 'string'
+          (message as any).handle instanceof FileSystemDirectoryHandle)
       );
     case 'setEntry':
       return (
@@ -131,13 +125,10 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
       return (
         'handle' in message &&
         ((message as any).handle === null ||
-          (message as any).handle instanceof FileSystemDirectoryHandle) &&
-        'url' in message &&
-        ((message as any).url === null ||
-          typeof (message as any).url === 'string')
+          (message as any).handle instanceof FileSystemDirectoryHandle)
       );
     case 'setDirectoryHandleAcknowledged':
-      return 'url' in message && typeof (message as any).url === 'string';
+      return true;
     case 'startFromScratch':
       return 'realmURL' in message && typeof message.realmURL === 'string';
     case 'startIncremental':

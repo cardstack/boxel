@@ -28,28 +28,26 @@ Loader.addURLMapping(new URL(baseRealm.url), new URL(resolvedBaseRealmURL));
 let runnerOptsMgr = new RunnerOptionsManager();
 (async () => {
   try {
+    let indexResponse = await fetch('./index.html');
+    let indexHTML = await indexResponse.text();
+    let ownRealmURL = getConfigFromIndexHTML(indexHTML).ownRealmURL;
     await messageHandler.startingUp;
     if (!messageHandler.fs) {
       throw new Error(`could not get FileSystem`);
     }
-    if (!messageHandler.indexHTML) {
-      throw new Error(`could not determine index.html for host app`);
-    }
-    if (!messageHandler.ownRealmURL) {
-      throw new Error(`could not determine own realm URL`);
-    }
     let realm = new Realm(
-      messageHandler.ownRealmURL,
+      ownRealmURL,
       new LocalRealmAdapter(messageHandler.fs),
       async (optsId) => {
         let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
         await messageHandler.setupIndexRunner(registerRunner, entrySetter);
       },
       runnerOptsMgr,
-      {
-        enableLocalRealm: true,
-        indexHTML: messageHandler.indexHTML,
-      }
+      async () => {
+        let response = await fetch('./index.html');
+        return await response.text();
+      },
+      { enableLocalRealm: true }
     );
     fetchHandler.addRealm(realm);
   } catch (err) {
@@ -71,3 +69,16 @@ worker.addEventListener('activate', () => {
 worker.addEventListener('fetch', (event: FetchEvent) => {
   event.respondWith(fetchHandler.handleFetch(event.request));
 });
+
+// TODO we could do a better job typing this return value--the config types live
+// in the host package
+function getConfigFromIndexHTML(indexHTML: string) {
+  let match = indexHTML.match(
+    /<meta name="@cardstack\/host\/config\/environment" content="([^"].*)">/
+  );
+  let encodedConfig = match?.[1];
+  if (!encodedConfig) {
+    throw new Error(`Cannot determine config from index.html:\n${indexHTML}`);
+  }
+  return JSON.parse(decodeURIComponent(encodedConfig));
+}

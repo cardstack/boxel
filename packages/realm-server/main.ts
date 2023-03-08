@@ -93,7 +93,6 @@ for (let [from, to] of urlMappings) {
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let distPath = resolve(dist);
-let indexHTML = readFileSync(join(distPath, 'index.html')).toString();
 
 let realms: Realm[] = [];
 for (let [i, path] of paths.entries()) {
@@ -108,9 +107,9 @@ for (let [i, path] of paths.entries()) {
       new NodeAdapter(resolve(String(path))),
       getRunner,
       manager,
+      async () => readFileSync(join(distPath, 'index.html')).toString(),
       {
         deferStartUp: true,
-        indexHTML,
         ...(useTestingDomain
           ? {
               useTestingDomain,

@@ -23,7 +23,7 @@ import {
 import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
-const { localRealmEnabled } = ENV;
+const { localRealmEnabled, ownRealmURL } = ENV;
 
 export default class LocalRealm extends Service {
   #setEntryDeferred: Deferred<void> | undefined;
@@ -61,7 +61,7 @@ export default class LocalRealm extends Service {
         break;
       case 'wait-for-worker-handle-receipt':
         if (data.type === 'setDirectoryHandleAcknowledged') {
-          this.state.wait.fulfill(new URL(data.url));
+          this.state.wait.fulfill();
           return;
         }
         break;
@@ -140,29 +140,24 @@ export default class LocalRealm extends Service {
       return;
     }
     await Promise.resolve();
-    let indexResponse = await fetch('./index.html');
-    let indexHTML = await indexResponse.text();
     this.state = { type: 'checking-worker' };
     let worker = await this.ensureWorker();
     this.state = {
       type: 'requesting-handle',
       worker,
       response: new Deferred<DirectoryHandleResponse>(),
-      indexHTML,
     };
-    send(this.state.worker, { type: 'requestDirectoryHandle', indexHTML });
-    let { handle, url } = await this.state.response.promise;
-    if (handle && url) {
+    send(this.state.worker, { type: 'requestDirectoryHandle' });
+    let { handle } = await this.state.response.promise;
+    if (handle) {
       this.state = {
         type: 'available',
         handle,
         worker: this.state.worker,
-        url: new URL(url),
         adapter: new LocalRealmAdapter(handle),
-        indexHTML,
       };
     } else {
-      this.state = { type: 'empty', worker: this.state.worker, indexHTML };
+      this.state = { type: 'empty', worker: this.state.worker };
     }
   }
 
@@ -180,25 +175,21 @@ export default class LocalRealm extends Service {
         type: 'requesting-handle';
         worker: ServiceWorker;
         response: Deferred<DirectoryHandleResponse>;
-        indexHTML: string;
       }
-    | { type: 'empty'; worker: ServiceWorker; indexHTML: string }
+    | { type: 'empty'; worker: ServiceWorker }
     | { type: 'fastboot'; worker: undefined }
     | { type: 'remote-realm'; worker: undefined }
     | {
         type: 'available';
         handle: FileSystemDirectoryHandle;
-        url: URL;
         worker: ServiceWorker;
         adapter: LocalRealmAdapter;
-        indexHTML: string;
       }
     | {
         type: 'wait-for-worker-handle-receipt';
         worker: ServiceWorker;
         handle: FileSystemDirectoryHandle;
-        wait: Deferred<URL>;
-        indexHTML: string;
+        wait: Deferred<void>;
       } = { type: 'starting-up' };
 
   @service declare router: RouterService;
@@ -225,10 +216,7 @@ export default class LocalRealm extends Service {
 
   get url(): URL {
     this.maybeSetup();
-    if (this.state.type !== 'available') {
-      throw new Error(`Cannot get url in state ${this.state.type}`);
-    }
-    return this.state.url;
+    return new URL(ownRealmURL);
   }
 
   get adapter(): LocalRealmAdapter {
@@ -272,12 +260,10 @@ export default class LocalRealm extends Service {
     send(this.state.worker, {
       type: 'setDirectoryHandle',
       handle: null,
-      indexHTML: this.state.indexHTML,
     });
     this.state = {
       type: 'empty',
       worker: this.state.worker,
-      indexHTML: this.state.indexHTML,
     };
   }
 
@@ -302,25 +288,21 @@ export default class LocalRealm extends Service {
       type: 'wait-for-worker-handle-receipt',
       handle,
       worker: this.state.worker,
-      wait: new Deferred<URL>(),
-      indexHTML: this.state.indexHTML,
+      wait: new Deferred<void>(),
     };
 
     send(this.state.worker, {
       type: 'setDirectoryHandle',
       handle,
-      indexHTML: this.state.indexHTML,
     });
-    let url = await this.state.wait.promise;
+    await this.state.wait.promise;
     let adapter = new LocalRealmAdapter(handle);
 
     this.state = {
       type: 'available',
       handle,
       worker: this.state.worker,
-      url,
       adapter,
-      indexHTML: this.state.indexHTML,
     };
 
     if (cb) {
@@ -340,7 +322,6 @@ export default class LocalRealm extends Service {
         send(registration.installing!, {
           type: 'setDirectoryHandle',
           handle: this.state.handle,
-          indexHTML: this.state.indexHTML,
         });
       }
     });

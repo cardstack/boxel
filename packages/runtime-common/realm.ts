@@ -129,7 +129,6 @@ export interface RealmAdapter {
 interface Options {
   deferStartUp?: true;
   enableLocalRealm?: true;
-  indexHTML?: string;
   useTestingDomain?: true;
 }
 
@@ -140,9 +139,9 @@ export class Realm {
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
   #deferStartup: boolean;
-  #indexHTML: string | undefined;
   #localRealmEnabled = false;
   #useTestingDomain = false;
+  #getIndexHTML: () => Promise<string>;
   readonly paths: RealmPaths;
 
   get url(): string {
@@ -154,10 +153,11 @@ export class Realm {
     adapter: RealmAdapter,
     indexRunner: IndexRunner,
     runnerOptsMgr: RunnerOptionsManager,
+    getIndexHTML: () => Promise<string>,
     opts?: Options
   ) {
     this.paths = new RealmPaths(url);
-    this.#indexHTML = opts?.indexHTML;
+    this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#localRealmEnabled = Boolean(opts?.enableLocalRealm);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
@@ -278,10 +278,7 @@ export class Realm {
   }
 
   async getIndexHTML(): Promise<string> {
-    if (!this.#indexHTML) {
-      throw new CardError('realm server not configured with index.html');
-    }
-    let indexHTML = this.#indexHTML.replace(
+    let indexHTML = (await this.#getIndexHTML()).replace(
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
