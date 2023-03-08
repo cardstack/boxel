@@ -78,6 +78,7 @@ export function createRealmServer(realms: Realm[], distPath: string) {
       // technically inside the realm (as the realm includes the trailing '/').
       // So issue a redirect in those scenarios.
       if (
+        !fullRequestUrl.href.endsWith('/') &&
         realms.find(
           (r) =>
             Loader.reverseResolution(`${fullRequestUrl.href}/`).href === r.url
