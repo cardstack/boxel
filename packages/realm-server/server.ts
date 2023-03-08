@@ -73,6 +73,9 @@ export function createRealmServer(realms: Realm[], distPath: string) {
       let fullRequestUrl = new URL(
         `${protocol}://${req.headers.host}${req.url}`
       );
+      // requests for the root of the realm without a trailing slash aren't
+      // technically inside the realm (as the realm includes the trailing '/').
+      // So issue a redirect in those scenarios.
       if (realms.find((r) => `${fullRequestUrl.href}/` === r.url)) {
         res.writeHead(302, { Location: `${fullRequestUrl.href}/` });
         res.end();
