@@ -11,7 +11,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
+        "module": "../catalog-entry",
         "name": "CatalogEntry"
       }
     }
