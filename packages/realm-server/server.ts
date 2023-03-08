@@ -73,33 +73,25 @@ export function createRealmServer(realms: Realm[], distPath: string) {
       let fullRequestUrl = new URL(
         `${protocol}://${req.headers.host}${req.url}`
       );
+      if (realms.find((r) => `${fullRequestUrl.href}/` === r.url)) {
+        res.writeHead(302, { Location: `${fullRequestUrl.href}/` });
+        res.end();
+        return;
+      }
       let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
-      let bareURLReversedResolution = Loader.reverseResolution(
-        `${fullRequestUrl.href}/`
-      );
-
       requestLog.debug(
         `Looking for realm to handle request with full URL: ${fullRequestUrl.href} (reversed: ${reversedResolution.href})`
       );
 
       let realm = realms.find((r) => {
-        for (let testReverseResolution of [
-          reversedResolution,
-          bareURLReversedResolution,
-        ]) {
-          let inRealm = r.paths.inRealm(testReverseResolution);
-          requestLog.debug(
-            `${testReverseResolution} in realm ${JSON.stringify({
-              url: r.url,
-              paths: r.paths,
-            })}: ${inRealm}`
-          );
-          if (inRealm) {
-            reversedResolution = testReverseResolution;
-            return true;
-          }
-        }
-        return false;
+        let inRealm = r.paths.inRealm(reversedResolution);
+        requestLog.debug(
+          `${reversedResolution} in realm ${JSON.stringify({
+            url: r.url,
+            paths: r.paths,
+          })}: ${inRealm}`
+        );
+        return inRealm;
       });
 
       if (!realm) {
@@ -110,7 +102,10 @@ export function createRealmServer(realms: Realm[], distPath: string) {
       }
 
       // this one is unique in that it is requested in a manner that is relative
-      // to the URL in the address bar as opposed to the absolute asset location
+      // to the URL in the address bar as opposed to the absolute asset
+      // location. worker can't be served out of /assets because that would
+      // adversely effect the service worker scope--the service worker scope
+      // is always a subset of the path the service worker js is served from.
       if (realm.paths.local(reversedResolution) === 'worker.js') {
         res.setHeader('Service-Worker-Allowed', '/');
         assetResponse(join(distPath, 'worker.js'), res);
