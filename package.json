@@ -15,7 +15,7 @@
     "overrides": {
       "@types/eslint": "8.4.1",
       "jsesc": "^3.0.0",
-      "ember-concurrency": "2.2.1"
+      "ember-concurrency": "^2.3.4"
     },
     "peerDependencyRules": {
       "allowedVersions": {

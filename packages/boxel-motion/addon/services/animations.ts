@@ -7,7 +7,6 @@ import {
   restartableTask,
   TaskInstance,
 } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 
 import { AnimationParticipantManager } from '../models/animation-participant';
 import { IContext } from '../models/animator';
@@ -55,21 +54,18 @@ export default class AnimationsService extends Service {
     }
   }
 
-  async maybeTransition(): Promise<TaskInstance<void>> {
-    return taskFor(this.maybeTransitionTask)
-      .perform()
-      .catch((error: Error) => {
-        if (!didCancel(error)) {
-          console.error(error);
-          throw error;
-        } else {
-          console.warn('maybeTransition cancelled, animations interrupted');
-        }
-      });
+  async maybeTransition(): Promise<TaskInstance<void | void[]>> {
+    return this.maybeTransitionTask.perform().catch((error: Error) => {
+      if (!didCancel(error)) {
+        console.error(error);
+        throw error;
+      } else {
+        console.warn('maybeTransition cancelled, animations interrupted');
+      }
+    });
   }
 
-  @restartableTask
-  *maybeTransitionTask() {
+  maybeTransitionTask = restartableTask(async () => {
     this.didNotifyContextRendering = false;
     this.animationParticipantManager.updateParticipants({
       insertedContexts: this.insertedContexts,
@@ -99,7 +95,7 @@ export default class AnimationsService extends Service {
       let changeset = animator.toChangeset();
       if (changeset.hasSprites) {
         let transitionRunner = new TransitionRunner(changeset.context);
-        let task = taskFor(transitionRunner.maybeTransitionTask);
+        let task = transitionRunner.maybeTransitionTask;
         promises.push(
           task.perform(changeset).then(() => {
             context.clearOrphans();
@@ -108,8 +104,8 @@ export default class AnimationsService extends Service {
       }
     }
 
-    yield all(promises);
-  }
+    return all(promises);
+  });
 }
 
 declare module '@ember/service' {

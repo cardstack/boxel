@@ -1,6 +1,5 @@
 import Service, { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { LocalRealmAdapter } from '@cardstack/worker/src/local-realm-adapter';
@@ -127,7 +126,7 @@ export default class LocalRealm extends Service {
     this.#incremental = incremental;
   }
 
-  @restartableTask private async setup(): Promise<void> {
+  private setup = restartableTask(async () => {
     if (this.fastboot.isFastBoot) {
       this.state = { type: 'fastboot', worker: undefined };
       return;
@@ -160,11 +159,11 @@ export default class LocalRealm extends Service {
     } else {
       this.state = { type: 'empty', worker: this.state.worker };
     }
-  }
+  });
 
   private maybeSetup() {
     if (this.state.type === 'starting-up') {
-      taskFor(this.setup).perform();
+      this.setup.perform();
     }
   }
 
@@ -246,7 +245,7 @@ export default class LocalRealm extends Service {
 
   get startedUp(): TaskInstance<void> | null {
     this.maybeSetup();
-    return taskFor(this.setup).last;
+    return this.setup.last;
   }
 
   // this is a hook for service worker like fetch proxying for tests
@@ -255,7 +254,7 @@ export default class LocalRealm extends Service {
   }
 
   chooseDirectory(cb?: () => void): void {
-    taskFor(this.openDirectory).perform(cb);
+    this.openDirectory.perform(cb);
   }
 
   close(): void {
@@ -269,7 +268,7 @@ export default class LocalRealm extends Service {
     this.state = { type: 'empty', worker: this.state.worker };
   }
 
-  @restartableTask private async openDirectory(cb?: () => void) {
+  private openDirectory = restartableTask(async (cb?: () => void) => {
     let handle = await showDirectoryPicker();
 
     // write a sacrificial file in order to prompt the browser to ask the user
@@ -311,7 +310,7 @@ export default class LocalRealm extends Service {
     if (cb) {
       cb();
     }
-  }
+  });
 
   private async ensureWorker() {
     let registration = await navigator.serviceWorker.register('./worker.js', {

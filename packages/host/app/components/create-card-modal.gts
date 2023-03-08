@@ -6,7 +6,6 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { Deferred } from '@cardstack/runtime-common/deferred';
-import { taskFor } from 'ember-concurrency-ts';
 import { enqueueTask } from 'ember-concurrency';
 import { service } from '@ember/service';
 import type CardService from '../services/card-service';
@@ -64,12 +63,10 @@ export default class CreateCardModal extends Component {
 
   async create<T extends Card>(ref: CardRef): Promise<undefined | T> {
     this.incrementZIndex();
-    return (await taskFor(this._create).perform(ref)) as T | undefined;
+    return (await this._create.perform(ref)) as T | undefined;
   }
 
-  @enqueueTask private async _create<T extends Card>(
-    ref: CardRef
-  ): Promise<undefined | T> {
+  private _create = enqueueTask(async <T extends Card>(ref: CardRef) => {
     let doc = { data: { meta: { adoptsFrom: ref } } };
     this.currentRequest = {
       card: await this.cardService.createFromSerialized(
@@ -85,7 +82,7 @@ export default class CreateCardModal extends Component {
     } else {
       return undefined;
     }
-  }
+  });
 
   @action save(card?: Card): void {
     if (this.currentRequest) {

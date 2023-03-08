@@ -2,7 +2,6 @@ import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
@@ -144,18 +143,16 @@ export default class Go extends Component<Signature> {
       }
       if (isCardDocument(maybeCard)) {
         let url = this.args.openFile?.url.replace(/\.json$/, '');
-        taskFor(this.loadCard).perform(url);
+        this.loadCard.perform(url);
         return maybeCard;
       }
     }
     return undefined;
   }
 
-  @restartableTask private async loadCard(
-    url: string | undefined
-  ): Promise<void> {
+  private loadCard = restartableTask(async (url: string | undefined) => {
     this.card = await this.cardService.loadModel(url);
-  }
+  });
 
   @action
   onSave(card: Card) {
@@ -178,10 +175,10 @@ export default class Go extends Component<Signature> {
     if (!this.openFile) {
       return;
     }
-    taskFor(this.remove).perform(this.openFile.url);
+    this.remove.perform(this.openFile.url);
   }
 
-  @restartableTask private async remove(url: string): Promise<void> {
+  private remove = restartableTask(async (url: string) => {
     let headersAccept = this.openFileCardJSON
       ? 'application/vnd.api+json'
       : 'application/vnd.card+source';
@@ -197,7 +194,7 @@ export default class Go extends Component<Signature> {
         }. ${await response.text()}`
       );
     }
-  }
+  });
 }
 
 function isRunnable(filename: string): boolean {

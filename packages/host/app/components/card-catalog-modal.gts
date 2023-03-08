@@ -4,7 +4,6 @@ import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { registerDestructor } from '@ember/destroyable';
-import { taskFor } from 'ember-concurrency-ts';
 import { enqueueTask } from 'ember-concurrency';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -92,27 +91,27 @@ export default class CardCatalogModal extends Component {
     opts?: { offerToCreate?: CardRef }
   ): Promise<undefined | T> {
     this.incrementZIndex();
-    return (await taskFor(this._chooseCard).perform(query, opts)) as
-      | T
-      | undefined;
+    return (await this._chooseCard.perform(query, opts)) as T | undefined;
   }
 
-  @enqueueTask private async _chooseCard<T extends Card>(
-    query: Query,
-    opts: { offerToCreate?: CardRef } = {}
-  ): Promise<undefined | T> {
-    this.currentRequest = {
-      search: getSearchResults(this, () => query),
-      deferred: new Deferred(),
-      opts,
-    };
-    let card = await this.currentRequest.deferred.promise;
-    if (card) {
-      return card as T;
-    } else {
-      return undefined;
+  private _chooseCard = enqueueTask(
+    async <T extends Card>(
+      query: Query,
+      opts: { offerToCreate?: CardRef } = {}
+    ) => {
+      this.currentRequest = {
+        search: getSearchResults(this, () => query),
+        deferred: new Deferred(),
+        opts,
+      };
+      let card = await this.currentRequest.deferred.promise;
+      if (card) {
+        return card as T;
+      } else {
+        return undefined;
+      }
     }
-  }
+  );
 
   @action pick(card?: Card): void {
     if (this.currentRequest) {
