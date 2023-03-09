@@ -21,6 +21,7 @@ import {
   isNode,
   isSingleCardDocument,
   baseRealm,
+  assetDir,
   type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -128,8 +129,13 @@ export interface RealmAdapter {
 
 interface Options {
   deferStartUp?: true;
-  enableLocalRealm?: true;
+  isLocalRealm?: true;
   useTestingDomain?: true;
+}
+
+interface IndexHTMLOptions {
+  hostLocalRealm?: boolean;
+  localRealmURL?: string;
 }
 
 export class Realm {
@@ -139,7 +145,7 @@ export class Realm {
   #jsonAPIRouter: Router;
   #cardSourceRouter: Router;
   #deferStartup: boolean;
-  #localRealmEnabled = false;
+  #isLocalRealm = false;
   #useTestingDomain = false;
   #getIndexHTML: () => Promise<string>;
   readonly paths: RealmPaths;
@@ -159,7 +165,7 @@ export class Realm {
     this.paths = new RealmPaths(url);
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
-    this.#localRealmEnabled = Boolean(opts?.enableLocalRealm);
+    this.#isLocalRealm = Boolean(opts?.isLocalRealm);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
@@ -245,7 +251,7 @@ export class Realm {
       accept?.includes('text/event-stream')
     ) {
       // local requests are allowed to query the realm as the index is being built up
-      if (!request.isLocal && !this.#localRealmEnabled) {
+      if (!request.isLocal && !this.#isLocalRealm) {
         await this.ready;
       }
       if (!this.searchIndex) {
@@ -260,7 +266,8 @@ export class Realm {
       });
     }
 
-    let maybeHandle = await this.getFileWithFallbacks(this.paths.local(url));
+    let localPath = this.paths.local(url);
+    let maybeHandle = await this.getFileWithFallbacks(localPath);
 
     if (!maybeHandle) {
       return notFound(request, `${request.url} not found`);
@@ -269,7 +276,10 @@ export class Realm {
     let handle = maybeHandle;
 
     if (
-      executableExtensions.some((extension) => handle.path.endsWith(extension))
+      executableExtensions.some((extension) =>
+        handle.path.endsWith(extension)
+      ) &&
+      !localPath.startsWith(assetDir)
     ) {
       return this.makeJS(await fileContentToText(handle), handle.path);
     } else {
@@ -277,21 +287,29 @@ export class Realm {
     }
   }
 
-  async getIndexHTML(): Promise<string> {
+  async getIndexHTML(opts?: IndexHTMLOptions): Promise<string> {
+    let resolvedBaseRealmURL = this.#searchIndex.loader.resolve(
+      baseRealm.url
+    ).href;
     let indexHTML = (await this.#getIndexHTML()).replace(
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
         config = merge({}, config, {
-          ownRealmURL: this.url,
-          resolvedBaseRealmURL: this.#searchIndex.loader.resolve(baseRealm.url)
-            .href,
-          localRealmEnabled: this.#localRealmEnabled,
+          ownRealmURL: opts?.localRealmURL ?? this.url,
+          resolvedBaseRealmURL,
+          isLocalRealm: opts?.hostLocalRealm,
           servedByRealm: true,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       }
     );
+
+    indexHTML = indexHTML.replace(
+      /(href|src)="\/base\//g,
+      `$1="${resolvedBaseRealmURL}`
+    );
+
     // This setting relaxes the document.domain (by eliminating the port) so
     // that we can do cross origin scripting in order to perform test assertions
     if (this.#useTestingDomain) {

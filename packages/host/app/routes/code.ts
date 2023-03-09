@@ -9,7 +9,7 @@ import { RealmPaths } from '@cardstack/runtime-common';
 import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
-const { localRealmEnabled } = ENV;
+const { isLocalRealm } = ENV;
 
 interface Model {
   path: string | undefined;
@@ -48,7 +48,7 @@ export default class Index extends Route<Model> {
     }
 
     await this.localRealm.startedUp;
-    if (!this.localRealm.isAvailable && localRealmEnabled) {
+    if (!this.localRealm.isAvailable && isLocalRealm) {
       return { path, openFile, openDirs, isFastBoot };
     }
 

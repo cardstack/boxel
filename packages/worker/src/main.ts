@@ -28,7 +28,9 @@ Loader.addURLMapping(new URL(baseRealm.url), new URL(resolvedBaseRealmURL));
 let runnerOptsMgr = new RunnerOptionsManager();
 (async () => {
   try {
-    let indexResponse = await fetch('./index.html');
+    let indexResponse = await fetch('./index.html', {
+      headers: { Accept: 'text/html' },
+    });
     let indexHTML = await indexResponse.text();
     let ownRealmURL = getConfigFromIndexHTML(indexHTML).ownRealmURL;
     await messageHandler.startingUp;
@@ -44,10 +46,12 @@ let runnerOptsMgr = new RunnerOptionsManager();
       },
       runnerOptsMgr,
       async () => {
-        let response = await fetch('./index.html');
+        let response = await fetch('./index.html', {
+          headers: { Accept: 'text/html' },
+        });
         return await response.text();
       },
-      { enableLocalRealm: true }
+      { isLocalRealm: true }
     );
     fetchHandler.addRealm(realm);
   } catch (err) {

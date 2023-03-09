@@ -1,11 +1,14 @@
 import http, { IncomingMessage, ServerResponse } from 'http';
-import { Loader, Realm } from '@cardstack/runtime-common';
+import {
+  Loader,
+  Realm,
+  baseRealm,
+  assetDir,
+  type ResponseWithNodeStream,
+} from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { Readable } from 'stream';
 import { setupCloseHandler } from './node-realm';
-import { existsSync, readFileSync } from 'fs-extra';
-import { join, resolve } from 'path';
-import mime from 'mime-types';
 import '@cardstack/runtime-common/externals-global';
 import log from 'loglevel';
 
@@ -16,7 +19,11 @@ export interface RealmConfig {
   path: string;
 }
 
-export function createRealmServer(realms: Realm[], distPath: string) {
+interface Options {
+  hostLocalRealm?: boolean;
+}
+// TODO refactor this with middleware--perhaps use KOA
+export function createRealmServer(realms: Realm[], opts?: Options) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
@@ -50,23 +57,20 @@ export function createRealmServer(realms: Realm[], distPath: string) {
         return;
       }
 
-      let maybeAssetPath = resolve(join(distPath, req.url));
-      if (
-        maybeAssetPath === distPath &&
-        realms.length > 0 &&
-        req.headers.accept?.includes('text/html')
-      ) {
-        // this would only be called when there is a single realm on this
-        // server, in which case just use the first realm
-        res.setHeader('Content-Type', 'text/html');
-        // note that a redirect won't work here since we need to rewrite the index.html
-        res.write(await realms[0].getIndexHTML());
-        res.end();
-        return;
-      }
-      if (existsSync(maybeAssetPath) && maybeAssetPath !== distPath) {
-        assetResponse(maybeAssetPath, res);
-        return;
+      if (req.url === '/' && realms.length > 0) {
+        if (req.headers.accept?.includes('text/html')) {
+          // this would only be called when there is a single realm on this
+          // server, in which case just use the first realm
+          res.setHeader('Content-Type', 'text/html');
+          res.write(await realms[0].getIndexHTML());
+          res.end();
+          return;
+        } else if (req.method === 'HEAD') {
+          // necessary for liveness checks
+          res.writeHead(200, { server: `@cardstack/host` });
+          res.end();
+          return;
+        }
       }
 
       let protocol =
@@ -74,6 +78,42 @@ export function createRealmServer(realms: Realm[], distPath: string) {
       let fullRequestUrl = new URL(
         `${protocol}://${req.headers.host}${req.url}`
       );
+      if (
+        (req.url === '/local' || req.url.startsWith('/local/')) &&
+        opts?.hostLocalRealm &&
+        realms.length > 0 &&
+        req.headers.accept?.includes('text/html')
+      ) {
+        res.setHeader('Content-Type', 'text/html');
+        res.write(
+          await realms[0].getIndexHTML({
+            hostLocalRealm: true,
+            localRealmURL: `${fullRequestUrl.origin}/local/`,
+          })
+        );
+        res.end();
+        return;
+      }
+      // this one is unique in that it is requested in a manner that is relative
+      // to the URL in the address bar as opposed to the absolute asset
+      // location. worker can't be served out of /assets because that would
+      // adversely effect the service worker scope--the service worker scope
+      // is always a subset of the path the service worker js is served from.
+      if (req.url === '/local/worker.js' && opts?.hostLocalRealm) {
+        // TODO use Loader.fetch--that will node stream when it is local, but
+        // I'm having problems getting streaming to work...
+        let response = (await fetch(
+          Loader.resolve(`${baseRealm.url}${assetDir}worker.js`)
+        )) as ResponseWithNodeStream;
+        res.setHeader('Service-Worker-Allowed', '/');
+        res.setHeader('Content-Type', 'text/javascript');
+        let workerJS = await response.text();
+        // TODO we should stream this
+        res.write(workerJS);
+        res.end();
+        return;
+      }
+
       // requests for the root of the realm without a trailing slash aren't
       // technically inside the realm (as the realm includes the trailing '/').
       // So issue a redirect in those scenarios.
@@ -108,17 +148,6 @@ export function createRealmServer(realms: Realm[], distPath: string) {
         res.statusCode = 404;
         res.statusMessage = 'Not Found';
         res.end();
-        return;
-      }
-
-      // this one is unique in that it is requested in a manner that is relative
-      // to the URL in the address bar as opposed to the absolute asset
-      // location. worker can't be served out of /assets because that would
-      // adversely effect the service worker scope--the service worker scope
-      // is always a subset of the path the service worker js is served from.
-      if (realm.paths.local(reversedResolution) === 'worker.js') {
-        res.setHeader('Service-Worker-Allowed', '/');
-        assetResponse(join(distPath, 'worker.js'), res);
         return;
       }
 
@@ -223,16 +252,4 @@ function requestIsHealthCheck(req: http.IncomingMessage) {
     req.method === 'GET' &&
     req.headers['user-agent']?.startsWith('ELB-HealthChecker')
   );
-}
-
-function assetResponse(
-  assetPath: string,
-  res: http.ServerResponse<http.IncomingMessage>
-) {
-  let mimeType = mime.lookup(assetPath);
-  res.setHeader('Content-Type', mimeType || 'application/octet-stream');
-  // TODO we should stream this
-  res.write(readFileSync(assetPath));
-  res.end();
-  return;
 }

@@ -22,7 +22,7 @@ import {
 import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
-const { localRealmEnabled, ownRealmURL } = ENV;
+const { isLocalRealm, ownRealmURL } = ENV;
 
 export default class LocalRealm extends Service {
   #setEntryDeferred: Deferred<void> | undefined;
@@ -37,7 +37,7 @@ export default class LocalRealm extends Service {
 
   constructor(properties: object) {
     super(properties);
-    if (!this.fastboot.isFastBoot && localRealmEnabled) {
+    if (!this.fastboot.isFastBoot && isLocalRealm) {
       let handler = (event: MessageEvent) => this.handleMessage(event);
       navigator.serviceWorker.addEventListener('message', handler);
       registerDestructor(this, () =>
@@ -131,7 +131,7 @@ export default class LocalRealm extends Service {
       this.state = { type: 'fastboot', worker: undefined };
       return;
     }
-    if (!localRealmEnabled) {
+    if (!isLocalRealm) {
       this.state = {
         type: 'remote-realm',
         worker: undefined,

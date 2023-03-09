@@ -34,5 +34,6 @@
       "include": ["../base/**", "./**", "../boxel-ui/addon/**"]
     }
   },
-  "include": ["../base/**/*", "./**/*"]
+  "include": ["../base/**/*", "./**/*"],
+  "exclude": ["../base/__boxel/**/*"]
 }

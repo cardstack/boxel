@@ -24,6 +24,7 @@ module.exports = function (defaults) {
     staticAppPaths: ['lib'],
 
     packagerOptions: {
+      publicAssetURL: `/base/__boxel/`,
       webpackConfig: {
         devtool: 'source-map',
         module: {
