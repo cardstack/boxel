@@ -1,11 +1,5 @@
 import http, { IncomingMessage, ServerResponse } from 'http';
-import {
-  Loader,
-  Realm,
-  baseRealm,
-  assetDir,
-  type ResponseWithNodeStream,
-} from '@cardstack/runtime-common';
+import { Loader, Realm, baseRealm, assetDir } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { Readable } from 'stream';
 import { setupCloseHandler } from './node-realm';
@@ -13,6 +7,8 @@ import '@cardstack/runtime-common/externals-global';
 import log from 'loglevel';
 
 let requestLog = log.getLogger('realm:requests');
+let assetPathname = new URL(`${baseRealm.url}${assetDir}`).pathname;
+let monacoLanguages = ['css', 'json', 'ts', 'html'];
 
 export interface RealmConfig {
   realmURL: string;
@@ -101,16 +97,35 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
       // adversely effect the service worker scope--the service worker scope
       // is always a subset of the path the service worker js is served from.
       if (req.url === '/local/worker.js' && opts?.hostLocalRealm) {
-        // TODO use Loader.fetch--that will node stream when it is local, but
-        // I'm having problems getting streaming to work...
-        let response = (await fetch(
-          Loader.resolve(`${baseRealm.url}${assetDir}worker.js`)
-        )) as ResponseWithNodeStream;
-        res.setHeader('Service-Worker-Allowed', '/');
-        res.setHeader('Content-Type', 'text/javascript');
-        let workerJS = await response.text();
-        // TODO we should stream this
-        res.write(workerJS);
+        await proxyAsset(
+          Loader.resolve(`${baseRealm.url}${assetDir}worker.js`).href,
+          res
+        );
+        return;
+      }
+
+      // For requests that are base realm assets and no base realm is running
+      // in this server then we should redirect to the base realm--except for
+      // web-worker scripts whose origin is sensitive to this server. in that
+      // case we should proxy those specific scripts so we don't run afoul of
+      // cross origin issues
+      if (
+        req.url.startsWith(assetPathname) &&
+        !realms.find((r) => r.url === baseRealm.url)
+      ) {
+        let redirectURL = Loader.resolve(new URL(req.url, baseRealm.url)).href;
+        if (
+          [
+            ...monacoLanguages.map((l) => `${l}.worker.js`),
+            'editor.worker.js',
+          ].includes(req.url.slice(assetPathname.length))
+        ) {
+          await proxyAsset(redirectURL, res);
+          return;
+        }
+        res.writeHead(302, {
+          Location: redirectURL,
+        });
         res.end();
         return;
       }
@@ -253,4 +268,15 @@ function requestIsHealthCheck(req: http.IncomingMessage) {
     req.method === 'GET' &&
     req.headers['user-agent']?.startsWith('ELB-HealthChecker')
   );
+}
+
+async function proxyAsset(url: string, res: ServerResponse) {
+  // TODO use Loader.fetch--that will node stream when it is local, but
+  // I'm having problems getting streaming to work...
+  let response = await fetch(url);
+  res.setHeader('Content-Type', 'text/javascript');
+  let workerJS = await response.text();
+  // TODO we should stream this
+  res.write(workerJS);
+  res.end();
 }
