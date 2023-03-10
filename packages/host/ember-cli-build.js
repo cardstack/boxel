@@ -54,7 +54,9 @@ module.exports = function (defaults) {
           },
         },
       },
-      ...(isBaseRealmHosting ? { publicAssetURL: `/base/__boxel/` } : {}),
+      ...(isBaseRealmHosting
+        ? { publicAssetURL: `http://localhost:4201/base/__boxel/` }
+        : {}),
     },
   });
 };
