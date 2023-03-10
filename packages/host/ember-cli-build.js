@@ -7,7 +7,6 @@ const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
 const isBaseRealmHosting = process.env.BASE_REALM_HOSTING_DISABLED !== 'true';
-const environment = process.env.EMBER_ENV;
 
 module.exports = function (defaults) {
   let app = new EmberApp(defaults, {
@@ -55,9 +54,7 @@ module.exports = function (defaults) {
           },
         },
       },
-      ...(isBaseRealmHosting && environment !== 'test'
-        ? { publicAssetURL: `/base/__boxel/` }
-        : {}),
+      ...(isBaseRealmHosting ? { publicAssetURL: `/base/__boxel/` } : {}),
     },
   });
 };

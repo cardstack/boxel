@@ -81,7 +81,7 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Build host dist/ for fastboot
-        run: pnpm build
+        run: pnpm build:ember-cli-hosted
         working-directory: packages/host
       - name: Start realm servers
         run: pnpm start:all &

@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "ember build",
+    "build:ember-cli-hosted": "BASE_REALM_HOSTING_DISABLED=true ember build",
     "build:production": "NODE_OPTIONS='--max-old-space-size=4096' ember build --environment=production",
     "lint": "npm-run-all --aggregate-output --continue-on-error --parallel \"lint:!(fix)\"",
     "lint:fix": "npm-run-all --aggregate-output --continue-on-error --parallel lint:*:fix",
