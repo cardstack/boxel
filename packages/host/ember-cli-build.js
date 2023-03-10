@@ -6,6 +6,9 @@ const { Webpack } = require('@embroider/webpack');
 const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
+const isBaseRealmHosting = process.env.BASE_REALM_HOSTING_DISABLED !== 'true';
+const environment = process.env.EMBER_ENV;
+
 module.exports = function (defaults) {
   let app = new EmberApp(defaults, {
     'ember-cli-babel': {
@@ -24,33 +27,37 @@ module.exports = function (defaults) {
     staticAppPaths: ['lib'],
 
     packagerOptions: {
-      publicAssetURL: `/base/__boxel/`,
-      webpackConfig: {
-        devtool: 'source-map',
-        module: {
-          rules: [
-            {
-              test: /\.ttf$/,
-              type: 'asset',
-            },
+      ...{
+        webpackConfig: {
+          devtool: 'source-map',
+          module: {
+            rules: [
+              {
+                test: /\.ttf$/,
+                type: 'asset',
+              },
+            ],
+          },
+          plugins: [
+            new MonacoWebpackPlugin(),
+            new webpack.ProvidePlugin({
+              process: 'process',
+            }),
           ],
-        },
-        plugins: [
-          new MonacoWebpackPlugin(),
-          new webpack.ProvidePlugin({
-            process: 'process',
-          }),
-        ],
-        resolve: {
-          fallback: {
-            fs: false,
-            path: require.resolve('path-browserify'),
+          resolve: {
+            fallback: {
+              fs: false,
+              path: require.resolve('path-browserify'),
+            },
+          },
+          node: {
+            global: true,
           },
         },
-        node: {
-          global: true,
-        },
       },
+      ...(isBaseRealmHosting && environment !== 'test'
+        ? { publicAssetURL: `/base/__boxel/` }
+        : {}),
     },
   });
 };

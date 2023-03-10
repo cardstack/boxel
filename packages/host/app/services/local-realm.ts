@@ -22,7 +22,7 @@ import {
 import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
-const { isLocalRealm, ownRealmURL } = ENV;
+const { isLocalRealm, ownRealmURL, realmsServed = [] } = ENV;
 
 export default class LocalRealm extends Service {
   #setEntryDeferred: Deferred<void> | undefined;
@@ -259,6 +259,7 @@ export default class LocalRealm extends Service {
     send(this.state.worker, {
       type: 'setDirectoryHandle',
       handle: null,
+      realmsServed,
     });
     this.state = {
       type: 'empty',
@@ -293,6 +294,7 @@ export default class LocalRealm extends Service {
     send(this.state.worker, {
       type: 'setDirectoryHandle',
       handle,
+      realmsServed,
     });
     await this.state.wait.promise;
     let adapter = new LocalRealmAdapter(handle);
@@ -321,6 +323,7 @@ export default class LocalRealm extends Service {
         send(registration.installing!, {
           type: 'setDirectoryHandle',
           handle: this.state.handle,
+          realmsServed,
         });
       }
     });

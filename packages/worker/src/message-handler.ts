@@ -11,6 +11,7 @@ import {
 
 export class MessageHandler {
   fs: FileSystemDirectoryHandle | null = null;
+  realmsServed: string[] = [];
   startingUp: Promise<void>;
   private finishedStarting!: () => void;
   private entrySetter: EntrySetter | undefined;
@@ -54,6 +55,7 @@ export class MessageHandler {
       case 'setDirectoryHandle':
         {
           this.fs = data.handle;
+          this.realmsServed = data.realmsServed;
           this.finishedStarting();
           if (this.fs) {
             send(source, {

@@ -136,6 +136,7 @@ interface Options {
 interface IndexHTMLOptions {
   hostLocalRealm?: boolean;
   localRealmURL?: string;
+  realmsServed?: string[];
 }
 
 export class Realm {
@@ -299,12 +300,15 @@ export class Realm {
           ownRealmURL: opts?.localRealmURL ?? this.url,
           resolvedBaseRealmURL,
           isLocalRealm: opts?.hostLocalRealm,
-          servedByRealm: true,
+          isBaseRealmHosting: true,
+          realmsServed: opts?.realmsServed,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       }
     );
 
+    // rewrite index.html (that already contains updated publicAssetURL) with
+    // base realm locations for all the assets
     indexHTML = indexHTML.replace(
       /(href|src)="\/base\//g,
       `$1="${resolvedBaseRealmURL}`

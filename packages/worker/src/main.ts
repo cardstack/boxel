@@ -53,7 +53,7 @@ let runnerOptsMgr = new RunnerOptionsManager();
       },
       { isLocalRealm: true }
     );
-    fetchHandler.addRealm(realm);
+    fetchHandler.addRealm(realm, messageHandler.realmsServed);
   } catch (err) {
     log.error(err);
   }

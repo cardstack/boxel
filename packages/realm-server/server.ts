@@ -89,6 +89,7 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
           await realms[0].getIndexHTML({
             hostLocalRealm: true,
             localRealmURL: `${fullRequestUrl.origin}/local/`,
+            realmsServed: realms.map((r) => r.url),
           })
         );
         res.end();
