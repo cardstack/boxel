@@ -307,13 +307,6 @@ export class Realm {
       }
     );
 
-    // rewrite index.html (that already contains updated publicAssetURL) with
-    // base realm locations for all the assets
-    // indexHTML = indexHTML.replace(
-    //   /(href|src)="\/base\//g,
-    //   `$1="/base/__boxel/`
-    // );
-
     // This setting relaxes the document.domain (by eliminating the port) so
     // that we can do cross origin scripting in order to perform test assertions
     if (this.#useTestingDomain) {
