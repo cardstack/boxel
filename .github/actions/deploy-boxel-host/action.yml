@@ -61,17 +61,16 @@ runs:
         role-to-assume: ${{ env.AWS_ROLE_ARN }}
         aws-region: us-east-1
 
-    # using an explicit build step as the deploy sometimes fails around
-    # cloudfront invalidation, as well as there is a chance that we may actually
-    # drop the ember-deploy and rely on realms hosting the app instead
-    - name: Build
+    # using an explicit build step as build to support realm hosting is actually
+    # different than the build for s3/cloudfront hosted app.
+    - name: Build host app for realm hosting
       shell: bash
       run: pnpm build:boxel-host
-    - name: Make dist zip
+    - name: Make realm hosted app dist zip
       shell: bash
       run: zip -r dist.zip ./dist
       working-directory: packages/host
-    - name: Copy dist zip to s3
+    - name: Copy host dist zip to s3
       shell: bash
       run: |
         aws s3 cp ./dist.zip "s3://${{ env.AWS_S3_BUCKET }}/boxel_dist/dist.zip" --cache-control=no-cache
