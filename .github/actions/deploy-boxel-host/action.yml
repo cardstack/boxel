@@ -69,8 +69,10 @@ runs:
       run: zip -r boxel.zip ./dist
       working-directory: packages/host
     - name: Copy files to the production website with the AWS CLI
+      shell: bash
       run: |
-        aws s3 sync ./packages/host/boxel.zip "${{ env.AWS_S3_BUCKET }}boxel_dist/boxel.zip"
+        aws s3 sync ./boxel.zip "${{ env.AWS_S3_BUCKET }}boxel_dist/boxel.zip"
+      working-directory: packages/host
 
     - name: Deploy
       shell: bash
