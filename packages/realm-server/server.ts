@@ -1,5 +1,11 @@
 import http, { IncomingMessage, ServerResponse } from 'http';
-import { Loader, Realm, baseRealm, assetDir } from '@cardstack/runtime-common';
+import {
+  Loader,
+  Realm,
+  baseRealm,
+  assetsDir,
+  testsDir,
+} from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { Readable } from 'stream';
 import { setupCloseHandler } from './node-realm';
@@ -7,7 +13,8 @@ import '@cardstack/runtime-common/externals-global';
 import log from 'loglevel';
 
 let requestLog = log.getLogger('realm:requests');
-let assetPathname = new URL(`${baseRealm.url}${assetDir}`).pathname;
+let assetPathname = new URL(`${baseRealm.url}${assetsDir}`).pathname;
+let testsPathname = new URL(`${baseRealm.url}${testsDir}`).pathname;
 let monacoLanguages = ['css', 'json', 'ts', 'html'];
 
 export interface RealmConfig {
@@ -98,7 +105,7 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
       // is always a subset of the path the service worker js is served from.
       if (req.url === '/local/worker.js' && opts?.hostLocalRealm) {
         await proxyAsset(
-          Loader.resolve(`${baseRealm.url}${assetDir}worker.js`).href,
+          Loader.resolve(`${baseRealm.url}${assetsDir}worker.js`).href,
           res
         );
         return;
@@ -128,6 +135,9 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
         });
         res.end();
         return;
+      }
+      if (req.url === testsPathname.replace(/\/$/, '')) {
+        res.writeHead(302, { Location: `${fullRequestUrl.href}/index.html` });
       }
 
       // requests for the root of the realm without a trailing slash aren't

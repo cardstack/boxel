@@ -1,10 +1,11 @@
 /* eslint-env node */
 import { ensureSymlinkSync, existsSync } from 'fs-extra';
-import { assetDir } from '@cardstack/runtime-common';
+import { assetsDir, testsDir } from '@cardstack/runtime-common';
 import { resolve, join } from 'path';
 
 const baseRealm = resolve(join(__dirname, '..', '..', 'base'));
 const dist = resolve(join(__dirname, '..', '..', 'host', 'dist'));
+const tests = resolve(join(__dirname, '..', 'dom-tests'));
 
 if (!existsSync(dist)) {
   console.error(
@@ -12,4 +13,5 @@ if (!existsSync(dist)) {
   );
   process.exit(-1);
 }
-ensureSymlinkSync(dist, join(baseRealm, assetDir.replace(/\/$/, '')));
+ensureSymlinkSync(dist, join(baseRealm, assetsDir.replace(/\/$/, '')));
+ensureSymlinkSync(tests, join(baseRealm, testsDir.replace(/\/$/, '')));

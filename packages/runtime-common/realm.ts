@@ -21,7 +21,8 @@ import {
   isNode,
   isSingleCardDocument,
   baseRealm,
-  assetDir,
+  assetsDir,
+  testsDir,
   type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -247,6 +248,7 @@ export class Realm {
         accept = acceptHeader;
       }
     }
+    let localPath = this.paths.local(url);
     if (
       accept?.includes('application/vnd.api+json') ||
       accept?.includes('text/event-stream')
@@ -261,13 +263,21 @@ export class Realm {
       return this.#jsonAPIRouter.handle(request);
     } else if (accept?.includes('application/vnd.card+source')) {
       return this.#cardSourceRouter.handle(request);
+    } else if (
+      accept?.includes('text/html') &&
+      localPath.startsWith(testsDir)
+    ) {
+      let testHandle = await this.#adapter.openFile(`${testsDir}index.html`);
+      if (!testHandle) {
+        return notFound(request);
+      }
+      return await this.serveLocalFile(testHandle);
     } else if (accept?.includes('text/html')) {
       return createResponse(await this.getIndexHTML(), {
         headers: { 'content-type': 'text/html' },
       });
     }
 
-    let localPath = this.paths.local(url);
     let maybeHandle = await this.getFileWithFallbacks(localPath);
 
     if (!maybeHandle) {
@@ -280,7 +290,7 @@ export class Realm {
       executableExtensions.some((extension) =>
         handle.path.endsWith(extension)
       ) &&
-      !localPath.startsWith(assetDir)
+      !localPath.startsWith(assetsDir)
     ) {
       return this.makeJS(await fileContentToText(handle), handle.path);
     } else {
