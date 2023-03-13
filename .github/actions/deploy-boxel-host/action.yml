@@ -74,7 +74,7 @@ runs:
     - name: Copy dist zip to s3
       shell: bash
       run: |
-        echo "pwd: $(pwd)" echo "ls: $(ls -la)" && aws s3 cp ./dist.zip "s3://${{ env.AWS_S3_BUCKET }}/boxel_dist/dist.zip"
+        aws s3 cp ./dist.zip "s3://${{ env.AWS_S3_BUCKET }}/boxel_dist/dist.zip" --cache-control=no-cache
       working-directory: packages/host
 
     - name: Deploy

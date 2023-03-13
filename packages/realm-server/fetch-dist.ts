@@ -35,24 +35,14 @@ if (!url.endsWith('/')) {
 }
 
 (async () => {
-  let indirectionUrl = `${url}fastboot-deploy-info.json`;
-
-  log.debug(`Fetching deployment info from ${indirectionUrl}`);
-  let response = await fetch(indirectionUrl);
-
-  let json = await response.json();
-
-  log.debug(`JSON response: ${JSON.stringify(json, null, 2)}`);
-  let key = json.key;
-
-  let zipUrl = `${url}${key}`;
+  let zipUrl = `${url}boxel_dist/dist.zip`;
   log.info(`Fetching zip from ${zipUrl}`);
 
   let zipResponse = await fetch(zipUrl);
   let zipBuffer = await zipResponse.arrayBuffer();
 
   let tmp = tmpDirSync();
-  let zipPath = join(tmp.name, key);
+  let zipPath = join(tmp.name, 'dist.zip');
 
   log.debug(`Writing zip to ${zipPath}`);
   writeFileSync(zipPath, Buffer.from(zipBuffer));
