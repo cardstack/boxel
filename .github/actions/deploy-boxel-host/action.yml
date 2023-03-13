@@ -61,6 +61,9 @@ runs:
         role-to-assume: ${{ env.AWS_ROLE_ARN }}
         aws-region: us-east-1
 
+    # using an explicit build step as the deploy sometimes fails around
+    # cloudfront invalidation, as well as there is a chance that we may actually
+    # drop the ember-deploy and rely on realms hosting the app instead
     - name: Build
       shell: bash
       run: pnpm build:boxel-host
