@@ -64,7 +64,7 @@ runs:
     - name: Build
       shell: bash
       run: pnpm build:boxel-host
-    - name: Zip
+    - name: Make zip
       shell: bash
       run: zip -r boxel.zip ./dist
       working-directory: packages/host
@@ -73,8 +73,6 @@ runs:
       with:
         source: './packages/host/boxel.zip'
         dest: '${{ env.AWS_S3_BUCKET }}boxel_dist/boxel.zip'
-        aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: Deploy
       shell: bash
