@@ -106,7 +106,10 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
       if (req.url === '/local/worker.js' && opts?.hostLocalRealm) {
         await proxyAsset(
           Loader.resolve(`${baseRealm.url}${assetsDir}worker.js`).href,
-          res
+          res,
+          {
+            'Service-Worker-Allowed': '/',
+          }
         );
         return;
       }
@@ -282,11 +285,18 @@ function requestIsHealthCheck(req: http.IncomingMessage) {
   );
 }
 
-async function proxyAsset(url: string, res: ServerResponse) {
+async function proxyAsset(
+  url: string,
+  res: ServerResponse,
+  headers: Record<string, string> = {}
+) {
   // TODO use Loader.fetch--that will node stream when it is local, but
   // I'm having problems getting streaming to work...
   let response = await fetch(url);
   res.setHeader('Content-Type', 'text/javascript');
+  for (let [header, value] of Object.entries(headers)) {
+    res.setHeader(header, value);
+  }
   let workerJS = await response.text();
   // TODO we should stream this
   res.write(workerJS);
