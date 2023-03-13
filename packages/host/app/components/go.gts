@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
@@ -59,13 +59,23 @@ export default class Go extends Component<Signature> {
         {{/if}}
       </div>
       {{#if this.openFile}}
-        <div
-          {{monaco
-            content=this.openFile.content
-            language=(getLangFromFileExtension this.openFile.name)
-            contentChanged=this.contentChanged
-          }}
-        >
+        <div class='editor__column'>
+          <menu class='editor__menu'>
+            <li>
+              isRunning
+              {{this.contentChanged.isRunning}}
+              {{if this.contentChanged.isRunning '⟳' '✔'}}</li>
+            <li>Last modified {{this.openFile.lastModified}}</li>
+          </menu>
+          <div
+            class='editor__container'
+            {{monaco
+              content=this.openFile.content
+              language=(getLangFromFileExtension this.openFile.name)
+              contentChanged=this.contentChanged
+            }}
+          >
+          </div>
         </div>
         <div class='main__column'>
           {{#if (isRunnable this.openFile.name)}}
@@ -98,8 +108,7 @@ export default class Go extends Component<Signature> {
     languageConfigs.map((lang) => extendMonacoLanguage(lang));
   }
 
-  @action
-  contentChanged(content: string) {
+  @tracked contentChanged = task(async (content: string) => {
     if (
       this.args.openFile?.state === 'ready' &&
       content !== this.args.openFile.content
@@ -125,7 +134,7 @@ export default class Go extends Component<Signature> {
       }
       this.args.openFile.write(content);
     }
-  }
+  });
 
   @cached
   get openFileCardJSON() {

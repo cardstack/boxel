@@ -1,7 +1,11 @@
 import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 import * as monaco from 'monaco-editor';
-import { restartableTask, timeout } from 'ember-concurrency';
+import {
+  restartableTask,
+  timeout,
+  TaskForAsyncTaskFunction,
+} from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
 
 interface Signature {
@@ -9,7 +13,10 @@ interface Signature {
     Named: {
       content: string;
       language: string;
-      contentChanged: (text: string) => void;
+      contentChanged: TaskForAsyncTaskFunction<
+        unknown,
+        (content: string) => Promise<void>
+      >;
     };
   };
 }
@@ -57,11 +64,19 @@ export default class Monaco extends Modifier<Signature> {
   }
 
   private onContentChanged = restartableTask(
-    async (contentChanged: (text: string) => void) => {
+    async (
+      contentChanged: TaskForAsyncTaskFunction<
+        unknown,
+        (content: string) => Promise<void>
+      >
+    ) => {
+      console.log('oCC start');
       await timeout(500);
+      console.log(`oCC post-timeout ${contentChanged.isRunning}`);
       if (this.model) {
         this.lastContent = this.model.getValue();
-        contentChanged(this.lastContent);
+        contentChanged.perform(this.lastContent);
+        console.log(`oCC cC.perform called ${contentChanged.isRunning}`);
       }
     }
   );
