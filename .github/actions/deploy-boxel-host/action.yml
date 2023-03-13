@@ -63,17 +63,15 @@ runs:
 
     - name: Build
       shell: bash
-      run: pnpm build:production
-      working-directory: packages/host
+      run: pnpm build:boxel-host
     - name: Zip
       shell: bash
       run: zip -r boxel.zip ./dist
       working-directory: packages/host
     - name: Copy zip to s3
       uses: prewk/s3-cp-action@v2
-      working-directory: packages/host
       with:
-        source: './boxel.zip'
+        source: './packages/host/boxel.zip'
         dest: '${{ env.AWS_S3_BUCKET }}boxel_dist/boxel.zip'
         aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
