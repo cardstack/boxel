@@ -34,7 +34,8 @@ export type FileResource =
       name: string;
       url: string;
       loading: TaskInstance<void> | null;
-      write(content: string, flushLoader?: true): void;
+      lastModified: Date;
+      write(content: string, flushLoader?: true): Promise<void>;
       close(): void;
     };
 
@@ -136,7 +137,7 @@ class _FileResource extends Resource<Args> {
   });
 
   async write(content: string, flushLoader?: true) {
-    this.doWrite.perform(content, flushLoader);
+    return this.doWrite.perform(content, flushLoader);
   }
 
   private doWrite = restartableTask(

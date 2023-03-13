@@ -27,6 +27,7 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 import InLocalRealm from './in-local-realm';
 import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
+import momentFrom from 'ember-moment/helpers/moment-from';
 
 const { ownRealmURL, localRealmEnabled } = ENV;
 
@@ -59,13 +60,23 @@ export default class Go extends Component<Signature> {
         {{/if}}
       </div>
       {{#if this.openFile}}
-        <div
-          {{monaco
-            content=this.openFile.content
-            language=(getLangFromFileExtension this.openFile.name)
-            contentChanged=this.contentChanged
-          }}
-        >
+        <div class='editor__column'>
+          <menu class='editor__menu'>
+            <li>
+              {{if this.saving '⟳ Saving…' '✔'}}</li>
+            {{#if this.openFile.lastModified}}
+              <li>Last edit was {{momentFrom this.openFile.lastModified}}</li>
+            {{/if}}
+          </menu>
+          <div
+            class='editor__container'
+            {{monaco
+              content=this.openFile.content
+              language=(getLangFromFileExtension this.openFile.name)
+              contentChanged=this.contentChanged
+            }}
+          >
+          </div>
         </div>
         <div class='main__column'>
           {{#if (isRunnable this.openFile.name)}}
@@ -92,6 +103,7 @@ export default class Go extends Component<Signature> {
   @service declare cardService: CardService;
   @tracked jsonError: string | undefined;
   @tracked card: Card | undefined;
+  @tracked saving = false;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -119,11 +131,16 @@ export default class Go extends Component<Signature> {
           let realmPath = new RealmPaths(this.cardService.defaultURL);
           let url = realmPath.fileURL(this.args.path!.replace(/\.json$/, ''));
           // note: intentionally not awaiting this promise, we may want to keep track of it...
-          this.cardService.saveCardDocument(json, url);
+          this.saving = true;
+          this.cardService
+            .saveCardDocument(json, url)
+            .then(() => (this.saving = false));
           return;
         }
       }
-      this.args.openFile.write(content);
+
+      this.saving = true;
+      this.args.openFile.write(content).then(() => (this.saving = false));
     }
   }
 
