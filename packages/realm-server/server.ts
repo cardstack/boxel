@@ -138,6 +138,8 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
       }
       if (req.url === testsPathname.replace(/\/$/, '')) {
         res.writeHead(302, { Location: `${fullRequestUrl.href}/index.html` });
+        res.end();
+        return;
       }
 
       // requests for the root of the realm without a trailing slash aren't
