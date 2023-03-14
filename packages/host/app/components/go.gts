@@ -65,7 +65,8 @@ export default class Go extends Component<Signature> {
             <li>
               {{if this.saving '⟳ Saving…' '✔'}}</li>
             {{#if this.openFile.lastModified}}
-              <li>Last edit was {{momentFrom this.openFile.lastModified}}</li>
+              <li data-test-last-edit>Last edit was
+                {{momentFrom this.openFile.lastModified}}</li>
             {{/if}}
           </menu>
           <div
