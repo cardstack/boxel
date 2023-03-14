@@ -28,7 +28,7 @@ const BooleanCardString = JSON.stringify({
 module('Integration | Component | go', function (hooks) {
   setupRenderingTest(hooks);
 
-  test('it renders', async function (assert) {
+  test('it shows last modified date', async function (assert) {
     let lastModified = new Date(2020, 4, 5).toISOString();
 
     let path = 'boolean-field.json';
