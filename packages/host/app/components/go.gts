@@ -71,6 +71,7 @@ export default class Go extends Component<Signature> {
           </menu>
           <div
             class='editor__container'
+            data-test-editor
             {{monaco
               content=this.openFile.content
               language=(getLangFromFileExtension this.openFile.name)

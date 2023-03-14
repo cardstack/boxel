@@ -41,5 +41,11 @@ module('Integration | Component | go', function (hooks) {
     assert
       .dom('[data-test-last-edit]')
       .hasText(`Last edit was ${moment(lastModified).fromNow()}`);
+
+    assert
+      .dom('[data-test-editor]')
+      .containsText('export')
+      .containsText('function')
+      .containsText('c()');
   });
 });
