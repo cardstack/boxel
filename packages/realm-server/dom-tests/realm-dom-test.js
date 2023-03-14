@@ -58,99 +58,102 @@ function resetTestContainer() {
   iframes.forEach((iframe) => iframe.remove());
 }
 
-QUnit.module('realm DOM tests', function (hooks) {
-  hooks.beforeEach(resetTestContainer);
-  hooks.afterEach(resetTestContainer);
+QUnit.module(
+  'realm DOM tests (with base realm hosted assets)',
+  function (hooks) {
+    hooks.beforeEach(resetTestContainer);
+    hooks.afterEach(resetTestContainer);
 
-  test('renders app', async function (assert) {
-    await boot(testRealmURL, 'a');
-    assert.strictEqual(testDocument().location.href, `${testRealmURL}/`);
-    let p = querySelector('p');
-    assert.ok(p, '<p> element exists');
-    assert.equal(
-      cleanWhiteSpace(p.textContent),
-      'The card code editor has moved to /code',
-      'the index route is displayed'
-    );
-  });
+    test('renders app', async function (assert) {
+      await boot(testRealmURL, 'a');
+      assert.strictEqual(testDocument().location.href, `${testRealmURL}/`);
+      let p = querySelector('p');
+      assert.ok(p, '<p> element exists');
+      assert.equal(
+        cleanWhiteSpace(p.textContent),
+        'The card code editor has moved to /code',
+        'the index route is displayed'
+      );
+    });
 
-  test('renders file tree', async function (assert) {
-    await boot(`${testRealmURL}/code`, '.directory-level');
-    assert.strictEqual(testDocument().location.href, `${testRealmURL}/code`);
-    let nav = querySelector('.main nav');
-    assert.ok(nav, '<nav> element exists');
-    let dirContents = nav.textContent;
-    assert.ok(dirContents.includes('a.js'));
-    assert.ok(dirContents.includes('b.js'));
-    assert.ok(dirContents.includes('c.js'));
-    assert.ok(dirContents.includes('card-ref-test.gts'));
-    assert.ok(dirContents.includes('cycle-one.js'));
-    assert.ok(dirContents.includes('cycle-two.js'));
-    assert.ok(dirContents.includes('d.js'));
-    assert.ok(dirContents.includes('dir/'));
-    assert.ok(dirContents.includes('e.js'));
-    assert.ok(dirContents.includes('person-1.json'));
-    assert.ok(dirContents.includes('person-2.json'));
-    assert.ok(dirContents.includes('person.gts'));
-    assert.ok(dirContents.includes('unused-card.gts'));
-  });
+    test('renders file tree', async function (assert) {
+      await boot(`${testRealmURL}/code`, '.directory-level');
+      assert.strictEqual(testDocument().location.href, `${testRealmURL}/code`);
+      let nav = querySelector('.main nav');
+      assert.ok(nav, '<nav> element exists');
+      let dirContents = nav.textContent;
+      assert.ok(dirContents.includes('a.js'));
+      assert.ok(dirContents.includes('b.js'));
+      assert.ok(dirContents.includes('c.js'));
+      assert.ok(dirContents.includes('card-ref-test.gts'));
+      assert.ok(dirContents.includes('cycle-one.js'));
+      assert.ok(dirContents.includes('cycle-two.js'));
+      assert.ok(dirContents.includes('d.js'));
+      assert.ok(dirContents.includes('dir/'));
+      assert.ok(dirContents.includes('e.js'));
+      assert.ok(dirContents.includes('person-1.json'));
+      assert.ok(dirContents.includes('person-2.json'));
+      assert.ok(dirContents.includes('person.gts'));
+      assert.ok(dirContents.includes('unused-card.gts'));
+    });
 
-  test('renders card source', async function (assert) {
-    await boot(`${testRealmURL}/code?path=person.gts`, '[data-test-card-id]');
-    assert.strictEqual(
-      testDocument().location.href,
-      `${testRealmURL}/code?path=person.gts`
-    );
-    let cardId = querySelector('[data-test-card-id');
-    assert.ok(cardId, 'card ID element exists');
-    assert.strictEqual(
-      cleanWhiteSpace(cardId.textContent),
-      `Card ID: ${testRealmURL}/person/Person`,
-      'the card id is correct'
-    );
+    test('renders card source', async function (assert) {
+      await boot(`${testRealmURL}/code?path=person.gts`, '[data-test-card-id]');
+      assert.strictEqual(
+        testDocument().location.href,
+        `${testRealmURL}/code?path=person.gts`
+      );
+      let cardId = querySelector('[data-test-card-id');
+      assert.ok(cardId, 'card ID element exists');
+      assert.strictEqual(
+        cleanWhiteSpace(cardId.textContent),
+        `Card ID: ${testRealmURL}/person/Person`,
+        'the card id is correct'
+      );
 
-    let fields = [...querySelectorAll('[data-test-field]')];
-    assert.strictEqual(fields.length, 1, 'number of fields is correct');
-    assert.strictEqual(
-      cleanWhiteSpace(fields[0].textContent),
-      `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
-      'field is correct'
-    );
-  });
+      let fields = [...querySelectorAll('[data-test-field]')];
+      assert.strictEqual(fields.length, 1, 'number of fields is correct');
+      assert.strictEqual(
+        cleanWhiteSpace(fields[0].textContent),
+        `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
+        'field is correct'
+      );
+    });
 
-  test('renders card instance', async function (assert) {
-    await boot(`${testRealmURL}/code?path=person-2.json`, '[data-test-card]');
-    assert.strictEqual(
-      testDocument().location.href,
-      `${testRealmURL}/code?path=person-2.json`
-    );
-    let card = querySelector('[data-test-card]');
-    assert.strictEqual(
-      cleanWhiteSpace(card.textContent),
-      'Jackie',
-      'the card is rendered correctly'
-    );
-  });
+    test('renders card instance', async function (assert) {
+      await boot(`${testRealmURL}/code?path=person-2.json`, '[data-test-card]');
+      assert.strictEqual(
+        testDocument().location.href,
+        `${testRealmURL}/code?path=person-2.json`
+      );
+      let card = querySelector('[data-test-card]');
+      assert.strictEqual(
+        cleanWhiteSpace(card.textContent),
+        'Jackie',
+        'the card is rendered correctly'
+      );
+    });
 
-  test('can change routes', async function (assert) {
-    await boot(`${testRealmURL}/code`, '.directory-level');
-    let files = querySelectorAll('.main nav .file');
-    let instance = [...files].find(
-      (file) => cleanWhiteSpace(file.textContent) === 'person-1.json'
-    );
-    assert.ok(instance, 'card instance file element exists');
-    instance.click();
+    test('can change routes', async function (assert) {
+      await boot(`${testRealmURL}/code`, '.directory-level');
+      let files = querySelectorAll('.main nav .file');
+      let instance = [...files].find(
+        (file) => cleanWhiteSpace(file.textContent) === 'person-1.json'
+      );
+      assert.ok(instance, 'card instance file element exists');
+      instance.click();
 
-    await waitFor('[data-test-card]');
-    assert.strictEqual(
-      testDocument().location.href,
-      `${testRealmURL}/code?path=person-1.json`
-    );
-    let card = querySelector('[data-test-card]');
-    assert.strictEqual(
-      cleanWhiteSpace(card.textContent),
-      'Mango',
-      'the card is rendered correctly'
-    );
-  });
-});
+      await waitFor('[data-test-card]');
+      assert.strictEqual(
+        testDocument().location.href,
+        `${testRealmURL}/code?path=person-1.json`
+      );
+      let card = querySelector('[data-test-card]');
+      assert.strictEqual(
+        cleanWhiteSpace(card.textContent),
+        'Mango',
+        'the card is rendered correctly'
+      );
+    });
+  }
+);

@@ -1,22 +1,25 @@
 import http, { IncomingMessage, ServerResponse } from 'http';
-import { Loader, Realm } from '@cardstack/runtime-common';
+import { Loader, Realm, baseRealm, assetsDir } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { Readable } from 'stream';
 import { setupCloseHandler } from './node-realm';
-import { existsSync, readFileSync } from 'fs-extra';
-import { join, resolve } from 'path';
-import mime from 'mime-types';
 import '@cardstack/runtime-common/externals-global';
 import log from 'loglevel';
 
 let requestLog = log.getLogger('realm:requests');
+let assetPathname = new URL(`${baseRealm.url}${assetsDir}`).pathname;
+let monacoLanguages = ['css', 'json', 'ts', 'html'];
 
 export interface RealmConfig {
   realmURL: string;
   path: string;
 }
 
-export function createRealmServer(realms: Realm[], distPath: string) {
+interface Options {
+  hostLocalRealm?: boolean;
+}
+// TODO refactor this with middleware--perhaps use KOA
+export function createRealmServer(realms: Realm[], opts?: Options) {
   detectRealmCollision(realms);
 
   let server = http.createServer(async (req, res) => {
@@ -50,23 +53,20 @@ export function createRealmServer(realms: Realm[], distPath: string) {
         return;
       }
 
-      let maybeAssetPath = resolve(join(distPath, req.url));
-      if (
-        maybeAssetPath === distPath &&
-        realms.length > 0 &&
-        req.headers.accept?.includes('text/html')
-      ) {
-        // this would only be called when there is a single realm on this
-        // server, in which case just use the first realm
-        res.setHeader('Content-Type', 'text/html');
-        // note that a redirect won't work here since we need to rewrite the index.html
-        res.write(await realms[0].getIndexHTML());
-        res.end();
-        return;
-      }
-      if (existsSync(maybeAssetPath) && maybeAssetPath !== distPath) {
-        assetResponse(maybeAssetPath, res);
-        return;
+      if (req.url === '/' && realms.length > 0) {
+        if (req.headers.accept?.includes('text/html')) {
+          // this would only be called when there is a single realm on this
+          // server, in which case just use the first realm
+          res.setHeader('Content-Type', 'text/html');
+          res.write(await realms[0].getIndexHTML());
+          res.end();
+          return;
+        } else if (req.method === 'HEAD') {
+          // necessary for liveness checks
+          res.writeHead(200, { server: `@cardstack/host` });
+          res.end();
+          return;
+        }
       }
 
       let protocol =
@@ -74,6 +74,63 @@ export function createRealmServer(realms: Realm[], distPath: string) {
       let fullRequestUrl = new URL(
         `${protocol}://${req.headers.host}${req.url}`
       );
+      if (
+        (req.url === '/local' || req.url.startsWith('/local/')) &&
+        opts?.hostLocalRealm &&
+        realms.length > 0 &&
+        req.headers.accept?.includes('text/html')
+      ) {
+        res.setHeader('Content-Type', 'text/html');
+        res.write(
+          await realms[0].getIndexHTML({
+            hostLocalRealm: true,
+            localRealmURL: `${fullRequestUrl.origin}/local/`,
+            realmsServed: realms.map((r) => r.url),
+          })
+        );
+        res.end();
+        return;
+      }
+      // this one is unique in that it is requested in a manner that is relative
+      // to the URL in the address bar as opposed to the absolute asset
+      // location. worker can't be served out of /assets because that would
+      // adversely effect the service worker scope--the service worker scope
+      // is always a subset of the path the service worker js is served from.
+      if (req.url === '/local/worker.js' && opts?.hostLocalRealm) {
+        await proxyAsset(
+          Loader.resolve(`${baseRealm.url}${assetsDir}worker.js`).href,
+          res,
+          {
+            'Service-Worker-Allowed': '/',
+          }
+        );
+        return;
+      }
+      // For requests that are base realm assets and no base realm is running
+      // in this server then we should redirect to the base realm--except for
+      // web-worker scripts whose origin is sensitive to this server. in that
+      // case we should proxy those specific scripts so we don't run afoul of
+      // cross origin issues
+      if (
+        req.url.startsWith(assetPathname) &&
+        !realms.find((r) => r.url === baseRealm.url)
+      ) {
+        let redirectURL = Loader.resolve(new URL(req.url, baseRealm.url)).href;
+        if (
+          [
+            ...monacoLanguages.map((l) => `${l}.worker.js`),
+            'editor.worker.js',
+          ].includes(req.url.slice(assetPathname.length))
+        ) {
+          await proxyAsset(redirectURL, res);
+          return;
+        }
+        res.writeHead(302, {
+          Location: redirectURL,
+        });
+        res.end();
+        return;
+      }
       // requests for the root of the realm without a trailing slash aren't
       // technically inside the realm (as the realm includes the trailing '/').
       // So issue a redirect in those scenarios.
@@ -108,17 +165,6 @@ export function createRealmServer(realms: Realm[], distPath: string) {
         res.statusCode = 404;
         res.statusMessage = 'Not Found';
         res.end();
-        return;
-      }
-
-      // this one is unique in that it is requested in a manner that is relative
-      // to the URL in the address bar as opposed to the absolute asset
-      // location. worker can't be served out of /assets because that would
-      // adversely effect the service worker scope--the service worker scope
-      // is always a subset of the path the service worker js is served from.
-      if (realm.paths.local(reversedResolution) === 'worker.js') {
-        res.setHeader('Service-Worker-Allowed', '/');
-        assetResponse(join(distPath, 'worker.js'), res);
         return;
       }
 
@@ -225,14 +271,20 @@ function requestIsHealthCheck(req: http.IncomingMessage) {
   );
 }
 
-function assetResponse(
-  assetPath: string,
-  res: http.ServerResponse<http.IncomingMessage>
+async function proxyAsset(
+  url: string,
+  res: ServerResponse,
+  headers: Record<string, string> = {}
 ) {
-  let mimeType = mime.lookup(assetPath);
-  res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+  // TODO use Loader.fetch--that will node stream when it is local, but
+  // I'm having problems getting streaming to work...
+  let response = await fetch(url);
+  res.setHeader('Content-Type', 'text/javascript');
+  for (let [header, value] of Object.entries(headers)) {
+    res.setHeader(header, value);
+  }
+  let workerJS = await response.text();
   // TODO we should stream this
-  res.write(readFileSync(assetPath));
+  res.write(workerJS);
   res.end();
-  return;
 }

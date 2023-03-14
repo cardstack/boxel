@@ -39,5 +39,6 @@
       ]
     }
   },
-  "include": ["../base/**/*", "src/**/*", "types/**/*"]
+  "include": ["../base/**/*", "src/**/*", "types/**/*"],
+  "exclude": ["../base/__boxel/**/*"]
 }

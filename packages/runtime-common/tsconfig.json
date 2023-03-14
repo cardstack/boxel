@@ -32,5 +32,6 @@
     "transform": {
       "include": ["../base/**", "../boxel-ui/addon/**"]
     }
-  }
+  },
+  "exclude": ["../base/__boxel/**/*"]
 }

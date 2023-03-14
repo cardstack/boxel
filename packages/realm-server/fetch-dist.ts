@@ -1,7 +1,9 @@
 import yargs from 'yargs';
 import log, { LogLevelNames } from 'loglevel';
-import fs from 'fs';
+import { writeFileSync, moveSync, ensureDirSync } from 'fs-extra';
 import { execSync } from 'child_process';
+import { dirSync as tmpDirSync } from 'tmp';
+import { join, resolve } from 'path';
 
 let { path, url, logLevel } = yargs(process.argv.slice(2))
   .usage('Fetch host Fastboot assets')
@@ -14,7 +16,7 @@ let { path, url, logLevel } = yargs(process.argv.slice(2))
     path: {
       description: 'Path to unzip assets into',
       type: 'string',
-      default: './',
+      default: './dist',
     },
     logLevel: {
       description: 'how detailed log output should be',
@@ -26,44 +28,35 @@ let { path, url, logLevel } = yargs(process.argv.slice(2))
 
 log.setLevel(logLevel as LogLevelNames);
 log.info(`Set fetch-dist log level to ${logLevel}`);
-
-if (!path.endsWith('/')) {
-  path = `${path}/`;
-}
+path = resolve(path);
 
 if (!url.endsWith('/')) {
   url = `${url}/`;
 }
 
 (async () => {
-  let indirectionUrl = `${url}fastboot-deploy-info.json`;
-
-  log.debug(`Fetching deployment info from ${indirectionUrl}`);
-  let response = await fetch(indirectionUrl);
-
-  let json = await response.json();
-
-  log.debug(`JSON response: ${JSON.stringify(json, null, 2)}`);
-  let key = json.key;
-
-  let zipUrl = `${url}${key}`;
+  let zipUrl = `${url}boxel_dist/dist.zip`;
   log.info(`Fetching zip from ${zipUrl}`);
 
   let zipResponse = await fetch(zipUrl);
   let zipBuffer = await zipResponse.arrayBuffer();
 
-  process.chdir(path);
+  let tmp = tmpDirSync();
+  let zipPath = join(tmp.name, 'dist.zip');
 
-  let pathToZip = key;
-
-  log.debug(`Writing zip to ${pathToZip}`);
-  fs.writeFileSync(pathToZip, Buffer.from(zipBuffer));
+  log.debug(`Writing zip to ${zipPath}`);
+  writeFileSync(zipPath, Buffer.from(zipBuffer));
 
   log.debug(`Extracting zip`);
-  execSync(`unzip -q ${pathToZip}`);
+  execSync(`unzip -q ${zipPath} -d ${tmp.name}`);
 
-  log.debug(`Deleting zip`);
-  fs.rmSync(pathToZip);
+  // extract and move are separate operations such that
+  // the dist appears atomically in the file system
+  let tmpDist = join(tmp.name, 'dist');
+  log.debug(`Moving zip contents from ${tmpDist} to ${path}`);
+
+  ensureDirSync(path);
+  moveSync(tmpDist, path, { overwrite: true });
 })().catch((e: any) => {
   log.error(`Unexpected error fetching dist, stopping`, e);
   process.exit(1);

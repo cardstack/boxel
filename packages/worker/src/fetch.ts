@@ -5,11 +5,15 @@ import log from 'loglevel';
 
 export class FetchHandler {
   private realm: Realm | undefined;
+  private otherRealmsServed: string[] | undefined;
 
   constructor(private livenessWatcher?: { alive: boolean }) {}
 
-  addRealm(realm: Realm) {
+  addRealm(realm: Realm, otherRealmsServed: string[]) {
     this.realm = realm;
+    this.otherRealmsServed = otherRealmsServed.map((u) =>
+      Loader.resolve(u).href.replace(/\/$/, '')
+    );
   }
 
   async handleFetch(request: Request): Promise<Response> {
@@ -43,6 +47,19 @@ export class FetchHandler {
         return await fetch(request);
       }
       return response;
+    }
+
+    // this is to work around an issue where the loader running within the
+    // service worker does not seem to be able to deal with a redirect
+    // correctly. When a redirect is issued for visiting a realm without a
+    // trailing slash, the service worker will cancel the request and the
+    // browser will show an "page can't load" error (the network logs show both
+    // a network error and a successful redirect request for the url in
+    // question). This happens when you are using the local realm and you decide
+    // to switch to a hosted realm on the same server, the very first request
+    // for the hosted realm will be handled here in the service worker.
+    if (this.otherRealmsServed?.includes(request.url)) {
+      return await fetch(request);
     }
 
     return await Loader.fetch(request);

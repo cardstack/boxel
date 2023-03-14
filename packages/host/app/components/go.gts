@@ -29,7 +29,7 @@ import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
 
-const { ownRealmURL, localRealmEnabled } = ENV;
+const { ownRealmURL, isLocalRealm } = ENV;
 
 interface Signature {
   Args: {
@@ -43,7 +43,7 @@ export default class Go extends Component<Signature> {
   <template>
     <div class='main'>
       <div class='main__column'>
-        {{#if localRealmEnabled}}
+        {{#if isLocalRealm}}
           <InLocalRealm as |url|>
             <FileTree
               @url={{url}}

@@ -77,7 +77,7 @@ module('Realm Server', function (hooks) {
 
     let testRealm = createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
-    server = createRealmServer([testRealm], distDir);
+    server = createRealmServer([testRealm]);
     server.listen(testRealmURL.port);
     request = supertest(server);
   });
@@ -484,6 +484,10 @@ module('Realm Server serving from root', function (hooks) {
     shimExternals();
     Loader.addURLMapping(
       new URL(baseRealm.url),
+      // Note that in order to really support a base realm that is served from
+      // the server's origin this will require an update of the host app's
+      // ember-cli-build.js, as that has been updated so that the chunk.js files
+      // are served from the base realm's /base path.
       new URL('http://localhost:4203/')
     );
     dir = dirSync();
@@ -491,7 +495,7 @@ module('Realm Server serving from root', function (hooks) {
 
     let testRealm = createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
-    server = createRealmServer([testRealm], distDir);
+    server = createRealmServer([testRealm]);
     server.listen(testRealmURL.port);
     request = supertest(server);
   });
