@@ -1,11 +1,5 @@
 import http, { IncomingMessage, ServerResponse } from 'http';
-import {
-  Loader,
-  Realm,
-  baseRealm,
-  assetsDir,
-  testsDir,
-} from '@cardstack/runtime-common';
+import { Loader, Realm, baseRealm, assetsDir } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { Readable } from 'stream';
 import { setupCloseHandler } from './node-realm';
@@ -14,7 +8,6 @@ import log from 'loglevel';
 
 let requestLog = log.getLogger('realm:requests');
 let assetPathname = new URL(`${baseRealm.url}${assetsDir}`).pathname;
-let testsPathname = new URL(`${baseRealm.url}${testsDir}`).pathname;
 let monacoLanguages = ['css', 'json', 'ts', 'html'];
 
 export interface RealmConfig {
@@ -113,7 +106,6 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
         );
         return;
       }
-
       // For requests that are base realm assets and no base realm is running
       // in this server then we should redirect to the base realm--except for
       // web-worker scripts whose origin is sensitive to this server. in that
@@ -139,12 +131,6 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
         res.end();
         return;
       }
-      if (req.url === testsPathname.replace(/\/$/, '')) {
-        res.writeHead(302, { Location: `${fullRequestUrl.href}/index.html` });
-        res.end();
-        return;
-      }
-
       // requests for the root of the realm without a trailing slash aren't
       // technically inside the realm (as the realm includes the trailing '/').
       // So issue a redirect in those scenarios.

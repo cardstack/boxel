@@ -22,7 +22,6 @@ import {
   isSingleCardDocument,
   baseRealm,
   assetsDir,
-  testsDir,
   type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -263,15 +262,6 @@ export class Realm {
       return this.#jsonAPIRouter.handle(request);
     } else if (accept?.includes('application/vnd.card+source')) {
       return this.#cardSourceRouter.handle(request);
-    } else if (
-      accept?.includes('text/html') &&
-      localPath.startsWith(testsDir)
-    ) {
-      let testHandle = await this.#adapter.openFile(`${testsDir}index.html`);
-      if (!testHandle) {
-        return notFound(request);
-      }
-      return await this.serveLocalFile(testHandle);
     } else if (accept?.includes('text/html')) {
       return createResponse(await this.getIndexHTML(), {
         headers: { 'content-type': 'text/html' },
