@@ -18,6 +18,7 @@ let {
   logLevel,
   requestLogLevel,
   useTestingDomain,
+  hostLocalRealm,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -50,6 +51,11 @@ let {
       description:
         'relaxes document domain rules so that cross origin scripting can be used for test assertions across iframe boundaries',
       type: 'boolean',
+    },
+    hostLocalRealm: {
+      description: `Provide a local realm hosted at /local`,
+      type: 'boolean',
+      default: false,
     },
     logLevel: {
       description: 'how detailed log output should be',
@@ -120,7 +126,7 @@ for (let [i, path] of paths.entries()) {
   );
 }
 
-let server = createRealmServer(realms, distPath);
+let server = createRealmServer(realms, { hostLocalRealm });
 server.listen(port);
 log.info(`Realm server listening on port ${port}:`);
 let additionalMappings = hrefs.slice(paths.length);

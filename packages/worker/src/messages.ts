@@ -20,6 +20,7 @@ export interface DirectoryHandleResponse {
 export interface SetDirectoryHandle {
   type: 'setDirectoryHandle';
   handle: FileSystemDirectoryHandle | null;
+  realmsServed: string[];
 }
 
 export interface SetEntry {
@@ -91,7 +92,9 @@ export function isClientMessage(message: unknown): message is ClientMessage {
       return (
         'handle' in message &&
         ((message as any).handle === null ||
-          (message as any).handle instanceof FileSystemDirectoryHandle)
+          (message as any).handle instanceof FileSystemDirectoryHandle) &&
+        'realmsServed' in message &&
+        Array.isArray(message.realmsServed)
       );
     case 'setEntry':
       return (
