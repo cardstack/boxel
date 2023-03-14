@@ -34,7 +34,7 @@ export type FileResource =
       name: string;
       url: string;
       loading: TaskInstance<void> | null;
-      lastModified: Date;
+      lastModified: string;
       write(content: string, flushLoader?: true): Promise<void>;
       close(): void;
     };

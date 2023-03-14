@@ -29,7 +29,7 @@ module('Integration | Component | go', function (hooks) {
   setupRenderingTest(hooks);
 
   test('it renders', async function (assert) {
-    let lastModified = new Date(2020, 4, 5);
+    let lastModified = new Date(2020, 4, 5).toISOString();
 
     let path = 'boolean-field.json';
     let openFile: FileResource = {
