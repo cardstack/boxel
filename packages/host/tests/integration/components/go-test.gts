@@ -5,25 +5,11 @@ import Go from '@cardstack/host/components/go';
 import type { FileResource } from '@cardstack/host/resources/file';
 import moment from 'moment';
 
-const BooleanCardString = JSON.stringify({
-  data: {
-    type: 'card',
-    attributes: {
-      title: 'Boolean Field',
-      description: 'A field that captures boolean values (true/false)',
-      ref: {
-        module: 'https://cardstack.com/base/boolean',
-        name: 'default',
-      },
-    },
-    meta: {
-      adoptsFrom: {
-        module: 'https://cardstack.com/base/catalog-entry',
-        name: 'CatalogEntry',
-      },
-    },
-  },
-});
+const BooleanCardString = `
+export function c() {
+  return 'c';
+}
+`;
 
 module('Integration | Component | go', function (hooks) {
   setupRenderingTest(hooks);
