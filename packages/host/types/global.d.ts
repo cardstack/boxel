@@ -32,6 +32,10 @@ declare module '@glint/environment-ember-loose/registry' {
   }
 }
 
+declare module 'ember-moment/helpers/moment-from' {
+  export default function momentFrom(string: string): string;
+}
+
 // runtime-common has its own global type declaration that we need to
 // incorporate
 import '../../runtime-common/global';
