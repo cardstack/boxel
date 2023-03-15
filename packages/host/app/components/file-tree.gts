@@ -1,13 +1,17 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
+import { restartableTask } from 'ember-concurrency';
 import type RouterService from '@ember/routing/router-service';
+import type LoaderService from '../services/loader-service';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import {
   chooseCard,
   catalogEntryRef,
   createNewCard,
+  baseRealm,
 } from '@cardstack/runtime-common';
 import Directory from './directory';
 
@@ -39,9 +43,14 @@ export default class FileTree extends Component<Args> {
   </template>
 
   @service declare router: RouterService;
+  @service declare loaderService: LoaderService;
 
   @action
   async createNew() {
+    this.createNewCard.perform();
+  }
+
+  private createNewCard = restartableTask(async () => {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
@@ -51,6 +60,22 @@ export default class FileTree extends Component<Args> {
     if (!card) {
       return;
     }
-    return await createNewCard(card.ref);
-  }
+    let newCard = await createNewCard(card.ref);
+    if (!newCard) {
+      throw new Error(
+        `bug: could not create new card from catalog entry ${JSON.stringify(
+          catalogEntryRef
+        )}`
+      );
+    }
+    let api = await this.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`
+    );
+    let relativeTo = newCard[api.relativeTo];
+    if (!relativeTo) {
+      throw new Error(`bug: should never get here`);
+    }
+    let path = `${newCard.id.slice(relativeTo.href.length)}.json`;
+    this.router.transitionTo('code', { queryParams: { path } });
+  });
 }

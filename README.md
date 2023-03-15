@@ -65,9 +65,11 @@ There are currently 4 test suites:
 
 ### Host
 
-To run the `packages/host/` workspace tests start the following servers: 2. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards 3. `pnpm start` in the `packages/host/` workspace to serve ember
+To run the `packages/host/` workspace tests start the following servers: 2. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards 3. `pnpm start:tests` in the `packages/host/` workspace to serve ember
 
-The tests are available at `http://localhost:4200/tests`
+The tests are available at `http://localhost:7357`
+
+Note that the host app uses a wildcard route to take over all the routes, so the standard `http://localhost:4200/tests` won't actually run the tests
 
 ### Realm Server
 

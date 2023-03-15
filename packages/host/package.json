@@ -23,6 +23,7 @@
     "lint:glint": "glint",
     "start": "FASTBOOT_DISABLED=true HOST_LOCAL_REALM=true BASE_REALM_HOSTING_DISABLED=true ember serve",
     "start:build": "FASTBOOT_DISABLED=true ember build --watch",
+    "start:tests": "BASE_REALM_HOSTING_DISABLED=true ember test --serve",
     "test": "npm-run-all lint test:*",
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/test/hassan?acceptHeader=application%2Fvnd.api%2Bjson' 'ember-test-pre-built'",
     "ember-test-pre-built": "ember test --path ./dist",
