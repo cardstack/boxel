@@ -72,7 +72,7 @@ function codeEqual(
   this: Assert,
   actual: string,
   expected: string,
-  message = 'code is not equal.'
+  message = 'code should be equal'
 ) {
   let parsedActual = standardize(actual)!;
   let parsedExpected = standardize(expected)!;
