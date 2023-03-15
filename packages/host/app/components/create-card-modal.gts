@@ -61,28 +61,33 @@ export default class CreateCardModal extends Component {
     });
   }
 
-  async create<T extends Card>(ref: CardRef): Promise<undefined | T> {
+  async create<T extends Card>(
+    ref: CardRef,
+    relativeTo: URL | undefined
+  ): Promise<undefined | T> {
     this.incrementZIndex();
-    return (await this._create.perform(ref)) as T | undefined;
+    return (await this._create.perform(ref, relativeTo)) as T | undefined;
   }
 
-  private _create = enqueueTask(async <T extends Card>(ref: CardRef) => {
-    let doc = { data: { meta: { adoptsFrom: ref } } };
-    this.currentRequest = {
-      card: await this.cardService.createFromSerialized(
-        doc.data,
-        doc,
-        this.cardService.defaultURL
-      ),
-      deferred: new Deferred(),
-    };
-    let card = await this.currentRequest.deferred.promise;
-    if (card) {
-      return card as T;
-    } else {
-      return undefined;
+  private _create = enqueueTask(
+    async <T extends Card>(ref: CardRef, relativeTo: URL | undefined) => {
+      let doc = { data: { meta: { adoptsFrom: ref } } };
+      this.currentRequest = {
+        card: await this.cardService.createFromSerialized(
+          doc.data,
+          doc,
+          relativeTo ?? this.cardService.defaultURL
+        ),
+        deferred: new Deferred(),
+      };
+      let card = await this.currentRequest.deferred.promise;
+      if (card) {
+        return card as T;
+      } else {
+        return undefined;
+      }
     }
-  });
+  );
 
   @action save(card?: Card): void {
     if (this.currentRequest) {
