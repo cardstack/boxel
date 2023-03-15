@@ -8,16 +8,11 @@ import { baseRealm } from '@cardstack/runtime-common';
 import {
   TestRealmAdapter,
   TestRealm,
+  testRealmURL,
   setupMockLocalRealm,
 } from '../../helpers';
-import type { FileResource } from '@cardstack/host/resources/file';
+import { getFileResource } from './schema-test';
 import moment from 'moment';
-
-const BooleanCardString = `
-export function c() {
-  return 'c';
-}
-`;
 
 module('Integration | Component | go', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -37,21 +32,28 @@ module('Integration | Component | go', function (hooks) {
   });
 
   test('it shows last modified date', async function (assert) {
+    await realm.write(
+      'person.gts',
+      `
+      import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field name = contains(StringCard);
+        @field friend = linksTo(() => Person);
+      }
+    `
+    );
+
     let lastModified = new Date(2020, 4, 5).toISOString();
 
     let path = 'boolean-field.json';
-    let openFile: FileResource = {
-      state: 'ready',
-      content: BooleanCardString,
-      name: path,
+
+    let openFile = await getFileResource(this, adapter, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
       lastModified,
-      loading: null,
-      url: 'https://cardstack.com/base/boolean-field',
-      async write(content: string) {
-        console.log('wrote', content);
-      },
-      close() {},
-    };
+    });
 
     let openDirs: string[] = [];
 
@@ -67,7 +69,7 @@ module('Integration | Component | go', function (hooks) {
     assert
       .dom('[data-test-editor]')
       .containsText('export')
-      .containsText('function')
-      .containsText('c()');
+      .containsText('class')
+      .containsText('Person');
   });
 });

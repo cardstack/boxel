@@ -823,10 +823,10 @@ module('Integration | schema', function (hooks) {
   });
 });
 
-async function getFileResource(
+export async function getFileResource(
   context: TestContext,
   adapter: TestRealmAdapter,
-  ref: { name: string; module: string }
+  ref: { name: string; module: string; lastModified?: string }
 ): Promise<FileResource> {
   let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
   let paths = new RealmPaths(testRealmURL);
@@ -837,7 +837,7 @@ async function getFileResource(
   return file(context, () => ({
     relativePath,
     realmURL: paths.url,
-    lastModified: undefined,
+    lastModified: ref.lastModified,
     content,
   }));
 }
