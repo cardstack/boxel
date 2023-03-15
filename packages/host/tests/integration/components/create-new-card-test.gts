@@ -130,7 +130,7 @@ module('Integration | create-new-card', function (hooks) {
       if (!card) {
         return;
       }
-      return await createNewCard(card.ref);
+      return await createNewCard(card.ref, new URL(card.id));
     }
     await renderComponent(
       class TestDriver extends GlimmerComponent {
