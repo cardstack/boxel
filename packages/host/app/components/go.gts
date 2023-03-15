@@ -136,13 +136,16 @@ export default class Go extends Component<Signature> {
           this.saving = true;
           this.cardService
             .saveCardDocument(json, url)
-            .then(() => (this.saving = false));
+            .finally(() => (this.saving = false));
           return;
         }
       }
 
       this.saving = true;
-      this.args.openFile.write(content).then(() => (this.saving = false));
+      this.args.openFile
+        .write(content)
+        .catch(() => {})
+        .finally(() => (this.saving = false));
     }
   }
 
