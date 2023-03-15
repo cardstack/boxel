@@ -116,11 +116,15 @@ export async function chooseCard<T extends Card>(
 }
 
 export interface CardCreator {
-  create<T extends Card>(ref: CardRef): Promise<undefined | T>;
+  create<T extends Card>(
+    ref: CardRef,
+    relativeTo: URL | undefined
+  ): Promise<undefined | T>;
 }
 
 export async function createNewCard<T extends Card>(
-  ref: CardRef
+  ref: CardRef,
+  relativeTo: URL | undefined
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
@@ -130,7 +134,7 @@ export async function createNewCard<T extends Card>(
   }
   let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
 
-  return await cardCreator.create<T>(ref);
+  return await cardCreator.create<T>(ref, relativeTo);
 }
 
 export function hasExecutableExtension(path: string): boolean {

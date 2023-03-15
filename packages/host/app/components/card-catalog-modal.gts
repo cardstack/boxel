@@ -121,7 +121,7 @@ export default class CardCatalogModal extends Component {
   }
 
   @action async createNew(ref: CardRef): Promise<void> {
-    let newCard = await createNewCard(ref);
+    let newCard = await createNewCard(ref, undefined);
     this.pick(newCard);
   }
 }

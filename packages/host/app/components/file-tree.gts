@@ -60,7 +60,7 @@ export default class FileTree extends Component<Args> {
     if (!card) {
       return;
     }
-    let newCard = await createNewCard(card.ref);
+    let newCard = await createNewCard(card.ref, new URL(card.id));
     if (!newCard) {
       throw new Error(
         `bug: could not create new card from catalog entry ${JSON.stringify(
