@@ -63,7 +63,7 @@ export default class Go extends Component<Signature> {
         <div class='editor__column'>
           <menu class='editor__menu'>
             <li>
-              {{if this.saving '⟳ Saving…' '✔'}}</li>
+              {{if this.contentChangedTask.isRunning '⟳ Saving…' '✔'}}</li>
             {{#if this.openFile.lastModified}}
               <li data-test-last-edit>Last edit was
                 {{momentFrom this.openFile.lastModified}}</li>
@@ -105,7 +105,6 @@ export default class Go extends Component<Signature> {
   @service declare cardService: CardService;
   @tracked jsonError: string | undefined;
   @tracked card: Card | undefined;
-  @tracked saving = false;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -119,36 +118,56 @@ export default class Go extends Component<Signature> {
 
   contentChangedTask = restartableTask(async (content: string) => {
     if (
-      this.args.openFile?.state === 'ready' &&
-      content !== this.args.openFile.content
+      this.args.openFile?.state !== 'ready' ||
+      content === this.args.openFile.content
     ) {
-      // if the file is a card instance, then use the card-service to update the content
-      if (this.args.openFile.name.endsWith('.json')) {
-        let json: any;
-        try {
-          json = JSON.parse(content);
-        } catch (err) {
-          log.warn(
-            `content for ${this.args.path} is not valid JSON, skipping write`
-          );
-          return;
-        }
-        if (isSingleCardDocument(json)) {
-          let realmPath = new RealmPaths(this.cardService.defaultURL);
-          let url = realmPath.fileURL(this.args.path!.replace(/\.json$/, ''));
-          // note: intentionally not awaiting this promise, we may want to keep track of it...
-          this.saving = true;
-          await this.cardService.saveCardDocument(json, url);
-          this.saving = false;
-          return;
-        }
-      }
-
-      this.saving = true;
-      await this.args.openFile.write(content);
-      this.saving = false;
+      return;
     }
+
+    let isJSON = this.args.openFile.name.endsWith('.json');
+    let json = isJSON && this.safeJSONParse(content);
+
+    if (json && isSingleCardDocument(json)) {
+      await this.saveSingleCardDocument(json);
+      return;
+    }
+
+    await this.writeContentToFile(this.args.openFile, content);
   });
+
+  safeJSONParse(content: string) {
+    try {
+      return JSON.parse(content);
+    } catch (err) {
+      log.warn(
+        `content for ${this.args.path} is not valid JSON, skipping write`
+      );
+      return;
+    }
+  }
+
+  writeContentToFile(file: FileResource, content: string) {
+    if (file.state !== 'ready')
+      throw new Error('File is not ready to be written to');
+
+    try {
+      return file.doWrite.perform(content);
+    } catch (e) {
+      console.log(`Failed to save`, e);
+      return null;
+    }
+  }
+
+  async saveSingleCardDocument(json: any) {
+    let realmPath = new RealmPaths(this.cardService.defaultURL);
+    let url = realmPath.fileURL(this.args.path!.replace(/\.json$/, ''));
+    // note: intentionally not awaiting this promise, we may want to keep track of it...
+    try {
+      await this.cardService.saveCardDocument(json, url);
+    } catch (e) {
+      console.log('failed to save single card document', e);
+    }
+  }
 
   @cached
   get openFileCardJSON() {
