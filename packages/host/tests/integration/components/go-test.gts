@@ -13,6 +13,7 @@ import {
 } from '../../helpers';
 import { getFileResource } from './schema-test';
 import moment from 'moment';
+import CardPrerender from '@cardstack/host/components/card-prerender';
 
 module('Integration | Component | go', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -60,6 +61,7 @@ module('Integration | Component | go', function (hooks) {
     await render(<template>
       <h2>hey</h2>
       <Go @path={{path}} @openFile={{openFile}} @openDirs={{openDirs}} />
+      <CardPrerender />
     </template>);
 
     assert
