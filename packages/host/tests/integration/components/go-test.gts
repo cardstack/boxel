@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { render } from '@ember/test-helpers';
+import { find, render, waitUntil } from '@ember/test-helpers';
 import Go from '@cardstack/host/components/go';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -14,6 +14,17 @@ import {
 import { getFileResource } from './schema-test';
 import moment from 'moment';
 import CardPrerender from '@cardstack/host/components/card-prerender';
+import type * as monaco from 'monaco-editor';
+
+const cardContent = `
+import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
+import StringCard from "https://cardstack.com/base/string";
+
+export class Person extends Card {
+  @field name = contains(StringCard);
+  @field friend = linksTo(() => Person);
+}
+`;
 
 module('Integration | Component | go', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -32,19 +43,8 @@ module('Integration | Component | go', function (hooks) {
     await realm.ready;
   });
 
-  test('it shows last modified date', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
-      import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Person extends Card {
-        @field name = contains(StringCard);
-        @field friend = linksTo(() => Person);
-      }
-    `
-    );
+  test('it shows last modified date and save status', async function (assert) {
+    await realm.write('person.gts', cardContent);
 
     let lastModified = new Date(2020, 4, 5).toISOString();
 
@@ -58,9 +58,22 @@ module('Integration | Component | go', function (hooks) {
 
     let openDirs: string[] = [];
 
+    let editor: monaco.editor.IStandaloneCodeEditor;
+
+    let onEditorSetup = function (
+      receivedEditor: monaco.editor.IStandaloneCodeEditor
+    ) {
+      editor = receivedEditor;
+    };
+
     await render(<template>
       <h2>hey</h2>
-      <Go @path={{path}} @openFile={{openFile}} @openDirs={{openDirs}} />
+      <Go
+        @path={{path}}
+        @openFile={{openFile}}
+        @openDirs={{openDirs}}
+        @onEditorSetup={{onEditorSetup}}
+      />
       <CardPrerender />
     </template>);
 
@@ -73,5 +86,17 @@ module('Integration | Component | go', function (hooks) {
       .containsText('export')
       .containsText('class')
       .containsText('Person');
+
+    editor!.setValue(cardContent + '\n\n');
+
+    await waitUntil(() => find('[data-test-saving]'));
+    assert.dom('[data-test-saving]').exists();
+
+    await waitUntil(() => find('[data-test-saved]'));
+    assert.dom('[data-test-saved]').exists();
+
+    assert
+      .dom('[data-test-last-edit]')
+      .hasText('Last edit was a few seconds ago');
   });
 });

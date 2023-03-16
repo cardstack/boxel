@@ -22,7 +22,8 @@ import {
   extendMonacoLanguage,
   languageConfigs,
 } from '../utils/editor-language';
-import monaco from '../modifiers/monaco';
+import monacoModifier from '../modifiers/monaco';
+import type * as monaco from 'monaco-editor';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import InLocalRealm from './in-local-realm';
 import log from 'loglevel';
@@ -36,6 +37,7 @@ interface Signature {
     openFile: FileResource | undefined;
     openDirs: string[];
     path: string | undefined;
+    onEditorSetup?(editor: monaco.editor.IStandaloneCodeEditor): void;
   };
 }
 
@@ -63,7 +65,12 @@ export default class Go extends Component<Signature> {
         <div class='editor__column'>
           <menu class='editor__menu'>
             <li>
-              {{if this.contentChangedTask.isRunning '⟳ Saving…' '✔'}}</li>
+              {{#if this.contentChangedTask.isRunning}}
+                <span data-test-saving>⟳ Saving…</span>
+              {{else}}
+                <span data-test-saved>✔</span>
+              {{/if}}
+            </li>
             {{#if this.openFile.lastModified}}
               <li data-test-last-edit>Last edit was
                 {{momentFrom this.openFile.lastModified}}</li>
@@ -72,10 +79,11 @@ export default class Go extends Component<Signature> {
           <div
             class='editor__container'
             data-test-editor
-            {{monaco
+            {{monacoModifier
               content=this.openFile.content
               language=(getLangFromFileExtension this.openFile.name)
               contentChanged=this.contentChanged
+              onSetup=@onEditorSetup
             }}
           >
           </div>
