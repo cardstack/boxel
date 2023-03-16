@@ -42,11 +42,11 @@ export type FileResource =
 
 class _FileResource extends Resource<Args> {
   private declare _url: string;
-  private lastModified: string | undefined;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
   @tracked content: string | undefined;
   @tracked state: FileResource['state'] = 'ready';
+  @tracked lastModified: string | undefined;
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
 
