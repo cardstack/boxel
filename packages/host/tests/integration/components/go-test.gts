@@ -67,7 +67,6 @@ module('Integration | Component | go', function (hooks) {
     };
 
     await render(<template>
-      <h2>hey</h2>
       <Go
         @path={{path}}
         @openFile={{openFile}}
