@@ -17,5 +17,5 @@ Router.map(function () {
     this.route('index', { path });
     this.route('code', { path: `${path}/code` });
   }
-  this.route('redirect', { path: '/*path' });
+  this.route('card', { path: '/*path' });
 });

@@ -155,5 +155,42 @@ QUnit.module(
         'the card is rendered correctly'
       );
     });
+
+    test('can render a card route', async function (assert) {
+      await boot(`${testRealmURL}/person-1`, '[data-test-card]');
+      assert.strictEqual(
+        testDocument().location.href,
+        `${testRealmURL}/person-1`
+      );
+      let card = querySelector('[data-test-card]');
+      assert.strictEqual(
+        cleanWhiteSpace(card.textContent),
+        'Mango',
+        'the card is rendered correctly'
+      );
+      let nav = querySelector('.main nav');
+      assert.notOk(nav, 'file tree is not rendered');
+    });
+
+    test('can show an error when navigating to nonexistent card route', async function (assert) {
+      await boot(`${testRealmURL}/does-not-exist`, '[data-card-error]');
+      assert.strictEqual(
+        testDocument().location.href,
+        `${testRealmURL}/does-not-exist`
+      );
+      let card = querySelector('[data-test-card]');
+      assert.notOk(card, 'no card rendered');
+      let error = querySelector('[data-card-error]');
+      assert.ok(
+        cleanWhiteSpace(error.textContent).includes(`Cannot load card`),
+        'error message is displayed'
+      );
+      assert.ok(
+        cleanWhiteSpace(error.textContent).includes(
+          `Could not find ${testRealmURL}/does-not-exist`
+        ),
+        'error message is displayed'
+      );
+    });
   }
 );
