@@ -114,6 +114,10 @@ export default class Go extends Component<Signature> {
 
   @action
   contentChanged(content: string) {
+    this.contentChangedTask.perform(content);
+  }
+
+  contentChangedTask = restartableTask(async (content: string) => {
     if (
       this.args.openFile?.state === 'ready' &&
       content !== this.args.openFile.content
@@ -134,20 +138,17 @@ export default class Go extends Component<Signature> {
           let url = realmPath.fileURL(this.args.path!.replace(/\.json$/, ''));
           // note: intentionally not awaiting this promise, we may want to keep track of it...
           this.saving = true;
-          this.cardService
-            .saveCardDocument(json, url)
-            .finally(() => (this.saving = false));
+          await this.cardService.saveCardDocument(json, url);
+          this.saving = false;
           return;
         }
       }
 
       this.saving = true;
-      this.args.openFile
-        .write(content)
-        .catch(() => {})
-        .finally(() => (this.saving = false));
+      await this.args.openFile.write(content);
+      this.saving = false;
     }
-  }
+  });
 
   @cached
   get openFileCardJSON() {

@@ -136,7 +136,7 @@ class _FileResource extends Resource<Args> {
     }
   });
 
-  async write(content: string, flushLoader?: true) {
+  write(content: string, flushLoader?: true) {
     return this.doWrite.perform(content, flushLoader);
   }
 
