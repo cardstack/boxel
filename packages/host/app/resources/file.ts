@@ -35,8 +35,7 @@ export type FileResource =
       url: string;
       loading: TaskInstance<void> | null;
       lastModified: string;
-      write(content: string, flushLoader?: true): Promise<void>;
-      doWrite: Task<void, [content: string, flushLoader?: boolean]>;
+      writeTask: Task<void, [content: string, flushLoader?: boolean]>;
       close(): void;
     };
 
@@ -137,11 +136,7 @@ class _FileResource extends Resource<Args> {
     }
   });
 
-  write(content: string, flushLoader?: true) {
-    return this.doWrite.perform(content, flushLoader);
-  }
-
-  doWrite = restartableTask(async (content: string, flushLoader?: true) => {
+  writeTask = restartableTask(async (content: string, flushLoader?: true) => {
     let response = await this.loaderService.loader.fetch(this.url, {
       method: 'POST',
       headers: {
@@ -150,12 +145,11 @@ class _FileResource extends Resource<Args> {
       body: content,
     });
     if (!response.ok) {
-      log.error(
-        `Could not write file ${this.url}, status ${response.status}: ${
-          response.statusText
-        } - ${await response.text()}`
-      );
-      return;
+      let errorMessage = `Could not write file ${this.url}, status ${
+        response.status
+      }: ${response.statusText} - ${await response.text()}`;
+      log.error(errorMessage);
+      throw new Error(errorMessage);
     }
     if (this.state === 'not-found') {
       // TODO think about the "unauthorized" scenario

@@ -297,7 +297,7 @@ export default class Schema extends Component<Signature> {
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
     // FIXME should be didCancel if this is needed
-    this.args.file.write(src, true).catch(() => {});
+    this.args.file.writeTask.perform(src, true).catch(() => {});
   });
 }
 

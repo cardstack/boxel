@@ -396,3 +396,9 @@ export class TestRealmAdapter implements RealmAdapter {
     this.#subscriber = undefined;
   }
 }
+
+export function delay(delayAmountMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayAmountMs);
+  });
+}

@@ -1,11 +1,18 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { find, render, waitUntil } from '@ember/test-helpers';
+import {
+  find,
+  render,
+  resetOnerror,
+  setupOnerror,
+  waitUntil,
+} from '@ember/test-helpers';
 import Go from '@cardstack/host/components/go';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
+  delay,
   TestRealmAdapter,
   TestRealm,
   testRealmURL,
@@ -15,6 +22,7 @@ import { getFileResource } from './schema-test';
 import moment from 'moment';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import type * as monaco from 'monaco-editor';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 
 const cardContent = `
 import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
@@ -25,6 +33,16 @@ export class Person extends Card {
   @field friend = linksTo(() => Person);
 }
 `;
+
+class FailingTestRealmAdapter extends TestRealmAdapter {
+  async write(
+    _path: LocalPath,
+    _contents: string | object
+  ): Promise<{ lastModified: number }> {
+    await delay(100);
+    throw new Error('Something has gone horribly wrong on purpose');
+  }
+}
 
 module('Integration | Component | go', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -38,64 +56,129 @@ module('Integration | Component | go', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    adapter = new TestRealmAdapter({});
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
-    await realm.ready;
   });
 
-  test('it shows last modified date and save status', async function (assert) {
-    await realm.write('person.gts', cardContent);
-
-    let lastModified = new Date(2020, 4, 5).toISOString();
-
-    let path = 'boolean-field.json';
-
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-      lastModified,
+  module('with a working realm', function (hooks) {
+    hooks.beforeEach(async function () {
+      adapter = new TestRealmAdapter({ 'person.gts': cardContent });
+      realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      await realm.ready;
     });
 
-    let openDirs: string[] = [];
+    test('it shows last modified date and save status', async function (assert) {
+      let lastModified = new Date(2020, 4, 5).toISOString();
 
-    let editor: monaco.editor.IStandaloneCodeEditor;
+      let path = 'boolean-field.json';
 
-    let onEditorSetup = function (
-      receivedEditor: monaco.editor.IStandaloneCodeEditor
-    ) {
-      editor = receivedEditor;
-    };
+      let openFile = await getFileResource(this, adapter, {
+        module: `${testRealmURL}person`,
+        name: 'Person',
+        lastModified,
+      });
 
-    await render(<template>
-      <Go
-        @path={{path}}
-        @openFile={{openFile}}
-        @openDirs={{openDirs}}
-        @onEditorSetup={{onEditorSetup}}
-      />
-      <CardPrerender />
-    </template>);
+      let openDirs: string[] = [];
 
-    assert
-      .dom('[data-test-last-edit]')
-      .hasText(`Last edit was ${moment(lastModified).fromNow()}`);
+      let editor: monaco.editor.IStandaloneCodeEditor;
 
-    assert
-      .dom('[data-test-editor]')
-      .containsText('export')
-      .containsText('class')
-      .containsText('Person');
+      let onEditorSetup = function (
+        receivedEditor: monaco.editor.IStandaloneCodeEditor
+      ) {
+        editor = receivedEditor;
+      };
 
-    editor!.setValue(cardContent + '\n\n');
+      await render(<template>
+        <Go
+          @path={{path}}
+          @openFile={{openFile}}
+          @openDirs={{openDirs}}
+          @onEditorSetup={{onEditorSetup}}
+        />
+        <CardPrerender />
+      </template>);
 
-    await waitUntil(() => find('[data-test-saving]'));
-    assert.dom('[data-test-saving]').exists();
+      assert
+        .dom('[data-test-last-edit]')
+        .hasText(`Last edit was ${moment(lastModified).fromNow()}`);
 
-    await waitUntil(() => find('[data-test-saved]'));
-    assert.dom('[data-test-saved]').exists();
+      assert
+        .dom('[data-test-editor]')
+        .containsText('export')
+        .containsText('class')
+        .containsText('Person');
 
-    assert
-      .dom('[data-test-last-edit]')
-      .hasText('Last edit was a few seconds ago');
+      editor!.setValue(cardContent + '\n\n');
+
+      await waitUntil(() => find('[data-test-saving]'));
+      assert.dom('[data-test-saving]').exists();
+
+      await waitUntil(() => find('[data-test-saved]'));
+      assert.dom('[data-test-saved]').exists();
+
+      assert
+        .dom('[data-test-last-edit]')
+        .hasText('Last edit was a few seconds ago');
+    });
+  });
+
+  module('with a broken realm', function (hooks) {
+    hooks.beforeEach(async function () {
+      adapter = new FailingTestRealmAdapter({ 'person.gts': cardContent });
+      realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      await realm.ready;
+    });
+
+    test('it shows last modified date and save status', async function (assert) {
+      setupOnerror(function (err: unknown) {
+        assert.ok(err, 'expected an error saving');
+      });
+
+      let lastModified = new Date(2020, 4, 5).toISOString();
+
+      let path = 'boolean-field.json';
+
+      let openFile = await getFileResource(this, adapter, {
+        module: `${testRealmURL}person`,
+        name: 'Person',
+        lastModified,
+      });
+
+      let openDirs: string[] = [];
+
+      let editor: monaco.editor.IStandaloneCodeEditor;
+
+      let onEditorSetup = function (
+        receivedEditor: monaco.editor.IStandaloneCodeEditor
+      ) {
+        editor = receivedEditor;
+      };
+
+      await render(<template>
+        <Go
+          @path={{path}}
+          @openFile={{openFile}}
+          @openDirs={{openDirs}}
+          @onEditorSetup={{onEditorSetup}}
+        />
+        <CardPrerender />
+      </template>);
+
+      editor!.setValue(cardContent + '\n\n');
+
+      await waitUntil(() => find('[data-test-saving]'), {
+        timeoutMessage: 'saving icon not found',
+      });
+      assert.dom('[data-test-saving]').exists();
+
+      await waitUntil(() => find('[data-test-save-error]'), {
+        timeoutMessage: 'error icon not found',
+      });
+      assert.dom('[data-test-save-error]').exists();
+
+      assert.dom('[data-test-failed-to-save]').hasText('Failed to save');
+    });
+
+    hooks.afterEach(() => {
+      resetOnerror();
+    });
   });
 });

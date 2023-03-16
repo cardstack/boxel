@@ -67,11 +67,15 @@ export default class Go extends Component<Signature> {
             <li>
               {{#if this.contentChangedTask.isRunning}}
                 <span data-test-saving>⟳ Saving…</span>
+              {{else if this.contentChangedTask.last.isError}}
+                <span data-test-save-error>XX</span>
               {{else}}
                 <span data-test-saved>✔</span>
               {{/if}}
             </li>
-            {{#if this.openFile.lastModified}}
+            {{#if this.contentChangedTask.lastErrored}}
+              <li data-test-failed-to-save>Failed to save</li>
+            {{else if this.openFile.lastModified}}
               <li data-test-last-edit>Last edit was
                 {{momentFrom this.openFile.lastModified}}</li>
             {{/if}}
@@ -158,12 +162,12 @@ export default class Go extends Component<Signature> {
     if (file.state !== 'ready')
       throw new Error('File is not ready to be written to');
 
-    try {
-      return file.doWrite.perform(content);
-    } catch (e) {
-      console.log(`Failed to save`, e);
-      return null;
-    }
+    // try {
+    return file.writeTask.perform(content);
+    // } catch (e) {
+    //   console.log(`Failed to save`, e);
+    //   return null;
+    // }
   }
 
   async saveSingleCardDocument(json: any) {
