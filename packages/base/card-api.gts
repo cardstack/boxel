@@ -2,7 +2,6 @@ import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import { flatten } from 'flat';
 import { on } from '@ember/modifier';
 import pick from '@cardstack/boxel-ui/helpers/pick';
 import { getBoxComponent } from './field-component';
@@ -1055,9 +1054,7 @@ export function getQueryableValue(
 
   // this recurses through the fields of the compound card via
   // the base card's queryableValue implementation
-  return flatten((fieldCard as any)[queryableValue](value, stack), {
-    safe: true,
-  });
+  return (fieldCard as any)[queryableValue](value, stack);
 }
 
 function peekAtField(instance: Card, fieldName: string): any {

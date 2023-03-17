@@ -349,7 +349,7 @@ export class SearchIndex {
   private async loadFieldCard(
     ref: CardRef,
     fieldPath: string
-  ): Promise<typeof Card> {
+  ): Promise<[string, typeof Card]> {
     let card: typeof Card | undefined;
     try {
       card = await loadCard(ref, { loader: this.loader });
@@ -383,7 +383,17 @@ export class SearchIndex {
         );
       }
     }
-    return card;
+    return [fieldPath, card];
+  }
+
+  private getFieldData(searchData: Record<string, any>, fieldPath: string) {
+    let data = searchData;
+    let segments = fieldPath.split('.');
+    while (segments.length && data != null) {
+      let fieldName = segments.shift()!;
+      data = data[fieldName];
+    }
+    return data;
   }
 
   private buildSorter(
@@ -400,8 +410,9 @@ export class SearchIndex {
         if (!this.cardHasType(e2, on)) {
           return direction === 'desc' ? 1 : -1;
         }
-        let a = e1.searchData[by];
-        let b = e2.searchData[by];
+
+        let a = this.getFieldData(e1.searchData, by);
+        let b = this.getFieldData(e2.searchData, by);
         if (a === undefined) {
           return direction === 'desc' ? -1 : 1; // if descending, null position is before the rest
         }
@@ -479,10 +490,9 @@ export class SearchIndex {
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
-          Object.keys(filter.eq).map(async (fieldPath) => [
-            fieldPath,
-            await this.loadFieldCard(on, fieldPath),
-          ])
+          Object.keys(filter.eq).map(
+            async (fieldPath) => await this.loadFieldCard(on, fieldPath)
+          )
         )
       );
 
@@ -495,10 +505,11 @@ export class SearchIndex {
         every(Object.entries(filter.eq), ([fieldPath, value]) => {
           if (this.cardHasType(entry, ref)) {
             let queryValue = api.getQueryableValue(
-              fieldCards[fieldPath]!,
+              fieldCards[fieldPath],
               value
             );
-            let instanceValue = entry.searchData[fieldPath];
+
+            let instanceValue = this.getFieldData(entry.searchData, fieldPath);
             if (instanceValue === undefined && queryValue != null) {
               return null;
             }
@@ -518,10 +529,9 @@ export class SearchIndex {
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
-          Object.keys(filter.range).map(async (fieldPath) => [
-            fieldPath,
-            await this.loadFieldCard(on, fieldPath),
-          ])
+          Object.keys(filter.range).map(
+            async (fieldPath) => await this.loadFieldCard(on, fieldPath)
+          )
         )
       );
 
@@ -533,7 +543,7 @@ export class SearchIndex {
       return (entry) =>
         every(Object.entries(filter.range), ([fieldPath, range]) => {
           if (this.cardHasType(entry, ref)) {
-            let value = entry.searchData[fieldPath];
+            let value = this.getFieldData(entry.searchData, fieldPath);
             if (value === undefined) {
               return null;
             }
@@ -541,23 +551,21 @@ export class SearchIndex {
             if (
               (range.gt &&
                 !(
-                  value >
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.gt)
+                  value > api.getQueryableValue(fieldCards[fieldPath], range.gt)
                 )) ||
               (range.lt &&
                 !(
-                  value <
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.lt)
+                  value < api.getQueryableValue(fieldCards[fieldPath], range.lt)
                 )) ||
               (range.gte &&
                 !(
                   value >=
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.gte)
+                  api.getQueryableValue(fieldCards[fieldPath], range.gte)
                 )) ||
               (range.lte &&
                 !(
                   value <=
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.lte)
+                  api.getQueryableValue(fieldCards[fieldPath], range.lte)
                 ))
             ) {
               return false;
