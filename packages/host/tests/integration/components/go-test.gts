@@ -13,12 +13,12 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
   delay,
+  getFileResource,
   TestRealmAdapter,
   TestRealm,
   testRealmURL,
   setupMockLocalRealm,
 } from '../../helpers';
-import { getFileResource } from './schema-test';
 import moment from 'moment';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import type * as monaco from 'monaco-editor';
