@@ -60,7 +60,7 @@
     "declarationMap": true,
     "inlineSourceMap": true,
     "inlineSources": true,
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "baseUrl": ".",
     "paths": {
       "@cardstack/boxel-motion": ["node_modules/@cardstack/boxel-motion/addon"],
