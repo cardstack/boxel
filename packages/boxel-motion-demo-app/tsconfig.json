@@ -60,7 +60,7 @@
     "declarationMap": true,
     "inlineSourceMap": true,
     "inlineSources": true,
-    "skipLibCheck": false,
+    "skipLibCheck": true,
 
     // The combination of `baseUrl` with `paths` allows Ember's classic package
     // layout, which is not resolveable with the Node resolution algorithm, to
@@ -77,8 +77,7 @@
     }
   },
   "glint": {
-    "environment": ["ember-loose", "ember-template-imports"],
-    "checkStandaloneTemplates": false
+    "environment": ["ember-loose", "ember-template-imports"]
   },
   "include": ["app/**/*", "tests/**/*", "types/**/*"]
 }

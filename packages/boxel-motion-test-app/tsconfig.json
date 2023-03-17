@@ -60,7 +60,7 @@
     "declarationMap": true,
     "inlineSourceMap": true,
     "inlineSources": true,
-    "skipLibCheck": false,
+    "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
       "@cardstack/boxel-motion": ["node_modules/@cardstack/boxel-motion/addon"],
@@ -73,12 +73,7 @@
     }
   },
   "glint": {
-    "environment": {
-      "ember-loose": {
-        "checkStandaloneTemplates": false
-      },
-      "ember-template-imports": {}
-    }
+    "environment": ["ember-loose", "ember-template-imports"]
   },
   "include": ["app/**/*", "tests/**/*", "types/**/*"]
 }
