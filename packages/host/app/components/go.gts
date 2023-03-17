@@ -162,12 +162,7 @@ export default class Go extends Component<Signature> {
     if (file.state !== 'ready')
       throw new Error('File is not ready to be written to');
 
-    // try {
     return file.writeTask.perform(content);
-    // } catch (e) {
-    //   console.log(`Failed to save`, e);
-    //   return null;
-    // }
   }
 
   async saveSingleCardDocument(json: any) {
