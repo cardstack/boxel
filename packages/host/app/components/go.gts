@@ -68,7 +68,7 @@ export default class Go extends Component<Signature> {
               {{#if this.contentChangedTask.isRunning}}
                 <span data-test-saving>⟳ Saving…</span>
               {{else if this.contentChangedTask.last.isError}}
-                <span data-test-save-error>XX</span>
+                <span data-test-save-error>✘</span>
               {{else}}
                 <span data-test-saved>✔</span>
               {{/if}}
