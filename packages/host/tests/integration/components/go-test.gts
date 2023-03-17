@@ -100,6 +100,9 @@ module('Integration | Component | go', function (hooks) {
         .dom('[data-test-last-edit]')
         .hasText(`Last edit was ${moment(lastModified).fromNow()}`);
 
+      waitUntil(() =>
+        find('[data-test-editor]')!.innerHTML?.includes('Person')
+      );
       assert
         .dom('[data-test-editor]')
         .containsText('export')
@@ -114,6 +117,9 @@ module('Integration | Component | go', function (hooks) {
       await waitUntil(() => find('[data-test-saved]'));
       assert.dom('[data-test-saved]').exists();
 
+      await waitUntil(() =>
+        find('[data-test-last-edit]')!.innerHTML?.includes('seconds')
+      );
       assert
         .dom('[data-test-last-edit]')
         .hasText('Last edit was a few seconds ago');
