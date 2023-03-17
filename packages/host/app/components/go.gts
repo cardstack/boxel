@@ -172,7 +172,7 @@ export default class Go extends Component<Signature> {
     try {
       await this.cardService.saveCardDocument(json, url);
     } catch (e) {
-      console.log('failed to save single card document', e);
+      console.log('Failed to save single card document', e);
     }
   }
 
