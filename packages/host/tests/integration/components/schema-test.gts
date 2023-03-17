@@ -93,6 +93,38 @@ module('Integration | schema', function (hooks) {
       );
   });
 
+  test('renders card schema view with a "/" in template', async function (assert) {
+    await realm.write(
+      'test.gts',
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import IntegerCard from "https://cardstack.com/base/integer";
+
+      export class Test extends Card {
+        @field test = contains(IntegerCard, {
+          computeVia: function () {
+            return 10 / 2;
+          },
+        });
+      }
+    `
+    );
+    let openFile = await getFileResource(this, adapter, {
+      module: `${testRealmURL}test`,
+      name: 'Test',
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Module @file={{openFile}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor('[data-test-card-id]');
+    assert.dom('[data-test-card-id]').exists();
+  });
+
   test('renders a card schema view for a card that contains itself as a field', async function (assert) {
     await realm.write(
       'friend.gts',
