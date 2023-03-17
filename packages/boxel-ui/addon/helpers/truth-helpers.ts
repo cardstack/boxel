@@ -1,8 +1,8 @@
-export function eq<T>(a: T, b: T, _namedArgs: unknown): boolean {
+export function eq<T>(a: T, b: T): boolean {
   return a === b;
 }
 
-export function gt<T>(a: T, b: T, _namedArgs: unknown): boolean {
+export function gt<T>(a: T, b: T): boolean {
   return a > b;
 }
 
@@ -29,4 +29,8 @@ export function not<T>(val: T): boolean {
     return true;
   }
   return false;
+}
+
+export function bool<T>(val: T): boolean {
+  return Boolean(val);
 }

@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import cn from '../helpers/cn';
-import { or, eq } from '../helpers/truth-helpers';
+import { or, eq, bool } from '../helpers/truth-helpers';
 import Label from './label';
 
 interface Signature {
@@ -24,7 +24,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       'boxel-header'
       boxel-header--no-background=@noBackground
       boxel-header--highlighted=@isHighlighted
-      boxel-header--large=(or @title (eq @size 'large'))
+      boxel-header--large=(or (bool @title) (eq @size 'large'))
     }}
     data-test-boxel-header
     ...attributes
