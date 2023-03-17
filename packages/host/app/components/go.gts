@@ -173,7 +173,7 @@ export default class Go extends Component<Signature> {
   async saveSingleCardDocument(json: any) {
     let realmPath = new RealmPaths(this.cardService.defaultURL);
     let url = realmPath.fileURL(this.args.path!.replace(/\.json$/, ''));
-    // note: intentionally not awaiting this promise, we may want to keep track of it...
+
     try {
       await this.cardService.saveCardDocument(json, url);
     } catch (e) {
