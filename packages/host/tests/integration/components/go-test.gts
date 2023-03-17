@@ -39,7 +39,7 @@ class FailingTestRealmAdapter extends TestRealmAdapter {
     _path: LocalPath,
     _contents: string | object
   ): Promise<{ lastModified: number }> {
-    await delay(100);
+    await delay(10);
     throw new Error('Something has gone horribly wrong on purpose');
   }
 }
