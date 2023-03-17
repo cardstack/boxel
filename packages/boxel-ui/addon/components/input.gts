@@ -5,7 +5,7 @@ import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import pick from '../helpers/pick';
 import optional from '../helpers/optional';
-import { and, not } from '../helpers/truth-helpers';
+import { and, not, bool } from '../helpers/truth-helpers';
 import element from '../helpers/element';
 import cn from '../helpers/cn';
 
@@ -37,7 +37,7 @@ export default class BoxelInput extends Component<Signature> {
     {{#if (and (not @required) @optional)}}
       <div class='boxel-input__optional'>Optional</div>
     {{/if}}
-    {{#let (and @invalid @errorMessage) as |shouldShowErrorMessage|}}
+    {{#let (and @invalid (bool @errorMessage)) as |shouldShowErrorMessage|}}
       {{#let (element (if @multiline 'textarea' 'input')) as |InputTag|}}
         <InputTag
           class={{cn 'boxel-input' boxel-input--invalid=@invalid}}
