@@ -1877,6 +1877,25 @@ posts/ignore-me.json
           },
         },
       },
+      'booking1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            hosts: [
+              {
+                firstName: 'Arthur',
+              },
+            ],
+          },
+          relationships: {},
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}booking`,
+              name: 'Booking',
+            },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -2116,6 +2135,19 @@ posts/ignore-me.json
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${paths.url}cards/1`, `${paths.url}cards/2`]
+      );
+    });
+
+    test(`can filter on a nested field inside a containsMany using 'eq'`, async function (assert) {
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+          eq: { 'hosts.firstName': 'Arthur' },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}booking1`]
       );
     });
 
