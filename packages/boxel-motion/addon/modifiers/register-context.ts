@@ -17,8 +17,8 @@ const registerContentModifier = modifier<Signature>(
 
 export default registerContentModifier;
 
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    'register-context': typeof registerContentModifier;
-  }
-}
+// declare module '@glint/environment-ember-loose/registry' {
+//   export default interface Registry {
+//     'register-context': typeof registerContentModifier;
+//   }
+// }
