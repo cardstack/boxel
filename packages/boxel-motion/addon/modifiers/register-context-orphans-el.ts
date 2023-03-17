@@ -17,8 +17,8 @@ const registerContextOrphansEl = modifier<Signature>(
 
 export default registerContextOrphansEl;
 
-// declare module '@glint/environment-ember-loose/registry' {
-//   export default interface Registry {
-//     'register-context-orphans-el': typeof registerContextOrphansEl;
-//   }
-// }
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    'register-context-orphans-el': typeof registerContextOrphansEl;
+  }
+}
