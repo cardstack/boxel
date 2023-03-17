@@ -65,7 +65,7 @@ module('Integration | Component | go', function (hooks) {
       await realm.ready;
     });
 
-    test('it shows last modified date and save status', async function (assert) {
+    test('it shows the editor, last modified date, and save status', async function (assert) {
       let lastModified = new Date(2020, 4, 5).toISOString();
 
       let path = 'boolean-field.json';
