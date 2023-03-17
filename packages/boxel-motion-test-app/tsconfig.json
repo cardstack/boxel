@@ -73,8 +73,12 @@
     }
   },
   "glint": {
-    "environment": ["ember-loose", "ember-template-imports"],
-    "checkStandaloneTemplates": false
+    "environment": {
+      "ember-loose": {
+        "checkStandaloneTemplates": false
+      },
+      "ember-template-imports": {}
+    }
   },
   "include": ["app/**/*", "tests/**/*", "types/**/*"]
 }
