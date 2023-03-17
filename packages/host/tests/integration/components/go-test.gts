@@ -17,12 +17,14 @@ import {
   TestRealmAdapter,
   TestRealm,
   testRealmURL,
+  setupCardLogs,
   setupMockLocalRealm,
 } from '../../helpers';
 import moment from 'moment';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import type * as monaco from 'monaco-editor';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 const cardContent = `
 import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
@@ -50,12 +52,17 @@ module('Integration | Component | go', function (hooks) {
 
   setupRenderingTest(hooks);
   setupMockLocalRealm(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
 
   hooks.beforeEach(async function () {
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+    shimExternals();
   });
 
   module('with a working realm', function (hooks) {
