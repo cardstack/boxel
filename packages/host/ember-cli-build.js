@@ -6,8 +6,6 @@ const { Webpack } = require('@embroider/webpack');
 const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
-const isBaseRealmHosting = process.env.BASE_REALM_HOSTING_DISABLED !== 'true';
-
 module.exports = function (defaults) {
   let app = new EmberApp(defaults, {
     'ember-cli-babel': {
@@ -54,7 +52,6 @@ module.exports = function (defaults) {
           },
         },
       },
-      ...(isBaseRealmHosting ? { publicAssetURL: `/base/__boxel/` } : {}),
     },
   });
 };
