@@ -61,21 +61,6 @@ runs:
         role-to-assume: ${{ env.AWS_ROLE_ARN }}
         aws-region: us-east-1
 
-    # using an explicit build step as build to support realm hosting is actually
-    # different than the build for s3/cloudfront hosted app.
-    # - name: Build host app for realm hosting
-    #   shell: bash
-    #   run: pnpm build:boxel-host
-    # - name: Make realm hosted app dist zip
-    #   shell: bash
-    #   run: zip -r dist.zip ./dist
-    #   working-directory: packages/host
-    # - name: Copy host dist zip to s3
-    #   shell: bash
-    #   run: |
-    #     aws s3 cp ./dist.zip "s3://${{ env.AWS_S3_BUCKET }}/boxel_dist/dist.zip" --cache-control=no-cache
-    #   working-directory: packages/host
-
     - name: Deploy
       shell: bash
       run: pnpm deploy:boxel-host ${{ inputs.environment }} --verbose
