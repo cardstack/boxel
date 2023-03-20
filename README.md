@@ -32,7 +32,6 @@ In order to run the ember-cli hosted app:
 
 The app is available at http://localhost:4200. Click on the button to connect to your Local Realm, and then select the "cards/" folder within this project. Click "Allow" on the popups that ask for the ability to read and write to the local file system.
 
-> Note that the ember build for the ember-cli hosted app is not compatible with a realm server hosted model. If you wish to visit a realm server URL directly to view its app then you must use the "Realm server Hosted App" instructions described in the following section.
 ### Realm server Hosted App
 In order to run the realm server hosted app:
 
@@ -81,7 +80,7 @@ To run the `packages/realm-server/` workspace tests start:
 Run `pnpm test` in the `packages/realm-server/` workspace to run the realm tests
 
 ### Realm Server DOM tests
-This test suite contains acceptance tests for asserting that the Realm server is capable of hosting its own app. These tests require that the host be built with the ability to support realm based hosting. To run these tests in the browser execute the following in the `packages/realm-server` workspace:
+This test suite contains acceptance tests for asserting that the Realm server is capable of hosting its own app. To run these tests in the browser execute the following in the `packages/realm-server` workspace:
 
 1. `pnpm start:test-container`
 2. `pnpm start:all`
