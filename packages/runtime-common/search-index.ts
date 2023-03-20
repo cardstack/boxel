@@ -392,6 +392,10 @@ export class SearchIndex {
     while (segments.length && data != null) {
       let fieldName = segments.shift()!;
       data = data[fieldName];
+      if (Array.isArray(data) && segments.length) {
+        data = data.map((v) => this.getFieldData(v, segments.join('.')));
+        return data;
+      }
     }
     return data;
   }
@@ -517,6 +521,33 @@ export class SearchIndex {
             if (queryValue == null && instanceValue == null) {
               return true;
             }
+
+            if (
+              typeof instanceValue === 'object' &&
+              typeof queryValue === 'object'
+            ) {
+              let instance = Array.isArray(instanceValue)
+                ? instanceValue
+                : [instanceValue];
+
+              return instance.some((ins) => {
+                for (let [key, val] of Object.entries(queryValue)) {
+                  if (ins == null && val != null) {
+                    return false;
+                  }
+                  if (ins[key] == null && val == null) {
+                    continue;
+                  }
+                  if (ins[key] !== val) {
+                    return false;
+                  }
+                }
+                return true;
+              });
+            } else if (Array.isArray(instanceValue)) {
+              return instanceValue.includes(queryValue);
+            }
+
             return instanceValue === queryValue;
           } else {
             return null;
