@@ -35,7 +35,17 @@ if (!url.endsWith('/')) {
 }
 
 (async () => {
-  let zipUrl = `${url}boxel_dist/dist.zip`;
+  let indirectionUrl = `${url}fastboot-deploy-info.json`;
+
+  log.debug(`Fetching deployment info from ${indirectionUrl}`);
+  let response = await fetch(indirectionUrl);
+
+  let json = await response.json();
+
+  log.debug(`JSON response: ${JSON.stringify(json, null, 2)}`);
+  let key = json.key;
+
+  let zipUrl = `${url}${key}`;
   log.info(`Fetching zip from ${zipUrl}`);
 
   let zipResponse = await fetch(zipUrl);

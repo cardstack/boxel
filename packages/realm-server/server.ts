@@ -9,6 +9,7 @@ import log from 'loglevel';
 let requestLog = log.getLogger('realm:requests');
 let assetPathname = new URL(`${baseRealm.url}${assetsDir}`).pathname;
 let monacoLanguages = ['css', 'json', 'ts', 'html'];
+let monacoFonts = ['ade705761eb7e702770d.ttf'];
 
 export interface RealmConfig {
   realmURL: string;
@@ -131,6 +132,20 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
         res.end();
         return;
       }
+
+      // monaco fonts are hardcoded to load from the root of the origin, this is
+      // where we deal with those
+      if (monacoFonts.map((f) => `/${f}`).includes(req.url)) {
+        let redirectURL = Loader.resolve(
+          new URL(`.${req.url}`, `${baseRealm.url}${assetsDir}`)
+        ).href;
+        res.writeHead(302, {
+          Location: redirectURL,
+        });
+        res.end();
+        return;
+      }
+
       // requests for the root of the realm without a trailing slash aren't
       // technically inside the realm (as the realm includes the trailing '/').
       // So issue a redirect in those scenarios.

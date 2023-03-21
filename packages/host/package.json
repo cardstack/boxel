@@ -12,7 +12,6 @@
   },
   "scripts": {
     "build": "ember build",
-    "build:ember-cli-hosted": "BASE_REALM_HOSTING_DISABLED=true ember build",
     "build:production": "NODE_OPTIONS='--max-old-space-size=4096' ember build --environment=production",
     "lint": "npm-run-all --aggregate-output --continue-on-error --parallel \"lint:!(fix)\"",
     "lint:fix": "npm-run-all --aggregate-output --continue-on-error --parallel lint:*:fix",
@@ -21,7 +20,7 @@
     "lint:js": "eslint . --cache --ext ts,js",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "start": "FASTBOOT_DISABLED=true HOST_LOCAL_REALM=true BASE_REALM_HOSTING_DISABLED=true ember serve",
+    "start": "FASTBOOT_DISABLED=true HOST_LOCAL_REALM=true ember serve",
     "start:build": "FASTBOOT_DISABLED=true ember build --watch",
     "test": "npm-run-all lint test:*",
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/test/hassan?acceptHeader=application%2Fvnd.api%2Bjson' 'ember-test-pre-built'",

@@ -299,13 +299,16 @@ export class Realm {
         config = merge({}, config, {
           ownRealmURL: opts?.localRealmURL ?? this.url,
           resolvedBaseRealmURL,
-          isLocalRealm: opts?.hostLocalRealm,
+          isLocalRealm: Boolean(opts?.hostLocalRealm),
           isBaseRealmHosting: true,
           realmsServed: opts?.realmsServed,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       }
     );
+
+    // set the static public asset paths in index.html
+    indexHTML = indexHTML.replace(/(src|href)="/g, '$1="/base/__boxel');
 
     // This setting relaxes the document.domain (by eliminating the port) so
     // that we can do cross origin scripting in order to perform test assertions

@@ -35,7 +35,7 @@
     "yargs": "^17.5.1"
   },
   "scripts": {
-    "fetch-dist": "ts-node --transpileOnly fetch-dist",
+    "fetch-dist": "ts-node --transpileOnly ./scripts/fetch-dist",
     "fetch-dist:staging": "pnpm fetch-dist --url https://boxel-host-staging.stack.cards/ --logLevel debug",
     "fetch-dist:production": "pnpm fetch-dist --url https://boxel-host.cardstack.com/ --logLevel debug",
     "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
