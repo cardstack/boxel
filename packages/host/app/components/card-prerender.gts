@@ -31,7 +31,7 @@ export default class CardPrerender extends Component {
           throw e;
         }
         throw new Error(
-          `card-prerender component is being destroyed before runner registration was completed`
+          `card-prerender component is missing or being destroyed before runner registration was completed`
         );
       }
     } else {
@@ -52,7 +52,7 @@ export default class CardPrerender extends Component {
       }
     }
     throw new Error(
-      `card-prerender component is being destroyed before from scratch index of realm ${realmURL} was completed`
+      `card-prerender component is missing or being destroyed before from scratch index of realm ${realmURL} was completed`
     );
   }
 
@@ -73,7 +73,7 @@ export default class CardPrerender extends Component {
       }
     }
     throw new Error(
-      `card-prerender component is being destroyed before incremental index of ${url} was completed`
+      `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`
     );
   }
 

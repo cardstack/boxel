@@ -1,14 +1,13 @@
 import { module, test } from 'qunit';
-import { TestContext, waitFor, fillIn, click } from '@ember/test-helpers';
+import { waitFor, fillIn, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import Module from '@cardstack/host/components/module';
-import { file, FileResource } from '@cardstack/host/resources/file';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
 import {
+  getFileResource,
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
@@ -854,22 +853,3 @@ module('Integration | schema', function (hooks) {
       .doesNotExist('error message does not exist');
   });
 });
-
-async function getFileResource(
-  context: TestContext,
-  adapter: TestRealmAdapter,
-  ref: { name: string; module: string }
-): Promise<FileResource> {
-  let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
-  let paths = new RealmPaths(testRealmURL);
-  let relativePath = paths.local(new URL(fileURL));
-  let content = (await adapter.openFile(relativePath))?.content as
-    | string
-    | undefined;
-  return file(context, () => ({
-    relativePath,
-    realmURL: paths.url,
-    lastModified: undefined,
-    content,
-  }));
-}

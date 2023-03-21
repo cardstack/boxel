@@ -10,6 +10,7 @@ interface Signature {
       content: string;
       language: string;
       contentChanged: (text: string) => void;
+      onSetup?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
     };
   };
 }
@@ -23,7 +24,7 @@ export default class Monaco extends Modifier<Signature> {
   modify(
     element: HTMLElement,
     _positional: [],
-    { content, language, contentChanged }: Signature['Args']['Named']
+    { content, language, contentChanged, onSetup }: Signature['Args']['Named']
   ) {
     if (this.model && content != null) {
       if (language !== this.lastLanguage) {
@@ -37,6 +38,9 @@ export default class Monaco extends Modifier<Signature> {
         value: content,
         language,
       });
+
+      onSetup?.(this.editor);
+
       registerDestructor(this, () => this.editor!.dispose());
 
       this.model = this.editor.getModel()!;
