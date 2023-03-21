@@ -349,7 +349,7 @@ export class SearchIndex {
   private async loadFieldCard(
     ref: CardRef,
     fieldPath: string
-  ): Promise<[string, typeof Card]> {
+  ): Promise<typeof Card> {
     let card: typeof Card | undefined;
     try {
       card = await loadCard(ref, { loader: this.loader });
@@ -383,7 +383,7 @@ export class SearchIndex {
         );
       }
     }
-    return [fieldPath, card];
+    return card;
   }
 
   private getFieldData(searchData: Record<string, any>, fieldPath: string) {
@@ -392,10 +392,6 @@ export class SearchIndex {
     while (segments.length && data != null) {
       let fieldName = segments.shift()!;
       data = data[fieldName];
-      if (Array.isArray(data) && segments.length) {
-        data = data.map((v) => this.getFieldData(v, segments.join('.')));
-        return data;
-      }
     }
     return data;
   }
@@ -494,9 +490,10 @@ export class SearchIndex {
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
-          Object.keys(filter.eq).map(
-            async (fieldPath) => await this.loadFieldCard(on, fieldPath)
-          )
+          Object.keys(filter.eq).map(async (fieldPath) => [
+            fieldPath,
+            await this.loadFieldCard(on, fieldPath),
+          ])
         )
       );
 
@@ -521,33 +518,6 @@ export class SearchIndex {
             if (queryValue == null && instanceValue == null) {
               return true;
             }
-
-            if (
-              typeof instanceValue === 'object' &&
-              typeof queryValue === 'object'
-            ) {
-              let instance = Array.isArray(instanceValue)
-                ? instanceValue
-                : [instanceValue];
-
-              return instance.some((ins) => {
-                for (let [key, val] of Object.entries(queryValue)) {
-                  if (ins == null && val != null) {
-                    return false;
-                  }
-                  if (ins[key] == null && val == null) {
-                    continue;
-                  }
-                  if (ins[key] !== val) {
-                    return false;
-                  }
-                }
-                return true;
-              });
-            } else if (Array.isArray(instanceValue)) {
-              return instanceValue.includes(queryValue);
-            }
-
             return instanceValue === queryValue;
           } else {
             return null;
@@ -560,9 +530,10 @@ export class SearchIndex {
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
-          Object.keys(filter.range).map(
-            async (fieldPath) => await this.loadFieldCard(on, fieldPath)
-          )
+          Object.keys(filter.range).map(async (fieldPath) => [
+            fieldPath,
+            await this.loadFieldCard(on, fieldPath),
+          ])
         )
       );
 

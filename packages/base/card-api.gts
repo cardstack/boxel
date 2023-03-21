@@ -867,9 +867,6 @@ export class Card {
       if (stack.includes(value)) {
         return { id: value.id };
       }
-      if (typeof value === 'object' && !(isBaseCard in value)) {
-        return value;
-      }
       return Object.fromEntries(
         Object.entries(
           getFields(value, { includeComputeds: true, usedFieldsOnly: true })
@@ -1054,11 +1051,6 @@ export function getQueryableValue(
   if (value == null) {
     return null;
   }
-
-  if (field?.fieldType === 'containsMany') {
-    return value.map((val: any) => getQueryableValue(fieldCard, val, stack));
-  }
-
   // this recurses through the fields of the compound card via
   // the base card's queryableValue implementation
   return (fieldCard as any)[queryableValue](value, stack);

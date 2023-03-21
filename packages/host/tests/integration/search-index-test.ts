@@ -1884,10 +1884,9 @@ posts/ignore-me.json
             hosts: [
               {
                 firstName: 'Arthur',
-                lastName: 'F',
               },
               {
-                firstName: 'Arnold',
+                firstName: 'Ed',
                 lastName: 'Faulkner',
               },
             ],
@@ -1945,84 +1944,42 @@ posts/ignore-me.json
     });
 
     test(`can use 'eq' to find 'null' values`, async function (assert) {
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}book`, name: 'Book' },
-            eq: { 'author.lastName': null },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${testRealmURL}card-2`]
-        );
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}book`, name: 'Book' },
-            eq: { author: { lastName: null } },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${testRealmURL}card-2`]
-        );
-      }
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          eq: { 'author.lastName': null },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${testRealmURL}card-2`]
+      );
     });
 
     test(`can search for cards by using a computed field`, async function (assert) {
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}post`, name: 'Post' },
-            eq: { 'author.fullName': 'Carl Stack' },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}cards/1`]
-        );
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}post`, name: 'Post' },
-            eq: { author: { fullName: 'Carl Stack' } },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}cards/1`]
-        );
-      }
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}post`, name: 'Post' },
+          eq: { 'author.fullName': 'Carl Stack' },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}cards/1`]
+      );
     });
 
     test('can search for cards by using a linksTo field', async function (assert) {
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}friend`, name: 'Friend' },
-            eq: { 'friend.firstName': 'Mango' },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}friend1`]
-        );
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}friend`, name: 'Friend' },
-            eq: { friend: { firstName: 'Mango' } },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}friend1`]
-        );
-      }
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}friend`, name: 'Friend' },
+          eq: { 'friend.firstName': 'Mango' },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}friend1`]
+      );
     });
 
     test(`can search for cards that have custom queryableValue`, async function (assert) {
@@ -2044,65 +2001,33 @@ posts/ignore-me.json
     });
 
     test('can combine multiple filters', async function (assert) {
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: {
-              module: `${testModuleRealm}post`,
-              name: 'Post',
-            },
-            every: [
-              { eq: { title: 'Card 1' } },
-              { not: { eq: { 'author.firstName': 'Cardy' } } },
-            ],
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: {
+            module: `${testModuleRealm}post`,
+            name: 'Post',
           },
-        });
-        assert.strictEqual(matching.length, 1);
-        assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: {
-              module: `${testModuleRealm}post`,
-              name: 'Post',
-            },
-            every: [
-              { eq: { title: 'Card 1' } },
-              { not: { eq: { author: { firstName: 'Cardy' } } } },
-            ],
-          },
-        });
-        assert.strictEqual(matching.length, 1);
-        assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
-      }
+          every: [
+            { eq: { title: 'Card 1' } },
+            { not: { eq: { 'author.firstName': 'Cardy' } } },
+          ],
+        },
+      });
+      assert.strictEqual(matching.length, 1);
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
     });
 
     test('can handle a filter with double negatives', async function (assert) {
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}post`, name: 'Post' },
-            not: { not: { not: { eq: { 'author.firstName': 'Carl' } } } },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}card-1`]
-        );
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}post`, name: 'Post' },
-            not: { not: { not: { eq: { author: { firstName: 'Carl' } } } } },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}card-1`]
-        );
-      }
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}post`, name: 'Post' },
+          not: { not: { not: { eq: { 'author.firstName': 'Carl' } } } },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}card-1`]
+      );
     });
 
     test('can filter by card type', async function (assert) {
@@ -2205,42 +2130,22 @@ posts/ignore-me.json
     });
 
     test(`gives a good error when query refers to missing field`, async function (assert) {
-      {
-        try {
-          await indexer.search({
-            filter: {
-              on: { module: `${testModuleRealm}post`, name: 'Post' },
-              eq: {
-                'author.firstName': 'Cardy',
-                'author.nonExistentField': 'hello',
-              },
+      try {
+        await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}post`, name: 'Post' },
+            eq: {
+              'author.firstName': 'Cardy',
+              'author.nonExistentField': 'hello',
             },
-          });
-          throw new Error('failed to throw expected exception');
-        } catch (err: any) {
-          assert.strictEqual(
-            err.message,
-            `Your filter refers to nonexistent field "nonExistentField" on type {"module":"${testModuleRealm}person","name":"Person"}`
-          );
-        }
-      }
-      {
-        try {
-          await indexer.search({
-            filter: {
-              on: { module: `${testModuleRealm}post`, name: 'Post' },
-              eq: {
-                author: { firstName: 'Cardy', nonExistentField: 'hello' },
-              },
-            },
-          });
-          throw new Error('failed to throw expected exception');
-        } catch (err: any) {
-          assert.strictEqual(
-            err.message,
-            `Your filter refers to nonexistent field "nonExistentField" on type {"module":"${testModuleRealm}person","name":"Person"}`
-          );
-        }
+          },
+        });
+        throw new Error('failed to throw expected exception');
+      } catch (err: any) {
+        assert.strictEqual(
+          err.message,
+          `Your filter refers to nonexistent field "nonExistentField" on type {"module":"${testModuleRealm}person","name":"Person"}`
+        );
       }
     });
 
@@ -2344,30 +2249,16 @@ posts/ignore-me.json
     });
 
     test('can negate a filter', async function (assert) {
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}article`, name: 'Article' },
-            not: { eq: { 'author.firstName': 'Carl' } },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${testRealmURL}card-1`]
-        );
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}article`, name: 'Article' },
-            not: { eq: { author: { firstName: 'Carl' } } },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${testRealmURL}card-1`]
-        );
-      }
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}article`, name: 'Article' },
+          not: { eq: { 'author.firstName': 'Carl' } },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${testRealmURL}card-1`]
+      );
     });
 
     test('can combine multiple types', async function (assert) {
