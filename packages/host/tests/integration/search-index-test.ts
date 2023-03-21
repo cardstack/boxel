@@ -1891,6 +1891,14 @@ posts/ignore-me.json
               },
             ],
             sponsors: ['Sony', 'Nintendo'],
+            posts: [
+              {
+                title: 'post 1',
+                author: {
+                  firstName: 'A',
+                },
+              },
+            ],
           },
           relationships: {},
           meta: {
@@ -1909,6 +1917,21 @@ posts/ignore-me.json
               {
                 firstName: 'Arthur',
                 lastName: 'Faulkner',
+              },
+            ],
+            posts: [
+              {
+                title: 'post 1',
+                author: {
+                  firstName: 'A',
+                  lastName: 'B',
+                },
+              },
+              {
+                title: 'post 2',
+                author: {
+                  firstName: 'C',
+                },
               },
             ],
           },
@@ -2201,6 +2224,18 @@ posts/ignore-me.json
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { 'posts.author.firstName': 'A', 'posts.author.lastName': 'B' },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking2`]
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
             eq: { sponsors: 'HBO' },
           },
         });
@@ -2218,6 +2253,7 @@ posts/ignore-me.json
           [`${paths.url}booking1`]
         );
       }
+
       // {
       //   let { data: matching } = await indexer.search({
       //     filter: {
@@ -2233,7 +2269,6 @@ posts/ignore-me.json
       //     [`${paths.url}booking1`, `${paths.url}booking2`]
       //   );
       // }
-
       // {
       //   let { data: matching } = await indexer.search({
       //     filter: {

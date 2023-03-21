@@ -527,30 +527,53 @@ export class SearchIndex {
 
     if ('eq' in filter) {
       let ref: CardRef = on;
-      let nextRef: CardRef | undefined;
 
-      let matcher: (entry: SearchEntry) => boolean | null;
-      let filters: EqFilter['eq'] | undefined;
+      let matchers = new Map<
+        string,
+        {
+          filters: EqFilter['eq'];
+          ref: CardRef;
+          matcher?: (entry: SearchEntry) => boolean | null;
+        }
+      >();
+      let fieldNames: string[] = [];
       for (let [name, value] of Object.entries(filter.eq)) {
-        let [fieldName, ...rest] = name.split('.');
-        let nextFieldName = rest.join('.');
-        let field = await this.loadField(on, fieldName);
-        if (!nextRef) {
+        let nextRef: CardRef | undefined;
+        let segments = name.split('.');
+        while (segments.length > 1) {
+          let fieldName = segments.shift()!;
+          let nextFieldName = segments.join('.');
+          let field = await this.loadField(nextRef ? nextRef : on, fieldName);
           nextRef = identifyCard(field.card);
           if (!nextRef) {
             throw new Error(`could not identify card for field ${fieldName}`);
           }
-        }
-        if (field.fieldType === 'containsMany' && nextFieldName) {
-          if (!filters) {
-            filters = {};
+          if (nextFieldName) {
+            let matcherArgs = matchers.get(fieldName);
+            if (!matcherArgs) {
+              matcherArgs = { filters: {}, ref: nextRef };
+              fieldNames.push(fieldName);
+            }
+            matcherArgs.filters[nextFieldName] = value;
+            matchers.set(fieldName, matcherArgs);
           }
-          filters[nextFieldName] = value;
         }
       }
-      if (filters && nextRef) {
-        matcher = await this.buildMatcher({ eq: filters }, nextRef);
+      if (matchers.size > 0) {
+        for (let fieldName of fieldNames) {
+          let matcherArgs = matchers.get(fieldName);
+          if (!matcherArgs) {
+            continue;
+          }
+          let matcher = await this.buildMatcher(
+            { eq: matcherArgs.filters },
+            matcherArgs.ref
+          );
+          matcherArgs.matcher = matcher;
+          matchers.set(fieldName, matcherArgs);
+        }
       }
+
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
           Object.keys(filter.eq).map(async (fieldPath) => [
@@ -573,22 +596,28 @@ export class SearchIndex {
               value
             );
 
-            let instanceValue = entry.searchData[fieldPath.split('.')[0]];
-            if (Array.isArray(instanceValue)) {
-              if (matcher && nextRef) {
-                let hasMatching = instanceValue
+            let fieldName: string = fieldPath.split('.')[0];
+            let instanceValue = entry.searchData[fieldName];
+            if (instanceValue != null && typeof instanceValue === 'object') {
+              let matcher = matchers.get(fieldName)?.matcher;
+              let values = Array.isArray(instanceValue)
+                ? instanceValue
+                : [instanceValue];
+              if (matcher && values.length > 0) {
+                let currRef = matchers.get(fieldName)?.ref;
+                let hasMatching = values
                   .map(
-                    (v) =>
+                    (data) =>
                       ({
-                        searchData: v,
-                        types: [internalKeyFor(nextRef!, undefined)],
+                        searchData: data,
+                        types: [internalKeyFor(currRef!, undefined)],
                       } as SearchEntry)
                   )
                   .some(matcher);
                 if (hasMatching) {
                   return true;
                 }
-              } else {
+              } else if (Array.isArray(instanceValue)) {
                 // primitive containsMany field
                 return instanceValue.includes(value);
               }
