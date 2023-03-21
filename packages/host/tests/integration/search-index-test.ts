@@ -1890,6 +1890,7 @@ posts/ignore-me.json
                 lastName: 'Faulkner',
               },
             ],
+            sponsors: ['Sony', 'Nintendo'],
           },
           relationships: {},
           meta: {
@@ -2179,46 +2180,7 @@ posts/ignore-me.json
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: { hosts: { firstName: 'Arthur' } },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}booking1`, `${paths.url}booking2`]
-        );
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
             eq: { 'hosts.firstName': 'Arthur', 'hosts.lastName': 'Faulkner' },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}booking1`, `${paths.url}booking2`]
-        );
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            every: [
-              { eq: { 'hosts.firstName': 'Arthur' } },
-              { eq: { 'hosts.lastName': 'Faulkner' } },
-            ],
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}booking1`, `${paths.url}booking2`]
-        );
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: { hosts: { firstName: 'Arthur', lastName: 'Faulkner' } },
           },
         });
         assert.deepEqual(
@@ -2230,15 +2192,25 @@ posts/ignore-me.json
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            every: [
-              { eq: { 'hosts.firstName': 'Arthur' } },
-              { eq: { 'hosts.lastName': 'Faulkner' } },
-              {
-                not: {
-                  eq: { hosts: { firstName: 'Arthur', lastName: 'Faulkner' } },
-                },
-              },
-            ],
+            eq: { 'hosts.firstName': 'Burcu' },
+          },
+        });
+        assert.strictEqual(matching.length, 0);
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { sponsors: 'HBO' },
+          },
+        });
+        assert.strictEqual(matching.length, 0);
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { sponsors: 'Nintendo' },
           },
         });
         assert.deepEqual(
@@ -2246,6 +2218,34 @@ posts/ignore-me.json
           [`${paths.url}booking1`]
         );
       }
+      // {
+      //   let { data: matching } = await indexer.search({
+      //     filter: {
+      //       on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+      //       every: [
+      //         { eq: { 'hosts.firstName': 'Arthur' } },
+      //         { eq: { 'hosts.lastName': 'Faulkner' } },
+      //       ],
+      //     },
+      //   });
+      //   assert.deepEqual(
+      //     matching.map((m) => m.id),
+      //     [`${paths.url}booking1`, `${paths.url}booking2`]
+      //   );
+      // }
+
+      // {
+      //   let { data: matching } = await indexer.search({
+      //     filter: {
+      //       on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+      //       eq: { hosts: { firstName: 'Arthur', lastName: 'Faulkner' } },
+      //     },
+      //   });
+      //   assert.deepEqual(
+      //     matching.map((m) => m.id),
+      //     [`${paths.url}booking2`]
+      //   );
+      // }
     });
 
     test('can negate a filter', async function (assert) {

@@ -7,12 +7,12 @@ import {
 import { Kind, Realm } from './realm';
 import { LocalPath, RealmPaths } from './paths';
 import { Loader } from './loader';
-import { Query, Filter, Sort } from './query';
+import type { Query, Filter, Sort, EqFilter } from './query';
 import { CardError, type SerializedError } from './error';
 import { URLMap } from './url-map';
 import flatMap from 'lodash/flatMap';
 import ignore, { type Ignore } from 'ignore';
-import { Card } from 'https://cardstack.com/base/card-api';
+import type { Card, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CardRef, getField, identifyCard, loadCard } from './card-ref';
 import {
@@ -386,12 +386,52 @@ export class SearchIndex {
     return card;
   }
 
+  private async loadField(
+    ref: CardRef,
+    fieldName: string
+  ): Promise<Field<typeof Card>> {
+    let card: typeof Card | undefined;
+    try {
+      card = await loadCard(ref, { loader: this.loader });
+    } catch (err: any) {
+      if (!('type' in ref)) {
+        throw new Error(
+          `Your filter refers to nonexistent type: import ${
+            ref.name === 'default' ? 'default' : `{ ${ref.name} }`
+          } from "${ref.module}"`
+        );
+      } else {
+        throw new Error(
+          `Your filter refers to nonexistent type: ${JSON.stringify(
+            ref,
+            null,
+            2
+          )}`
+        );
+      }
+    }
+
+    let field = getField(card, fieldName);
+    if (!field) {
+      throw new Error(
+        `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(
+          identifyCard(card)
+        )}`
+      );
+    }
+    return field;
+  }
+
   private getFieldData(searchData: Record<string, any>, fieldPath: string) {
     let data = searchData;
     let segments = fieldPath.split('.');
     while (segments.length && data != null) {
       let fieldName = segments.shift()!;
       data = data[fieldName];
+      // if (Array.isArray(data) && segments.length) {
+      //   data = data.map((v) => this.getFieldData(v, segments.join('.')));
+      //   return data;
+      // }
     }
     return data;
   }
@@ -487,7 +527,30 @@ export class SearchIndex {
 
     if ('eq' in filter) {
       let ref: CardRef = on;
+      let nextRef: CardRef | undefined;
 
+      let matcher: (entry: SearchEntry) => boolean | null;
+      let filters: EqFilter['eq'] | undefined;
+      for (let [name, value] of Object.entries(filter.eq)) {
+        let [fieldName, ...rest] = name.split('.');
+        let nextFieldName = rest.join('.');
+        let field = await this.loadField(on, fieldName);
+        if (!nextRef) {
+          nextRef = identifyCard(field.card);
+          if (!nextRef) {
+            throw new Error(`could not identify card for field ${fieldName}`);
+          }
+        }
+        if (field.fieldType === 'containsMany' && nextFieldName) {
+          if (!filters) {
+            filters = {};
+          }
+          filters[nextFieldName] = value;
+        }
+      }
+      if (filters && nextRef) {
+        matcher = await this.buildMatcher({ eq: filters }, nextRef);
+      }
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
           Object.keys(filter.eq).map(async (fieldPath) => [
@@ -510,7 +573,26 @@ export class SearchIndex {
               value
             );
 
-            let instanceValue = this.getFieldData(entry.searchData, fieldPath);
+            let instanceValue = entry.searchData[fieldPath.split('.')[0]];
+            if (Array.isArray(instanceValue)) {
+              if (matcher && nextRef) {
+                let hasMatching = instanceValue
+                  .map(
+                    (v) =>
+                      ({
+                        searchData: v,
+                        types: [internalKeyFor(nextRef!, undefined)],
+                      } as SearchEntry)
+                  )
+                  .some(matcher);
+                if (hasMatching) {
+                  return true;
+                }
+              } else {
+                // primitive containsMany field
+                return instanceValue.includes(value);
+              }
+            }
             if (instanceValue === undefined && queryValue != null) {
               return null;
             }
