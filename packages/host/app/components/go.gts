@@ -22,11 +22,13 @@ import {
   extendMonacoLanguage,
   languageConfigs,
 } from '../utils/editor-language';
-import monaco from '../modifiers/monaco';
+import monacoModifier from '../modifiers/monaco';
+import type * as monaco from 'monaco-editor';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import InLocalRealm from './in-local-realm';
 import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
+import momentFrom from 'ember-moment/helpers/moment-from';
 
 const { ownRealmURL, isLocalRealm } = ENV;
 
@@ -35,6 +37,7 @@ interface Signature {
     openFile: FileResource | undefined;
     openDirs: string[];
     path: string | undefined;
+    onEditorSetup?(editor: monaco.editor.IStandaloneCodeEditor): void;
   };
 }
 
@@ -59,13 +62,35 @@ export default class Go extends Component<Signature> {
         {{/if}}
       </div>
       {{#if this.openFile}}
-        <div
-          {{monaco
-            content=this.openFile.content
-            language=(getLangFromFileExtension this.openFile.name)
-            contentChanged=this.contentChanged
-          }}
-        >
+        <div class='editor__column'>
+          <menu class='editor__menu'>
+            <li>
+              {{#if this.contentChangedTask.isRunning}}
+                <span data-test-saving>⟳ Saving…</span>
+              {{else if this.contentChangedTask.last.isError}}
+                <span data-test-save-error>✘</span>
+              {{else}}
+                <span data-test-saved>✔</span>
+              {{/if}}
+            </li>
+            {{#if this.contentChangedTask.lastErrored}}
+              <li data-test-failed-to-save>Failed to save</li>
+            {{else if this.openFile.lastModified}}
+              <li data-test-last-edit>Last edit was
+                {{momentFrom this.openFile.lastModified}}</li>
+            {{/if}}
+          </menu>
+          <div
+            class='editor__container'
+            data-test-editor
+            {{monacoModifier
+              content=this.openFile.content
+              language=(getLangFromFileExtension this.openFile.name)
+              contentChanged=this.contentChanged
+              onSetup=@onEditorSetup
+            }}
+          >
+          </div>
         </div>
         <div class='main__column'>
           {{#if (isRunnable this.openFile.name)}}
@@ -100,30 +125,54 @@ export default class Go extends Component<Signature> {
 
   @action
   contentChanged(content: string) {
+    this.contentChangedTask.perform(content);
+  }
+
+  contentChangedTask = restartableTask(async (content: string) => {
     if (
-      this.args.openFile?.state === 'ready' &&
-      content !== this.args.openFile.content
+      this.args.openFile?.state !== 'ready' ||
+      content === this.args.openFile.content
     ) {
-      // if the file is a card instance, then use the card-service to update the content
-      if (this.args.openFile.name.endsWith('.json')) {
-        let json: any;
-        try {
-          json = JSON.parse(content);
-        } catch (err) {
-          log.warn(
-            `content for ${this.args.path} is not valid JSON, skipping write`
-          );
-          return;
-        }
-        if (isSingleCardDocument(json)) {
-          let realmPath = new RealmPaths(this.cardService.defaultURL);
-          let url = realmPath.fileURL(this.args.path!.replace(/\.json$/, ''));
-          // note: intentionally not awaiting this promise, we may want to keep track of it...
-          this.cardService.saveCardDocument(json, url);
-          return;
-        }
-      }
-      this.args.openFile.write(content);
+      return;
+    }
+
+    let isJSON = this.args.openFile.name.endsWith('.json');
+    let json = isJSON && this.safeJSONParse(content);
+
+    if (json && isSingleCardDocument(json)) {
+      await this.saveSingleCardDocument(json);
+      return;
+    }
+
+    await this.writeContentToFile(this.args.openFile, content);
+  });
+
+  safeJSONParse(content: string) {
+    try {
+      return JSON.parse(content);
+    } catch (err) {
+      log.warn(
+        `content for ${this.args.path} is not valid JSON, skipping write`
+      );
+      return;
+    }
+  }
+
+  writeContentToFile(file: FileResource, content: string) {
+    if (file.state !== 'ready')
+      throw new Error('File is not ready to be written to');
+
+    return file.writeTask.perform(content);
+  }
+
+  async saveSingleCardDocument(json: any) {
+    let realmPath = new RealmPaths(this.cardService.defaultURL);
+    let url = realmPath.fileURL(this.args.path!.replace(/\.json$/, ''));
+
+    try {
+      await this.cardService.saveCardDocument(json, url);
+    } catch (e) {
+      console.log('Failed to save single card document', e);
     }
   }
 
