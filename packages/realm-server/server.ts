@@ -1,3 +1,6 @@
+import Koa from 'koa';
+import cors from '@koa/cors';
+import { Memoize } from 'typescript-memoize';
 import http, { IncomingMessage, ServerResponse } from 'http';
 import { Loader, Realm, baseRealm, assetsDir } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
@@ -6,7 +9,7 @@ import { setupCloseHandler } from './node-realm';
 import '@cardstack/runtime-common/externals-global';
 import log from 'loglevel';
 
-let requestLog = log.getLogger('realm:requests');
+let logger = log.getLogger('realm:requests');
 let assetPathname = new URL(`${baseRealm.url}${assetsDir}`).pathname;
 let monacoLanguages = ['css', 'json', 'ts', 'html'];
 let monacoFonts = ['ade705761eb7e702770d.ttf'];
@@ -19,26 +22,67 @@ export interface RealmConfig {
 interface Options {
   hostLocalRealm?: boolean;
 }
-// TODO refactor this with middleware--perhaps use KOA
-export function createRealmServer(realms: Realm[], opts?: Options) {
-  detectRealmCollision(realms);
 
-  let server = http.createServer(async (req, res) => {
+export class RealmServer {
+  private hostLocalRealm = false;
+
+  constructor(private realms: Realm[], opts?: Options) {
+    detectRealmCollision(realms);
+    this.realms = realms;
+    this.hostLocalRealm = Boolean(opts?.hostLocalRealm);
+  }
+
+  @Memoize()
+  get app() {
+    let middlewareToRefactor = createRealmServerMiddleware(this.realms, {
+      hostLocalRealm: this.hostLocalRealm,
+    });
+    let app = new Koa<Koa.DefaultState, Koa.Context>()
+      // .use(errorMiddleware)
+      // .use(
+      //   cors({
+      //     origin: '*',
+      //     allowHeaders:
+      //       'Authorization, Content-Type, If-Match, X-Requested-With',
+      //   })
+      // )
+      // .use(httpLogging)
+      .use(middlewareToRefactor);
+    return app;
+  }
+
+  listen(port: number) {
+    let instance = this.app.listen(port);
+    logger.info(`Realm server listening on port %s\n`, port);
+    return instance;
+  }
+}
+
+// TODO refactor this with middleware--perhaps use KOA
+export function createRealmServerMiddleware(
+  realms: Realm[],
+  opts?: Options
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  return async (ctxt: Koa.Context, next: Koa.Next) => {
+    let { req, res: deprecatedRes } = ctxt;
+    detectRealmCollision(realms);
+
+    // let server = http.createServer(async (req, res) => {
     if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
-      res.setHeader(
+      deprecatedRes.setHeader(
         'X-ECS-Container-Metadata-URI-v4',
         process.env['ECS_CONTAINER_METADATA_URI_V4']
       );
     }
 
-    res.on('finish', () => {
-      requestLog.info(`${req.method} ${req.url}: ${res.statusCode}`);
-      requestLog.debug(JSON.stringify(req.headers));
+    deprecatedRes.on('finish', () => {
+      logger.info(`${req.method} ${req.url}: ${deprecatedRes.statusCode}`);
+      logger.debug(JSON.stringify(req.headers));
     });
 
-    let isStreaming = false;
     try {
-      if (handleCors(req, res)) {
+      if (handleCors(req, deprecatedRes)) {
+        next();
         return;
       }
       if (!req.url) {
@@ -47,10 +91,12 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
 
       // Respond to AWS ELB health check
       if (requestIsHealthCheck(req)) {
-        res.statusCode = 200;
-        res.statusMessage = 'OK';
-        res.write('OK');
-        res.end();
+        // res.statusCode = 200;
+        // res.statusMessage = 'OK';
+        // res.write('OK');
+        ctxt.body = 'OK';
+        // res.end();
+        // next();
         return;
       }
 
@@ -58,14 +104,18 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
         if (req.headers.accept?.includes('text/html')) {
           // this would only be called when there is a single realm on this
           // server, in which case just use the first realm
-          res.setHeader('Content-Type', 'text/html');
-          res.write(await realms[0].getIndexHTML());
-          res.end();
+          ctxt.type = 'html';
+          ctxt.body = await realms[0].getIndexHTML();
+          // res.end();
+          // next();
           return;
         } else if (req.method === 'HEAD') {
           // necessary for liveness checks
-          res.writeHead(200, { server: `@cardstack/host` });
-          res.end();
+          // res.writeHead(200, { server: `@cardstack/host` });
+          ctxt.status = 200;
+          ctxt.set('server', '@cardstack/host');
+          // res.end();
+          // next();
           return;
         }
       }
@@ -81,15 +131,14 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
         realms.length > 0 &&
         req.headers.accept?.includes('text/html')
       ) {
-        res.setHeader('Content-Type', 'text/html');
-        res.write(
-          await realms[0].getIndexHTML({
-            hostLocalRealm: true,
-            localRealmURL: `${fullRequestUrl.origin}/local/`,
-            realmsServed: realms.map((r) => r.url),
-          })
-        );
-        res.end();
+        ctxt.type = 'html';
+        ctxt.body = await realms[0].getIndexHTML({
+          hostLocalRealm: true,
+          localRealmURL: `${fullRequestUrl.origin}/local/`,
+          realmsServed: realms.map((r) => r.url),
+        });
+        // res.end();
+        // next();
         return;
       }
       // this one is unique in that it is requested in a manner that is relative
@@ -100,11 +149,12 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
       if (req.url === '/local/worker.js' && opts?.hostLocalRealm) {
         await proxyAsset(
           Loader.resolve(`${baseRealm.url}${assetsDir}worker.js`).href,
-          res,
+          deprecatedRes,
           {
             'Service-Worker-Allowed': '/',
           }
         );
+        // next();
         return;
       }
       // For requests that are base realm assets and no base realm is running
@@ -123,13 +173,17 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
             'editor.worker.js',
           ].includes(req.url.slice(assetPathname.length))
         ) {
-          await proxyAsset(redirectURL, res);
+          await proxyAsset(redirectURL, deprecatedRes);
+          // next();
           return;
         }
-        res.writeHead(302, {
-          Location: redirectURL,
-        });
-        res.end();
+
+        // res.writeHead(302, {
+        //   Location: redirectURL,
+        // });
+        ctxt.redirect(redirectURL);
+        // res.end();
+        // next();
         return;
       }
 
@@ -139,10 +193,12 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
         let redirectURL = Loader.resolve(
           new URL(`.${req.url}`, `${baseRealm.url}${assetsDir}`)
         ).href;
-        res.writeHead(302, {
-          Location: redirectURL,
-        });
-        res.end();
+        // res.writeHead(302, {
+        //   Location: redirectURL,
+        // });
+        ctxt.redirect(redirectURL);
+        // res.end();
+        // next();
         return;
       }
 
@@ -156,18 +212,20 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
             Loader.reverseResolution(`${fullRequestUrl.href}/`).href === r.url
         )
       ) {
-        res.writeHead(302, { Location: `${fullRequestUrl.href}/` });
-        res.end();
+        // res.writeHead(302, { Location: `${fullRequestUrl.href}/` });
+        ctxt.redirect(`${fullRequestUrl.href}/`);
+        // res.end();
+        // next();
         return;
       }
       let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
-      requestLog.debug(
+      logger.debug(
         `Looking for realm to handle request with full URL: ${fullRequestUrl.href} (reversed: ${reversedResolution.href})`
       );
 
       let realm = realms.find((r) => {
         let inRealm = r.paths.inRealm(reversedResolution);
-        requestLog.debug(
+        logger.debug(
           `${reversedResolution} in realm ${JSON.stringify({
             url: r.url,
             paths: r.paths,
@@ -177,9 +235,11 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
       });
 
       if (!realm) {
-        res.statusCode = 404;
-        res.statusMessage = 'Not Found';
-        res.end();
+        // res.statusCode = 404;
+        // res.statusMessage = 'Not Found';
+        ctxt.status = 404;
+        // res.end();
+        // next();
         return;
       }
 
@@ -191,19 +251,28 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
         ...(reqBody ? { body: reqBody } : {}),
       });
 
-      setupCloseHandler(res, request);
+      setupCloseHandler(deprecatedRes, request);
 
       let { status, statusText, headers, body, nodeStream } =
         await realm.handle(request);
-      res.statusCode = status;
-      res.statusMessage = statusText;
+      ctxt.status = status;
+      ctxt.message = statusText;
       for (let [header, value] of headers.entries()) {
-        res.setHeader(header, value);
+        ctxt.set(header, value);
+      }
+      if (!headers.get('content-type')) {
+        let fileName = reversedResolution.href.split('/').pop()!;
+        if (fileName.includes('.')) {
+          ctxt.type = fileName.split('.').pop()!;
+        } else {
+          ctxt.type = 'application/vnd.api+json';
+        }
       }
 
       if (nodeStream) {
-        isStreaming = true;
-        nodeStream.pipe(res);
+        // isStreaming = true;
+        // nodeStream.pipe(res);
+        ctxt.body = nodeStream;
       } else if (body instanceof ReadableStream) {
         // A quirk with native fetch Response in node is that it will be clever
         // and convert strings or buffers in the response.body into web-streams
@@ -213,19 +282,22 @@ export function createRealmServer(realms: Realm[], opts?: Options) {
         // then include in our node ServerResponse. Actual node file streams
         // (i.e streams that we are intentionally creating in the Realm) will
         // not be handled here--those will be taken care of above.
-        res.write(await webStreamToText(body));
+        // res.write(await webStreamToText(body));
+        ctxt.body = await webStreamToText(body);
       } else if (body != null) {
-        res.write(body);
+        // res.write(body);
+        ctxt.body = body;
       }
     } finally {
       // the node pipe takes care of ending the response for us, so we only have
       // to do this when we are not piping
-      if (!isStreaming) {
-        res.end();
-      }
+      // if (!isStreaming) {
+      // res.end();
+      // }
     }
-  });
-  return server;
+    // });
+    // next();
+  };
 }
 
 function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
@@ -239,7 +311,7 @@ function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,DELETE,PATCH');
     res.statusCode = 204;
-    res.end();
+    // res.end();
     return true;
   }
   return false;
@@ -301,5 +373,5 @@ async function proxyAsset(
   let workerJS = await response.text();
   // TODO we should stream this
   res.write(workerJS);
-  res.end();
+  // res.end();
 }
