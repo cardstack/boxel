@@ -1,6 +1,7 @@
 import { isClientMessage, send } from './messages';
 import assertNever from 'assert-never';
 import { Deferred } from '@cardstack/runtime-common/deferred';
+import type { FetchHandler } from './fetch';
 import {
   serializeRunState,
   deserializeRunState,
@@ -11,7 +12,6 @@ import {
 
 export class MessageHandler {
   fs: FileSystemDirectoryHandle | null = null;
-  realmsServed: string[] = [];
   startingUp: Promise<void>;
   private finishedStarting!: () => void;
   private entrySetter: EntrySetter | undefined;
@@ -19,7 +19,10 @@ export class MessageHandler {
   private fromScratchDeferred: Deferred<RunState> | undefined;
   private incrementalDeferred: Deferred<RunState> | undefined;
 
-  constructor(worker: ServiceWorkerGlobalScope) {
+  constructor(
+    worker: ServiceWorkerGlobalScope,
+    private fetchHandler: FetchHandler
+  ) {
     this.startingUp = new Promise((res) => (this.finishedStarting = res));
     worker.addEventListener('message', (event) => {
       this.handle(event);
@@ -46,6 +49,7 @@ export class MessageHandler {
     switch (data.type) {
       case 'requestDirectoryHandle':
         {
+          this.fetchHandler.setRealmsServed(data.realmsServed);
           send(source, {
             type: 'directoryHandleResponse',
             handle: this.fs,
@@ -55,7 +59,7 @@ export class MessageHandler {
       case 'setDirectoryHandle':
         {
           this.fs = data.handle;
-          this.realmsServed = data.realmsServed;
+          this.fetchHandler.setRealmsServed(data.realmsServed);
           this.finishedStarting();
           if (this.fs) {
             send(source, {

@@ -146,7 +146,7 @@ export default class LocalRealm extends Service {
       worker,
       response: new Deferred<DirectoryHandleResponse>(),
     };
-    send(this.state.worker, { type: 'requestDirectoryHandle' });
+    send(this.state.worker, { type: 'requestDirectoryHandle', realmsServed });
     let { handle } = await this.state.response.promise;
     if (handle) {
       this.state = {
