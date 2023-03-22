@@ -101,7 +101,7 @@ export class RealmServer {
       )
       .use(this.rootRealmRedirect)
       .use(router.routes())
-      .use(this.serveFromRealm);
+      .use(compose([parseBody, this.serveFromRealm]));
 
     return app;
   }
@@ -288,7 +288,7 @@ function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
   return next();
 }
 
-export const parseBody = KoaBody({
+const parseBody = KoaBody({
   jsonLimit: '16mb',
   urlencoded: false,
   text: false,
