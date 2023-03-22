@@ -324,7 +324,16 @@ class ContainsMany<FieldT extends CardConstructor>
     return getter(instance, this);
   }
 
-  queryableValue(instances: any[], stack: Card[]): any[] {
+  queryableValue(instances: any[] | null, stack: Card[]): any[] {
+    if (instances == null) {
+      return [];
+    }
+
+    if (primitive in this.card && !Array.isArray(instances)) {
+      // TODO: better handling of primitive case / why is this happening
+      return instances;
+    }
+
     // Need to replace the WatchedArray proxy with an actual array because the
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.

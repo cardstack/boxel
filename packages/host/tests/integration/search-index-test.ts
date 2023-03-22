@@ -2577,7 +2577,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}books/1`, 'http://test-realm/test/card-2']
+        [`${paths.url}books/1`]
       );
     });
   });

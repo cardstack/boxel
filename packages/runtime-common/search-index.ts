@@ -484,8 +484,7 @@ export class SearchIndex {
     }
 
     if ('eq' in filter) {
-      let ref: CardRef = on;
-      return await this.buildEqMatchers(filter.eq, ref);
+      return await this.buildEqMatchers(filter.eq, on);
     }
 
     if ('range' in filter) {
@@ -586,16 +585,25 @@ export class SearchIndex {
         let nextField = fields.pop()!;
         let nextMatcher = nextField.queryMatcher(matcher);
         matcher = (instanceValue: any) => {
-          if (nextField.name in instanceValue) {
-            return nextMatcher(instanceValue[nextField.name]);
+          if (instanceValue == null && queryValue != null) {
+            return null;
           }
-          return null;
+          if (instanceValue == null && queryValue == null) {
+            return true;
+          }
+          return nextMatcher(instanceValue[nextField.name]);
         };
       }
       matchers.push(matcher);
     }
 
-    return (entry) => every(matchers, (m) => m(entry.searchData));
+    return (entry) =>
+      every(matchers, (m) => {
+        if (this.cardHasType(entry, ref)) {
+          return m(entry.searchData);
+        }
+        return null;
+      });
   }
 }
 
