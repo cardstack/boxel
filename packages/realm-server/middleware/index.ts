@@ -9,6 +9,7 @@ import log from 'loglevel';
 import type Koa from 'koa';
 
 const logger = log.getLogger('realm:requests');
+export const assetPathname = new URL(`${baseRealm.url}${assetsDir}`).pathname;
 
 interface ProxyOptions {
   responseHeaders?: Record<string, string>;
@@ -67,7 +68,6 @@ export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
   return next();
 }
 
-const assetPathname = new URL(`${baseRealm.url}${assetsDir}`).pathname;
 // if the base realm is not running on this server then we should issue a
 // redirect to get the asset from the base realm
 export function assetRedirect(

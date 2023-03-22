@@ -1,4 +1,4 @@
-import { proxyAsset } from './index';
+import { proxyAsset, assetPathname } from './index';
 import Router from '@koa/router';
 import compose from 'koa-compose';
 import type Koa from 'koa';
@@ -24,9 +24,7 @@ export function monacoMiddleware(realms: Realm[]) {
     ...(!realms.find((r) => r.url === baseRealm.url)
       ? [
           ...['editor', 'json', 'css', 'ts', 'html'].map((f) =>
-            proxyAsset(
-              `${new URL(baseRealm.url).pathname}${assetsDir}${f}.worker.js`
-            )
+            proxyAsset(`${assetPathname}${f}.worker.js`)
           ),
         ]
       : []),
