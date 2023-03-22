@@ -24,7 +24,9 @@ export function monacoMiddleware(realms: Realm[]) {
     ...(!realms.find((r) => r.url === baseRealm.url)
       ? [
           ...['editor', 'json', 'css', 'ts', 'html'].map((f) =>
-            proxyAsset(`/base/__boxel/${f}.worker.js`)
+            proxyAsset(
+              `${new URL(baseRealm.url).pathname}${assetsDir}${f}.worker.js`
+            )
           ),
         ]
       : []),
