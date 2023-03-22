@@ -1,9 +1,9 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
-import KoaBody from 'koa-body';
 import proxy from 'koa-proxies';
 import Router from '@koa/router';
 import compose from 'koa-compose';
+import { Readable } from 'stream';
 import { Memoize } from 'typescript-memoize';
 import { Loader, Realm, baseRealm, assetsDir } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
@@ -42,7 +42,7 @@ export class RealmServer {
       healthCheck,
       this.serveIndex({ serveLocalRealm: false }),
       this.rootRealmRedirect,
-      parseBody,
+      // parseBody,
       this.serveFromRealm
     );
     router.get('/local', this.serveIndex({ serveLocalRealm: true }));
@@ -101,7 +101,7 @@ export class RealmServer {
       )
       .use(this.rootRealmRedirect)
       .use(router.routes())
-      .use(compose([parseBody, this.serveFromRealm]));
+      .use(this.serveFromRealm);
 
     return app;
   }
@@ -196,7 +196,7 @@ export class RealmServer {
 
     let reqBody: string | undefined;
     if (['POST', 'PATCH'].includes(ctxt.method)) {
-      reqBody = JSON.stringify(ctxt.request.body);
+      reqBody = await nodeStreamToText(ctxt.req);
     }
 
     let request = new Request(reversedResolution.href, {
@@ -288,11 +288,11 @@ function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
   return next();
 }
 
-const parseBody = KoaBody({
-  jsonLimit: '16mb',
-  urlencoded: false,
-  text: false,
-  onError(error: Error) {
-    throw new Error(`error while parsing body: ${error.message}`);
-  },
-});
+async function nodeStreamToText(stream: Readable): Promise<string> {
+  const chunks: Buffer[] = [];
+  // the types for Readable have not caught up to the fact these are async generators
+  for await (const chunk of stream as any) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf-8');
+}

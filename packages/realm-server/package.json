@@ -25,7 +25,6 @@
     "fs-extra": "^10.1.0",
     "http-server": "^14.1.1",
     "koa": "^2.14.1",
-    "koa-body": "^6.0.1",
     "koa-compose": "^4.1.0",
     "koa-proxies": "^0.12.3",
     "lodash": "^4.17.21",
