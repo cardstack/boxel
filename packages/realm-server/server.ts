@@ -13,6 +13,7 @@ import {
   ecsMetadata,
   assetRedirect,
   rootRealmRedirect,
+  fullRequestURL,
 } from './middleware';
 import { monacoMiddleware } from './middleware/monaco';
 import '@cardstack/runtime-common/externals-global';
@@ -90,7 +91,7 @@ export class RealmServer {
           hostLocalRealm: serveLocalRealm && this.hostLocalRealm,
           localRealmURL:
             serveLocalRealm && this.hostLocalRealm
-              ? `${ctxt.URL.origin}/local/`
+              ? `${fullRequestURL(ctxt).origin}/local/`
               : undefined,
           realmsServed: this.realms.map((r) => r.url),
         });
@@ -101,9 +102,13 @@ export class RealmServer {
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
-    let reversedResolution = Loader.reverseResolution(ctxt.URL.href);
+    let reversedResolution = Loader.reverseResolution(
+      fullRequestURL(ctxt).href
+    );
     logger.debug(
-      `Looking for realm to handle request with full URL: ${ctxt.URL.href} (reversed: ${reversedResolution.href})`
+      `Looking for realm to handle request with full URL: ${
+        fullRequestURL(ctxt).href
+      } (reversed: ${reversedResolution.href})`
     );
 
     let realm = this.realms.find((r) => {

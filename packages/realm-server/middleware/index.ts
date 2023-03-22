@@ -52,7 +52,7 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   ctxt.res.on('finish', () => {
-    logger.info(`${ctxt.method} ${ctxt.URL.href}: ${ctxt.status}`);
+    logger.info(`${ctxt.method} ${fullRequestURL(ctxt).href}: ${ctxt.status}`);
     logger.debug(JSON.stringify(ctxt.req.headers));
   });
   return next();
@@ -93,15 +93,22 @@ export function rootRealmRedirect(
   realms: Realm[]
 ): (ctxt: Koa.Context, next: Koa.Next) => void {
   return (ctxt: Koa.Context, next: Koa.Next) => {
+    let url = fullRequestURL(ctxt);
     if (
-      !ctxt.URL.href.endsWith('/') &&
+      !url.href.endsWith('/') &&
       realms.find(
-        (r) => Loader.reverseResolution(`${ctxt.URL.href}/`).href === r.url
+        (r) => Loader.reverseResolution(`${url.href}/`).href === r.url
       )
     ) {
-      ctxt.redirect(`${ctxt.URL.href}/`);
+      ctxt.redirect(`${url.href}/`);
       return;
     }
     return next();
   };
+}
+
+export function fullRequestURL(ctxt: Koa.Context): URL {
+  let protocol =
+    ctxt.req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  return new URL(`${protocol}://${ctxt.req.headers.host}${ctxt.path}`);
 }
