@@ -187,7 +187,10 @@ interface JSONAPISingleResourceDocument {
   included?: (Partial<JSONAPIResource> & { id: string; type: string })[];
 }
 
-export interface Field<CardT extends CardConstructor> {
+export interface Field<
+  CardT extends CardConstructor = CardConstructor,
+  SearchT = any
+> {
   card: CardT;
   name: string;
   fieldType: FieldType;
@@ -214,7 +217,10 @@ export interface Field<CardT extends CardConstructor> {
     format: Format
   ): ComponentLike<{ Args: {}; Blocks: {} }>;
   getter(instance: Card): CardInstanceType<CardT>;
-  queryableValue(value: any, stack: Card[]): any;
+  queryableValue(value: any, stack: Card[]): SearchT;
+  queryMatcher(
+    innerMatcher: (innerValue: any) => boolean | null
+  ): (value: SearchT) => boolean | null;
 }
 
 function callSerializeHook(
@@ -300,7 +306,9 @@ function getter<CardT extends CardConstructor>(
   }
 }
 
-class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
+class ContainsMany<FieldT extends CardConstructor>
+  implements Field<FieldT, any[]>
+{
   readonly fieldType = 'containsMany';
   constructor(
     private cardThunk: () => FieldT,
@@ -316,7 +324,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
     return getter(instance, this);
   }
 
-  queryableValue(instances: any[], stack: Card[]): any {
+  queryableValue(instances: any[], stack: Card[]): any[] {
     // Need to replace the WatchedArray proxy with an actual array because the
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
@@ -327,6 +335,12 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
       }
       return result;
     });
+  }
+
+  queryMatcher(
+    innerMatcher: (innerValue: any) => boolean | null
+  ): (value: any[]) => boolean | null {
+    return (value) => value.some((innerValue) => innerMatcher(innerValue));
   }
 
   serialize(
@@ -480,7 +494,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
   }
 }
 
-class Contains<CardT extends CardConstructor> implements Field<CardT> {
+class Contains<CardT extends CardConstructor> implements Field<CardT, any> {
   readonly fieldType = 'contains';
   constructor(
     private cardThunk: () => CardT,
@@ -506,6 +520,12 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
       return null;
     }
     return this.card[queryableValue](instance, stack);
+  }
+
+  queryMatcher(
+    innerMatcher: (innerValue: any) => boolean | null
+  ): (value: any) => boolean | null {
+    return (value) => innerMatcher(value);
   }
 
   serialize(
@@ -653,6 +673,12 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       return null;
     }
     return this.card[queryableValue](instance, stack);
+  }
+
+  queryMatcher(
+    innerMatcher: (innerValue: any) => boolean | null
+  ): (value: any) => boolean | null {
+    return (value) => innerMatcher(value);
   }
 
   serialize(
