@@ -1,19 +1,25 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
-import proxy from 'koa-proxies';
 import Router from '@koa/router';
-import compose from 'koa-compose';
-import { Readable } from 'stream';
 import { Memoize } from 'typescript-memoize';
-import { Loader, Realm, baseRealm, assetsDir } from '@cardstack/runtime-common';
+import { Loader, Realm } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { setupCloseHandler } from './node-realm';
+import {
+  proxyAsset,
+  livenessCheck,
+  healthCheck,
+  httpLogging,
+  ecsMetadata,
+  assetRedirect,
+  rootRealmRedirect,
+} from './middleware';
+import { monacoMiddleware } from './middleware/monaco';
 import '@cardstack/runtime-common/externals-global';
 import log from 'loglevel';
+import { nodeStreamToText } from './stream';
 
 const logger = log.getLogger('realm:requests');
-const assetPathname = new URL(`${baseRealm.url}${assetsDir}`).pathname;
-const monacoFont = 'ade705761eb7e702770d.ttf';
 
 export interface RealmConfig {
   realmURL: string;
@@ -41,7 +47,7 @@ export class RealmServer {
       '/',
       healthCheck,
       this.serveIndex({ serveLocalRealm: false }),
-      this.rootRealmRedirect,
+      rootRealmRedirect(this.realms),
       this.serveFromRealm
     );
     router.get('/local', this.serveIndex({ serveLocalRealm: true }));
@@ -49,28 +55,7 @@ export class RealmServer {
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
-      .use(ecsMetadata);
-
-    // handle monaco...
-    router.get(`/${monacoFont}`, (ctxt: Koa.Context) =>
-      ctxt.redirect(
-        Loader.resolve(new URL(`.${ctxt.path}`, `${baseRealm.url}${assetsDir}`))
-          .href
-      )
-    );
-    // if the base realm is not running in this server then we should proxy for monaco web worker js
-    if (!this.realms.find((r) => r.url === baseRealm.url)) {
-      app.use(
-        compose([
-          ...['editor', 'json', 'css', 'ts', 'html'].map((f) =>
-            proxyAsset(`/base/__boxel/${f}.worker.js`)
-          ),
-        ])
-      );
-    }
-
-    app
-      .use(this.assetRedirect)
+      .use(ecsMetadata)
       .use(
         cors({
           origin: '*',
@@ -78,12 +63,14 @@ export class RealmServer {
             'Authorization, Content-Type, If-Match, X-Requested-With',
         })
       )
+      .use(monacoMiddleware(this.realms))
+      .use(assetRedirect(this.realms))
       .use(
         proxyAsset('/local/worker.js', {
           responseHeaders: { 'Service-Worker-Allowed': '/' },
         })
       )
-      .use(this.rootRealmRedirect)
+      .use(rootRealmRedirect(this.realms))
       .use(router.routes())
       .use(this.serveFromRealm);
 
@@ -96,7 +83,7 @@ export class RealmServer {
     return instance;
   }
 
-  serveIndex({
+  private serveIndex({
     serveLocalRealm,
   }: {
     serveLocalRealm: boolean;
@@ -117,36 +104,6 @@ export class RealmServer {
       return next();
     };
   }
-
-  // if the base realm is not running on this server then we should issue a
-  // redirect to get the asset from the base realm
-  private assetRedirect = (ctxt: Koa.Context, next: Koa.Next) => {
-    if (
-      ctxt.path.startsWith(assetPathname) &&
-      !this.realms.find((r) => r.url === baseRealm.url)
-    ) {
-      let redirectURL = Loader.resolve(new URL(ctxt.path, baseRealm.url)).href;
-      ctxt.redirect(redirectURL);
-      return;
-    }
-    return next();
-  };
-
-  // requests for the root of the realm without a trailing slash aren't
-  // technically inside the realm (as the realm includes the trailing '/').
-  // So issue a redirect in those scenarios.
-  private rootRealmRedirect = (ctxt: Koa.Context, next: Koa.Next) => {
-    if (
-      !ctxt.URL.href.endsWith('/') &&
-      this.realms.find(
-        (r) => Loader.reverseResolution(`${ctxt.URL.href}/`).href === r.url
-      )
-    ) {
-      ctxt.redirect(`${ctxt.URL.href}/`);
-      return;
-    }
-    return next();
-  };
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
     let reversedResolution = Loader.reverseResolution(ctxt.URL.href);
@@ -238,70 +195,4 @@ function detectRealmCollision(realms: Realm[]): void {
       )}`
     );
   }
-}
-
-interface ProxyOptions {
-  responseHeaders?: Record<string, string>;
-}
-
-function proxyAsset(
-  from: string,
-  opts?: ProxyOptions
-): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext, any> {
-  let filename = from.split('/').pop()!;
-  return proxy(from, {
-    target: Loader.resolve(baseRealm.url).href,
-    changeOrigin: true,
-    rewrite: () => {
-      return `/${assetsDir}${filename}`;
-    },
-    events: {
-      proxyRes: (_proxyRes, _req, res) => {
-        for (let [key, value] of Object.entries(opts?.responseHeaders ?? {})) {
-          res.setHeader(key, value);
-        }
-      },
-    },
-  });
-}
-
-function livenessCheck(ctxt: Koa.Context, _next: Koa.Next) {
-  ctxt.status = 200;
-  ctxt.set('server', '@cardstack/host');
-}
-
-// Respond to AWS ELB health check
-function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
-  if (ctxt.req.headers['user-agent']?.startsWith('ELB-HealthChecker')) {
-    ctxt.body = 'OK';
-    return;
-  }
-  return next();
-}
-
-function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
-  ctxt.res.on('finish', () => {
-    logger.info(`${ctxt.method} ${ctxt.URL.href}: ${ctxt.status}`);
-    logger.debug(JSON.stringify(ctxt.req.headers));
-  });
-  return next();
-}
-
-function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
-  if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
-    ctxt.set(
-      'X-ECS-Container-Metadata-URI-v4',
-      process.env['ECS_CONTAINER_METADATA_URI_V4']
-    );
-  }
-  return next();
-}
-
-async function nodeStreamToText(stream: Readable): Promise<string> {
-  const chunks: Buffer[] = [];
-  // the types for Readable have not caught up to the fact these are async generators
-  for await (const chunk of stream as any) {
-    chunks.push(Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks).toString('utf-8');
 }
