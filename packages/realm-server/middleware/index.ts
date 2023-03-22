@@ -110,5 +110,5 @@ export function rootRealmRedirect(
 export function fullRequestURL(ctxt: Koa.Context): URL {
   let protocol =
     ctxt.req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-  return new URL(`${protocol}://${ctxt.req.headers.host}${ctxt.path}`);
+  return new URL(`${protocol}://${ctxt.req.headers.host}${ctxt.req.url}`);
 }
