@@ -30,7 +30,7 @@ In order to run the ember-cli hosted app:
 2. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `REALM_BASED_HOSTING_DISABLED=true` which enables this type of build for the host app.
 3. `pnpm start:base` in the realm-server/ to serve the base realm (alternatively you can use `pnpm start:all` which also serves the base realm--this is convenient if you wish to switch between the app and the tests without having to restart servers)
 
-The app is available at http://localhost:4200. Click on the button to connect to your Local Realm, and then select the "cards/" folder within this project. Click "Allow" on the popups that ask for the ability to read and write to the local file system.
+The app is available at http://localhost:4200. Click on the button to connect to your Local Realm, and then select the "packages/demo-cards" folder within this project. Click "Allow" on the popups that ask for the ability to read and write to the local file system.
 
 ### Realm server Hosted App
 In order to run the realm server hosted app:
