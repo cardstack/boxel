@@ -42,14 +42,13 @@ export class RealmServer {
       healthCheck,
       this.serveIndex({ serveLocalRealm: false }),
       this.rootRealmRedirect,
-      // parseBody,
       this.serveFromRealm
     );
     router.get('/local', this.serveIndex({ serveLocalRealm: true }));
     router.get(/\/local\/.*/, this.serveIndex({ serveLocalRealm: true }));
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
-      .use(this.httpLogging)
+      .use(httpLogging)
       .use(ecsMetadata);
 
     // handle monaco...
@@ -64,13 +63,7 @@ export class RealmServer {
       app.use(
         compose([
           ...['editor', 'json', 'css', 'ts', 'html'].map((f) =>
-            proxy(`/base/__boxel/${f}.worker.js`, {
-              target: Loader.resolve(baseRealm.url).href,
-              changeOrigin: true,
-              rewrite: () => {
-                return `/${assetsDir}${f}.worker.js`;
-              },
-            })
+            proxyAsset(`/base/__boxel/${f}.worker.js`)
           ),
         ])
       );
@@ -86,17 +79,8 @@ export class RealmServer {
         })
       )
       .use(
-        proxy('/local/worker.js', {
-          target: Loader.resolve(baseRealm.url).href,
-          changeOrigin: true,
-          rewrite: () => {
-            return `/${assetsDir}worker.js`;
-          },
-          events: {
-            proxyRes: (_proxyRes, _req, res) => {
-              res.setHeader('Service-Worker-Allowed', '/');
-            },
-          },
+        proxyAsset('/local/worker.js', {
+          responseHeaders: { 'Service-Worker-Allowed': '/' },
         })
       )
       .use(this.rootRealmRedirect)
@@ -161,14 +145,6 @@ export class RealmServer {
       ctxt.redirect(`${ctxt.URL.href}/`);
       return;
     }
-    return next();
-  };
-
-  private httpLogging = (ctxt: Koa.Context, next: Koa.Next) => {
-    ctxt.res.on('finish', () => {
-      logger.info(`${ctxt.method} ${ctxt.URL.href}: ${ctxt.status}`);
-      logger.debug(JSON.stringify(ctxt.req.headers));
-    });
     return next();
   };
 
@@ -264,6 +240,31 @@ function detectRealmCollision(realms: Realm[]): void {
   }
 }
 
+interface ProxyOptions {
+  responseHeaders?: Record<string, string>;
+}
+
+function proxyAsset(
+  from: string,
+  opts?: ProxyOptions
+): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext, any> {
+  let filename = from.split('/').pop()!;
+  return proxy(from, {
+    target: Loader.resolve(baseRealm.url).href,
+    changeOrigin: true,
+    rewrite: () => {
+      return `/${assetsDir}${filename}`;
+    },
+    events: {
+      proxyRes: (_proxyRes, _req, res) => {
+        for (let [key, value] of Object.entries(opts?.responseHeaders ?? {})) {
+          res.setHeader(key, value);
+        }
+      },
+    },
+  });
+}
+
 function livenessCheck(ctxt: Koa.Context, _next: Koa.Next) {
   ctxt.status = 200;
   ctxt.set('server', '@cardstack/host');
@@ -275,6 +276,14 @@ function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
     ctxt.body = 'OK';
     return;
   }
+  return next();
+}
+
+function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
+  ctxt.res.on('finish', () => {
+    logger.info(`${ctxt.method} ${ctxt.URL.href}: ${ctxt.status}`);
+    logger.debug(JSON.stringify(ctxt.req.headers));
+  });
   return next();
 }
 
