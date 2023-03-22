@@ -12,7 +12,7 @@ import { CardError, type SerializedError } from './error';
 import { URLMap } from './url-map';
 import flatMap from 'lodash/flatMap';
 import ignore, { type Ignore } from 'ignore';
-import type { Card, Field } from 'https://cardstack.com/base/card-api';
+import type { Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CardRef, getField, identifyCard, loadCard } from './card-ref';
 import {
@@ -386,42 +386,6 @@ export class SearchIndex {
     return card;
   }
 
-  private async loadField(
-    ref: CardRef,
-    fieldName: string
-  ): Promise<Field<typeof Card>> {
-    let card: typeof Card | undefined;
-    try {
-      card = await loadCard(ref, { loader: this.loader });
-    } catch (err: any) {
-      if (!('type' in ref)) {
-        throw new Error(
-          `Your filter refers to nonexistent type: import ${
-            ref.name === 'default' ? 'default' : `{ ${ref.name} }`
-          } from "${ref.module}"`
-        );
-      } else {
-        throw new Error(
-          `Your filter refers to nonexistent type: ${JSON.stringify(
-            ref,
-            null,
-            2
-          )}`
-        );
-      }
-    }
-
-    let field = getField(card, fieldName);
-    if (!field) {
-      throw new Error(
-        `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(
-          identifyCard(card)
-        )}`
-      );
-    }
-    return field;
-  }
-
   private getFieldData(searchData: Record<string, any>, fieldPath: string) {
     let data = searchData;
     let segments = fieldPath.split('.');
@@ -528,51 +492,7 @@ export class SearchIndex {
     if ('eq' in filter) {
       let ref: CardRef = on;
 
-      let matchers = new Map<
-        string,
-        {
-          filters: EqFilter['eq'];
-          ref: CardRef;
-          matcher?: (entry: SearchEntry) => boolean | null;
-        }
-      >();
-      let fieldNames: string[] = [];
-      for (let [name, value] of Object.entries(filter.eq)) {
-        let nextRef: CardRef | undefined;
-        let segments = name.split('.');
-        while (segments.length > 1) {
-          let fieldName = segments.shift()!;
-          let nextFieldName = segments.join('.');
-          let field = await this.loadField(nextRef ? nextRef : on, fieldName);
-          nextRef = identifyCard(field.card);
-          if (!nextRef) {
-            throw new Error(`could not identify card for field ${fieldName}`);
-          }
-          if (nextFieldName) {
-            let matcherArgs = matchers.get(fieldName);
-            if (!matcherArgs) {
-              matcherArgs = { filters: {}, ref: nextRef };
-              fieldNames.push(fieldName);
-            }
-            matcherArgs.filters[nextFieldName] = value;
-            matchers.set(fieldName, matcherArgs);
-          }
-        }
-      }
-      if (matchers.size > 0) {
-        for (let fieldName of fieldNames) {
-          let matcherArgs = matchers.get(fieldName);
-          if (!matcherArgs) {
-            continue;
-          }
-          let matcher = await this.buildMatcher(
-            { eq: matcherArgs.filters },
-            matcherArgs.ref
-          );
-          matcherArgs.matcher = matcher;
-          matchers.set(fieldName, matcherArgs);
-        }
-      }
+      let matchers = await this.buildEqMatchers(filter.eq, ref);
 
       let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
         await Promise.all(
@@ -598,6 +518,7 @@ export class SearchIndex {
 
             let fieldName: string = fieldPath.split('.')[0];
             let instanceValue = entry.searchData[fieldName];
+
             if (instanceValue != null && typeof instanceValue === 'object') {
               let matcher = matchers.get(fieldName)?.matcher;
               let values = Array.isArray(instanceValue)
@@ -618,10 +539,15 @@ export class SearchIndex {
                   return true;
                 }
               } else if (Array.isArray(instanceValue)) {
-                // primitive containsMany field
+                // for primitive containsMany field
+
+                if (queryValue == null && instanceValue.length === 0) {
+                  return true;
+                }
                 return instanceValue.includes(value);
               }
             }
+
             if (instanceValue === undefined && queryValue != null) {
               return null;
             }
@@ -690,6 +616,60 @@ export class SearchIndex {
     }
 
     throw new Error('Unknown filter');
+  }
+
+  private async buildEqMatchers(filter: EqFilter['eq'], ref: CardRef) {
+    let matchers = new Map<
+      string,
+      {
+        filters: EqFilter['eq'];
+        ref: CardRef;
+        matcher?: (entry: SearchEntry) => boolean | null;
+      }
+    >();
+    let fieldNames: string[] = [];
+
+    for (let [name, value] of Object.entries(filter)) {
+      let nextRef: CardRef | undefined = ref;
+      let segments = name.split('.');
+
+      while (segments.length > 1) {
+        let fieldName = segments.shift()!;
+        let card = await this.loadFieldCard(nextRef, fieldName);
+
+        nextRef = identifyCard(card);
+        if (!nextRef) {
+          throw new Error(`could not identify card for field ${fieldName}`);
+        }
+
+        let matcherArgs = matchers.get(fieldName);
+
+        if (!matcherArgs) {
+          matcherArgs = { filters: {}, ref: nextRef };
+          fieldNames.push(fieldName);
+        }
+
+        matcherArgs.filters[segments.join('.')] = value;
+        matchers.set(fieldName, matcherArgs);
+      }
+    }
+
+    if (matchers.size > 0) {
+      for (let fieldName of fieldNames) {
+        let matcherArgs = matchers.get(fieldName);
+        if (!matcherArgs) {
+          continue;
+        }
+        let matcher = await this.buildMatcher(
+          { eq: matcherArgs.filters },
+          matcherArgs.ref
+        );
+        matcherArgs.matcher = matcher;
+        matchers.set(fieldName, matcherArgs);
+      }
+    }
+
+    return matchers;
   }
 }
 

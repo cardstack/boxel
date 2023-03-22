@@ -1944,6 +1944,22 @@ posts/ignore-me.json
           },
         },
       },
+      'booking3.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            hosts: [],
+            posts: [],
+            sponsors: ['Sony'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}booking`,
+              name: 'Booking',
+            },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -2196,7 +2212,8 @@ posts/ignore-me.json
         });
         assert.deepEqual(
           matching.map((m) => m.id),
-          [`${paths.url}booking1`, `${paths.url}booking2`]
+          [`${paths.url}booking1`, `${paths.url}booking2`],
+          'eq on hosts.firstName'
         );
       }
       {
@@ -2208,17 +2225,34 @@ posts/ignore-me.json
         });
         assert.deepEqual(
           matching.map((m) => m.id),
-          [`${paths.url}booking2`]
+          [`${paths.url}booking2`],
+          'eq on hosts.firstName and hosts.lastName'
         );
       }
       {
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: { 'hosts.firstName': 'Burcu' },
+            every: [
+              { eq: { 'hosts.firstName': 'Arthur' } },
+              { eq: { 'hosts.lastName': 'Faulkner' } },
+            ],
           },
         });
-        assert.strictEqual(matching.length, 0);
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking1`, `${paths.url}booking2`],
+          'every on hosts.firstName and hosts.lastName'
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { 'hosts.firstName': null },
+          },
+        });
+        assert.strictEqual(matching.length, 0, 'eq on null hosts.firstName');
       }
       {
         let { data: matching } = await indexer.search({
@@ -2229,7 +2263,42 @@ posts/ignore-me.json
         });
         assert.deepEqual(
           matching.map((m) => m.id),
-          [`${paths.url}booking2`]
+          [`${paths.url}booking2`],
+          'eq on posts.author.firstName and posts.author.lastName'
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: {
+              'hosts.firstName': 'Arthur',
+              'posts.author.firstName': 'A',
+              'posts.author.lastName': null,
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking1`],
+          'eq on hosts.firstName, posts.author.firstName, and null posts.author.lastName'
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: {
+              'hosts.firstName': 'Arthur',
+              'posts.author.firstName': 'A',
+              sponsors: null,
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking2`],
+          'eq on hosts.firstName, posts.author.firstName, and null sponsors'
         );
       }
       {
@@ -2239,7 +2308,11 @@ posts/ignore-me.json
             eq: { sponsors: 'HBO' },
           },
         });
-        assert.strictEqual(matching.length, 0);
+        assert.strictEqual(
+          matching.length,
+          0,
+          'eq on nonexisting value in sponsors'
+        );
       }
       {
         let { data: matching } = await indexer.search({
@@ -2250,37 +2323,10 @@ posts/ignore-me.json
         });
         assert.deepEqual(
           matching.map((m) => m.id),
-          [`${paths.url}booking1`]
+          [`${paths.url}booking1`],
+          'eq on sponsors'
         );
       }
-
-      // {
-      //   let { data: matching } = await indexer.search({
-      //     filter: {
-      //       on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-      //       every: [
-      //         { eq: { 'hosts.firstName': 'Arthur' } },
-      //         { eq: { 'hosts.lastName': 'Faulkner' } },
-      //       ],
-      //     },
-      //   });
-      //   assert.deepEqual(
-      //     matching.map((m) => m.id),
-      //     [`${paths.url}booking1`, `${paths.url}booking2`]
-      //   );
-      // }
-      // {
-      //   let { data: matching } = await indexer.search({
-      //     filter: {
-      //       on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-      //       eq: { hosts: { firstName: 'Arthur', lastName: 'Faulkner' } },
-      //     },
-      //   });
-      //   assert.deepEqual(
-      //     matching.map((m) => m.id),
-      //     [`${paths.url}booking2`]
-      //   );
-      // }
     });
 
     test('can negate a filter', async function (assert) {
