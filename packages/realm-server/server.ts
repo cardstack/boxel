@@ -21,11 +21,6 @@ import { nodeStreamToText } from './stream';
 
 const logger = log.getLogger('realm:requests');
 
-export interface RealmConfig {
-  realmURL: string;
-  path: string;
-}
-
 interface Options {
   hostLocalRealm?: boolean;
 }
