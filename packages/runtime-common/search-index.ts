@@ -618,18 +618,18 @@ export class SearchIndex {
     throw new Error('Unknown filter');
   }
 
-  private async buildEqMatchers(filter: EqFilter['eq'], ref: CardRef) {
+  private async buildEqMatchers(filterValue: EqFilter['eq'], ref: CardRef) {
     let matchers = new Map<
       string,
       {
-        filters: EqFilter['eq'];
+        filterValue: EqFilter['eq'];
         ref: CardRef;
         matcher?: (entry: SearchEntry) => boolean | null;
       }
     >();
     let fieldNames: string[] = [];
 
-    for (let [name, value] of Object.entries(filter)) {
+    for (let [name, value] of Object.entries(filterValue)) {
       let nextRef: CardRef | undefined = ref;
       let segments = name.split('.');
 
@@ -645,11 +645,11 @@ export class SearchIndex {
         let matcherArgs = matchers.get(fieldName);
 
         if (!matcherArgs) {
-          matcherArgs = { filters: {}, ref: nextRef };
+          matcherArgs = { filterValue: {}, ref: nextRef };
           fieldNames.push(fieldName);
         }
 
-        matcherArgs.filters[segments.join('.')] = value;
+        matcherArgs.filterValue[segments.join('.')] = value;
         matchers.set(fieldName, matcherArgs);
       }
     }
@@ -661,7 +661,7 @@ export class SearchIndex {
           continue;
         }
         let matcher = await this.buildMatcher(
-          { eq: matcherArgs.filters },
+          { eq: matcherArgs.filterValue },
           matcherArgs.ref
         );
         matcherArgs.matcher = matcher;

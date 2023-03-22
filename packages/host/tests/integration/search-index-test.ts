@@ -1114,13 +1114,15 @@ module('Integration | search-index', function (hooks) {
     );
     assert.deepEqual(entry?.searchData, {
       id: `${testRealmURL}CatalogEntry/booking`,
-      'demo.endTime': undefined,
-      'demo.hosts': {},
-      'demo.id': undefined,
-      'demo.sponsors': [],
-      'demo.startTime': undefined,
-      'demo.title': null,
-      'demo.venue': null,
+      demo: {
+        endTime: undefined,
+        hosts: [],
+        id: undefined,
+        sponsors: [],
+        startTime: undefined,
+        title: null,
+        venue: null,
+      },
       description: 'Catalog entry for Booking',
       isPrimitive: false,
       moduleHref: 'http://localhost:4202/test/booking',
@@ -1241,11 +1243,15 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(hassanEntry.searchData, {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
-        'friend.id': `${testRealmURL}Friend/mango`,
-        'friend.firstName': 'Mango',
-        'friend.friend.id': `${testRealmURL}Friend/vanGogh`,
-        'friend.friend.firstName': 'Van Gogh',
-        'friend.friend.friend': null,
+        friend: {
+          id: `${testRealmURL}Friend/mango`,
+          firstName: 'Mango',
+          friend: {
+            id: `${testRealmURL}Friend/vanGogh`,
+            firstName: 'Van Gogh',
+            friend: null,
+          },
+        },
       });
     } else {
       assert.ok(
@@ -1378,9 +1384,13 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(hassanEntry.searchData, {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
-        'friend.id': `${testRealmURL}Friend/mango`,
-        'friend.firstName': 'Mango',
-        'friend.friend.id': `${testRealmURL}Friend/hassan`,
+        friend: {
+          id: `${testRealmURL}Friend/mango`,
+          firstName: 'Mango',
+          friend: {
+            id: `${testRealmURL}Friend/hassan`,
+          },
+        },
       });
     } else {
       assert.ok(
@@ -1464,9 +1474,13 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(mangoEntry.searchData, {
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
-        'friend.id': `${testRealmURL}Friend/hassan`,
-        'friend.firstName': 'Hassan',
-        'friend.friend.id': `${testRealmURL}Friend/mango`,
+        friend: {
+          id: `${testRealmURL}Friend/hassan`,
+          firstName: 'Hassan',
+          friend: {
+            id: `${testRealmURL}Friend/mango`,
+          },
+        },
       });
     } else {
       assert.ok(
@@ -1514,7 +1528,6 @@ module('Integration | search-index', function (hooks) {
         '@glimmer/component',
         'ember-concurrency',
         'ember-concurrency/-private/async-arrow-runtime',
-        'flat',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/contains-many-component',
         'http://localhost:4201/base/default-card-component',
@@ -1936,22 +1949,6 @@ posts/ignore-me.json
             ],
           },
           relationships: {},
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}booking`,
-              name: 'Booking',
-            },
-          },
-        },
-      },
-      'booking3.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            hosts: [],
-            posts: [],
-            sponsors: ['Sony'],
-          },
           meta: {
             adoptsFrom: {
               module: `${testModuleRealm}booking`,
@@ -2580,7 +2577,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}books/1`]
+        [`${paths.url}books/1`, 'http://test-realm/test/card-2']
       );
     });
   });
