@@ -15,7 +15,7 @@ export async function makeFastBootIndexRunner(
   let fastboot: FastBootInstance;
   if (typeof dist === 'string') {
     fastboot = new FastBoot({
-      dist,
+      distPath: dist,
       resilient: false,
       buildSandboxGlobals(defaultGlobals: any) {
         return Object.assign({}, defaultGlobals, {
