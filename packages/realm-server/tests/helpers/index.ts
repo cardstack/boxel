@@ -10,16 +10,16 @@ export const testRealm = 'http://test-realm/';
 let distPath = resolve(__dirname, '..', '..', '..', 'host', 'dist');
 
 let manager = new RunnerOptionsManager();
-let getRunner = makeFastBootIndexRunner(
-  distPath,
-  manager.getOptions.bind(manager)
-);
 
-export function createRealm(
+export async function createRealm(
   dir: string,
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   realmURL = testRealm
-): Realm {
+): Promise<Realm> {
+  let getRunner = await makeFastBootIndexRunner(
+    distPath,
+    manager.getOptions.bind(manager)
+  );
   for (let [filename, contents] of Object.entries(flatFiles)) {
     if (typeof contents === 'string') {
       writeFileSync(join(dir, filename), contents);

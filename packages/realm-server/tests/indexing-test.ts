@@ -37,7 +37,7 @@ module('indexing', function (hooks) {
     );
     dir = dirSync().name;
 
-    realm = createRealm(dir, {
+    realm = await createRealm(dir, {
       'person.gts': `
         import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";

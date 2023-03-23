@@ -75,7 +75,7 @@ module('Realm Server', function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    let testRealm = createRealm(dir.name, undefined, testRealmHref);
+    let testRealm = await createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
     server = createRealmServer([testRealm]);
     server.listen(testRealmURL.port);
@@ -493,7 +493,7 @@ module('Realm Server serving from root', function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    let testRealm = createRealm(dir.name, undefined, testRealmHref);
+    let testRealm = await createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
     server = createRealmServer([testRealm]);
     server.listen(testRealmURL.port);
