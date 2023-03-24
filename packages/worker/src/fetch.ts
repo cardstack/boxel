@@ -9,8 +9,11 @@ export class FetchHandler {
 
   constructor(private livenessWatcher?: { alive: boolean }) {}
 
-  addRealm(realm: Realm, otherRealmsServed: string[]) {
+  addRealm(realm: Realm) {
     this.realm = realm;
+  }
+
+  setRealmsServed(otherRealmsServed: string[]) {
     this.otherRealmsServed = otherRealmsServed.map((u) =>
       Loader.resolve(u).href.replace(/\/$/, '')
     );

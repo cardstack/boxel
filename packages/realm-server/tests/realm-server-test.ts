@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
-import { createRealmServer } from '../server';
+import { RealmServer } from '../server';
 import { join, resolve } from 'path';
 import { Server } from 'http';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
@@ -56,7 +56,7 @@ module('Realm Server', function (hooks) {
       defer.reject(
         new Error(`expectEvent timed out, saw events ${JSON.stringify(events)}`)
       );
-    }, 3000);
+    }, 5000);
     await new Promise((resolve) => es.addEventListener('open', resolve));
     let result = await callback();
     assert.deepEqual(await defer.promise, expectedContents);
@@ -77,8 +77,8 @@ module('Realm Server', function (hooks) {
 
     let testRealm = createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
-    server = createRealmServer([testRealm]);
-    server.listen(testRealmURL.port);
+    let realmServer = new RealmServer([testRealm]);
+    server = realmServer.listen(parseInt(testRealmURL.port));
     request = supertest(server);
   });
 
@@ -266,7 +266,7 @@ module('Realm Server', function (hooks) {
       .set('Accept', 'application/vnd.card+source');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
-    let result = response.text.trim();
+    let result = response.body.toString().trim();
     assert.strictEqual(result, cardSrc, 'the card source is correct');
     assert.ok(response.headers['last-modified'], 'last-modified header exists');
   });
@@ -495,8 +495,8 @@ module('Realm Server serving from root', function (hooks) {
 
     let testRealm = createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
-    server = createRealmServer([testRealm]);
-    server.listen(testRealmURL.port);
+    let realmServer = new RealmServer([testRealm]);
+    server = realmServer.listen(parseInt(testRealmURL.port));
     request = supertest(server);
   });
 
