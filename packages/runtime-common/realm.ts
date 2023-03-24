@@ -299,7 +299,7 @@ export class Realm {
         config = merge({}, config, {
           ownRealmURL: opts?.localRealmURL ?? this.url,
           resolvedBaseRealmURL,
-          isLocalRealm: Boolean(opts?.hostLocalRealm),
+          isLocalRealm: !isNode || Boolean(opts?.hostLocalRealm),
           isBaseRealmHosting: isNode,
           realmsServed: opts?.realmsServed,
         });
