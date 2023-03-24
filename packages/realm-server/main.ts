@@ -2,7 +2,7 @@ import { Realm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
-import { createRealmServer } from './server';
+import { RealmServer } from './server';
 import { resolve, join } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
@@ -138,7 +138,7 @@ if (distURL) {
     );
   }
 
-  let server = createRealmServer(realms, { hostLocalRealm });
+  let server = new RealmServer(realms, { hostLocalRealm });
   server.listen(port);
   log.info(`Realm server listening on port ${port}:`);
   let additionalMappings = hrefs.slice(paths.length);

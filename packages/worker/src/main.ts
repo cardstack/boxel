@@ -11,8 +11,8 @@ import '@cardstack/runtime-common/externals-global';
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
 const livenessWatcher = new LivenessWatcher(worker);
-const messageHandler = new MessageHandler(worker);
 const fetchHandler = new FetchHandler(livenessWatcher);
+const messageHandler = new MessageHandler(worker, fetchHandler);
 
 livenessWatcher.registerShutdownListener(async () => {
   await fetchHandler.dropCaches();
@@ -53,7 +53,7 @@ let runnerOptsMgr = new RunnerOptionsManager();
       },
       { isLocalRealm: true }
     );
-    fetchHandler.addRealm(realm, messageHandler.realmsServed);
+    fetchHandler.addRealm(realm);
   } catch (err) {
     log.error(err);
   }
