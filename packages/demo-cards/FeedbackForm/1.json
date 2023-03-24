@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Employee Well-being Feedback Form",
+      "description": "We value your feedback on how we can improve the well-being of our employees. Please take a few minutes to fill out this form.",
+      "questions": [
+        {
+          "question": "How would you rate the level of support provided by the HR team?",
+          "rating": {
+            "options": ["Excellent", "Good", "Fair", "Poor"]
+          }
+        },
+        {
+          "question": "Do you feel comfortable discussing personal issues with your manager?",
+          "rating": {
+            "options": ["Always", "Sometimes", "Rarely", "Never"]
+          }
+        },
+        {
+          "question": "How satisfied are you with the work-life balance at our company?",
+          "rating": {
+            "options": [
+              "Very satisfied",
+              "Satisfied",
+              "Neutral",
+              "Dissatisfied",
+              "Very dissatisfied"
+            ]
+          }
+        }
+      ],
+      "customTextField": "Is there anything else you would like to share about employee well-being at our company?"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4202/feedback_form",
+        "name": "FeedbackForm"
+      }
+    }
+  }
+}

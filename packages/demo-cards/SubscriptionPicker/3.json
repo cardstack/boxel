@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "plans": [
+        {
+          "name": "Free",
+          "price": "$0",
+          "description": "Free forever",
+          "features": [
+            {
+              "name": "Storage",
+              "description": "5GB"
+            }
+          ]
+        },
+        {
+          "name": "Pro",
+          "price": "$10",
+          "description": "For small teams",
+          "popular": true,
+          "features": [
+            {
+              "name": "Storage",
+              "description": "10GB"
+            }
+          ]
+        },
+        {
+          "name": "Enterprise",
+          "price": "$20",
+          "description": "For large teams",
+          "features": [
+            {
+              "name": "Storage",
+              "description": "20GB"
+            }
+          ]
+        }
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4202/subscription-picker",
+        "name": "SubscriptionPicker"
+      }
+    }
+  }
+}

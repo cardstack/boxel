@@ -1,0 +1,90 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "plans": [
+        {
+          "name": "Basic",
+          "price": 10,
+          "description": "Get started with our basic plan, ideal for small projects and developers who want to try our service.",
+          "popular": false,
+          "features": [
+            {
+              "name": "Up to 5 templates per month"
+            },
+            {
+              "name": "Standard support"
+            },
+            {
+              "name": "Basic components library"
+            },
+            {
+              "name": "1 user"
+            }
+          ]
+        },
+        {
+          "name": "Pro",
+          "price": 25,
+          "description": "Unlock the full potential of our platform with the Pro plan, suitable for professional developers and businesses.",
+          "popular": true,
+          "features": [
+            {
+              "name": "Unlimited templates"
+            },
+            {
+              "name": "Priority support"
+            },
+            {
+              "name": "Advanced components library"
+            },
+            {
+              "name": "Up to 5 users"
+            },
+            {
+              "name": "Custom branding"
+            }
+          ]
+        },
+        {
+          "name": "Enterprise",
+          "price": 50,
+          "description": "Tailored for large-scale organizations, our Enterprise plan offers advanced features, dedicated support, and custom integrations.",
+          "popular": false,
+          "features": [
+            {
+              "name": "Unlimited templates"
+            },
+            {
+              "name": "24/7 dedicated support"
+            },
+            {
+              "name": "Advanced components library"
+            },
+            {
+              "name": "Unlimited users"
+            },
+            {
+              "name": "Custom branding"
+            },
+            {
+              "name": "SLA and uptime guarantee"
+            },
+            {
+              "name": "Custom integrations"
+            },
+            {
+              "name": "Onboarding and training"
+            }
+          ]
+        }
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4202/subscription-picker",
+        "name": "SubscriptionPicker"
+      }
+    }
+  }
+}

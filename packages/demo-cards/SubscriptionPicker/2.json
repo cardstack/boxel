@@ -1,0 +1,11 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4202/subscription-picker",
+        "name": "SubscriptionPicker"
+      }
+    }
+  }
+}
