@@ -19,10 +19,10 @@ export async function createRealm(
   realmURL = testRealm
 ): Promise<Realm> {
   if (!getRunner) {
-    getRunner = await makeFastBootIndexRunner(
+    ({ getRunner } = await makeFastBootIndexRunner(
       distPath,
       manager.getOptions.bind(manager)
-    );
+    ));
   }
   for (let [filename, contents] of Object.entries(flatFiles)) {
     if (typeof contents === 'string') {
