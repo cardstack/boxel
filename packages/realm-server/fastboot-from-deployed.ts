@@ -13,7 +13,7 @@ export async function instantiateFastBoot(
   appName: string,
   distURL: URL,
   buildSandboxGlobals: (defaultGlobals: any) => any
-): Promise<FastBootInstance> {
+): Promise<{ fastboot: FastBootInstance; distPath: string }> {
   let pkgJSONHref = new URL('./package.json', distURL).href;
   let pkgJSON = await (await fetch(pkgJSONHref)).json();
   let pkgFastboot = pkgJSON?.fastboot;
@@ -78,11 +78,14 @@ export async function instantiateFastBoot(
     writeFileSync(local, script);
   }
 
-  return new FastBoot({
+  return {
+    fastboot: new FastBoot({
+      distPath,
+      resilient: false,
+      buildSandboxGlobals,
+    }) as FastBootInstance,
     distPath,
-    resilient: false,
-    buildSandboxGlobals,
-  }) as FastBootInstance;
+  };
 }
 
 function mergeContent(

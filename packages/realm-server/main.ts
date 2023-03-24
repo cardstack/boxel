@@ -11,7 +11,7 @@ import log, { LogLevelNames } from 'loglevel';
 
 let {
   port,
-  distPath = join(__dirname, '..', 'host', 'dist'),
+  distDir = join(__dirname, '..', 'host', 'dist'),
   distURL,
   path: paths,
   fromUrl: fromUrls,
@@ -43,7 +43,7 @@ let {
       demandOption: true,
       type: 'array',
     },
-    distPath: {
+    distDir: {
       description:
         "the dist/ folder of the host app. Defaults to '../host/dist'",
       type: 'string',
@@ -108,14 +108,14 @@ let dist: string | URL;
 if (distURL) {
   dist = new URL(distURL);
 } else {
-  dist = resolve(distPath);
+  dist = resolve(distDir);
 }
 
 (async () => {
   let realms: Realm[] = [];
   for (let [i, path] of paths.entries()) {
     let manager = new RunnerOptionsManager();
-    let getRunner = await makeFastBootIndexRunner(
+    let { getRunner, distPath } = await makeFastBootIndexRunner(
       dist,
       manager.getOptions.bind(manager)
     );
@@ -151,7 +151,7 @@ if (distURL) {
       log.info(`    ${from} => ${to}`);
     }
   }
-  log.info(`Using host dist path: '${distPath}' for card pre-rendering`);
+  log.info(`Using host dist path: '${distDir}' for card pre-rendering`);
 
   for (let realm of realms) {
     log.info(`Starting realm ${realm.url}...`);

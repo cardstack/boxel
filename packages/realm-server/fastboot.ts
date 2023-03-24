@@ -11,11 +11,13 @@ const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
   dist: URL | string,
   getRunnerOpts: (optsId: number) => RunnerOpts
-): Promise<IndexRunner> {
+): Promise<{ getRunner: IndexRunner; distPath: string }> {
   let fastboot: FastBootInstance;
+  let distPath: string;
   if (typeof dist === 'string') {
+    distPath = dist;
     fastboot = new FastBoot({
-      distPath: dist,
+      distPath,
       resilient: false,
       buildSandboxGlobals(defaultGlobals: any) {
         return Object.assign({}, defaultGlobals, {
@@ -28,7 +30,7 @@ export async function makeFastBootIndexRunner(
       },
     }) as FastBootInstance;
   } else {
-    fastboot = await instantiateFastBoot(
+    ({ fastboot, distPath } = await instantiateFastBoot(
       appName,
       dist,
       (defaultGlobals: any) => {
@@ -40,13 +42,16 @@ export async function makeFastBootIndexRunner(
           getRunnerOpts,
         });
       }
-    );
+    ));
   }
-  return async (optsId: number) => {
-    await fastboot.visit(`/indexer/${optsId}`, {
-      // TODO we'll need to configure this host origin as part of the hosted realm work
-      request: { headers: { host: 'localhost:4200' } },
-    });
+  return {
+    getRunner: async (optsId: number) => {
+      await fastboot.visit(`/indexer/${optsId}`, {
+        // TODO we'll need to configure this host origin as part of the hosted realm work
+        request: { headers: { host: 'localhost:4200' } },
+      });
+    },
+    distPath,
   };
 }
 
