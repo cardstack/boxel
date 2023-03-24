@@ -11,7 +11,8 @@ import log, { LogLevelNames } from 'loglevel';
 
 let {
   port,
-  dist = join(__dirname, '..', 'host', 'dist'),
+  distDir = join(__dirname, '..', 'host', 'dist'),
+  distURL,
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -42,9 +43,14 @@ let {
       demandOption: true,
       type: 'array',
     },
-    dist: {
+    distDir: {
       description:
         "the dist/ folder of the host app. Defaults to '../host/dist'",
+      type: 'string',
+    },
+    distURL: {
+      description:
+        'the URL of a deployed host app. (This can be provided instead of the --distPath)',
       type: 'string',
     },
     useTestingDomain: {
@@ -98,49 +104,55 @@ for (let [from, to] of urlMappings) {
   Loader.addURLMapping(from, to);
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
-let distPath = resolve(dist);
-
-let realms: Realm[] = [];
-for (let [i, path] of paths.entries()) {
-  let manager = new RunnerOptionsManager();
-  let getRunner = makeFastBootIndexRunner(
-    distPath,
-    manager.getOptions.bind(manager)
-  );
-  realms.push(
-    new Realm(
-      hrefs[i][0],
-      new NodeAdapter(resolve(String(path))),
-      getRunner,
-      manager,
-      async () => readFileSync(join(distPath, 'index.html')).toString(),
-      {
-        deferStartUp: true,
-        ...(useTestingDomain
-          ? {
-              useTestingDomain,
-            }
-          : {}),
-      }
-    )
-  );
+let dist: string | URL;
+if (distURL) {
+  dist = new URL(distURL);
+} else {
+  dist = resolve(distDir);
 }
-
-let server = new RealmServer(realms, { hostLocalRealm });
-server.listen(port);
-let additionalMappings = hrefs.slice(paths.length);
-for (let [index, { url }] of realms.entries()) {
-  log.info(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
-}
-if (additionalMappings.length) {
-  log.info('Additional URL mappings:');
-  for (let [from, to] of additionalMappings) {
-    log.info(`    ${from} => ${to}`);
-  }
-}
-log.info(`Using host dist path: '${distPath}' for card pre-rendering`);
 
 (async () => {
+  let realms: Realm[] = [];
+  for (let [i, path] of paths.entries()) {
+    let manager = new RunnerOptionsManager();
+    let { getRunner, distPath } = await makeFastBootIndexRunner(
+      dist,
+      manager.getOptions.bind(manager)
+    );
+    realms.push(
+      new Realm(
+        hrefs[i][0],
+        new NodeAdapter(resolve(String(path))),
+        getRunner,
+        manager,
+        async () => readFileSync(join(distPath, 'index.html')).toString(),
+        {
+          deferStartUp: true,
+          ...(useTestingDomain
+            ? {
+                useTestingDomain,
+              }
+            : {}),
+        }
+      )
+    );
+  }
+
+  let server = new RealmServer(realms, { hostLocalRealm });
+  server.listen(port);
+  log.info(`Realm server listening on port ${port}:`);
+  let additionalMappings = hrefs.slice(paths.length);
+  for (let [index, { url }] of realms.entries()) {
+    log.info(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
+  }
+  if (additionalMappings.length) {
+    log.info('Additional URL mappings:');
+    for (let [from, to] of additionalMappings) {
+      log.info(`    ${from} => ${to}`);
+    }
+  }
+  log.info(`Using host dist path: '${distDir}' for card pre-rendering`);
+
   for (let realm of realms) {
     log.info(`Starting realm ${realm.url}...`);
     await realm.start();

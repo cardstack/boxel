@@ -42,7 +42,7 @@ module('loader', function (hooks) {
 
   test('supports import.meta', async function (assert) {
     let loader = new Loader();
-    let realm = createRealm(
+    let realm = await createRealm(
       dir,
       {
         'foo.js': `
