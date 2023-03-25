@@ -324,13 +324,13 @@ class ContainsMany<FieldT extends CardConstructor>
     return getter(instance, this);
   }
 
-  queryableValue(instances: any[] | null, stack: Card[]): any[] {
+  queryableValue(instances: any, stack: Card[]): any {
     if (instances == null) {
-      return [];
+      return null;
     }
 
     if (primitive in this.card && !Array.isArray(instances)) {
-      // TODO: better handling of primitive case / why is this happening
+      assertScalar(instances, this.card);
       return instances;
     }
 
@@ -338,18 +338,21 @@ class ContainsMany<FieldT extends CardConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     return [...instances].map((instance) => {
-      let result = this.card[queryableValue](instance, stack);
-      if (primitive in this.card) {
-        assertScalar(result, this.card);
-      }
-      return result;
+      return this.card[queryableValue](instance, stack);
     });
   }
 
   queryMatcher(
     innerMatcher: (innerValue: any) => boolean | null
   ): (value: any[]) => boolean | null {
-    return (value) => value.some((innerValue) => innerMatcher(innerValue));
+    return (value) => {
+      if (value.length === 0) {
+        return innerMatcher(null);
+      }
+      return value.some((innerValue) => {
+        return innerMatcher(innerValue);
+      });
+    };
   }
 
   serialize(

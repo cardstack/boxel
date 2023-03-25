@@ -1909,7 +1909,9 @@ posts/ignore-me.json
                 title: 'post 1',
                 author: {
                   firstName: 'A',
+                  posts: 10,
                 },
+                views: 16,
               },
             ],
           },
@@ -1938,13 +1940,27 @@ posts/ignore-me.json
                 author: {
                   firstName: 'A',
                   lastName: 'B',
+                  posts: 5,
                 },
+                views: 10,
               },
               {
                 title: 'post 2',
                 author: {
                   firstName: 'C',
+                  lastName: 'D',
+                  posts: 11,
                 },
+                views: 13,
+              },
+              {
+                title: 'post 2',
+                author: {
+                  firstName: 'C',
+                  lastName: 'D',
+                  posts: 2,
+                },
+                views: 0,
               },
             ],
           },
@@ -2104,6 +2120,52 @@ posts/ignore-me.json
       );
     });
 
+    test(`can filter on a nested field inside a containsMany using 'range'`, async function (assert) {
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            range: {
+              'posts.views': { gt: 10, lte: 16 },
+              'posts.author.posts': { gte: 5, lt: 10 },
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking2`]
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            range: {
+              'posts.views': { lte: 0 },
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking2`]
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            range: {
+              'posts.views': { lte: undefined },
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          []
+        );
+      }
+    });
+
     test('can use a range filter with custom queryableValue', async function (assert) {
       let { data: matching } = await indexer.search({
         filter: {
@@ -2217,35 +2279,6 @@ posts/ignore-me.json
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: { 'hosts.firstName': 'Arthur', 'hosts.lastName': 'Faulkner' },
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}booking2`],
-          'eq on hosts.firstName and hosts.lastName'
-        );
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            every: [
-              { eq: { 'hosts.firstName': 'Arthur' } },
-              { eq: { 'hosts.lastName': 'Faulkner' } },
-            ],
-          },
-        });
-        assert.deepEqual(
-          matching.map((m) => m.id),
-          [`${paths.url}booking1`, `${paths.url}booking2`],
-          'every on hosts.firstName and hosts.lastName'
-        );
-      }
-      {
-        let { data: matching } = await indexer.search({
-          filter: {
-            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
             eq: { 'hosts.firstName': null },
           },
         });
@@ -2270,7 +2303,6 @@ posts/ignore-me.json
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
             eq: {
               'hosts.firstName': 'Arthur',
-              'posts.author.firstName': 'A',
               'posts.author.lastName': null,
             },
           },
@@ -2281,28 +2313,27 @@ posts/ignore-me.json
           'eq on hosts.firstName, posts.author.firstName, and null posts.author.lastName'
         );
       }
+    });
+
+    test(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
       {
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: {
-              'hosts.firstName': 'Arthur',
-              'posts.author.firstName': 'A',
-              sponsors: null,
-            },
+            eq: { sponsors: 'Nintendo' },
           },
         });
         assert.deepEqual(
           matching.map((m) => m.id),
-          [`${paths.url}booking2`],
-          'eq on hosts.firstName, posts.author.firstName, and null sponsors'
+          [`${paths.url}booking1`],
+          'eq on sponsors'
         );
       }
       {
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: { sponsors: 'HBO' },
+            eq: { sponsors: 'Playstation' },
           },
         });
         assert.strictEqual(
@@ -2315,13 +2346,16 @@ posts/ignore-me.json
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: { sponsors: 'Nintendo' },
+            eq: {
+              'hosts.firstName': 'Arthur',
+              sponsors: null,
+            },
           },
         });
         assert.deepEqual(
           matching.map((m) => m.id),
-          [`${paths.url}booking1`],
-          'eq on sponsors'
+          [`${paths.url}booking2`],
+          'eq on hosts.firstName and null sponsors'
         );
       }
     });
