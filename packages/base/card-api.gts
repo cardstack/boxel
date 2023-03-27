@@ -329,11 +329,6 @@ class ContainsMany<FieldT extends CardConstructor>
       return null;
     }
 
-    if (primitive in this.card && !Array.isArray(instances)) {
-      assertScalar(instances, this.card);
-      return instances;
-    }
-
     // Need to replace the WatchedArray proxy with an actual array because the
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.

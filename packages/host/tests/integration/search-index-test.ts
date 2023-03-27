@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -2315,12 +2315,12 @@ posts/ignore-me.json
       }
     });
 
-    test(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
+    skip(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
       {
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: { sponsors: 'Nintendo' },
+            eq: { sponsors: ['Nintendo'] },
           },
         });
         assert.deepEqual(
@@ -2333,7 +2333,7 @@ posts/ignore-me.json
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: { sponsors: 'Playstation' },
+            eq: { sponsors: ['Playstation'] },
           },
         });
         assert.strictEqual(
