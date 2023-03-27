@@ -38,7 +38,6 @@ runs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0
-    # Fix timestamps
     - name: restore timestamps
       uses: chetan/git-restore-mtime-action@v2
     - uses: pnpm/action-setup@v2
@@ -77,18 +76,6 @@ runs:
     - name: Install Dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
-
-    - name: List demo cards
-      shell: bash
-      run: ls -l packages/demo-cards
-
-    - name: Create archive of demo cards
-      shell: bash
-      run: tar cfz demo-cards.tar.gz ./packages/demo-cards
-
-    - name: Show tar contents
-      shell: bash
-      run: tar tvf demo-cards.tar.gz
 
     - name: Deploy ${{ inputs.app_name }}
       uses: ./.github/actions/waypoint-deploy
