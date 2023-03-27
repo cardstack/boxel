@@ -8,6 +8,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import DateTimeCard from 'https://cardstack.com/base/datetime';
 import { Person } from './person';
+import { Post } from './post';
 
 export class Booking extends Card {
   @field title = contains(StringCard);
@@ -16,6 +17,7 @@ export class Booking extends Card {
   @field endTime = contains(DateTimeCard);
   @field hosts = containsMany(Person);
   @field sponsors = containsMany(StringCard);
+  @field posts = containsMany(Post);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

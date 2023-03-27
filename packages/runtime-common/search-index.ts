@@ -7,12 +7,12 @@ import {
 import { Kind, Realm } from './realm';
 import { LocalPath, RealmPaths } from './paths';
 import { Loader } from './loader';
-import { Query, Filter, Sort } from './query';
+import type { Query, Filter, Sort, EqFilter, RangeFilter } from './query';
 import { CardError, type SerializedError } from './error';
 import { URLMap } from './url-map';
 import flatMap from 'lodash/flatMap';
 import ignore, { type Ignore } from 'ignore';
-import { Card } from 'https://cardstack.com/base/card-api';
+import type { Card, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CardRef, getField, identifyCard, loadCard } from './card-ref';
 import {
@@ -346,10 +346,7 @@ export class SearchIndex {
     );
   }
 
-  private async loadFieldCard(
-    ref: CardRef,
-    fieldPath: string
-  ): Promise<typeof Card> {
+  private async loadField(ref: CardRef, fieldPath: string): Promise<Field> {
     let card: typeof Card | undefined;
     try {
       card = await loadCard(ref, { loader: this.loader });
@@ -371,19 +368,30 @@ export class SearchIndex {
       }
     }
     let segments = fieldPath.split('.');
+    let field: Field | undefined;
     while (segments.length) {
       let fieldName = segments.shift()!;
-      let prevCard = card;
-      card = getField(card, fieldName)?.card;
-      if (!card) {
+      let prevField = field;
+      field = getField(card, fieldName);
+      if (!field) {
         throw new Error(
           `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(
-            identifyCard(prevCard)
+            identifyCard(prevField ? prevField.card : card)
           )}`
         );
       }
     }
-    return card;
+    return field!;
+  }
+
+  private getFieldData(searchData: Record<string, any>, fieldPath: string) {
+    let data = searchData;
+    let segments = fieldPath.split('.');
+    while (segments.length && data != null) {
+      let fieldName = segments.shift()!;
+      data = data[fieldName];
+    }
+    return data;
   }
 
   private buildSorter(
@@ -400,8 +408,9 @@ export class SearchIndex {
         if (!this.cardHasType(e2, on)) {
           return direction === 'desc' ? 1 : -1;
         }
-        let a = e1.searchData[by];
-        let b = e2.searchData[by];
+
+        let a = this.getFieldData(e1.searchData, by);
+        let b = this.getFieldData(e2.searchData, by);
         if (a === undefined) {
           return direction === 'desc' ? -1 : 1; // if descending, null position is before the rest
         }
@@ -475,100 +484,154 @@ export class SearchIndex {
     }
 
     if ('eq' in filter) {
-      let ref: CardRef = on;
-
-      let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
-        await Promise.all(
-          Object.keys(filter.eq).map(async (fieldPath) => [
-            fieldPath,
-            await this.loadFieldCard(on, fieldPath),
-          ])
-        )
-      );
-
-      // TODO when we are ready to execute queries within computeds, we'll need to
-      // use the loader instance from current-run and not the global loader, as
-      // the card definitions may have changed in the current-run loader
-      let api = await this.loadAPI();
-
-      return (entry) =>
-        every(Object.entries(filter.eq), ([fieldPath, value]) => {
-          if (this.cardHasType(entry, ref)) {
-            let queryValue = api.getQueryableValue(
-              fieldCards[fieldPath]!,
-              value
-            );
-            let instanceValue = entry.searchData[fieldPath];
-            if (instanceValue === undefined && queryValue != null) {
-              return null;
-            }
-            // allows queries for null to work
-            if (queryValue == null && instanceValue == null) {
-              return true;
-            }
-            return instanceValue === queryValue;
-          } else {
-            return null;
-          }
-        });
+      return await this.buildEqMatchers(filter.eq, on);
     }
 
     if ('range' in filter) {
-      let ref: CardRef = on;
-
-      let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
-        await Promise.all(
-          Object.keys(filter.range).map(async (fieldPath) => [
-            fieldPath,
-            await this.loadFieldCard(on, fieldPath),
-          ])
-        )
-      );
-
-      // TODO when we are ready to execute queries within computeds, we'll need to
-      // use the loader instance from current-run and not the global loader, as
-      // the card definitions may have changed in the current-run loader
-      let api = await this.loadAPI();
-
-      return (entry) =>
-        every(Object.entries(filter.range), ([fieldPath, range]) => {
-          if (this.cardHasType(entry, ref)) {
-            let value = entry.searchData[fieldPath];
-            if (value === undefined) {
-              return null;
-            }
-
-            if (
-              (range.gt &&
-                !(
-                  value >
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.gt)
-                )) ||
-              (range.lt &&
-                !(
-                  value <
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.lt)
-                )) ||
-              (range.gte &&
-                !(
-                  value >=
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.gte)
-                )) ||
-              (range.lte &&
-                !(
-                  value <=
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.lte)
-                ))
-            ) {
-              return false;
-            }
-            return true;
-          }
-          return null;
-        });
+      return await this.buildRangeMatchers(filter.range, on);
     }
 
     throw new Error('Unknown filter');
+  }
+
+  private async buildRangeMatchers(
+    range: RangeFilter['range'],
+    ref: CardRef
+  ): Promise<(entry: SearchEntry) => boolean | null> {
+    // TODO when we are ready to execute queries within computeds, we'll need to
+    // use the loader instance from current-run and not the global loader, as
+    // the card definitions may have changed in the current-run loader
+    let api = await this.loadAPI();
+
+    let matchers: ((instanceData: Record<string, any>) => boolean | null)[] =
+      [];
+
+    for (let [name, value] of Object.entries(range)) {
+      // Load the stack of fields we're accessing
+      let fields: Field[] = [];
+      let nextRef: CardRef | undefined = ref;
+      let segments = name.split('.');
+      while (segments.length > 0) {
+        let fieldName = segments.shift()!;
+        let field = await this.loadField(nextRef, fieldName);
+        fields.push(field);
+        nextRef = identifyCard(field.card);
+        if (!nextRef) {
+          throw new Error(`could not identify card for field ${fieldName}`);
+        }
+      }
+
+      let qValueGT = api.getQueryableValue(fields[fields.length - 1], value.gt);
+      let qValueLT = api.getQueryableValue(fields[fields.length - 1], value.lt);
+      let qValueGTE = api.getQueryableValue(
+        fields[fields.length - 1],
+        value.gte
+      );
+      let qValueLTE = api.getQueryableValue(
+        fields[fields.length - 1],
+        value.lte
+      );
+      let queryValue = qValueGT ?? qValueLT ?? qValueGTE ?? qValueLTE;
+
+      let matcher = (instanceValue: any) => {
+        if (instanceValue == null || queryValue == null) {
+          return null;
+        }
+        // checking for not null below is necessary because queryValue can be 0
+        if (
+          (qValueGT != null && !(instanceValue > qValueGT)) ||
+          (qValueLT != null && !(instanceValue < qValueLT)) ||
+          (qValueGTE != null && !(instanceValue >= qValueGTE)) ||
+          (qValueLTE != null && !(instanceValue <= qValueLTE))
+        ) {
+          return false;
+        }
+        return true;
+      };
+
+      while (fields.length > 0) {
+        let nextField = fields.pop()!;
+        let nextMatcher = nextField.queryMatcher(matcher);
+        matcher = (instanceValue: any) => {
+          if (instanceValue == null || queryValue == null) {
+            return null;
+          }
+          return nextMatcher(instanceValue[nextField.name]);
+        };
+      }
+      matchers.push(matcher);
+    }
+
+    return (entry) =>
+      every(matchers, (m) => {
+        if (this.cardHasType(entry, ref)) {
+          return m(entry.searchData);
+        }
+        return null;
+      });
+  }
+
+  private async buildEqMatchers(
+    filterValue: EqFilter['eq'],
+    ref: CardRef
+  ): Promise<(entry: SearchEntry) => boolean | null> {
+    // TODO when we are ready to execute queries within computeds, we'll need to
+    // use the loader instance from current-run and not the global loader, as
+    // the card definitions may have changed in the current-run loader
+    let api = await this.loadAPI();
+
+    let matchers: ((instanceData: Record<string, any>) => boolean | null)[] =
+      [];
+
+    for (let [name, value] of Object.entries(filterValue)) {
+      // Load the stack of fields we're accessing
+      let fields: Field[] = [];
+      let nextRef: CardRef | undefined = ref;
+      let segments = name.split('.');
+      while (segments.length > 0) {
+        let fieldName = segments.shift()!;
+        let field = await this.loadField(nextRef, fieldName);
+        fields.push(field);
+        nextRef = identifyCard(field.card);
+        if (!nextRef) {
+          throw new Error(`could not identify card for field ${fieldName}`);
+        }
+      }
+
+      let queryValue = api.getQueryableValue(fields[fields.length - 1], value);
+      let matcher = (instanceValue: any) => {
+        if (instanceValue === undefined && queryValue != null) {
+          return null;
+        }
+        // allows queries for null to work
+        if (queryValue == null && instanceValue == null) {
+          return true;
+        }
+        return instanceValue === queryValue;
+      };
+      while (fields.length > 0) {
+        let nextField = fields.pop()!;
+        let nextMatcher = nextField.queryMatcher(matcher);
+        matcher = (instanceValue: any) => {
+          if (instanceValue == null && queryValue != null) {
+            return null;
+          }
+          if (instanceValue == null && queryValue == null) {
+            return true;
+          }
+          return nextMatcher(instanceValue[nextField.name]);
+        };
+      }
+      matchers.push(matcher);
+    }
+
+    return (entry) =>
+      every(matchers, (m) => {
+        if (this.cardHasType(entry, ref)) {
+          return m(entry.searchData);
+        }
+        return null;
+      });
   }
 }
 

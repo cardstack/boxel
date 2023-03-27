@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -1114,13 +1114,15 @@ module('Integration | search-index', function (hooks) {
     );
     assert.deepEqual(entry?.searchData, {
       id: `${testRealmURL}CatalogEntry/booking`,
-      'demo.endTime': undefined,
-      'demo.hosts': {},
-      'demo.id': undefined,
-      'demo.sponsors': [],
-      'demo.startTime': undefined,
-      'demo.title': null,
-      'demo.venue': null,
+      demo: {
+        endTime: undefined,
+        hosts: [],
+        id: undefined,
+        sponsors: [],
+        startTime: undefined,
+        title: null,
+        venue: null,
+      },
       description: 'Catalog entry for Booking',
       isPrimitive: false,
       moduleHref: 'http://localhost:4202/test/booking',
@@ -1241,11 +1243,15 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(hassanEntry.searchData, {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
-        'friend.id': `${testRealmURL}Friend/mango`,
-        'friend.firstName': 'Mango',
-        'friend.friend.id': `${testRealmURL}Friend/vanGogh`,
-        'friend.friend.firstName': 'Van Gogh',
-        'friend.friend.friend': null,
+        friend: {
+          id: `${testRealmURL}Friend/mango`,
+          firstName: 'Mango',
+          friend: {
+            id: `${testRealmURL}Friend/vanGogh`,
+            firstName: 'Van Gogh',
+            friend: null,
+          },
+        },
       });
     } else {
       assert.ok(
@@ -1378,9 +1384,13 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(hassanEntry.searchData, {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
-        'friend.id': `${testRealmURL}Friend/mango`,
-        'friend.firstName': 'Mango',
-        'friend.friend.id': `${testRealmURL}Friend/hassan`,
+        friend: {
+          id: `${testRealmURL}Friend/mango`,
+          firstName: 'Mango',
+          friend: {
+            id: `${testRealmURL}Friend/hassan`,
+          },
+        },
       });
     } else {
       assert.ok(
@@ -1464,9 +1474,13 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(mangoEntry.searchData, {
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
-        'friend.id': `${testRealmURL}Friend/hassan`,
-        'friend.firstName': 'Hassan',
-        'friend.friend.id': `${testRealmURL}Friend/mango`,
+        friend: {
+          id: `${testRealmURL}Friend/hassan`,
+          firstName: 'Hassan',
+          friend: {
+            id: `${testRealmURL}Friend/mango`,
+          },
+        },
       });
     } else {
       assert.ok(
@@ -1514,7 +1528,6 @@ module('Integration | search-index', function (hooks) {
         '@glimmer/component',
         'ember-concurrency',
         'ember-concurrency/-private/async-arrow-runtime',
-        'flat',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/contains-many-component',
         'http://localhost:4201/base/default-card-component',
@@ -1877,6 +1890,89 @@ posts/ignore-me.json
           },
         },
       },
+      'booking1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            hosts: [
+              {
+                firstName: 'Arthur',
+              },
+              {
+                firstName: 'Ed',
+                lastName: 'Faulkner',
+              },
+            ],
+            sponsors: ['Sony', 'Nintendo'],
+            posts: [
+              {
+                title: 'post 1',
+                author: {
+                  firstName: 'A',
+                  posts: 10,
+                },
+                views: 16,
+              },
+            ],
+          },
+          relationships: {},
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}booking`,
+              name: 'Booking',
+            },
+          },
+        },
+      },
+      'booking2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            hosts: [
+              {
+                firstName: 'Arthur',
+                lastName: 'Faulkner',
+              },
+            ],
+            posts: [
+              {
+                title: 'post 1',
+                author: {
+                  firstName: 'A',
+                  lastName: 'B',
+                  posts: 5,
+                },
+                views: 10,
+              },
+              {
+                title: 'post 2',
+                author: {
+                  firstName: 'C',
+                  lastName: 'D',
+                  posts: 11,
+                },
+                views: 13,
+              },
+              {
+                title: 'post 2',
+                author: {
+                  firstName: 'C',
+                  lastName: 'D',
+                  posts: 2,
+                },
+                views: 0,
+              },
+            ],
+          },
+          relationships: {},
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}booking`,
+              name: 'Booking',
+            },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -2024,6 +2120,52 @@ posts/ignore-me.json
       );
     });
 
+    test(`can filter on a nested field inside a containsMany using 'range'`, async function (assert) {
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            range: {
+              'posts.views': { gt: 10, lte: 16 },
+              'posts.author.posts': { gte: 5, lt: 10 },
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking2`]
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            range: {
+              'posts.views': { lte: 0 },
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking2`]
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            range: {
+              'posts.views': { lte: undefined },
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          []
+        );
+      }
+    });
+
     test('can use a range filter with custom queryableValue', async function (assert) {
       let { data: matching } = await indexer.search({
         filter: {
@@ -2117,6 +2259,105 @@ posts/ignore-me.json
         matching.map((m) => m.id),
         [`${paths.url}cards/1`, `${paths.url}cards/2`]
       );
+    });
+
+    test(`can filter on a nested field inside a containsMany using 'eq'`, async function (assert) {
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { 'hosts.firstName': 'Arthur' },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking1`, `${paths.url}booking2`],
+          'eq on hosts.firstName'
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { 'hosts.firstName': null },
+          },
+        });
+        assert.strictEqual(matching.length, 0, 'eq on null hosts.firstName');
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { 'posts.author.firstName': 'A', 'posts.author.lastName': 'B' },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking2`],
+          'eq on posts.author.firstName and posts.author.lastName'
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: {
+              'hosts.firstName': 'Arthur',
+              'posts.author.lastName': null,
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking1`],
+          'eq on hosts.firstName, posts.author.firstName, and null posts.author.lastName'
+        );
+      }
+    });
+
+    skip(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { sponsors: ['Nintendo'] },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking1`],
+          'eq on sponsors'
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { sponsors: ['Playstation'] },
+          },
+        });
+        assert.strictEqual(
+          matching.length,
+          0,
+          'eq on nonexisting value in sponsors'
+        );
+      }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: {
+              'hosts.firstName': 'Arthur',
+              sponsors: null,
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [`${paths.url}booking2`],
+          'eq on hosts.firstName and null sponsors'
+        );
+      }
     });
 
     test('can negate a filter', async function (assert) {

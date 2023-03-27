@@ -805,6 +805,7 @@ module('Integration | realm', function (hooks) {
             endTime: '2023-02-19T02:00:00.000Z',
             hosts: [{ firstName: 'Hassan' }, { firstName: 'Mango' }],
             sponsors: ['Burton', 'Spy Optics'],
+            posts: [],
           },
           meta: {
             adoptsFrom: {
@@ -864,6 +865,7 @@ module('Integration | realm', function (hooks) {
             },
           ],
           sponsors: ['Burton'],
+          posts: [],
         },
         meta: {
           adoptsFrom: {
@@ -892,6 +894,7 @@ module('Integration | realm', function (hooks) {
             endTime: '2023-02-19T02:00:00.000Z',
             hosts: [{ firstName: 'Hassan' }],
             sponsors: ['Burton'],
+            posts: [],
           },
           meta: {
             adoptsFrom: {

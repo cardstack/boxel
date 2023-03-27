@@ -6,15 +6,15 @@ overrides:
   ember-concurrency: ^2.3.4
 
 patchedDependencies:
-  magic-string@0.25.9:
-    hash: sbmabuxrk2m44agmppz3qozwvq
-    path: patches/magic-string@0.25.9.patch
-  fastboot@4.1.0:
-    hash: kizxbxhfcldguz4jcwonfduu2y
-    path: patches/fastboot@4.1.0.patch
   '@types/eventsource@1.1.11':
     hash: itunl7o524papufrlp7tcpsoiu
     path: patches/@types__eventsource@1.1.11.patch
+  fastboot@4.1.0:
+    hash: kizxbxhfcldguz4jcwonfduu2y
+    path: patches/fastboot@4.1.0.patch
+  magic-string@0.25.9:
+    hash: sbmabuxrk2m44agmppz3qozwvq
+    path: patches/magic-string@0.25.9.patch
 
 importers:
 

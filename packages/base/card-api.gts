@@ -2,7 +2,6 @@ import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import { flatten } from 'flat';
 import { on } from '@ember/modifier';
 import pick from '@cardstack/boxel-ui/helpers/pick';
 import { getBoxComponent } from './field-component';
@@ -188,7 +187,10 @@ interface JSONAPISingleResourceDocument {
   included?: (Partial<JSONAPIResource> & { id: string; type: string })[];
 }
 
-export interface Field<CardT extends CardConstructor> {
+export interface Field<
+  CardT extends CardConstructor = CardConstructor,
+  SearchT = any
+> {
   card: CardT;
   name: string;
   fieldType: FieldType;
@@ -215,6 +217,10 @@ export interface Field<CardT extends CardConstructor> {
     format: Format
   ): ComponentLike<{ Args: {}; Blocks: {} }>;
   getter(instance: Card): CardInstanceType<CardT>;
+  queryableValue(value: any, stack: Card[]): SearchT;
+  queryMatcher(
+    innerMatcher: (innerValue: any) => boolean | null
+  ): (value: SearchT) => boolean | null;
 }
 
 function callSerializeHook(
@@ -300,7 +306,9 @@ function getter<CardT extends CardConstructor>(
   }
 }
 
-class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
+class ContainsMany<FieldT extends CardConstructor>
+  implements Field<FieldT, any[]>
+{
   readonly fieldType = 'containsMany';
   constructor(
     private cardThunk: () => FieldT,
@@ -314,6 +322,32 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
 
   getter(instance: Card): CardInstanceType<FieldT> {
     return getter(instance, this);
+  }
+
+  queryableValue(instances: any, stack: Card[]): any {
+    if (instances == null) {
+      return null;
+    }
+
+    // Need to replace the WatchedArray proxy with an actual array because the
+    // WatchedArray proxy is not structuredClone-able, and hence cannot be
+    // communicated over the postMessage boundary between worker and DOM.
+    return [...instances].map((instance) => {
+      return this.card[queryableValue](instance, stack);
+    });
+  }
+
+  queryMatcher(
+    innerMatcher: (innerValue: any) => boolean | null
+  ): (value: any[]) => boolean | null {
+    return (value) => {
+      if (value.length === 0) {
+        return innerMatcher(null);
+      }
+      return value.some((innerValue) => {
+        return innerMatcher(innerValue);
+      });
+    };
   }
 
   serialize(
@@ -467,7 +501,7 @@ class ContainsMany<FieldT extends CardConstructor> implements Field<FieldT> {
   }
 }
 
-class Contains<CardT extends CardConstructor> implements Field<CardT> {
+class Contains<CardT extends CardConstructor> implements Field<CardT, any> {
   readonly fieldType = 'contains';
   constructor(
     private cardThunk: () => CardT,
@@ -481,6 +515,24 @@ class Contains<CardT extends CardConstructor> implements Field<CardT> {
 
   getter(instance: Card): CardInstanceType<CardT> {
     return getter(instance, this);
+  }
+
+  queryableValue(instance: any, stack: Card[]): any {
+    if (primitive in this.card) {
+      let result = this.card[queryableValue](instance);
+      assertScalar(result, this.card);
+      return result;
+    }
+    if (instance == null) {
+      return null;
+    }
+    return this.card[queryableValue](instance, stack);
+  }
+
+  queryMatcher(
+    innerMatcher: (innerValue: any) => boolean | null
+  ): (value: any) => boolean | null {
+    return (value) => innerMatcher(value);
   }
 
   serialize(
@@ -616,6 +668,24 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
     }
     return getter(instance, this);
+  }
+
+  queryableValue(instance: any, stack: Card[]): any {
+    if (primitive in this.card) {
+      throw new Error(
+        `the linksTo field '${this.name}' contains a primitive card '${this.card.name}'`
+      );
+    }
+    if (instance == null) {
+      return null;
+    }
+    return this.card[queryableValue](instance, stack);
+  }
+
+  queryMatcher(
+    innerMatcher: (innerValue: any) => boolean | null
+  ): (value: any) => boolean | null {
+    return (value) => innerMatcher(value);
   }
 
   serialize(
@@ -1028,36 +1098,14 @@ export function getQueryableValue(
   value: any,
   stack: Card[] = []
 ): any {
-  let fieldCard: typeof Card;
-  let field: Field<typeof Card> | undefined;
   if ('baseCard' in fieldOrCard) {
-    fieldCard = fieldOrCard;
-  } else {
-    field = fieldOrCard;
-    fieldCard = fieldOrCard.card;
-  }
-
-  // Need to replace the WatchedArray proxy with an actual array because the
-  // WatchedArray proxy is not structuredClone-able, and hence cannot be
-  // communicated over the postMessage boundary between worker and DOM.
-  if (field?.fieldType === 'containsMany') {
-    value = [...value];
-  }
-
-  if (primitive in fieldCard) {
-    let result = (fieldCard as any)[queryableValue](value);
-    assertScalar(result, fieldCard);
+    let result = fieldOrCard[queryableValue](value, stack);
+    if (primitive in fieldOrCard) {
+      assertScalar(result, fieldOrCard);
+    }
     return result;
   }
-  if (value == null) {
-    return null;
-  }
-
-  // this recurses through the fields of the compound card via
-  // the base card's queryableValue implementation
-  return flatten((fieldCard as any)[queryableValue](value, stack), {
-    safe: true,
-  });
+  return fieldOrCard.queryableValue(value, stack);
 }
 
 function peekAtField(instance: Card, fieldName: string): any {
