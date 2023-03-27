@@ -9,7 +9,7 @@ import {
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
 import { TestContext } from '@ember/test-helpers';
-import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
+import { LocalPath } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { renderComponent } from './render-component';
@@ -27,6 +27,8 @@ import {
   WebMessageStream,
   messageCloseHandler,
 } from '@cardstack/runtime-common/stream';
+import { file, FileResource } from '@cardstack/host/resources/file';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -395,4 +397,29 @@ export class TestRealmAdapter implements RealmAdapter {
   unsubscribe(): void {
     this.#subscriber = undefined;
   }
+}
+
+export function delay(delayAmountMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayAmountMs);
+  });
+}
+
+export async function getFileResource(
+  context: TestContext,
+  adapter: TestRealmAdapter,
+  ref: { name: string; module: string; lastModified?: string }
+): Promise<FileResource> {
+  let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
+  let paths = new RealmPaths(testRealmURL);
+  let relativePath = paths.local(new URL(fileURL));
+  let content = (await adapter.openFile(relativePath))?.content as
+    | string
+    | undefined;
+  return file(context, () => ({
+    relativePath,
+    realmURL: paths.url,
+    lastModified: ref.lastModified,
+    content,
+  }));
 }

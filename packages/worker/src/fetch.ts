@@ -9,8 +9,11 @@ export class FetchHandler {
 
   constructor(private livenessWatcher?: { alive: boolean }) {}
 
-  addRealm(realm: Realm, otherRealmsServed: string[]) {
+  addRealm(realm: Realm) {
     this.realm = realm;
+  }
+
+  setRealmsServed(otherRealmsServed: string[]) {
     this.otherRealmsServed = otherRealmsServed.map((u) =>
       Loader.resolve(u).href.replace(/\/$/, '')
     );
@@ -30,6 +33,10 @@ export class FetchHandler {
     if (!this.realm) {
       log.warn(`No realm is currently available`);
     } else if (this.realm.paths.inRealm(new URL(request.url))) {
+      if (new URL(request.url).pathname === '/tests') {
+        // allow tests requests to go back to the ember-cli server
+        return await fetch(request);
+      }
       if (request.headers.get('Accept')?.includes('text/html')) {
         return createResponse(await this.realm.getIndexHTML(), {
           headers: { 'content-type': 'text/html' },

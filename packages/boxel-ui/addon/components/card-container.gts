@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import element from '../helpers/element';
 import cn from '../helpers/cn';
-import { or } from '../helpers/truth-helpers';
+import { or, bool } from '../helpers/truth-helpers';
 import Header from './header';
 
 interface Signature {
@@ -30,7 +30,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       data-test-boxel-card-container
       ...attributes
     >
-      {{#if (or (has-block 'header') @label @title)}}
+      {{#if (or (has-block 'header') (bool @label) (bool @title))}}
         <Header @label={{@label}} @title={{@title}}>
           {{yield to='header'}}
         </Header>

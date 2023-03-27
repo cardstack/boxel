@@ -7,6 +7,7 @@ import {
 
 export interface RequestDirectoryHandle {
   type: 'requestDirectoryHandle';
+  realmsServed: string[];
 }
 export interface SetDirectoryHandleAcknowledged {
   type: 'setDirectoryHandleAcknowledged';
@@ -87,7 +88,7 @@ export function isClientMessage(message: unknown): message is ClientMessage {
   switch (message.type) {
     case 'getRunStateRequest':
     case 'requestDirectoryHandle':
-      return true;
+      return 'realmsServed' in message && Array.isArray(message.realmsServed);
     case 'setDirectoryHandle':
       return (
         'handle' in message &&

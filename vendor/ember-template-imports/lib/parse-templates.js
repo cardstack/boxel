@@ -11,7 +11,7 @@ const string_prototype_matchall_1 = __importDefault(
 );
 const debug_1 = require('./debug');
 const escapeChar = '\\';
-const stringOrRegexDelimiter = /['"/]/;
+const stringDelimiter = /['"]/;
 const singleLineCommentStart = /\/\//;
 const newLine = /\n/;
 const multiLineCommentStart = /\/\*/;
@@ -63,7 +63,7 @@ function parseTemplates(template, relativePath, templateTag) {
       newLine.source,
       multiLineCommentStart.source,
       multiLineCommentEnd.source,
-      stringOrRegexDelimiter.source,
+      stringDelimiter.source,
       templateLiteralStart.source,
       templateLiteralEnd.source,
       dynamicSegmentStart.source,
@@ -99,15 +99,15 @@ function parseTemplates(template, relativePath, templateTag) {
       token[0].match(templateTagStart)
     ) {
       parseTemplateTag(results, template, token, tokens);
-    } else if (token[0].match(stringOrRegexDelimiter)) {
-      parseStringOrRegex(results, template, token, tokens);
+    } else if (token[0].match(stringDelimiter)) {
+      parseString(results, template, token, tokens);
     }
   }
   /**
-   * Parse a string or a regex. All tokens within a string or regex are ignored
+   * Parse a string. All tokens within a string are ignored
    * since there are no dynamic segments within these.
    */
-  function parseStringOrRegex(_results, template, startToken, tokens) {
+  function parseString(_results, template, startToken, tokens) {
     while (tokens.length > 0) {
       const currentToken = (0, debug_1.expect)(
         tokens.shift(),

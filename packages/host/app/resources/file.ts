@@ -1,7 +1,7 @@
 import { Resource } from 'ember-resources/core';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { restartableTask, TaskInstance } from 'ember-concurrency';
+import { restartableTask, Task, TaskInstance } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
@@ -34,17 +34,18 @@ export type FileResource =
       name: string;
       url: string;
       loading: TaskInstance<void> | null;
-      write(content: string, flushLoader?: true): void;
+      lastModified: string;
+      writeTask: Task<void, [content: string, flushLoader?: boolean]>;
       close(): void;
     };
 
 class _FileResource extends Resource<Args> {
   private declare _url: string;
-  private lastModified: string | undefined;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
   @tracked content: string | undefined;
   @tracked state: FileResource['state'] = 'ready';
+  @tracked lastModified: string | undefined;
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
 
@@ -135,41 +136,34 @@ class _FileResource extends Resource<Args> {
     }
   });
 
-  async write(content: string, flushLoader?: true) {
-    this.doWrite.perform(content, flushLoader);
-  }
-
-  private doWrite = restartableTask(
-    async (content: string, flushLoader?: true) => {
-      let response = await this.loaderService.loader.fetch(this.url, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.card+source',
-        },
-        body: content,
-      });
-      if (!response.ok) {
-        log.error(
-          `Could not write file ${this.url}, status ${response.status}: ${
-            response.statusText
-          } - ${await response.text()}`
-        );
-        return;
-      }
-      if (this.state === 'not-found') {
-        // TODO think about the "unauthorized" scenario
-        throw new Error(
-          'this should be impossible--we are creating the specified path'
-        );
-      }
-
-      this.content = content;
-      this.lastModified = response.headers.get('last-modified') || undefined;
-      if (flushLoader) {
-        this.loaderService.reset();
-      }
+  writeTask = restartableTask(async (content: string, flushLoader?: true) => {
+    let response = await this.loaderService.loader.fetch(this.url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+      body: content,
+    });
+    if (!response.ok) {
+      let errorMessage = `Could not write file ${this.url}, status ${
+        response.status
+      }: ${response.statusText} - ${await response.text()}`;
+      log.error(errorMessage);
+      throw new Error(errorMessage);
     }
-  );
+    if (this.state === 'not-found') {
+      // TODO think about the "unauthorized" scenario
+      throw new Error(
+        'this should be impossible--we are creating the specified path'
+      );
+    }
+
+    this.content = content;
+    this.lastModified = response.headers.get('last-modified') || undefined;
+    if (flushLoader) {
+      this.loaderService.reset();
+    }
+  });
 }
 
 export function file(parent: object, args: () => Args['named']): FileResource {

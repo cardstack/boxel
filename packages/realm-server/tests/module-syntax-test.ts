@@ -264,7 +264,7 @@ module('module-syntax', function () {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    let realm = createRealm(dirSync().name, {
+    let realm = await createRealm(dirSync().name, {
       'pet.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";

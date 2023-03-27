@@ -5,21 +5,25 @@ import { Realm, LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type IndexRunner } from '@cardstack/runtime-common/search-index';
 
 export const testRealm = 'http://test-realm/';
 let distPath = resolve(__dirname, '..', '..', '..', 'host', 'dist');
 
 let manager = new RunnerOptionsManager();
-let getRunner = makeFastBootIndexRunner(
-  distPath,
-  manager.getOptions.bind(manager)
-);
+let getRunner: IndexRunner | undefined;
 
-export function createRealm(
+export async function createRealm(
   dir: string,
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   realmURL = testRealm
-): Realm {
+): Promise<Realm> {
+  if (!getRunner) {
+    ({ getRunner } = await makeFastBootIndexRunner(
+      distPath,
+      manager.getOptions.bind(manager)
+    ));
+  }
   for (let [filename, contents] of Object.entries(flatFiles)) {
     if (typeof contents === 'string') {
       writeFileSync(join(dir, filename), contents);

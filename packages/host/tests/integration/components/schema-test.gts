@@ -1,14 +1,13 @@
 import { module, test } from 'qunit';
-import { TestContext, waitFor, fillIn, click } from '@ember/test-helpers';
+import { waitFor, fillIn, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
 import Module from '@cardstack/host/components/module';
-import { file, FileResource } from '@cardstack/host/resources/file';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
 import {
+  getFileResource,
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
@@ -91,6 +90,38 @@ module('Integration | schema', function (hooks) {
       .hasText(
         'Delete firstName - contains - field card ID: https://cardstack.com/base/string/default'
       );
+  });
+
+  test('renders card schema view with a "/" in template', async function (assert) {
+    await realm.write(
+      'test.gts',
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import IntegerCard from "https://cardstack.com/base/integer";
+
+      export class Test extends Card {
+        @field test = contains(IntegerCard, {
+          computeVia: function () {
+            return 10 / 2;
+          },
+        });
+      }
+    `
+    );
+    let openFile = await getFileResource(this, adapter, {
+      module: `${testRealmURL}test`,
+      name: 'Test',
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Module @file={{openFile}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor('[data-test-card-id]');
+    assert.dom('[data-test-card-id]').exists();
   });
 
   test('renders a card schema view for a card that contains itself as a field', async function (assert) {
@@ -822,22 +853,3 @@ module('Integration | schema', function (hooks) {
       .doesNotExist('error message does not exist');
   });
 });
-
-async function getFileResource(
-  context: TestContext,
-  adapter: TestRealmAdapter,
-  ref: { name: string; module: string }
-): Promise<FileResource> {
-  let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
-  let paths = new RealmPaths(testRealmURL);
-  let relativePath = paths.local(new URL(fileURL));
-  let content = (await adapter.openFile(relativePath))?.content as
-    | string
-    | undefined;
-  return file(context, () => ({
-    relativePath,
-    realmURL: paths.url,
-    lastModified: undefined,
-    content,
-  }));
-}
