@@ -92,5 +92,12 @@ deactivate CardPrerender
 ```
 
 
-## SearchIndex Indexing process
-When the `SearchIndex` class ([`packages/runtime-common/search-index.ts`](../packages/runtime-common/search-index.ts)) begins indexing, either `fromScratch()` or `incremental()`, the first thing it will do is to call the `getRunner` callback that was supplied from either node or service worker environment (via `SearchIndex.setupRunner()`). The `SearchIndex` calls the `getRunner` callback with it's own `registerRunner` callback as a parameter to the original `getRunner` callback. The provided `registerRunner` callback is invoked on the host when the `CardPrerender` component is instantiated. The provided `registerRunner` callback wires up the `SearchIndex.#incremental` and `SearchIndex.#fromScratch` private fields to the `CardPrerender.incremental()` and `CardPrerender.fromScratch()` methods, such that we provide a consistent interface for the `SearchIndex` class to be able to kick off indexing without having to deal with the intricacies of either `FastBoot` or service worker `postMessage`. 
+## Indexing process
+Once the environment has initiated the indexing, the host [`CardPrerender` component](../packages/host/app/components/card-prerender.gts) utilizes the [`CurrentRun` module](../packages/host/app/lib/current-run.ts) to perform the indexing. There are 2 flavors of indexing:
+1. **From Scratch**
+
+    From scratch indexing will index all the cards the entire realm. `CurrentRun` will start by visiting the directory the realm is mounted at and recursively descend through any subdirectories that it encounters, indexing all the card instances that it comes across.
+   
+2. **Incremental**
+
+    Incremental indexing is used to index a specific item that changes and all the other items in the index that consume changed item either directly or indirectly. This is accomplished by recording all the dependencies (both instance and module dependencies) that an instances and modules have as we do the indexing. When an incremental index is requested, we traverse through the graph of dependencies that other items have on the changed index and invalidate all the consumers of the changed item. We remove all the invalidated items from a working copy of the index. We then instruct `CurrentRun` to visit all the invalidated items and whose entries are added to the working copy of the index. The working copy of the index then becomes the current index.
