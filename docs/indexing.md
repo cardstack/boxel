@@ -53,6 +53,44 @@ deactivate CardPrerender
 ```
 
 ## Service Worker Environment
+In the service worker environment we take advantage of the host app running the DOM perform indexing by coordinating via postMessage between the service worker and the host app running in the DOM. In the `getRunner` callback that is passed to the `Realm` constructor for the service worker (from [packages/worker/src/main.ts](../packages/worker/src/main.ts)), we use the service worker's `MessageHandler.setupIndexRuner()` instance in [../packages/worker/src/message-handler.ts](../packages/worker/src/message-handler.ts). This method uses the `registerRunner` callback that is passed in as a parameter to wire it's own `MessageHandler.fromScratch()` and `MessageHandler.incremental()` methods to the outer closure's `SearchIndex.#fromScratch` and `SearchIndex.#incremental` private properties. The `MessageHandler.fromScratch()` and `incremental()` instances perform a postMessage call to the host application running in DOM. These messages to perform indexing are received by the [`LocalRealm` service](../packages/host/app/services/local-realm.ts) running in the host app. The [`CardPrerender` component](../packages/host/app/components/card-prerender.gts) in the host app is rendered in the [application template](../packages/host/app/templates/application.hbs). Within the `CardPrerender` constructor we set the `CardPrerender.fromScratch()` and `CardPrerender.incremental()` methods as properties on the `LocalRealm` service. This means that when the `LocalRealm` service receives a postMessage to perform indexing it can call the `CardPrerender.fromScratch()` or `CardPrerender.incremental()` methods that were bound to it, and then return the resulting index state as a postMessage response to the received indexing messages.
+
+```mermaid
+sequenceDiagram
+participant SearchIndex
+participant RunnerOptionsManager
+participant MessageHandler
+participant LocalRealm service
+participant application route
+participant CardPrerender
+participant CurrentRun
+application route->>CardPrerender: render component
+CardPrerender->>LocalRealm service: setupIndexing(CardPrerender.fromScratch, CardPrerender.incremental)
+Note right of LocalRealm service: this binds the CardPrerender.fromScratch() method as a property of LocalRealm
+SearchIndex->>SearchIndex: run()
+SearchIndex->>RunnerOptionsManager: setOptions() - create new RunnerOpts state w/ ID
+SearchIndex->>MessageHandler: invoke getRunner() callback with RunnerOpts state ID
+MessageHandler->>RunnerOptionsManager: getRunnerOpts (which includes registerRunner callback) for optsId
+MessageHandler->>SearchIndex: registerRunner(MessageHandler.fromScratch, MessageHandler.incremental)
+Note right of SearchIndex: this wires together SearchIndex.fromScratch to MessageHandler.fromScratch
+SearchIndex->>MessageHandler:fromScratch() - start full indexing
+MessageHandler->>LocalRealm service: postMessage({ type: 'startFromScratch'c})
+LocalRealm service->>CardPrerender: fromScratch()
+activate CardPrerender
+CardPrerender->>CurrentRun: fromScratch()
+activate CurrentRun
+CurrentRun->>RenderService: isolated render card 1
+CurrentRun->>RenderService: isolated render card 2
+CurrentRun->>RenderService: isolated render card n
+CurrentRun-->>CardPrerender: indexing complete
+deactivate CurrentRun
+CardPrerender-->>LocalRealm service: indexing complete - returns updated index state
+LocalRealm service->>MessageHandler: postMessage({ type: 'fromScratchCompleted', state: serializedIndexState })
+MessageHandler->>SearchIndex: indexing complete - returns deserialized index state
+deactivate CardPrerender
+
+```
+
 
 ## SearchIndex Indexing process
-When the `SearchIndex` class ([`packages/runtime-common/search-index.ts`](../packages/runtime-common/search-index.ts)) begins indexing, either `fromScratch()` or `incremental()`, the first thing it will do is to call the `getRunner` callback that was supplied from either node or service worker environment (via `SearchIndex.setupRunner()`). The `SearchIndex` calls the `getRunner` callback with it's own `registerRunner` callback as a parameter to the original `getRunner` callback. The provided `registerRunner` callback is invoked on the host when the `CardPrerender` component is instantiated. The provided `registerRunner` callback wires up the `SearchIndex.#incremental` and `SearchIndex.#fromScratch` private fields to the `CardPrerender.incremental()` and `CardPrerender.fromScratch()` methods, such that we provide a consistent interface for the `SearchIndex` class to be able to kick off indexing without having to deal with the intricacies of either `FastBoot` or service worker `postMessage`.
+When the `SearchIndex` class ([`packages/runtime-common/search-index.ts`](../packages/runtime-common/search-index.ts)) begins indexing, either `fromScratch()` or `incremental()`, the first thing it will do is to call the `getRunner` callback that was supplied from either node or service worker environment (via `SearchIndex.setupRunner()`). The `SearchIndex` calls the `getRunner` callback with it's own `registerRunner` callback as a parameter to the original `getRunner` callback. The provided `registerRunner` callback is invoked on the host when the `CardPrerender` component is instantiated. The provided `registerRunner` callback wires up the `SearchIndex.#incremental` and `SearchIndex.#fromScratch` private fields to the `CardPrerender.incremental()` and `CardPrerender.fromScratch()` methods, such that we provide a consistent interface for the `SearchIndex` class to be able to kick off indexing without having to deal with the intricacies of either `FastBoot` or service worker `postMessage`. 
