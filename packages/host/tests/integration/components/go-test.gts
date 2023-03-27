@@ -37,12 +37,19 @@ export class Person extends Card {
 `;
 
 class FailingTestRealmAdapter extends TestRealmAdapter {
+  writeCalled = false;
+
   async write(
-    _path: LocalPath,
-    _contents: string | object
+    path: LocalPath,
+    contents: string | object
   ): Promise<{ lastModified: number }> {
-    await delay(10);
-    throw new Error('Something has gone horribly wrong on purpose');
+    if (this.writeCalled) {
+      return super.write(path, contents);
+    } else {
+      this.writeCalled = true;
+      await delay(10);
+      throw new Error('Something has gone horribly wrong on purpose');
+    }
   }
 }
 
@@ -188,6 +195,21 @@ module('Integration | Component | go', function (hooks) {
       assert.dom('[data-test-save-error]').exists();
 
       assert.dom('[data-test-failed-to-save]').hasText('Failed to save');
+
+      editor!.setValue(cardContent + '\n\n\n\n');
+
+      await waitUntil(() => find('[data-test-saved]'));
+      assert.dom('[data-test-saved]').exists();
+
+      await waitUntil(() =>
+        find('[data-test-last-edit]')!.innerHTML?.includes('seconds')
+      );
+      assert
+        .dom('[data-test-last-edit]')
+        .hasText(
+          'Last edit was a few seconds ago',
+          'expected last updated to return after a successful save'
+        );
     });
 
     hooks.afterEach(() => {
