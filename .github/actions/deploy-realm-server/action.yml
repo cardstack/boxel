@@ -73,6 +73,10 @@ runs:
       shell: bash
       run: pnpm install --frozen-lockfile
 
+    - name: Create archive of demo cards
+      shell:
+      run: tar cfz demo-cards.tar.gz ./packages/demo-cards
+
     - name: Deploy ${{ inputs.app_name }}
       uses: ./.github/actions/waypoint-deploy
       with:
