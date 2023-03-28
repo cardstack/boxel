@@ -325,9 +325,9 @@ class ContainsMany<FieldT extends CardConstructor>
     return getter(instance, this);
   }
 
-  queryableValue(instances: any, stack: Card[]): any {
+  queryableValue(instances: any[] | null, stack: Card[]): any[] {
     if (instances == null) {
-      return null;
+      return [];
     }
 
     // Need to replace the WatchedArray proxy with an actual array because the
@@ -865,6 +865,37 @@ class LinksToMany<CardT extends CardConstructor> implements Field<CardT> {
     }
 
     return getter(instance, this);
+  }
+
+  queryableValue(instances: any[] | null, stack: Card[]): any[] {
+    if (instances == null) {
+      return [];
+    }
+
+    // Need to replace the WatchedArray proxy with an actual array because the
+    // WatchedArray proxy is not structuredClone-able, and hence cannot be
+    // communicated over the postMessage boundary between worker and DOM.
+    return [...instances].map((instance) => {
+      if (primitive in instance) {
+        throw new Error(
+          `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`
+        );
+      }
+      return this.card[queryableValue](instance, stack);
+    });
+  }
+
+  queryMatcher(
+    innerMatcher: (innerValue: any) => boolean | null
+  ): (value: any[]) => boolean | null {
+    return (value) => {
+      if (value.length === 0) {
+        return innerMatcher(null);
+      }
+      return value.some((innerValue) => {
+        return innerMatcher(innerValue);
+      });
+    };
   }
 
   serialize(
