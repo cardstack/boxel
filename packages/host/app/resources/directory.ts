@@ -2,7 +2,6 @@ import { Resource } from 'ember-resources/core';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import type { Relationship } from '@cardstack/runtime-common';
 import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
@@ -42,7 +41,7 @@ export class DirectoryResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     this.directoryURL = new URL(named.relativePath, named.realmURL).href;
-    taskFor(this.readdir).perform();
+    this.readdir.perform();
 
     let path = `${named.realmURL}_message`;
 
@@ -55,13 +54,13 @@ export class DirectoryResource extends Resource<Args> {
       this.subscription = {
         url: path,
         unsubscribe: this.messageService.subscribe(path, () =>
-          taskFor(this.readdir).perform()
+          this.readdir.perform()
         ),
       };
     }
   }
 
-  @restartableTask private async readdir() {
+  private readdir = restartableTask(async () => {
     if (!this.directoryURL) {
       return;
     }
@@ -74,7 +73,7 @@ export class DirectoryResource extends Resource<Args> {
       return pathA.localeCompare(pathB);
     });
     this.entries = entries;
-  }
+  });
 
   private async getEntries(url: string): Promise<Entry[]> {
     let response: Response | undefined;

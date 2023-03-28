@@ -1,6 +1,5 @@
 import Component from '@glimmer/component';
 import { didCancel, enqueueTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { service } from '@ember/service';
 import { CurrentRun } from '../lib/current-run';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
@@ -26,13 +25,13 @@ export default class CardPrerender extends Component {
     super(owner, args);
     if (this.fastboot.isFastBoot) {
       try {
-        taskFor(this.doRegistration).perform();
+        this.doRegistration.perform();
       } catch (e: any) {
         if (!didCancel(e)) {
           throw e;
         }
         throw new Error(
-          `card-prerender component is being destroyed before runner registration was completed`
+          `card-prerender component is missing or being destroyed before runner registration was completed`
         );
       }
     } else {
@@ -45,7 +44,7 @@ export default class CardPrerender extends Component {
 
   private async fromScratch(realmURL: URL): Promise<RunState> {
     try {
-      let state = await taskFor(this.doFromScratch).perform(realmURL);
+      let state = await this.doFromScratch.perform(realmURL);
       return state;
     } catch (e: any) {
       if (!didCancel(e)) {
@@ -53,7 +52,7 @@ export default class CardPrerender extends Component {
       }
     }
     throw new Error(
-      `card-prerender component is being destroyed before from scratch index of realm ${realmURL} was completed`
+      `card-prerender component is missing or being destroyed before from scratch index of realm ${realmURL} was completed`
     );
   }
 
@@ -66,11 +65,7 @@ export default class CardPrerender extends Component {
       this.loaderService.reset();
     }
     try {
-      let state = await taskFor(this.doIncremental).perform(
-        prev,
-        url,
-        operation
-      );
+      let state = await this.doIncremental.perform(prev, url, operation);
       return state;
     } catch (e: any) {
       if (!didCancel(e)) {
@@ -78,20 +73,20 @@ export default class CardPrerender extends Component {
       }
     }
     throw new Error(
-      `card-prerender component is being destroyed before incremental index of ${url} was completed`
+      `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`
     );
   }
 
-  @enqueueTask private async doRegistration(): Promise<void> {
+  private doRegistration = enqueueTask(async () => {
     let optsId = (globalThis as any).runnerOptsId;
     if (optsId == null) {
       throw new Error(`Runner Options Identifier was not set`);
     }
     let register = getRunnerOpts(optsId).registerRunner;
     await register(this.fromScratch.bind(this), this.incremental.bind(this));
-  }
+  });
 
-  @enqueueTask private async doFromScratch(realmURL: URL): Promise<RunState> {
+  private doFromScratch = enqueueTask(async (realmURL: URL) => {
     let { reader, entrySetter } = this.getRunnerParams();
     let current = await CurrentRun.fromScratch(
       new CurrentRun({
@@ -104,26 +99,24 @@ export default class CardPrerender extends Component {
     );
     this.renderService.indexRunDeferred?.fulfill();
     return current;
-  }
+  });
 
-  @enqueueTask private async doIncremental(
-    prev: RunState,
-    url: URL,
-    operation: 'delete' | 'update'
-  ): Promise<RunState> {
-    let { reader, entrySetter } = this.getRunnerParams();
-    let current = await CurrentRun.incremental({
-      url,
-      operation,
-      prev,
-      reader,
-      loader: this.loaderService.loader,
-      entrySetter,
-      renderCard: this.renderService.renderCard.bind(this.renderService),
-    });
-    this.renderService.indexRunDeferred?.fulfill();
-    return current;
-  }
+  private doIncremental = enqueueTask(
+    async (prev: RunState, url: URL, operation: 'delete' | 'update') => {
+      let { reader, entrySetter } = this.getRunnerParams();
+      let current = await CurrentRun.incremental({
+        url,
+        operation,
+        prev,
+        reader,
+        loader: this.loaderService.loader,
+        entrySetter,
+        renderCard: this.renderService.renderCard.bind(this.renderService),
+      });
+      this.renderService.indexRunDeferred?.fulfill();
+      return current;
+    }
+  );
 
   private getRunnerParams(): {
     reader: Reader;

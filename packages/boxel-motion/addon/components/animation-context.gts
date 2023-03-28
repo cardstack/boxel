@@ -6,6 +6,8 @@ import { assert } from '@ember/debug';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
+import registerContext from '../modifiers/register-context';
+import registerContextOrphansEl from '../modifiers/register-context-orphans-el';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import Ember from 'ember';
@@ -32,6 +34,18 @@ export default class AnimationContextComponent
   extends Component<Signature>
   implements IContext
 {
+  <template>
+    {{this.renderDetector}}
+    <div class='animation-context' {{registerContext this}} ...attributes>
+      <div
+        {{registerContextOrphansEl this}}
+        data-animation-context-orphan-element='true'
+      ></div>
+      {{! JS appends and removes here }}
+      {{yield this}}
+    </div>
+  </template>
+
   @service declare animations: AnimationsService;
 
   get id(): string | undefined {

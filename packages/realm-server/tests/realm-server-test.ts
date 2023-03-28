@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
-import { createRealmServer } from '../server';
-import { join } from 'path';
+import { RealmServer } from '../server';
+import { join, resolve } from 'path';
 import { Server } from 'http';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
 import { copySync, existsSync, readFileSync, readJSONSync } from 'fs-extra';
@@ -27,6 +27,8 @@ setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
 const testRealm2Href = 'http://localhost:4202/node-test/';
+const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
+console.log(`using host dist dir: ${distDir}`);
 
 module('Realm Server', function (hooks) {
   let server: Server;
@@ -54,7 +56,7 @@ module('Realm Server', function (hooks) {
       defer.reject(
         new Error(`expectEvent timed out, saw events ${JSON.stringify(events)}`)
       );
-    }, 3000);
+    }, 5000);
     await new Promise((resolve) => es.addEventListener('open', resolve));
     let result = await callback();
     assert.deepEqual(await defer.promise, expectedContents);
@@ -73,10 +75,10 @@ module('Realm Server', function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    let testRealm = createRealm(dir.name, undefined, testRealmHref);
+    let testRealm = await createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
-    server = createRealmServer([testRealm]);
-    server.listen(testRealmURL.port);
+    let realmServer = new RealmServer([testRealm]);
+    server = realmServer.listen(parseInt(testRealmURL.port));
     request = supertest(server);
   });
 
@@ -264,7 +266,7 @@ module('Realm Server', function (hooks) {
       .set('Accept', 'application/vnd.card+source');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
-    let result = response.text.trim();
+    let result = response.body.toString().trim();
     assert.strictEqual(result, cardSrc, 'the card source is correct');
     assert.ok(response.headers['last-modified'], 'last-modified header exists');
   });
@@ -325,7 +327,7 @@ module('Realm Server', function (hooks) {
     let body = response.text.trim();
     assert.codeEqual(
       body,
-      compiledCard(`"x8zhsP0S"` /* id that glimmer assigns for the block */),
+      compiledCard(`"PRwgdZFk"` /* id that glimmer assigns for the block */),
       'module JS is correct'
     );
   });
@@ -482,15 +484,19 @@ module('Realm Server serving from root', function (hooks) {
     shimExternals();
     Loader.addURLMapping(
       new URL(baseRealm.url),
+      // Note that in order to really support a base realm that is served from
+      // the server's origin this will require an update of the host app's
+      // ember-cli-build.js, as that has been updated so that the chunk.js files
+      // are served from the base realm's /base path.
       new URL('http://localhost:4203/')
     );
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    let testRealm = createRealm(dir.name, undefined, testRealmHref);
+    let testRealm = await createRealm(dir.name, undefined, testRealmHref);
     await testRealm.ready;
-    server = createRealmServer([testRealm]);
-    server.listen(testRealmURL.port);
+    let realmServer = new RealmServer([testRealm]);
+    server = realmServer.listen(parseInt(testRealmURL.port));
     request = supertest(server);
   });
 

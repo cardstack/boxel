@@ -21,7 +21,6 @@ import { LinkTo } from '@ember/routing';
 import { hash } from '@ember/helper';
 import CatalogEntryEditor from './catalog-entry-editor';
 import { restartableTask } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import Modifier from 'ember-modifier';
 import type LoaderService from '../services/loader-service';
 import type CardService from '../services/card-service';
@@ -33,6 +32,7 @@ import BoxelInput from '@cardstack/boxel-ui/components/input';
 import FieldContainer from '@cardstack/boxel-ui/components/field-container';
 import CardContainer from '@cardstack/boxel-ui/components/card-container';
 import Label from '@cardstack/boxel-ui/components/label';
+import type { Filter } from '@cardstack/runtime-common/query';
 
 interface Signature {
   Args: {
@@ -73,7 +73,7 @@ export default class Schema extends Component<Signature> {
                   (this card)
                 {{else if (this.inRealm (cardModule field.card))}}
                   <LinkTo
-                    @route='application'
+                    @route='code'
                     @query={{hash
                       path=(this.modulePath (cardModule field.card))
                     }}
@@ -103,35 +103,50 @@ export default class Schema extends Component<Signature> {
             />
           </FieldContainer>
           <FieldContainer @label='Field Type:'>
-            <div>
-              <label>
-                contains
-                <input
-                  data-test-new-field-contains
-                  {{RadioInitializer (eq this.newFieldType 'contains') true}}
-                  type='radio'
-                  disabled={{this.isNewFieldDisabled}}
-                  checked={{eq this.newFieldType 'contains'}}
-                  {{on 'change' (fn this.setNewFieldType 'contains')}}
-                  name='field-type'
-                />
-              </label>
-              <label>
-                containsMany
-                <input
-                  data-test-new-field-containsMany
-                  {{RadioInitializer
-                    (eq this.newFieldType 'containsMany')
-                    true
-                  }}
-                  type='radio'
-                  disabled={{this.isNewFieldDisabled}}
-                  checked={{eq this.newFieldType 'containsMany'}}
-                  {{on 'change' (fn this.setNewFieldType 'containsMany')}}
-                  name='field-type'
-                />
-              </label>
-            </div>
+            <ul class='schema__new-field-type'>
+              <li>
+                <label>
+                  <input
+                    data-test-new-field-contains
+                    {{RadioInitializer (eq this.newFieldType 'contains') true}}
+                    type='radio'
+                    checked={{eq this.newFieldType 'contains'}}
+                    {{on 'change' (fn this.setNewFieldType 'contains')}}
+                    name='field-type'
+                  />
+                  contains
+                </label>
+              </li>
+              <li>
+                <label>
+                  <input
+                    data-test-new-field-containsMany
+                    {{RadioInitializer
+                      (eq this.newFieldType 'containsMany')
+                      true
+                    }}
+                    type='radio'
+                    checked={{eq this.newFieldType 'containsMany'}}
+                    {{on 'change' (fn this.setNewFieldType 'containsMany')}}
+                    name='field-type'
+                  />
+                  containsMany
+                </label>
+              </li>
+              <li>
+                <label>
+                  <input
+                    data-test-new-field-linksTo
+                    {{RadioInitializer (eq this.newFieldType 'linksTo') true}}
+                    type='radio'
+                    checked={{eq this.newFieldType 'linksTo'}}
+                    {{on 'change' (fn this.setNewFieldType 'linksTo')}}
+                    name='field-type'
+                  />
+                  linksTo
+                </label>
+              </li>
+            </ul>
           </FieldContainer>
           <button
             data-test-add-field
@@ -220,7 +235,7 @@ export default class Schema extends Component<Signature> {
 
   @action
   addField() {
-    taskFor(this.makeField).perform();
+    this.makeField.perform();
   }
 
   @action
@@ -229,7 +244,7 @@ export default class Schema extends Component<Signature> {
       { type: 'exportedName', name: this.ref.name },
       fieldName
     );
-    taskFor(this.write).perform(this.args.moduleSyntax.code());
+    this.write.perform(this.args.moduleSyntax.code());
   }
 
   @action
@@ -242,15 +257,21 @@ export default class Schema extends Component<Signature> {
     this.newFieldType = fieldType;
   }
 
-  @restartableTask private async makeField() {
+  private makeField = restartableTask(async () => {
+    let filter: Filter =
+      this.newFieldType === 'linksTo'
+        ? {
+            on: catalogEntryRef,
+            eq: { isPrimitive: false },
+          }
+        : {
+            on: catalogEntryRef,
+            not: {
+              eq: { ref: this.ref },
+            },
+          };
     let fieldEntry: CatalogEntry | undefined = await chooseCard({
-      filter: {
-        on: catalogEntryRef,
-        // a "contains" field cannot be the same card as it's enclosing card (but it can for a linksTo)
-        not: {
-          eq: { ref: this.ref },
-        },
-      },
+      filter,
     });
     if (!fieldEntry) {
       return;
@@ -265,18 +286,18 @@ export default class Schema extends Component<Signature> {
       fieldEntry.ref,
       this.newFieldType
     );
-    await taskFor(this.write).perform(this.args.moduleSyntax.code());
-  }
+    await this.write.perform(this.args.moduleSyntax.code());
+  });
 
-  @restartableTask private async write(src: string): Promise<void> {
+  private write = restartableTask(async (src: string) => {
     if (this.args.file.state !== 'ready') {
       throw new Error(`the file ${this.args.file.url} is not open`);
     }
     // note that this write will cause the component to rerender, so
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
-    await this.args.file.write(src, true);
-  }
+    this.args.file.writeTask.perform(src, true);
+  });
 }
 
 function cardId(card: Type | CardRef): string {

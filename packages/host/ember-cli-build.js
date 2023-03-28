@@ -5,6 +5,7 @@ const { compatBuild } = require('@embroider/compat');
 const { Webpack } = require('@embroider/webpack');
 const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
+const MomentLocalesPlugin = require('moment-locales-webpack-plugin');
 
 module.exports = function (defaults) {
   let app = new EmberApp(defaults, {
@@ -24,30 +25,36 @@ module.exports = function (defaults) {
     staticAppPaths: ['lib'],
 
     packagerOptions: {
-      webpackConfig: {
-        devtool: 'source-map',
-        module: {
-          rules: [
-            {
-              test: /\.ttf$/,
-              type: 'asset',
-            },
-          ],
-        },
-        plugins: [
-          new MonacoWebpackPlugin(),
-          new webpack.ProvidePlugin({
-            process: 'process',
-          }),
-        ],
-        resolve: {
-          fallback: {
-            fs: false,
-            path: require.resolve('path-browserify'),
+      ...{
+        webpackConfig: {
+          devtool: 'source-map',
+          module: {
+            rules: [
+              {
+                test: /\.ttf$/,
+                type: 'asset',
+              },
+            ],
           },
-        },
-        node: {
-          global: true,
+          plugins: [
+            new MonacoWebpackPlugin(),
+            new webpack.ProvidePlugin({
+              process: 'process',
+            }),
+            new MomentLocalesPlugin({
+              // 'en' is built into moment and cannot be removed. This strips the others.
+              localesToKeep: [],
+            }),
+          ],
+          resolve: {
+            fallback: {
+              fs: false,
+              path: require.resolve('path-browserify'),
+            },
+          },
+          node: {
+            global: true,
+          },
         },
       },
     },

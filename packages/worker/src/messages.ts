@@ -7,21 +7,21 @@ import {
 
 export interface RequestDirectoryHandle {
   type: 'requestDirectoryHandle';
+  realmsServed: string[];
 }
 export interface SetDirectoryHandleAcknowledged {
   type: 'setDirectoryHandleAcknowledged';
-  url: string;
 }
 
 export interface DirectoryHandleResponse {
   type: 'directoryHandleResponse';
   handle: FileSystemDirectoryHandle | null;
-  url: string | null;
 }
 
 export interface SetDirectoryHandle {
   type: 'setDirectoryHandle';
   handle: FileSystemDirectoryHandle | null;
+  realmsServed: string[];
 }
 
 export interface SetEntry {
@@ -88,12 +88,14 @@ export function isClientMessage(message: unknown): message is ClientMessage {
   switch (message.type) {
     case 'getRunStateRequest':
     case 'requestDirectoryHandle':
-      return true;
+      return 'realmsServed' in message && Array.isArray(message.realmsServed);
     case 'setDirectoryHandle':
       return (
         'handle' in message &&
         ((message as any).handle === null ||
-          (message as any).handle instanceof FileSystemDirectoryHandle)
+          (message as any).handle instanceof FileSystemDirectoryHandle) &&
+        'realmsServed' in message &&
+        Array.isArray(message.realmsServed)
       );
     case 'setEntry':
       return (
@@ -127,13 +129,10 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
       return (
         'handle' in message &&
         ((message as any).handle === null ||
-          (message as any).handle instanceof FileSystemDirectoryHandle) &&
-        'url' in message &&
-        ((message as any).url === null ||
-          typeof (message as any).url === 'string')
+          (message as any).handle instanceof FileSystemDirectoryHandle)
       );
     case 'setDirectoryHandleAcknowledged':
-      return 'url' in message && typeof (message as any).url === 'string';
+      return true;
     case 'startFromScratch':
       return 'realmURL' in message && typeof message.realmURL === 'string';
     case 'startIncremental':

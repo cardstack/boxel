@@ -19,5 +19,9 @@ module.exports = {
   rules: {
     // this doesn't work well with the monorepo. Typescript already complains if you try to import something that's not found
     'import/no-unresolved': 'off',
+    'prefer-const': 'off',
+    '@typescript-eslint/ban-ts-comment': 'off',
+    '@typescript-eslint/ban-types': 'off',
+    '@typescript-eslint/prefer-as-const': 'off',
   },
 };

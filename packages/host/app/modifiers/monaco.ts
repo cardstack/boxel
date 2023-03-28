@@ -2,7 +2,6 @@ import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 import * as monaco from 'monaco-editor';
 import { restartableTask, timeout } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { registerDestructor } from '@ember/destroyable';
 
 interface Signature {
@@ -11,6 +10,7 @@ interface Signature {
       content: string;
       language: string;
       contentChanged: (text: string) => void;
+      onSetup?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
     };
   };
 }
@@ -24,7 +24,7 @@ export default class Monaco extends Modifier<Signature> {
   modify(
     element: HTMLElement,
     _positional: [],
-    { content, language, contentChanged }: Signature['Args']['Named']
+    { content, language, contentChanged, onSetup }: Signature['Args']['Named']
   ) {
     if (this.model && content != null) {
       if (language !== this.lastLanguage) {
@@ -38,17 +38,20 @@ export default class Monaco extends Modifier<Signature> {
         value: content,
         language,
       });
+
+      onSetup?.(this.editor);
+
       registerDestructor(this, () => this.editor!.dispose());
 
       this.model = this.editor.getModel()!;
 
       this.model.onDidChangeContent(() =>
-        taskFor(this.onContentChanged).perform(contentChanged)
+        this.onContentChanged.perform(contentChanged)
       );
 
       // To be consistent call this immediately since the initial content
       // was set before we had a chance to register our listener
-      taskFor(this.onContentChanged).perform(contentChanged);
+      this.onContentChanged.perform(contentChanged);
 
       monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
         monacoTypescriptOptions
@@ -57,15 +60,15 @@ export default class Monaco extends Modifier<Signature> {
     this.lastLanguage = language;
   }
 
-  @restartableTask private async onContentChanged(
-    contentChanged: (text: string) => void
-  ) {
-    await timeout(500);
-    if (this.model) {
-      this.lastContent = this.model.getValue();
-      contentChanged(this.lastContent);
+  private onContentChanged = restartableTask(
+    async (contentChanged: (text: string) => void) => {
+      await timeout(500);
+      if (this.model) {
+        this.lastContent = this.model.getValue();
+        contentChanged(this.lastContent);
+      }
     }
-  }
+  );
 }
 
 const monacoTypescriptOptions: monaco.languages.typescript.CompilerOptions = {

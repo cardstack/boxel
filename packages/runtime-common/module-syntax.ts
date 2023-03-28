@@ -1,32 +1,32 @@
-import generate from "@babel/generator";
-import * as Babel from "@babel/core";
+import generate from '@babel/generator';
+import * as Babel from '@babel/core';
 import {
   schemaAnalysisPlugin,
   Options,
   PossibleCardClass,
   ClassReference,
   ExternalReference,
-} from "./schema-analysis-plugin";
+} from './schema-analysis-plugin';
 import {
   removeFieldPlugin,
   Options as RemoveOptions,
-} from "./remove-field-plugin";
-import { ImportUtil } from "babel-import-util";
-import startCase from "lodash/startCase";
-import camelCase from "lodash/camelCase";
-import upperFirst from "lodash/upperFirst";
-import { parseTemplates } from "@cardstack/ember-template-imports/lib/parse-templates";
-import { baseRealm } from "./index";
+} from './remove-field-plugin';
+import { ImportUtil } from 'babel-import-util';
+import startCase from 'lodash/startCase';
+import camelCase from 'lodash/camelCase';
+import upperFirst from 'lodash/upperFirst';
+import { parseTemplates } from '@cardstack/ember-template-imports/lib/parse-templates';
+import { baseRealm } from './index';
 //@ts-ignore unsure where these types live
-import decoratorsPlugin from "@babel/plugin-syntax-decorators";
+import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
-import classPropertiesPlugin from "@babel/plugin-syntax-class-properties";
+import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 //@ts-ignore unsure where these types live
-import typescriptPlugin from "@babel/plugin-syntax-typescript";
+import typescriptPlugin from '@babel/plugin-syntax-typescript';
 
-import type { types as t } from "@babel/core";
-import type { NodePath } from "@babel/traverse";
-import type { FieldType } from "https://cardstack.com/base/card-api";
+import type { types as t } from '@babel/core';
+import type { NodePath } from '@babel/traverse';
+import type { FieldType } from 'https://cardstack.com/base/card-api';
 
 export type { ClassReference, ExternalReference };
 
@@ -67,8 +67,8 @@ export class ModuleSyntax {
 
   addField(
     cardName:
-      | { type: "exportedName"; name: string }
-      | { type: "localName"; name: string },
+      | { type: 'exportedName'; name: string }
+      | { type: 'localName'; name: string },
     fieldName: string,
     fieldRef: { name: string; module: string },
     fieldType: FieldType
@@ -81,7 +81,13 @@ export class ModuleSyntax {
       throw new Error(`the field "${fieldName}" already exists`);
     }
 
-    let newField = makeNewField(card.path, fieldRef, fieldType, fieldName);
+    let newField = makeNewField(
+      card.path,
+      fieldRef,
+      fieldType,
+      fieldName,
+      cardName.name
+    );
     let src = this.code();
     this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
 
@@ -89,15 +95,15 @@ export class ModuleSyntax {
     let lastField = [...card.possibleFields.values()].pop();
     if (lastField) {
       lastField = [...this.getCard(cardName).possibleFields.values()].pop()!;
-      if (typeof lastField.path.node.end !== "number") {
+      if (typeof lastField.path.node.end !== 'number') {
         throw new Error(
           `bug: could not determine the string end position to insert the new field`
         );
       }
       insertPosition = lastField.path.node.end;
     } else {
-      let bodyStart = this.getCard(cardName).path.get("body").node.start;
-      if (typeof bodyStart !== "number") {
+      let bodyStart = this.getCard(cardName).path.get('body').node.start;
+      if (typeof bodyStart !== 'number') {
         throw new Error(
           `bug: could not determine the string end position to insert the new field`
         );
@@ -123,8 +129,8 @@ export class ModuleSyntax {
   // on card compilation to be able to guard for this scenario
   removeField(
     cardName:
-      | { type: "exportedName"; name: string }
-      | { type: "localName"; name: string },
+      | { type: 'exportedName'; name: string }
+      | { type: 'localName'; name: string },
     fieldName: string
   ) {
     let card = this.getCard(cardName);
@@ -149,12 +155,12 @@ export class ModuleSyntax {
 
   private getCard(
     card:
-      | { type: "exportedName"; name: string }
-      | { type: "localName"; name: string }
+      | { type: 'exportedName'; name: string }
+      | { type: 'localName'; name: string }
   ): PossibleCardClass {
     let cardName = card.name;
     let cardClass: PossibleCardClass | undefined;
-    if (card.type === "exportedName") {
+    if (card.type === 'exportedName') {
       cardClass = this.possibleCards.find((c) => c.exportedAs === cardName);
     } else {
       cardClass = this.possibleCards.find((c) => c.localName === cardName);
@@ -173,29 +179,30 @@ export class ModuleSyntax {
 function preprocessTemplateTags(src: string): string {
   let output = [];
   let offset = 0;
-  let matches = parseTemplates(src, "no-filename", "template");
+  let matches = parseTemplates(src, 'no-filename', 'template');
   for (let match of matches) {
     output.push(src.slice(offset, match.start.index));
     // we are using this name as well as padded spaces at the end so that source
     // maps are unaffected
-    output.push("[templte(`");
+    output.push('[templte(`');
     output.push(
       src
         .slice(match.start.index! + match.start[0].length, match.end.index)
-        .replace(/`/g, "\\`")
+        .replace(/`/g, '\\`')
     );
-    output.push("`)]        ");
+    output.push('`)]        ');
     offset = match.end.index! + match.end[0].length;
   }
   output.push(src.slice(offset));
-  return output.join("");
+  return output.join('');
 }
 
 function makeNewField(
   target: NodePath<t.Node>,
   fieldRef: { name: string; module: string },
   fieldType: FieldType,
-  fieldName: string
+  fieldName: string,
+  cardName: string
 ): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -206,13 +213,19 @@ function makeNewField(
     // target.parentPath to be non-nullable, but unable to express that in types
     target as NodePath<any>,
     `${baseRealm.url}card-api`,
-    "field"
+    'field'
   );
   let fieldTypeIdentifier = importUtil.import(
     target as NodePath<any>,
     `${baseRealm.url}card-api`,
     fieldType
   );
+
+  if (fieldType === 'linksTo' && cardName === fieldRef.name) {
+    // syntax for when a card has a linksTo field to a card with the same type as itself
+    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${cardName});`;
+  }
+
   let fieldCardIdentifier = importUtil.import(
     target as NodePath<any>,
     fieldRef.module,
@@ -225,7 +238,7 @@ function makeNewField(
 
 function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
   let currentPath: NodePath | null = path;
-  while (currentPath && currentPath.type !== "Program") {
+  while (currentPath && currentPath.type !== 'Program') {
     currentPath = currentPath.parentPath;
   }
   if (!currentPath) {
@@ -235,12 +248,12 @@ function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
 }
 
 function suggestedCardName(ref: { name: string; module: string }): string {
-  if (ref.name.toLowerCase().endsWith("card")) {
+  if (ref.name.toLowerCase().endsWith('card')) {
     return ref.name;
   }
   let name = ref.name;
-  if (name === "default") {
-    name = ref.module.split("/").pop()!;
+  if (name === 'default') {
+    name = ref.module.split('/').pop()!;
   }
   return upperFirst(camelCase(`${name} card`));
 }

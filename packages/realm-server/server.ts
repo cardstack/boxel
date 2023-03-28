@@ -1,151 +1,176 @@
-import http, { IncomingMessage, ServerResponse } from 'http';
+import Koa from 'koa';
+import cors from '@koa/cors';
+import Router from '@koa/router';
+import { Memoize } from 'typescript-memoize';
 import { Loader, Realm } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
-import { Readable } from 'stream';
 import { setupCloseHandler } from './node-realm';
+import {
+  proxyAsset,
+  livenessCheck,
+  healthCheck,
+  httpLogging,
+  ecsMetadata,
+  assetRedirect,
+  rootRealmRedirect,
+  fullRequestURL,
+} from './middleware';
+import { monacoMiddleware } from './middleware/monaco';
 import '@cardstack/runtime-common/externals-global';
 import log from 'loglevel';
+import { nodeStreamToText } from './stream';
 
-let requestLog = log.getLogger('realm:requests');
+const logger = log.getLogger('realm:requests');
 
-export interface RealmConfig {
-  realmURL: string;
-  path: string;
+interface Options {
+  hostLocalRealm?: boolean;
 }
 
-export function createRealmServer(realms: Realm[]) {
-  detectRealmCollision(realms);
+export class RealmServer {
+  private hostLocalRealm = false;
 
-  let server = http.createServer(async (req, res) => {
-    if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
-      res.setHeader(
-        'X-ECS-Container-Metadata-URI-v4',
-        process.env['ECS_CONTAINER_METADATA_URI_V4']
+  constructor(private realms: Realm[], opts?: Options) {
+    detectRealmCollision(realms);
+    this.realms = realms;
+    this.hostLocalRealm = Boolean(opts?.hostLocalRealm);
+  }
+
+  @Memoize()
+  get app() {
+    let router = new Router();
+    router.head('/', livenessCheck);
+    router.get(
+      '/',
+      healthCheck,
+      this.serveIndex({ serveLocalRealm: false }),
+      rootRealmRedirect(this.realms),
+      this.serveFromRealm
+    );
+    router.get('/local', this.serveIndex({ serveLocalRealm: true }));
+    router.get(/\/local\/.*/, this.serveIndex({ serveLocalRealm: true }));
+
+    let app = new Koa<Koa.DefaultState, Koa.Context>()
+      .use(httpLogging)
+      .use(ecsMetadata)
+      .use(
+        cors({
+          origin: '*',
+          allowHeaders:
+            'Authorization, Content-Type, If-Match, X-Requested-With',
+        })
+      )
+      .use(monacoMiddleware(this.realms))
+      .use(assetRedirect(this.realms))
+      .use(
+        proxyAsset('/local/worker.js', {
+          responseHeaders: { 'Service-Worker-Allowed': '/' },
+        })
+      )
+      .use(rootRealmRedirect(this.realms))
+      .use(router.routes())
+      .use(this.serveFromRealm);
+
+    return app;
+  }
+
+  listen(port: number) {
+    let instance = this.app.listen(port);
+    logger.info(`Realm server listening on port %s\n`, port);
+    return instance;
+  }
+
+  private serveIndex({
+    serveLocalRealm,
+  }: {
+    serveLocalRealm: boolean;
+  }): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+    return async (ctxt: Koa.Context, next: Koa.Next) => {
+      if (ctxt.header.accept?.includes('text/html') && this.realms.length > 0) {
+        ctxt.type = 'html';
+        ctxt.body = await this.realms[0].getIndexHTML({
+          hostLocalRealm: serveLocalRealm && this.hostLocalRealm,
+          localRealmURL:
+            serveLocalRealm && this.hostLocalRealm
+              ? `${fullRequestURL(ctxt).origin}/local/`
+              : undefined,
+          realmsServed: this.realms.map((r) => r.url),
+        });
+        return;
+      }
+      return next();
+    };
+  }
+
+  private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
+    let reversedResolution = Loader.reverseResolution(
+      fullRequestURL(ctxt).href
+    );
+    logger.debug(
+      `Looking for realm to handle request with full URL: ${
+        fullRequestURL(ctxt).href
+      } (reversed: ${reversedResolution.href})`
+    );
+
+    let realm = this.realms.find((r) => {
+      let inRealm = r.paths.inRealm(reversedResolution);
+      logger.debug(
+        `${reversedResolution} in realm ${JSON.stringify({
+          url: r.url,
+          paths: r.paths,
+        })}: ${inRealm}`
       );
-    }
-
-    res.on('finish', () => {
-      requestLog.info(`${req.method} ${req.url}: ${res.statusCode}`);
-      requestLog.debug(JSON.stringify(req.headers));
+      return inRealm;
     });
 
-    let isStreaming = false;
-    try {
-      if (handleCors(req, res)) {
-        return;
-      }
-      if (!req.url) {
-        throw new Error(`bug: missing URL in request`);
-      }
+    if (!realm) {
+      ctxt.status = 404;
+      return;
+    }
 
-      // Respond to AWS ELB health check
-      if (requestIsHealthCheck(req)) {
-        res.statusCode = 200;
-        res.statusMessage = 'OK';
-        res.write('OK');
-        res.end();
-        return;
-      }
+    let reqBody: string | undefined;
+    if (['POST', 'PATCH'].includes(ctxt.method)) {
+      reqBody = await nodeStreamToText(ctxt.req);
+    }
 
-      let protocol =
-        req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-      let fullRequestUrl = new URL(
-        `${protocol}://${req.headers.host}${req.url}`
-      );
-      let reversedResolution = Loader.reverseResolution(fullRequestUrl.href);
+    let request = new Request(reversedResolution.href, {
+      method: ctxt.method,
+      headers: ctxt.req.headers as { [name: string]: string },
+      ...(reqBody ? { body: reqBody } : {}),
+    });
 
-      requestLog.debug(
-        `Looking for realm to handle request with full URL: ${fullRequestUrl.href} (reversed: ${reversedResolution.href})`
-      );
-
-      let realm = realms.find((r) => {
-        let inRealm = r.paths.inRealm(reversedResolution);
-
-        requestLog.debug(
-          `In realm ${JSON.stringify({
-            url: r.url,
-            paths: r.paths,
-          })}: ${inRealm}`
-        );
-        return inRealm;
-      });
-
-      if (!realm) {
-        res.statusCode = 404;
-        res.statusMessage = 'Not Found';
-        res.end();
-        return;
-      }
-
-      let reqBody = await nodeStreamToText(req);
-
-      let request = new Request(reversedResolution.href, {
-        method: req.method,
-        headers: req.headers as { [name: string]: string },
-        ...(reqBody ? { body: reqBody } : {}),
-      });
-
-      setupCloseHandler(res, request);
-
-      let { status, statusText, headers, body, nodeStream } =
-        await realm.handle(request);
-      res.statusCode = status;
-      res.statusMessage = statusText;
-      for (let [header, value] of headers.entries()) {
-        res.setHeader(header, value);
-      }
-
-      if (nodeStream) {
-        isStreaming = true;
-        nodeStream.pipe(res);
-      } else if (body instanceof ReadableStream) {
-        // A quirk with native fetch Response in node is that it will be clever
-        // and convert strings or buffers in the response.body into web-streams
-        // automatically. This is not to be confused with actual file streams
-        // that the Realm is creating. The node HTTP server does not play nice
-        // with web-streams, so we will read these streams back into strings and
-        // then include in our node ServerResponse. Actual node file streams
-        // (i.e streams that we are intentionally creating in the Realm) will
-        // not be handled here--those will be taken care of above.
-        res.write(await webStreamToText(body));
-      } else if (body != null) {
-        res.write(body);
-      }
-    } finally {
-      // the node pipe takes care of ending the response for us, so we only have
-      // to do this when we are not piping
-      if (!isStreaming) {
-        res.end();
+    setupCloseHandler(ctxt.res, request);
+    let realmResponse = await realm.handle(request);
+    let { status, statusText, headers, body, nodeStream } = realmResponse;
+    ctxt.status = status;
+    ctxt.message = statusText;
+    for (let [header, value] of headers.entries()) {
+      ctxt.set(header, value);
+    }
+    if (!headers.get('content-type')) {
+      let fileName = reversedResolution.href.split('/').pop()!;
+      if (fileName.includes('.')) {
+        ctxt.type = fileName.split('.').pop()!;
+      } else {
+        ctxt.type = 'application/vnd.api+json';
       }
     }
-  });
-  return server;
-}
 
-function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-
-  if (
-    req.method === 'OPTIONS' &&
-    req.headers['access-control-request-method']
-  ) {
-    // preflight request
-    res.setHeader('Access-Control-Allow-Headers', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,DELETE,PATCH');
-    res.statusCode = 204;
-    res.end();
-    return true;
-  }
-  return false;
-}
-
-async function nodeStreamToText(stream: Readable): Promise<string> {
-  const chunks: Buffer[] = [];
-  // the types for Readable have not caught up to the fact these are async generators
-  for await (const chunk of stream as any) {
-    chunks.push(Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks).toString('utf-8');
+    if (nodeStream) {
+      ctxt.body = nodeStream;
+    } else if (body instanceof ReadableStream) {
+      // A quirk with native fetch Response in node is that it will be clever
+      // and convert strings or buffers in the response.body into web-streams
+      // automatically. This is not to be confused with actual file streams
+      // that the Realm is creating. The node HTTP server does not play nice
+      // with web-streams, so we will read these streams back into strings and
+      // then include in our node ServerResponse. Actual node file streams
+      // (i.e streams that we are intentionally creating in the Realm) will
+      // not be handled here--those will be taken care of above.
+      ctxt.body = await webStreamToText(body);
+    } else if (body != null) {
+      ctxt.body = body;
+    }
+  };
 }
 
 function detectRealmCollision(realms: Realm[]): void {
@@ -170,12 +195,4 @@ function detectRealmCollision(realms: Realm[]): void {
       )}`
     );
   }
-}
-
-function requestIsHealthCheck(req: http.IncomingMessage) {
-  return (
-    req.url === '/' &&
-    req.method === 'GET' &&
-    req.headers['user-agent']?.startsWith('ELB-HealthChecker')
-  );
 }

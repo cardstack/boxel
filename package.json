@@ -5,9 +5,10 @@
     "url": "https://github.com/cardstack/boxel-motion"
   },
   "scripts": {
-    "deploy:boxel-host": "cd packages/host && NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy",
-    "deploy:boxel-host:preview-staging": "cd packages/host && NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-staging --verbose",
-    "deploy:boxel-host:preview-production": "cd packages/host && NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-production --verbose",
+    "build:boxel-host": "cd packages/host && pnpm build:production",
+    "deploy:boxel-host": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy",
+    "deploy:boxel-host:preview-staging": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-staging --verbose",
+    "deploy:boxel-host:preview-production": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-production --verbose",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix"
   },
@@ -15,7 +16,7 @@
     "overrides": {
       "@types/eslint": "8.4.1",
       "jsesc": "^3.0.0",
-      "ember-concurrency": "2.2.1"
+      "ember-concurrency": "^2.3.4"
     },
     "peerDependencyRules": {
       "allowedVersions": {
@@ -34,9 +35,9 @@
     "@babel/core": "^7.17.8",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.0.4",
-    "@glint/core": "^0.9.7",
-    "@glint/environment-ember-loose": "^0.9.7",
-    "@glint/environment-ember-template-imports": "^0.9.7",
+    "@glint/core": "^1.0.0-beta.4",
+    "@glint/environment-ember-loose": "^1.0.0-beta.4",
+    "@glint/environment-ember-template-imports": "^1.0.0-beta.4",
     "@typescript-eslint/eslint-plugin": "^5.17.0",
     "@typescript-eslint/parser": "^5.17.0",
     "ember-cli-htmlbars": "^6.1.0",

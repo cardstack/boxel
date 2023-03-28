@@ -99,7 +99,7 @@ export default class TransitionRunner {
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-  @task *maybeTransitionTask(changeset: Changeset) {
+  maybeTransitionTask = task(async (changeset: Changeset) => {
     assert('No changeset was passed to the TransitionRunner', !!changeset);
 
     let { animationContext } = this;
@@ -126,14 +126,14 @@ export default class TransitionRunner {
         });
 
         try {
-          yield Promise.resolve(Promise.all(promises));
+          return Promise.resolve(Promise.all(promises));
         } catch (error) {
           console.error(error);
           throw error;
         }
       }
     }
-  }
+  });
 
   private logChangeset(changeset: Changeset, animationContext: IContext): void {
     let contextId = animationContext.args.id;

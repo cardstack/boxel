@@ -112,6 +112,9 @@ jobs:
       - name: realm server test suite
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
+      - name: realm server DOM tests
+        run: pnpm test:dom
+        working-directory: packages/realm-server
 
   change-check:
     name: Check which packages changed
@@ -168,7 +171,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [realm-base, realm-demo]
+        # We are not currently using the realm-base server. Rather the base realm
+        # and demo realm are both being hosted by the realm-demo server
+        # app: [realm-base, realm-demo]
+        app: [realm-demo]
     steps:
       - uses: actions/checkout@v3
 

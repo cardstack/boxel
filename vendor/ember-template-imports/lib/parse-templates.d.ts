@@ -1,14 +1,14 @@
 export declare type TemplateMatch = TemplateTagMatch | TemplateLiteralMatch;
 export interface TemplateTagMatch {
-    type: 'template-tag';
-    start: RegExpMatchArray;
-    end: RegExpMatchArray;
+  type: 'template-tag';
+  start: RegExpMatchArray;
+  end: RegExpMatchArray;
 }
 export interface TemplateLiteralMatch {
-    type: 'template-literal';
-    tagName: string;
-    start: RegExpMatchArray;
-    end: RegExpMatchArray;
+  type: 'template-literal';
+  tagName: string;
+  start: RegExpMatchArray;
+  end: RegExpMatchArray;
 }
 /**
  * Parses a template to find all possible valid matches for an embedded template.
@@ -29,4 +29,8 @@ export interface TemplateLiteralMatch {
  * @param templateTag Optional template tag if parsing template tags is enabled
  * @returns
  */
-export declare function parseTemplates(template: string, relativePath: string, templateTag?: string): TemplateMatch[];
+export declare function parseTemplates(
+  template: string,
+  relativePath: string,
+  templateTag?: string
+): TemplateMatch[];

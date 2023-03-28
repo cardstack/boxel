@@ -1,6 +1,5 @@
 import { Resource } from 'ember-resources/core';
 import { tracked } from '@glimmer/tracking';
-import { taskFor } from 'ember-concurrency-ts';
 import { task } from 'ember-concurrency';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
@@ -18,14 +17,14 @@ export class ImportResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { url, loader } = named;
-    this.#loaded = taskFor(this.load).perform(url, loader);
+    this.#loaded = this.load.perform(url, loader);
   }
 
   get loaded() {
     return this.#loaded;
   }
 
-  @task private async load(url: string, loader: Loader): Promise<void> {
+  private load = task(async (url: string, loader: Loader) => {
     try {
       let m = await loader.import<object>(url);
       this.module = m;
@@ -48,7 +47,7 @@ Check console log for more details`,
         log.error(err);
       }
     }
-  }
+  });
 }
 
 export function importResource(parent: object, url: () => string) {

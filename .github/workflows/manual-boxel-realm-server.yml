@@ -22,7 +22,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [realm-base, realm-demo]
+        # We are not currently using the realm-base server. Rather the base realm
+        # and demo realm are both being hosted by the realm-demo server
+        # app: [realm-base, realm-demo]
+        app: [realm-demo]
     steps:
       - uses: actions/checkout@v3
 
@@ -36,4 +39,3 @@ jobs:
           production_waypoint_server_address: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_ADDR }}
           staging_waypoint_server_token: ${{ secrets.STAGING_WAYPOINT_SERVER_TOKEN }}
           staging_waypoint_server_address: ${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}
-

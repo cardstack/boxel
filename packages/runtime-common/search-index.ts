@@ -3,25 +3,25 @@ import {
   baseRealm,
   internalKeyFor,
   type LooseCardResource,
-} from ".";
-import { Kind, Realm } from "./realm";
-import { LocalPath, RealmPaths } from "./paths";
-import { Loader } from "./loader";
-import { Query, Filter, Sort } from "./query";
-import { CardError, type SerializedError } from "./error";
-import { URLMap } from "./url-map";
-import flatMap from "lodash/flatMap";
-import { type Ignore } from "ignore";
-import { Card } from "https://cardstack.com/base/card-api";
-import type * as CardAPI from "https://cardstack.com/base/card-api";
-import { type CardRef, getField, identifyCard, loadCard } from "./card-ref";
+} from '.';
+import { Kind, Realm } from './realm';
+import { LocalPath, RealmPaths } from './paths';
+import { Loader } from './loader';
+import type { Query, Filter, Sort, EqFilter, RangeFilter } from './query';
+import { CardError, type SerializedError } from './error';
+import { URLMap } from './url-map';
+import flatMap from 'lodash/flatMap';
+import ignore, { type Ignore } from 'ignore';
+import type { Card, Field } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type CardRef, getField, identifyCard, loadCard } from './card-ref';
 import {
   isSingleCardDocument,
   type SingleCardDocument,
   type CardCollectionDocument,
   type CardResource,
   type Saved,
-} from "./card-document";
+} from './card-document';
 
 export interface Reader {
   readFileAsText: (
@@ -43,6 +43,7 @@ export interface RunState {
   realmURL: URL;
   instances: URLMap<SearchEntryWithErrors>;
   ignoreMap: URLMap<Ignore>;
+  ignoreMapContents: URLMap<string>;
   modules: Map<string, ModuleWithErrors>;
   stats: Stats;
 }
@@ -50,7 +51,7 @@ export interface RunState {
 export interface SerializableRunState {
   realmURL: string;
   instances: [string, SearchEntryWithErrors][];
-  ignoreMap: [string, Ignore][];
+  ignoreMap: [string, string][];
   modules: [string, ModuleWithErrors][];
   stats: Stats;
 }
@@ -60,7 +61,7 @@ export type RunnerRegistration = (
   incremental: (
     prev: RunState,
     url: URL,
-    operation: "update" | "delete"
+    operation: 'update' | 'delete'
   ) => Promise<RunState>
 ) => Promise<void>;
 
@@ -83,16 +84,16 @@ export interface SearchEntry {
 }
 
 export type SearchEntryWithErrors =
-  | { type: "entry"; entry: SearchEntry }
-  | { type: "error"; error: SerializedError };
+  | { type: 'entry'; entry: SearchEntry }
+  | { type: 'error'; error: SerializedError };
 
 export interface Module {
   url: string;
   consumes: string[];
 }
 export type ModuleWithErrors =
-  | { type: "module"; module: Module }
-  | { type: "error"; moduleURL: string; error: SerializedError };
+  | { type: 'module'; module: Module }
+  | { type: 'error'; moduleURL: string; error: SerializedError };
 
 interface Options {
   loadLinks?: true;
@@ -100,11 +101,11 @@ interface Options {
 
 type SearchResult = SearchResultDoc | SearchResultError;
 interface SearchResultDoc {
-  type: "doc";
+  type: 'doc';
   doc: SingleCardDocument;
 }
 interface SearchResultError {
-  type: "error";
+  type: 'error';
   error: SerializedError;
 }
 
@@ -152,7 +153,7 @@ export class SearchIndex {
     | ((
         prev: RunState,
         url: URL,
-        operation: "update" | "delete"
+        operation: 'update' | 'delete'
       ) => Promise<RunState>)
     | undefined;
 
@@ -175,6 +176,7 @@ export class SearchIndex {
       realmURL: new URL(realm.url),
       loader: Loader.createLoaderFromGlobal(),
       ignoreMap: new URLMap(),
+      ignoreMapContents: new URLMap(),
       instances: new URLMap(),
       modules: new Map(),
       stats: {
@@ -222,7 +224,7 @@ export class SearchIndex {
       let current = await this.#incremental(
         this.#index,
         url,
-        opts?.delete ? "delete" : "update"
+        opts?.delete ? 'delete' : 'update'
       );
       this.#index = {
         // we overwrite the instances in the incremental update, as there may
@@ -231,6 +233,7 @@ export class SearchIndex {
         instances: current.instances,
         modules: current.modules,
         ignoreMap: current.ignoreMap,
+        ignoreMapContents: current.ignoreMapContents,
         realmURL: current.realmURL,
         stats: current.stats,
         loader: Loader.createLoaderFromGlobal(),
@@ -258,12 +261,12 @@ export class SearchIndex {
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
     let matcher = await this.buildMatcher(query.filter, {
       module: `${baseRealm.url}card-api`,
-      name: "Card",
+      name: 'Card',
     });
 
     let doc: CardCollectionDocument = {
       data: flatMap([...this.#index.instances.values()], (maybeError) =>
-        maybeError.type !== "error" ? [maybeError.entry] : []
+        maybeError.type !== 'error' ? [maybeError.entry] : []
       )
         .filter(matcher)
         .sort(this.buildSorter(query.sort))
@@ -303,7 +306,7 @@ export class SearchIndex {
     if (!card) {
       return undefined;
     }
-    if (card.type === "error") {
+    if (card.type === 'error') {
       return card;
     }
     let doc: SingleCardDocument = {
@@ -321,13 +324,13 @@ export class SearchIndex {
         doc.included = included;
       }
     }
-    return { type: "doc", doc };
+    return { type: 'doc', doc };
   }
 
   // this is meant for tests only
   async searchEntry(url: URL): Promise<SearchEntry | undefined> {
     let result = this.#index.instances.get(url);
-    if (result?.type !== "error") {
+    if (result?.type !== 'error') {
       return result?.entry;
     }
     return undefined;
@@ -343,18 +346,15 @@ export class SearchIndex {
     );
   }
 
-  private async loadFieldCard(
-    ref: CardRef,
-    fieldPath: string
-  ): Promise<typeof Card> {
+  private async loadField(ref: CardRef, fieldPath: string): Promise<Field> {
     let card: typeof Card | undefined;
     try {
       card = await loadCard(ref, { loader: this.loader });
     } catch (err: any) {
-      if (!("type" in ref)) {
+      if (!('type' in ref)) {
         throw new Error(
           `Your filter refers to nonexistent type: import ${
-            ref.name === "default" ? "default" : `{ ${ref.name} }`
+            ref.name === 'default' ? 'default' : `{ ${ref.name} }`
           } from "${ref.module}"`
         );
       } else {
@@ -367,20 +367,31 @@ export class SearchIndex {
         );
       }
     }
-    let segments = fieldPath.split(".");
+    let segments = fieldPath.split('.');
+    let field: Field | undefined;
     while (segments.length) {
       let fieldName = segments.shift()!;
-      let prevCard = card;
-      card = getField(card, fieldName)?.card;
-      if (!card) {
+      let prevField = field;
+      field = getField(card, fieldName);
+      if (!field) {
         throw new Error(
           `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(
-            identifyCard(prevCard)
+            identifyCard(prevField ? prevField.card : card)
           )}`
         );
       }
     }
-    return card;
+    return field!;
+  }
+
+  private getFieldData(searchData: Record<string, any>, fieldPath: string) {
+    let data = searchData;
+    let segments = fieldPath.split('.');
+    while (segments.length && data != null) {
+      let fieldName = segments.shift()!;
+      data = data[fieldName];
+    }
+    return data;
   }
 
   private buildSorter(
@@ -392,23 +403,24 @@ export class SearchIndex {
     let sorters = expressions.map(({ by, on, direction }) => {
       return (e1: SearchEntry, e2: SearchEntry) => {
         if (!this.cardHasType(e1, on)) {
-          return direction === "desc" ? -1 : 1;
+          return direction === 'desc' ? -1 : 1;
         }
         if (!this.cardHasType(e2, on)) {
-          return direction === "desc" ? 1 : -1;
+          return direction === 'desc' ? 1 : -1;
         }
-        let a = e1.searchData[by];
-        let b = e2.searchData[by];
+
+        let a = this.getFieldData(e1.searchData, by);
+        let b = this.getFieldData(e2.searchData, by);
         if (a === undefined) {
-          return direction === "desc" ? -1 : 1; // if descending, null position is before the rest
+          return direction === 'desc' ? -1 : 1; // if descending, null position is before the rest
         }
         if (b === undefined) {
-          return direction === "desc" ? 1 : -1; // `a` is not null
+          return direction === 'desc' ? 1 : -1; // `a` is not null
         }
         if (a < b) {
-          return direction === "desc" ? 1 : -1;
+          return direction === 'desc' ? 1 : -1;
         } else if (a > b) {
-          return direction === "desc" ? -1 : 1;
+          return direction === 'desc' ? -1 : 1;
         } else {
           return 0;
         }
@@ -438,27 +450,27 @@ export class SearchIndex {
       return (_entry) => true;
     }
 
-    if ("type" in filter) {
+    if ('type' in filter) {
       return (entry) => this.cardHasType(entry, filter.type);
     }
 
     let on = filter?.on ?? onRef;
 
-    if ("any" in filter) {
+    if ('any' in filter) {
       let matchers = await Promise.all(
         filter.any.map((f) => this.buildMatcher(f, on))
       );
       return (entry) => some(matchers, (m) => m(entry));
     }
 
-    if ("every" in filter) {
+    if ('every' in filter) {
       let matchers = await Promise.all(
         filter.every.map((f) => this.buildMatcher(f, on))
       );
       return (entry) => every(matchers, (m) => m(entry));
     }
 
-    if ("not" in filter) {
+    if ('not' in filter) {
       let matcher = await this.buildMatcher(filter.not, on);
       return (entry) => {
         let inner = matcher(entry);
@@ -471,101 +483,155 @@ export class SearchIndex {
       };
     }
 
-    if ("eq" in filter) {
-      let ref: CardRef = on;
+    if ('eq' in filter) {
+      return await this.buildEqMatchers(filter.eq, on);
+    }
 
-      let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
-        await Promise.all(
-          Object.keys(filter.eq).map(async (fieldPath) => [
-            fieldPath,
-            await this.loadFieldCard(on, fieldPath),
-          ])
-        )
+    if ('range' in filter) {
+      return await this.buildRangeMatchers(filter.range, on);
+    }
+
+    throw new Error('Unknown filter');
+  }
+
+  private async buildRangeMatchers(
+    range: RangeFilter['range'],
+    ref: CardRef
+  ): Promise<(entry: SearchEntry) => boolean | null> {
+    // TODO when we are ready to execute queries within computeds, we'll need to
+    // use the loader instance from current-run and not the global loader, as
+    // the card definitions may have changed in the current-run loader
+    let api = await this.loadAPI();
+
+    let matchers: ((instanceData: Record<string, any>) => boolean | null)[] =
+      [];
+
+    for (let [name, value] of Object.entries(range)) {
+      // Load the stack of fields we're accessing
+      let fields: Field[] = [];
+      let nextRef: CardRef | undefined = ref;
+      let segments = name.split('.');
+      while (segments.length > 0) {
+        let fieldName = segments.shift()!;
+        let field = await this.loadField(nextRef, fieldName);
+        fields.push(field);
+        nextRef = identifyCard(field.card);
+        if (!nextRef) {
+          throw new Error(`could not identify card for field ${fieldName}`);
+        }
+      }
+
+      let qValueGT = api.getQueryableValue(fields[fields.length - 1], value.gt);
+      let qValueLT = api.getQueryableValue(fields[fields.length - 1], value.lt);
+      let qValueGTE = api.getQueryableValue(
+        fields[fields.length - 1],
+        value.gte
       );
+      let qValueLTE = api.getQueryableValue(
+        fields[fields.length - 1],
+        value.lte
+      );
+      let queryValue = qValueGT ?? qValueLT ?? qValueGTE ?? qValueLTE;
 
-      // TODO when we are ready to execute queries within computeds, we'll need to
-      // use the loader instance from current-run and not the global loader, as
-      // the card definitions may have changed in the current-run loader
-      let api = await this.loadAPI();
+      let matcher = (instanceValue: any) => {
+        if (instanceValue == null || queryValue == null) {
+          return null;
+        }
+        // checking for not null below is necessary because queryValue can be 0
+        if (
+          (qValueGT != null && !(instanceValue > qValueGT)) ||
+          (qValueLT != null && !(instanceValue < qValueLT)) ||
+          (qValueGTE != null && !(instanceValue >= qValueGTE)) ||
+          (qValueLTE != null && !(instanceValue <= qValueLTE))
+        ) {
+          return false;
+        }
+        return true;
+      };
 
-      return (entry) =>
-        every(Object.entries(filter.eq), ([fieldPath, value]) => {
-          if (this.cardHasType(entry, ref)) {
-            let queryValue = api.getQueryableValue(
-              fieldCards[fieldPath]!,
-              value
-            );
-            let instanceValue = entry.searchData[fieldPath];
-            if (instanceValue === undefined && queryValue != null) {
-              return null;
-            }
-            // allows queries for null to work
-            if (queryValue == null && instanceValue == null) {
-              return true;
-            }
-            return instanceValue === queryValue;
-          } else {
+      while (fields.length > 0) {
+        let nextField = fields.pop()!;
+        let nextMatcher = nextField.queryMatcher(matcher);
+        matcher = (instanceValue: any) => {
+          if (instanceValue == null || queryValue == null) {
             return null;
           }
-        });
+          return nextMatcher(instanceValue[nextField.name]);
+        };
+      }
+      matchers.push(matcher);
     }
 
-    if ("range" in filter) {
-      let ref: CardRef = on;
+    return (entry) =>
+      every(matchers, (m) => {
+        if (this.cardHasType(entry, ref)) {
+          return m(entry.searchData);
+        }
+        return null;
+      });
+  }
 
-      let fieldCards: { [fieldPath: string]: typeof Card } = Object.fromEntries(
-        await Promise.all(
-          Object.keys(filter.range).map(async (fieldPath) => [
-            fieldPath,
-            await this.loadFieldCard(on, fieldPath),
-          ])
-        )
-      );
+  private async buildEqMatchers(
+    filterValue: EqFilter['eq'],
+    ref: CardRef
+  ): Promise<(entry: SearchEntry) => boolean | null> {
+    // TODO when we are ready to execute queries within computeds, we'll need to
+    // use the loader instance from current-run and not the global loader, as
+    // the card definitions may have changed in the current-run loader
+    let api = await this.loadAPI();
 
-      // TODO when we are ready to execute queries within computeds, we'll need to
-      // use the loader instance from current-run and not the global loader, as
-      // the card definitions may have changed in the current-run loader
-      let api = await this.loadAPI();
+    let matchers: ((instanceData: Record<string, any>) => boolean | null)[] =
+      [];
 
-      return (entry) =>
-        every(Object.entries(filter.range), ([fieldPath, range]) => {
-          if (this.cardHasType(entry, ref)) {
-            let value = entry.searchData[fieldPath];
-            if (value === undefined) {
-              return null;
-            }
+    for (let [name, value] of Object.entries(filterValue)) {
+      // Load the stack of fields we're accessing
+      let fields: Field[] = [];
+      let nextRef: CardRef | undefined = ref;
+      let segments = name.split('.');
+      while (segments.length > 0) {
+        let fieldName = segments.shift()!;
+        let field = await this.loadField(nextRef, fieldName);
+        fields.push(field);
+        nextRef = identifyCard(field.card);
+        if (!nextRef) {
+          throw new Error(`could not identify card for field ${fieldName}`);
+        }
+      }
 
-            if (
-              (range.gt &&
-                !(
-                  value >
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.gt)
-                )) ||
-              (range.lt &&
-                !(
-                  value <
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.lt)
-                )) ||
-              (range.gte &&
-                !(
-                  value >=
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.gte)
-                )) ||
-              (range.lte &&
-                !(
-                  value <=
-                  api.getQueryableValue(fieldCards[fieldPath]!, range.lte)
-                ))
-            ) {
-              return false;
-            }
+      let queryValue = api.getQueryableValue(fields[fields.length - 1], value);
+      let matcher = (instanceValue: any) => {
+        if (instanceValue === undefined && queryValue != null) {
+          return null;
+        }
+        // allows queries for null to work
+        if (queryValue == null && instanceValue == null) {
+          return true;
+        }
+        return instanceValue === queryValue;
+      };
+      while (fields.length > 0) {
+        let nextField = fields.pop()!;
+        let nextMatcher = nextField.queryMatcher(matcher);
+        matcher = (instanceValue: any) => {
+          if (instanceValue == null && queryValue != null) {
+            return null;
+          }
+          if (instanceValue == null && queryValue == null) {
             return true;
           }
-          return null;
-        });
+          return nextMatcher(instanceValue[nextField.name]);
+        };
+      }
+      matchers.push(matcher);
     }
 
-    throw new Error("Unknown filter");
+    return (entry) =>
+      every(matchers, (m) => {
+        if (this.cardHasType(entry, ref)) {
+          return m(entry.searchData);
+        }
+        return null;
+      });
   }
 }
 
@@ -612,10 +678,10 @@ export async function loadLinks({
     if (realmPath.inRealm(linkURL)) {
       let maybeEntry = instances.get(linkURL);
       linkResource =
-        maybeEntry?.type === "entry" ? maybeEntry.entry.resource : undefined;
+        maybeEntry?.type === 'entry' ? maybeEntry.entry.resource : undefined;
     } else {
       let response = await loader.fetch(linkURL, {
-        headers: { Accept: "application/vnd.api+json" },
+        headers: { Accept: 'application/vnd.api+json' },
       });
       if (!response.ok) {
         let cardError = await CardError.fromFetchResponse(
@@ -663,7 +729,7 @@ export async function loadLinks({
     }
     if (foundLinks || omit.includes(relationship.links.self)) {
       resource.relationships![fieldName].data = {
-        type: "card",
+        type: 'card',
         id: relationship.links.self,
       };
     }
@@ -699,7 +765,13 @@ export function isIgnored(
 }
 
 export function serializeRunState(state: RunState): SerializableRunState {
-  let { modules, instances, realmURL, ignoreMap, stats } = state;
+  let {
+    modules,
+    instances,
+    realmURL,
+    ignoreMapContents: ignoreMap,
+    stats,
+  } = state;
   return {
     stats,
     realmURL: realmURL.href,
@@ -716,7 +788,10 @@ export function deserializeRunState(state: SerializableRunState): RunState {
     stats,
     modules: new Map(modules),
     instances: new URLMap(instances.map(([k, v]) => [new URL(k), v])),
-    ignoreMap: new URLMap(ignoreMap.map(([k, v]) => [new URL(k), v])),
+    ignoreMap: new URLMap(
+      ignoreMap.map(([k, v]) => [new URL(k), ignore().add(v)])
+    ),
+    ignoreMapContents: new URLMap(ignoreMap.map(([k, v]) => [new URL(k), v])),
   };
 }
 

@@ -4,7 +4,6 @@ import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import { getBoxComponent } from './field-component';
 import { type Card, type Box, type Field } from './card-api';
 import {
@@ -44,7 +43,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   </template>
 
   choose = () => {
-    taskFor(this.chooseCard as unknown as Descriptor<any, any[]>).perform();
+    (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
 
   remove = () => {
@@ -66,7 +65,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     return getBoxComponent(card, 'embedded', this.args.model as Box<Card>);
   }
 
-  @restartableTask private async chooseCard() {
+  private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let chosenCard: Card | undefined = await chooseCard(
       { filter: { type } },
@@ -75,7 +74,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     if (chosenCard) {
       this.args.model.value = chosenCard;
     }
-  }
+  });
 }
 
 export function getLinksToEditor(

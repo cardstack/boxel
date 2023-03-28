@@ -24,8 +24,12 @@ module.exports = function (environment) {
     'ember-cli-mirage': {
       enabled: false,
     },
-    // This should be provided as an *unresolved* URL
-    demoRealmURL: process.env.DEMO_REALM_URL,
+
+    // the fields below may be rewritten by the realm server
+    ownRealmURL: process.env.OWN_REALM_URL || 'http://localhost:4200/', // this should be provided as an *unresolved* URL
+    isBaseRealmHosting: false,
+    isLocalRealm:
+      environment === 'test' ? true : process.env.HOST_LOCAL_REALM === 'true',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
   };

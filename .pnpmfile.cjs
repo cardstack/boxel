@@ -10,12 +10,12 @@
 // version @ember/test-helper.
 
 function readPackage(pkg, context) {
-  if (pkg.name === "ember-qunit" && pkg.version.startsWith("5.")) {
+  if (pkg.name === 'ember-qunit' && pkg.version.startsWith('5.')) {
     pkg.peerDependencies = {
       ...pkg.peerDependencies,
-      "ember-source": ">=4.2.0",
+      'ember-source': '>=4.2.0',
     };
-    context.log("set ember-qunit to have a peer-dep of ember-source >=4.2.0");
+    context.log('set ember-qunit to have a peer-dep of ember-source >=4.2.0');
   }
   return pkg;
 }

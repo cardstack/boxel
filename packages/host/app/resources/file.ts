@@ -1,8 +1,7 @@
 import { Resource } from 'ember-resources/core';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { restartableTask, TaskInstance } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
+import { restartableTask, Task, TaskInstance } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
@@ -35,17 +34,18 @@ export type FileResource =
       name: string;
       url: string;
       loading: TaskInstance<void> | null;
-      write(content: string, flushLoader?: true): void;
+      lastModified: string;
+      writeTask: Task<void, [content: string, flushLoader?: boolean]>;
       close(): void;
     };
 
 class _FileResource extends Resource<Args> {
   private declare _url: string;
-  private lastModified: string | undefined;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
   @tracked content: string | undefined;
   @tracked state: FileResource['state'] = 'ready';
+  @tracked lastModified: string | undefined;
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
 
@@ -69,7 +69,7 @@ class _FileResource extends Resource<Args> {
       this.lastModified = lastModified;
     } else {
       // get the initial content if we haven't already been seeded with initial content
-      taskFor(this.read).perform();
+      this.read.perform();
     }
 
     let path = `${realmURL}_message`;
@@ -83,7 +83,7 @@ class _FileResource extends Resource<Args> {
       this.subscription = {
         url: path,
         unsubscribe: this.messageService.subscribe(path, () =>
-          taskFor(this.read).perform()
+          this.read.perform()
         ),
       };
     }
@@ -98,10 +98,10 @@ class _FileResource extends Resource<Args> {
   }
 
   get loading() {
-    return taskFor(this.read).last;
+    return this.read.last;
   }
 
-  @restartableTask private async read() {
+  private read = restartableTask(async () => {
     let prevState = this.state;
     let response = await this.loaderService.loader.fetch(this.url, {
       headers: {
@@ -134,13 +134,9 @@ class _FileResource extends Resource<Args> {
     if (this.onStateChange && this.state !== prevState) {
       this.onStateChange(this.state);
     }
-  }
+  });
 
-  async write(content: string, flushLoader?: true) {
-    taskFor(this.doWrite).perform(content, flushLoader);
-  }
-
-  @restartableTask private async doWrite(content: string, flushLoader?: true) {
+  writeTask = restartableTask(async (content: string, flushLoader?: true) => {
     let response = await this.loaderService.loader.fetch(this.url, {
       method: 'POST',
       headers: {
@@ -149,12 +145,11 @@ class _FileResource extends Resource<Args> {
       body: content,
     });
     if (!response.ok) {
-      log.error(
-        `Could not write file ${this.url}, status ${response.status}: ${
-          response.statusText
-        } - ${await response.text()}`
-      );
-      return;
+      let errorMessage = `Could not write file ${this.url}, status ${
+        response.status
+      }: ${response.statusText} - ${await response.text()}`;
+      log.error(errorMessage);
+      throw new Error(errorMessage);
     }
     if (this.state === 'not-found') {
       // TODO think about the "unauthorized" scenario
@@ -168,7 +163,7 @@ class _FileResource extends Resource<Args> {
     if (flushLoader) {
       this.loaderService.reset();
     }
-  }
+  });
 }
 
 export function file(parent: object, args: () => Args['named']): FileResource {

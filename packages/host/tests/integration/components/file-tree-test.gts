@@ -1,4 +1,5 @@
 import { module, test } from 'qunit';
+import Service from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -14,24 +15,26 @@ import {
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
+import FileTree from '@cardstack/host/components/file-tree';
 import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import { on } from '@ember/modifier';
-import {
-  chooseCard,
-  catalogEntryRef,
-  createNewCard,
-} from '@cardstack/runtime-common';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
-module('Integration | create-new-card', function (hooks) {
+module('Integration | file-tree', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
+  let didTransition: { route: string; params: any } | undefined;
+  class MockRouter extends Service {
+    transitionTo(route: string, params: any) {
+      didTransition = { route, params };
+    }
+  }
   setupRenderingTest(hooks);
   setupMockLocalRealm(hooks);
 
   hooks.beforeEach(async function () {
+    didTransition = undefined;
+    this.owner.register('service:router', MockRouter);
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     Loader.addURLMapping(
@@ -119,36 +122,23 @@ module('Integration | create-new-card', function (hooks) {
     Loader.destroy();
   });
 
-  test('can create new card', async function (assert) {
-    async function createNew() {
-      let card = await chooseCard<CatalogEntry>({
-        filter: {
-          on: catalogEntryRef,
-          eq: { isPrimitive: false },
-        },
-      });
-      if (!card) {
-        return;
-      }
-      return await createNewCard(card.ref);
-    }
+  test('can create a new card', async function (assert) {
+    let openDirs: string[] = [];
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <button
-            {{on 'click' createNew}}
-            type='button'
-            data-test-create-button
-          >
-            Create New Card
-          </button>
+          <FileTree
+            @url={{testRealmURL}}
+            @openFile={{undefined}}
+            @openDirs={{openDirs}}
+          />
           <CreateCardModal />
           <CardCatalogModal />
           <CardPrerender />
         </template>
       }
     );
-    await click('[data-test-create-button]');
+    await click('[data-test-create-new-card-button]');
     await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
 
     assert
@@ -177,6 +167,11 @@ module('Integration | create-new-card', function (hooks) {
     await fillIn('[data-test-field="firstName"] input', 'Jackie');
     await click('[data-test-save-card]');
     await waitUntil(() => !document.querySelector('[data-test-saving]'));
+
+    assert.strictEqual(didTransition?.route, 'code');
+    assert.deepEqual(didTransition?.params, {
+      queryParams: { path: 'Person/1.json' },
+    });
 
     let entry = await realm.searchIndex.card(
       new URL(`${testRealmURL}Person/1`)

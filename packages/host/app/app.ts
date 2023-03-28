@@ -1,3 +1,4 @@
+import './lib/public-path'; // this should be first
 import Application from '@ember/application';
 import Resolver from 'ember-resolver';
 import loadInitializers from 'ember-load-initializers';

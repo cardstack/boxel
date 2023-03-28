@@ -1,4 +1,4 @@
-import { Token, Currency } from "./asset";
+import { Token, Currency } from './asset';
 
 export function balanceInCurrency(
   balance: number | null | undefined,
@@ -8,7 +8,7 @@ export function balanceInCurrency(
     return 0;
   }
   let total = balance * payment.exchangeRate;
-  if (payment.name === "USD") {
+  if (payment.name === 'USD') {
     return formatUSD(total);
   } else {
     return `${Number.isInteger(total) ? total : total.toFixed(2)} ${

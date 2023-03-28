@@ -304,6 +304,129 @@ module('Integration | catalog-entry-editor', function (hooks) {
     );
   });
 
+  test('can edit existing catalog entry that uses relative references', async function (assert) {
+    await realm.write(
+      'dir/pet-catalog-entry.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Pet',
+            description: 'Catalog entry',
+            ref: {
+              module: `../pet`,
+              name: 'Pet',
+            },
+            demo: {
+              name: 'Jackie',
+              lovesWalks: true,
+              birthday: null,
+              owner: {
+                firstName: 'BN',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry',
+            },
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: `../pet`,
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+        },
+      })
+    );
+
+    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CatalogEntryEditor @ref={{args}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-format-button="edit"]');
+    await click('[data-test-format-button="edit"]');
+
+    assert
+      .dom('[data-test-catalog-entry-id]')
+      .hasText(`${testRealmURL}dir/pet-catalog-entry`);
+    assert
+      .dom('[data-test-field="title"] input')
+      .hasValue('Pet', 'title input field value is correct');
+    assert
+      .dom('[data-test-field="description"] input')
+      .hasValue('Catalog entry', 'description input field value is correct');
+    assert.dom('[data-test-ref]').containsText(`Module: ../pet Name: Pet`);
+    assert
+      .dom('[data-test-field="demo"] [data-test-field="name"] input')
+      .hasValue('Jackie', 'demo card name input field is correct');
+    assert
+      .dom('[data-test-field="lovesWalks"] label:nth-of-type(1) input')
+      .isChecked('title input field value is correct');
+    assert
+      .dom('[data-test-field="owner"] [data-test-field="firstName"] input')
+      .hasValue(
+        'BN',
+        'demo card owner first name input field value is correct'
+      );
+
+    await fillIn('[data-test-field="title"] input', 'test title');
+    await fillIn('[data-test-field="description"] input', 'test description');
+    await fillIn('[data-test-field="name"] input', 'Jackie Wackie');
+    await fillIn('[data-test-field="firstName"] input', 'EA');
+
+    await click('button[data-test-save-card]');
+    await waitUntil(() => !document.querySelector('[data-test-saving]'));
+
+    assert.dom('[data-test-title]').hasText('test title');
+    assert.dom('[data-test-description]').hasText('test description');
+    assert
+      .dom('[data-test-demo] [data-test-pet-name]')
+      .hasText('Jackie Wackie');
+    assert.dom('[data-test-demo] [data-test-pet-owner]').exists();
+    assert.dom('[data-test-demo] [data-test-pet-owner]').hasText('EA');
+
+    let maybeError = await realm.searchIndex.card(
+      new URL(`${testRealmURL}dir/pet-catalog-entry`)
+    );
+    if (maybeError?.type === 'error') {
+      throw new Error(
+        `unexpected error when getting card from index: ${maybeError.error.detail}`
+      );
+    }
+    let { doc } = maybeError!;
+    assert.strictEqual(
+      doc?.data.attributes?.title,
+      'test title',
+      'catalog entry title was updated'
+    );
+    assert.strictEqual(
+      doc?.data.attributes?.description,
+      'test description',
+      'catalog entry description was updated'
+    );
+    assert.strictEqual(
+      doc?.data.attributes?.demo?.name,
+      'Jackie Wackie',
+      'demo name field was updated'
+    );
+    assert.strictEqual(
+      doc?.data.attributes?.demo?.owner?.firstName,
+      'EA',
+      'demo owner firstName field was updated'
+    );
+  });
+
   test('can create new card with missing composite field value', async function (assert) {
     const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
