@@ -519,7 +519,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT, any> {
 
   queryableValue(instance: any, stack: Card[]): any {
     if (primitive in this.card) {
-      let result = this.card[queryableValue](instance);
+      let result = this.card[queryableValue](instance, stack);
       assertScalar(result, this.card);
       return result;
     }

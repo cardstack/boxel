@@ -7,6 +7,7 @@ import {
   Card,
   CardConstructor,
   CardInstanceType,
+  relativeTo,
 } from './card-api';
 
 class BaseView extends Component<typeof CardRefCard> {
@@ -34,9 +35,14 @@ export default class CardRefCard extends Card {
   ): Promise<CardInstanceType<T>> {
     return { ...cardRef } as CardInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
   }
-  static [queryableValue](cardRef: CardId | undefined) {
+  static [queryableValue](cardRef: CardId | undefined, stack: Card[] = []) {
     if (cardRef) {
-      return `${cardRef.module}/${cardRef.name}`; // this assumes the module is an absolute reference
+      // if a stack is passed in, use the containing card to resolve relative references
+      let moduleHref =
+        stack.length > 0
+          ? new URL(cardRef.module, stack[0][relativeTo]).href
+          : cardRef.module;
+      return `${moduleHref}/${cardRef.name}`;
     }
     return undefined;
   }
