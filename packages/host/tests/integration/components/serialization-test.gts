@@ -619,16 +619,23 @@ module('Integration | serialization', function (hooks) {
     }
 
     let relationship = relationshipMeta(card, 'pet');
-    if (relationship?.type === 'loaded') {
-      let relatedCard = relationship.card;
-      assert.strictEqual(
-        relatedCard instanceof Pet,
-        true,
-        'related card is a Pet'
+    if (Array.isArray(relationship)) {
+      assert.ok(
+        false,
+        'relationshipMeta should not be an array for linksTo relationship'
       );
-      assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
     } else {
-      assert.ok(false, 'relationship type was not "loaded"');
+      if (relationship?.type === 'loaded') {
+        let relatedCard = relationship.card;
+        assert.strictEqual(
+          relatedCard instanceof Pet,
+          true,
+          'related card is a Pet'
+        );
+        assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
+      } else {
+        assert.ok(false, 'relationship type was not "loaded"');
+      }
     }
 
     assert.strictEqual(
@@ -699,10 +706,17 @@ module('Integration | serialization', function (hooks) {
     }
 
     let relationship = relationshipMeta(hassan, 'pet');
-    if (relationship?.type === 'not-loaded') {
-      assert.strictEqual(relationship.reference, `${realmURL}Pet/mango`);
+    if (Array.isArray(relationship)) {
+      assert.ok(
+        false,
+        'relationshipMeta should not be an array for linksTo relationship'
+      );
     } else {
-      assert.ok(false, 'relationship type was not "not-loaded"');
+      if (relationship?.type === 'not-loaded') {
+        assert.strictEqual(relationship.reference, `${realmURL}Pet/mango`);
+      } else {
+        assert.ok(false, 'relationship type was not "not-loaded"');
+      }
     }
 
     let payload = serializeCard(hassan, { includeUnrenderedFields: true });
@@ -932,16 +946,23 @@ module('Integration | serialization', function (hooks) {
     }
 
     let relationship = relationshipMeta(card, 'owner');
-    if (relationship?.type === 'loaded') {
-      let relatedCard = relationship.card;
-      assert.strictEqual(
-        relatedCard instanceof Person,
-        true,
-        'related card is a Person'
+    if (Array.isArray(relationship)) {
+      assert.ok(
+        false,
+        'relationshipMeta should not be an array for linksTo relationship'
       );
-      assert.strictEqual(relatedCard?.id, `${realmURL}Person/burcu`);
     } else {
-      assert.ok(false, 'relationship type was not "loaded"');
+      if (relationship?.type === 'loaded') {
+        let relatedCard = relationship.card;
+        assert.strictEqual(
+          relatedCard instanceof Person,
+          true,
+          'related card is a Person'
+        );
+        assert.strictEqual(relatedCard?.id, `${realmURL}Person/burcu`);
+      } else {
+        assert.ok(false, 'relationship type was not "loaded"');
+      }
     }
 
     ['firstName', 'toys', 'favoriteToy'].map((fieldName) =>
@@ -2760,6 +2781,695 @@ module('Integration | serialization', function (hooks) {
           },
         },
       },
+    });
+  });
+
+  module('linksToMany', function () {
+    test('can serialize a linksToMany relationship', async function (assert) {
+      let { field, contains, linksToMany, Card, serializeCard } = cardApi;
+      let { default: StringCard } = string;
+
+      class Pet extends Card {
+        @field firstName = contains(StringCard);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field pets = linksToMany(Pet);
+      }
+      await shimModule(`${realmURL}test-cards`, { Person, Pet });
+
+      let mango = new Pet({
+        firstName: 'Mango',
+      });
+      let vanGogh = new Pet({
+        firstName: 'Van Gogh',
+      });
+      let hassan = new Person({
+        firstName: 'Hassan',
+        pets: [mango, vanGogh],
+      });
+
+      await saveCard(mango, `${realmURL}Pet/mango`);
+      await saveCard(vanGogh, `${realmURL}Pet/vanGogh`);
+
+      let serialized = serializeCard(hassan);
+      assert.deepEqual(serialized, {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'pets.0': {
+              links: {
+                self: `${realmURL}Pet/mango`,
+              },
+              data: { id: `${realmURL}Pet/mango`, type: 'card' },
+            },
+            'pets.1': {
+              links: {
+                self: `${realmURL}Pet/vanGogh`,
+              },
+              data: { id: `${realmURL}Pet/vanGogh`, type: 'card' },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+        included: [
+          {
+            id: `${realmURL}Pet/mango`,
+            type: 'card',
+            attributes: { firstName: 'Mango' },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
+            },
+          },
+          {
+            id: `${realmURL}Pet/vanGogh`,
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
+            },
+          },
+        ],
+      });
+    });
+
+    test('can deserialize a linksToMany relationship', async function (assert) {
+      let {
+        field,
+        contains,
+        linksToMany,
+        Card,
+        createFromSerialized,
+        relationshipMeta,
+        isSaved,
+      } = cardApi;
+      let { default: StringCard } = string;
+
+      class Pet extends Card {
+        @field firstName = contains(StringCard);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field pets = linksToMany(Pet);
+      }
+      await shimModule(`${realmURL}test-cards`, { Person, Pet });
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'pets.0': {
+              links: {
+                self: `${realmURL}Pet/mango`,
+              },
+            },
+            'pets.1': {
+              links: {
+                self: `${realmURL}Pet/vanGogh`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+        included: [
+          {
+            id: `${realmURL}Pet/mango`,
+            type: 'card',
+            attributes: { firstName: 'Mango' },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
+            },
+          },
+          {
+            id: `${realmURL}Pet/vanGogh`,
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
+            },
+          },
+        ],
+      };
+      let card = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        undefined
+      );
+
+      assert.ok(card instanceof Person, 'card is an instance of person');
+      assert.strictEqual(card.firstName, 'Hassan');
+
+      let { pets } = card;
+      assert.ok(Array.isArray(pets), 'pets is an array');
+      assert.strictEqual(pets.length, 2, 'pets has 2 items');
+      let [mango, vanGogh] = pets;
+      if (mango instanceof Pet) {
+        assert.strictEqual(isSaved(mango), true, 'Pet[0] card is saved');
+        assert.strictEqual(mango.firstName, 'Mango');
+      } else {
+        assert.ok(false, '"pets[0]" is not an instance of Pet');
+      }
+      if (vanGogh instanceof Pet) {
+        assert.strictEqual(isSaved(vanGogh), true, 'Pet[1] card is saved');
+        assert.strictEqual(vanGogh.firstName, 'Van Gogh');
+      } else {
+        assert.ok(false, '"pets[1]" is not an instance of Pet');
+      }
+
+      let relationships = relationshipMeta(card, 'pets');
+      if (relationships !== undefined && Array.isArray(relationships)) {
+        let [mangoRelationship, vanGoghRelationship] = relationships;
+
+        if (mangoRelationship?.type === 'loaded') {
+          let relatedCard = mangoRelationship.card;
+          assert.strictEqual(
+            relatedCard instanceof Pet,
+            true,
+            'related card is a Pet'
+          );
+          assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
+        } else {
+          assert.ok(false, 'relationship type was not "loaded" for mango');
+        }
+        if (vanGoghRelationship?.type === 'loaded') {
+          let relatedCard = vanGoghRelationship.card;
+          assert.strictEqual(
+            relatedCard instanceof Pet,
+            true,
+            'related card is a Pet'
+          );
+          assert.strictEqual(relatedCard?.id, `${realmURL}Pet/vanGogh`);
+        } else {
+          assert.ok(false, 'relationship type was not "loaded" for vanGogh');
+        }
+        assert.strictEqual(
+          relationshipMeta(card, 'firstName'),
+          undefined,
+          'relationshipMeta returns undefined for non-relationship field'
+        );
+      } else {
+        assert.ok(false, 'relationshipMeta returned an unexpected value');
+      }
+    });
+
+    test('can serialize a linkstoMany relationship with nested linksTo field', async function (assert) {
+      let {
+        field,
+        contains,
+        linksToMany,
+        linksTo,
+        Card,
+        serializeCard,
+        createFromSerialized,
+      } = cardApi;
+      let { default: StringCard } = string;
+
+      class Toy extends Card {
+        @field description = contains(StringCard);
+      }
+      class Pet extends Card {
+        @field firstName = contains(StringCard);
+        @field favoriteToy = linksTo(Toy);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field pets = linksToMany(Pet);
+      }
+      await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+
+      let spookyToiletPaper = new Toy({
+        description: 'Toilet paper ghost: Poooo!',
+      });
+      let mango = new Pet({
+        firstName: 'Mango',
+        favoriteToy: spookyToiletPaper,
+      });
+      let hassan = new Person({
+        firstName: 'Hassan',
+        pets: [mango],
+      });
+
+      await saveCard(spookyToiletPaper, `${realmURL}Toy/spookyToiletPaper`);
+      await saveCard(mango, `${realmURL}Pet/mango`);
+
+      let serialized = serializeCard(hassan);
+      assert.deepEqual(serialized, {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'pets.0': {
+              links: {
+                self: `${realmURL}Pet/mango`,
+              },
+              data: { id: `${realmURL}Pet/mango`, type: 'card' },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+        included: [
+          {
+            id: `${realmURL}Toy/spookyToiletPaper`,
+            type: 'card',
+            attributes: { description: 'Toilet paper ghost: Poooo!' },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Toy' },
+            },
+          },
+          {
+            id: `${realmURL}Pet/mango`,
+            type: 'card',
+            attributes: { firstName: 'Mango' },
+            relationships: {
+              favoriteToy: {
+                links: {
+                  self: `${realmURL}Toy/spookyToiletPaper`,
+                },
+                data: {
+                  id: `${realmURL}Toy/spookyToiletPaper`,
+                  type: 'card',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
+            },
+          },
+        ],
+      });
+
+      let card = await createFromSerialized(
+        serialized.data,
+        serialized,
+        undefined
+      );
+      if (card instanceof Person) {
+        assert.strictEqual(card.firstName, 'Hassan');
+        let { pets } = card;
+        if (Array.isArray(pets)) {
+          assert.strictEqual(pets.length, 1, 'correct number of pets');
+          let [pet] = pets;
+          if (pet instanceof Pet) {
+            assert.strictEqual(pet.firstName, 'Mango');
+            let { favoriteToy } = pet;
+            if (favoriteToy instanceof Toy) {
+              assert.strictEqual(
+                favoriteToy.description,
+                'Toilet paper ghost: Poooo!'
+              );
+            } else {
+              assert.ok(false, 'card is not instance of Toy');
+            }
+          } else {
+            assert.ok(false, 'card is not instance of Pet');
+          }
+        } else {
+          assert.ok(false, 'Person.pets is not an array');
+        }
+      } else {
+        assert.ok(false, 'card is not instance of Person');
+      }
+    });
+
+    test('can serialize an empty linksToMany relationship', async function (assert) {
+      let { field, contains, linksToMany, Card, serializeCard } = cardApi;
+      let { default: StringCard } = string;
+
+      class Pet extends Card {
+        @field firstName = contains(StringCard);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field pets = linksToMany(Pet);
+      }
+      await shimModule(`${realmURL}test-cards`, { Person, Pet });
+
+      let hassan = new Person({ firstName: 'Hassan' });
+
+      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+      assert.deepEqual(serialized, {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            pets: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+      });
+
+      let mango = new Person({ firstName: 'Mango', pets: null });
+      serialized = serializeCard(mango);
+      assert.deepEqual(serialized, {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Mango' },
+          relationships: {
+            pets: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+      });
+    });
+
+    test('can deserialize an empty linksToMany relationship', async function (assert) {
+      let { field, contains, linksToMany, Card, createFromSerialized } =
+        cardApi;
+      let { default: StringCard } = string;
+
+      class Pet extends Card {
+        @field firstName = contains(StringCard);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field pets = linksToMany(Pet);
+      }
+      await shimModule(`${realmURL}test-cards`, { Person, Pet });
+
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            pets: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+      };
+      let card = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        undefined
+      );
+      assert.ok(card instanceof Person, 'card is a Person');
+      assert.strictEqual(card.firstName, 'Hassan');
+      assert.deepEqual(card.pets, [], 'relationship is an empty array');
+    });
+
+    test('can deserialize a linksToMany relationship that does not include all the related resources', async function (assert) {
+      let {
+        field,
+        contains,
+        linksToMany,
+        Card,
+        createFromSerialized,
+        relationshipMeta,
+        serializeCard,
+      } = cardApi;
+      let { default: StringCard } = string;
+
+      class Pet extends Card {
+        @field firstName = contains(StringCard);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field pets = linksToMany(Pet);
+      }
+      await shimModule(`${realmURL}test-cards`, { Person, Pet });
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'pets.0': { links: { self: `${realmURL}Pet/mango` } },
+            'pets.1': { links: { self: `${realmURL}Pet/vanGogh` } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Person',
+            },
+          },
+        },
+        included: [
+          {
+            id: `${realmURL}Pet/mango`,
+            type: 'card',
+            attributes: { firstName: 'Mango' },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
+            },
+          },
+        ],
+      };
+      let hassan = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        undefined
+      );
+
+      try {
+        hassan.pets;
+        throw new Error(`expected error not thrown`);
+      } catch (err: any) {
+        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
+        assert.strictEqual(
+          err.message,
+          'The field Person.pets refers to the card instance https://test-realm/Pet/vanGogh which is not loaded'
+        );
+      }
+
+      let relationships = relationshipMeta(hassan, 'pets');
+      if (!Array.isArray(relationships)) {
+        assert.ok(
+          false,
+          'relationshipMeta should be an array for linksToMany relationship'
+        );
+      } else {
+        let [mango, vanGogh] = relationships;
+        if (mango?.type === 'loaded') {
+          assert.strictEqual(mango.card?.id, `${realmURL}Pet/mango`);
+        } else {
+          assert.ok(
+            false,
+            `relationship type for ${realmURL}Pet/mango was not "loaded"`
+          );
+        }
+        if (vanGogh?.type === 'not-loaded') {
+          assert.strictEqual(vanGogh.reference, `${realmURL}Pet/vanGogh`);
+        } else {
+          assert.ok(
+            false,
+            `relationship type for ${realmURL}Pet/vanGogh was not "not-loaded"`
+          );
+        }
+      }
+
+      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+      assert.deepEqual(serialized, {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'pets.0': {
+              links: {
+                self: `${realmURL}Pet/mango`,
+              },
+              data: { type: 'card', id: `${realmURL}Pet/mango` },
+            },
+            'pets.1': {
+              links: {
+                self: `${realmURL}Pet/vanGogh`,
+              },
+              data: { type: 'card', id: `${realmURL}Pet/vanGogh` },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Person',
+            },
+          },
+        },
+        included: [
+          {
+            id: `${realmURL}Pet/mango`,
+            type: 'card',
+            attributes: { firstName: 'Mango' },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
+            },
+          },
+        ],
+      });
+    });
+
+    test('can serialize a linksToMany relationship that points to own card class', async function (assert) {
+      let { field, contains, linksToMany, Card, serializeCard } = cardApi;
+      let { default: StringCard } = string;
+
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field friends = linksToMany(() => Person);
+      }
+      await shimModule(`${realmURL}test-cards`, { Person });
+
+      let mango = new Person({ firstName: 'Mango' });
+      let vanGogh = new Person({ firstName: 'Van Gogh' });
+      let hassan = new Person({
+        firstName: 'Hassan',
+        friends: [mango, vanGogh],
+      });
+      await saveCard(mango, `${realmURL}Person/mango`);
+      await saveCard(vanGogh, `${realmURL}Person/vanGogh`);
+      await saveCard(hassan, `${realmURL}Person/hassan`);
+      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+      assert.deepEqual(serialized, {
+        data: {
+          type: 'card',
+          id: `${realmURL}Person/hassan`,
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'friends.0': {
+              links: { self: `${realmURL}Person/mango` },
+              data: { id: `${realmURL}Person/mango`, type: 'card' },
+            },
+            'friends.1': {
+              links: { self: `${realmURL}Person/vanGogh` },
+              data: { id: `${realmURL}Person/vanGogh`, type: 'card' },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+        included: [
+          {
+            id: `${realmURL}Person/mango`,
+            type: 'card',
+            attributes: { firstName: 'Mango' },
+            relationships: {
+              friends: { links: { self: null } },
+            },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+            },
+          },
+          {
+            id: `${realmURL}Person/vanGogh`,
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            relationships: {
+              friends: { links: { self: null } },
+            },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+            },
+          },
+        ],
+      });
+    });
+
+    test('can deserialize a linksToMany relationship that points to own card class', async function (assert) {
+      let {
+        field,
+        contains,
+        linksToMany,
+        Card,
+        createFromSerialized,
+        isSaved,
+      } = cardApi;
+      let { default: StringCard } = string;
+
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field friends = linksToMany(() => Person);
+      }
+      await shimModule(`${realmURL}test-cards`, { Person });
+
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          id: `${realmURL}Person/hassan`,
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'friends.0': {
+              links: { self: `${realmURL}Person/mango` },
+              data: { id: `${realmURL}Person/mango`, type: 'card' },
+            },
+            'friends.1': {
+              links: { self: `${realmURL}Person/vanGogh` },
+              data: { id: `${realmURL}Person/vanGogh`, type: 'card' },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+        included: [
+          {
+            id: `${realmURL}Person/mango`,
+            type: 'card',
+            attributes: { firstName: 'Mango' },
+            relationships: {
+              friends: { links: { self: null } },
+            },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+            },
+          },
+          {
+            id: `${realmURL}Person/vanGogh`,
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            relationships: {
+              'friends.0': {
+                links: { self: `${realmURL}Person/hassan` },
+                data: { id: `${realmURL}Person/hassan`, type: 'card' },
+              },
+            },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+            },
+          },
+        ],
+      };
+      let card = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        new URL(`${realmURL}Person/hassan`)
+      );
+      assert.ok(card instanceof Person, 'card is a Person');
+      assert.strictEqual(card.firstName, 'Hassan');
+
+      let [mango, vanGogh] = card.friends;
+      assert.ok(mango instanceof Person, `${mango.id} is a Person`);
+      assert.ok(isSaved(mango), `${mango.id} is saved`);
+      assert.strictEqual(mango.firstName, 'Mango');
+
+      assert.ok(vanGogh instanceof Person, `${vanGogh.id} is a Person`);
+      assert.ok(isSaved(vanGogh), `${vanGogh.id} is saved`);
+      assert.strictEqual(vanGogh.firstName, 'Van Gogh');
+
+      let [hassan] = vanGogh.friends;
+      assert.ok(hassan instanceof Person, `${hassan.id} is a Person`);
+      assert.ok(isSaved(hassan), `${hassan.id} is saved`);
+      assert.strictEqual(hassan.firstName, 'Hassan');
     });
   });
 });
