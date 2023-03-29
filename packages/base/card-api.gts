@@ -222,6 +222,18 @@ export interface Field<
   queryMatcher(
     innerMatcher: (innerValue: any) => boolean | null
   ): (value: SearchT) => boolean | null;
+  // singular
+  handleNotLoadedError<T extends Card>(
+    instance: T,
+    e: NotLoadedValue | NotLoaded,
+    opts?: RecomputeOptions
+  ): Promise<T | undefined | void>;
+  // plural
+  handleNotLoadedError<T extends Card>(
+    instance: T,
+    e: NotLoaded,
+    opts?: RecomputeOptions
+  ): Promise<T[] | undefined | void>;
 }
 
 function callSerializeHook(
@@ -483,6 +495,12 @@ class ContainsMany<FieldT extends CardConstructor>
     return new WatchedArray(() => logger.log(recompute(instance)), value);
   }
 
+  async handleNotLoadedError<T extends Card>(instance: T, _e: NotLoaded) {
+    throw new Error(
+      `cannot load missing field for non-linksTo or non-linksToMany field ${instance.constructor.name}.${this.name}`
+    );
+  }
+
   component(
     model: Box<Card>,
     format: Format
@@ -638,6 +656,15 @@ class Contains<CardT extends CardConstructor> implements Field<CardT, any> {
       }
     }
     return value;
+  }
+
+  async handleNotLoadedError<T extends Card>(
+    instance: T,
+    _e: NotLoadedValue | NotLoaded
+  ) {
+    throw new Error(
+      `cannot load missing field for non-linksTo or non-linksToMany field ${instance.constructor.name}.${this.name}`
+    );
   }
 
   component(
@@ -820,6 +847,39 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       }
     }
     return value;
+  }
+
+  async handleNotLoadedError<T extends Card>(
+    instance: T,
+    e: NotLoadedValue | NotLoaded,
+    opts?: RecomputeOptions
+  ): Promise<T | undefined> {
+    let result: T | undefined;
+    let deserialized = getDataBucket(instance);
+
+    let identityContext =
+      identityContexts.get(instance) ?? new IdentityContext();
+    // taking advantage of the identityMap regardless of whether loadFields is set
+    let fieldValue = identityContext.identities.get(e.reference as string);
+
+    if (fieldValue) {
+      deserialized.set(this.name, fieldValue);
+      return fieldValue as T;
+    }
+
+    if (opts?.loadFields) {
+      let fieldValue = await loadMissingField(
+        instance,
+        this,
+        e,
+        identityContext,
+        instance[relativeTo]
+      );
+      deserialized.set(this.name, fieldValue);
+      result = fieldValue as T;
+    }
+
+    return result;
   }
 
   component(
@@ -1043,6 +1103,55 @@ class LinksToMany<FieldT extends CardConstructor>
     }
 
     return new WatchedArray(() => logger.log(recompute(instance)), values);
+  }
+
+  async handleNotLoadedError<T extends Card>(
+    instance: T,
+    e: NotLoaded,
+    opts?: RecomputeOptions
+  ): Promise<T[] | undefined> {
+    let result: T[] | undefined;
+    let fieldValues: Card[] = [];
+    let identityContext =
+      identityContexts.get(instance) ?? new IdentityContext();
+
+    for (let ref of e.reference) {
+      // taking advantage of the identityMap regardless of whether loadFields is set
+      let value = identityContext.identities.get(ref);
+      if (value) {
+        fieldValues.push(value);
+      }
+    }
+
+    if (opts?.loadFields) {
+      fieldValues = await loadMissingFields(
+        instance,
+        this,
+        e,
+        identityContext,
+        instance[relativeTo]
+      );
+    }
+
+    if (fieldValues.length === e.reference.length) {
+      let values: T[] = [];
+      let deserialized = getDataBucket(instance);
+
+      for (let field of deserialized.get(this.name)) {
+        if (isNotLoadedValue(field)) {
+          // replace the not-loaded values with the loaded cards
+          values.push(fieldValues.find((v) => v.id === field.reference)! as T);
+        } else {
+          // keep existing loaded cards
+          values.push(field);
+        }
+      }
+
+      deserialized.set(this.name, values);
+      result = values as T[];
+    }
+
+    return result;
   }
 
   component(
@@ -1916,7 +2025,6 @@ export async function getIfReady<T extends Card, K extends keyof T>(
 ): Promise<T[K] | T[K][] | NotReadyValue | StaleValue | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
-  let identityContext = identityContexts.get(instance) ?? new IdentityContext();
   let maybeStale = deserialized.get(fieldName as string);
   if (isStaleValue(maybeStale)) {
     let field = getField(
@@ -1948,75 +2056,16 @@ export async function getIfReady<T extends Card, K extends keyof T>(
     result = await compute();
   } catch (e: any) {
     if (isNotLoadedError(e)) {
-      // taking advantage of the identityMap regardless of whether loadFields is set
-      if (Array.isArray(e.reference)) {
-        let fieldValues: Card[] = [];
-        for (let ref of e.reference) {
-          let value = identityContext.identities.get(ref);
-          if (value) {
-            fieldValues.push(value);
-          }
-        }
-        if (opts?.loadFields) {
-          let card = Reflect.getPrototypeOf(instance)!
-            .constructor as typeof Card;
-          let field = getField(card, fieldName as string);
-          if (!field) {
-            throw new Error(
-              `the field '${fieldName as string} does not exist in card ${
-                card.name
-              }'`
-            );
-          }
-          fieldValues = await loadMissingFields(
-            instance,
-            field,
-            e,
-            identityContext,
-            instance[relativeTo]
-          );
-        }
-        if (fieldValues.length === e.reference.length) {
-          let values: Card[] = [];
-          for (let field of deserialized.get(fieldName as string)) {
-            if (isNotLoadedValue(field)) {
-              values.push(fieldValues.find((v) => v.id === field.reference)!);
-            } else {
-              values.push(field);
-            }
-          }
-          deserialized.set(fieldName as string, values);
-          result = values as T[K][];
-        }
-      } else {
-        let fieldValue = identityContext.identities.get(e.reference);
-        if (fieldValue) {
-          deserialized.set(fieldName as string, fieldValue);
-          return fieldValue as T[K];
-        }
-        if (opts?.loadFields) {
-          let card = Reflect.getPrototypeOf(instance)!
-            .constructor as typeof Card;
-          let field = getField(card, fieldName as string);
-          if (!field) {
-            throw new Error(
-              `the field '${fieldName as string} does not exist in card ${
-                card.name
-              }'`
-            );
-          }
-          let fieldValue = await loadMissingField(
-            instance,
-            field,
-            e,
-            identityContext,
-            instance[relativeTo]
-          );
-          deserialized.set(fieldName as string, fieldValue);
-          result = fieldValue as T[K];
-        }
+      let card = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
+      let field = getField(card, fieldName as string);
+      if (!field) {
+        throw new Error(
+          `the field '${fieldName as string} does not exist in card ${
+            card.name
+          }'`
+        );
       }
-      return result;
+      return field.handleNotLoadedError(instance, e, opts);
     } else if (isNotReadyError(e)) {
       let { instance: depModel, computeVia, fieldName: depField } = e;
       let nestedCompute =
