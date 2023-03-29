@@ -87,7 +87,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
     );
 
-    await waitFor('button[data-test-catalog-entry-publish]');
+    await waitFor('button[data-test-catalog-entry-publish]', { timeout: 5000 });
     await click('[data-test-catalog-entry-publish]');
     // for some reason this takes long enough in CI that it seems
     // to trigger a timeout error using the default timeout
