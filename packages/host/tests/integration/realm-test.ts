@@ -1205,7 +1205,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 302, '302 HTTP status');
     assert.strictEqual(
       response.headers.get('Location'),
-      '/dir/person.gts',
+      '/test/dir/person.gts',
       'Location header is correct'
     );
   });
