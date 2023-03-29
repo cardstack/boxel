@@ -868,9 +868,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     }
 
     if (opts?.loadFields) {
-      let fieldValue = await loadMissingField(
+      let fieldValue = await this.loadMissingField(
         instance,
-        this,
         e,
         identityContext,
         instance[relativeTo]
@@ -880,6 +879,43 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     }
 
     return result;
+  }
+
+  private async loadMissingField(
+    instance: Card,
+    notLoaded: NotLoadedValue | NotLoaded,
+    identityContext: IdentityContext,
+    relativeTo: URL | undefined
+  ): Promise<Card> {
+    let { reference: maybeRelativeReference } = notLoaded;
+    let reference = new URL(maybeRelativeReference as string, relativeTo).href;
+    let loader = Loader.getLoaderFor(createFromSerialized);
+    let response = await loader.fetch(reference, {
+      headers: { Accept: 'application/vnd.api+json' },
+    });
+    if (!response.ok) {
+      let cardError = await CardError.fromFetchResponse(reference, response);
+      cardError.deps = [reference];
+      cardError.additionalErrors = [
+        new NotLoaded(instance, reference, this.name),
+      ];
+      throw cardError;
+    }
+    let json = await response.json();
+    if (!isSingleCardDocument(json)) {
+      throw new Error(
+        `instance ${reference} is not a card document. it is: ${JSON.stringify(
+          json,
+          null,
+          2
+        )}`
+      );
+    }
+    let fieldInstance = await createFromSerialized(json.data, json, undefined, {
+      loader,
+      identityContext,
+    });
+    return fieldInstance;
   }
 
   component(
@@ -1124,9 +1160,8 @@ class LinksToMany<FieldT extends CardConstructor>
     }
 
     if (opts?.loadFields) {
-      fieldValues = await loadMissingFields(
+      fieldValues = await this.loadMissingFields(
         instance,
-        this,
         e,
         identityContext,
         instance[relativeTo]
@@ -1152,6 +1187,59 @@ class LinksToMany<FieldT extends CardConstructor>
     }
 
     return result;
+  }
+
+  private async loadMissingFields(
+    instance: Card,
+    notLoaded: NotLoaded,
+    identityContext: IdentityContext,
+    relativeTo: URL | undefined
+  ): Promise<Card[]> {
+    let refs = (notLoaded.reference as string[]).map(
+      (ref) => new URL(ref, relativeTo).href
+    );
+    let loader = Loader.getLoaderFor(createFromSerialized);
+    let errors = [];
+    let fieldInstances: Card[] = [];
+
+    for (let reference of refs) {
+      let response = await loader.fetch(reference, {
+        headers: { Accept: 'application/vnd.api+json' },
+      });
+      if (!response.ok) {
+        let cardError = await CardError.fromFetchResponse(reference, response);
+        cardError.deps = [reference];
+        cardError.additionalErrors = [
+          new NotLoaded(instance, reference, this.name),
+        ];
+        errors.push(cardError);
+      } else {
+        let json = await response.json();
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `instance ${reference} is not a card document. it is: ${JSON.stringify(
+              json,
+              null,
+              2
+            )}`
+          );
+        }
+        let fieldInstance = await createFromSerialized(
+          json.data,
+          json,
+          undefined,
+          {
+            loader,
+            identityContext,
+          }
+        );
+        fieldInstances.push(fieldInstance);
+      }
+    }
+    if (errors.length) {
+      throw errors;
+    }
+    return fieldInstances;
   }
 
   component(
@@ -2080,108 +2168,6 @@ export async function getIfReady<T extends Card, K extends keyof T>(
   }
   deserialized.set(fieldName as string, result);
   return result;
-}
-
-async function loadMissingFields(
-  instance: Card,
-  field: Field<typeof Card>,
-  notLoaded: NotLoaded,
-  identityContext: IdentityContext,
-  relativeTo: URL | undefined
-): Promise<Card[]> {
-  if (field.fieldType !== 'linksToMany') {
-    throw new Error(
-      `cannot load missing fields for ${instance.constructor.name}.${field.name}, which is not a linksToMany field`
-    );
-  }
-  let refs = (notLoaded.reference as string[]).map(
-    (ref) => new URL(ref, relativeTo).href
-  );
-  let loader = Loader.getLoaderFor(createFromSerialized);
-  let errors = [];
-  let fieldInstances: Card[] = [];
-
-  for (let reference of refs) {
-    let response = await loader.fetch(reference, {
-      headers: { Accept: 'application/vnd.api+json' },
-    });
-    if (!response.ok) {
-      let cardError = await CardError.fromFetchResponse(reference, response);
-      cardError.deps = [reference];
-      cardError.additionalErrors = [
-        new NotLoaded(instance, reference, field.name),
-      ];
-      errors.push(cardError);
-    } else {
-      let json = await response.json();
-      if (!isSingleCardDocument(json)) {
-        throw new Error(
-          `instance ${reference} is not a card document. it is: ${JSON.stringify(
-            json,
-            null,
-            2
-          )}`
-        );
-      }
-      let fieldInstance = await createFromSerialized(
-        json.data,
-        json,
-        undefined,
-        {
-          loader,
-          identityContext,
-        }
-      );
-      fieldInstances.push(fieldInstance);
-    }
-  }
-  if (errors.length) {
-    throw errors;
-  }
-  return fieldInstances;
-}
-
-async function loadMissingField(
-  instance: Card,
-  field: Field<typeof Card>,
-  notLoaded: NotLoadedValue | NotLoaded,
-  identityContext: IdentityContext,
-  relativeTo: URL | undefined
-): Promise<Card> {
-  if (field.fieldType !== 'linksTo') {
-    throw new Error(
-      `cannot load missing field for ${instance.constructor.name}.${field.name}, which is not a linksTo field`
-    );
-  }
-  let { reference: maybeRelativeReference } = notLoaded;
-  let reference = new URL(maybeRelativeReference as string, relativeTo).href;
-  let loader = Loader.getLoaderFor(createFromSerialized);
-  let response = await loader.fetch(reference, {
-    headers: { Accept: 'application/vnd.api+json' },
-  });
-  if (!response.ok) {
-    let cardError = await CardError.fromFetchResponse(reference, response);
-    cardError.deps = [reference];
-    cardError.additionalErrors = [
-      new NotLoaded(instance, reference, field.name),
-    ];
-    throw cardError;
-  }
-  let json = await response.json();
-  if (!isSingleCardDocument(json)) {
-    throw new Error(
-      `instance ${reference} is not a card document. it is: ${JSON.stringify(
-        json,
-        null,
-        2
-      )}`
-    );
-  }
-  let fieldInstance = await createFromSerialized(json.data, json, undefined, {
-    loader,
-    identityContext,
-  });
-  return fieldInstance;
 }
 
 export function getFields(
