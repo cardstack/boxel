@@ -6,6 +6,7 @@ import { RealmPaths } from './paths';
 import { CardError } from './error';
 import { type RunnerOpts } from './search-index';
 import log from 'loglevel';
+import { forStatement } from '@babel/types';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -72,7 +73,7 @@ export interface MaybeLocalRequest extends Request {
 }
 
 export class Loader {
-  private modules = new Map<string, Module>();
+  public modules = new Map<string, Module>();
   private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
   // use a tuple array instead of a map so that we can support reversing
   // different resolutions back to the same URL. the resolution that we apply
@@ -388,6 +389,10 @@ export class Loader {
     return this.modules.get(moduleIdentifier);
   }
 
+  public clearModule(moduleIdentifier: string): boolean {
+    return this.modules.delete(moduleIdentifier);
+  }
+
   private setModule(moduleIdentifier: string, module: Module) {
     this.modules.set(moduleIdentifier, module);
   }
@@ -510,7 +515,6 @@ export class Loader {
       });
       implementation = impl;
     };
-
     try {
       eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
     } catch (exception) {

@@ -22,6 +22,7 @@ import {
   isSingleCardDocument,
   baseRealm,
   assetsDir,
+  moduleFrom,
   type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -474,7 +475,6 @@ export class Realm {
     } else {
       name = 'cards';
     }
-
     let dirName = `/${join(new URL(this.url).pathname, name)}/`;
     let entries = await this.directoryEntries(new URL(dirName, this.url));
     let index = 0;
@@ -739,6 +739,10 @@ export class Realm {
     let api = await this.searchIndex.loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api'
     );
+    let cleared = this.searchIndex.loader.modules.delete(
+      moduleFrom(doc.data.meta.adoptsFrom)
+    );
+    log.info('Cleard the module', cleared);
     let card: Card = await api.createFromSerialized(doc.data, doc, relativeTo, {
       loader: this.searchIndex.loader as unknown as LoaderType,
     });
