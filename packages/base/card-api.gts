@@ -836,19 +836,21 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   }
 }
 
-class LinksToMany<CardT extends CardConstructor> implements Field<CardT> {
+class LinksToMany<FieldT extends CardConstructor>
+  implements Field<FieldT, any[]>
+{
   readonly fieldType = 'linksToMany';
   constructor(
-    private cardThunk: () => CardT,
+    private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string
   ) {}
 
-  get card(): CardT {
+  get card(): FieldT {
     return this.cardThunk();
   }
 
-  getter(instance: Card): CardInstanceType<CardT> {
+  getter(instance: Card): CardInstanceType<FieldT> {
     let deserialized = getDataBucket(instance);
     cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
@@ -881,6 +883,9 @@ class LinksToMany<CardT extends CardConstructor> implements Field<CardT> {
           `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`
         );
       }
+      if (isNotLoadedValue(instance)) {
+        return { id: instance.reference };
+      }
       return this.card[queryableValue](instance, stack);
     });
   }
@@ -899,7 +904,7 @@ class LinksToMany<CardT extends CardConstructor> implements Field<CardT> {
   }
 
   serialize(
-    values: InstanceType<CardT>[] | null | undefined,
+    values: CardInstanceType<FieldT>[] | null | undefined,
     doc: JSONAPISingleResourceDocument,
     visited: Set<string>,
     opts?: SerializeOpts
@@ -969,12 +974,12 @@ class LinksToMany<CardT extends CardConstructor> implements Field<CardT> {
     identityContext: IdentityContext,
     instancePromise: Promise<Card>,
     relativeTo: URL | undefined
-  ): Promise<(CardInstanceType<CardT> | NotLoadedValue)[]> {
+  ): Promise<(CardInstanceType<FieldT> | NotLoadedValue)[]> {
     if (!Array.isArray(values) && values.links.self === null) {
       return [];
     }
 
-    let resources: Promise<CardInstanceType<CardT> | NotLoadedValue>[] =
+    let resources: Promise<CardInstanceType<FieldT> | NotLoadedValue>[] =
       values.map(async (value: Relationship) => {
         if (!isRelationship(value)) {
           throw new Error(
@@ -1181,6 +1186,12 @@ export class Card {
           getFields(value, { includeComputeds: true, usedFieldsOnly: true })
         ).map(([fieldName, field]) => {
           let rawValue = peekAtField(value, fieldName);
+          if (field?.fieldType === 'linksToMany') {
+            return [
+              fieldName,
+              field.queryableValue(rawValue, [value, ...stack]),
+            ];
+          }
           if (isNotLoadedValue(rawValue)) {
             return [fieldName, { id: rawValue.reference }];
           }
@@ -1960,7 +1971,7 @@ export async function getIfReady<T extends Card, K extends keyof T>(
           fieldValues = await loadMissingFields(
             instance,
             field,
-            e.reference,
+            e,
             identityContext,
             instance[relativeTo]
           );
@@ -2025,7 +2036,7 @@ export async function getIfReady<T extends Card, K extends keyof T>(
 async function loadMissingFields(
   instance: Card,
   field: Field<typeof Card>,
-  notLoaded: NotLoadedValue[] | NotLoaded | string[],
+  notLoaded: NotLoaded,
   identityContext: IdentityContext,
   relativeTo: URL | undefined
 ): Promise<Card[]> {
@@ -2034,23 +2045,9 @@ async function loadMissingFields(
       `cannot load missing fields for ${instance.constructor.name}.${field.name}, which is not a linksToMany field`
     );
   }
-
-  let refs: string[] = [];
-
-  if (!Array.isArray(notLoaded)) {
-    if (!Array.isArray(notLoaded.reference)) {
-      // this shouldn't happen...
-      refs = [notLoaded.reference];
-    } else {
-      refs = notLoaded.reference;
-    }
-  } else {
-    notLoaded.map((nl) =>
-      typeof nl === 'string' ? refs.push(nl) : refs.push(nl.reference)
-    );
-  }
-
-  refs = refs.map((ref) => new URL(ref, relativeTo).href);
+  let refs = (notLoaded.reference as string[]).map(
+    (ref) => new URL(ref, relativeTo).href
+  );
   let loader = Loader.getLoaderFor(createFromSerialized);
   let errors = [];
   let fieldInstances: Card[] = [];
