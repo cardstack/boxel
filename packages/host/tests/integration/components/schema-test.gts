@@ -174,7 +174,7 @@ module('Integration | schema', function (hooks) {
       );
   });
 
-  test('renders link to field card for contained field', async function (assert) {
+  test('renders link to field card', async function (assert) {
     await realm.write(
       'person.gts',
       `
@@ -217,10 +217,11 @@ module('Integration | schema', function (hooks) {
     assert
       .dom('[data-test-field="author"] a[href="/code?path=person"]')
       .exists('link to person card exists');
-    assert.dom('[data-test-field="title"]').exists('the title field exists');
     assert
-      .dom('[data-test-field="title"] a')
-      .doesNotExist('the title field has no link');
+      .dom(
+        '[data-test-field="title"] a[href="http://localhost:4201/base/string?schema"]'
+      )
+      .exists('link to string card exists');
   });
 
   test('can delete a field from card', async function (assert) {

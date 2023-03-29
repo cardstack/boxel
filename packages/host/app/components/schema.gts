@@ -81,7 +81,9 @@ export default class Schema extends Component<Signature> {
                     {{cardId field.card}}
                   </LinkTo>
                 {{else}}
-                  {{cardId field.card}}
+                  <a
+                    href={{this.moduleSchemaURL (cardModule field.card)}}
+                  >{{cardId field.card}}</a>
                 {{/if}}
               </li>
             {{/each}}
@@ -231,6 +233,11 @@ export default class Schema extends Component<Signature> {
   @action
   modulePath(url: string): string {
     return this.realmPath.local(new URL(url));
+  }
+
+  @action
+  moduleSchemaURL(url: string): string {
+    return `${this.loaderService.loader.resolve(url)}?schema`;
   }
 
   @action
