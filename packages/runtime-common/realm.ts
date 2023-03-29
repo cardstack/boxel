@@ -375,7 +375,7 @@ export class Realm {
     if (handle.path !== localName) {
       return createResponse(null, {
         status: 302,
-        headers: { Location: `/${handle.path}` },
+        headers: { Location: `${new URL(this.url).pathname}${handle.path}` },
       });
     }
     return await this.serveLocalFile(handle);
