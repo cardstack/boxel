@@ -2,7 +2,7 @@ import Koa from 'koa';
 import cors from '@koa/cors';
 import Router from '@koa/router';
 import { Memoize } from 'typescript-memoize';
-import { Loader, Realm } from '@cardstack/runtime-common';
+import { Loader, Realm, baseRealm, assetsDir } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { setupCloseHandler } from './node-realm';
 import {
@@ -24,15 +24,20 @@ const logger = log.getLogger('realm:requests');
 
 interface Options {
   hostLocalRealm?: boolean;
+  assetsURL?: URL;
 }
 
 export class RealmServer {
   private hostLocalRealm = false;
+  private assetsURL: URL;
 
   constructor(private realms: Realm[], opts?: Options) {
     detectRealmCollision(realms);
     this.realms = realms;
     this.hostLocalRealm = Boolean(opts?.hostLocalRealm);
+    // defaults to using the base realm to host assets (this is the dev env default)
+    this.assetsURL =
+      opts?.assetsURL ?? Loader.resolve(`${baseRealm.url}${assetsDir}`);
   }
 
   @Memoize()
@@ -59,10 +64,10 @@ export class RealmServer {
             'Authorization, Content-Type, If-Match, X-Requested-With',
         })
       )
-      .use(monacoMiddleware(this.realms))
-      .use(assetRedirect(this.realms))
+      .use(monacoMiddleware(this.assetsURL))
+      .use(assetRedirect(this.assetsURL))
       .use(
-        proxyAsset('/local/worker.js', {
+        proxyAsset('/local/worker.js', this.assetsURL, {
           responseHeaders: { 'Service-Worker-Allowed': '/' },
         })
       )
