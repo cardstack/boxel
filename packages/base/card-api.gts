@@ -222,18 +222,11 @@ export interface Field<
   queryMatcher(
     innerMatcher: (innerValue: any) => boolean | null
   ): (value: SearchT) => boolean | null;
-  // singular
-  handleNotLoadedError<T extends Card>(
-    instance: T,
-    e: NotLoadedValue | NotLoaded,
-    opts?: RecomputeOptions
-  ): Promise<T | undefined | void>;
-  // plural
   handleNotLoadedError<T extends Card>(
     instance: T,
     e: NotLoaded,
     opts?: RecomputeOptions
-  ): Promise<T[] | undefined | void>;
+  ): Promise<T | T[] | undefined | void>;
 }
 
 function callSerializeHook(
@@ -658,10 +651,7 @@ class Contains<CardT extends CardConstructor> implements Field<CardT, any> {
     return value;
   }
 
-  async handleNotLoadedError<T extends Card>(
-    instance: T,
-    _e: NotLoadedValue | NotLoaded
-  ) {
+  async handleNotLoadedError<T extends Card>(instance: T, _e: NotLoaded) {
     throw new Error(
       `cannot load missing field for non-linksTo or non-linksToMany field ${instance.constructor.name}.${this.name}`
     );
@@ -851,7 +841,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
 
   async handleNotLoadedError<T extends Card>(
     instance: T,
-    e: NotLoadedValue | NotLoaded,
+    e: NotLoaded,
     opts?: RecomputeOptions
   ): Promise<T | undefined> {
     let result: T | undefined;
@@ -1596,7 +1586,12 @@ export function relationshipMeta(
     return undefined;
   }
   let related = getter(instance, field);
-  if (Array.isArray(related)) {
+  if (field.fieldType === 'linksToMany') {
+    if (!Array.isArray(related)) {
+      throw new Error(
+        `expected ${fieldName} to be an array but was ${typeof related}`
+      );
+    }
     return related.map((rel) => {
       if (isNotLoadedValue(rel)) {
         return { type: 'not-loaded', reference: rel.reference };
@@ -1827,23 +1822,20 @@ async function _updateFromSerialized<T extends CardConstructor>(
       ([fieldName]) => !fieldName.includes('.')
     )
   );
-  let linksToManyRelationships: Record<string, Relationship[]> = {};
-  for (let [fieldName, value] of Object.entries(resource.relationships ?? {})) {
-    let name;
-    if (
-      fieldName.split('.').length === 2 &&
-      fieldName.split('.')[1].match(/^\d+$/)
-    ) {
-      name = fieldName.split('.')[0];
-    }
-    if (!name) {
-      continue;
-    }
-    if (!linksToManyRelationships[name]) {
-      linksToManyRelationships[name] = [];
-    }
-    linksToManyRelationships[name] = [...linksToManyRelationships[name], value];
-  }
+  let linksToManyRelationships: Record<string, Relationship[]> = Object.entries(
+    resource.relationships ?? {}
+  )
+    .filter(
+      ([fieldName]) =>
+        fieldName.split('.').length === 2 &&
+        fieldName.split('.')[1].match(/^\d+$/)
+    )
+    .reduce((result, [fieldName, value]) => {
+      let name = fieldName.split('.')[0];
+      result[name] = result[name] || [];
+      result[name].push(value);
+      return result;
+    }, Object.create(null));
 
   let values = (await Promise.all(
     Object.entries(
@@ -2145,15 +2137,11 @@ export async function getIfReady<T extends Card, K extends keyof T>(
   } catch (e: any) {
     if (isNotLoadedError(e)) {
       let card = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
-      let field = getField(card, fieldName as string);
-      if (!field) {
-        throw new Error(
-          `the field '${fieldName as string} does not exist in card ${
-            card.name
-          }'`
-        );
-      }
-      return field.handleNotLoadedError(instance, e, opts);
+      let field: Field = getField(card, fieldName as string)!;
+      return field.handleNotLoadedError(instance, e, opts) as
+        | T[K]
+        | T[K][]
+        | undefined;
     } else if (isNotReadyError(e)) {
       let { instance: depModel, computeVia, fieldName: depField } = e;
       let nestedCompute =
