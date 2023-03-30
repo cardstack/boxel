@@ -138,7 +138,10 @@ if (distURL) {
     );
   }
 
-  let server = new RealmServer(realms, { hostLocalRealm });
+  let server = new RealmServer(realms, {
+    hostLocalRealm,
+    ...(distURL ? { assetsURL: new URL(distURL) } : {}),
+  });
   server.listen(port);
   log.info(`Realm server listening on port ${port}:`);
   let additionalMappings = hrefs.slice(paths.length);

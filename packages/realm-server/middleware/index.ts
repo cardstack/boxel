@@ -1,15 +1,9 @@
 import proxy from 'koa-proxies';
-import {
-  Loader,
-  baseRealm,
-  assetsDir,
-  type Realm,
-} from '@cardstack/runtime-common';
+import { Loader, assetsDir, type Realm } from '@cardstack/runtime-common';
 import log from 'loglevel';
 import type Koa from 'koa';
 
 const logger = log.getLogger('realm:requests');
-export const assetPathname = new URL(`${baseRealm.url}${assetsDir}`).pathname;
 
 interface ProxyOptions {
   responseHeaders?: Record<string, string>;
@@ -17,14 +11,15 @@ interface ProxyOptions {
 
 export function proxyAsset(
   from: string,
+  assetsURL: URL,
   opts?: ProxyOptions
 ): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext> {
   let filename = from.split('/').pop()!;
   return proxy(from, {
-    target: Loader.resolve(baseRealm.url).href,
+    target: assetsURL.href.replace(/$\//, ''),
     changeOrigin: true,
     rewrite: () => {
-      return `/${assetsDir}${filename}`;
+      return `/${filename}`;
     },
     events: {
       proxyRes: (_proxyRes, _req, res) => {
@@ -68,17 +63,15 @@ export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
   return next();
 }
 
-// if the base realm is not running on this server then we should issue a
-// redirect to get the asset from the base realm
 export function assetRedirect(
-  realms: Realm[]
+  assetsURL: URL
 ): (ctxt: Koa.Context, next: Koa.Next) => void {
   return (ctxt: Koa.Context, next: Koa.Next) => {
-    if (
-      ctxt.path.startsWith(assetPathname) &&
-      !realms.find((r) => r.url === baseRealm.url)
-    ) {
-      let redirectURL = Loader.resolve(new URL(ctxt.path, baseRealm.url)).href;
+    if (ctxt.path.startsWith(`/${assetsDir}`)) {
+      let redirectURL = new URL(
+        `./${ctxt.path.slice(assetsDir.length + 1)}`,
+        assetsURL
+      ).href;
       ctxt.redirect(redirectURL);
       return;
     }
