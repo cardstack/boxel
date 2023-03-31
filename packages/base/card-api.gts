@@ -852,7 +852,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     // taking advantage of the identityMap regardless of whether loadFields is set
     let fieldValue = identityContext.identities.get(e.reference as string);
 
-    if (fieldValue) {
+    if (fieldValue !== undefined) {
       deserialized.set(this.name, fieldValue);
       return fieldValue as T;
     }
@@ -1144,7 +1144,7 @@ class LinksToMany<FieldT extends CardConstructor>
     for (let ref of e.reference) {
       // taking advantage of the identityMap regardless of whether loadFields is set
       let value = identityContext.identities.get(ref);
-      if (value) {
+      if (value !== undefined) {
         fieldValues.push(value);
       }
     }

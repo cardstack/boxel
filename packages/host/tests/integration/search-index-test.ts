@@ -1337,6 +1337,191 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
+  test('can index a card that contains a card with a linksToMany field', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Pet/vanGogh.json': {
+        data: {
+          attributes: { firstName: 'Van Gogh' },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'pet-person-catalog-entry.json': {
+        data: {
+          attributes: {
+            title: 'PetPerson',
+            description: 'Catalog entry for PetPerson',
+            ref: {
+              module: `${testModuleRealm}pet-person`,
+              name: 'PetPerson',
+            },
+            demo: { firstName: 'Hassan' },
+          },
+          relationships: {
+            'demo.pets.0': {
+              links: { self: `${testRealmURL}Pet/mango` },
+            },
+            'demo.pets.1': {
+              links: { self: `${testRealmURL}Pet/vanGogh` },
+            },
+          },
+          meta: {
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: `${testModuleRealm}pet-person`,
+                  name: 'PetPerson',
+                },
+              },
+            },
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/catalog-entry',
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+      'Pet/mango.json': {
+        data: {
+          attributes: { firstName: 'Mango' },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let catalogEntry = await indexer.card(
+      new URL(`${testRealmURL}pet-person-catalog-entry`),
+      { loadLinks: true }
+    );
+
+    if (catalogEntry?.type === 'doc') {
+      assert.deepEqual(catalogEntry.doc.data, {
+        id: `${testRealmURL}pet-person-catalog-entry`,
+        type: 'card',
+        links: { self: `${testRealmURL}pet-person-catalog-entry` },
+        attributes: {
+          title: 'PetPerson',
+          description: 'Catalog entry for PetPerson',
+          ref: {
+            module: `${testModuleRealm}pet-person`,
+            name: 'PetPerson',
+          },
+          demo: { firstName: 'Hassan' },
+          isPrimitive: false,
+          moduleHref: `${testModuleRealm}pet-person`,
+        },
+        relationships: {
+          'demo.pets.0': {
+            links: { self: `${testRealmURL}Pet/mango` },
+            data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
+          },
+          'demo.pets.1': {
+            links: { self: `${testRealmURL}Pet/vanGogh` },
+            data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/catalog-entry',
+            name: 'CatalogEntry',
+          },
+          fields: {
+            demo: {
+              adoptsFrom: {
+                module: `${testModuleRealm}pet-person`,
+                name: 'PetPerson',
+              },
+            },
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}pet-person-catalog-entry.json`
+          ),
+        },
+      });
+
+      assert.deepEqual(catalogEntry.doc.included, [
+        {
+          id: `${testRealmURL}Pet/mango`,
+          type: 'card',
+          links: { self: `${testRealmURL}Pet/mango` },
+          attributes: { firstName: 'Mango' },
+          relationships: { owner: { links: { self: null } } },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Pet/mango.json`
+            ),
+          },
+        },
+        {
+          id: `${testRealmURL}Pet/vanGogh`,
+          type: 'card',
+          links: { self: `${testRealmURL}Pet/vanGogh` },
+          attributes: { firstName: 'Van Gogh' },
+          relationships: { owner: { links: { self: null } } },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Pet/vanGogh.json`
+            ),
+          },
+        },
+      ]);
+    } else {
+      assert.ok(
+        false,
+        `search entry was an error: ${catalogEntry?.error.detail}`
+      );
+    }
+
+    let entry = await indexer.searchEntry(
+      new URL(`${testRealmURL}pet-person-catalog-entry`)
+    );
+    if (entry) {
+      assert.deepEqual(entry.searchData, {
+        id: `${testRealmURL}pet-person-catalog-entry`,
+        title: 'PetPerson',
+        description: 'Catalog entry for PetPerson',
+        ref: `${testModuleRealm}pet-person/PetPerson`,
+        demo: {
+          id: undefined,
+          firstName: 'Hassan',
+          pets: [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              firstName: 'Mango',
+              owner: null,
+            },
+            {
+              id: `${testRealmURL}Pet/vanGogh`,
+              firstName: 'Van Gogh',
+              owner: null,
+            },
+          ],
+        },
+        isPrimitive: false,
+        moduleHref: `${testModuleRealm}pet-person`,
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}pet-person-catalog-entry in the index`
+      );
+    }
+  });
+
   test('can index a card that has nested linksTo fields', async function (assert) {
     let adapter = new TestRealmAdapter({
       'Friend/hassan.json': {
