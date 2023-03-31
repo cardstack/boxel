@@ -7,6 +7,7 @@ import pick from '@cardstack/boxel-ui/helpers/pick';
 import { getBoxComponent } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { getLinksToEditor } from './links-to-editor';
+import { getLinksToManyComponent } from './links-to-many-component';
 import {
   Deferred,
   isCardResource,
@@ -61,7 +62,7 @@ export type FieldsTypeFor<T extends Card> = {
     (T[Field] extends Card ? FieldsTypeFor<T[Field]> : unknown);
 };
 export type Format = 'isolated' | 'embedded' | 'edit';
-export type FieldType = 'contains' | 'containsMany' | 'linksTo';
+export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 
 type Setter = { setters: { [fieldName: string]: Setter } } & ((
   value: any
@@ -221,6 +222,11 @@ export interface Field<
   queryMatcher(
     innerMatcher: (innerValue: any) => boolean | null
   ): (value: SearchT) => boolean | null;
+  handleNotLoadedError<T extends Card>(
+    instance: T,
+    e: NotLoaded,
+    opts?: RecomputeOptions
+  ): Promise<T | T[] | undefined | void>;
 }
 
 function callSerializeHook(
@@ -324,9 +330,9 @@ class ContainsMany<FieldT extends CardConstructor>
     return getter(instance, this);
   }
 
-  queryableValue(instances: any, stack: Card[]): any {
+  queryableValue(instances: any[] | null, stack: Card[]): any[] {
     if (instances == null) {
-      return null;
+      return [];
     }
 
     // Need to replace the WatchedArray proxy with an actual array because the
@@ -480,6 +486,12 @@ class ContainsMany<FieldT extends CardConstructor>
       throw new Error(`Expected array for field value ${this.name}`);
     }
     return new WatchedArray(() => logger.log(recompute(instance)), value);
+  }
+
+  async handleNotLoadedError<T extends Card>(instance: T, _e: NotLoaded) {
+    throw new Error(
+      `cannot load missing field for non-linksTo or non-linksToMany field ${instance.constructor.name}.${this.name}`
+    );
   }
 
   component(
@@ -637,6 +649,12 @@ class Contains<CardT extends CardConstructor> implements Field<CardT, any> {
       }
     }
     return value;
+  }
+
+  async handleNotLoadedError<T extends Card>(instance: T, _e: NotLoaded) {
+    throw new Error(
+      `cannot load missing field for non-linksTo or non-linksToMany field ${instance.constructor.name}.${this.name}`
+    );
   }
 
   component(
@@ -821,6 +839,75 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     return value;
   }
 
+  async handleNotLoadedError<T extends Card>(
+    instance: T,
+    e: NotLoaded,
+    opts?: RecomputeOptions
+  ): Promise<T | undefined> {
+    let result: T | undefined;
+    let deserialized = getDataBucket(instance);
+
+    let identityContext =
+      identityContexts.get(instance) ?? new IdentityContext();
+    // taking advantage of the identityMap regardless of whether loadFields is set
+    let fieldValue = identityContext.identities.get(e.reference as string);
+
+    if (fieldValue !== undefined) {
+      deserialized.set(this.name, fieldValue);
+      return fieldValue as T;
+    }
+
+    if (opts?.loadFields) {
+      let fieldValue = await this.loadMissingField(
+        instance,
+        e,
+        identityContext,
+        instance[relativeTo]
+      );
+      deserialized.set(this.name, fieldValue);
+      result = fieldValue as T;
+    }
+
+    return result;
+  }
+
+  private async loadMissingField(
+    instance: Card,
+    notLoaded: NotLoadedValue | NotLoaded,
+    identityContext: IdentityContext,
+    relativeTo: URL | undefined
+  ): Promise<Card> {
+    let { reference: maybeRelativeReference } = notLoaded;
+    let reference = new URL(maybeRelativeReference as string, relativeTo).href;
+    let loader = Loader.getLoaderFor(createFromSerialized);
+    let response = await loader.fetch(reference, {
+      headers: { Accept: 'application/vnd.api+json' },
+    });
+    if (!response.ok) {
+      let cardError = await CardError.fromFetchResponse(reference, response);
+      cardError.deps = [reference];
+      cardError.additionalErrors = [
+        new NotLoaded(instance, reference, this.name),
+      ];
+      throw cardError;
+    }
+    let json = await response.json();
+    if (!isSingleCardDocument(json)) {
+      throw new Error(
+        `instance ${reference} is not a card document. it is: ${JSON.stringify(
+          json,
+          null,
+          2
+        )}`
+      );
+    }
+    let fieldInstance = await createFromSerialized(json.data, json, undefined, {
+      loader,
+      identityContext,
+    });
+    return fieldInstance;
+  }
+
   component(
     model: Box<Card>,
     format: Format
@@ -832,6 +919,335 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       return getLinksToEditor(innerModel, this);
     }
     return fieldComponent(this, model, format);
+  }
+}
+
+class LinksToMany<FieldT extends CardConstructor>
+  implements Field<FieldT, any[]>
+{
+  readonly fieldType = 'linksToMany';
+  constructor(
+    private cardThunk: () => FieldT,
+    readonly computeVia: undefined | string | (() => unknown),
+    readonly name: string
+  ) {}
+
+  get card(): FieldT {
+    return this.cardThunk();
+  }
+
+  getter(instance: Card): CardInstanceType<FieldT> {
+    let deserialized = getDataBucket(instance);
+    cardTracking.get(instance);
+    let maybeNotLoaded = deserialized.get(this.name);
+    if (maybeNotLoaded) {
+      let notLoadedRefs: string[] = [];
+      for (let entry of maybeNotLoaded) {
+        if (isNotLoadedValue(entry)) {
+          notLoadedRefs = [...notLoadedRefs, entry.reference];
+        }
+      }
+      if (notLoadedRefs.length > 0) {
+        throw new NotLoaded(instance, notLoadedRefs, this.name);
+      }
+    }
+
+    return getter(instance, this);
+  }
+
+  queryableValue(instances: any[] | null, stack: Card[]): any[] {
+    if (instances == null) {
+      return [];
+    }
+
+    // Need to replace the WatchedArray proxy with an actual array because the
+    // WatchedArray proxy is not structuredClone-able, and hence cannot be
+    // communicated over the postMessage boundary between worker and DOM.
+    return [...instances].map((instance) => {
+      if (primitive in instance) {
+        throw new Error(
+          `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`
+        );
+      }
+      if (isNotLoadedValue(instance)) {
+        return { id: instance.reference };
+      }
+      return this.card[queryableValue](instance, stack);
+    });
+  }
+
+  queryMatcher(
+    innerMatcher: (innerValue: any) => boolean | null
+  ): (value: any[]) => boolean | null {
+    return (value) => {
+      if (value.length === 0) {
+        return innerMatcher(null);
+      }
+      return value.some((innerValue) => {
+        return innerMatcher(innerValue);
+      });
+    };
+  }
+
+  serialize(
+    values: CardInstanceType<FieldT>[] | null | undefined,
+    doc: JSONAPISingleResourceDocument,
+    visited: Set<string>,
+    opts?: SerializeOpts
+  ) {
+    if (values == undefined || values.length === 0) {
+      return {
+        relationships: {
+          [this.name]: {
+            links: { self: null },
+          },
+        },
+      };
+    }
+
+    if (!Array.isArray(values)) {
+      throw new Error(`Expected array for field value ${this.name}`);
+    }
+
+    let relationships: Record<string, Relationship> = {};
+    values.map((value, i) => {
+      if (isNotLoadedValue(value)) {
+        relationships[`${this.name}\.${i}`] = {
+          links: { self: value.reference },
+          data: { type: 'card', id: value.reference },
+        };
+        return;
+      }
+      if (visited.has(value.id)) {
+        relationships[`${this.name}\.${i}`] = {
+          links: { self: value.id },
+          data: { type: 'card', id: value.id },
+        };
+        return;
+      }
+      visited.add(value.id);
+      let serialized: JSONAPIResource & { id: string; type: string } =
+        callSerializeHook(this.card, value, doc, visited, opts);
+      if (!value[isSavedInstance]) {
+        throw new Error(
+          `the linksToMany field '${this.name}' cannot be serialized with an unsaved card`
+        );
+      }
+      if (serialized.meta && Object.keys(serialized.meta).length === 0) {
+        delete serialized.meta;
+      }
+      if (
+        !(doc.included ?? []).find((r) => r.id === value.id) &&
+        doc.data.id !== value.id
+      ) {
+        doc.included = doc.included ?? [];
+        doc.included.push(serialized);
+      }
+      relationships[`${this.name}\.${i}`] = {
+        links: { self: value.id },
+        data: { type: 'card', id: value.id },
+      };
+    });
+
+    return { relationships };
+  }
+
+  async deserialize(
+    values: any,
+    doc: CardDocument,
+    _relationships: undefined,
+    _fieldMeta: undefined,
+    identityContext: IdentityContext,
+    instancePromise: Promise<Card>,
+    relativeTo: URL | undefined
+  ): Promise<(CardInstanceType<FieldT> | NotLoadedValue)[]> {
+    if (!Array.isArray(values) && values.links.self === null) {
+      return [];
+    }
+
+    let resources: Promise<CardInstanceType<FieldT> | NotLoadedValue>[] =
+      values.map(async (value: Relationship) => {
+        if (!isRelationship(value)) {
+          throw new Error(
+            `linksToMany field '${
+              this.name
+            }' cannot deserialize non-relationship value ${JSON.stringify(
+              value
+            )}`
+          );
+        }
+        if (value.links.self == null) {
+          return null;
+        }
+        let cachedInstance = identityContext.identities.get(value.links.self);
+        if (cachedInstance) {
+          return cachedInstance;
+        }
+        let resource = resourceFrom(doc, value.links.self);
+        if (!resource) {
+          return {
+            type: 'not-loaded',
+            reference: value.links.self,
+          };
+        }
+        return (await cardClassFromResource(resource, this.card, relativeTo))[
+          deserialize
+        ](resource, relativeTo, doc, identityContext);
+      });
+
+    return new WatchedArray(
+      () => instancePromise.then((instance) => logger.log(recompute(instance))),
+      await Promise.all(resources)
+    );
+  }
+
+  emptyValue(instance: Card) {
+    return new WatchedArray(() => logger.log(recompute(instance)));
+  }
+
+  validate(instance: Card, values: any[] | null) {
+    if (primitive in this.card) {
+      throw new Error(
+        `the linksToMany field '${this.name}' contains a primitive card '${this.card.name}'`
+      );
+    }
+
+    if (values == null) {
+      return values;
+    }
+
+    if (!Array.isArray(values)) {
+      throw new Error(`Expected array for field value ${this.name}`);
+    }
+
+    for (let value of values) {
+      if (!isNotLoadedValue(value) && !(value instanceof this.card)) {
+        throw new Error(
+          `tried set ${value} as field '${this.name}' but it is not an instance of ${this.card.name}`
+        );
+      }
+    }
+
+    return new WatchedArray(() => logger.log(recompute(instance)), values);
+  }
+
+  async handleNotLoadedError<T extends Card>(
+    instance: T,
+    e: NotLoaded,
+    opts?: RecomputeOptions
+  ): Promise<T[] | undefined> {
+    let result: T[] | undefined;
+    let fieldValues: Card[] = [];
+    let identityContext =
+      identityContexts.get(instance) ?? new IdentityContext();
+
+    for (let ref of e.reference) {
+      // taking advantage of the identityMap regardless of whether loadFields is set
+      let value = identityContext.identities.get(ref);
+      if (value !== undefined) {
+        fieldValues.push(value);
+      }
+    }
+
+    if (opts?.loadFields) {
+      fieldValues = await this.loadMissingFields(
+        instance,
+        e,
+        identityContext,
+        instance[relativeTo]
+      );
+    }
+
+    if (fieldValues.length === e.reference.length) {
+      let values: T[] = [];
+      let deserialized = getDataBucket(instance);
+
+      for (let field of deserialized.get(this.name)) {
+        if (isNotLoadedValue(field)) {
+          // replace the not-loaded values with the loaded cards
+          values.push(fieldValues.find((v) => v.id === field.reference)! as T);
+        } else {
+          // keep existing loaded cards
+          values.push(field);
+        }
+      }
+
+      deserialized.set(this.name, values);
+      result = values as T[];
+    }
+
+    return result;
+  }
+
+  private async loadMissingFields(
+    instance: Card,
+    notLoaded: NotLoaded,
+    identityContext: IdentityContext,
+    relativeTo: URL | undefined
+  ): Promise<Card[]> {
+    let refs = (notLoaded.reference as string[]).map(
+      (ref) => new URL(ref, relativeTo).href
+    );
+    let loader = Loader.getLoaderFor(createFromSerialized);
+    let errors = [];
+    let fieldInstances: Card[] = [];
+
+    for (let reference of refs) {
+      let response = await loader.fetch(reference, {
+        headers: { Accept: 'application/vnd.api+json' },
+      });
+      if (!response.ok) {
+        let cardError = await CardError.fromFetchResponse(reference, response);
+        cardError.deps = [reference];
+        cardError.additionalErrors = [
+          new NotLoaded(instance, reference, this.name),
+        ];
+        errors.push(cardError);
+      } else {
+        let json = await response.json();
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `instance ${reference} is not a card document. it is: ${JSON.stringify(
+              json,
+              null,
+              2
+            )}`
+          );
+        }
+        let fieldInstance = await createFromSerialized(
+          json.data,
+          json,
+          undefined,
+          {
+            loader,
+            identityContext,
+          }
+        );
+        fieldInstances.push(fieldInstance);
+      }
+    }
+    if (errors.length) {
+      throw errors;
+    }
+    return fieldInstances;
+  }
+
+  component(
+    model: Box<Card>,
+    format: Format
+  ): ComponentLike<{ Args: {}; Blocks: {} }> {
+    let fieldName = this.name as keyof Card;
+    let arrayField = model.field(
+      fieldName,
+      useIndexBasedKey in this.card
+    ) as unknown as Box<Card[]>;
+    return getLinksToManyComponent({
+      model,
+      arrayField,
+      field: this,
+      format,
+      cardTypeFor,
+    });
   }
 }
 
@@ -904,6 +1320,20 @@ export function linksTo<CardT extends CardConstructor>(
 }
 linksTo[fieldType] = 'linksTo' as FieldType;
 
+export function linksToMany<CardT extends CardConstructor>(
+  cardOrThunk: CardT | (() => CardT),
+  options?: Options
+) {
+  return {
+    setupField(fieldName: string) {
+      return makeDescriptor(
+        new LinksToMany(cardThunk(cardOrThunk), options?.computeVia, fieldName)
+      );
+    },
+  } as any;
+}
+linksToMany[fieldType] = 'linksToMany' as FieldType;
+
 export class Card {
   // this is here because Card has no public instance methods, so without it
   // typescript considers everything a valid card.
@@ -943,6 +1373,12 @@ export class Card {
           getFields(value, { includeComputeds: true, usedFieldsOnly: true })
         ).map(([fieldName, field]) => {
           let rawValue = peekAtField(value, fieldName);
+          if (field?.fieldType === 'linksToMany') {
+            return [
+              fieldName,
+              field.queryableValue(rawValue, [value, ...stack]),
+            ];
+          }
           if (isNotLoadedValue(rawValue)) {
             return [fieldName, { id: rawValue.reference }];
           }
@@ -1136,7 +1572,7 @@ interface LoadedRelationship {
 export function relationshipMeta(
   instance: Card,
   fieldName: string
-): RelationshipMeta | undefined {
+): RelationshipMeta | RelationshipMeta[] | undefined {
   let field = getField(
     Reflect.getPrototypeOf(instance)!.constructor as typeof Card,
     fieldName
@@ -1146,10 +1582,25 @@ export function relationshipMeta(
       `the card ${instance.constructor.name} does not have a field '${fieldName}'`
     );
   }
-  if (field.fieldType !== 'linksTo') {
+  if (!(field.fieldType === 'linksTo' || field.fieldType === 'linksToMany')) {
     return undefined;
   }
   let related = getter(instance, field);
+  if (field.fieldType === 'linksToMany') {
+    if (!Array.isArray(related)) {
+      throw new Error(
+        `expected ${fieldName} to be an array but was ${typeof related}`
+      );
+    }
+    return related.map((rel) => {
+      if (isNotLoadedValue(rel)) {
+        return { type: 'not-loaded', reference: rel.reference };
+      } else {
+        return { type: 'loaded', card: rel ?? null };
+      }
+    });
+  }
+
   if (isNotLoadedValue(related)) {
     return { type: 'not-loaded', reference: related.reference };
   } else {
@@ -1371,11 +1822,27 @@ async function _updateFromSerialized<T extends CardConstructor>(
       ([fieldName]) => !fieldName.includes('.')
     )
   );
+  let linksToManyRelationships: Record<string, Relationship[]> = Object.entries(
+    resource.relationships ?? {}
+  )
+    .filter(
+      ([fieldName]) =>
+        fieldName.split('.').length === 2 &&
+        fieldName.split('.')[1].match(/^\d+$/)
+    )
+    .reduce((result, [fieldName, value]) => {
+      let name = fieldName.split('.')[0];
+      result[name] = result[name] || [];
+      result[name].push(value);
+      return result;
+    }, Object.create(null));
+
   let values = (await Promise.all(
     Object.entries(
       {
         ...resource.attributes,
         ...nonNestedRelationships,
+        ...linksToManyRelationships,
         ...(resource.id !== undefined ? { id: resource.id } : {}),
       } ?? {}
     ).map(async ([fieldName, value]) => {
@@ -1635,10 +2102,9 @@ export async function getIfReady<T extends Card, K extends keyof T>(
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
   opts?: RecomputeOptions
-): Promise<T[K] | NotReadyValue | StaleValue | undefined> {
-  let result: T[K] | undefined;
+): Promise<T[K] | T[K][] | NotReadyValue | StaleValue | undefined> {
+  let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
-  let identityContext = identityContexts.get(instance) ?? new IdentityContext();
   let maybeStale = deserialized.get(fieldName as string);
   if (isStaleValue(maybeStale)) {
     let field = getField(
@@ -1670,34 +2136,12 @@ export async function getIfReady<T extends Card, K extends keyof T>(
     result = await compute();
   } catch (e: any) {
     if (isNotLoadedError(e)) {
-      // taking advantage of the identityMap regardless of whether loadFields is set
-      let fieldValue = identityContext.identities.get(e.reference);
-      if (fieldValue) {
-        deserialized.set(fieldName as string, fieldValue);
-        return fieldValue as T[K];
-      }
-
-      if (opts?.loadFields) {
-        let card = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
-        let field = getField(card, fieldName as string);
-        if (!field) {
-          throw new Error(
-            `the field '${fieldName as string} does not exist in card ${
-              card.name
-            }'`
-          );
-        }
-        let fieldValue = await loadMissingField(
-          instance,
-          field,
-          e,
-          identityContext,
-          instance[relativeTo]
-        );
-        deserialized.set(fieldName as string, fieldValue);
-        result = fieldValue as T[K];
-      }
-      return result;
+      let card = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
+      let field: Field = getField(card, fieldName as string)!;
+      return field.handleNotLoadedError(instance, e, opts) as
+        | T[K]
+        | T[K][]
+        | undefined;
     } else if (isNotReadyError(e)) {
       let { instance: depModel, computeVia, fieldName: depField } = e;
       let nestedCompute =
@@ -1710,52 +2154,8 @@ export async function getIfReady<T extends Card, K extends keyof T>(
       throw e;
     }
   }
-
   deserialized.set(fieldName as string, result);
   return result;
-}
-
-async function loadMissingField(
-  instance: Card,
-  field: Field<typeof Card>,
-  notLoaded: NotLoadedValue | NotLoaded,
-  identityContext: IdentityContext,
-  relativeTo: URL | undefined
-): Promise<Card> {
-  if (field.fieldType !== 'linksTo') {
-    throw new Error(
-      `cannot load missing field for non-linksTo field ${instance.constructor.name}.${field.name}`
-    );
-  }
-  let { reference: maybeRelativeReference } = notLoaded;
-  let reference = new URL(maybeRelativeReference, relativeTo).href;
-  let loader = Loader.getLoaderFor(createFromSerialized);
-  let response = await loader.fetch(reference, {
-    headers: { Accept: 'application/vnd.api+json' },
-  });
-  if (!response.ok) {
-    let cardError = await CardError.fromFetchResponse(reference, response);
-    cardError.deps = [reference];
-    cardError.additionalErrors = [
-      new NotLoaded(instance, reference, field.name),
-    ];
-    throw cardError;
-  }
-  let json = await response.json();
-  if (!isSingleCardDocument(json)) {
-    throw new Error(
-      `instance ${reference} is not a card document. it is: ${JSON.stringify(
-        json,
-        null,
-        2
-      )}`
-    );
-  }
-  let fieldInstance = await createFromSerialized(json.data, json, undefined, {
-    loader,
-    identityContext,
-  });
-  return fieldInstance;
 }
 
 export function getFields(

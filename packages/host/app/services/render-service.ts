@@ -126,21 +126,24 @@ export default class RenderService extends Service {
       await api.getIfReady(card, fieldName as keyof Card, undefined, {
         loadFields: true,
       });
-    } catch (err: any) {
-      let notLoaded = err.additionalErrors?.find((e: any) =>
-        isNotLoadedError(e)
-      ) as NotLoaded | undefined;
-      if (isCardError(err) && notLoaded) {
-        let linkURL = new URL(`${notLoaded.reference}.json`);
-        if (realmPath.inRealm(linkURL)) {
-          await visit(linkURL, identityContext);
+    } catch (error: any) {
+      let errors = Array.isArray(error) ? error : [error];
+      for (let err of errors) {
+        let notLoaded = err.additionalErrors?.find((e: any) =>
+          isNotLoadedError(e)
+        ) as NotLoaded | undefined;
+        if (isCardError(err) && notLoaded) {
+          let linkURL = new URL(`${notLoaded.reference}.json`);
+          if (realmPath.inRealm(linkURL)) {
+            await visit(linkURL, identityContext);
+          } else {
+            // in this case the instance we are linked to is a missing instance
+            // in an external realm.
+            throw err;
+          }
         } else {
-          // in this case the instance we are linked to is a missing instance
-          // in an external realm.
           throw err;
         }
-      } else {
-        throw err;
       }
     }
   }

@@ -1135,6 +1135,393 @@ module('Integration | search-index', function (hooks) {
     structuredClone(entry?.searchData);
   });
 
+  test('can index a card with linksToMany field', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Pet/vanGogh.json': {
+        data: {
+          attributes: { firstName: 'Van Gogh' },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'PetPerson/hassan.json': {
+        data: {
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'pets.0': {
+              links: { self: `${testRealmURL}Pet/mango` },
+            },
+            'pets.1': {
+              links: { self: `${testRealmURL}Pet/vanGogh` },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet-person`,
+              name: 'PetPerson',
+            },
+          },
+        },
+      },
+      'Pet/mango.json': {
+        data: {
+          attributes: { firstName: 'Mango' },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let hassan = await indexer.card(
+      new URL(`${testRealmURL}PetPerson/hassan`),
+      { loadLinks: true }
+    );
+
+    if (hassan?.type === 'doc') {
+      assert.deepEqual(hassan.doc.data, {
+        id: `${testRealmURL}PetPerson/hassan`,
+        type: 'card',
+        links: { self: `${testRealmURL}PetPerson/hassan` },
+        attributes: { firstName: 'Hassan' },
+        relationships: {
+          'pets.0': {
+            links: { self: `${testRealmURL}Pet/mango` },
+            data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
+          },
+          'pets.1': {
+            links: { self: `${testRealmURL}Pet/vanGogh` },
+            data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testModuleRealm}pet-person`,
+            name: 'PetPerson',
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}PetPerson/hassan.json`
+          ),
+        },
+      });
+      assert.deepEqual(hassan.doc.included, [
+        {
+          id: `${testRealmURL}Pet/mango`,
+          type: 'card',
+          links: { self: `${testRealmURL}Pet/mango` },
+          attributes: { firstName: 'Mango' },
+          relationships: { owner: { links: { self: null } } },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Pet/mango.json`
+            ),
+          },
+        },
+        {
+          id: `${testRealmURL}Pet/vanGogh`,
+          type: 'card',
+          links: { self: `${testRealmURL}Pet/vanGogh` },
+          attributes: { firstName: 'Van Gogh' },
+          relationships: { owner: { links: { self: null } } },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Pet/vanGogh.json`
+            ),
+          },
+        },
+      ]);
+    } else {
+      assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
+    }
+
+    let hassanEntry = await indexer.searchEntry(
+      new URL(`${testRealmURL}PetPerson/hassan`)
+    );
+    if (hassanEntry) {
+      assert.deepEqual(hassanEntry.searchData, {
+        id: `${testRealmURL}PetPerson/hassan`,
+        firstName: 'Hassan',
+        pets: [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            firstName: 'Mango',
+            owner: null,
+          },
+          {
+            id: `${testRealmURL}Pet/vanGogh`,
+            firstName: 'Van Gogh',
+            owner: null,
+          },
+        ],
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}PetPerson/hassan in the index`
+      );
+    }
+  });
+
+  test('can index a card with empty linksToMany field value', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'PetPerson/burcu.json': {
+        data: {
+          attributes: { firstName: 'Burcu' },
+          relationships: { pets: { links: { self: null } } },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet-person`,
+              name: 'PetPerson',
+            },
+          },
+        },
+      },
+    });
+
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let card = await indexer.card(new URL(`${testRealmURL}PetPerson/burcu`), {
+      loadLinks: true,
+    });
+
+    if (card?.type === 'doc') {
+      assert.deepEqual(card.doc, {
+        data: {
+          id: `${testRealmURL}PetPerson/burcu`,
+          type: 'card',
+          links: { self: `${testRealmURL}PetPerson/burcu` },
+          attributes: { firstName: 'Burcu' },
+          relationships: { pets: { links: { self: null } } },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet-person`,
+              name: 'PetPerson',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}PetPerson/burcu.json`
+            ),
+          },
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${card?.error.detail}`);
+    }
+
+    let entry = await indexer.searchEntry(
+      new URL(`${testRealmURL}PetPerson/burcu`)
+    );
+    if (entry) {
+      assert.deepEqual(entry.searchData, {
+        id: `${testRealmURL}PetPerson/burcu`,
+        firstName: 'Burcu',
+        pets: [],
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}PetPerson/burcu in the index`
+      );
+    }
+  });
+
+  test('can index a card that contains a card with a linksToMany field', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'Pet/vanGogh.json': {
+        data: {
+          attributes: { firstName: 'Van Gogh' },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'pet-person-catalog-entry.json': {
+        data: {
+          attributes: {
+            title: 'PetPerson',
+            description: 'Catalog entry for PetPerson',
+            ref: {
+              module: `${testModuleRealm}pet-person`,
+              name: 'PetPerson',
+            },
+            demo: { firstName: 'Hassan' },
+          },
+          relationships: {
+            'demo.pets.0': {
+              links: { self: `${testRealmURL}Pet/mango` },
+            },
+            'demo.pets.1': {
+              links: { self: `${testRealmURL}Pet/vanGogh` },
+            },
+          },
+          meta: {
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: `${testModuleRealm}pet-person`,
+                  name: 'PetPerson',
+                },
+              },
+            },
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/catalog-entry',
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+      'Pet/mango.json': {
+        data: {
+          attributes: { firstName: 'Mango' },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+    });
+
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let catalogEntry = await indexer.card(
+      new URL(`${testRealmURL}pet-person-catalog-entry`),
+      { loadLinks: true }
+    );
+
+    if (catalogEntry?.type === 'doc') {
+      assert.deepEqual(catalogEntry.doc.data, {
+        id: `${testRealmURL}pet-person-catalog-entry`,
+        type: 'card',
+        links: { self: `${testRealmURL}pet-person-catalog-entry` },
+        attributes: {
+          title: 'PetPerson',
+          description: 'Catalog entry for PetPerson',
+          ref: {
+            module: `${testModuleRealm}pet-person`,
+            name: 'PetPerson',
+          },
+          demo: { firstName: 'Hassan' },
+          isPrimitive: false,
+          moduleHref: `${testModuleRealm}pet-person`,
+        },
+        relationships: {
+          'demo.pets.0': {
+            links: { self: `${testRealmURL}Pet/mango` },
+            data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
+          },
+          'demo.pets.1': {
+            links: { self: `${testRealmURL}Pet/vanGogh` },
+            data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/catalog-entry',
+            name: 'CatalogEntry',
+          },
+          fields: {
+            demo: {
+              adoptsFrom: {
+                module: `${testModuleRealm}pet-person`,
+                name: 'PetPerson',
+              },
+            },
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}pet-person-catalog-entry.json`
+          ),
+        },
+      });
+
+      assert.deepEqual(catalogEntry.doc.included, [
+        {
+          id: `${testRealmURL}Pet/mango`,
+          type: 'card',
+          links: { self: `${testRealmURL}Pet/mango` },
+          attributes: { firstName: 'Mango' },
+          relationships: { owner: { links: { self: null } } },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Pet/mango.json`
+            ),
+          },
+        },
+        {
+          id: `${testRealmURL}Pet/vanGogh`,
+          type: 'card',
+          links: { self: `${testRealmURL}Pet/vanGogh` },
+          attributes: { firstName: 'Van Gogh' },
+          relationships: { owner: { links: { self: null } } },
+          meta: {
+            adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}Pet/vanGogh.json`
+            ),
+          },
+        },
+      ]);
+    } else {
+      assert.ok(
+        false,
+        `search entry was an error: ${catalogEntry?.error.detail}`
+      );
+    }
+
+    let entry = await indexer.searchEntry(
+      new URL(`${testRealmURL}pet-person-catalog-entry`)
+    );
+    if (entry) {
+      assert.deepEqual(entry.searchData, {
+        id: `${testRealmURL}pet-person-catalog-entry`,
+        title: 'PetPerson',
+        description: 'Catalog entry for PetPerson',
+        ref: `${testModuleRealm}pet-person/PetPerson`,
+        demo: {
+          id: undefined,
+          firstName: 'Hassan',
+          pets: [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              firstName: 'Mango',
+              owner: null,
+            },
+            {
+              id: `${testRealmURL}Pet/vanGogh`,
+              firstName: 'Van Gogh',
+              owner: null,
+            },
+          ],
+        },
+        isPrimitive: false,
+        moduleHref: `${testModuleRealm}pet-person`,
+      });
+    } else {
+      assert.ok(
+        false,
+        `could not find ${testRealmURL}pet-person-catalog-entry in the index`
+      );
+    }
+  });
+
   test('can index a card that has nested linksTo fields', async function (assert) {
     let adapter = new TestRealmAdapter({
       'Friend/hassan.json': {
@@ -1490,6 +1877,338 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
+  test('can index a field with a cycle in the linksToMany field', async function (assert) {
+    let hassanID = `${testRealmURL}Friends/hassan`;
+    let mangoID = `${testRealmURL}Friends/mango`;
+    let vanGoghID = `${testRealmURL}Friends/vanGogh`;
+    let friendsRef = { module: `${testModuleRealm}friends`, name: 'Friends' };
+    let adapter = new TestRealmAdapter({
+      'Friends/vanGogh.json': {
+        data: {
+          attributes: { firstName: 'Van Gogh' },
+          relationships: { 'friends.0': { links: { self: hassanID } } },
+          meta: { adoptsFrom: friendsRef },
+        },
+      },
+      'Friends/hassan.json': {
+        data: {
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'friends.0': { links: { self: mangoID } },
+            'friends.1': { links: { self: vanGoghID } },
+          },
+          meta: { adoptsFrom: friendsRef },
+        },
+      },
+      'Friends/mango.json': {
+        data: {
+          attributes: { firstName: 'Mango' },
+          relationships: { 'friends.0': { links: { self: hassanID } } },
+          meta: { adoptsFrom: friendsRef },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    assert.deepEqual(
+      indexer.stats,
+      {
+        instanceErrors: 0,
+        instancesIndexed: 3,
+        moduleErrors: 0,
+      },
+      'instances are indexed without error'
+    );
+
+    let hassan = await indexer.card(new URL(hassanID), { loadLinks: true });
+    if (hassan?.type === 'doc') {
+      assert.deepEqual(
+        hassan.doc.data,
+        {
+          id: hassanID,
+          type: 'card',
+          links: { self: hassanID },
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'friends.0': {
+              links: { self: mangoID },
+              data: { type: 'card', id: mangoID },
+            },
+            'friends.1': {
+              links: { self: vanGoghID },
+              data: { type: 'card', id: vanGoghID },
+            },
+          },
+          meta: {
+            adoptsFrom: friendsRef,
+            lastModified: adapter.lastModified.get(`${hassanID}.json`),
+          },
+        },
+        'hassan doc.data is correct'
+      );
+
+      assert.deepEqual(
+        hassan.doc.included,
+        [
+          {
+            id: mangoID,
+            type: 'card',
+            links: { self: mangoID },
+            attributes: { firstName: 'Mango' },
+            relationships: {
+              'friends.0': {
+                links: { self: hassanID },
+                data: { type: 'card', id: hassanID },
+              },
+            },
+            meta: {
+              adoptsFrom: friendsRef,
+              lastModified: adapter.lastModified.get(`${mangoID}.json`),
+            },
+          },
+          {
+            id: vanGoghID,
+            type: 'card',
+            links: { self: vanGoghID },
+            attributes: { firstName: 'Van Gogh' },
+            relationships: {
+              'friends.0': {
+                links: { self: hassanID },
+                data: { type: 'card', id: hassanID },
+              },
+            },
+            meta: {
+              adoptsFrom: friendsRef,
+              lastModified: adapter.lastModified.get(`${vanGoghID}.json`),
+            },
+          },
+        ],
+        'hassan doc.included is correct'
+      );
+    } else {
+      assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
+    }
+
+    let hassanEntry = await indexer.searchEntry(new URL(hassanID));
+    if (hassanEntry) {
+      assert.deepEqual(
+        hassanEntry.searchData,
+        {
+          id: hassanID,
+          firstName: 'Hassan',
+          friends: [
+            {
+              id: mangoID,
+              firstName: 'Mango',
+              friends: [{ id: hassanID }],
+            },
+            {
+              id: vanGoghID,
+              firstName: 'Van Gogh',
+              friends: [{ id: hassanID }],
+            },
+          ],
+        },
+        'hassan searchData is correct'
+      );
+    } else {
+      assert.ok(false, `could not find ${hassanID} in the index`);
+    }
+
+    let mango = await indexer.card(new URL(mangoID), { loadLinks: true });
+    if (mango?.type === 'doc') {
+      assert.deepEqual(
+        mango.doc.data,
+        {
+          id: mangoID,
+          type: 'card',
+          links: { self: mangoID },
+          attributes: { firstName: 'Mango' },
+          relationships: {
+            'friends.0': {
+              links: { self: hassanID },
+              data: { type: 'card', id: hassanID },
+            },
+          },
+          meta: {
+            adoptsFrom: friendsRef,
+            lastModified: adapter.lastModified.get(`${mangoID}.json`),
+          },
+        },
+        'mango doc.data is correct'
+      );
+      assert.deepEqual(
+        mango.doc.included,
+        [
+          {
+            id: hassanID,
+            type: 'card',
+            links: { self: hassanID },
+            attributes: { firstName: 'Hassan' },
+            relationships: {
+              'friends.0': {
+                links: { self: mangoID },
+                data: { type: 'card', id: mangoID },
+              },
+              'friends.1': {
+                links: { self: vanGoghID },
+                data: { type: 'card', id: vanGoghID },
+              },
+            },
+            meta: {
+              adoptsFrom: friendsRef,
+              lastModified: adapter.lastModified.get(`${hassanID}.json`),
+            },
+          },
+          {
+            id: vanGoghID,
+            type: 'card',
+            links: { self: vanGoghID },
+            attributes: { firstName: 'Van Gogh' },
+            relationships: {
+              'friends.0': {
+                links: { self: hassanID },
+                data: { type: 'card', id: hassanID },
+              },
+            },
+            meta: {
+              adoptsFrom: friendsRef,
+              lastModified: adapter.lastModified.get(`${vanGoghID}.json`),
+            },
+          },
+        ],
+        'mango doc.included is correct'
+      );
+    } else {
+      assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
+    }
+
+    let mangoEntry = await indexer.searchEntry(new URL(mangoID));
+    if (mangoEntry) {
+      assert.deepEqual(
+        mangoEntry.searchData,
+        {
+          id: mangoID,
+          firstName: 'Mango',
+          friends: [
+            {
+              id: hassanID,
+              firstName: 'Hassan',
+              friends: [
+                { id: mangoID },
+                {
+                  id: vanGoghID,
+                  firstName: 'Van Gogh',
+                  friends: [{ id: hassanID }],
+                },
+              ],
+            },
+          ],
+        },
+        'mango searchData is correct'
+      );
+    } else {
+      assert.ok(false, `could not find ${mangoID} in the index`);
+    }
+
+    let vanGogh = await indexer.card(new URL(vanGoghID), { loadLinks: true });
+    if (vanGogh?.type === 'doc') {
+      assert.deepEqual(
+        vanGogh.doc.data,
+        {
+          id: vanGoghID,
+          type: 'card',
+          links: { self: vanGoghID },
+          attributes: { firstName: 'Van Gogh' },
+          relationships: {
+            'friends.0': {
+              links: { self: hassanID },
+              data: { type: 'card', id: hassanID },
+            },
+          },
+          meta: {
+            adoptsFrom: friendsRef,
+            lastModified: adapter.lastModified.get(`${vanGoghID}.json`),
+          },
+        },
+        'vanGogh doc.data is correct'
+      );
+      assert.deepEqual(
+        vanGogh.doc.included,
+        [
+          {
+            id: hassanID,
+            type: 'card',
+            links: { self: hassanID },
+            attributes: { firstName: 'Hassan' },
+            relationships: {
+              'friends.0': {
+                links: { self: mangoID },
+                data: { type: 'card', id: mangoID },
+              },
+              'friends.1': {
+                links: { self: vanGoghID },
+                data: { type: 'card', id: vanGoghID },
+              },
+            },
+            meta: {
+              adoptsFrom: friendsRef,
+              lastModified: adapter.lastModified.get(`${hassanID}.json`),
+            },
+          },
+          {
+            id: mangoID,
+            type: 'card',
+            links: { self: mangoID },
+            attributes: { firstName: 'Mango' },
+            relationships: {
+              'friends.0': {
+                links: { self: hassanID },
+                data: { type: 'card', id: hassanID },
+              },
+            },
+            meta: {
+              adoptsFrom: friendsRef,
+              lastModified: adapter.lastModified.get(`${mangoID}.json`),
+            },
+          },
+        ],
+        'vanGogh doc.included is correct'
+      );
+    } else {
+      assert.ok(false, `search entry was an error: ${vanGogh?.error.detail}`);
+    }
+
+    let vanGoghEntry = await indexer.searchEntry(new URL(vanGoghID));
+    if (vanGoghEntry) {
+      assert.deepEqual(
+        vanGoghEntry.searchData,
+        {
+          id: vanGoghID,
+          firstName: 'Van Gogh',
+          friends: [
+            {
+              id: hassanID,
+              firstName: 'Hassan',
+              friends: [
+                {
+                  id: mangoID,
+                  firstName: 'Mango',
+                  friends: [{ id: hassanID }],
+                },
+                { id: vanGoghID },
+              ],
+            },
+          ],
+        },
+        'vanGogh searchData is correct'
+      );
+    } else {
+      assert.ok(false, `could not find ${vanGoghID} in the index`);
+    }
+  });
+
   test("indexing identifies an instance's card references", async function (assert) {
     let realm = await TestRealm.create(
       {
@@ -1534,6 +2253,7 @@ module('Integration | search-index', function (hooks) {
         'http://localhost:4201/base/field-component',
         'http://localhost:4201/base/integer',
         'http://localhost:4201/base/links-to-editor',
+        'http://localhost:4201/base/links-to-many-component',
         'http://localhost:4201/base/string',
         'http://localhost:4201/base/watched-array',
         'http://localhost:4202/test/person',
