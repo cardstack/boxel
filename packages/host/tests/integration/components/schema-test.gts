@@ -853,4 +853,302 @@ module('Integration | schema', function (hooks) {
       .dom('data-test-error-msg')
       .doesNotExist('error message does not exist');
   });
+
+  test('it can add a linksToMany field to a card', async function (assert) {
+    await realm.write(
+      'person.gts',
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `
+    );
+    await realm.write(
+      'pet.gts',
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Pet extends Card {
+        @field name = contains(StringCard);
+      }
+    `
+    );
+    await realm.write(
+      'pet.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Pet',
+            description: 'Catalog entry',
+            ref: {
+              module: `${testRealmURL}pet`,
+              name: 'Pet',
+            },
+            demo: {
+              name: 'Jackie',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry',
+            },
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+        },
+      })
+    );
+    let openFile = await getFileResource(this, adapter, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Module @file={{openFile}} />
+          <CardCatalogModal />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-card-id]');
+    await fillIn('[data-test-new-field-name]', 'pets');
+    await click('[data-test-new-field-linksToMany]');
+
+    await click('[data-test-add-field]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    assert.dom(`[data-test-select="${testRealmURL}pet"]`).exists();
+    assert
+      .dom('[data-test-select]')
+      .exists({ count: 1 }, 'primitive fields are not shown');
+
+    await click(`[data-test-select="${testRealmURL}pet"]`);
+    await waitFor('[data-test-field="pets"]');
+    assert
+      .dom('[data-test-field="pets"]')
+      .hasText(
+        `Delete pets - linksToMany - field card ID: ${testRealmURL}pet/Pet`
+      );
+
+    let fileRef = await adapter.openFile('person.gts');
+    let src = fileRef?.content as string;
+    assert.codeEqual(
+      src,
+      `
+      import { Pet as PetCard } from "${testRealmURL}pet";
+      import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field pets = linksToMany(PetCard);
+      }
+    `
+    );
+  });
+
+  test('it can add a linksToMany field with the same type as its enclosing card', async function (assert) {
+    await realm.write(
+      'person.gts',
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `
+    );
+    await realm.write(
+      'person.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Person',
+            description: 'Catalog entry',
+            ref: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+            demo: {
+              firstName: 'Jackie',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry',
+            },
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
+                },
+              },
+            },
+          },
+        },
+      })
+    );
+    let openFile = await getFileResource(this, adapter, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Module @file={{openFile}} />
+          <CardCatalogModal />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-card-id]');
+    await fillIn('[data-test-new-field-name]', 'friends');
+    await click('[data-test-new-field-linksToMany]');
+
+    await click('[data-test-add-field]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    assert.dom(`[data-test-select="${testRealmURL}person"]`).exists();
+    assert
+      .dom('[data-test-select]')
+      .exists({ count: 1 }, 'primitive fields are not shown');
+
+    await click(`[data-test-select="${testRealmURL}person"]`);
+    await waitFor('[data-test-field="friends"]');
+    assert
+      .dom('[data-test-field="friends"]')
+      .hasText(
+        `Delete friends - linksToMany - field card ID: ${testRealmURL}person/Person (this card)`
+      );
+
+    let fileRef = await adapter.openFile('person.gts');
+    let src = fileRef?.content as string;
+    assert.codeEqual(
+      src,
+      `
+      import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field friends = linksToMany(() => Person);
+      }
+    `
+    );
+  });
+
+  test('can delete a linksToMany field with the same type as its enclosing card', async function (assert) {
+    await realm.write(
+      'person.gts',
+      `
+      import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field friends = linksToMany(() => Person);
+      }
+    `
+    );
+    let openFile = await getFileResource(this, adapter, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Module @file={{openFile}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-card-id]');
+    await click('[data-test-field="friends"] button[data-test-delete]');
+    let fileRef = await adapter.openFile('person.gts');
+    let src = fileRef?.content as string;
+    assert.codeEqual(
+      src,
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `
+    );
+  });
+
+  test('can delete a linksToMany field', async function (assert) {
+    await realm.write(
+      'pet.gts',
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Pet extends Card {
+        @field name = contains(StringCard);
+      }
+    `
+    );
+    await realm.write(
+      'person.gts',
+      `
+      import { Pet as PetCard } from "${testRealmURL}pet";
+      import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field pets = linksToMany(PetCard);
+      }
+    `
+    );
+    let openFile = await getFileResource(this, adapter, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Module @file={{openFile}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-card-id]');
+    await click('[data-test-field="pets"] button[data-test-delete]');
+    let fileRef = await adapter.openFile('person.gts');
+    let src = fileRef?.content as string;
+    assert.codeEqual(
+      src,
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `
+    );
+  });
 });
