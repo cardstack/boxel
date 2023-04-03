@@ -221,8 +221,11 @@ function makeNewField(
     fieldType
   );
 
-  if (fieldType === 'linksTo' && cardName === fieldRef.name) {
-    // syntax for when a card has a linksTo field to a card with the same type as itself
+  if (
+    (fieldType === 'linksTo' || fieldType === 'linksToMany') &&
+    cardName === fieldRef.name
+  ) {
+    // syntax for when a card has a linksTo or linksToMany field to a card with the same type as itself
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${cardName});`;
   }
 
