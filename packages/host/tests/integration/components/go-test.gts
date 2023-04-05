@@ -19,13 +19,13 @@ import {
   testRealmURL,
   setupCardLogs,
   setupMockLocalRealm,
+  setupMockMessageService,
 } from '../../helpers';
 import moment from 'moment';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import type * as monaco from 'monaco-editor';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { shimExternals } from '@cardstack/host/lib/externals';
-import Service from '@ember/service';
 
 const cardContent = `
 import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
@@ -36,12 +36,6 @@ export class Person extends Card {
   @field friend = linksTo(() => Person);
 }
 `;
-
-class MockMessageService extends Service {
-  subscribe() {
-    return () => {};
-  }
-}
 
 class FailingTestRealmAdapter extends TestRealmAdapter {
   writeCalled = false;
@@ -66,13 +60,13 @@ module('Integration | Component | go', function (hooks) {
 
   setupRenderingTest(hooks);
   setupMockLocalRealm(hooks);
+  setupMockMessageService(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
   );
 
   hooks.beforeEach(async function () {
-    this.owner.register('service:message-service', MockMessageService);
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')

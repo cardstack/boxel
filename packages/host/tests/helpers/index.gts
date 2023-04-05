@@ -8,7 +8,7 @@ import {
   createResponse,
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
-import { TestContext } from '@ember/test-helpers';
+import { type TestContext, visit } from '@ember/test-helpers';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -52,6 +52,11 @@ export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
 }
 
+interface Options {
+  realmURL?: string;
+  isAcceptanceTest?: true;
+}
+
 // We use a rendered component to facilitate our indexing (this emulates
 // the work that the service worker renderer is doing), which means that the
 // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
@@ -59,19 +64,27 @@ export const TestRealm = {
   async create(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
     owner: TestContext['owner'],
-    realmURL?: string
+    opts?: Options
   ): Promise<Realm> {
-    await makeRenderer();
-    return makeRealm(new TestRealmAdapter(flatFiles), owner, realmURL);
+    if (opts?.isAcceptanceTest) {
+      await visit('/');
+    } else {
+      await makeRenderer();
+    }
+    return makeRealm(new TestRealmAdapter(flatFiles), owner, opts?.realmURL);
   },
 
   async createWithAdapter(
     adapter: RealmAdapter,
     owner: TestContext['owner'],
-    realmURL?: string
+    opts?: Options
   ): Promise<Realm> {
-    await makeRenderer();
-    return makeRealm(adapter, owner, realmURL);
+    if (opts?.isAcceptanceTest) {
+      await visit('/');
+    } else {
+      await makeRenderer();
+    }
+    return makeRealm(adapter, owner, opts?.realmURL);
   },
 };
 
@@ -146,6 +159,18 @@ class MockLocalRealm extends Service {
 export function setupMockLocalRealm(hooks: NestedHooks) {
   hooks.beforeEach(function () {
     this.owner.register('service:local-realm', MockLocalRealm);
+  });
+}
+
+class MockMessageService extends Service {
+  subscribe() {
+    return () => {};
+  }
+}
+
+export function setupMockMessageService(hooks: NestedHooks) {
+  hooks.beforeEach(function () {
+    this.owner.register('service:message-service', MockMessageService);
   });
 }
 
