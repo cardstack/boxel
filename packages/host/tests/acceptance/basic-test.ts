@@ -197,9 +197,8 @@ module('Acceptance | basic tests', function (hooks) {
     await fillIn('[data-test-field="firstName"] input', 'Mango');
     await fillIn('[data-test-field="lastName"] input', 'Abdel-Rahman');
     await click('[data-test-save-card]');
-    await waitUntil(() => !document.querySelector('[data-test-saving]'));
+    await waitUntil(() => currentURL() === '/code?path=Person%2F2.json');
 
-    assert.strictEqual(currentURL(), '/code?path=Person%2F2.json');
     await click('[data-test-directory="Person/"]');
     await waitFor('[data-test-file="Person/2.json"]');
     assert
