@@ -24,6 +24,7 @@ export default class Directory extends Component<Args> {
         {{#let (concat @relativePath entry.name) as |entryPath|}}
           {{#if (eq entry.kind 'file')}}
             <div
+              data-test-file={{entryPath}}
               role='button'
               {{on 'click' (fn this.openFile entryPath)}}
               class='file {{if (eq entryPath @openFile) "selected"}}'
@@ -32,6 +33,7 @@ export default class Directory extends Component<Args> {
             </div>
           {{else}}
             <div
+              data-test-directory={{entryPath}}
               role='button'
               {{on 'click' (fn this.toggleDirectory entryPath)}}
               class='directory

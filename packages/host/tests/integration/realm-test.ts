@@ -346,7 +346,9 @@ module('Integration | realm', function (hooks) {
         },
       },
       this.owner,
-      `${testRealmURL}root/`
+      {
+        realmURL: `${testRealmURL}root/`,
+      }
     );
     await realm.ready;
     {
