@@ -17,6 +17,7 @@ import {
 import { formatRFC7231 } from 'date-fns';
 import { md5 } from 'super-fast-md5';
 import {
+  cardJsonMimeType,
   isCardResource,
   executableExtensions,
   hasExecutableExtension,
@@ -65,6 +66,7 @@ import { Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
+import { cardSourceMimeType } from './index';
 
 export interface FileRef {
   path: LocalPath;
@@ -272,6 +274,7 @@ export class Realm {
     let localPath = this.paths.local(request.url);
     if (
       accept?.includes('application/vnd.api+json') ||
+      accept?.includes(cardJsonMimeType) ||
       accept?.includes('text/event-stream')
     ) {
       // local requests are allowed to query the realm as the index is being built up
@@ -282,7 +285,7 @@ export class Realm {
         return systemError('search index is not available');
       }
       return this.#jsonAPIRouter.handle(request);
-    } else if (accept?.includes('application/vnd.card+source')) {
+    } else if (accept?.includes(cardSourceMimeType)) {
       return this.#cardSourceRouter.handle(request);
     } else if (accept?.includes('text/html')) {
       return createResponse(await this.getIndexHTML(), {
@@ -559,7 +562,7 @@ export class Realm {
     return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
-        'content-type': 'application/vnd.api+json',
+        'content-type': cardJsonMimeType,
         ...lastModifiedHeader(doc),
       },
     });
@@ -628,7 +631,7 @@ export class Realm {
     });
     return createResponse(JSON.stringify(doc, null, 2), {
       headers: {
-        'content-type': 'application/vnd.api+json',
+        'content-type': cardJsonMimeType,
         ...lastModifiedHeader(doc),
       },
     });
@@ -652,7 +655,7 @@ export class Realm {
     return createResponse(JSON.stringify(card, null, 2), {
       headers: {
         'last-modified': formatRFC7231(card.data.meta.lastModified!),
-        'content-type': 'application/vnd.api+json',
+        'content-type': cardJsonMimeType,
         ...lastModifiedHeader(card),
       },
     });
@@ -779,7 +782,7 @@ export class Realm {
       { loadLinks: true }
     );
     return createResponse(JSON.stringify(doc, null, 2), {
-      headers: { 'content-type': 'application/vnd.api+json' },
+      headers: { 'content-type': cardJsonMimeType },
     });
   }
 

@@ -162,7 +162,7 @@ export class RealmServer {
       if (fileName.includes('.')) {
         ctxt.type = fileName.split('.').pop()!;
       } else {
-        ctxt.type = 'application/vnd.api+json';
+        ctxt.type = 'application/vnd.api+json'; // TODO: should we still default to this???
       }
     }
 

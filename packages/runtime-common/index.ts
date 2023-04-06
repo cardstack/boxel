@@ -93,6 +93,8 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
+export const cardJsonMimeType = 'application/vnd.card+json';
+export const cardSourceMimeType = 'application/vnd.card+source';
 
 export interface CardChooser {
   chooseCard<T extends Card>(
