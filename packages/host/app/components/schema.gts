@@ -148,6 +148,22 @@ export default class Schema extends Component<Signature> {
                   linksTo
                 </label>
               </li>
+              <li>
+                <label>
+                  <input
+                    data-test-new-field-linksToMany
+                    {{RadioInitializer
+                      (eq this.newFieldType 'linksToMany')
+                      true
+                    }}
+                    type='radio'
+                    checked={{eq this.newFieldType 'linksToMany'}}
+                    {{on 'change' (fn this.setNewFieldType 'linksToMany')}}
+                    name='field-type'
+                  />
+                  linksToMany
+                </label>
+              </li>
             </ul>
           </FieldContainer>
           <button
@@ -266,7 +282,7 @@ export default class Schema extends Component<Signature> {
 
   private makeField = restartableTask(async () => {
     let filter: Filter =
-      this.newFieldType === 'linksTo'
+      this.newFieldType === 'linksTo' || this.newFieldType === 'linksToMany'
         ? {
             on: catalogEntryRef,
             eq: { isPrimitive: false },
