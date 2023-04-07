@@ -14,7 +14,7 @@ import { BoxelInput } from '@cardstack/boxel-ui';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
-const Format = new Intl.DateTimeFormat('us-EN', {
+const Format = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
   month: 'short',
   day: 'numeric',
