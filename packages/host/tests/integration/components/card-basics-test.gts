@@ -21,6 +21,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import BoxelInput from '@cardstack/boxel-ui/components/input';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import format from 'date-fns/format';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -1179,8 +1180,9 @@ module('Integration | card-basics', function (hooks) {
     let { field, containsMany, Card, Component } = cardApi;
     let { default: DateCard } = date;
     let { default: DatetimeCard } = datetime;
+
     function toDateString(date: Date | null) {
-      return date instanceof Date ? date.toISOString().split('T')[0] : null;
+      return date instanceof Date ? format(date, 'yyyy-MM-dd') : null;
     }
 
     class Person extends Card {
