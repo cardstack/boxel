@@ -1,9 +1,9 @@
 import Component from '@glimmer/component';
-import { didCancel, enqueueTask } from 'ember-concurrency';
+import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
 import { service } from '@ember/service';
 import { CurrentRun } from '../lib/current-run';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
-import { hasExecutableExtension } from '@cardstack/runtime-common';
+import { hasExecutableExtension, baseRealm } from '@cardstack/runtime-common';
 import {
   type EntrySetter,
   type Reader,
@@ -35,6 +35,7 @@ export default class CardPrerender extends Component {
         );
       }
     } else {
+      this.warmUpModuleCache.perform();
       this.localRealm.setupIndexing(
         this.fromScratch.bind(this),
         this.incremental.bind(this)
@@ -76,6 +77,17 @@ export default class CardPrerender extends Component {
       `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`
     );
   }
+
+  private warmUpModuleCache = dropTask(async () => {
+    await this.loaderService.loader.import(`${baseRealm.url}card-api`);
+    await this.loaderService.loader.import(`${baseRealm.url}catalog-entry`);
+    await this.loaderService.loader.import(`${baseRealm.url}card-ref`);
+    await this.loaderService.loader.import(`${baseRealm.url}boolean`);
+    await this.loaderService.loader.import(`${baseRealm.url}date`);
+    await this.loaderService.loader.import(`${baseRealm.url}datetime`);
+    await this.loaderService.loader.import(`${baseRealm.url}integer`);
+    await this.loaderService.loader.import(`${baseRealm.url}string`);
+  });
 
   private doRegistration = enqueueTask(async () => {
     let optsId = (globalThis as any).runnerOptsId;

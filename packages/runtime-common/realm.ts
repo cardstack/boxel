@@ -15,6 +15,7 @@ import {
   CardError,
 } from './error';
 import { formatRFC7231 } from 'date-fns';
+import { md5 } from 'super-fast-md5';
 import {
   isCardResource,
   executableExtensions,
@@ -148,6 +149,7 @@ export class Realm {
   #deferStartup: boolean;
   #isLocalRealm = false;
   #useTestingDomain = false;
+  #transpileCache = new Map<string, string>();
   #getIndexHTML: () => Promise<string>;
   readonly paths: RealmPaths;
 
@@ -392,6 +394,11 @@ export class Realm {
   }
 
   private transpileJS(content: string, debugFilename: string): string {
+    let hash = md5(content);
+    let cached = this.#transpileCache.get(hash);
+    if (cached) {
+      return cached;
+    }
     content = preprocessEmbeddedTemplates(content, {
       relativePath: debugFilename,
       getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
@@ -426,6 +433,14 @@ export class Realm {
     })?.code;
     if (!src) {
       throw new Error('bug: should never get here');
+    }
+
+    // This assumes the base realm is static. We take advantage of the static
+    // nature of the base realm such that we can cache the transpiled JS, which
+    // is the slowest part of module loading (and base realm modules are
+    // imported a lot by all realms)
+    if (this.url === baseRealm.url) {
+      this.#transpileCache.set(hash, src);
     }
     return src;
   }

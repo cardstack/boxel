@@ -111,7 +111,9 @@ export class CurrentRun {
   }
 
   static async fromScratch(current: CurrentRun) {
+    (globalThis as any).__currentRunLoader = current.#loader;
     await current.visitDirectory(current.#realmURL);
+    (globalThis as any).__currentRunLoader = undefined;
     return current;
   }
 
@@ -132,6 +134,7 @@ export class CurrentRun {
     entrySetter: EntrySetter;
     renderCard: RenderCard;
   }) {
+    (globalThis as any).__currentRunLoader = loader;
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
     let ignoreMapContents = new URLMap(prev.ignoreMapContents);
@@ -164,6 +167,7 @@ export class CurrentRun {
     for (let invalidation of invalidations) {
       await current.visitFile(invalidation);
     }
+    (globalThis as any).__currentRunLoader = undefined;
     return current;
   }
 

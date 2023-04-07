@@ -1,7 +1,11 @@
 import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
-import { trimExecutableExtension } from './index';
+import {
+  trimExecutableExtension,
+  executableExtensions,
+  baseRealm,
+} from './index';
 import { RealmPaths } from './paths';
 import { CardError } from './error';
 import { type RunnerOpts } from './search-index';
@@ -70,6 +74,12 @@ type Module =
 export interface MaybeLocalRequest extends Request {
   isLocal?: true;
 }
+
+// One of the largest expenditures of time during incremental indexing is
+// fetching modules from a fresh Loader instance. To improve performance we are
+// creating a module cache that can be shared across loader instances for
+// modules that we believe never change.
+const sharedModules = new Map<string, Module>();
 
 export class Loader {
   private modules = new Map<string, Module>();
@@ -385,11 +395,37 @@ export class Loader {
   }
 
   private getModule(moduleIdentifier: string): Module | undefined {
-    return this.modules.get(moduleIdentifier);
+    if (isUrlLike(moduleIdentifier)) {
+      let moduleURL = new URL(moduleIdentifier);
+      if (baseRealm.inRealm(moduleURL)) {
+        return sharedModules.get(moduleIdentifier);
+      } else {
+        return this.modules.get(moduleIdentifier);
+      }
+    } else {
+      // These are the shimmed modules that have npm-like module identifiers
+      return sharedModules.get(moduleIdentifier);
+    }
   }
 
   private setModule(moduleIdentifier: string, module: Module) {
-    this.modules.set(moduleIdentifier, module);
+    if (isUrlLike(moduleIdentifier)) {
+      let moduleURL = new URL(moduleIdentifier);
+      let cache: Map<string, Module>;
+      if (baseRealm.inRealm(moduleURL)) {
+        cache = sharedModules;
+      } else {
+        cache = this.modules;
+      }
+      let trimmedIdentifier = trimExecutableExtension(moduleURL);
+      cache.set(trimmedIdentifier.href, module);
+      for (let extension of executableExtensions) {
+        cache.set(`${trimmedIdentifier.href}${extension}`, module);
+      }
+    } else {
+      // These are the shimmed modules that have npm-like module identifiers
+      sharedModules.set(moduleIdentifier, module);
+    }
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
