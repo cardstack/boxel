@@ -65,6 +65,10 @@ export default class LocalRealm extends Service {
         }
         break;
       case 'available':
+        // if (data.type === 'setDirectoryHandleAcknowledged') {
+        //   // TODO: ???
+        //   return;
+        // }
         if (data.type === 'setEntryAcknowledged') {
           if (!this.#setEntryDeferred) {
             throw new Error(
@@ -326,32 +330,56 @@ export default class LocalRealm extends Service {
     let registration = await navigator.serviceWorker.register('/worker.js', {
       scope: '/',
     });
+
     registration.addEventListener('updatefound', () => {
-      // if we see a new service worker version getting installed, and if we
-      // already have an open file handle, send it to the new worker so we don't
-      // lose access
-      if (this.state.type === 'available') {
-        send(registration.installing!, {
-          type: 'setDirectoryHandle',
-          handle: this.state.handle,
-          realmsServed,
+      // this event is fired when a new service worker is installing
+      const newWorker = registration.installing;
+
+      if (newWorker) {
+        newWorker.addEventListener('statechange', async () => {
+          if (
+            newWorker.state === 'installed' &&
+            this.state.type === 'available'
+          ) {
+            console.log('new worker installed');
+            // if we see a new service worker version getting installed, and if we
+            // already have an open file handle, send it to the new worker so we don't
+            // lose access
+            // send(newWorker, {
+            //   type: 'setDirectoryHandle',
+            //   handle: this.state.handle,
+            //   realmsServed,
+            // });
+            // this.state = {
+            //   type: 'available',
+            //   handle: this.state.handle,
+            //   worker: newWorker,
+            //   adapter: this.state.adapter,
+            // };
+          }
         });
       }
     });
+
     while (registration.active?.state !== 'activated') {
       await timeout(10);
     }
-    navigator.serviceWorker.oncontrollerchange = () => {
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      // this event fires when the new service worker is activated
       log.info('worker changed');
-      if ('worker' in this.state) {
-        this.router.transitionTo('index', {
-          queryParams: { path: undefined },
-        });
-        this.state = { type: 'starting-up' };
-        this.maybeSetup();
-      }
-    };
-    return navigator.serviceWorker.controller!;
+      console.log('worker changed, state:', this.state);
+      // this.state = { type: 'starting-up' };
+      // this.maybeSetup();
+    });
+
+    if (!navigator.serviceWorker.controller) {
+      // navigator.serviceWorker.controller returns null when doing a force-refresh in the browser
+      // TODO: best way to handle this?
+      throw 'service worker is not active';
+    }
+
+    return navigator.serviceWorker.controller;
   }
 }
 

@@ -61,11 +61,17 @@ let runnerOptsMgr = new RunnerOptionsManager();
 })();
 
 worker.addEventListener('install', () => {
+  console.log('installing service worker...');
   // force moving on to activation even if another service worker had control
-  worker.skipWaiting();
+  // TODO: explore why network request gets stuck in pending state when 'update on reload' is enabled in dev tools (this happens only if there's an open directory)
+  // we may enable skipWaiting if we can figure out the above
+  // currently, enabling skipWaiting is causing inconsistent behavior in the browser (only if there's an open directory)
+  // this means, we need to close all open tabs and open a new tab to get the newest service worker
+  // worker.skipWaiting();
 });
 
 worker.addEventListener('activate', () => {
+  console.log('activating service worker...');
   // takes over when there is *no* existing service worker
   worker.clients.claim();
   log.info('activating service worker');
