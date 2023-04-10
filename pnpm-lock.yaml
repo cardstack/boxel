@@ -925,6 +925,7 @@ importers:
       '@types/koa__cors': ^4.0.0
       '@types/koa__router': ^12.0.0
       '@types/lodash': ^4.14.182
+      '@types/mime-types': ^2.1.1
       '@types/node': ^18.6.0
       '@types/qs': ^6.9.7
       '@types/qunit': ^2.11.3
@@ -942,6 +943,7 @@ importers:
       koa-proxies: ^0.12.3
       lodash: ^4.17.21
       loglevel: ^1.8.1
+      mime-types: ^2.1.35
       npm-run-all: ^4.1.5
       prettier: ^2.8.4
       prettier-plugin-ember-template-tag: ^0.3.2
@@ -968,6 +970,7 @@ importers:
       '@types/koa__cors': 4.0.0
       '@types/koa__router': 12.0.0
       '@types/lodash': 4.14.189
+      '@types/mime-types': 2.1.1
       '@types/node': 18.11.9
       '@types/qs': 6.9.7
       '@types/qunit': 2.19.3
@@ -985,6 +988,7 @@ importers:
       koa-proxies: 0.12.3_koa@2.14.1
       lodash: 4.17.21
       loglevel: 1.8.1
+      mime-types: 2.1.35
       npm-run-all: 4.1.5
       prettier: 2.8.4
       prettier-plugin-ember-template-tag: 0.3.2
@@ -5463,6 +5467,10 @@ packages:
       '@types/unist': 2.0.6
     dev: true
 
+  /@types/mime-types/2.1.1:
+    resolution: {integrity: sha512-vXOTGVSLR2jMw440moWTC7H19iUyLtP3Z1YTj7cSsubOICinjMxFeb/V57v9QdyyPGbbWolUFSSmSiRSn94tFw==}
+    dev: true
+
   /@types/mime/3.0.1:
     resolution: {integrity: sha512-Y4XFY5VJAuw0FgAqPNd6NNoV44jbq9Bz2L7Rh/J6jLTiHBSBJa9fxqQIvkIld4GsoDOcCbvzOUAbLPsSKKg+uA==}
     dev: true
@@ -8688,7 +8696,7 @@ packages:
       mississippi: 3.0.0
       mkdirp: 0.5.6
       move-concurrently: 1.0.1
-      promise-inflight: 1.0.1
+      promise-inflight: 1.0.1_bluebird@3.7.2
       rimraf: 2.7.1
       ssri: 6.0.2
       unique-filename: 1.1.1
@@ -14121,6 +14129,16 @@ packages:
       readable-stream: 2.3.7
     dev: true
 
+  /follow-redirects/1.15.2:
+    resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
+    engines: {node: '>=4.0'}
+    peerDependencies:
+      debug: '*'
+    peerDependenciesMeta:
+      debug:
+        optional: true
+    dev: true
+
   /follow-redirects/1.15.2_debug@4.3.2:
     resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
     engines: {node: '>=4.0'}
@@ -15144,7 +15162,7 @@ packages:
     engines: {node: '>=8.0.0'}
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.2_debug@4.3.2
+      follow-redirects: 1.15.2
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -18431,6 +18449,17 @@ packages:
     peerDependenciesMeta:
       bluebird:
         optional: true
+    dev: true
+
+  /promise-inflight/1.0.1_bluebird@3.7.2:
+    resolution: {integrity: sha512-6zWPyEOFaQBJYcGMHBKTKJ3u6TBsnMFOIZSa6ce1e/ZrrsOlnHRHbabMjLiBYKp+n44X9eUI6VUPaukCXHuG4g==}
+    peerDependencies:
+      bluebird: '*'
+    peerDependenciesMeta:
+      bluebird:
+        optional: true
+    dependencies:
+      bluebird: 3.7.2
     dev: true
 
   /promise-map-series/0.2.3:
