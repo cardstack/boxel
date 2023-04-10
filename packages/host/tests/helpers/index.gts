@@ -437,7 +437,7 @@ export async function getFileResource(
 ): Promise<FileResource> {
   let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
   let paths = new RealmPaths(testRealmURL);
-  let relativePath = paths.local(new URL(fileURL));
+  let relativePath = paths.local(fileURL);
   let content = (await adapter.openFile(relativePath))?.content as
     | string
     | undefined;

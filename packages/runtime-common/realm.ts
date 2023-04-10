@@ -238,9 +238,8 @@ export class Realm {
   }
 
   async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
-    let url = new URL(request.url);
     let accept = request.headers.get('Accept');
-    let localPath = this.paths.local(url);
+    let localPath = this.paths.local(request.url);
     if (
       accept?.includes('application/vnd.api+json') ||
       accept?.includes('text/event-stream')
@@ -347,7 +346,7 @@ export class Realm {
 
   private async upsertCardSource(request: Request): Promise<Response> {
     let { lastModified } = await this.write(
-      this.paths.local(new URL(request.url)),
+      this.paths.local(request.url),
       await request.text()
     );
     return createResponse(null, {
@@ -359,7 +358,7 @@ export class Realm {
   private async getCardSourceOrRedirect(
     request: Request
   ): Promise<ResponseWithNodeStream> {
-    let localName = this.paths.local(new URL(request.url));
+    let localName = this.paths.local(request.url);
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
       return notFound(request, `${localName} not found`);
@@ -375,7 +374,7 @@ export class Realm {
   }
 
   private async removeCardSource(request: Request): Promise<Response> {
-    let localName = this.paths.local(new URL(request.url));
+    let localName = this.paths.local(request.url);
     let handle = await this.getFileWithFallbacks(localName);
     if (!handle) {
       return notFound(request, `${localName} not found`);
@@ -524,10 +523,7 @@ export class Realm {
   }
 
   private async patchCard(request: Request): Promise<Response> {
-    // strip off query params
-    let localPath = this.paths.local(
-      new URL(new URL(request.url).pathname, request.url)
-    );
+    let localPath = this.paths.local(request.url);
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request);
     }
@@ -596,10 +592,7 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
-    // strip off query params
-    let localPath = this.paths.local(
-      new URL(new URL(request.url).pathname, request.url)
-    );
+    let localPath = this.paths.local(request.url);
     let url = this.paths.fileURL(localPath);
     let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
@@ -661,7 +654,7 @@ export class Realm {
 
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
-    let localPath: LocalPath = this.paths.local(new URL(request.url));
+    let localPath: LocalPath = this.paths.local(request.url);
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
     if (!entries) {

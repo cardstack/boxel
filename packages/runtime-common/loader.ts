@@ -358,7 +358,11 @@ export class Loader {
             toPath.directoryURL(sourcePath.local(absoluteURL))
           );
         } else {
-          return makeResolvedURL(toPath.fileURL(sourcePath.local(absoluteURL)));
+          return makeResolvedURL(
+            toPath.fileURL(
+              sourcePath.local(absoluteURL, { preserveQuerystring: true })
+            )
+          );
         }
       }
     }
@@ -377,7 +381,9 @@ export class Loader {
         if (absoluteURL.href.endsWith('/')) {
           return sourcePath.directoryURL(destinationPath.local(absoluteURL));
         } else {
-          return sourcePath.fileURL(destinationPath.local(absoluteURL));
+          return sourcePath.fileURL(
+            destinationPath.local(absoluteURL, { preserveQuerystring: true })
+          );
         }
       }
     }

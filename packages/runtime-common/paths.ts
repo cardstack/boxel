@@ -1,3 +1,6 @@
+interface LocalOptions {
+  preserveQuerystring?: boolean;
+}
 export class RealmPaths {
   readonly url: string;
 
@@ -9,10 +12,20 @@ export class RealmPaths {
       ) + '/';
   }
 
-  local(url: URL): LocalPath {
+  local(url: URL | string, opts: LocalOptions = {}): LocalPath {
+    if (typeof url === 'string') {
+      url = new URL(url);
+    }
+
     if (!url.href.startsWith(this.url)) {
       throw new Error(`bug: realm ${this.url} does not contain ${url.href}`);
     }
+
+    if (opts.preserveQuerystring !== true) {
+      // strip query params
+      url = new URL(url.pathname, url);
+    }
+
     // this will always remove a leading slash because our constructor ensures
     // this.#realm has a trailing slash.
     let local = url.href.slice(this.url.length);
