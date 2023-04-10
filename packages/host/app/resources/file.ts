@@ -5,7 +5,8 @@ import { restartableTask, Task, TaskInstance } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-import log from 'loglevel';
+import type LogService from '../services/log';
+import { type Logger } from 'loglevel';
 
 interface Args {
   named: {
@@ -43,14 +44,17 @@ class _FileResource extends Resource<Args> {
   private declare _url: string;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
+  private logger: Logger;
   @tracked content: string | undefined;
   @tracked state: FileResource['state'] = 'ready';
   @tracked lastModified: string | undefined;
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
+  @service declare log: LogService;
 
   constructor(owner: unknown) {
     super(owner);
+    this.logger = this.log.logger('host:resource:file');
     registerDestructor(this, () => {
       if (this.subscription) {
         this.subscription.unsubscribe();
@@ -109,7 +113,7 @@ class _FileResource extends Resource<Args> {
       },
     });
     if (!response.ok) {
-      log.error(
+      this.logger.error(
         `Could not get file ${this.url}, status ${response.status}: ${
           response.statusText
         } - ${await response.text()}`
@@ -148,7 +152,7 @@ class _FileResource extends Resource<Args> {
       let errorMessage = `Could not write file ${this.url}, status ${
         response.status
       }: ${response.statusText} - ${await response.text()}`;
-      log.error(errorMessage);
+      this.logger.error(errorMessage);
       throw new Error(errorMessage);
     }
     if (this.state === 'not-found') {

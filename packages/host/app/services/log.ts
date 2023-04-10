@@ -1,19 +1,10 @@
 import Service from '@ember/service';
-import ENV from '@cardstack/host/config/environment';
-import log from 'loglevel';
+import { logger } from '@cardstack/runtime-common';
 
-log.setDefaultLevel(ENV.logLevel);
-
-let currentRunLog = log.getLogger('host:current-run');
-currentRunLog.setDefaultLevel(ENV.currentRunLogLevel);
-
+// Perhaps it would be easier to just move this function to globalThis...
 export default class LogService extends Service {
-  get log() {
-    return log;
-  }
-
-  get currentRunLog() {
-    return currentRunLog;
+  logger(logName: string) {
+    return logger(logName);
   }
 }
 

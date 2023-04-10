@@ -23,6 +23,7 @@ import {
   isSingleCardDocument,
   baseRealm,
   assetsDir,
+  logger,
   type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -63,7 +64,6 @@ import { Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
-import log from 'loglevel';
 
 export interface FileRef {
   path: LocalPath;
@@ -150,6 +150,7 @@ export class Realm {
   #isLocalRealm = false;
   #useTestingDomain = false;
   #transpileCache = new Map<string, string>();
+  #logger = logger('realm');
   #getIndexHTML: () => Promise<string>;
   readonly paths: RealmPaths;
 
@@ -687,7 +688,7 @@ export class Realm {
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
     if (!entries) {
-      log.warn(`can't find directory ${url.href}`);
+      this.#logger.warn(`can't find directory ${url.href}`);
       return notFound(request);
     }
 
@@ -824,7 +825,9 @@ export class Realm {
     data: Record<string, any>;
     id?: string;
   }): Promise<void> {
-    log.info(`sending updates to ${this.listeningClients.length} clients`);
+    this.#logger.info(
+      `sending updates to ${this.listeningClients.length} clients`
+    );
     let { type, data, id } = message;
     let chunkArr = [];
     for (let item in data) {

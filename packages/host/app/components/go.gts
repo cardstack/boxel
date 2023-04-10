@@ -26,9 +26,9 @@ import monacoModifier from '../modifiers/monaco';
 import type * as monaco from 'monaco-editor';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import InLocalRealm from './in-local-realm';
-import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
+import type LogService from '../services/log';
 
 const { ownRealmURL, isLocalRealm } = ENV;
 
@@ -115,6 +115,7 @@ export default class Go extends Component<Signature> {
 
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare log: LogService;
   @tracked jsonError: string | undefined;
   @tracked card: Card | undefined;
 
@@ -151,9 +152,11 @@ export default class Go extends Component<Signature> {
     try {
       return JSON.parse(content);
     } catch (err) {
-      log.warn(
-        `content for ${this.args.path} is not valid JSON, skipping write`
-      );
+      this.log
+        .logger('host:component:go')
+        .warn(
+          `content for ${this.args.path} is not valid JSON, skipping write`
+        );
       return;
     }
   }

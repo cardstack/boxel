@@ -2,12 +2,18 @@ import { FetchHandler } from './fetch';
 import { LivenessWatcher } from './liveness';
 import { MessageHandler } from './message-handler';
 import { LocalRealmAdapter } from './local-realm-adapter';
-import { Realm, baseRealm } from '@cardstack/runtime-common';
+import {
+  Realm,
+  baseRealm,
+  makeLogDefinitions,
+  logger,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
-import log from 'loglevel';
 import '@cardstack/runtime-common/externals-global';
 
+(globalThis as any)._logDefinitions = makeLogDefinitions('*=info'); // not really sure of a good place to configure this...
+let log = logger('service-worker:main');
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
 const livenessWatcher = new LivenessWatcher(worker);

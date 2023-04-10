@@ -24,6 +24,7 @@ module.exports = function (environment) {
     'ember-cli-mirage': {
       enabled: false,
     },
+    logLevel: process.env.LOG_LEVEL || '*=info,current-run=error',
 
     // the fields below may be rewritten by the realm server
     ownRealmURL:
@@ -42,8 +43,6 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
-    ENV.logLevel = 'debug';
-    ENV.currentRunLogLevel = 'error';
   }
 
   if (environment === 'test') {
@@ -60,8 +59,7 @@ module.exports = function (environment) {
 
   if (environment === 'production') {
     // here you can enable a production-specific feature
-    ENV.logLevel = 'warn';
-    ENV.currentRunLogLevel = 'info';
+    ENV.logLevel = '*=warn,current-run=error';
   }
 
   return ENV;

@@ -49,9 +49,8 @@ import {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { type RenderCard } from '../services/render-service';
-import log from 'loglevel';
-
-let currentRunLog = log.getLogger('host:current-run');
+import type LogService from '../services/log';
+import { type Logger } from 'loglevel';
 
 type TypesWithErrors =
   | { type: 'types'; types: string[] }
@@ -68,6 +67,7 @@ export class CurrentRun {
   #ignoreMap: URLMap<Ignore>;
   #ignoreMapContents: URLMap<string>;
   #loader: Loader;
+  #logger: Logger;
   #entrySetter: EntrySetter;
   #renderCard: RenderCard;
   #realmURL: URL;
@@ -87,6 +87,7 @@ export class CurrentRun {
     loader,
     entrySetter,
     renderCard,
+    logService,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -95,6 +96,7 @@ export class CurrentRun {
     ignoreMap?: URLMap<Ignore>;
     ignoreMapContents?: URLMap<string>;
     loader: Loader;
+    logService: LogService;
     entrySetter: EntrySetter;
     renderCard: RenderCard;
   }) {
@@ -108,6 +110,7 @@ export class CurrentRun {
     this.#loader = loader;
     this.#entrySetter = entrySetter;
     this.#renderCard = renderCard;
+    this.#logger = logService.logger('host:current-run');
   }
 
   static async fromScratch(current: CurrentRun) {
@@ -125,6 +128,7 @@ export class CurrentRun {
     loader,
     entrySetter,
     renderCard,
+    logService,
   }: {
     url: URL;
     operation: 'update' | 'delete';
@@ -133,6 +137,7 @@ export class CurrentRun {
     loader: Loader;
     entrySetter: EntrySetter;
     renderCard: RenderCard;
+    logService: LogService;
   }) {
     (globalThis as any).__currentRunLoader = loader;
     let instances = new URLMap(prev.instances);
@@ -159,6 +164,7 @@ export class CurrentRun {
       loader,
       entrySetter,
       renderCard,
+      logService,
     });
 
     if (operation === 'update') {
@@ -271,7 +277,7 @@ export class CurrentRun {
       module = await this.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
-      currentRunLog.warn(
+      this.#logger.warn(
         `encountered error loading module "${url.href}": ${err.message}`
       );
       let deps = await (
@@ -410,7 +416,7 @@ export class CurrentRun {
         deferred.reject(err);
         throw err;
       }
-      currentRunLog.warn(
+      this.#logger.warn(
         `encountered error indexing card instance ${path}: ${error.error.detail}`
       );
       this.setInstance(instanceURL, error);

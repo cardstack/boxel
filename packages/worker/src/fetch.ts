@@ -1,7 +1,6 @@
-import { Realm } from '@cardstack/runtime-common';
+import { Realm, logger } from '@cardstack/runtime-common';
 import { createResponse } from '@cardstack/runtime-common/create-response';
 import { Loader } from '@cardstack/runtime-common/loader';
-import log from 'loglevel';
 
 export class FetchHandler {
   private realm: Realm | undefined;
@@ -31,7 +30,7 @@ export class FetchHandler {
     }
 
     if (!this.realm) {
-      log.warn(`No realm is currently available`);
+      logger('service-worker:fetch').warn(`No realm is currently available`);
     } else if (this.realm.paths.inRealm(new URL(request.url))) {
       if (new URL(request.url).pathname === '/tests') {
         // allow tests requests to go back to the ember-cli server
@@ -82,7 +81,9 @@ export class FetchHandler {
       await this.realm.searchIndex.run();
     }
 
-    log.warn(`Caches dropped and search index rebuilt`);
+    logger('service-worker:fetch').warn(
+      `Caches dropped and search index rebuilt`
+    );
     return new Response(`Caches dropped!`, {
       headers: {
         'content-type': 'text/html',

@@ -19,7 +19,8 @@ import {
   type SearchEntryWithErrors,
   type RunState,
 } from '@cardstack/runtime-common/search-index';
-import log from 'loglevel';
+import type LogService from '../services/log';
+import { type Logger } from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
 const { isLocalRealm, ownRealmURL, realmsServed = [] } = ENV;
@@ -37,6 +38,7 @@ export default class LocalRealm extends Service {
 
   constructor(properties: object) {
     super(properties);
+    this.logger = this.log.logger('host:service:local-realm');
     if (!this.fastboot.isFastBoot && isLocalRealm) {
       let handler = (event: MessageEvent) => this.handleMessage(event);
       navigator.serviceWorker.addEventListener('message', handler);
@@ -111,7 +113,7 @@ export default class LocalRealm extends Service {
           return;
         }
     }
-    log.error(`did not handle worker message`, data);
+    this.logger.error(`did not handle worker message`, data);
   }
 
   setupIndexing(
@@ -194,6 +196,8 @@ export default class LocalRealm extends Service {
   @service declare router: RouterService;
   @service declare fastboot: { isFastBoot: boolean };
   @service declare renderService: RenderService;
+  @service declare log: LogService;
+  private logger: Logger;
 
   async setEntry(url: URL, entry: SearchEntryWithErrors) {
     if (this.state.type !== 'available') {
@@ -331,7 +335,7 @@ export default class LocalRealm extends Service {
       await timeout(10);
     }
     navigator.serviceWorker.oncontrollerchange = () => {
-      log.info('worker changed');
+      this.logger.info('worker changed');
       if ('worker' in this.state) {
         this.router.transitionTo('index', {
           queryParams: { path: undefined },

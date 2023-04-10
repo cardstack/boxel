@@ -1,5 +1,4 @@
 export default config;
-import { LogLevelNames } from 'loglevel';
 
 /**
  * Type declarations for
@@ -17,6 +16,5 @@ declare const config: {
   resolvedBaseRealmURL: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
-  logLevel: LogLevelNames;
-  currentRunLogLevel: LogLevelNames;
+  logLevels: string;
 };

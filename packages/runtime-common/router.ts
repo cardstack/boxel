@@ -4,8 +4,8 @@ import {
   CardError,
   responseWithError,
 } from './error';
+import { logger } from './index';
 import { RealmPaths } from './paths';
-import log from 'loglevel';
 
 type Handler = (request: Request) => Promise<Response>;
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -19,6 +19,7 @@ function isHTTPMethod(method: any): method is Method {
 
 export class Router {
   #routeTable = new Map<Method, Map<string, Handler>>();
+  #logger = logger('realm:router');
   #paths: RealmPaths;
   constructor(mountURL: URL) {
     this.#paths = new RealmPaths(mountURL);
@@ -78,7 +79,7 @@ export class Router {
           if (err instanceof CardError) {
             return responseWithError(err);
           }
-          log.error(err);
+          this.#logger.error(err);
           return new Response(`unexpected exception in realm ${err}`, {
             status: 500,
           });
