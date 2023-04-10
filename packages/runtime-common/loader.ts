@@ -462,7 +462,13 @@ export class Loader {
       // in the event of a cycle, we have already evaluated the
       // define() since we recurse into our deps after the evaluation of the
       // define, so just return ourselves
-      if (stack.includes(moduleIdentifier)) {
+      if (
+        stack.includes(
+          isUrlLike(moduleIdentifier)
+            ? trimExecutableExtension(new URL(moduleIdentifier)).href
+            : moduleIdentifier
+        )
+      ) {
         return module;
       }
       // this closes an otherwise leaky async when there are simultaneous
@@ -563,7 +569,12 @@ export class Loader {
         if (depId !== 'exports' && depId !== '__import_meta__') {
           return await this.fetchModule(
             isUrlLike(depId) ? makeResolvedURL(depId) : depId,
-            [...stack, moduleIdentifier]
+            [
+              ...stack,
+              isUrlLike(moduleIdentifier)
+                ? trimExecutableExtension(new URL(moduleIdentifier)).href
+                : moduleIdentifier,
+            ]
           );
         }
         return undefined;
