@@ -47,7 +47,11 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   ctxt.res.on('finish', () => {
-    logger.info(`${ctxt.method} ${fullRequestURL(ctxt).href}: ${ctxt.status}`);
+    logger.info(
+      `${ctxt.method} ${ctxt.req.headers.accept} ${
+        fullRequestURL(ctxt).href
+      }: ${ctxt.status}`
+    );
     logger.debug(JSON.stringify(ctxt.req.headers));
   });
   return next();
