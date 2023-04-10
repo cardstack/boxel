@@ -24,7 +24,7 @@ module.exports = function (environment) {
     'ember-cli-mirage': {
       enabled: false,
     },
-    logLevel: process.env.LOG_LEVEL || '*=info,current-run=error',
+    logLevels: process.env.LOG_LEVELS || '*=info,current-run=error',
 
     // the fields below may be rewritten by the realm server
     ownRealmURL:
@@ -59,7 +59,7 @@ module.exports = function (environment) {
 
   if (environment === 'production') {
     // here you can enable a production-specific feature
-    ENV.logLevel = '*=warn,current-run=error';
+    ENV.logLevels = '*=warn,current-run=error';
   }
 
   return ENV;
