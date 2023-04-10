@@ -29,7 +29,6 @@ import {
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
-import qs from 'qs';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   fileContentToText,
@@ -241,12 +240,6 @@ export class Realm {
   async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
     let accept = request.headers.get('Accept');
-    if (url.search.length > 0) {
-      let { acceptHeader } = qs.parse(url.search, { ignoreQueryPrefix: true });
-      if (acceptHeader && typeof acceptHeader === 'string') {
-        accept = acceptHeader;
-      }
-    }
     let localPath = this.paths.local(url);
     if (
       accept?.includes('application/vnd.api+json') ||

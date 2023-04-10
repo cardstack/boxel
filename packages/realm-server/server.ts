@@ -15,6 +15,7 @@ import {
   rootRealmRedirect,
   fullRequestURL,
 } from './middleware';
+import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
 import { monacoMiddleware } from './middleware/monaco';
 import '@cardstack/runtime-common/externals-global';
 import log from 'loglevel';
@@ -71,6 +72,7 @@ export class RealmServer {
           responseHeaders: { 'Service-Worker-Allowed': '/' },
         })
       )
+      .use(convertAcceptHeaderQueryParam)
       .use(rootRealmRedirect(this.realms))
       .use(router.routes())
       .use(this.serveFromRealm);
