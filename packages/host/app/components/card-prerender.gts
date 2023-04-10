@@ -3,6 +3,7 @@ import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
 import { service } from '@ember/service';
 import { CurrentRun } from '../lib/current-run';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
+import { getModulesInRealm } from '../lib/utils';
 import { hasExecutableExtension, baseRealm } from '@cardstack/runtime-common';
 import {
   type EntrySetter,
@@ -79,14 +80,13 @@ export default class CardPrerender extends Component {
   }
 
   private warmUpModuleCache = dropTask(async () => {
-    await this.loaderService.loader.import(`${baseRealm.url}card-api`);
-    await this.loaderService.loader.import(`${baseRealm.url}catalog-entry`);
-    await this.loaderService.loader.import(`${baseRealm.url}card-ref`);
-    await this.loaderService.loader.import(`${baseRealm.url}boolean`);
-    await this.loaderService.loader.import(`${baseRealm.url}date`);
-    await this.loaderService.loader.import(`${baseRealm.url}datetime`);
-    await this.loaderService.loader.import(`${baseRealm.url}integer`);
-    await this.loaderService.loader.import(`${baseRealm.url}string`);
+    let baseRealmModules = await getModulesInRealm(
+      this.loaderService.loader,
+      baseRealm.url
+    );
+    for (let module of baseRealmModules) {
+      await this.loaderService.loader.import(module);
+    }
   });
 
   private doRegistration = enqueueTask(async () => {
