@@ -1,63 +1,122 @@
-import {
-  methodNotAllowed,
-  notFound,
-  CardError,
-  responseWithError,
-} from './error';
+import { notFound, CardError, responseWithError } from './error';
 import { logger } from './index';
 import { RealmPaths } from './paths';
 
 type Handler = (request: Request) => Promise<Response>;
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+export enum SupportedMimeType {
+  CardJsonMimeType = 'application/vnd.card+json',
+  CardSourceMimeType = 'application/vnd.card+source',
+  DirectoryListingMimeType = 'application/vnd.api+json',
+  EventStreamMimeType = 'text/event-stream',
+  HTMLMimeType = 'text/html',
+}
 
-function isHTTPMethod(method: any): method is Method {
+function isHTTPMethod(method: unknown): method is Method {
   if (typeof method !== 'string') {
     return false;
   }
   return ['GET', 'POST', 'PATCH', 'DELETE'].includes(method);
 }
 
+function extractSupportedMimeType(
+  rawAcceptHeader: null | string | [string]
+): SupportedMimeType | undefined {
+  if (!rawAcceptHeader) {
+    return undefined;
+  }
+  let acceptMimeTypes = Array.isArray(rawAcceptHeader)
+    ? rawAcceptHeader
+    : rawAcceptHeader.split(/,\s*/);
+  let supportedMimeTypes = Object.values(SupportedMimeType);
+  for (const candidateMimeType of acceptMimeTypes) {
+    if (supportedMimeTypes.includes(candidateMimeType as SupportedMimeType)) {
+      return candidateMimeType as SupportedMimeType;
+    }
+  }
+  return undefined;
+}
+
 export class Router {
-  #routeTable = new Map<Method, Map<string, Handler>>();
+  #routeTable = new Map<SupportedMimeType, Map<Method, Map<string, Handler>>>();
   log = logger('realm:router');
   #paths: RealmPaths;
   constructor(mountURL: URL) {
     this.#paths = new RealmPaths(mountURL);
   }
 
-  get(path: string, handler: Handler): Router {
-    this.setRoute('GET', path, handler);
+  get(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
+    this.setRoute(mimeType, 'GET', path, handler);
     return this;
   }
-  post(path: string, handler: Handler): Router {
-    this.setRoute('POST', path, handler);
+  post(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
+    this.setRoute(mimeType, 'POST', path, handler);
     return this;
   }
-  patch(path: string, handler: Handler): Router {
-    this.setRoute('PATCH', path, handler);
+  patch(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
+    this.setRoute(mimeType, 'PATCH', path, handler);
     return this;
   }
-  delete(path: string, handler: Handler): Router {
-    this.setRoute('DELETE', path, handler);
+  delete(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
+    this.setRoute(mimeType, 'DELETE', path, handler);
     return this;
   }
 
-  private setRoute(method: Method, path: string, handler: Handler) {
-    let routes = this.#routeTable.get(method);
+  private setRoute(
+    mimeType: SupportedMimeType,
+    method: Method,
+    path: string,
+    handler: Handler
+  ) {
+    let routeFamily = this.#routeTable.get(mimeType);
+    if (!routeFamily) {
+      routeFamily = new Map();
+      this.#routeTable.set(mimeType, routeFamily);
+    }
+    let routes = routeFamily.get(method);
     if (!routes) {
       routes = new Map();
-      this.#routeTable.set(method, routes);
+      routeFamily.set(method, routes);
     }
     routes.set(path, handler);
   }
 
+  handles(request: Request): boolean {
+    return !!this.lookupHandler(request);
+  }
+
   async handle(request: Request): Promise<Response> {
-    if (!isHTTPMethod(request.method)) {
-      return methodNotAllowed(request);
-    }
-    let routes = this.#routeTable.get(request.method);
-    if (!routes) {
+    let handler = this.lookupHandler(request);
+    if (!handler) {
       return notFound(request);
+    }
+    try {
+      return await handler(request);
+    } catch (err) {
+      if (err instanceof CardError) {
+        return responseWithError(err);
+      }
+      this.log.error(err);
+      return new Response(`unexpected exception in realm ${err}`, {
+        status: 500,
+      });
+    }
+  }
+
+  private lookupHandler(request: Request): Handler | undefined {
+    let acceptMimeType = extractSupportedMimeType(
+      request.headers.get('Accept') as unknown as null | string | [string]
+    );
+    if (!acceptMimeType) {
+      return;
+    }
+    if (!isHTTPMethod(request.method)) {
+      return;
+    }
+    let routeTable = this.#routeTable;
+    let routes = routeTable.get(acceptMimeType)?.get(request.method);
+    if (!routes) {
+      return;
     }
 
     // we construct a new URL within RealmPath.local() param that strips off the query string
@@ -72,19 +131,9 @@ export class Router {
       // to make it more readable in our config
       let routeRegExp = new RegExp(`^${route.replace('/', '\\/')}$`);
       if (routeRegExp.test(requestPath)) {
-        try {
-          return await handler(request);
-        } catch (err) {
-          if (err instanceof CardError) {
-            return responseWithError(err);
-          }
-          this.log.error(err);
-          return new Response(`unexpected exception in realm ${err}`, {
-            status: 500,
-          });
-        }
+        return handler;
       }
     }
-    return notFound(request);
+    return;
   }
 }

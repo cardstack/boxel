@@ -7,8 +7,7 @@ import { service } from '@ember/service';
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
 import {
-  cardJsonMimeType,
-  cardSourceMimeType,
+  SupportedMimeType,
   isCardDocument,
   isSingleCardDocument,
   logger,
@@ -235,8 +234,8 @@ export default class Go extends Component<Signature> {
 
   private remove = restartableTask(async (url: string) => {
     let headersAccept = this.openFileCardJSON
-      ? cardJsonMimeType
-      : cardSourceMimeType;
+      ? SupportedMimeType.CardJsonMimeType
+      : SupportedMimeType.CardSourceMimeType;
     url = this.openFileCardJSON ? url.replace(/\.json$/, '') : url;
     let response = await this.loaderService.loader.fetch(url, {
       method: 'DELETE',

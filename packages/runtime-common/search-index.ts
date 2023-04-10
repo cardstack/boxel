@@ -1,6 +1,6 @@
 import {
   baseRealm,
-  cardJsonMimeType,
+  SupportedMimeType,
   internalKeyFor,
   maxLinkDepth,
   type LooseCardResource,
@@ -691,7 +691,7 @@ export async function loadLinks({
         maybeEntry?.type === 'entry' ? maybeEntry.entry.resource : undefined;
     } else {
       let response = await loader.fetch(linkURL, {
-        headers: { Accept: cardJsonMimeType },
+        headers: { Accept: SupportedMimeType.CardJsonMimeType },
       });
       if (!response.ok) {
         let cardError = await CardError.fromFetchResponse(

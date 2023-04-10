@@ -56,6 +56,7 @@ export const isNode =
   '[object process]';
 
 export { Realm } from './realm';
+export { SupportedMimeType } from './router';
 export { Loader } from './loader';
 export type {
   Kind,
@@ -93,8 +94,6 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
-export const cardJsonMimeType = 'application/vnd.card+json';
-export const cardSourceMimeType = 'application/vnd.card+source';
 
 export interface CardChooser {
   chooseCard<T extends Card>(

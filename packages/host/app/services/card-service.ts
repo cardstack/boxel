@@ -3,7 +3,7 @@ import { stringify } from 'qs';
 import type LoaderService from './loader-service';
 import type LocalRealm from '../services/local-realm';
 import {
-  cardJsonMimeType,
+  SupportedMimeType,
   type LooseCardResource,
   isSingleCardDocument,
   isCardCollectionDocument,
@@ -53,7 +53,7 @@ export default class CardService extends Service {
     args?: RequestInit
   ): Promise<CardDocument> {
     let response = await this.loaderService.loader.fetch(url, {
-      headers: { Accept: cardJsonMimeType },
+      headers: { Accept: SupportedMimeType.CardJsonMimeType },
       ...args,
     });
     if (!response.ok) {
