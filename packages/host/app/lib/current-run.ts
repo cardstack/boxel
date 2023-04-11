@@ -111,9 +111,12 @@ export class CurrentRun {
   }
 
   static async fromScratch(current: CurrentRun) {
+    let start = Date.now();
+    log.debug(`starting from scratch indexing`);
     (globalThis as any).__currentRunLoader = current.#loader;
     await current.visitDirectory(current.#realmURL);
     (globalThis as any).__currentRunLoader = undefined;
+    log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
     return current;
   }
 
@@ -134,6 +137,8 @@ export class CurrentRun {
     entrySetter: EntrySetter;
     renderCard: RenderCard;
   }) {
+    let start = Date.now();
+    log.debug(`starting from incremental indexing for ${url.href}`);
     (globalThis as any).__currentRunLoader = loader;
     let instances = new URLMap(prev.instances);
     let ignoreMap = new URLMap(prev.ignoreMap);
@@ -168,6 +173,11 @@ export class CurrentRun {
       await current.visitFile(invalidation);
     }
     (globalThis as any).__currentRunLoader = undefined;
+    log.debug(
+      `completed incremental indexing for ${url.href} in ${
+        Date.now() - start
+      }ms`
+    );
     return current;
   }
 
@@ -227,42 +237,44 @@ export class CurrentRun {
     if (isIgnored(this.#realmURL, this.#ignoreMap, url)) {
       return;
     }
-
+    let start = Date.now();
+    log.debug(`begin visiting file ${url.href}`);
     if (
       hasExecutableExtension(url.href) ||
       // handle modules with no extension too
       !url.href.split('/').pop()!.includes('.')
     ) {
-      return await this.indexCardSource(url);
-    }
-
-    let localPath = this.#realmPaths.local(url);
-    let fileRef = await this.#reader.readFileAsText(localPath);
-    if (!fileRef) {
-      let error = new CardError(`missing file ${url.href}`, { status: 404 });
-      error.deps = [url.href];
-      throw error;
-    }
-    if (!identityContext) {
-      let api = await this.#loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`
-      );
-      let { IdentityContext } = api;
-      identityContext = new IdentityContext();
-    }
-
-    let { content, lastModified } = fileRef;
-    if (url.href.endsWith('.json')) {
-      let { data: resource } = JSON.parse(content);
-      if (isCardResource(resource)) {
-        await this.indexCard(
-          localPath,
-          lastModified,
-          resource,
-          identityContext
+      await this.indexCardSource(url);
+    } else {
+      let localPath = this.#realmPaths.local(url);
+      let fileRef = await this.#reader.readFileAsText(localPath);
+      if (!fileRef) {
+        let error = new CardError(`missing file ${url.href}`, { status: 404 });
+        error.deps = [url.href];
+        throw error;
+      }
+      if (!identityContext) {
+        let api = await this.#loader.import<typeof CardAPI>(
+          `${baseRealm.url}card-api`
         );
+        let { IdentityContext } = api;
+        identityContext = new IdentityContext();
+      }
+
+      let { content, lastModified } = fileRef;
+      if (url.href.endsWith('.json')) {
+        let { data: resource } = JSON.parse(content);
+        if (isCardResource(resource)) {
+          await this.indexCard(
+            localPath,
+            lastModified,
+            resource,
+            identityContext
+          );
+        }
       }
     }
+    log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
   }
 
   private async indexCardSource(url: URL): Promise<void> {
