@@ -298,8 +298,10 @@ export class SearchIndex {
   }
 
   public isIgnored(url: URL): boolean {
-    // this may be called before search index is ready in order to warm up
-    // transpilation cache, in which case we should provide a default ignore
+    // TODO this may be called before search index is ready in which case we
+    // should provide a default ignore list. But really we should decouple the
+    // realm's consumption of this from the search index so that the realm can
+    // figure out what files are ignored before indexing has happened.
     if (
       ['node_modules'].includes(url.href.replace(/\/$/, '').split('/').pop()!)
     ) {

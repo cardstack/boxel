@@ -82,7 +82,7 @@ export interface MaybeLocalRequest extends Request {
 const sharedModules = new Map<string, Module>();
 
 export class Loader {
-  private logger = logger('loader');
+  private log = logger('loader');
   private modules = new Map<string, Module>();
   private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
   // use a tuple array instead of a map so that we can support reversing
@@ -230,7 +230,7 @@ export class Loader {
           }
         }
       } catch (err: any) {
-        this.logger.warn(
+        this.log.warn(
           `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`
         );
       }
@@ -503,7 +503,7 @@ export class Loader {
       });
       throw exception;
     }
-    this.logger.debug(
+    this.log.debug(
       `loader cache miss for ${moduleURL.href}, fetching this module...`
     );
     module = {
@@ -600,7 +600,7 @@ export class Loader {
     this.setModule(moduleIdentifier, registeredModule);
     module.deferred.fulfill(registeredModule);
     if (stack.length === 0) {
-      this.logger.debug(
+      this.log.debug(
         `loader fetch for ${moduleURL} (including deps) took ${
           Date.now() - start
         }ms`
@@ -679,7 +679,7 @@ export class Loader {
     try {
       response = await this.fetch(moduleURL);
     } catch (err) {
-      this.logger.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
+      this.log.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a
       // "broken" state, since the server hosting the module is likely down. it
       // might be a good idea to be able to try again in this case...

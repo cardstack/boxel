@@ -19,7 +19,7 @@ function isHTTPMethod(method: any): method is Method {
 
 export class Router {
   #routeTable = new Map<Method, Map<string, Handler>>();
-  #logger = logger('realm:router');
+  log = logger('realm:router');
   #paths: RealmPaths;
   constructor(mountURL: URL) {
     this.#paths = new RealmPaths(mountURL);
@@ -79,7 +79,7 @@ export class Router {
           if (err instanceof CardError) {
             return responseWithError(err);
           }
-          this.#logger.error(err);
+          this.log.error(err);
           return new Response(`unexpected exception in realm ${err}`, {
             status: 500,
           });

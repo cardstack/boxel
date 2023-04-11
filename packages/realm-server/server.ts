@@ -33,7 +33,7 @@ interface Options {
 export class RealmServer {
   private hostLocalRealm = false;
   private assetsURL: URL;
-  private logger = logger('realm:requests');
+  private log = logger('realm:requests');
 
   constructor(private realms: Realm[], opts?: Options) {
     detectRealmCollision(realms);
@@ -84,7 +84,7 @@ export class RealmServer {
 
   listen(port: number) {
     let instance = this.app.listen(port);
-    this.logger.info(`Realm server listening on port %s\n`, port);
+    this.log.info(`Realm server listening on port %s\n`, port);
     return instance;
   }
 
@@ -114,7 +114,7 @@ export class RealmServer {
     let reversedResolution = Loader.reverseResolution(
       fullRequestURL(ctxt).href
     );
-    this.logger.debug(
+    this.log.debug(
       `Looking for realm to handle request with full URL: ${
         fullRequestURL(ctxt).href
       } (reversed: ${reversedResolution.href})`
@@ -122,7 +122,7 @@ export class RealmServer {
 
     let realm = this.realms.find((r) => {
       let inRealm = r.paths.inRealm(reversedResolution);
-      this.logger.debug(
+      this.log.debug(
         `${reversedResolution} in realm ${JSON.stringify({
           url: r.url,
           paths: r.paths,

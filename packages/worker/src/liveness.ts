@@ -1,10 +1,11 @@
 import { logger } from '@cardstack/runtime-common';
 import { timeout } from './util';
 
+const log = logger('worker:liveness');
+
 export class LivenessWatcher {
   private isAlive = true;
   private listeners: (() => Promise<void>)[] = [];
-  private logger = logger('service-worker:liveness');
 
   constructor(private worker: ServiceWorkerGlobalScope) {
     this.watch();
@@ -33,7 +34,7 @@ export class LivenessWatcher {
       try {
         this.isAlive = await this.backendIsOurs();
       } catch (err) {
-        this.logger.error(
+        log.error(
           `Encountered error performing aliveness check (server is probably not running):`,
           err
         );
@@ -41,7 +42,7 @@ export class LivenessWatcher {
       if (this.isAlive) {
         await timeout(10 * 1000);
       } else {
-        this.logger.error('shutting down service worker.');
+        log.error('shutting down service worker.');
         await Promise.all([
           this.worker.registration.unregister(),
           ...this.listeners.map((l) => l()),

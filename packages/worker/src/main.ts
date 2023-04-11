@@ -8,7 +8,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import '@cardstack/runtime-common/externals-global';
 
-let log = logger('service-worker:main');
+let log = logger('worker:main');
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
 const livenessWatcher = new LivenessWatcher(worker);
