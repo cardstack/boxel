@@ -181,55 +181,55 @@ export class Realm {
     );
 
     this.#router = new Router(new URL(url))
-      .post('/', SupportedMimeType.CardJsonMimeType, this.createCard.bind(this))
+      .post('/', SupportedMimeType.CardJson, this.createCard.bind(this))
       .patch(
         '/.+(?<!.json)',
-        SupportedMimeType.CardJsonMimeType,
+        SupportedMimeType.CardJson,
         this.patchCard.bind(this)
       )
       .get(
         '/_search',
-        SupportedMimeType.CardJsonMimeType,
+        SupportedMimeType.CardJson,
         this.search.bind(this)
       )
       .get(
         '/.+(?<!.json)',
-        SupportedMimeType.CardJsonMimeType,
+        SupportedMimeType.CardJson,
         this.getCard.bind(this)
       )
       .delete(
         '/.+(?<!.json)',
-        SupportedMimeType.CardJsonMimeType,
+        SupportedMimeType.CardJson,
         this.removeCard.bind(this)
       )
       .post(
         `/.+(${executableExtensions.map((e) => '\\' + e).join('|')})`,
-        SupportedMimeType.CardSourceMimeType,
+        SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this)
       )
       .get(
         '/.+',
-        SupportedMimeType.CardSourceMimeType,
+        SupportedMimeType.CardSource,
         this.getCardSourceOrRedirect.bind(this)
       )
       .delete(
         '/.+',
-        SupportedMimeType.CardSourceMimeType,
+        SupportedMimeType.CardSource,
         this.removeCardSource.bind(this)
       )
       .get(
         '/_message',
-        SupportedMimeType.EventStreamMimeType,
+        SupportedMimeType.EventStream,
         this.subscribe.bind(this)
       )
       .get(
         '.*/',
-        SupportedMimeType.DirectoryListingMimeType,
+        SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this)
       )
       .get(
         '/.*',
-        SupportedMimeType.HTMLMimeType,
+        SupportedMimeType.HTML,
         this.respondWithHTML.bind(this)
       );
 
@@ -585,7 +585,7 @@ export class Realm {
     return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
-        'content-type': SupportedMimeType.CardJsonMimeType,
+        'content-type': SupportedMimeType.CardJson,
         ...lastModifiedHeader(doc),
       },
     });
@@ -654,7 +654,7 @@ export class Realm {
     });
     return createResponse(JSON.stringify(doc, null, 2), {
       headers: {
-        'content-type': SupportedMimeType.CardJsonMimeType,
+        'content-type': SupportedMimeType.CardJson,
         ...lastModifiedHeader(doc),
       },
     });
@@ -678,7 +678,7 @@ export class Realm {
     return createResponse(JSON.stringify(card, null, 2), {
       headers: {
         'last-modified': formatRFC7231(card.data.meta.lastModified!),
-        'content-type': SupportedMimeType.CardJsonMimeType,
+        'content-type': SupportedMimeType.CardJson,
         ...lastModifiedHeader(card),
       },
     });
@@ -780,7 +780,7 @@ export class Realm {
     }
 
     return createResponse(JSON.stringify({ data }, null, 2), {
-      headers: { 'content-type': SupportedMimeType.DirectoryListingMimeType },
+      headers: { 'content-type': SupportedMimeType.DirectoryListing },
     });
   }
 
@@ -805,7 +805,7 @@ export class Realm {
       { loadLinks: true }
     );
     return createResponse(JSON.stringify(doc, null, 2), {
-      headers: { 'content-type': SupportedMimeType.CardJsonMimeType },
+      headers: { 'content-type': SupportedMimeType.CardJson },
     });
   }
 

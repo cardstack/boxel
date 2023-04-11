@@ -83,7 +83,7 @@ export class DirectoryResource extends Resource<Args> {
   private async getEntries(url: string): Promise<Entry[]> {
     let response: Response | undefined;
     response = await this.loaderService.loader.fetch(url, {
-      headers: { Accept: SupportedMimeType.DirectoryListingMimeType },
+      headers: { Accept: SupportedMimeType.DirectoryListing },
     });
     if (!response.ok) {
       // the server takes a moment to become ready do be tolerant of errors at boot

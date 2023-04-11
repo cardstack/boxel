@@ -5,11 +5,11 @@ import { RealmPaths } from './paths';
 type Handler = (request: Request) => Promise<Response>;
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 export enum SupportedMimeType {
-  CardJsonMimeType = 'application/vnd.card+json',
-  CardSourceMimeType = 'application/vnd.card+source',
-  DirectoryListingMimeType = 'application/vnd.api+json',
-  EventStreamMimeType = 'text/event-stream',
-  HTMLMimeType = 'text/html',
+  CardJson = 'application/vnd.card+json',
+  CardSource = 'application/vnd.card+source',
+  DirectoryListing = 'application/vnd.api+json',
+  EventStream = 'text/event-stream',
+  HTML = 'text/html',
 }
 
 function isHTTPMethod(method: unknown): method is Method {

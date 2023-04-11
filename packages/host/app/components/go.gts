@@ -234,8 +234,8 @@ export default class Go extends Component<Signature> {
 
   private remove = restartableTask(async (url: string) => {
     let headersAccept = this.openFileCardJSON
-      ? SupportedMimeType.CardJsonMimeType
-      : SupportedMimeType.CardSourceMimeType;
+      ? SupportedMimeType.CardJson
+      : SupportedMimeType.CardSource;
     url = this.openFileCardJSON ? url.replace(/\.json$/, '') : url;
     let response = await this.loaderService.loader.fetch(url, {
       method: 'DELETE',

@@ -53,7 +53,7 @@ export default class CardService extends Service {
     args?: RequestInit
   ): Promise<CardDocument> {
     let response = await this.loaderService.loader.fetch(url, {
-      headers: { Accept: SupportedMimeType.CardJsonMimeType },
+      headers: { Accept: SupportedMimeType.CardJson },
       ...args,
     });
     if (!response.ok) {
