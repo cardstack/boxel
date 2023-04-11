@@ -5,11 +5,11 @@ import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import type LocalRealm from '../services/local-realm';
 import type CardService from '../services/card-service';
-import { RealmPaths } from '@cardstack/runtime-common';
-import type LogService from '../services/log';
+import { RealmPaths, logger } from '@cardstack/runtime-common';
 import ENV from '@cardstack/host/config/environment';
 
 const { isLocalRealm } = ENV;
+const log = logger('route:code');
 
 interface Model {
   path: string | undefined;
@@ -32,7 +32,6 @@ export default class Index extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare localRealm: LocalRealm;
-  @service declare log: LogService;
   @service declare fastboot: { isFastBoot: boolean };
 
   async model(args: {
@@ -62,11 +61,9 @@ export default class Index extends Route<Model> {
     });
     if (!response.ok) {
       // TODO should we have an error route?
-      this.log
-        .logger('host:route:code')
-        .error(
-          `Could not load ${url}: ${response.status}, ${response.statusText}`
-        );
+      log.error(
+        `Could not load ${url}: ${response.status}, ${response.statusText}`
+      );
       return { path, openFile, openDirs, isFastBoot };
     }
     let responseURL: URL | undefined;

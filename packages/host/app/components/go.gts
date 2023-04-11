@@ -7,6 +7,7 @@ import { service } from '@ember/service';
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
 import {
+  logger,
   isCardDocument,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -28,9 +29,9 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 import InLocalRealm from './in-local-realm';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
-import type LogService from '../services/log';
 
 const { ownRealmURL, isLocalRealm } = ENV;
+const log = logger('component:go');
 
 interface Signature {
   Args: {
@@ -115,7 +116,6 @@ export default class Go extends Component<Signature> {
 
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  @service declare log: LogService;
   @tracked jsonError: string | undefined;
   @tracked card: Card | undefined;
 
@@ -152,11 +152,9 @@ export default class Go extends Component<Signature> {
     try {
       return JSON.parse(content);
     } catch (err) {
-      this.log
-        .logger('host:component:go')
-        .warn(
-          `content for ${this.args.path} is not valid JSON, skipping write`
-        );
+      log.warn(
+        `content for ${this.args.path} is not valid JSON, skipping write`
+      );
       return;
     }
   }

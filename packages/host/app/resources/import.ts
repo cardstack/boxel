@@ -1,18 +1,18 @@
 import { Resource } from 'ember-resources/core';
 import { tracked } from '@glimmer/tracking';
-import { service } from '@ember/service';
 import { task } from 'ember-concurrency';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
+import { logger } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
-import type LogService from '../services/log';
 
 interface Args {
   named: { url: string; loader: Loader };
 }
 
+const log = logger('resource:import');
+
 export class ImportResource extends Resource<Args> {
-  @service declare log: LogService;
   @tracked module: object | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
   #loaded!: Promise<void>; // modifier runs at init so we will always have a value
@@ -46,7 +46,7 @@ ${err}
 
 Check console log for more details`,
         };
-        this.log.logger('host:resource:import').error(err);
+        log.error(err);
       }
     }
   });

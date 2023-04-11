@@ -1,0 +1,3 @@
+import { makeLogDefinitions } from '@cardstack/runtime-common';
+
+(globalThis as any)._logDefinitions = makeLogDefinitions('*=info'); // not really sure of a good place to configure this...

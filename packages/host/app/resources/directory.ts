@@ -2,11 +2,12 @@ import { Resource } from 'ember-resources/core';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
-import type { Relationship } from '@cardstack/runtime-common';
+import { logger, type Relationship } from '@cardstack/runtime-common';
 import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-import type LogService from '../services/log';
+
+const log = logger('resource:directory');
 
 interface Args {
   named: {
@@ -28,7 +29,6 @@ export class DirectoryResource extends Resource<Args> {
 
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
-  @service declare log: LogService;
 
   constructor(owner: unknown) {
     super(owner);
@@ -83,13 +83,11 @@ export class DirectoryResource extends Resource<Args> {
     });
     if (!response.ok) {
       // the server takes a moment to become ready do be tolerant of errors at boot
-      this.log
-        .logger('host:resource:directory')
-        .error(
-          `Could not get directory listing ${url}, status ${response.status}: ${
-            response.statusText
-          } - ${await response.text()}`
-        );
+      log.error(
+        `Could not get directory listing ${url}, status ${response.status}: ${
+          response.statusText
+        } - ${await response.text()}`
+      );
       return [];
     }
 

@@ -9,7 +9,7 @@ import {
   send,
 } from '@cardstack/worker/src/messages';
 import { timeout } from '@cardstack/worker/src/util';
-import { Deferred } from '@cardstack/runtime-common';
+import { Deferred, logger } from '@cardstack/runtime-common';
 import { TaskInstance } from 'ember-resources';
 import RenderService from './render-service';
 import type RouterService from '@ember/routing/router-service';
@@ -19,11 +19,10 @@ import {
   type SearchEntryWithErrors,
   type RunState,
 } from '@cardstack/runtime-common/search-index';
-import type LogService from '../services/log';
-import { type Logger } from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
 const { isLocalRealm, ownRealmURL, realmsServed = [] } = ENV;
+const log = logger('service:local-realm');
 
 export default class LocalRealm extends Service {
   #setEntryDeferred: Deferred<void> | undefined;
@@ -38,7 +37,6 @@ export default class LocalRealm extends Service {
 
   constructor(properties: object) {
     super(properties);
-    this.logger = this.log.logger('host:service:local-realm');
     if (!this.fastboot.isFastBoot && isLocalRealm) {
       let handler = (event: MessageEvent) => this.handleMessage(event);
       navigator.serviceWorker.addEventListener('message', handler);
@@ -113,7 +111,7 @@ export default class LocalRealm extends Service {
           return;
         }
     }
-    this.logger.error(`did not handle worker message`, data);
+    log.error(`did not handle worker message`, data);
   }
 
   setupIndexing(
@@ -196,8 +194,6 @@ export default class LocalRealm extends Service {
   @service declare router: RouterService;
   @service declare fastboot: { isFastBoot: boolean };
   @service declare renderService: RenderService;
-  @service declare log: LogService;
-  private logger: Logger;
 
   async setEntry(url: URL, entry: SearchEntryWithErrors) {
     if (this.state.type !== 'available') {
@@ -335,7 +331,7 @@ export default class LocalRealm extends Service {
       await timeout(10);
     }
     navigator.serviceWorker.oncontrollerchange = () => {
-      this.logger.info('worker changed');
+      log.info('worker changed');
       if ('worker' in this.state) {
         this.router.transitionTo('index', {
           queryParams: { path: undefined },

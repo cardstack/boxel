@@ -15,14 +15,12 @@ import type RenderService from '../services/render-service';
 import type LoaderService from '../services/loader-service';
 import type LocalRealm from '../services/local-realm';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
-import type LogService from '../services/log';
 
 export default class CardPrerender extends Component {
   @service declare loaderService: LoaderService;
   @service declare renderService: RenderService;
   @service declare fastboot: { isFastBoot: boolean };
   @service declare localRealm: LocalRealm;
-  @service declare log: LogService;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -111,7 +109,6 @@ export default class CardPrerender extends Component {
         reader,
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
-        logService: this.log,
       })
     );
     this.renderService.indexRunDeferred?.fulfill();
@@ -129,7 +126,6 @@ export default class CardPrerender extends Component {
         loader: this.loaderService.loader,
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
-        logService: this.log,
       });
       this.renderService.indexRunDeferred?.fulfill();
       return current;

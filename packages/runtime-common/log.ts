@@ -51,7 +51,7 @@ export function logger(
 ): LogLevel.Logger {
   if (!logDefinitions) {
     throw new Error(
-      `missing logDefinitions, this value is not being supplied.`
+      `Missing logDefinitions. Make sure that 'makeLogDefinitions()' is called before any module scoped code. The best way to ensure this is to evaluate makeLogDefinitions() in the module scope in its own module that is imported for side effect from the entry point module.`
     );
   }
   let log = LogLevel.getLogger(logName);
