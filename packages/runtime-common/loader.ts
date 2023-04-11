@@ -456,6 +456,7 @@ export class Loader {
     moduleURL: ResolvedURL | string,
     stack: string[] = []
   ): Promise<Module> {
+    let start = Date.now();
     let moduleIdentifier =
       typeof moduleURL === 'string' ? moduleURL : moduleURL.href;
     let module = this.getModule(moduleIdentifier);
@@ -502,6 +503,9 @@ export class Loader {
       });
       throw exception;
     }
+    this.logger.debug(
+      `loader cache miss for ${moduleURL.href}, fetching this module...`
+    );
     module = {
       state: 'fetching',
       deferred: new Deferred<Module>(),
@@ -595,6 +599,13 @@ export class Loader {
 
     this.setModule(moduleIdentifier, registeredModule);
     module.deferred.fulfill(registeredModule);
+    if (stack.length === 0) {
+      this.logger.debug(
+        `loader fetch for ${moduleURL} (including deps) took ${
+          Date.now() - start
+        }ms`
+      );
+    }
     return registeredModule;
   }
 
