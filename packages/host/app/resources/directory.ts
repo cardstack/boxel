@@ -2,11 +2,12 @@ import { Resource } from 'ember-resources/core';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
-import type { Relationship } from '@cardstack/runtime-common';
+import { logger, type Relationship } from '@cardstack/runtime-common';
 import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-import log from 'loglevel';
+
+const log = logger('resource:directory');
 
 interface Args {
   named: {

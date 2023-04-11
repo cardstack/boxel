@@ -1,13 +1,14 @@
+import './setup-logger'; // This should be first
 import { FetchHandler } from './fetch';
 import { LivenessWatcher } from './liveness';
 import { MessageHandler } from './message-handler';
 import { LocalRealmAdapter } from './local-realm-adapter';
-import { Realm, baseRealm } from '@cardstack/runtime-common';
+import { Realm, baseRealm, logger } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
-import log from 'loglevel';
 import '@cardstack/runtime-common/externals-global';
 
+let log = logger('worker:main');
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
 const livenessWatcher = new LivenessWatcher(worker);
@@ -18,8 +19,8 @@ livenessWatcher.registerShutdownListener(async () => {
   await fetchHandler.dropCaches();
 });
 
-//@ts-expect-error webpack replaces process.env at build time
-let resolvedBaseRealmURL = process.env.RESOLVED_BASE_REALM_URL;
+// webpack replaces process.env at build time
+let resolvedBaseRealmURL = process.env.RESOLVED_BASE_REALM_URL!;
 log.info(`service worker resolvedBaseRealmURL=${resolvedBaseRealmURL}`);
 Loader.addURLMapping(new URL(baseRealm.url), new URL(resolvedBaseRealmURL));
 

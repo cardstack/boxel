@@ -7,6 +7,7 @@ import { service } from '@ember/service';
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
 import {
+  logger,
   isCardDocument,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -26,11 +27,11 @@ import monacoModifier from '../modifiers/monaco';
 import type * as monaco from 'monaco-editor';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import InLocalRealm from './in-local-realm';
-import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
 
 const { ownRealmURL, isLocalRealm } = ENV;
+const log = logger('component:go');
 
 interface Signature {
   Args: {

@@ -1,9 +1,10 @@
 import Component from '@glimmer/component';
-import { didCancel, enqueueTask } from 'ember-concurrency';
+import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
 import { service } from '@ember/service';
 import { CurrentRun } from '../lib/current-run';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
-import { hasExecutableExtension } from '@cardstack/runtime-common';
+import { getModulesInRealm } from '../lib/utils';
+import { hasExecutableExtension, baseRealm } from '@cardstack/runtime-common';
 import {
   type EntrySetter,
   type Reader,
@@ -35,6 +36,7 @@ export default class CardPrerender extends Component {
         );
       }
     } else {
+      this.warmUpModuleCache.perform();
       this.localRealm.setupIndexing(
         this.fromScratch.bind(this),
         this.incremental.bind(this)
@@ -76,6 +78,18 @@ export default class CardPrerender extends Component {
       `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`
     );
   }
+
+  private warmUpModuleCache = dropTask(async () => {
+    let baseRealmModules = await getModulesInRealm(
+      this.loaderService.loader,
+      baseRealm.url
+    );
+    // TODO the need to perform this reverse reveals that there is a bug in
+    // our loader around dependency consumption, please investigate more!
+    for (let module of baseRealmModules.reverse()) {
+      await this.loaderService.loader.import(module);
+    }
+  });
 
   private doRegistration = enqueueTask(async () => {
     let optsId = (globalThis as any).runnerOptsId;

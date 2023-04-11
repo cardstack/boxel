@@ -137,7 +137,7 @@ export class LocalRealmAdapter implements RealmAdapter {
         }
       }
       this.entries = currentEntries;
-    }, 1000);
+    }, 1000) as unknown as number; // glint thinks this is a NodeJS.Timer
   }
 
   unsubscribe(): void {

@@ -3,9 +3,11 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, Task, TaskInstance } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
+import { logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-import log from 'loglevel';
+
+const log = logger('resource:file');
 
 interface Args {
   named: {

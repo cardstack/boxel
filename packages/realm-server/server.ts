@@ -2,7 +2,13 @@ import Koa from 'koa';
 import cors from '@koa/cors';
 import Router from '@koa/router';
 import { Memoize } from 'typescript-memoize';
-import { Loader, Realm, baseRealm, assetsDir } from '@cardstack/runtime-common';
+import {
+  Loader,
+  Realm,
+  baseRealm,
+  assetsDir,
+  logger,
+} from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { setupCloseHandler } from './node-realm';
 import {
@@ -18,10 +24,7 @@ import {
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
 import { monacoMiddleware } from './middleware/monaco';
 import '@cardstack/runtime-common/externals-global';
-import log from 'loglevel';
 import { nodeStreamToText } from './stream';
-
-const logger = log.getLogger('realm:requests');
 
 interface Options {
   hostLocalRealm?: boolean;
@@ -31,6 +34,7 @@ interface Options {
 export class RealmServer {
   private hostLocalRealm = false;
   private assetsURL: URL;
+  private log = logger('realm:requests');
 
   constructor(private realms: Realm[], opts?: Options) {
     detectRealmCollision(realms);
@@ -82,7 +86,7 @@ export class RealmServer {
 
   listen(port: number) {
     let instance = this.app.listen(port);
-    logger.info(`Realm server listening on port %s\n`, port);
+    this.log.info(`Realm server listening on port %s\n`, port);
     return instance;
   }
 
@@ -112,7 +116,7 @@ export class RealmServer {
     let reversedResolution = Loader.reverseResolution(
       fullRequestURL(ctxt).href
     );
-    logger.debug(
+    this.log.debug(
       `Looking for realm to handle request with full URL: ${
         fullRequestURL(ctxt).href
       } (reversed: ${reversedResolution.href})`
@@ -120,7 +124,7 @@ export class RealmServer {
 
     let realm = this.realms.find((r) => {
       let inRealm = r.paths.inRealm(reversedResolution);
-      logger.debug(
+      this.log.debug(
         `${reversedResolution} in realm ${JSON.stringify({
           url: r.url,
           paths: r.paths,

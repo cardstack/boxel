@@ -9,7 +9,7 @@ import {
   send,
 } from '@cardstack/worker/src/messages';
 import { timeout } from '@cardstack/worker/src/util';
-import { Deferred } from '@cardstack/runtime-common';
+import { Deferred, logger } from '@cardstack/runtime-common';
 import { TaskInstance } from 'ember-resources';
 import RenderService from './render-service';
 import type RouterService from '@ember/routing/router-service';
@@ -19,10 +19,10 @@ import {
   type SearchEntryWithErrors,
   type RunState,
 } from '@cardstack/runtime-common/search-index';
-import log from 'loglevel';
 import ENV from '@cardstack/host/config/environment';
 
 const { isLocalRealm, ownRealmURL, realmsServed = [] } = ENV;
+const log = logger('service:local-realm');
 
 export default class LocalRealm extends Service {
   #setEntryDeferred: Deferred<void> | undefined;

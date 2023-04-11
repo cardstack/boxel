@@ -1,4 +1,5 @@
-import { Realm } from '@cardstack/runtime-common';
+import './setup-logger'; // This should be first
+import { Realm, logger } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -7,7 +8,6 @@ import { resolve, join } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
-import log, { LogLevelNames } from 'loglevel';
 
 let {
   port,
@@ -16,8 +16,6 @@ let {
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
-  logLevel,
-  requestLogLevel,
   useTestingDomain,
   hostLocalRealm,
 } = yargs(process.argv.slice(2))
@@ -63,16 +61,6 @@ let {
       type: 'boolean',
       default: false,
     },
-    logLevel: {
-      description: 'how detailed log output should be',
-      choices: ['trace', 'debug', 'info', 'warn', 'error'],
-      default: 'debug',
-    },
-    requestLogLevel: {
-      description: 'how detailed request log output should be',
-      choices: ['trace', 'debug', 'info', 'warn', 'error'],
-      default: 'info',
-    },
   })
   .parseSync();
 
@@ -89,12 +77,7 @@ if (fromUrls.length < paths.length) {
   process.exit(-1);
 }
 
-log.setLevel(logLevel as LogLevelNames);
-log.info(`Set log level to ${logLevel}`);
-
-let requestLog = log.getLogger('realm:requests');
-requestLog.setLevel(requestLogLevel as LogLevelNames);
-requestLog.info(`Set request log level to ${requestLogLevel}`);
+let log = logger('main');
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),

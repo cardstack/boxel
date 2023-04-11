@@ -3,12 +3,14 @@ import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
+import { logger } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
-import log from 'loglevel';
 
 interface Args {
   named: { url: string; loader: Loader };
 }
+
+const log = logger('resource:import');
 
 export class ImportResource extends Resource<Args> {
   @tracked module: object | undefined;

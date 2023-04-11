@@ -1,11 +1,15 @@
 import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
-import { trimExecutableExtension } from './index';
+import {
+  trimExecutableExtension,
+  executableExtensions,
+  baseRealm,
+  logger,
+} from './index';
 import { RealmPaths } from './paths';
 import { CardError } from './error';
 import { type RunnerOpts } from './search-index';
-import log from 'loglevel';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -71,7 +75,14 @@ export interface MaybeLocalRequest extends Request {
   isLocal?: true;
 }
 
+// One of the largest expenditures of time during incremental indexing is
+// fetching modules from a fresh Loader instance. To improve performance we are
+// creating a module cache that can be shared across loader instances for
+// modules that we believe never change.
+const sharedModules = new Map<string, Module>();
+
 export class Loader {
+  private log = logger('loader');
   private modules = new Map<string, Module>();
   private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
   // use a tuple array instead of a map so that we can support reversing
@@ -219,7 +230,7 @@ export class Loader {
           }
         }
       } catch (err: any) {
-        log.warn(
+        this.log.warn(
           `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`
         );
       }
@@ -391,11 +402,37 @@ export class Loader {
   }
 
   private getModule(moduleIdentifier: string): Module | undefined {
-    return this.modules.get(moduleIdentifier);
+    if (isUrlLike(moduleIdentifier)) {
+      let moduleURL = new URL(moduleIdentifier);
+      if (baseRealm.inRealm(moduleURL)) {
+        return sharedModules.get(moduleIdentifier);
+      } else {
+        return this.modules.get(moduleIdentifier);
+      }
+    } else {
+      // These are the shimmed modules that have npm-like module identifiers
+      return sharedModules.get(moduleIdentifier);
+    }
   }
 
   private setModule(moduleIdentifier: string, module: Module) {
-    this.modules.set(moduleIdentifier, module);
+    if (isUrlLike(moduleIdentifier)) {
+      let moduleURL = new URL(moduleIdentifier);
+      let cache: Map<string, Module>;
+      if (baseRealm.inRealm(moduleURL)) {
+        cache = sharedModules;
+      } else {
+        cache = this.modules;
+      }
+      let trimmedIdentifier = trimExecutableExtension(moduleURL);
+      cache.set(trimmedIdentifier.href, module);
+      for (let extension of executableExtensions) {
+        cache.set(`${trimmedIdentifier.href}${extension}`, module);
+      }
+    } else {
+      // These are the shimmed modules that have npm-like module identifiers
+      sharedModules.set(moduleIdentifier, module);
+    }
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
@@ -425,6 +462,7 @@ export class Loader {
     moduleURL: ResolvedURL | string,
     stack: string[] = []
   ): Promise<Module> {
+    let start = Date.now();
     let moduleIdentifier =
       typeof moduleURL === 'string' ? moduleURL : moduleURL.href;
     let module = this.getModule(moduleIdentifier);
@@ -432,7 +470,13 @@ export class Loader {
       // in the event of a cycle, we have already evaluated the
       // define() since we recurse into our deps after the evaluation of the
       // define, so just return ourselves
-      if (stack.includes(moduleIdentifier)) {
+      if (
+        stack.includes(
+          isUrlLike(moduleIdentifier)
+            ? trimExecutableExtension(new URL(moduleIdentifier)).href
+            : moduleIdentifier
+        )
+      ) {
         return module;
       }
       // this closes an otherwise leaky async when there are simultaneous
@@ -465,6 +509,9 @@ export class Loader {
       });
       throw exception;
     }
+    this.log.debug(
+      `loader cache miss for ${moduleURL.href}, fetching this module...`
+    );
     module = {
       state: 'fetching',
       deferred: new Deferred<Module>(),
@@ -533,7 +580,12 @@ export class Loader {
         if (depId !== 'exports' && depId !== '__import_meta__') {
           return await this.fetchModule(
             isUrlLike(depId) ? makeResolvedURL(depId) : depId,
-            [...stack, moduleIdentifier]
+            [
+              ...stack,
+              isUrlLike(moduleIdentifier)
+                ? trimExecutableExtension(new URL(moduleIdentifier)).href
+                : moduleIdentifier,
+            ]
           );
         }
         return undefined;
@@ -553,6 +605,13 @@ export class Loader {
 
     this.setModule(moduleIdentifier, registeredModule);
     module.deferred.fulfill(registeredModule);
+    if (stack.length === 0) {
+      this.log.debug(
+        `loader fetch for ${moduleURL} (including deps) took ${
+          Date.now() - start
+        }ms`
+      );
+    }
     return registeredModule;
   }
 
@@ -626,7 +685,7 @@ export class Loader {
     try {
       response = await this.fetch(moduleURL);
     } catch (err) {
-      log.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
+      this.log.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a
       // "broken" state, since the server hosting the module is likely down. it
       // might be a good idea to be able to try again in this case...

@@ -5,11 +5,11 @@ import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import type LocalRealm from '../services/local-realm';
 import type CardService from '../services/card-service';
-import { RealmPaths } from '@cardstack/runtime-common';
-import log from 'loglevel';
+import { RealmPaths, logger } from '@cardstack/runtime-common';
 import ENV from '@cardstack/host/config/environment';
 
 const { isLocalRealm } = ENV;
+const log = logger('route:code');
 
 interface Model {
   path: string | undefined;

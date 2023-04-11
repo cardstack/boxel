@@ -1,9 +1,11 @@
 import proxy from 'koa-proxies';
-import { Loader, assetsDir, type Realm } from '@cardstack/runtime-common';
-import log from 'loglevel';
+import {
+  Loader,
+  assetsDir,
+  logger as getLogger,
+  type Realm,
+} from '@cardstack/runtime-common';
 import type Koa from 'koa';
-
-const logger = log.getLogger('realm:requests');
 
 interface ProxyOptions {
   responseHeaders?: Record<string, string>;
@@ -46,6 +48,7 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 }
 
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
+  let logger = getLogger('realm:requests');
   ctxt.res.on('finish', () => {
     logger.info(
       `${ctxt.method} ${ctxt.req.headers.accept} ${

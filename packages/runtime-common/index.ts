@@ -42,6 +42,7 @@ export {
   isField,
   primitive,
 } from './constants';
+export { makeLogDefinitions, logger } from './log';
 export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
 export { NotReady, isNotReadyError } from './not-ready';

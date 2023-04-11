@@ -36,6 +36,7 @@
     "loglevel": "^1.8.1",
     "qs": "^6.10.5",
     "qunit": "^2.18.0",
+    "super-fast-md5": "^1.0.1",
     "transform-modules-amd-plugin": "workspace:*"
   },
   "devDependencies": {

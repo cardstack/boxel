@@ -1,5 +1,7 @@
+import { logger } from '@cardstack/runtime-common';
 import { timeout } from './util';
-import log from 'loglevel';
+
+const log = logger('worker:liveness');
 
 export class LivenessWatcher {
   private isAlive = true;

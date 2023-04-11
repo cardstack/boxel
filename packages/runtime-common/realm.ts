@@ -15,19 +15,23 @@ import {
   CardError,
 } from './error';
 import { formatRFC7231 } from 'date-fns';
+import { md5 } from 'super-fast-md5';
 import {
   isCardResource,
   executableExtensions,
+  hasExecutableExtension,
   isNode,
   isSingleCardDocument,
   baseRealm,
   assetsDir,
+  logger,
   type CardRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
 } from './index';
 import merge from 'lodash/merge';
+import flatMap from 'lodash/flatMap';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import {
@@ -61,7 +65,6 @@ import { Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
-import log from 'loglevel';
 
 export interface FileRef {
   path: LocalPath;
@@ -147,6 +150,8 @@ export class Realm {
   #deferStartup: boolean;
   #isLocalRealm = false;
   #useTestingDomain = false;
+  #transpileCache = new Map<string, string>();
+  #log = logger('realm');
   #getIndexHTML: () => Promise<string>;
   readonly paths: RealmPaths;
 
@@ -230,7 +235,32 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
+    await this.#warmUpCache();
     await this.#searchIndex.run();
+  }
+
+  // Take advantage of the fact that the base realm modules are static (for now)
+  // and cache the transpiled js for all the base realm modules so that all
+  // consuming realms can benefit from this work
+  async #warmUpCache() {
+    if (this.url !== baseRealm.url) {
+      return;
+    }
+
+    let entries = await this.recursiveDirectoryEntries(new URL(this.url));
+    let modules = flatMap(entries, (e) =>
+      e.kind === 'file' && hasExecutableExtension(e.path) ? [e.path] : []
+    );
+    for (let mod of modules) {
+      let handle = await this.#adapter.openFile(mod);
+      if (!handle) {
+        this.#log.error(
+          `cannot open file ${mod} when warming up transpilation cache`
+        );
+        continue;
+      }
+      this.makeJS(await fileContentToText(handle), handle.path);
+    }
   }
 
   get ready(): Promise<void> {
@@ -384,6 +414,11 @@ export class Realm {
   }
 
   private transpileJS(content: string, debugFilename: string): string {
+    let hash = md5(content);
+    let cached = this.#transpileCache.get(hash);
+    if (cached) {
+      return cached;
+    }
     content = preprocessEmbeddedTemplates(content, {
       relativePath: debugFilename,
       getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
@@ -418,6 +453,14 @@ export class Realm {
     })?.code;
     if (!src) {
       throw new Error('bug: should never get here');
+    }
+
+    // This assumes the base realm is static. We take advantage of the static
+    // nature of the base realm such that we can cache the transpiled JS, which
+    // is the slowest part of module loading (and base realm modules are
+    // imported a lot by all realms)
+    if (this.url === baseRealm.url) {
+      this.#transpileCache.set(hash, src);
     }
     return src;
   }
@@ -629,7 +672,7 @@ export class Realm {
 
   private async directoryEntries(
     url: URL
-  ): Promise<{ name: string; kind: Kind }[] | undefined> {
+  ): Promise<{ name: string; kind: Kind; path: LocalPath }[] | undefined> {
     if (await this.isIgnored(url)) {
       return undefined;
     }
@@ -637,7 +680,7 @@ export class Realm {
     if (!(await this.#adapter.exists(path))) {
       return undefined;
     }
-    let entries: { name: string; kind: Kind }[] = [];
+    let entries: { name: string; kind: Kind; path: LocalPath }[] = [];
     for await (let entry of this.#adapter.readdir(path)) {
       let innerPath = join(path, entry.name);
       let innerURL =
@@ -652,13 +695,31 @@ export class Realm {
     return entries;
   }
 
+  private async recursiveDirectoryEntries(
+    url: URL
+  ): Promise<{ name: string; kind: Kind; path: LocalPath }[]> {
+    let entries = await this.directoryEntries(url);
+    if (!entries) {
+      return [];
+    }
+    let nestedEntries: { name: string; kind: Kind; path: LocalPath }[] = [];
+    for (let dirEntry of entries.filter((e) => e.kind === 'directory')) {
+      nestedEntries.push(
+        ...(await this.recursiveDirectoryEntries(
+          new URL(`${url.href}${dirEntry.name}`)
+        ))
+      );
+    }
+    return [...entries, ...nestedEntries];
+  }
+
   private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
     let localPath: LocalPath = this.paths.local(request.url);
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
     if (!entries) {
-      log.warn(`can't find directory ${url.href}`);
+      this.#log.warn(`can't find directory ${url.href}`);
       return notFound(request);
     }
 
@@ -709,7 +770,6 @@ export class Realm {
   }
 
   private async isIgnored(url: URL): Promise<boolean> {
-    await this.ready;
     return this.#searchIndex.isIgnored(url);
   }
 
@@ -795,7 +855,9 @@ export class Realm {
     data: Record<string, any>;
     id?: string;
   }): Promise<void> {
-    log.info(`sending updates to ${this.listeningClients.length} clients`);
+    this.#log.info(
+      `sending updates to ${this.listeningClients.length} clients`
+    );
     let { type, data, id } = message;
     let chunkArr = [];
     for (let item in data) {

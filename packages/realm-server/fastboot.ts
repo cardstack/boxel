@@ -26,6 +26,7 @@ export async function makeFastBootIndexRunner(
           Response: globalThis.Response,
           btoa,
           getRunnerOpts,
+          _logDefinitions: (globalThis as any)._logDefinitions,
         });
       },
     }) as FastBootInstance;
@@ -40,6 +41,7 @@ export async function makeFastBootIndexRunner(
           Response: globalThis.Response,
           btoa,
           getRunnerOpts,
+          _logDefinitions: (globalThis as any)._logDefinitions,
         });
       }
     ));

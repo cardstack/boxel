@@ -1,7 +1,8 @@
-import { Realm } from '@cardstack/runtime-common';
+import { Realm, logger } from '@cardstack/runtime-common';
 import { createResponse } from '@cardstack/runtime-common/create-response';
 import { Loader } from '@cardstack/runtime-common/loader';
-import log from 'loglevel';
+
+const log = logger('worker:fetch');
 
 export class FetchHandler {
   private realm: Realm | undefined;
