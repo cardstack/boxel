@@ -298,6 +298,13 @@ export class SearchIndex {
   }
 
   public isIgnored(url: URL): boolean {
+    // this may be called before search index is ready in order to warm up
+    // transpilation cache, in which case we should provide a default ignore
+    if (
+      ['node_modules'].includes(url.href.replace(/\/$/, '').split('/').pop()!)
+    ) {
+      return true;
+    }
     return isIgnored(this.#index.realmURL, this.#index.ignoreMap, url);
   }
 
