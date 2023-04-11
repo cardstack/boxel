@@ -1998,7 +1998,7 @@ function cardThunk<CardT extends CardConstructor>(
   cardOrThunk: CardT | (() => CardT)
 ): () => CardT {
   return (
-    !cardOrThunk || 'baseCard' in cardOrThunk ? () => cardOrThunk : cardOrThunk
+    'baseCard' in cardOrThunk ? () => cardOrThunk : cardOrThunk
   ) as () => CardT;
 }
 

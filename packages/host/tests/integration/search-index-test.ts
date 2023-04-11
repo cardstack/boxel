@@ -796,6 +796,116 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
+  test('can index a card that contains a card that linksTo the outermost card', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'person-card.gts': `
+      import { contains, linksTo, field, Card, Component } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { PetCard } from "./pet-card";
+
+      export class PersonCard extends Card {
+        @field firstName = contains(StringCard);
+        @field pet = linksTo(PetCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><@fields.firstName /></template>
+        };
+      }
+    `,
+      'appointment.gts': `
+      import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { PersonCard } from "./person-card";
+
+      export class Appointment extends Card {
+        @field title = contains(StringCard);
+        @field contact = contains(PersonCard);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><@fields.title /> - contact: <@fields.contact /></template>
+        };
+      }
+    `,
+      'pet-card.gts': `
+      import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { Appointment } from "./appointment";
+
+      export class PetCard extends Card {
+        @field firstName = contains(StringCard);
+        @field appointment = contains(Appointment);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1 data-test-firstName><@fields.firstName /></h1>
+            <div data-test-appointment>Appointment: <@fields.appointment /></div>
+          </template>
+        };
+      }`,
+      'burcu.json': {
+        data: {
+          attributes: { firstName: 'Burcu' },
+          relationships: { pet: { links: { self: null } } },
+          meta: { adoptsFrom: { module: `./person-card`, name: 'PersonCard' } },
+        },
+      },
+      'jackie.json': {
+        data: {
+          attributes: {
+            firstName: 'Jackie',
+            appointment: {
+              title: 'Vet Visit',
+              contact: { firstName: 'Burcu' },
+            },
+          },
+          meta: { adoptsFrom: { module: `./pet-card`, name: 'PetCard' } },
+          relationships: {
+            'appointment.contact.pet': {
+              links: { self: `${testRealmURL}jackie` },
+            },
+          },
+        },
+      },
+    });
+
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let card = await indexer.card(new URL(`${testRealmURL}jackie`));
+
+    if (card?.type === 'doc') {
+      console.log(card.doc);
+      assert.deepEqual(card.doc, {
+        data: {
+          id: `${testRealmURL}jackie`,
+          type: 'card',
+          links: { self: `${testRealmURL}jackie` },
+          attributes: {
+            firstName: 'Jackie',
+            appointment: {
+              title: 'Vet Visit',
+              contact: { firstName: 'Burcu' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}pet-card`,
+              name: 'PetCard',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}jackie.json`
+            ),
+          },
+          relationships: {
+            'appointment.contact.pet': {
+              data: { type: 'card', id: `${testRealmURL}jackie` },
+              links: { self: `${testRealmURL}jackie` },
+            },
+          },
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${card?.error.detail}`);
+    }
+  });
+
   test('can index a card with a containsMany composite containing a linkTo field', async function (assert) {
     let adapter = new TestRealmAdapter({
       'Vendor/vendor1.json': {
