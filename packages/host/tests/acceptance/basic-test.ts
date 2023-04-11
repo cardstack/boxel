@@ -25,6 +25,20 @@ function getMonacoContent(): string {
   return (window as any).monaco.editor.getModels()[0].getValue();
 }
 
+const indexCardSource = `
+  import { Card, Component } from "https://cardstack.com/base/card-api";
+
+  export class Index extends Card {
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div data-test-index-card>
+          Hello, world!
+        </div>
+      </template>
+    };
+  }
+`;
+
 const personCardSource = `
   import { contains, field, Card } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
@@ -52,6 +66,7 @@ module('Acceptance | basic tests', function (hooks) {
     );
     shimExternals();
     adapter = new TestRealmAdapter({
+      'index.gts': indexCardSource,
       'person.gts': personCardSource,
       'person-entry.json': {
         data: {
@@ -68,6 +83,18 @@ module('Acceptance | basic tests', function (hooks) {
             adoptsFrom: {
               module: `${baseRealm.url}catalog-entry`,
               name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+      'index.json': {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: './index',
+              name: 'Index',
             },
           },
         },
@@ -102,6 +129,18 @@ module('Acceptance | basic tests', function (hooks) {
     await visit('/');
 
     assert.strictEqual(currentURL(), '/');
+    assert
+      .dom('[data-test-moved]')
+      .containsText('The card code editor has moved to /code');
+    await click('[data-test-code-link]');
+    assert.strictEqual(currentURL(), '/code');
+  });
+
+  test('visiting realm root', async function (assert) {
+    await visit('/test/');
+
+    assert.strictEqual(currentURL(), '/test/');
+    assert.dom('[data-test-index-card]').containsText('Hello, world');
     assert
       .dom('[data-test-moved]')
       .containsText('The card code editor has moved to /code');

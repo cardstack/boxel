@@ -187,13 +187,9 @@ export class Realm {
         SupportedMimeType.CardJson,
         this.patchCard.bind(this)
       )
+      .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .get(
-        '/_search',
-        SupportedMimeType.CardJson,
-        this.search.bind(this)
-      )
-      .get(
-        '/.+(?<!.json)',
+        '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.getCard.bind(this)
       )
@@ -208,7 +204,7 @@ export class Realm {
         this.upsertCardSource.bind(this)
       )
       .get(
-        '/.+',
+        '/.*',
         SupportedMimeType.CardSource,
         this.getCardSourceOrRedirect.bind(this)
       )
@@ -227,11 +223,7 @@ export class Realm {
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this)
       )
-      .get(
-        '/.*',
-        SupportedMimeType.HTML,
-        this.respondWithHTML.bind(this)
-      );
+      .get('/.*', SupportedMimeType.HTML, this.respondWithHTML.bind(this));
 
     this.#deferStartup = opts?.deferStartUp ?? false;
     if (!opts?.deferStartUp) {
@@ -662,6 +654,9 @@ export class Realm {
 
   private async getCard(request: Request): Promise<Response> {
     let localPath = this.paths.local(request.url);
+    if (localPath === '') {
+      localPath = 'index';
+    }
     let url = this.paths.fileURL(localPath);
     let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
