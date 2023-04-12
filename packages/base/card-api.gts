@@ -1997,6 +1997,11 @@ function makeDescriptor<
 function cardThunk<CardT extends CardConstructor>(
   cardOrThunk: CardT | (() => CardT)
 ): () => CardT {
+  if (!cardOrThunk) {
+    throw new Error(
+      `bug: cardOrThunk was ${cardOrThunk}. if there is a cyclic dependency if one of your fields, make sure to use '() => CardName' format instead of just 'CardName'`
+    );
+  }
   return (
     'baseCard' in cardOrThunk ? () => cardOrThunk : cardOrThunk
   ) as () => CardT;

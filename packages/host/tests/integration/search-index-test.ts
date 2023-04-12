@@ -796,70 +796,132 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
-  test('can index a card that contains a card that linksTo the outermost card', async function (assert) {
+  test('can index a card that contains a polymorphic field with a card that extends from the same type as itself', async function (assert) {
     let adapter = new TestRealmAdapter({
       'person-card.gts': `
-      import { contains, linksTo, field, Card, Component } from "https://cardstack.com/base/card-api";
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class PersonCard extends Card {
+        @field firstName = contains(StringCard);
+        @field friend = contains(() => PersonCard);
+      }
+    `,
+      'fancy-person.gts': `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { PersonCard } from './person-card';
+
+      export class FancyPerson extends PersonCard {
+        @field lastName = contains(StringCard);
+      }
+    `,
+      'burcu.json': {
+        data: {
+          attributes: {
+            firstName: 'Burcu',
+            friend: { firstName: 'Jackie', lastName: 'A' },
+          },
+          meta: {
+            adoptsFrom: { module: `./person-card`, name: 'PersonCard' },
+            fields: {
+              friend: {
+                adoptsFrom: { module: `./fancy-person`, name: 'FancyPerson' },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let card = await indexer.card(new URL(`${testRealmURL}burcu`));
+
+    if (card?.type === 'doc') {
+      assert.deepEqual(card.doc.data, {
+        id: `${testRealmURL}burcu`,
+        type: 'card',
+        links: { self: `${testRealmURL}burcu` },
+        attributes: {
+          firstName: 'Burcu',
+          friend: { firstName: 'Jackie', lastName: 'A' },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}person-card`,
+            name: 'PersonCard',
+          },
+          lastModified: adapter.lastModified.get(`${testRealmURL}burcu.json`),
+          fields: {
+            friend: {
+              adoptsFrom: {
+                module: `${testRealmURL}fancy-person`,
+                name: 'FancyPerson',
+              },
+            },
+          },
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${card?.error.detail}`);
+    }
+  });
+
+  test('can index a card that has a cyclic relationship at the second degree with a card it contains', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'person-card.gts': `
+      import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { PetCard } from "./pet-card";
 
       export class PersonCard extends Card {
         @field firstName = contains(StringCard);
-        @field pet = linksTo(PetCard);
-        static embedded = class Embedded extends Component<typeof this> {
-          <template><@fields.firstName /></template>
-        };
+        @field pet = linksTo(() => PetCard);
       }
     `,
       'appointment.gts': `
-      import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { PersonCard } from "./person-card";
 
       export class Appointment extends Card {
         @field title = contains(StringCard);
         @field contact = contains(PersonCard);
-        static embedded = class Embedded extends Component<typeof this> {
-          <template><@fields.title /> - contact: <@fields.contact /></template>
-        };
       }
     `,
       'pet-card.gts': `
-      import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Appointment } from "./appointment";
 
       export class PetCard extends Card {
         @field firstName = contains(StringCard);
-        @field appointment = contains(Appointment);
-        static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            <h1 data-test-firstName><@fields.firstName /></h1>
-            <div data-test-appointment>Appointment: <@fields.appointment /></div>
-          </template>
-        };
+        @field appointment = contains(() => Appointment);
       }`,
-      'burcu.json': {
-        data: {
-          attributes: { firstName: 'Burcu' },
-          relationships: { pet: { links: { self: null } } },
-          meta: { adoptsFrom: { module: `./person-card`, name: 'PersonCard' } },
-        },
-      },
       'jackie.json': {
         data: {
           attributes: {
             firstName: 'Jackie',
             appointment: {
-              title: 'Vet Visit',
+              title: 'Vet visit',
               contact: { firstName: 'Burcu' },
             },
           },
           meta: { adoptsFrom: { module: `./pet-card`, name: 'PetCard' } },
           relationships: {
             'appointment.contact.pet': {
-              links: { self: `${testRealmURL}jackie` },
+              links: { self: `${testRealmURL}mango` },
             },
+          },
+        },
+      },
+      'mango.json': {
+        data: {
+          attributes: { firstName: 'Mango' },
+          meta: {
+            adoptsFrom: { module: `./pet-card`, name: 'PetCard' },
           },
         },
       },
@@ -871,7 +933,6 @@ module('Integration | search-index', function (hooks) {
     let card = await indexer.card(new URL(`${testRealmURL}jackie`));
 
     if (card?.type === 'doc') {
-      console.log(card.doc);
       assert.deepEqual(card.doc, {
         data: {
           id: `${testRealmURL}jackie`,
@@ -880,7 +941,7 @@ module('Integration | search-index', function (hooks) {
           attributes: {
             firstName: 'Jackie',
             appointment: {
-              title: 'Vet Visit',
+              title: 'Vet visit',
               contact: { firstName: 'Burcu' },
             },
           },
@@ -895,8 +956,7 @@ module('Integration | search-index', function (hooks) {
           },
           relationships: {
             'appointment.contact.pet': {
-              data: { type: 'card', id: `${testRealmURL}jackie` },
-              links: { self: `${testRealmURL}jackie` },
+              links: { self: `${testRealmURL}mango` },
             },
           },
         },

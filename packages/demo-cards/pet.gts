@@ -16,7 +16,7 @@ export class Pet extends Card {
   @field favoriteTreat = contains(StringCard);
   @field cutenessRating = contains(IntegerCard);
   @field sleepsOnTheCouch = contains(BooleanCard);
-  @field appointment = contains(Booking);
+  @field appointment = contains(() => Booking);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer class='demo-card' @displayBoundaries={{true}}>
