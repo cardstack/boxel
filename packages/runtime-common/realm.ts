@@ -57,7 +57,7 @@ import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properti
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
 import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
-import { Router } from './router';
+import { Router, SupportedMimeType } from './router';
 import { parseQueryString } from './query';
 //@ts-ignore service worker can't handle this
 import type { Readable } from 'stream';
@@ -145,8 +145,7 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
-  #jsonAPIRouter: Router;
-  #cardSourceRouter: Router;
+  #router: Router;
   #deferStartup: boolean;
   #isLocalRealm = false;
   #useTestingDomain = false;
@@ -181,22 +180,58 @@ export class Realm {
       runnerOptsMgr
     );
 
-    this.#jsonAPIRouter = new Router(new URL(url))
-      .post('/', this.createCard.bind(this))
-      .patch('/.+(?<!.json)', this.patchCard.bind(this))
-      .get('/_search', this.search.bind(this))
-      .get('/_message', this.subscribe.bind(this))
-      .get('.*/', this.getDirectoryListing.bind(this))
-      .get('/.+(?<!.json)', this.getCard.bind(this))
-      .delete('/.+(?<!.json)', this.removeCard.bind(this));
-
-    this.#cardSourceRouter = new Router(new URL(url))
+    this.#router = new Router(new URL(url))
+      .post('/', SupportedMimeType.CardJson, this.createCard.bind(this))
+      .patch(
+        '/.+(?<!.json)',
+        SupportedMimeType.CardJson,
+        this.patchCard.bind(this)
+      )
+      .get(
+        '/_search',
+        SupportedMimeType.CardJson,
+        this.search.bind(this)
+      )
+      .get(
+        '/.+(?<!.json)',
+        SupportedMimeType.CardJson,
+        this.getCard.bind(this)
+      )
+      .delete(
+        '/.+(?<!.json)',
+        SupportedMimeType.CardJson,
+        this.removeCard.bind(this)
+      )
       .post(
         `/.+(${executableExtensions.map((e) => '\\' + e).join('|')})`,
+        SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this)
       )
-      .get('/.+', this.getCardSourceOrRedirect.bind(this))
-      .delete('/.+', this.removeCardSource.bind(this));
+      .get(
+        '/.+',
+        SupportedMimeType.CardSource,
+        this.getCardSourceOrRedirect.bind(this)
+      )
+      .delete(
+        '/.+',
+        SupportedMimeType.CardSource,
+        this.removeCardSource.bind(this)
+      )
+      .get(
+        '/_message',
+        SupportedMimeType.EventStream,
+        this.subscribe.bind(this)
+      )
+      .get(
+        '.*/',
+        SupportedMimeType.DirectoryListing,
+        this.getDirectoryListing.bind(this)
+      )
+      .get(
+        '/.*',
+        SupportedMimeType.HTML,
+        this.respondWithHTML.bind(this)
+      );
 
     this.#deferStartup = opts?.deferStartUp ?? false;
     if (!opts?.deferStartUp) {
@@ -268,45 +303,36 @@ export class Realm {
   }
 
   async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
-    let accept = request.headers.get('Accept');
-    let localPath = this.paths.local(request.url);
-    if (
-      accept?.includes('application/vnd.api+json') ||
-      accept?.includes('text/event-stream')
-    ) {
-      // local requests are allowed to query the realm as the index is being built up
-      if (!request.isLocal && !this.#isLocalRealm) {
-        await this.ready;
-      }
-      if (!this.searchIndex) {
-        return systemError('search index is not available');
-      }
-      return this.#jsonAPIRouter.handle(request);
-    } else if (accept?.includes('application/vnd.card+source')) {
-      return this.#cardSourceRouter.handle(request);
-    } else if (accept?.includes('text/html')) {
-      return createResponse(await this.getIndexHTML(), {
-        headers: { 'content-type': 'text/html' },
-      });
+    // local requests are allowed to query the realm as the index is being built up
+    if (!request.isLocal && !this.#isLocalRealm) {
+      await this.ready;
     }
-
-    let maybeHandle = await this.getFileWithFallbacks(localPath);
-
-    if (!maybeHandle) {
-      return notFound(request, `${request.url} not found`);
+    if (!this.searchIndex) {
+      return systemError('search index is not available');
     }
-
-    let handle = maybeHandle;
-
-    if (
-      executableExtensions.some((extension) =>
-        handle.path.endsWith(extension)
-      ) &&
-      !localPath.startsWith(assetsDir)
-    ) {
-      return this.makeJS(await fileContentToText(handle), handle.path);
+    if (this.#router.handles(request)) {
+      return this.#router.handle(request);
     } else {
-      return await this.serveLocalFile(handle);
+      let url = new URL(request.url);
+      let localPath = this.paths.local(url);
+      let maybeHandle = await this.getFileWithFallbacks(localPath);
+
+      if (!maybeHandle) {
+        return notFound(request, `${request.url} not found`);
+      }
+
+      let handle = maybeHandle;
+
+      if (
+        executableExtensions.some((extension) =>
+          handle.path.endsWith(extension)
+        ) &&
+        !localPath.startsWith(assetsDir)
+      ) {
+        return this.makeJS(await fileContentToText(handle), handle.path);
+      } else {
+        return await this.serveLocalFile(handle);
+      }
     }
   }
 
@@ -559,7 +585,7 @@ export class Realm {
     return createResponse(JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
-        'content-type': 'application/vnd.api+json',
+        'content-type': SupportedMimeType.CardJson,
         ...lastModifiedHeader(doc),
       },
     });
@@ -628,7 +654,7 @@ export class Realm {
     });
     return createResponse(JSON.stringify(doc, null, 2), {
       headers: {
-        'content-type': 'application/vnd.api+json',
+        'content-type': SupportedMimeType.CardJson,
         ...lastModifiedHeader(doc),
       },
     });
@@ -652,7 +678,7 @@ export class Realm {
     return createResponse(JSON.stringify(card, null, 2), {
       headers: {
         'last-modified': formatRFC7231(card.data.meta.lastModified!),
-        'content-type': 'application/vnd.api+json',
+        'content-type': SupportedMimeType.CardJson,
         ...lastModifiedHeader(card),
       },
     });
@@ -754,7 +780,7 @@ export class Realm {
     }
 
     return createResponse(JSON.stringify({ data }, null, 2), {
-      headers: { 'content-type': 'application/vnd.api+json' },
+      headers: { 'content-type': SupportedMimeType.DirectoryListing },
     });
   }
 
@@ -779,7 +805,7 @@ export class Realm {
       { loadLinks: true }
     );
     return createResponse(JSON.stringify(doc, null, 2), {
-      headers: { 'content-type': 'application/vnd.api+json' },
+      headers: { 'content-type': SupportedMimeType.CardJson },
     });
   }
 
@@ -867,6 +893,12 @@ export class Realm {
     await Promise.all(
       this.listeningClients.map((client) => writeToStream(client, chunk))
     );
+  }
+
+  private async respondWithHTML() {
+    return createResponse(await this.getIndexHTML(), {
+      headers: { 'content-type': 'text/html' },
+    });
   }
 }
 

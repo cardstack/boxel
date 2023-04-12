@@ -137,7 +137,7 @@ export function responseWithError(error: CardError): Response {
     {
       status: error.status,
       statusText: error.title,
-      headers: { 'content-type': 'application/vnd.api+json' },
+      headers: { 'content-type': 'application/json' },
     }
   );
 }

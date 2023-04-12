@@ -2,7 +2,11 @@ import { Resource } from 'ember-resources/core';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
-import { logger, type Relationship } from '@cardstack/runtime-common';
+import {
+  logger,
+  Relationship,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
@@ -79,7 +83,7 @@ export class DirectoryResource extends Resource<Args> {
   private async getEntries(url: string): Promise<Entry[]> {
     let response: Response | undefined;
     response = await this.loaderService.loader.fetch(url, {
-      headers: { Accept: 'application/vnd.api+json' },
+      headers: { Accept: SupportedMimeType.DirectoryListing },
     });
     if (!response.ok) {
       // the server takes a moment to become ready do be tolerant of errors at boot

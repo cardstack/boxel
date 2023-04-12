@@ -89,7 +89,7 @@ module('Realm Server', function (hooks) {
   test('serves a card GET request', async function (assert) {
     let response = await request
       .get('/person-1')
-      .set('Accept', 'application/vnd.api+json');
+      .set('Accept', 'application/vnd.card+json');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     let json = response.body;
@@ -131,7 +131,7 @@ module('Realm Server', function (hooks) {
             },
           },
         })
-        .set('Accept', 'application/vnd.api+json');
+        .set('Accept', 'application/vnd.card+json');
     });
     assert.strictEqual(response.status, 201, 'HTTP 201 status');
     let json = response.body;
@@ -186,7 +186,7 @@ module('Realm Server', function (hooks) {
             },
           },
         })
-        .set('Accept', 'application/vnd.api+json');
+        .set('Accept', 'application/vnd.card+json');
     });
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -240,7 +240,7 @@ module('Realm Server', function (hooks) {
 
     response = await request
       .get(`/_search?${stringify(query)}`)
-      .set('Accept', 'application/vnd.api+json');
+      .set('Accept', 'application/vnd.card+json');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     assert.strictEqual(response.body.data.length, 1, 'found one card');
@@ -252,7 +252,7 @@ module('Realm Server', function (hooks) {
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .delete('/person-1')
-        .set('Accept', 'application/vnd.api+json');
+        .set('Accept', 'application/vnd.card+json');
     });
 
     assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -392,7 +392,7 @@ module('Realm Server', function (hooks) {
 
     let response = await request
       .get(`/_search?${stringify(query)}`)
-      .set('Accept', 'application/vnd.api+json');
+      .set('Accept', 'application/vnd.card+json');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     let json = response.body;

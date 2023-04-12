@@ -56,6 +56,7 @@ export const isNode =
   '[object process]';
 
 export { Realm } from './realm';
+export { SupportedMimeType } from './router';
 export { Loader } from './loader';
 export type {
   Kind,

@@ -7,9 +7,10 @@ import { service } from '@ember/service';
 import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
 import {
-  logger,
+  SupportedMimeType,
   isCardDocument,
   isSingleCardDocument,
+  logger,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../services/loader-service';
@@ -233,8 +234,8 @@ export default class Go extends Component<Signature> {
 
   private remove = restartableTask(async (url: string) => {
     let headersAccept = this.openFileCardJSON
-      ? 'application/vnd.api+json'
-      : 'application/vnd.card+source';
+      ? SupportedMimeType.CardJson
+      : SupportedMimeType.CardSource;
     url = this.openFileCardJSON ? url.replace(/\.json$/, '') : url;
     let response = await this.loaderService.loader.fetch(url, {
       method: 'DELETE',

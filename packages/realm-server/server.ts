@@ -25,6 +25,7 @@ import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp
 import { monacoMiddleware } from './middleware/monaco';
 import '@cardstack/runtime-common/externals-global';
 import { nodeStreamToText } from './stream';
+import mime from 'mime-types';
 
 interface Options {
   hostLocalRealm?: boolean;
@@ -159,11 +160,7 @@ export class RealmServer {
     }
     if (!headers.get('content-type')) {
       let fileName = reversedResolution.href.split('/').pop()!;
-      if (fileName.includes('.')) {
-        ctxt.type = fileName.split('.').pop()!;
-      } else {
-        ctxt.type = 'application/vnd.api+json';
-      }
+      ctxt.type = mime.lookup(fileName) || 'application/octet-stream';
     }
 
     if (nodeStream) {

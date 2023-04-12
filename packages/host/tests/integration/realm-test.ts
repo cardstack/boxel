@@ -105,7 +105,7 @@ module('Integration | realm', function (hooks) {
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/empty`, {
         headers: {
-          Accept: 'application/vnd.api+json',
+          Accept: 'application/vnd.card+json',
         },
       })
     );
@@ -178,7 +178,7 @@ module('Integration | realm', function (hooks) {
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/mango`, {
         headers: {
-          Accept: 'application/vnd.api+json',
+          Accept: 'application/vnd.card+json',
         },
       })
     );
@@ -270,7 +270,7 @@ module('Integration | realm', function (hooks) {
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/mango`, {
         headers: {
-          Accept: 'application/vnd.api+json',
+          Accept: 'application/vnd.card+json',
         },
       })
     );
@@ -355,7 +355,7 @@ module('Integration | realm', function (hooks) {
       let response = await realm.handle(
         new Request(`${testRealmURL}root/dir/empty`, {
           headers: {
-            Accept: 'application/vnd.api+json',
+            Accept: 'application/vnd.card+json',
           },
         })
       );
@@ -371,7 +371,7 @@ module('Integration | realm', function (hooks) {
       let response = await realm.handle(
         new Request(`${testRealmURL}root/_search`, {
           headers: {
-            Accept: 'application/vnd.api+json',
+            Accept: 'application/vnd.card+json',
           },
         })
       );
@@ -400,7 +400,7 @@ module('Integration | realm', function (hooks) {
           new Request(testRealmURL, {
             method: 'POST',
             headers: {
-              Accept: 'application/vnd.api+json',
+              Accept: 'application/vnd.card+json',
             },
             body: JSON.stringify(
               {
@@ -471,7 +471,7 @@ module('Integration | realm', function (hooks) {
           new Request(testRealmURL, {
             method: 'POST',
             headers: {
-              Accept: 'application/vnd.api+json',
+              Accept: 'application/vnd.card+json',
             },
             body: JSON.stringify(
               {
@@ -546,7 +546,7 @@ module('Integration | realm', function (hooks) {
       new Request(testRealmURL, {
         method: 'POST',
         headers: {
-          Accept: 'application/vnd.api+json',
+          Accept: 'application/vnd.card+json',
         },
         body: JSON.stringify(
           {
@@ -689,7 +689,7 @@ module('Integration | realm', function (hooks) {
           new Request(`${testRealmURL}dir/card`, {
             method: 'PATCH',
             headers: {
-              Accept: 'application/vnd.api+json',
+              Accept: 'application/vnd.card+json',
             },
             body: JSON.stringify(
               {
@@ -824,7 +824,7 @@ module('Integration | realm', function (hooks) {
       new Request(`${testRealmURL}ski-trip`, {
         method: 'PATCH',
         headers: {
-          Accept: 'application/vnd.api+json',
+          Accept: 'application/vnd.card+json',
         },
         body: JSON.stringify(
           {
@@ -970,7 +970,7 @@ module('Integration | realm', function (hooks) {
       new Request(`${testRealmURL}dir/mango`, {
         method: 'PATCH',
         headers: {
-          Accept: 'application/vnd.api+json',
+          Accept: 'application/vnd.card+json',
         },
         body: JSON.stringify(
           {
@@ -1138,7 +1138,7 @@ module('Integration | realm', function (hooks) {
           new Request(`${testRealmURL}cards/2`, {
             method: 'DELETE',
             headers: {
-              Accept: 'application/vnd.api+json',
+              Accept: 'application/vnd.card+json',
             },
           })
         );
@@ -1397,7 +1397,7 @@ module('Integration | realm', function (hooks) {
     let response = await realm.handle(
       new Request(`${testRealmURL}_search`, {
         headers: {
-          Accept: 'application/vnd.api+json',
+          Accept: 'application/vnd.card+json',
         },
       })
     );
@@ -1489,7 +1489,7 @@ module('Integration | realm', function (hooks) {
         })}`,
         {
           headers: {
-            Accept: 'application/vnd.api+json',
+            Accept: 'application/vnd.card+json',
           },
         }
       )

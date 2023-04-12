@@ -9,6 +9,7 @@ import { getContainsManyComponent } from './contains-many-component';
 import { getLinksToEditor } from './links-to-editor';
 import { getLinksToManyComponent } from './links-to-many-component';
 import {
+  SupportedMimeType,
   Deferred,
   isCardResource,
   Loader,
@@ -881,7 +882,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     let reference = new URL(maybeRelativeReference as string, relativeTo).href;
     let loader = Loader.getLoaderFor(createFromSerialized);
     let response = await loader.fetch(reference, {
-      headers: { Accept: 'application/vnd.api+json' },
+      headers: { Accept: SupportedMimeType.CardJson },
     });
     if (!response.ok) {
       let cardError = await CardError.fromFetchResponse(reference, response);
@@ -1194,7 +1195,7 @@ class LinksToMany<FieldT extends CardConstructor>
 
     for (let reference of refs) {
       let response = await loader.fetch(reference, {
-        headers: { Accept: 'application/vnd.api+json' },
+        headers: { Accept: SupportedMimeType.CardJson },
       });
       if (!response.ok) {
         let cardError = await CardError.fromFetchResponse(reference, response);
