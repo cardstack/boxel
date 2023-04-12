@@ -59,8 +59,12 @@ export type PartialCardInstanceType<T extends CardConstructor> = T extends {
   ? P | null
   : Partial<InstanceType<T>>;
 export type FieldsTypeFor<T extends Card> = {
-  [Field in keyof T]: (new () => GlimmerComponent<{ Args: {}; Blocks: {} }>) &
-    (T[Field] extends Card ? FieldsTypeFor<T[Field]> : unknown);
+  [Field in keyof T]: ComponentLike<{ Args: {}; Blocks: {} }> &
+    (T[Field] extends ArrayLike<unknown>
+      ? ComponentLike<{ Args: {}; Blocks: {} }>[]
+      : T[Field] extends Card
+      ? FieldsTypeFor<T[Field]>
+      : unknown);
 };
 export type Format = 'isolated' | 'embedded' | 'edit';
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
@@ -1324,7 +1328,7 @@ linksTo[fieldType] = 'linksTo' as FieldType;
 export function linksToMany<CardT extends CardConstructor>(
   cardOrThunk: CardT | (() => CardT),
   options?: Options
-) {
+): CardInstanceType<CardT>[] {
   return {
     setupField(fieldName: string) {
       return makeDescriptor(

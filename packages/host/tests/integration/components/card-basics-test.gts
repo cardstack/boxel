@@ -637,6 +637,126 @@ module('Integration | card-basics', function (hooks) {
     );
   });
 
+  test('can #each over a containsMany primitive @fields', async function (assert) {
+    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field languagesSpoken = containsMany(StringCard);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <@fields.firstName />
+          speaks
+          {{#each @fields.languagesSpoken as |language|}}
+            <language />
+          {{/each}}
+        </template>
+      };
+    }
+
+    let mango = new Person({
+      firstName: 'Mango',
+      languagesSpoken: ['english', 'japanese'],
+    });
+
+    let root = await renderCard(mango, 'isolated');
+    assert.strictEqual(
+      cleanWhiteSpace(root.textContent!),
+      'Mango speaks english japanese'
+    );
+  });
+
+  test('can #each over a containsMany composite @fields', async function (assert) {
+    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-person-firstName><@fields.firstName /></div>
+        </template>
+      };
+    }
+
+    class Family extends Card {
+      @field people = containsMany(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div>
+            {{#each @fields.people as |person|}}
+              <person />
+            {{/each}}
+          </div>
+        </template>
+      };
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
+
+    let abdelRahmans = new Family({
+      people: [
+        new Person({ firstName: 'Mango' }),
+        new Person({ firstName: 'Van Gogh' }),
+        new Person({ firstName: 'Hassan' }),
+        new Person({ firstName: 'Mariko' }),
+        new Person({ firstName: 'Yume' }),
+        new Person({ firstName: 'Sakura' }),
+      ],
+    });
+
+    await renderCard(abdelRahmans, 'isolated');
+    assert.deepEqual(
+      [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
+        (element) => element.textContent?.trim()
+      ),
+      ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura']
+    );
+  });
+
+  test('can #each over a linksToMany @fields', async function (assert) {
+    let { field, contains, linksToMany, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-person-firstName><@fields.firstName /></div>
+        </template>
+      };
+    }
+
+    class Family extends Card {
+      @field people = linksToMany(Person);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div>
+            {{#each @fields.people as |person|}}
+              <person />
+            {{/each}}
+          </div>
+        </template>
+      };
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
+    let mango = new Person({
+      firstName: 'Mango',
+    });
+    let vanGogh = new Person({
+      firstName: 'Van Gogh',
+    });
+    await saveCard(mango, `${testRealmURL}Pet/mango`);
+    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`);
+    let abdelRahmanDogs = new Family({
+      people: [mango, vanGogh],
+    });
+    await renderCard(abdelRahmanDogs, 'isolated');
+    assert.deepEqual(
+      [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
+        (element) => element.textContent?.trim()
+      ),
+      ['Mango', 'Van Gogh']
+    );
+  });
+
   // note that polymorphic "contains" field rendering is inherently tested via the catalog entry tests
   test('renders a card with a polymorphic "containsMany" field', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;

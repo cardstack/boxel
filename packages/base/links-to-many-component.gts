@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { type Card, type Box, type Format, type Field } from './card-api';
-import { getBoxComponent } from './field-component';
+import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui';
 import {
@@ -114,19 +114,6 @@ export function getLinksToManyComponent({
       </template>
     };
   } else {
-    return class LinksToMany extends GlimmerComponent {
-      <template>
-        {{#each arrayField.children as |boxedElement|}}
-          {{#let
-            (getBoxComponent
-              (cardTypeFor field boxedElement) format boxedElement
-            )
-            as |Item|
-          }}
-            <Item />
-          {{/let}}
-        {{/each}}
-      </template>
-    };
+    return getPluralViewComponent(arrayField, field, format, cardTypeFor);
   }
 }

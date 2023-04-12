@@ -8,7 +8,7 @@ import {
   type Format,
   type Field,
 } from './card-api';
-import { getBoxComponent } from './field-component';
+import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui';
 
@@ -93,19 +93,6 @@ export function getContainsManyComponent({
       </template>
     };
   } else {
-    return class ContainsMany extends GlimmerComponent {
-      <template>
-        {{#each arrayField.children as |boxedElement|}}
-          {{#let
-            (getBoxComponent
-              (cardTypeFor field boxedElement) format boxedElement
-            )
-            as |Item|
-          }}
-            <Item />
-          {{/let}}
-        {{/each}}
-      </template>
-    };
+    return getPluralViewComponent(arrayField, field, format, cardTypeFor);
   }
 }

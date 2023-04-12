@@ -1,6 +1,8 @@
+import GlimmerComponent from '@glimmer/component';
 import {
   type Card,
   type Box,
+  type Field,
   type Format,
   type FieldsTypeFor,
 } from './card-api';
@@ -137,4 +139,53 @@ function fieldsComponentsFor<T extends Card>(
       };
     },
   }) as any;
+}
+
+export function getPluralViewComponent(
+  model: Box<Card[]>,
+  field: Field<typeof Card>,
+  format: Format,
+  cardTypeFor: (
+    field: Field<typeof Card>,
+    boxedElement: Box<Card>
+  ) => typeof Card
+): ComponentLike<{ Args: {}; Blocks: {} }> {
+  let components = model.children.map((child) =>
+    getBoxComponent(cardTypeFor(field, child), format, child)
+  );
+  let defaultComponent = class PluralView extends GlimmerComponent {
+    <template>
+      {{#each model.children as |child|}}
+        {{#let
+          (getBoxComponent (cardTypeFor field child) format child)
+          as |Item|
+        }}
+          <Item />
+        {{/let}}
+      {{/each}}
+    </template>
+  };
+  return new Proxy(defaultComponent, {
+    get(target, property, received) {
+      // proxying the bare minimum of an Array in order to render within a
+      // template. add more getters as necessary...
+      if (property === Symbol.iterator) {
+        return components[Symbol.iterator];
+      }
+      if (property === 'length') {
+        return components.length;
+      }
+      if (typeof property === 'string' && property.match(/\d+/)) {
+        return components[parseInt(property)];
+      }
+      return Reflect.get(target, property, received);
+    },
+    getPrototypeOf() {
+      // This is necessary for Ember to be able to locate the template associated
+      // with a proxied component. Our Proxy object won't be in the template WeakMap,
+      // but we can pretend our Proxy object inherits from the true component, and
+      // Ember's template lookup respects inheritance.
+      return defaultComponent;
+    },
+  });
 }
