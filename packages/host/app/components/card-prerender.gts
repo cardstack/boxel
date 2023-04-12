@@ -84,9 +84,9 @@ export default class CardPrerender extends Component {
       this.loaderService.loader,
       baseRealm.url
     );
-    await Promise.all(
-      baseRealmModules.map((m) => this.loaderService.loader.import(m))
-    );
+    for (let module of baseRealmModules) {
+      await this.loaderService.loader.import(module);
+    }
   });
 
   private doRegistration = enqueueTask(async () => {
