@@ -84,11 +84,9 @@ export default class CardPrerender extends Component {
       this.loaderService.loader,
       baseRealm.url
     );
-    // TODO the need to perform this reverse reveals that there is a bug in
-    // our loader around dependency consumption, please investigate more!
-    for (let module of baseRealmModules.reverse()) {
-      await this.loaderService.loader.import(module);
-    }
+    await Promise.all(
+      baseRealmModules.map((m) => this.loaderService.loader.import(m))
+    );
   });
 
   private doRegistration = enqueueTask(async () => {
