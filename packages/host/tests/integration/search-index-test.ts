@@ -815,7 +815,7 @@ module('Integration | search-index', function (hooks) {
 
       export class Appointment extends Card {
         @field title = contains(StringCard);
-        @field contact = contains(PersonCard);
+        @field contact = contains(() => PersonCard);
       }
     `,
       'pet-card.gts': `

@@ -301,7 +301,7 @@ module('module-syntax', function () {
         import StringCard from "https://cardstack.com/base/string";
         export class Person extends Card {
           @field firstName = contains(StringCard);
-          @field pet = linksTo(PetCard);
+          @field pet = linksTo(() => PetCard);
         }
       `
     );
