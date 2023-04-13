@@ -1999,7 +1999,9 @@ function cardThunk<CardT extends CardConstructor>(
 ): () => CardT {
   if (!cardOrThunk) {
     throw new Error(
-      `bug: cardOrThunk was ${cardOrThunk}. if there is a cyclic dependency if one of your fields, make sure to use '() => CardName' format instead of just 'CardName'`
+      `cardOrThunk was ${cardOrThunk}. There might be a cyclic dependency in one of your fields.
+      Use '() => CardName' format for the fields with the cycle in all related cards.
+      e.g.: '@field friend = linksTo(() => Person)'`
     );
   }
   return (

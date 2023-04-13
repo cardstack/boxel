@@ -526,7 +526,7 @@ module('Integration | schema', function (hooks) {
 
       export class Post extends Card {
         @field title = contains(StringCard);
-        @field author = contains(PersonCard);
+        @field author = contains(() => PersonCard);
       }
     `
     );
@@ -586,6 +586,132 @@ module('Integration | schema', function (hooks) {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
         @field aliases = containsMany(StringCard);
+      }
+    `
+    );
+  });
+
+  test('it can add a field with a card whose fields have a cyclic dependency with the enclosing card', async function (assert) {
+    await realm.write(
+      'pet.gts',
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Pet extends Card {
+        @field firstName = contains(StringCard);
+      }
+    `
+    );
+    await realm.write(
+      'person.gts',
+      `
+      import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { Pet } from "./pet";
+
+      export class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field pet = linksTo(() => Pet);
+      }
+    `
+    );
+    await realm.write(
+      'appointment.gts',
+      `
+      import { contains, containsMany, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { Person } from "./person";
+
+      export class Appointment extends Card {
+        @field title = contains(StringCard);
+        @field contacts = containsMany(Person);
+      }
+    `
+    );
+
+    await realm.write(
+      'appointment.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Appointment',
+            ref: {
+              module: `${testRealmURL}appointment`,
+              name: 'Appointment',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${baseRealm.url}catalog-entry`,
+              name: 'CatalogEntry',
+            },
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: `${testRealmURL}appointment`,
+                  name: 'Appointment',
+                },
+              },
+            },
+          },
+        },
+      })
+    );
+
+    let openFile = await getFileResource(this, adapter, {
+      module: `${testRealmURL}pet`,
+      name: 'Pet',
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Module @file={{openFile}} />
+          <CardCatalogModal />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-card-id]');
+    await fillIn('[data-test-new-field-name]', 'appointment');
+    await click('[data-test-new-field-contains]');
+
+    await click('[data-test-add-field]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    assert.dom(`[data-test-select="${testRealmURL}appointment"]`).exists();
+
+    await click(`[data-test-select="${testRealmURL}appointment"]`);
+    await waitFor('[data-test-field="appointment"]');
+    assert
+      .dom('[data-test-field="appointment"]')
+      .hasText(
+        `Delete appointment - contains - field card ID: ${testRealmURL}appointment/Appointment`
+      );
+
+    await waitFor('[data-test-catalog-entry-publish]');
+    await click(`[data-test-catalog-entry-publish]`);
+
+    await waitFor('[data-test-save-card]');
+    await click(`[data-test-save-card]`);
+    await waitFor(`[data-test-catalog-entry-editor] [data-test-ref]`);
+    assert
+      .dom(`[data-test-catalog-entry-editor] [data-test-ref]`)
+      .hasText(`Module: ${testRealmURL}pet Name: Pet`);
+
+    let fileRef = await adapter.openFile('pet.gts');
+    let src = fileRef?.content as string;
+    assert.codeEqual(
+      src,
+      `
+      import { Appointment as AppointmentCard } from "${testRealmURL}appointment";
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Pet extends Card {
+        @field firstName = contains(StringCard);
+        @field appointment = contains(() => AppointmentCard);
       }
     `
     );
@@ -691,7 +817,7 @@ module('Integration | schema', function (hooks) {
       export class Person extends Card {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
-        @field pet = linksTo(PetCard);
+        @field pet = linksTo(() => PetCard);
       }
     `
     );
@@ -954,7 +1080,7 @@ module('Integration | schema', function (hooks) {
 
       export class Person extends Card {
         @field firstName = contains(StringCard);
-        @field pets = linksToMany(PetCard);
+        @field pets = linksToMany(() => PetCard);
       }
     `
     );
