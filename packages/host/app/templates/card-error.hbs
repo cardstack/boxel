@@ -1,14 +1,29 @@
-{{!-- template-lint-disable no-inline-styles --}}
-<div data-card-error style="margin: 5em">
-  {{!-- @glint-ignore glint doesn't understand the type for the error template's model --}}
-  {{#if this.model.failureLoadingIndexCard}}
-    <b>Cannot load index card.</b>
-  {{else}}
-    <b>Cannot load card.</b>
-  {{/if}}
-  <pre style="overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;">
-  {{!-- @glint-ignore glint doesn't understand the type for the error template's model --}}
-  {{this.model.message}}
-  </pre>
-</div>
+{{! template-lint-disable no-inline-styles }}
+{{#if this.isLocalRealm}}
+  <InLocalRealm as |realm|>
+    {{#if realm.connected}}
+      <CardError
+        @isIndexCard={{this.model.failureLoadingIndexCard}}
+        @message={{this.model.message}}
+      />
+    {{else if realm.isLoading}}
+      Loading local realm...
+    {{else if realm.isEmpty}}
+      No local realm connected.
+      <a
+        href="#"
+        {{on 'click' (this.withPreventDefault realm.open)}}
+        style='color:#6638ff;text-decoration:underline'
+      >Open a local realm</a>
+    {{else}}
+      <p>Local realm state: {{realm.status}}</p>
+    {{/if}}
+  </InLocalRealm>
+{{else}}
+  <CardError
+    @isIndexCard={{this.model.failureLoadingIndexCard}}
+    @message={{this.model.message}}
+  />
+{{/if}}
+
 <CodeLink />
