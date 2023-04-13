@@ -83,7 +83,11 @@ export class NodeAdapter implements RealmAdapter {
     if (!existsSync(absolutePath)) {
       return undefined;
     }
-    let { mtime } = statSync(absolutePath);
+    let stat = statSync(absolutePath);
+    // Case-insensitive file systems need this check
+    if (stat.isDirectory()) {
+      return undefined;
+    }
     let lazyStream: ReadStream;
     return {
       path,
@@ -96,7 +100,7 @@ export class NodeAdapter implements RealmAdapter {
         }
         return lazyStream;
       },
-      lastModified: mtime.getTime(),
+      lastModified: stat.mtime.getTime(),
     };
   }
 

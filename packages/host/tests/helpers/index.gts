@@ -80,7 +80,7 @@ export const TestRealm = {
     opts?: Options
   ): Promise<Realm> {
     if (opts?.isAcceptanceTest) {
-      await visit('/');
+      await visit('/acceptance-test-setup');
     } else {
       await makeRenderer();
     }

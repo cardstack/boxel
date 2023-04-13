@@ -11,10 +11,12 @@ let path = new URL(ownRealmURL).pathname.replace(/\/$/, '');
 
 Router.map(function () {
   this.route('indexer', { path: '/indexer/:id' });
+  this.route('acceptance-test-setup');
   if (!path || hostsOwnAssets) {
+    this.route('card', { path: '' });
     this.route('code');
   } else {
-    this.route('index', { path });
+    this.route('card', { path });
     this.route('code', { path: `${path}/code` });
   }
   this.route('card', { path: '/*path' });

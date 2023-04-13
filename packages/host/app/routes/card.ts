@@ -35,8 +35,13 @@ export default class RenderCard extends Route<
 
   async model(params: { path: string }) {
     let { path } = params;
-    let url = new URL(`/${path}`, ownRealmURL);
-    let instance = await this.cardService.loadModel(url);
-    return instance.constructor.getComponent(instance, 'isolated');
+    let url = new URL(`/${path || ''}`, ownRealmURL);
+    try {
+      let instance = await this.cardService.loadModel(url);
+      return instance.constructor.getComponent(instance, 'isolated');
+    } catch (e) {
+      (e as any).failureLoadingIndexCard = url.href === ownRealmURL;
+      throw e;
+    }
   }
 }

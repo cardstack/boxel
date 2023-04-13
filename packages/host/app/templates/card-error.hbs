@@ -1,8 +1,14 @@
 {{!-- template-lint-disable no-inline-styles --}}
 <div data-card-error style="margin: 5em">
-  <b>Cannot load card</b>
+  {{!-- @glint-ignore glint doesn't understand the type for the error template's model --}}
+  {{#if this.model.failureLoadingIndexCard}}
+    <b>Cannot load index card.</b>
+  {{else}}
+    <b>Cannot load card.</b>
+  {{/if}}
   <pre style="overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;">
   {{!-- @glint-ignore glint doesn't understand the type for the error template's model --}}
   {{this.model.message}}
   </pre>
 </div>
+<CodeLink />
