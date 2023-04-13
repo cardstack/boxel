@@ -15,7 +15,7 @@ export class Person extends Card {
   @field lastName = contains(StringCard);
   @field isCool = contains(BooleanCard);
   @field isHuman = contains(BooleanCard);
-  @field pet = linksTo(Pet);
+  @field pet = linksTo(() => Pet);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

@@ -8,6 +8,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import { CardContainer } from '@cardstack/boxel-ui';
+import { Booking } from './booking';
 
 export class Pet extends Card {
   @field firstName = contains(StringCard);
@@ -15,6 +16,7 @@ export class Pet extends Card {
   @field favoriteTreat = contains(StringCard);
   @field cutenessRating = contains(IntegerCard);
   @field sleepsOnTheCouch = contains(BooleanCard);
+  @field appointment = contains(() => Booking);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer class='demo-card' @displayBoundaries={{true}}>

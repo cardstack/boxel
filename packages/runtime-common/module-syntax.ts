@@ -236,7 +236,15 @@ function makeNewField(
     suggestedCardName(fieldRef)
   );
 
-  return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
+  if (
+    fieldRef.module.startsWith(baseRealm.url) &&
+    fieldRef.name === 'default'
+  ) {
+    // primitive fields
+    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
+  }
+
+  return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldCardIdentifier.name});`;
 }
 
 function getProgramPath(path: NodePath<any>): NodePath<t.Program> {

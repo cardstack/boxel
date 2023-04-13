@@ -796,6 +796,103 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
+  test('can index a card that has a cyclic relationship with the field of a card in its fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'person-card.gts': `
+      import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { PetCard } from "./pet-card";
+
+      export class PersonCard extends Card {
+        @field firstName = contains(StringCard);
+        @field pet = linksTo(() => PetCard);
+      }
+    `,
+      'appointment.gts': `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { PersonCard } from "./person-card";
+
+      export class Appointment extends Card {
+        @field title = contains(StringCard);
+        @field contact = contains(() => PersonCard);
+      }
+    `,
+      'pet-card.gts': `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      import { Appointment } from "./appointment";
+
+      export class PetCard extends Card {
+        @field firstName = contains(StringCard);
+        @field appointment = contains(() => Appointment);
+      }`,
+      'jackie.json': {
+        data: {
+          attributes: {
+            firstName: 'Jackie',
+            appointment: {
+              title: 'Vet visit',
+              contact: { firstName: 'Burcu' },
+            },
+          },
+          meta: { adoptsFrom: { module: `./pet-card`, name: 'PetCard' } },
+          relationships: {
+            'appointment.contact.pet': {
+              links: { self: `${testRealmURL}mango` },
+            },
+          },
+        },
+      },
+      'mango.json': {
+        data: {
+          attributes: { firstName: 'Mango' },
+          meta: {
+            adoptsFrom: { module: `./pet-card`, name: 'PetCard' },
+          },
+        },
+      },
+    });
+
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let card = await indexer.card(new URL(`${testRealmURL}jackie`));
+
+    if (card?.type === 'doc') {
+      assert.deepEqual(card.doc, {
+        data: {
+          id: `${testRealmURL}jackie`,
+          type: 'card',
+          links: { self: `${testRealmURL}jackie` },
+          attributes: {
+            firstName: 'Jackie',
+            appointment: {
+              title: 'Vet visit',
+              contact: { firstName: 'Burcu' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}pet-card`,
+              name: 'PetCard',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}jackie.json`
+            ),
+          },
+          relationships: {
+            'appointment.contact.pet': {
+              links: { self: `${testRealmURL}mango` },
+            },
+          },
+        },
+      });
+    } else {
+      assert.ok(false, `search entry was an error: ${card?.error.detail}`);
+    }
+  });
+
   test('can index a card with a containsMany composite containing a linkTo field', async function (assert) {
     let adapter = new TestRealmAdapter({
       'Vendor/vendor1.json': {

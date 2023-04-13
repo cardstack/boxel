@@ -2002,6 +2002,13 @@ function makeDescriptor<
 function cardThunk<CardT extends CardConstructor>(
   cardOrThunk: CardT | (() => CardT)
 ): () => CardT {
+  if (!cardOrThunk) {
+    throw new Error(
+      `cardOrThunk was ${cardOrThunk}. There might be a cyclic dependency in one of your fields.
+      Use '() => CardName' format for the fields with the cycle in all related cards.
+      e.g.: '@field friend = linksTo(() => Person)'`
+    );
+  }
   return (
     'baseCard' in cardOrThunk ? () => cardOrThunk : cardOrThunk
   ) as () => CardT;
