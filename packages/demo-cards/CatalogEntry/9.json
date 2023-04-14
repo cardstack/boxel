@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "BlogPost",
+      "description": "Catalog entry for BlogPost",
+      "ref": {
+        "module": "http://localhost:4200/blog-post",
+        "name": "BlogPost"
+      },
+      "demo": {
+        "title": "Blog Post",
+        "slug": "blog-post"
+      }
+    },
+    "relationships": {
+      "demo.authorBio": {
+        "links": {
+          "self": "http://localhost:4200/Author/1"
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://localhost:4200/blog-post",
+            "name": "BlogPost"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
