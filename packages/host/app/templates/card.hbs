@@ -1,2 +1,29 @@
-<this.model/>
+{{! template-lint-disable no-inline-styles }}
+{{#if this.isLocalRealm}}
+  <InLocalRealm as |realm|>
+    {{#if realm.connected}}
+      <this.model/>
+      <LocalRealmFooter
+        @connected={{realm.connected}}
+        @close={{realm.close}}
+      />
+    {{else if realm.isLoading}}
+      Loading local realm...
+    {{else if realm.isEmpty}}
+      <div class='demo-card'>
+        No local realm connected.
+        <a
+          href="#"
+          {{on 'click' (this.withPreventDefault realm.open)}}
+          style='color:#6638ff;text-decoration:underline'
+        >Open a local realm</a>
+      </div>
+    {{else}}
+      <p>Local realm state: {{realm.status}}</p>
+    {{/if}}
+  </InLocalRealm>
+{{else}}
+  <this.model/>
+{{/if}}
+
 <CodeLink />

@@ -1,9 +1,12 @@
 import { Component, Card } from 'https://cardstack.com/base/card-api';
+import { CardContainer } from '@cardstack/boxel-ui';
 
 export class CardsGrid extends Card {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      This cards-grid instance should become even better.
+      <CardContainer class='demo-card' @displayBoundaries={{true}}>
+        This cards-grid instance should become even better.
+      </CardContainer>
     </template>
   };
 }

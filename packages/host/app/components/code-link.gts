@@ -8,14 +8,14 @@ interface Signature {
 export default class CodeLink extends Component<Signature> {
   <template>
     {{! template-lint-disable no-inline-styles }}
-    <p style='text-align:center;margin:5em auto;' data-test-moved>The card code
-      editor has moved to
+    <footer style='text-align:center;margin:1em auto;' data-test-moved>The card
+      code editor has moved to
       <LinkTo
         @route='code'
-        style='color:aqua;font-weight:bold;font-style:italic'
+        style='color:#6638ff;text-decoration:underline'
         data-test-code-link
       >/code</LinkTo>
-    </p>
+    </footer>
   </template>
 }
 

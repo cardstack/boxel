@@ -48,12 +48,20 @@ export default class Go extends Component<Signature> {
     <div class='main'>
       <div class='main__column'>
         {{#if isLocalRealm}}
-          <InLocalRealm as |url|>
-            <FileTree
-              @url={{url}}
-              @openFile={{@path}}
-              @openDirs={{@openDirs}}
-            />
+          <InLocalRealm as |realm|>
+            {{#if realm.connected}}
+              <button {{on 'click' realm.close}} type='button'>Close local realm<br
+                />({{realm.connected.directoryName}})</button>
+              <FileTree
+                @url={{realm.connected.url}}
+                @openFile={{@path}}
+                @openDirs={{@openDirs}}
+              />
+            {{else if realm.isLoading}}
+              ...
+            {{else if realm.isEmpty}}
+              <button {{on 'click' realm.open}}>Open a local realm</button>
+            {{/if}}
           </InLocalRealm>
         {{else}}
           <FileTree

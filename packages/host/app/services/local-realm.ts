@@ -166,6 +166,13 @@ export default class LocalRealm extends Service {
     }
   }
 
+  get directoryName() {
+    if (this.state.type == 'available') {
+      return (this.state.handle as FileSystemHandle).name;
+    }
+    return null;
+  }
+
   @tracked
   private state:
     | { type: 'starting-up' }
@@ -190,6 +197,10 @@ export default class LocalRealm extends Service {
         handle: FileSystemDirectoryHandle;
         wait: Deferred<void>;
       } = { type: 'starting-up' };
+
+  get status() {
+    return this.state.type;
+  }
 
   @service declare router: RouterService;
   @service declare fastboot: { isFastBoot: boolean };
@@ -312,7 +323,7 @@ export default class LocalRealm extends Service {
   });
 
   private async ensureWorker() {
-    let registration = await navigator.serviceWorker.register('./worker.js', {
+    let registration = await navigator.serviceWorker.register('/worker.js', {
       scope: '/',
     });
     registration.addEventListener('updatefound', () => {

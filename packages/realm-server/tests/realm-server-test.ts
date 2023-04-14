@@ -598,6 +598,22 @@ module('Realm Server serving from root', function (hooks) {
                 kind: 'file',
               },
             },
+            'home.gts': {
+              links: {
+                related: `${testRealmHref}home.gts`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
+            'index.json': {
+              links: {
+                related: `${testRealmHref}index.json`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
             'person-1.json': {
               links: {
                 related: `${testRealmHref}person-1.json`,
