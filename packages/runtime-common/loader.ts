@@ -1,12 +1,7 @@
 import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
-import {
-  trimExecutableExtension,
-  executableExtensions,
-  baseRealm,
-  logger,
-} from './index';
+import { trimExecutableExtension, logger } from './index';
 import { RealmPaths } from './paths';
 import { CardError } from './error';
 import { type RunnerOpts } from './search-index';
@@ -40,10 +35,15 @@ type RegisteredModule = {
 // have been loaded. Modules move from fetching to registered depth-first.
 type FetchingModule = {
   state: 'fetching';
-
   // if you encounter a module in this state, you should wait for the deferred
   // and then retry load where you're guarantee to see a new state
   deferred: Deferred<Module>;
+  stacks: string[][];
+  defined?: {
+    dependencyList: string[];
+    implementation: Function;
+    consumedModules: Set<string>;
+  };
 };
 
 type Module =
@@ -74,12 +74,6 @@ type Module =
 export interface MaybeLocalRequest extends Request {
   isLocal?: true;
 }
-
-// One of the largest expenditures of time during incremental indexing is
-// fetching modules from a fresh Loader instance. To improve performance we are
-// creating a module cache that can be shared across loader instances for
-// modules that we believe never change.
-const sharedModules = new Map<string, Module>();
 
 export class Loader {
   private log = logger('loader');
@@ -402,37 +396,11 @@ export class Loader {
   }
 
   private getModule(moduleIdentifier: string): Module | undefined {
-    if (isUrlLike(moduleIdentifier)) {
-      let moduleURL = new URL(moduleIdentifier);
-      if (baseRealm.inRealm(moduleURL)) {
-        return sharedModules.get(moduleIdentifier);
-      } else {
-        return this.modules.get(moduleIdentifier);
-      }
-    } else {
-      // These are the shimmed modules that have npm-like module identifiers
-      return sharedModules.get(moduleIdentifier);
-    }
+    return this.modules.get(trimModuleIdentifier(moduleIdentifier));
   }
 
   private setModule(moduleIdentifier: string, module: Module) {
-    if (isUrlLike(moduleIdentifier)) {
-      let moduleURL = new URL(moduleIdentifier);
-      let cache: Map<string, Module>;
-      if (baseRealm.inRealm(moduleURL)) {
-        cache = sharedModules;
-      } else {
-        cache = this.modules;
-      }
-      let trimmedIdentifier = trimExecutableExtension(moduleURL);
-      cache.set(trimmedIdentifier.href, module);
-      for (let extension of executableExtensions) {
-        cache.set(`${trimmedIdentifier.href}${extension}`, module);
-      }
-    } else {
-      // These are the shimmed modules that have npm-like module identifiers
-      sharedModules.set(moduleIdentifier, module);
-    }
+    this.modules.set(trimModuleIdentifier(moduleIdentifier), module);
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
@@ -466,19 +434,40 @@ export class Loader {
     let moduleIdentifier =
       typeof moduleURL === 'string' ? moduleURL : moduleURL.href;
     let module = this.getModule(moduleIdentifier);
+    let trimmedIdentifier = trimModuleIdentifier(moduleIdentifier);
     if (module) {
       // in the event of a cycle, we have already evaluated the
       // define() since we recurse into our deps after the evaluation of the
       // define, so just return ourselves
-      if (
-        stack.includes(
-          isUrlLike(moduleIdentifier)
-            ? trimExecutableExtension(new URL(moduleIdentifier)).href
-            : moduleIdentifier
-        )
-      ) {
+      if (stack.includes(trimmedIdentifier)) {
         return module;
       }
+
+      // if we see that our fetch is stuck in a deadlock, then we'll transition
+      // our module to the registered state since it has been defined already.
+      if (module.state === 'fetching' && stack.length > 0) {
+        let deadlock = [...this.modules].find(
+          ([identifier, m]) =>
+            m.state === 'fetching' &&
+            m.stacks.find((s) => s.includes(trimmedIdentifier)) &&
+            stack.includes(identifier)
+        );
+        if (deadlock && module.defined) {
+          let { dependencyList, implementation, consumedModules } =
+            module.defined;
+          let registeredModule: RegisteredModule = {
+            state: 'registered',
+            dependencyList,
+            implementation,
+            consumedModules,
+          };
+          this.setModule(moduleIdentifier, registeredModule);
+          console.log(`registered module ${moduleIdentifier}`);
+          module.deferred.fulfill(registeredModule);
+          return registeredModule;
+        }
+      }
+
       // this closes an otherwise leaky async when there are simultaneous
       // imports for modules that share a common dep, e.g. where you request
       // module a and b simultaneously for the following consumption pattern
@@ -494,6 +483,7 @@ export class Loader {
       // has actually completed loading we need to return the deferred promise
       // of the cached module.
       if (module.state === 'fetching') {
+        module.stacks.push(stack);
         return module.deferred.promise;
       }
       return module;
@@ -515,6 +505,7 @@ export class Loader {
     module = {
       state: 'fetching',
       deferred: new Deferred<Module>(),
+      stacks: [stack],
     };
     this.setModule(moduleIdentifier, module);
 
@@ -574,6 +565,15 @@ export class Loader {
       });
       throw exception;
     }
+    module.defined = {
+      implementation: implementation!,
+      dependencyList: dependencyList!,
+      consumedModules: new Set(
+        dependencyList!.filter(
+          (d) => !['exports', '__import_meta__'].includes(d)
+        )
+      ),
+    };
 
     await Promise.all(
       dependencyList!.map(async (depId) => {
@@ -725,4 +725,10 @@ function isUrlLike(moduleIdentifier: string): boolean {
     moduleIdentifier.startsWith('http://') ||
     moduleIdentifier.startsWith('https://')
   );
+}
+
+function trimModuleIdentifier(moduleIdentifier: string): string {
+  return isUrlLike(moduleIdentifier)
+    ? trimExecutableExtension(new URL(moduleIdentifier)).href
+    : moduleIdentifier;
 }

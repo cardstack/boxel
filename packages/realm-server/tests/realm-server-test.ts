@@ -574,6 +574,14 @@ module('Realm Server serving from root', function (hooks) {
                 kind: 'file',
               },
             },
+            'deadlock/': {
+              links: {
+                related: `${testRealmHref}deadlock/`,
+              },
+              meta: {
+                kind: 'directory',
+              },
+            },
             'dir/': {
               links: {
                 related: `${testRealmHref}dir/`,

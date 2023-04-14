@@ -40,6 +40,19 @@ module('loader', function (hooks) {
     assert.strictEqual(bModule.b(), 'bc', 'module executed successfully');
   });
 
+  test('can resolve a import deadlock', async function (assert) {
+    let loader = new Loader();
+    loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
+    let a = loader.import<{ a(): string }>(`${testRealm}deadlock/a`);
+    let b = loader.import<{ b(): string }>(`${testRealm}deadlock/b`);
+    let [aModule, bModule] = await Promise.all([a, b]);
+    assert.strictEqual(aModule.a(), 'abcd', 'module executed successfully');
+    assert.strictEqual(bModule.b(), 'bcd', 'module executed successfully');
+  });
+
   test('supports import.meta', async function (assert) {
     let loader = new Loader();
     let realm = await createRealm(
