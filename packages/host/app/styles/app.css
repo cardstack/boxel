@@ -101,7 +101,7 @@ svg {
 }
 
 a:hover {
-  color: var(--boxel-link-highlight);
+  color: var(--boxel-highlight);
   cursor: pointer;
 }
 
@@ -254,23 +254,7 @@ textarea:focus {
   --boxel-light: #fff;
   --boxel-dark: #000;
 
-  /*
-    --boxel-highlight (#00ebe5) use cases:
-    on dark background: text links, icons, CTA buttons
-    on light background: CTA buttons, graph line
-
-    --boxel-dark-highlight (#03c4bf) use cases:
-    on light background: copy, text links, icons only
-
-    --boxel-link-highlight:
-    it is set to var(--boxel-dark-highlight) by default - since default background is light
-    it is the color for a:hover
-    set it to var(--boxel-highlight) on dark backgrounds
-  */
-  --boxel-highlight: var(--boxel-cyan);
-  --boxel-highlight-hover: #00d3ce;
-  --boxel-dark-highlight: var(--boxel-teal);
-  --boxel-link-highlight: var(--boxel-dark-highlight);
+  --boxel-highlight: var(--boxel-teal);
   --boxel-danger: #ff4852;
   --boxel-danger-hover: #fa1521;
 
@@ -344,13 +328,13 @@ textarea:focus {
 
 /* FileTree template */
 .file:hover {
-  color: var(--boxel-link-highlight);
+  color: var(--boxel-highlight);
   cursor: pointer;
 }
 .directory.selected,
 .file.selected,
 .file:active {
-  color: var(--boxel-link-highlight);
+  color: var(--boxel-highlight);
 }
 nav > .directory-level {
   padding-left: 0;
