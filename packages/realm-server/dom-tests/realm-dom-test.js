@@ -71,7 +71,7 @@ QUnit.module(
       assert.ok(p, '<p> element exists');
       assert.equal(
         cleanWhiteSpace(p.textContent),
-        'The card code editor has moved to /code',
+        'Hello, world',
         'the index route is displayed'
       );
     });
@@ -91,6 +91,8 @@ QUnit.module(
       assert.ok(dirContents.includes('d.js'));
       assert.ok(dirContents.includes('dir/'));
       assert.ok(dirContents.includes('e.js'));
+      assert.ok(dirContents.includes('home.gts'));
+      assert.ok(dirContents.includes('index.json'));
       assert.ok(dirContents.includes('person-1.json'));
       assert.ok(dirContents.includes('person-2.json'));
       assert.ok(dirContents.includes('person.gts'));
