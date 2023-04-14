@@ -1,6 +1,41 @@
 /** BOXEL STYLES **/
 
 @font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-Regular.ttf');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-Italic.ttf');
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-Medium.ttf');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-MediumItalic.ttf');
+  font-weight: 500;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-Bold.ttf');
+  font-weight: 700;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-BoldItalic.ttf');
+  font-weight: 700;
+  font-style: italic;
+}
+
+/* fallback font */
+@font-face {
   font-family: 'Open Sans';
   src: url('../../fonts/OpenSans-Regular.ttf');
   font-weight: 400;
@@ -115,7 +150,7 @@ textarea:focus {
 }
 
 :root {
-  --boxel-font-family: 'Open Sans', helvetica, arial, sans-serif;
+  --boxel-font-family: 'Poppins', 'Open Sans', helvetica, arial, sans-serif;
   --boxel-monospace-font-family: 'Roboto Mono', 'Courier New', courier,
     monospace;
   --boxel-font-xl: var(--boxel-font-size-xl) / calc(43 / 32)
