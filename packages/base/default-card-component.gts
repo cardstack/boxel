@@ -26,7 +26,6 @@ class DefaultEdit extends GlimmerComponent<{
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <FieldContainer
-            @vertical={{true}}
             {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
             @label={{startCase key}}
             data-test-field={{key}}

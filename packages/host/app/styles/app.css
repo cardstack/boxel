@@ -275,7 +275,7 @@ textarea:focus {
   --boxel-form-control-height: 2.5rem; /* 40px */
   --boxel-form-control-placeholder-color: var(--boxel-400);
   --boxel-form-control-border-color: var(--boxel-400);
-  --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
+  --boxel-form-control-border-radius: var(--boxel-border-radius);
 }
 
 /** HOST APP STYLES **/
@@ -408,7 +408,7 @@ nav > .directory-level {
   --boxel-label-color: var(--boxel-dark);
   padding: var(--boxel-sp);
   display: grid;
-  gap: var(--boxel-sp);
+  gap: var(--boxel-sp-lg);
 }
 
 /* LinksTo Editor */
@@ -571,9 +571,8 @@ nav > .directory-level {
 /* Boxel Label */
 .boxel-label {
   color: var(--boxel-label-color);
-  font: 700 var(--boxel-font-xs);
-  letter-spacing: var(--boxel-lsp-xxl);
-  text-transform: uppercase;
+  font: 700 var(--boxel-font-sm);
+  letter-spacing: var(--boxel-lsp-sm);
 }
 
 /* Boxel Input */
@@ -583,7 +582,7 @@ nav > .directory-level {
   box-sizing: border-box;
   width: 100%;
   min-height: var(--boxel-input-height);
-  padding: var(--boxel-sp-xxs) 0 var(--boxel-sp-xxs) var(--boxel-sp-xxs);
+  padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
   border: 1px solid var(--boxel-form-control-border-color);
   border-radius: var(--boxel-form-control-border-radius);
   font: var(--boxel-font-sm);
