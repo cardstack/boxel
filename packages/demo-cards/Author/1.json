@@ -7,7 +7,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4200/author",
+        "module": "../author",
         "name": "Author"
       }
     }

@@ -9,13 +9,13 @@
     "relationships": {
       "authorBio": {
         "links": {
-          "self": "http://localhost:4200/Author/1"
+          "self": "../Author/1"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4200/blog-post",
+        "module": "../blog-post",
         "name": "BlogPost"
       }
     }
