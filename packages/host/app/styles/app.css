@@ -443,6 +443,9 @@ nav > .directory-level {
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);
 }
 .remove-button {
+  --icon-bg: var(--boxel-teal);
+  --icon-color: var(--boxel-light);
+
   display: block;
   background: none;
   border: none;
@@ -451,6 +454,9 @@ nav > .directory-level {
   height: var(--boxel-icon-sm);
   margin: 0;
   padding: 0;
+}
+.remove-button:hover {
+  --icon-bg: var(--boxel-dark);
 }
 
 /* ContainsMany Editor */
