@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Alice",
+      "lastName": "Enwunder"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../author",
+        "name": "Author"
+      }
+    }
+  }
+}

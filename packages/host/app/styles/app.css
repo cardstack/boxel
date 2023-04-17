@@ -1,6 +1,41 @@
 /** BOXEL STYLES **/
 
 @font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-Regular.ttf');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-Italic.ttf');
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-Medium.ttf');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-MediumItalic.ttf');
+  font-weight: 500;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-Bold.ttf');
+  font-weight: 700;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../fonts/Poppins-BoldItalic.ttf');
+  font-weight: 700;
+  font-style: italic;
+}
+
+/* fallback font */
+@font-face {
   font-family: 'Open Sans';
   src: url('../../fonts/OpenSans-Regular.ttf');
   font-weight: 400;
@@ -66,7 +101,7 @@ svg {
 }
 
 a:hover {
-  color: var(--boxel-link-highlight);
+  color: var(--boxel-highlight);
   cursor: pointer;
 }
 
@@ -115,7 +150,7 @@ textarea:focus {
 }
 
 :root {
-  --boxel-font-family: 'Open Sans', helvetica, arial, sans-serif;
+  --boxel-font-family: 'Poppins', 'Open Sans', helvetica, arial, sans-serif;
   --boxel-monospace-font-family: 'Roboto Mono', 'Courier New', courier,
     monospace;
   --boxel-font-xl: var(--boxel-font-size-xl) / calc(43 / 32)
@@ -164,7 +199,7 @@ textarea:focus {
   --boxel-icon-xxl: 5rem; /* 80px */
 
   /* other */
-  --boxel-border-color: var(--boxel-light-500);
+  --boxel-border-color: #d3d3d3;
   --boxel-border: 1px solid var(--boxel-border-color);
   --boxel-border-dark: 1px solid var(--boxel-dark);
   --boxel-border-radius-xs: 2px;
@@ -219,23 +254,7 @@ textarea:focus {
   --boxel-light: #fff;
   --boxel-dark: #000;
 
-  /*
-    --boxel-highlight (#00ebe5) use cases:
-    on dark background: text links, icons, CTA buttons
-    on light background: CTA buttons, graph line
-
-    --boxel-dark-highlight (#03c4bf) use cases:
-    on light background: copy, text links, icons only
-
-    --boxel-link-highlight:
-    it is set to var(--boxel-dark-highlight) by default - since default background is light
-    it is the color for a:hover
-    set it to var(--boxel-highlight) on dark backgrounds
-  */
-  --boxel-highlight: var(--boxel-cyan);
-  --boxel-highlight-hover: #00d3ce;
-  --boxel-dark-highlight: var(--boxel-teal);
-  --boxel-link-highlight: var(--boxel-dark-highlight);
+  --boxel-highlight: var(--boxel-teal);
   --boxel-danger: #ff4852;
   --boxel-danger-hover: #fa1521;
 
@@ -274,8 +293,8 @@ textarea:focus {
   /* Form control appearance */
   --boxel-form-control-height: 2.5rem; /* 40px */
   --boxel-form-control-placeholder-color: var(--boxel-400);
-  --boxel-form-control-border-color: var(--boxel-400);
-  --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
+  --boxel-form-control-border-color: var(--boxel-border-color);
+  --boxel-form-control-border-radius: var(--boxel-border-radius);
 }
 
 /** HOST APP STYLES **/
@@ -309,13 +328,13 @@ textarea:focus {
 
 /* FileTree template */
 .file:hover {
-  color: var(--boxel-link-highlight);
+  color: var(--boxel-highlight);
   cursor: pointer;
 }
 .directory.selected,
 .file.selected,
 .file:active {
-  color: var(--boxel-link-highlight);
+  color: var(--boxel-highlight);
 }
 nav > .directory-level {
   padding-left: 0;
@@ -408,25 +427,36 @@ nav > .directory-level {
   --boxel-label-color: var(--boxel-dark);
   padding: var(--boxel-sp);
   display: grid;
-  gap: var(--boxel-sp);
+  gap: var(--boxel-sp-lg);
 }
 
 /* LinksTo Editor */
 .links-to-editor {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--boxel-sp-xs);
+  align-items: center;
+}
+.links-to-editor__item {
   padding: var(--boxel-sp);
+  border: var(--boxel-border);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);
 }
-.links-to-editor button {
+.remove-button {
+  --icon-bg: var(--boxel-teal);
+  --icon-color: var(--boxel-light);
+
   display: block;
-  margin-top: var(--boxel-sp-sm);
-  font: inherit;
-  font-weight: 600;
+  background: none;
   border: none;
-  background-color: var(--boxel-light);
-  padding: var(--boxel-sp-xxs) 0;
-  text-transform: capitalize;
+  border-radius: 100px;
+  width: var(--boxel-icon-sm);
+  height: var(--boxel-icon-sm);
+  margin: 0;
+  padding: 0;
 }
-.links-to-editor button:hover {
-  color: var(--boxel-highlight);
+.remove-button:hover {
+  --icon-bg: var(--boxel-dark);
 }
 
 /* ContainsMany Editor */
@@ -571,9 +601,8 @@ nav > .directory-level {
 /* Boxel Label */
 .boxel-label {
   color: var(--boxel-label-color);
-  font: 700 var(--boxel-font-xs);
-  letter-spacing: var(--boxel-lsp-xxl);
-  text-transform: uppercase;
+  font: 700 var(--boxel-font-sm);
+  letter-spacing: var(--boxel-lsp-sm);
 }
 
 /* Boxel Input */
@@ -583,13 +612,17 @@ nav > .directory-level {
   box-sizing: border-box;
   width: 100%;
   min-height: var(--boxel-input-height);
-  padding: var(--boxel-sp-xxs) 0 var(--boxel-sp-xxs) var(--boxel-sp-xxs);
+  padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
   border: 1px solid var(--boxel-form-control-border-color);
   border-radius: var(--boxel-form-control-border-radius);
   font: var(--boxel-font-sm);
   font-weight: 400;
   letter-spacing: var(--boxel-lsp-xs);
   transition: border-color var(--boxel-transition);
+}
+
+.boxel-text-area {
+  --boxel-input-height: 10rem;
 }
 
 .boxel-input:disabled {

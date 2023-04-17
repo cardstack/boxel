@@ -13,6 +13,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Args: {
@@ -23,23 +24,27 @@ interface Signature {
 
 class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
-    <CardContainer class='links-to-editor' @displayBoundaries={{true}}>
+    <div class='links-to-editor'>
       {{#if this.isEmpty}}
         <div data-test-empty-link>{{! PLACEHOLDER CONTENT }}</div>
         <button {{on 'click' this.choose}} data-test-choose-card>
           + Add New
         </button>
       {{else}}
-        <this.linkedCard />
+        <CardContainer class='links-to-editor__item'>
+          <this.linkedCard />
+        </CardContainer>
         <button
+          class='remove-button'
           {{on 'click' this.remove}}
           data-test-remove-card
           disabled={{this.isEmpty}}
+          aria-label='Remove'
         >
-          Remove
+          {{svgJar 'icon-minus-circle' width='20px' height='20px'}}
         </button>
       {{/if}}
-    </CardContainer>
+    </div>
   </template>
 
   choose = () => {

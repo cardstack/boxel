@@ -5,7 +5,12 @@ import { BoxelInput } from '@cardstack/boxel-ui';
 export default class TextAreaCard extends StringCard {
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <BoxelInput @value={{@model}} @onInput={{@set}} @multiline={{true}} />
+      <BoxelInput
+        class='boxel-text-area'
+        @value={{@model}}
+        @onInput={{@set}}
+        @multiline={{true}}
+      />
     </template>
   };
 }
