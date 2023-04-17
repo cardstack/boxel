@@ -38,12 +38,6 @@ type FetchingModule = {
   // if you encounter a module in this state, you should wait for the deferred
   // and then retry load where you're guarantee to see a new state
   deferred: Deferred<Module>;
-  // stacks: string[][];
-  // defined?: {
-  //   dependencyList: string[];
-  //   implementation: Function;
-  //   consumedModules: Set<string>;
-  // };
 };
 
 type Module =
@@ -426,35 +420,6 @@ export class Loader {
     });
   }
 
-  // private getFetchingConsumers(
-  //   moduleIdentifier: string,
-  //   visited: Set<string> = new Set()
-  // ): Set<string> {
-  //   visited.add(moduleIdentifier);
-  //   let module = this.getModule(moduleIdentifier);
-  //   if (!module || module.state !== 'fetching') {
-  //     return new Set();
-  //   }
-  //   let consumers: string[] = [];
-  //   for (let stack of module.stacks) {
-  //     consumers = [...consumers, ...stack];
-  //     for (let identifier of stack) {
-  //       let maybeFetchingModule = this.modules.get(identifier);
-  //       if (
-  //         maybeFetchingModule?.state === 'fetching' &&
-  //         !visited.has(identifier)
-  //       ) {
-  //         consumers = [
-  //           ...consumers,
-  //           ...[...this.getFetchingConsumers(identifier, visited)],
-  //         ];
-  //       }
-  //     }
-  //   }
-
-  //   return new Set(consumers);
-  // }
-
   private async fetchModule(
     moduleURL: ResolvedURL | string,
     stack: string[] = []
@@ -568,15 +533,6 @@ export class Loader {
       });
       throw exception;
     }
-    // module.defined = {
-    //   implementation: implementation!,
-    //   dependencyList: dependencyList!,
-    //   consumedModules: new Set(
-    //     dependencyList!.filter(
-    //       (d) => !['exports', '__import_meta__'].includes(d)
-    //     )
-    //   ),
-    // };
 
     await Promise.all(
       dependencyList!.map(async (depId) => {
