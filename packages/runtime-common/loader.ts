@@ -426,6 +426,35 @@ export class Loader {
     });
   }
 
+  private getFetchingConsumers(
+    moduleIdentifier: string,
+    visited: Set<string> = new Set()
+  ): Set<string> {
+    visited.add(moduleIdentifier);
+    let module = this.getModule(moduleIdentifier);
+    if (!module || module.state !== 'fetching') {
+      return new Set();
+    }
+    let consumers: string[] = [];
+    for (let stack of module.stacks) {
+      consumers = [...consumers, ...stack];
+      for (let identifier of stack) {
+        let maybeFetchingModule = this.modules.get(identifier);
+        if (
+          maybeFetchingModule?.state === 'fetching' &&
+          !visited.has(identifier)
+        ) {
+          consumers = [
+            ...consumers,
+            ...[...this.getFetchingConsumers(identifier, visited)],
+          ];
+        }
+      }
+    }
+
+    return new Set(consumers);
+  }
+
   private async fetchModule(
     moduleURL: ResolvedURL | string,
     stack: string[] = []
@@ -436,43 +465,10 @@ export class Loader {
     let module = this.getModule(moduleIdentifier);
     let trimmedIdentifier = trimModuleIdentifier(moduleIdentifier);
     if (module) {
-      // in the event of a cycle, we have already evaluated the
-      // define() since we recurse into our deps after the evaluation of the
-      // define, so just return ourselves
-      if (stack.includes(trimmedIdentifier)) {
-        return module;
-      }
-
-      // if we see that our fetch is stuck in a deadlock, then we'll transition
-      // our module to the registered state since it has been defined already.
-      if (module.state === 'fetching' && stack.length > 0) {
-        let deadlock = [...this.modules].find(
-          ([identifier, m]) =>
-            m.state === 'fetching' &&
-            m.stacks.find((s) => s.includes(trimmedIdentifier)) &&
-            stack.includes(identifier)
-        );
-        if (deadlock && module.defined) {
-          let { dependencyList, implementation, consumedModules } =
-            module.defined;
-          let registeredModule: RegisteredModule = {
-            state: 'registered',
-            dependencyList,
-            implementation,
-            consumedModules,
-          };
-          this.setModule(moduleIdentifier, registeredModule);
-          console.log(`registered module ${moduleIdentifier}`);
-          module.deferred.fulfill(registeredModule);
-          return registeredModule;
-        }
-      }
-
       // this closes an otherwise leaky async when there are simultaneous
       // imports for modules that share a common dep, e.g. where you request
       // module a and b simultaneously for the following consumption pattern
-      // (also included in our tests):
-      //   a -> b -> c
+      // (also included in our tests): a -> b -> c
       //
       // In that case both of the imports will try to fetch c, one of them will
       // start the actual fetch, and the other will short circuit and just
@@ -481,9 +477,39 @@ export class Loader {
       // and immediately proceed to evaluation--when in fact the dep is still
       // being loaded. to make sure that the consumer will wait until the dep
       // has actually completed loading we need to return the deferred promise
-      // of the cached module.
+      // of the cached module. As part of this we need to be careful that we are
+      // not returning a promise that is wrapped around itself. As such we also
+      // check to see who are all the consumers of this module. If we see that
+      // we are our own consumer (i.e. a module cycle), then that means that
+      // this module and all of its consumers have been defined (since we
+      // define before we load deps), and we move these modules into a registered
+      // state.
       if (module.state === 'fetching') {
         module.stacks.push(stack);
+        let consumers = this.getFetchingConsumers(trimmedIdentifier);
+        if (consumers.has(trimmedIdentifier)) {
+          for (let consumerIdentifier of consumers) {
+            let consumer = this.getModule(consumerIdentifier)!; // the module definitely exists in our cache otherwise we wouldn't have identified it as a consumer
+            if (consumer.state !== 'fetching') {
+              continue;
+            }
+            if (!consumer?.defined) {
+              throw new Error(
+                `bug: should never get here --encountered module cycle for ${consumerIdentifier} but we do not have defined state for module (we always define before we load deps).`
+              );
+            }
+            let { dependencyList, implementation, consumedModules } =
+              consumer.defined;
+            this.setModule(consumerIdentifier, {
+              state: 'registered',
+              dependencyList,
+              implementation,
+              consumedModules,
+            });
+          }
+          module.deferred.fulfill(module);
+          return module;
+        }
         return module.deferred.promise;
       }
       return module;
