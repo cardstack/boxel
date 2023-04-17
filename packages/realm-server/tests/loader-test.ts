@@ -48,9 +48,11 @@ module('loader', function (hooks) {
     );
     let a = loader.import<{ a(): string }>(`${testRealm}deadlock/a`);
     let b = loader.import<{ b(): string }>(`${testRealm}deadlock/b`);
-    let [aModule, bModule] = await Promise.all([a, b]);
+    let c = loader.import<{ c(): string }>(`${testRealm}deadlock/c`);
+    let [aModule, bModule, cModule] = await Promise.all([a, b, c]);
     assert.strictEqual(aModule.a(), 'abcd', 'module executed successfully');
     assert.strictEqual(bModule.b(), 'bcd', 'module executed successfully');
+    assert.strictEqual(cModule.c(), 'cd', 'module executed successfully');
   });
 
   test('supports import.meta', async function (assert) {
