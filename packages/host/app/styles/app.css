@@ -199,7 +199,7 @@ textarea:focus {
   --boxel-icon-xxl: 5rem; /* 80px */
 
   /* other */
-  --boxel-border-color: var(--boxel-light-500);
+  --boxel-border-color: #d3d3d3;
   --boxel-border: 1px solid var(--boxel-border-color);
   --boxel-border-dark: 1px solid var(--boxel-dark);
   --boxel-border-radius-xs: 2px;
@@ -293,7 +293,7 @@ textarea:focus {
   /* Form control appearance */
   --boxel-form-control-height: 2.5rem; /* 40px */
   --boxel-form-control-placeholder-color: var(--boxel-400);
-  --boxel-form-control-border-color: var(--boxel-400);
+  --boxel-form-control-border-color: var(--boxel-border-color);
   --boxel-form-control-border-radius: var(--boxel-border-radius);
 }
 
@@ -432,20 +432,25 @@ nav > .directory-level {
 
 /* LinksTo Editor */
 .links-to-editor {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--boxel-sp);
+  align-items: center;
+}
+.links-to-editor__item {
   padding: var(--boxel-sp);
+  border: var(--boxel-border);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);
 }
-.links-to-editor button {
+.remove-button {
   display: block;
-  margin-top: var(--boxel-sp-sm);
-  font: inherit;
-  font-weight: 600;
+  background: none;
   border: none;
-  background-color: var(--boxel-light);
-  padding: var(--boxel-sp-xxs) 0;
-  text-transform: capitalize;
-}
-.links-to-editor button:hover {
-  color: var(--boxel-highlight);
+  border-radius: 100px;
+  width: var(--boxel-icon-sm);
+  height: var(--boxel-icon-sm);
+  margin: 0;
+  padding: 0;
 }
 
 /* ContainsMany Editor */

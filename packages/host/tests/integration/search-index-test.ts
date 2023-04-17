@@ -2333,6 +2333,7 @@ module('Integration | search-index', function (hooks) {
       [...refs!.keys()].sort(),
       [
         '@cardstack/boxel-ui',
+        '@cardstack/boxel-ui/helpers/svg-jar',
         '@cardstack/boxel-ui/helpers/pick',
         '@cardstack/boxel-ui/helpers/truth-helpers',
         '@cardstack/runtime-common',

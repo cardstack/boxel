@@ -17,6 +17,10 @@ import * as dateFns from 'date-fns';
 export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/runtime-common', runtime);
   loader.shimModule('@cardstack/boxel-ui', boxelUI);
+  // import * as boxelSvgJar from "@cardstack/boxel-ui/helpers/svg-jar";
+  loader.shimModule('@cardstack/boxel-ui/helpers/svg-jar', {
+    svgJar() {},
+  });
   // import * as boxelPickHelper from "@cardstack/boxel-ui/helpers/pick";
   loader.shimModule('@cardstack/boxel-ui/helpers/pick', {
     default() {},
