@@ -434,7 +434,7 @@ nav > .directory-level {
 .links-to-editor {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: var(--boxel-sp);
+  gap: var(--boxel-sp-xs);
   align-items: center;
 }
 .links-to-editor__item {
@@ -619,6 +619,10 @@ nav > .directory-level {
   font-weight: 400;
   letter-spacing: var(--boxel-lsp-xs);
   transition: border-color var(--boxel-transition);
+}
+
+.boxel-text-area {
+  --boxel-input-height: 10rem;
 }
 
 .boxel-input:disabled {
