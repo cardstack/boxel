@@ -28,7 +28,7 @@ actually execute the card code.
 
 ## Types of realms
 
-There are 3 types of realms.
+The realm is isomorphic JavaScript code meant to be run in any environment, and there exists a RealmAdapter whose job is to provide environment specific implementations for 3 different types of realms.
 
 ### Hosted realm
 
