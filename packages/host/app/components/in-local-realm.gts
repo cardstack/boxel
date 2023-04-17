@@ -55,17 +55,7 @@ export default class InLocalRealm extends Component<Signature> {
 
   @action
   openRealm() {
-    this.localRealm.chooseDirectory(() => this.refreshRouteOrPage());
-  }
-
-  private refreshRouteOrPage() {
-    if (this.router.currentURL === '/') {
-      // `this.router.refresh()` errors in the case of the root URL.
-      // Until this is resolved, reload the page in that case.
-      document.location.reload();
-    } else {
-      this.router.refresh();
-    }
+    this.localRealm.chooseDirectory(() => this.router.refresh());
   }
 
   @action

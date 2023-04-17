@@ -13,7 +13,7 @@ Router.map(function () {
   this.route('indexer', { path: '/indexer/:id' });
   this.route('acceptance-test-setup');
   if (!path || hostsOwnAssets) {
-    this.route('card', { path: '' });
+    this.route('index-card', { path: '/' });
     this.route('code');
   } else {
     this.route('card', { path });

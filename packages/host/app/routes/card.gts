@@ -6,10 +6,16 @@ import { parse } from 'qs';
 import type CardService from '../services/card-service';
 import type RouterService from '@ember/routing/router-service';
 import type LocalRealmService from '../services/local-realm';
-import LocalRealmNotConnectedComponent from '@cardstack/host/components/local-realm-not-connected';
+import Component from '@glimmer/component';
 
 const { ownRealmURL, isLocalRealm } = ENV;
 const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
+
+class LocalRealmNotConnectedComponent extends Component {
+  <template>
+    Local realm not connected.
+  </template>
+}
 
 export default class RenderCard extends Route<
   ComponentLike<{ Args: {}; Blocks: {} }>
@@ -27,6 +33,7 @@ export default class RenderCard extends Route<
       let {
         params: { path },
       } = transition.routeInfos[transition.routeInfos.length - 1];
+      path = path || '';
       path = path.slice(rootPath.length);
       let segments = path.split('/');
       segments.pop();
@@ -38,6 +45,7 @@ export default class RenderCard extends Route<
 
   async model(params: { path: string }) {
     let { path } = params;
+    path = path || '';
     let url = path
       ? new URL(`/${path}`, ownRealmURL)
       : new URL('./', ownRealmURL);
