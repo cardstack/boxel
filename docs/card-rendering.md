@@ -17,4 +17,4 @@ A card object can serve as a field within another card object. To establish a ca
 4. Using fields and box class to instantiate the glimmer component.
 
 ## Re-rendering process
-Our approach leverages the glimmer invalidation system to trigger card re-rendering. To achieve this, we rely on a [unique WeakMap implementation](../packages/base/card-api.gts#L136-L138), where each card instance is used as a key. Whenever we call the .get() method on an item in this map, it automatically prompts glimmer to update the card.
+Our approach leverages the glimmer invalidation system to trigger card re-rendering. To achieve this, we rely on [TrackedWeakMap implementation](../packages/base/card-api.gts#L136-L138), where each card instance is used as a key. Whenever we call the .get() method on an item in this map, it automatically prompts glimmer to update the card.
