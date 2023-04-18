@@ -3,11 +3,11 @@ import { type EmptyObject } from '@ember/component/helper';
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
-import pick from '../helpers/pick';
-import optional from '../helpers/optional';
-import { and, not, bool } from '../helpers/truth-helpers';
-import element from '../helpers/element';
-import cn from '../helpers/cn';
+import pick from '@cardstack/boxel-ui/helpers/pick';
+import optional from '@cardstack/boxel-ui/helpers/optional';
+import { and, not, bool } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import element from '@cardstack/boxel-ui/helpers/element';
+import cn from '@cardstack/boxel-ui/helpers/cn';
 
 export interface Signature {
   Element: HTMLInputElement | HTMLTextAreaElement;
