@@ -84,7 +84,10 @@ export default class CardPrerender extends Component {
       this.loaderService.loader,
       baseRealm.url
     );
-    for (let module of baseRealmModules) {
+    // TODO the fact that we need to reverse this list is
+    // indicative of a loader issue. Need to work with Ed around this as I think
+    // there is probably missing state in our loader's state machine.
+    for (let module of baseRealmModules.reverse()) {
       await this.loaderService.loader.import(module);
     }
   });

@@ -141,11 +141,13 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`
       );
     }
-    return await Promise.all(
-      json.data.map(
-        async (doc) =>
-          await this.createFromSerialized(doc, json, new URL(doc.id))
-      )
-    );
+    // TODO the fact that the loader cannot handle a concurrent form of this is
+    // indicative of a loader issue. Need to work with Ed around this as I think
+    // there is probably missing state in our loader's state machine.
+    let results: Card[] = [];
+    for (let doc of json.data) {
+      results.push(await this.createFromSerialized(doc, json, new URL(doc.id)));
+    }
+    return results;
   }
 }

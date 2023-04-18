@@ -38,12 +38,6 @@ type FetchingModule = {
   // if you encounter a module in this state, you should wait for the deferred
   // and then retry load where you're guarantee to see a new state
   deferred: Deferred<Module>;
-  stacks: string[][];
-  defined?: {
-    dependencyList: string[];
-    implementation: Function;
-    consumedModules: Set<string>;
-  };
 };
 
 type Module =
@@ -443,31 +437,6 @@ export class Loader {
         return module;
       }
 
-      // if we see that our fetch is stuck in a deadlock, then we'll transition
-      // our module to the registered state since it has been defined already.
-      if (module.state === 'fetching' && stack.length > 0) {
-        let deadlock = [...this.modules].find(
-          ([identifier, m]) =>
-            m.state === 'fetching' &&
-            m.stacks.find((s) => s.includes(trimmedIdentifier)) &&
-            stack.includes(identifier)
-        );
-        if (deadlock && module.defined) {
-          let { dependencyList, implementation, consumedModules } =
-            module.defined;
-          let registeredModule: RegisteredModule = {
-            state: 'registered',
-            dependencyList,
-            implementation,
-            consumedModules,
-          };
-          this.setModule(moduleIdentifier, registeredModule);
-          console.log(`registered module ${moduleIdentifier}`);
-          module.deferred.fulfill(registeredModule);
-          return registeredModule;
-        }
-      }
-
       // this closes an otherwise leaky async when there are simultaneous
       // imports for modules that share a common dep, e.g. where you request
       // module a and b simultaneously for the following consumption pattern
@@ -483,7 +452,6 @@ export class Loader {
       // has actually completed loading we need to return the deferred promise
       // of the cached module.
       if (module.state === 'fetching') {
-        module.stacks.push(stack);
         return module.deferred.promise;
       }
       return module;
@@ -505,7 +473,7 @@ export class Loader {
     module = {
       state: 'fetching',
       deferred: new Deferred<Module>(),
-      stacks: [stack],
+      // stacks: [stack],
     };
     this.setModule(moduleIdentifier, module);
 
@@ -565,15 +533,6 @@ export class Loader {
       });
       throw exception;
     }
-    module.defined = {
-      implementation: implementation!,
-      dependencyList: dependencyList!,
-      consumedModules: new Set(
-        dependencyList!.filter(
-          (d) => !['exports', '__import_meta__'].includes(d)
-        )
-      ),
-    };
 
     await Promise.all(
       dependencyList!.map(async (depId) => {
