@@ -65,10 +65,10 @@ export default class LocalRealm extends Service {
         }
         break;
       case 'available':
-        // if (data.type === 'setDirectoryHandleAcknowledged') {
-        //   // TODO: ???
-        //   return;
-        // }
+        if (data.type === 'setDirectoryHandleAcknowledged') {
+          // TODO: ???
+          return;
+        }
         if (data.type === 'setEntryAcknowledged') {
           if (!this.#setEntryDeferred) {
             throw new Error(
@@ -335,31 +335,38 @@ export default class LocalRealm extends Service {
       // this event is fired when a new service worker is installing
       const newWorker = registration.installing;
 
-      if (newWorker) {
-        newWorker.addEventListener('statechange', async () => {
-          if (
-            newWorker.state === 'installed' &&
-            this.state.type === 'available'
-          ) {
-            console.log('new worker installed');
-            // if we see a new service worker version getting installed, and if we
-            // already have an open file handle, send it to the new worker so we don't
-            // lose access
-            // send(newWorker, {
-            //   type: 'setDirectoryHandle',
-            //   handle: this.state.handle,
-            //   realmsServed,
-            // });
-            // this.state = {
-            //   type: 'available',
-            //   handle: this.state.handle,
-            //   worker: newWorker,
-            //   adapter: this.state.adapter,
-            // };
-          }
-        });
+      if (!newWorker) {
+        throw new Error('this should never happen');
       }
+
+      newWorker.addEventListener('statechange', () => {
+        if (
+          newWorker.state === 'installed' &&
+          this.state.type === 'available'
+        ) {
+          // if we see a new service worker version getting installed, and if we
+          // already have an open file handle, send it to the new worker so we don't
+          // lose access
+          send(newWorker, {
+            type: 'setDirectoryHandle',
+            handle: this.state.handle,
+            realmsServed,
+          });
+        }
+      });
     });
+
+    if (registration.waiting) {
+      while (registration.waiting) {
+        // when a new worker is installed but not yet activated, and the user refreshes the page,
+        // sometimes `worker.skipWaiting()` does not work when there is a directory handle
+        // and the app gets stuck in an unstable state until the new worker is activated
+        // this is a workaround for that
+        log.info('new service worker installed but not activated, RELOADING');
+        await timeout(10);
+        window.location.reload();
+      }
+    }
 
     while (registration.active?.state !== 'activated') {
       await timeout(10);
@@ -367,10 +374,11 @@ export default class LocalRealm extends Service {
 
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       // this event fires when the new service worker is activated
-      log.info('worker changed');
-      console.log('worker changed, state:', this.state);
-      // this.state = { type: 'starting-up' };
-      // this.maybeSetup();
+      if ('worker' in this.state) {
+        if (this.state.worker?.state === 'redundant') {
+          log.info('REDUNDANT WORKER');
+        }
+      }
     });
 
     if (!navigator.serviceWorker.controller) {
