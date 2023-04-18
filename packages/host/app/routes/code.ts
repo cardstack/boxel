@@ -18,7 +18,7 @@ interface Model {
   isFastBoot: boolean;
 }
 
-export default class Index extends Route<Model> {
+export default class Code extends Route<Model> {
   queryParams = {
     path: {
       refreshModel: true,
