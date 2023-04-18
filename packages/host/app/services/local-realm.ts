@@ -331,6 +331,8 @@ export default class LocalRealm extends Service {
       scope: '/',
     });
 
+    await navigator.serviceWorker.ready;
+
     registration.addEventListener('updatefound', () => {
       // this event is fired when a new service worker is installing
       const newWorker = registration.installing;
@@ -339,7 +341,7 @@ export default class LocalRealm extends Service {
         throw new Error('this should never happen');
       }
 
-      newWorker.addEventListener('statechange', () => {
+      newWorker.addEventListener('statechange', async () => {
         if (
           newWorker.state === 'installed' &&
           this.state.type === 'available'
@@ -352,31 +354,37 @@ export default class LocalRealm extends Service {
             handle: this.state.handle,
             realmsServed,
           });
+
+          if (registration.waiting) {
+            log.info('A new service worker is waiting to activate');
+            await timeout(10);
+            window.location.reload();
+            // reloading helps the new worker activate, however this means that `update on reload` option
+            // should NOT be enabled in browser dev tools because it will cause an infinite loop
+          }
         }
       });
     });
 
-    if (registration.waiting) {
-      while (registration.waiting) {
-        // when a new worker is installed but not yet activated, and the user refreshes the page,
-        // sometimes `worker.skipWaiting()` does not work when there is a directory handle
-        // and the app gets stuck in an unstable state until the new worker is activated
-        // this is a workaround for that
-        log.info('new service worker installed but not activated, RELOADING');
-        await timeout(10);
-        window.location.reload();
-      }
-    }
-
     while (registration.active?.state !== 'activated') {
       await timeout(10);
+    }
+
+    if (registration.waiting) {
+      log.info('new service worker is waiting to activate');
+      // when a new worker is installed but not yet activated, and the user refreshes the page,
+      // sometimes `worker.skipWaiting()` does not work when there is a directory handle or when there are other tabs open
+      // and the app can get stuck in an unstable state until the new worker is activated
+      // this is a workaround for that
+      await timeout(10);
+      window.location.reload();
     }
 
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       // this event fires when the new service worker is activated
       if ('worker' in this.state) {
         if (this.state.worker?.state === 'redundant') {
-          log.info('REDUNDANT WORKER');
+          window.location.reload();
         }
       }
     });
