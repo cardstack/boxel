@@ -30,6 +30,7 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 import InLocalRealm from './in-local-realm';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
+import { Button } from '@cardstack/boxel-ui';
 
 const { ownRealmURL, isLocalRealm } = ENV;
 const log = logger('component:go');
@@ -50,8 +51,8 @@ export default class Go extends Component<Signature> {
         {{#if isLocalRealm}}
           <InLocalRealm as |realm|>
             {{#if realm.connected}}
-              <button {{on 'click' realm.close}} type='button'>Close local realm<br
-                />({{realm.connected.directoryName}})</button>
+              <Button @size='small' {{on 'click' realm.close}}>Close local realm<br
+                />({{realm.connected.directoryName}})</Button>
               <FileTree
                 @url={{realm.connected.url}}
                 @openFile={{@path}}
@@ -60,7 +61,11 @@ export default class Go extends Component<Signature> {
             {{else if realm.isLoading}}
               ...
             {{else if realm.isEmpty}}
-              <button {{on 'click' realm.open}}>Open a local realm</button>
+              <Button
+                @kind='primary'
+                @size='tall'
+                {{on 'click' realm.open}}
+              >Open a local realm</Button>
             {{/if}}
           </InLocalRealm>
         {{else}}
@@ -117,7 +122,7 @@ export default class Go extends Component<Signature> {
             <h2>Encountered error parsing JSON</h2>
             <pre>{{this.jsonError}}</pre>
           {{/if}}
-          <button type='button' {{on 'click' this.removeFile}}>Delete</button>
+          <button {{on 'click' this.removeFile}}>Delete</button>
         </div>
       {{/if}}
     </div>

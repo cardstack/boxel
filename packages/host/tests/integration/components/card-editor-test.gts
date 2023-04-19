@@ -413,7 +413,7 @@ module('Integration | card-editor', function (hooks) {
       }
     );
 
-    assert.dom('[data-test-empty-link]').exists();
+    assert.dom('[data-test-choose-card]').exists();
     assert.dom('button[data-test-remove-card]').doesNotExist();
 
     await click('[data-test-choose-card]');
@@ -449,7 +449,6 @@ module('Integration | card-editor', function (hooks) {
     await click('[data-test-remove-card]');
 
     assert.dom('[data-test-pet="Mango"]').doesNotExist();
-    assert.dom('[data-test-empty-link]').exists();
     assert.dom('button[data-test-remove-card]').doesNotExist();
     assert.dom('[data-test-choose-card]').exists();
   });

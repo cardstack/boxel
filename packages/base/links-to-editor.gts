@@ -12,7 +12,7 @@ import {
   identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { CardContainer } from '@cardstack/boxel-ui';
+import { CardContainer, Button } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
@@ -24,12 +24,11 @@ interface Signature {
 
 class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
-    <div class='links-to-editor'>
+    <div class='links-to-editor{{if this.isEmpty "--empty"}}'>
       {{#if this.isEmpty}}
-        <div data-test-empty-link>{{! PLACEHOLDER CONTENT }}</div>
-        <button {{on 'click' this.choose}} data-test-choose-card>
+        <Button @size='small' {{on 'click' this.choose}} data-test-choose-card>
           + Add New
-        </button>
+        </Button>
       {{else}}
         <CardContainer class='links-to-editor__item'>
           <this.linkedCard />
