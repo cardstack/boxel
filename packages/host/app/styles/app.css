@@ -969,3 +969,25 @@ nav > .directory-level {
 .demo-card h3 {
   margin: 0;
 }
+
+/* OPERATOR MODE */
+
+.operator-mode-desktop-overlay {
+  position: fixed;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: #686283;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.operator-mode-card-stack {
+  min-width: 400px;
+  max-width: 900px;
+  width: 70%;
+}
