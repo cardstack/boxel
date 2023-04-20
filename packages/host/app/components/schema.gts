@@ -28,10 +28,13 @@ import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '../resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
-import BoxelInput from '@cardstack/boxel-ui/components/input';
-import FieldContainer from '@cardstack/boxel-ui/components/field-container';
-import CardContainer from '@cardstack/boxel-ui/components/card-container';
-import Label from '@cardstack/boxel-ui/components/label';
+import {
+  BoxelInput,
+  Button,
+  CardContainer,
+  FieldContainer,
+  Label,
+} from '@cardstack/boxel-ui';
 import type { Filter } from '@cardstack/runtime-common/query';
 
 interface Signature {
@@ -166,14 +169,14 @@ export default class Schema extends Component<Signature> {
               </li>
             </ul>
           </FieldContainer>
-          <button
+          <Button
+            @size='small'
             data-test-add-field
-            type='button'
             disabled={{this.isNewFieldDisabled}}
             {{on 'click' this.addField}}
           >
             Add Field
-          </button>
+          </Button>
         </fieldset>
       </CardContainer>
       <CatalogEntryEditor @ref={{this.ref}} />

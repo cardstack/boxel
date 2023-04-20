@@ -11,7 +11,7 @@ import { createNewCard, type CardRef } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
-import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
+import { Modal, CardContainer, Header, Button } from '@cardstack/boxel-ui';
 
 export default class CardCatalogModal extends Component {
   <template>
@@ -35,13 +35,14 @@ export default class CardCatalogModal extends Component {
               Loading...
             {{else}}
               {{#if this.currentRequest.opts.offerToCreate}}
-                <button
+                <Button
+                  @size='small'
                   {{on
                     'click'
                     (fn this.createNew this.currentRequest.opts.offerToCreate)
                   }}
                   data-test-create-new
-                >Create New</button>
+                >Create New</Button>
               {{/if}}
               <ul class='card-catalog' data-test-card-catalog>
                 {{#each this.currentRequest.search.instances as |card|}}

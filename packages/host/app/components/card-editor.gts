@@ -8,6 +8,7 @@ import type CardService from '../services/card-service';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
 import FormatPicker from './format-picker';
 import Preview from './preview';
+import Button from '@cardstack/boxel-ui/components/button';
 
 interface Signature {
   Args: {
@@ -28,25 +29,26 @@ export default class CardEditor extends Component<Signature> {
       @setFormat={{this.setFormat}}
     />
     <Preview @format={{this.format}} @card={{@card}} />
-    {{! @glint-ignore glint doesn't know about EC task properties }}
-    {{#if this.write.last.isRunning}}
-      <span data-test-saving>Saving...</span>
-    {{else}}
-      <div>
-        <button
-          data-test-save-card
-          {{on 'click' this.save}}
-          type='button'
-        >Save</button>
+    <div class='card-editor__buttons'>
+      {{! @glint-ignore glint doesn't know about EC task properties }}
+      {{#if this.write.last.isRunning}}
+        <span data-test-saving>Saving...</span>
+      {{else}}
         {{#if @onCancel}}
-          <button
+          <Button
             data-test-cancel-create
             {{on 'click' @onCancel}}
-            type='button'
-          >Cancel</button>
+            @size='tall'
+          >Cancel</Button>
         {{/if}}
-      </div>
-    {{/if}}
+        <Button
+          data-test-save-card
+          {{on 'click' this.save}}
+          @kind='primary'
+          @size='tall'
+        >Save</Button>
+      {{/if}}
+    </div>
   </template>
 
   formats = formats;

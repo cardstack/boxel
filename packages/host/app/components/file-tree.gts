@@ -14,6 +14,7 @@ import {
   baseRealm,
 } from '@cardstack/runtime-common';
 import Directory from './directory';
+import { Button } from '@cardstack/boxel-ui';
 
 interface Args {
   Args: {
@@ -33,13 +34,14 @@ export default class FileTree extends Component<Args> {
         @realmURL={{@url}}
       />
     </nav>
-    <button
+    <Button
+      @kind='primary'
+      @size='tall'
       {{on 'click' this.createNew}}
-      type='button'
       data-test-create-new-card-button
     >
       Create New Card
-    </button>
+    </Button>
   </template>
 
   @service declare router: RouterService;

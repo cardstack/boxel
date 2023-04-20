@@ -1,17 +1,21 @@
 import BoxelInput from './components/input';
-import FieldContainer from './components/field-container';
+import Button from './components/button';
 import CardContainer from './components/card-container';
+import FieldContainer from './components/field-container';
 import Header from './components/header';
-import Modal from './components/modal';
 import Label from './components/label';
+import LoadingIndicator from './components/loading-indicator';
 import Message from './components/message';
+import Modal from './components/modal';
 
 export {
   BoxelInput,
-  FieldContainer,
+  Button,
   CardContainer,
+  FieldContainer,
   Header,
-  Modal,
   Label,
+  LoadingIndicator,
   Message,
+  Modal,
 };
