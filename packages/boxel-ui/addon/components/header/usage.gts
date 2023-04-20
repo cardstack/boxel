@@ -5,7 +5,7 @@ import BoxelHeader from './index';
 import { fn } from '@ember/helper';
 
 export default class HeaderUsage extends Component {
-  @tracked header = 'Header';
+  @tracked title = 'Header';
   @tracked noBackground = false;
   @tracked isHighlighted = false;
 
@@ -16,7 +16,7 @@ export default class HeaderUsage extends Component {
       </:description>
       <:example>
         <BoxelHeader
-          @header={{this.header}}
+          @title={{this.title}}
           @noBackground={{this.noBackground}}
           @isHighlighted={{this.isHighlighted}}
         >
@@ -27,10 +27,10 @@ export default class HeaderUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='header'
+          @name='title'
           @description='Header label text'
-          @value={{this.header}}
-          @onInput={{fn (mut this.header)}}
+          @value={{this.title}}
+          @onInput={{fn (mut this.title)}}
         />
         <Args.Bool
           @name='noBackground'
