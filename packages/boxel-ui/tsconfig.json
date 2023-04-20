@@ -37,13 +37,13 @@
       "@cardstack/boxel": [
         "addon"
       ],
-      "@cardstack/boxel/*": [
+      "@cardstack/boxel-ui/*": [
         "addon/*"
       ],
-      "@cardstack/boxel/test-support": [
+      "@cardstack/boxel-ui/test-support": [
         "addon-test-support"
       ],
-      "@cardstack/boxel/test-support/*": [
+      "@cardstack/boxel-ui/test-support/*": [
         "addon-test-support/*"
       ],
       "*": [
