@@ -65,10 +65,6 @@ export default class LocalRealm extends Service {
         }
         break;
       case 'available':
-        if (data.type === 'setDirectoryHandleAcknowledged') {
-          // TODO: ???
-          return;
-        }
         if (data.type === 'setEntryAcknowledged') {
           if (!this.#setEntryDeferred) {
             throw new Error(
@@ -349,18 +345,18 @@ export default class LocalRealm extends Service {
           // if we see a new service worker version getting installed, and if we
           // already have an open file handle, send it to the new worker so we don't
           // lose access
-          send(newWorker, {
-            type: 'setDirectoryHandle',
-            handle: this.state.handle,
-            realmsServed,
-          });
+          // send(newWorker, {
+          //   type: 'setDirectoryHandle',
+          //   handle: this.state.handle,
+          //   realmsServed,
+          // });
+          // TODO: code above is causing inconsistent behavior in the app,
+          // but making it work would make dev experience much better
 
           if (registration.waiting) {
-            log.info('A new service worker is waiting to activate');
-            await timeout(10);
-            window.location.reload();
-            // reloading helps the new worker activate, however this means that `update on reload` option
-            // should NOT be enabled in browser dev tools because it will cause an infinite loop
+            log.warn(
+              `A new service worker is waiting  to activate. To use it, refresh the page until you see 'Activating service worker' message, or close all tabs and start a new one.`
+            );
           }
         }
       });
@@ -371,27 +367,21 @@ export default class LocalRealm extends Service {
     }
 
     if (registration.waiting) {
-      log.info('new service worker is waiting to activate');
-      // when a new worker is installed but not yet activated, and the user refreshes the page,
-      // sometimes `worker.skipWaiting()` does not work when there is a directory handle or when there are other tabs open
-      // and the app can get stuck in an unstable state until the new worker is activated
-      // this is a workaround for that
-      await timeout(10);
-      window.location.reload();
+      log.warn(
+        `A new service worker is waiting to activate. To use it, refresh the page until you see 'Activating service worker' message, or close all tabs and start a new one.`
+      );
     }
 
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
+    navigator.serviceWorker.addEventListener('controllerchange', async () => {
       // this event fires when the new service worker is activated
-      if ('worker' in this.state) {
-        if (this.state.worker?.state === 'redundant') {
-          window.location.reload();
-        }
+      if ('worker' in this.state && this.state.worker?.state === 'redundant') {
+        this.state = { type: 'starting-up' };
+        this.maybeSetup();
       }
     });
 
     if (!navigator.serviceWorker.controller) {
       // navigator.serviceWorker.controller returns null when doing a force-refresh in the browser
-      // TODO: best way to handle this?
       throw 'service worker is not active';
     }
 

@@ -68,7 +68,7 @@ worker.addEventListener('install', () => {
 worker.addEventListener('activate', () => {
   // takes over when there is *no* existing service worker
   worker.clients.claim();
-  log.info('activating service worker');
+  log.info('Activating service worker');
 });
 
 worker.addEventListener('fetch', (event: FetchEvent) => {
