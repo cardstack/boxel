@@ -352,7 +352,7 @@ nav > .directory-level {
   grid-template-rows: auto 1fr;
 }
 .dialog-box__content {
-  padding: var(--boxel-sp);
+  padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
   height: 100%;
   overflow: auto;
 }
@@ -402,7 +402,7 @@ nav > .directory-level {
 .card-catalog {
   list-style-type: none;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(16.25rem, 1fr));
   gap: var(--boxel-sp);
   padding-left: 0;
 }
@@ -416,16 +416,20 @@ nav > .directory-level {
 
 /* Catalog Entry */
 .catalog-entry {
-  padding: var(--boxel-sp);
+  padding: calc(2 * var(--boxel-sp-sm)) var(--boxel-sp-sm);
   display: grid;
-  gap: var(--boxel-sp);
+  gap: var(--boxel-sp-xxxs);
 }
-.catalog-entry > h1,
-.catalog-entry > h2 {
-  margin: 0;
+.catalog-entry > * {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .catalog-entry--edit {
   --boxel-label-color: var(--boxel-dark);
+}
+.catalog-entry__ref {
+  font-size: var(--boxel-font-size-xs);
 }
 
 /* Default Card Component */
@@ -596,7 +600,6 @@ a.boxel-button:hover {
   justify-content: space-between;
   padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
   min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
-  background-color: var(--boxel-header-background-color, var(--boxel-100));
   color: var(--boxel-header-text-color, var(--boxel-dark));
   border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
   border-top-left-radius: calc(var(--boxel-border-radius) - 1px);
@@ -612,8 +615,8 @@ a.boxel-button:hover {
   letter-spacing: normal;
   text-transform: none;
 }
-.boxel-header--no-background {
-  background-color: transparent;
+.boxel-header--has-background {
+  background-color: var(--boxel-header-background-color, var(--boxel-100));
 }
 .boxel-header--highlighted {
   background-color: var(--boxel-highlight);

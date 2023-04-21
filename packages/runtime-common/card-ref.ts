@@ -183,7 +183,7 @@ export function moduleFrom(ref: CardRef): string {
 
 export function humanReadable(ref: CardRef): string {
   if (!('type' in ref)) {
-    return `${ref.name} from ${ref.module}`;
+    return ref.name;
   } else if (ref.type === 'ancestorOf') {
     return `Ancestor of ${humanReadable(ref.card)}`;
   } else {
