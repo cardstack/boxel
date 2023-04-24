@@ -103,6 +103,7 @@
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-prettier": "^4.0.0",
     "eslint-plugin-qunit": "^7.2.0",
+    "glimmer-scoped-css": "file:../../../glimmer-scoped-css/glimmer-scoped-css/glimmer-scoped-css-0.0.4.tgz",
     "loader.js": "^4.7.0",
     "npm-run-all": "^4.1.5",
     "prettier": "^2.7.1",
@@ -121,5 +122,9 @@
   "ember": {
     "edition": "octane"
   },
-  "ember-addon": {}
+  "ember-addon": {
+    "paths": [
+      "lib/setup-ast-transforms"
+    ]
+  }
 }

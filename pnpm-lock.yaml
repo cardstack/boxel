@@ -583,6 +583,7 @@ importers:
       eslint-plugin-prettier: ^4.0.0
       eslint-plugin-qunit: ^7.2.0
       file-loader: ^6.2.0
+      glimmer-scoped-css: file:../../../glimmer-scoped-css/glimmer-scoped-css/glimmer-scoped-css-0.0.4.tgz
       loader.js: ^4.7.0
       lodash: ^4.17.21
       npm-run-all: ^4.1.5
@@ -668,6 +669,7 @@ importers:
       eslint-plugin-node: 11.1.0_eslint@7.32.0
       eslint-plugin-prettier: 4.2.1_7gsvg5lgwpfdww3i7smtqxamuy
       eslint-plugin-qunit: 7.3.2_eslint@7.32.0
+      glimmer-scoped-css: file:../glimmer-scoped-css/glimmer-scoped-css/glimmer-scoped-css-0.0.4.tgz
       loader.js: 4.7.0
       npm-run-all: 4.1.5
       prettier: 2.7.1
@@ -3984,6 +3986,17 @@ packages:
       '@embroider/shared-internals': 1.8.3
       semver: 7.3.8
 
+  /@embroider/addon-shim/1.8.4-unstable.72d5a8e:
+    resolution: {integrity: sha512-ueaaJ3iWJlfxyisHAjk4fO8PoxswQFY9H9Vdjnl3xC/9HzUqHv+Z9dxjev+pEVlsWQU7ZXB9k66UVa9R9qYvwA==}
+    engines: {node: 12.* || 14.* || >= 16}
+    dependencies:
+      '@embroider/shared-internals': 2.0.0-unstable.72d5a8e
+      broccoli-funnel: 3.0.8
+      semver: 7.3.8
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
+
   /@embroider/babel-loader-8/1.9.0_mg5axfkqq6pv6o25os7kj44oyi:
     resolution: {integrity: sha512-kEAPkyHXEWxJA9n/zmExhRIOCZPhEgWGyAb3t1hxcJGUzzD6r8zAEE6zfZGRIwpfi3jhkCn/FOZi43eVLJsjgA==}
     engines: {node: 12.* || 14.* || >= 16}
@@ -5453,8 +5466,8 @@ packages:
     dependencies:
       '@glimmer/component': 1.1.2_@babel+core@7.20.2
       '@types/ember': 4.0.2_@babel+core@7.20.2
-      '@types/ember__engine': 4.0.4_@babel+core@7.20.2
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__engine': 4.0.4
+      '@types/ember__object': 4.0.5
       '@types/ember__owner': 4.0.2
       '@types/ember__routing': 4.0.12_@babel+core@7.20.2
     transitivePeerDependencies:
@@ -5466,7 +5479,7 @@ packages:
     resolution: {integrity: sha512-G6kbLaS3ke4QspHkgLlGY0t1v0G22hGavyphezZucj7LLk1N+r11w913CYkBg3cJsJD+TG2Wo4eVbgRcotvuvQ==}
     dependencies:
       '@types/ember': 4.0.2_@babel+core@7.20.2
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -5476,7 +5489,7 @@ packages:
     resolution: {integrity: sha512-iwFf+qYBsGp9SycIb0lxGkdZPYpKxMcBoV5kCJbWyC6azuX2xPDXHx8n2lm8O9GrEFVJXfYC5bSXf33rdpy5Sw==}
     dependencies:
       '@types/ember': 4.0.2_@babel+core@7.20.2
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -5509,6 +5522,13 @@ packages:
 
   /@types/ember__destroyable/4.0.1:
     resolution: {integrity: sha512-U497H5zW2bfdwmX1rktaSe+IsOrcqLn7jtrHI2dNnf9le38e1Wcnes8amA9PCv4lOhH+Mc3nkNIdQx38DwflXA==}
+    dev: true
+
+  /@types/ember__engine/4.0.4:
+    resolution: {integrity: sha512-dxQf3ESRjTJtCHbd42/ReUpQUAUsn/VtI6+S07jrsgCbAQEr8Qkh/dJpd9Cta8N+DpbY1CUH58D4HxdOC4Ip3A==}
+    dependencies:
+      '@types/ember__object': 4.0.5
+      '@types/ember__owner': 4.0.2
     dev: true
 
   /@types/ember__engine/4.0.4_@babel+core@7.20.2:
@@ -8690,7 +8710,7 @@ packages:
       broccoli-persistent-filter: 3.1.3
       minimist: 1.2.7
       object-assign: 4.1.1
-      postcss: 8.4.19
+      postcss: 8.4.23
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -10286,13 +10306,13 @@ packages:
     peerDependencies:
       webpack: ^4.27.0 || ^5.0.0
     dependencies:
-      icss-utils: 5.1.0_postcss@8.4.19
+      icss-utils: 5.1.0_postcss@8.4.23
       loader-utils: 2.0.4
-      postcss: 8.4.19
-      postcss-modules-extract-imports: 3.0.0_postcss@8.4.19
-      postcss-modules-local-by-default: 4.0.0_postcss@8.4.19
-      postcss-modules-scope: 3.0.0_postcss@8.4.19
-      postcss-modules-values: 4.0.0_postcss@8.4.19
+      postcss: 8.4.23
+      postcss-modules-extract-imports: 3.0.0_postcss@8.4.23
+      postcss-modules-local-by-default: 4.0.0_postcss@8.4.23
+      postcss-modules-scope: 3.0.0_postcss@8.4.23
+      postcss-modules-values: 4.0.0_postcss@8.4.23
       postcss-value-parser: 4.2.0
       schema-utils: 3.1.1
       semver: 7.3.8
@@ -10303,13 +10323,13 @@ packages:
     peerDependencies:
       webpack: ^4.27.0 || ^5.0.0
     dependencies:
-      icss-utils: 5.1.0_postcss@8.4.19
+      icss-utils: 5.1.0_postcss@8.4.23
       loader-utils: 2.0.4
-      postcss: 8.4.19
-      postcss-modules-extract-imports: 3.0.0_postcss@8.4.19
-      postcss-modules-local-by-default: 4.0.0_postcss@8.4.19
-      postcss-modules-scope: 3.0.0_postcss@8.4.19
-      postcss-modules-values: 4.0.0_postcss@8.4.19
+      postcss: 8.4.23
+      postcss-modules-extract-imports: 3.0.0_postcss@8.4.23
+      postcss-modules-local-by-default: 4.0.0_postcss@8.4.23
+      postcss-modules-scope: 3.0.0_postcss@8.4.23
+      postcss-modules-values: 4.0.0_postcss@8.4.23
       postcss-value-parser: 4.2.0
       schema-utils: 3.1.1
       semver: 7.3.8
@@ -11190,7 +11210,7 @@ packages:
       ember-cli: ^3.2.0 || ^4.0.0
     dependencies:
       chalk: 2.4.2
-      ember-cli: 4.6.0
+      ember-cli: 4.6.0_lodash@4.17.21
       find-yarn-workspace-root: 1.2.1
       is-git-url: 1.0.0
       resolve: 1.22.1
@@ -15747,6 +15767,15 @@ packages:
       postcss: ^8.1.0
     dependencies:
       postcss: 8.4.19
+    dev: true
+
+  /icss-utils/5.1.0_postcss@8.4.23:
+    resolution: {integrity: sha512-soFhflCVWLfRNOPU3iv5Z9VUdT44xFRbzjLsEzSr5AQmgqPMTHdU3PMT1Cf1ssx8fLNJDA1juftYl+PUcv3MqA==}
+    engines: {node: ^10 || ^12 || >= 14}
+    peerDependencies:
+      postcss: ^8.1.0
+    dependencies:
+      postcss: 8.4.23
 
   /ieee754/1.1.13:
     resolution: {integrity: sha512-4vf7I2LYV/HaWerSo3XmlMkp5eZ83i+/CDluXi/IGTs/O1sejBNhTtnxzmRZfvOUqj7lZjqHkeTvpgSFDlWZTg==}
@@ -17843,8 +17872,8 @@ packages:
     dev: true
     optional: true
 
-  /nanoid/3.3.4:
-    resolution: {integrity: sha512-MqBkQh/OHTS2egovRtLk45wEyNXwF+cokD+1YPf9u5VfJiRdAiRwB2froX5Co9Rh20xs4siNPm8naNotSD6RBw==}
+  /nanoid/3.3.6:
+    resolution: {integrity: sha512-BGcqMMJuToF7i1rt+2PWSNVnWIkGCU78jBG3RxO/bZlnZPK2Cmi2QaffxGO/2RvWi9sL+FAiRiXMgsyxQ1DIDA==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -18779,6 +18808,15 @@ packages:
       postcss: ^8.1.0
     dependencies:
       postcss: 8.4.19
+    dev: true
+
+  /postcss-modules-extract-imports/3.0.0_postcss@8.4.23:
+    resolution: {integrity: sha512-bdHleFnP3kZ4NYDhuGlVK+CMrQ/pqUm8bx/oGL93K6gVwiclvX5x0n76fYMKuIGKzlABOy13zsvqjb0f92TEXw==}
+    engines: {node: ^10 || ^12 || >= 14}
+    peerDependencies:
+      postcss: ^8.1.0
+    dependencies:
+      postcss: 8.4.23
 
   /postcss-modules-local-by-default/4.0.0_postcss@8.4.19:
     resolution: {integrity: sha512-sT7ihtmGSF9yhm6ggikHdV0hlziDTX7oFoXtuVWeDd3hHObNkcHRo9V3yg7vCAY7cONyxJC/XXCmmiHHcvX7bQ==}
@@ -18788,7 +18826,19 @@ packages:
     dependencies:
       icss-utils: 5.1.0_postcss@8.4.19
       postcss: 8.4.19
-      postcss-selector-parser: 6.0.10
+      postcss-selector-parser: 6.0.11
+      postcss-value-parser: 4.2.0
+    dev: true
+
+  /postcss-modules-local-by-default/4.0.0_postcss@8.4.23:
+    resolution: {integrity: sha512-sT7ihtmGSF9yhm6ggikHdV0hlziDTX7oFoXtuVWeDd3hHObNkcHRo9V3yg7vCAY7cONyxJC/XXCmmiHHcvX7bQ==}
+    engines: {node: ^10 || ^12 || >= 14}
+    peerDependencies:
+      postcss: ^8.1.0
+    dependencies:
+      icss-utils: 5.1.0_postcss@8.4.23
+      postcss: 8.4.23
+      postcss-selector-parser: 6.0.11
       postcss-value-parser: 4.2.0
 
   /postcss-modules-scope/3.0.0_postcss@8.4.19:
@@ -18798,7 +18848,17 @@ packages:
       postcss: ^8.1.0
     dependencies:
       postcss: 8.4.19
-      postcss-selector-parser: 6.0.10
+      postcss-selector-parser: 6.0.11
+    dev: true
+
+  /postcss-modules-scope/3.0.0_postcss@8.4.23:
+    resolution: {integrity: sha512-hncihwFA2yPath8oZ15PZqvWGkWf+XUfQgUGamS4LqoP1anQLOsOJw0vr7J7IwLpoY9fatA2qiGUGmuZL0Iqlg==}
+    engines: {node: ^10 || ^12 || >= 14}
+    peerDependencies:
+      postcss: ^8.1.0
+    dependencies:
+      postcss: 8.4.23
+      postcss-selector-parser: 6.0.11
 
   /postcss-modules-values/4.0.0_postcss@8.4.19:
     resolution: {integrity: sha512-RDxHkAiEGI78gS2ofyvCsu7iycRv7oqw5xMWn9iMoR0N/7mf9D50ecQqUo5BZ9Zh2vH4bCUR/ktCqbB9m8vJjQ==}
@@ -18808,9 +18868,19 @@ packages:
     dependencies:
       icss-utils: 5.1.0_postcss@8.4.19
       postcss: 8.4.19
+    dev: true
 
-  /postcss-selector-parser/6.0.10:
-    resolution: {integrity: sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w==}
+  /postcss-modules-values/4.0.0_postcss@8.4.23:
+    resolution: {integrity: sha512-RDxHkAiEGI78gS2ofyvCsu7iycRv7oqw5xMWn9iMoR0N/7mf9D50ecQqUo5BZ9Zh2vH4bCUR/ktCqbB9m8vJjQ==}
+    engines: {node: ^10 || ^12 || >= 14}
+    peerDependencies:
+      postcss: ^8.1.0
+    dependencies:
+      icss-utils: 5.1.0_postcss@8.4.23
+      postcss: 8.4.23
+
+  /postcss-selector-parser/6.0.11:
+    resolution: {integrity: sha512-zbARubNdogI9j7WY4nQJBiNqQf3sLS3wCP4WfOidu+p28LofJqDH1tcXypGrcmMHhDk2t9wGhCsYe/+szLTy1g==}
     engines: {node: '>=4'}
     dependencies:
       cssesc: 3.0.0
@@ -18823,7 +18893,16 @@ packages:
     resolution: {integrity: sha512-h+pbPsyhlYj6N2ozBmHhHrs9DzGmbaarbLvWipMRO7RLS+v4onj26MPFXA5OBYFxyqYhUJK456SwDcY9H2/zsA==}
     engines: {node: ^10 || ^12 || >=14}
     dependencies:
-      nanoid: 3.3.4
+      nanoid: 3.3.6
+      picocolors: 1.0.0
+      source-map-js: 1.0.2
+    dev: true
+
+  /postcss/8.4.23:
+    resolution: {integrity: sha512-bQ3qMcpF6A/YjR55xtoTr0jGOlnPOKAIMdOWiv0EIT6HVPEaJiJB4NLljSbiHoC2RX7DN5Uvjtpbg1NPdwv1oA==}
+    engines: {node: ^10 || ^12 || >=14}
+    dependencies:
+      nanoid: 3.3.6
       picocolors: 1.0.0
       source-map-js: 1.0.2
 
@@ -22787,6 +22866,19 @@ packages:
       compress-commons: 1.2.2
       lodash: 4.17.21
       readable-stream: 2.3.7
+    dev: true
+
+  file:../glimmer-scoped-css/glimmer-scoped-css/glimmer-scoped-css-0.0.4.tgz:
+    resolution: {integrity: sha512-/NXsn2dXOQNYlIpeEDht8g9NZKuXwDAN8zEWnRQGTcQODjCWWUBZB5gRU9LE24bopt78Ysooe59x8UEVW6TySw==, tarball: file:../glimmer-scoped-css/glimmer-scoped-css/glimmer-scoped-css-0.0.4.tgz}
+    name: glimmer-scoped-css
+    version: 0.0.4
+    dependencies:
+      '@embroider/addon-shim': 1.8.4-unstable.72d5a8e
+      js-string-escape: 1.0.1
+      postcss: 8.4.23
+      postcss-selector-parser: 6.0.11
+    transitivePeerDependencies:
+      - supports-color
     dev: true
 
   file:packages/base:
