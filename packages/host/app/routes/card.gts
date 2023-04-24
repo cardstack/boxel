@@ -7,6 +7,7 @@ import type CardService from '../services/card-service';
 import type RouterService from '@ember/routing/router-service';
 import type LocalRealmService from '../services/local-realm';
 import Component from '@glimmer/component';
+import { Card } from 'https://cardstack.com/base/card-api';
 
 const { ownRealmURL, isLocalRealm } = ENV;
 const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
@@ -17,9 +18,12 @@ class LocalRealmNotConnectedComponent extends Component {
   </template>
 }
 
-export default class RenderCard extends Route<
-  ComponentLike<{ Args: {}; Blocks: {} }>
-> {
+interface Model {
+  card?: Card;
+  component?: ComponentLike<{ Args: {}; Blocks: {} }>;
+}
+
+export default class RenderCard extends Route<Model> {
   @service declare cardService: CardService;
   @service declare localRealm: LocalRealmService;
   @service declare router: RouterService;
@@ -51,12 +55,11 @@ export default class RenderCard extends Route<
       : new URL('./', ownRealmURL);
     await this.localRealm.startedUp;
     try {
-      let instance = await this.cardService.loadModel(url);
-      return instance.constructor.getComponent(instance, 'isolated');
+      return { card: await this.cardService.loadModel(url) };
     } catch (e) {
       (e as any).failureLoadingIndexCard = url.href === ownRealmURL;
       if (isLocalRealm && !this.localRealm.isAvailable) {
-        return LocalRealmNotConnectedComponent;
+        return { component: LocalRealmNotConnectedComponent };
       }
       throw e;
     }

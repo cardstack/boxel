@@ -35,7 +35,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
           <this.linkedCard />
         </CardContainer>
         <button
-          class='remove-button'
+          class='icon-button'
           {{on 'click' this.remove}}
           data-test-remove-card
           disabled={{this.isEmpty}}
