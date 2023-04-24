@@ -7,6 +7,6 @@ module('Acceptance | Freestyle', function (hooks) {
 
   test('smoke check', async function (assert) {
     await visit('/_freestyle');
-    assert.dom('h2.FreestyleUsage-name').containsText('SearchBar');
+    assert.dom('h2.FreestyleUsage-name').containsText('SearchSheet');
   });
 });
