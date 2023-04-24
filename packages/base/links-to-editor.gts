@@ -12,8 +12,7 @@ import {
   identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { CardContainer, Button } from '@cardstack/boxel-ui';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
@@ -33,15 +32,16 @@ class LinksToEditor extends GlimmerComponent<Signature> {
         <CardContainer class='links-to-editor__item'>
           <this.linkedCard />
         </CardContainer>
-        <button
+        <IconButton
+          @icon='icon-minus-circle'
+          @width='20px'
+          @height='20px'
           class='remove-button'
-          {{on 'click' this.remove}}
-          data-test-remove-card
-          disabled={{this.isEmpty}}
           aria-label='Remove'
-        >
-          {{svgJar 'icon-minus-circle' width='20px' height='20px'}}
-        </button>
+          {{on 'click' this.remove}}
+          disabled={{this.isEmpty}}
+          data-test-remove-card
+        />
       {{/if}}
     </div>
   </template>

@@ -1,306 +1,3 @@
-/** BOXEL STYLES **/
-
-@font-face {
-  font-family: 'Poppins';
-  src: url('../../fonts/Poppins-Regular.ttf');
-  font-weight: 400;
-}
-@font-face {
-  font-family: 'Poppins';
-  src: url('../../fonts/Poppins-Italic.ttf');
-  font-weight: 400;
-  font-style: italic;
-}
-@font-face {
-  font-family: 'Poppins';
-  src: url('../../fonts/Poppins-Medium.ttf');
-  font-weight: 500;
-}
-@font-face {
-  font-family: 'Poppins';
-  src: url('../../fonts/Poppins-MediumItalic.ttf');
-  font-weight: 500;
-  font-style: italic;
-}
-@font-face {
-  font-family: 'Poppins';
-  src: url('../../fonts/Poppins-Bold.ttf');
-  font-weight: 700;
-}
-@font-face {
-  font-family: 'Poppins';
-  src: url('../../fonts/Poppins-BoldItalic.ttf');
-  font-weight: 700;
-  font-style: italic;
-}
-
-/* fallback font */
-@font-face {
-  font-family: 'Open Sans';
-  src: url('../../fonts/OpenSans-Regular.ttf');
-  font-weight: 400;
-}
-@font-face {
-  font-family: 'Open Sans';
-  src: url('../../fonts/OpenSans-SemiBold.ttf');
-  font-weight: 600;
-}
-@font-face {
-  font-family: 'Open Sans';
-  src: url('../../fonts/OpenSans-Bold.ttf');
-  font-weight: 700;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-#isolated-render {
-  display: none;
-}
-
-html,
-body {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-  color: var(--boxel-dark, #000);
-  font-family: var(
-    --boxel-font-family,
-    'Open Sans',
-    Helvetica,
-    Arial,
-    sans-serif
-  );
-  background-color: var(--boxel-light, #fff);
-  font-size: 13px;
-  line-height: calc(18 / 13);
-  overscroll-behavior: none;
-}
-
-body.has-modal {
-  overflow: hidden;
-}
-
-a {
-  display: inline-block;
-  color: inherit;
-  text-decoration: none;
-}
-
-button {
-  display: inline-block;
-  font: inherit;
-}
-
-img,
-svg {
-  display: inline-block;
-}
-
-a:hover {
-  color: var(--boxel-highlight);
-  cursor: pointer;
-}
-
-a:focus {
-  outline: var(--boxel-outline);
-}
-
-a:focus:not(:focus-visible) {
-  outline-color: transparent;
-}
-
-button:hover:not(:disabled),
-[role='button']:hover:not(:disabled, [aria-disabled='true']) {
-  cursor: pointer;
-}
-
-button:focus:not(:disabled),
-[role='button']:focus:not(:disabled) {
-  outline: var(--boxel-outline);
-}
-
-button:focus:not(:focus-visible),
-[role='button']:focus:not(:focus-visible) {
-  outline-color: transparent;
-}
-
-input:focus,
-select:focus,
-textarea:focus {
-  outline-color: var(--boxel-highlight);
-}
-
-/* Hides content visually only
-  (accessible via screen readers) */
-.boxel-sr-only:not(:focus):not(:active) {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  border: 0;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-:root {
-  --boxel-font-family: 'Poppins', 'Open Sans', helvetica, arial, sans-serif;
-  --boxel-monospace-font-family: 'Roboto Mono', 'Courier New', courier,
-    monospace;
-  --boxel-font-xl: var(--boxel-font-size-xl) / calc(43 / 32)
-    var(--boxel-font-family);
-  --boxel-font-lg: var(--boxel-font-size-lg) / calc(30 / 22)
-    var(--boxel-font-family);
-  --boxel-font: var(--boxel-font-size) / calc(22 / 16) var(--boxel-font-family); /* default */
-  --boxel-font-sm: var(--boxel-font-size-sm) / calc(18 / 13)
-    var(--boxel-font-family);
-  --boxel-font-xs: var(--boxel-font-size-xs) / calc(15 / 11)
-    var(--boxel-font-family);
-
-  /* font-sizes */
-  --boxel-font-size-xl: 2rem;
-  --boxel-font-size-lg: 1.375rem;
-  --boxel-font-size: 1rem; /* default - 16px */
-  --boxel-font-size-sm: 0.8125rem;
-  --boxel-font-size-xs: 0.6875rem;
-
-  /* letter-spacing */
-  --boxel-lsp-xxl: 0.1em;
-  --boxel-lsp-xl: 0.05em;
-  --boxel-lsp-lg: 0.035em;
-  --boxel-lsp: 0.025em;
-  --boxel-lsp-sm: 0.015em;
-  --boxel-lsp-xs: 0.01em;
-  --boxel-lsp-xxs: 0.005em;
-
-  /* Modular scale for spacing */
-  --boxel-spacing: 1.25rem; /* base size (20px) */
-  --boxel-ratio: 1.333; /* scale (based on "Perfect Fourth" scale) */
-  --boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio)); /* 6.33px */
-  --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio)); /* 8.44px */
-  --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio)); /* 11.26px */
-  --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio)); /* 15px */
-  --boxel-sp: var(--boxel-spacing); /* 20px */
-  --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio)); /* 26.66px */
-  --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio)); /* 35.54px */
-  --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 47.37px */
-  --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio)); /* 63.15px */
-
-  /* common icon sizes */
-  --boxel-icon-sm: 1.25rem; /* 20px */
-  --boxel-icon-lg: 2.5rem; /* 40px */
-  --boxel-icon-xl: 3.75rem; /* 60px */
-  --boxel-icon-xxl: 5rem; /* 80px */
-
-  /* other */
-  --boxel-button-border-color: #acacac;
-  --boxel-border-color: #d3d3d3;
-  --boxel-border: 1px solid var(--boxel-border-color);
-  --boxel-border-dark: 1px solid var(--boxel-dark);
-  --boxel-border-radius-xs: 2px;
-  --boxel-border-radius-sm: 5px;
-  --boxel-border-radius: 10px;
-  --boxel-border-radius-lg: 15px;
-  --boxel-transition: 0.2s ease;
-  --boxel-box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
-  --boxel-box-shadow-hover: 0 3px 10px rgb(0 0 0 / 15%);
-  --boxel-outline-color: var(--boxel-blue);
-  --boxel-outline: 2px solid var(--boxel-outline-color);
-
-  /* Container sizes */
-  --boxel-xxs-container: 15.625rem; /* 250px */
-  --boxel-xs-container: 17.8125rem; /* 285px */
-  --boxel-sm-container: 36.25rem; /* 580px */
-  --boxel-md-container: 40.625rem; /* 650px */
-  --boxel-lg-container: 43.75rem; /* 700px */
-  --boxel-xl-container: 65rem; /* 1040px */
-  --boxel-xxl-container: 83.76rem; /* 1340px */
-
-  /* COLOR PALETTE */
-
-  /**** Revisited Colors BOXEL-UI ****/
-  --boxel-100: #f8f7fa;
-  --boxel-200: #e8e8e8;
-  --boxel-300: #d1d1d1;
-  --boxel-400: #afafb7;
-  --boxel-500: #5a586a;
-  --boxel-600: #413e4e;
-  --boxel-700: #272330;
-
-  --boxel-cyan: #00ebe5;
-  --boxel-teal: #03c4bf;
-  --boxel-red: #ff5050;
-  --boxel-pink: #ff009d;
-  --boxel-orange: #ff7f00;
-  --boxel-yellow: #ffd800;
-  --boxel-lime: #c3fc33;
-  --boxel-green: #37eb77;
-  --boxel-dark-green: #00ac3d;
-  --boxel-lilac: #a66dfa;
-  --boxel-fuschia: #ac00ff;
-  --boxel-purple: #6638ff;
-  --boxel-blue: #0069f9;
-  --boxel-navy: #281e78;
-
-  --boxel-label-color: #a0a0a0;
-  /**** End of revisited colors ****/
-
-  /* Primary colors */
-  --boxel-light: #fff;
-  --boxel-dark: #000;
-
-  --boxel-highlight: var(--boxel-teal);
-  --boxel-highlight-hover: #02b1ad;
-  --boxel-danger: #ff4852;
-  --boxel-danger-hover: #fa1521;
-
-  /* Boxel purples */
-  --boxel-purple-100: var(--boxel-100); /* 1 */
-  --boxel-purple-200: var(--boxel-400); /* formerly: #b3b1b8; */
-  --boxel-purple-300: var(--boxel-400); /* 4 */
-  --boxel-purple-400: var(--boxel-500); /* formerly: #6b6a80; */
-  --boxel-purple-500: var(--boxel-500); /* 5 */
-  --boxel-purple-600: var(--boxel-600); /* 6 - Cardspace bg */
-  --boxel-purple-700: var(--boxel-700); /* formerly: #393642; */
-  --boxel-purple-750: var(--boxel-700); /* formerly: #363441; */
-  --boxel-purple-800: var(--boxel-700); /* formerly: #2e2d38; */
-  --boxel-purple-900: var(--boxel-700); /* 7 - Card Wallet bg */
-
-  /* Boxel neutrals */
-  --boxel-light-100: #f5f5f5;
-  --boxel-light-200: var(--boxel-200); /* formerly: #f0f0f0; */
-  --boxel-light-300: var(--boxel-200); /* formerly: #efefef; */
-  --boxel-light-400: var(--boxel-200); /* 2 */
-  --boxel-light-500: var(--boxel-300); /* formerly: #dedede; */
-  --boxel-light-600: var(--boxel-300); /* 3 */
-
-  /* Status colors */
-  --boxel-error-100: #f00; /* alert - attention - error */
-  --boxel-error-200: #ed0000;
-  --boxel-warning-100: var(--boxel-yellow); /* warning - notification */
-  --boxel-success-100: var(--boxel-green);
-  --boxel-success-200: var(--boxel-teal);
-  --boxel-success-300: var(--boxel-dark-green);
-
-  /* z-index layers */
-  --boxel-layer-modal-default: 15;
-  --boxel-layer-modal-urgent: 20;
-
-  /* Form control appearance */
-  --boxel-form-control-height: 2.5rem; /* 40px */
-  --boxel-form-control-placeholder-color: var(--boxel-400);
-  --boxel-form-control-border-color: var(--boxel-border-color);
-  --boxel-form-control-border-radius: var(--boxel-border-radius);
-}
-
-/** HOST APP STYLES **/
-
 /* Go template */
 .main {
   position: relative;
@@ -420,7 +117,7 @@ nav > .directory-level {
   display: grid;
   gap: var(--boxel-sp-xxxs);
 }
-.catalog-entry > * {
+.catalog-entry--embedded > * {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -457,16 +154,8 @@ nav > .directory-level {
 }
 .remove-button {
   --icon-bg: var(--boxel-teal);
+  --icon-border: var(--icon-bg);
   --icon-color: var(--boxel-light);
-
-  display: block;
-  background: none;
-  border: none;
-  border-radius: 100px;
-  width: var(--boxel-icon-sm);
-  height: var(--boxel-icon-sm);
-  margin: 0;
-  padding: 0;
 }
 .remove-button:hover {
   --icon-bg: var(--boxel-dark);
@@ -1216,4 +905,56 @@ a.boxel-button:hover {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Boxel Icon Button */
+.boxel-icon-button {
+  --boxel-icon-button-width: 40px;
+  --boxel-icon-button-height: 40px;
+
+  width: var(--boxel-icon-button-width);
+  height: var(--boxel-icon-button-height);
+  padding: 0;
+  background: none;
+  border: none;
+  z-index: 1;
+}
+
+.boxel-icon-button:hover {
+  cursor: pointer;
+}
+
+.boxel-icon-button--primary {
+  --icon-bg: var(--boxel-highlight);
+  --icon-border: var(--boxel-highlight);
+}
+
+.boxel-icon-button--secondary {
+  --icon-color: var(--boxel-highlight);
+
+  border: 1px solid rgb(255 255 255 / 35%);
+  border-radius: 100px;
+  background-color: #41404d;
+}
+
+.boxel-icon-button--secondary:hover {
+  background-color: var(--boxel-purple-800);
+}
+
+.boxel-icon-button > svg {
+  display: block;
+  margin: auto;
+}
+
+/* Add Button (Icon Button) */
+.add-button {
+  --icon-bg: var(--boxel-light-100);
+  --icon-border: var(--icon-bg);
+  --icon-color: var(--boxel-highlight);
+
+  border-radius: 100px;
+  box-shadow: 0 4px 6px 0px rgb(0 0 0 / 35%);
+}
+.add-button:hover {
+  --icon-bg: var(--boxel-light-200);
 }

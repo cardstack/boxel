@@ -72,7 +72,10 @@ export class CatalogEntry extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class='catalog-entry' @displayBoundaries={{true}}>
+      <CardContainer
+        class='catalog-entry catalog-entry--embedded'
+        @displayBoundaries={{true}}
+      >
         <header><@fields.title /></header>
         <div class='catalog-entry__ref' data-test-ref>
           <@fields.moduleHref />

@@ -24,7 +24,7 @@ export default class CardCatalogModal extends Component {
         data-test-card-catalog-modal
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
-          <Header @title='Card Catalog'>
+          <Header @title='Choose a card type'>
             <button
               {{on 'click' (fn this.pick undefined)}}
               class='dialog-box__close'

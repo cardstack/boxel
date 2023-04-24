@@ -4,7 +4,7 @@ import { fn } from '@ember/helper';
 import { type Card, type Box, type Format, type Field } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
-import { CardContainer, Button } from '@cardstack/boxel-ui';
+import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -14,7 +14,6 @@ import {
   baseCardRef,
   identifyCard,
 } from '@cardstack/runtime-common';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Args: {
@@ -51,15 +50,16 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                   <Item />
                 </CardContainer>
               {{/let}}
-              <button
+              <IconButton
+                @icon='icon-minus-circle'
+                @width='20px'
+                @height='20px'
                 class='remove-button'
                 {{on 'click' (fn this.remove i)}}
                 data-test-remove-card
                 data-test-remove={{i}}
                 aria-label='Remove'
-              >
-                {{svgJar 'icon-minus-circle' width='20px' height='20px'}}
-              </button>
+              />
             </li>
           {{/each}}
         </ul>
