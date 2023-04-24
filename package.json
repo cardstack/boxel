@@ -2,7 +2,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/cardstack/boxel-motion"
+    "url": "https://github.com/cardstack/boxel"
   },
   "scripts": {
     "build:boxel-host": "cd packages/host && pnpm build:production",

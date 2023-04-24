@@ -764,6 +764,8 @@ importers:
       ember-concurrency: ^2.3.4
       ember-data: ~4.2.0
       ember-export-application-global: ^2.0.1
+      ember-focus-trap: ^1.0.1
+      ember-freestyle: ^0.17.0
       ember-functions-as-helper-polyfill: ^2.0.1
       ember-load-initializers: ^2.1.2
       ember-modifier: ^3.2.1
@@ -884,6 +886,8 @@ importers:
       ember-concurrency: 2.3.7_@babel+core@7.20.2
       ember-data: 4.2.0_npabyccmuonwo2rku4k53xo3hi
       ember-export-application-global: 2.0.1
+      ember-focus-trap: 1.0.1
+      ember-freestyle: 0.17.0_msaygt6tq473uyro2orjookkzy
       ember-functions-as-helper-polyfill: 2.1.1_ember-source@4.2.0
       ember-load-initializers: 2.1.2_@babel+core@7.20.2
       ember-modifier: 3.2.7_@babel+core@7.20.2
@@ -3742,6 +3746,21 @@ packages:
       mkdirp: 1.0.4
       silent-error: 1.1.1
     transitivePeerDependencies:
+      - supports-color
+    dev: true
+
+  /@ember/render-modifiers/2.0.5_c3ll764h35tb7zumth7bce2v2e:
+    resolution: {integrity: sha512-5cJ1niIdOJC6k6KtIn9HGbr1DATJQp4ZqMv1vbi6LKQWbVCQ3byvKONtUEi3H0wcewlrcaWCqXOgm0nACzCOQA==}
+    engines: {node: 12.* || 14.* || >= 16}
+    peerDependencies:
+      ember-source: ^3.8 || ^4.0.0
+    dependencies:
+      '@embroider/macros': 1.10.0
+      ember-cli-babel: 7.26.11
+      ember-modifier-manager-polyfill: 1.2.0_@babel+core@7.20.2
+      ember-source: 4.2.0_npabyccmuonwo2rku4k53xo3hi
+    transitivePeerDependencies:
+      - '@babel/core'
       - supports-color
     dev: true
 
@@ -12359,6 +12378,32 @@ packages:
       '@embroider/addon-shim': 1.8.3
       focus-trap: 6.9.4
 
+  /ember-freestyle/0.17.0_msaygt6tq473uyro2orjookkzy:
+    resolution: {integrity: sha512-3ycaOLHu5ZwMBJH3TU2SSMOR9PqyixygdcVGA6CRZ7C96Gzuypst2eM54HrjsQ9uK7UYSTw6NvDoyE4POBb3Bw==}
+    engines: {node: 14.* || >= 16}
+    dependencies:
+      '@ember/render-modifiers': 2.0.5_c3ll764h35tb7zumth7bce2v2e
+      '@glimmer/component': 1.1.2_@babel+core@7.20.2
+      '@glimmer/tracking': 1.1.2
+      ember-auto-import: 2.4.3_webpack@5.75.0
+      ember-cli-babel: 7.26.11
+      ember-cli-htmlbars: 6.2.0
+      ember-cli-typescript: 5.2.1
+      ember-focus-trap: 1.0.1
+      ember-modifier: 3.2.7_@babel+core@7.20.2
+      ember-named-blocks-polyfill: 0.2.5
+      ember-truth-helpers: 3.1.1
+      json-formatter-js: 2.3.4
+      macro-decorators: 0.1.2
+      strip-indent: 3.0.0
+      tracked-built-ins: 3.1.1
+    transitivePeerDependencies:
+      - '@babel/core'
+      - ember-source
+      - supports-color
+      - webpack
+    dev: true
+
   /ember-freestyle/0.17.0_ookassz7sg56vfolkk3pkbrf7y:
     resolution: {integrity: sha512-3ycaOLHu5ZwMBJH3TU2SSMOR9PqyixygdcVGA6CRZ7C96Gzuypst2eM54HrjsQ9uK7UYSTw6NvDoyE4POBb3Bw==}
     engines: {node: 14.* || >= 16}
@@ -14666,7 +14711,7 @@ packages:
     resolution: {integrity: sha512-oWb1Z6mkHIskLzEJ/XWX0srkpkTQ7vaopMQkyaEIoq0fmtFVxOthb8cCxeT+p3ynTdkk/RZwbgG4brR5BeWECw==}
     engines: {node: '>= 4.0'}
     os: [darwin]
-    deprecated: fsevents 1 will break on node v14+ and could be using insecure binaries. Upgrade to fsevents 2.
+    deprecated: The v1 package contains DANGEROUS / INSECURE binaries. Upgrade to safe fsevents v2
     requiresBuild: true
     dependencies:
       bindings: 1.5.0
@@ -20732,7 +20777,7 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
     dependencies:
-      acorn: 8.8.1
+      acorn: 8.8.2
       commander: 2.20.3
       source-map: 0.6.1
       source-map-support: 0.5.21
@@ -21387,7 +21432,7 @@ packages:
     dev: true
 
   /tty-browserify/0.0.0:
-    resolution: {integrity: sha1-oVe6QC2iTpv5V/mqadUk7tQpAaY=}
+    resolution: {integrity: sha512-JVa5ijo+j/sOoHGjw0sxw734b1LhBkQ3bvUGNdxnVXDCX81Yx7TFgnZygxrIIWn23hbfTaMYLwRmAxFyDuFmIw==}
     dev: true
 
   /tunnel/0.0.6:
