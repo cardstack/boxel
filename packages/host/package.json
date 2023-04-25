@@ -109,6 +109,8 @@
     "ember-concurrency": "^2.3.4",
     "ember-data": "~4.2.0",
     "ember-export-application-global": "^2.0.1",
+    "ember-focus-trap": "^1.0.1",
+    "ember-freestyle": "^0.17.0",
     "ember-functions-as-helper-polyfill": "^2.0.1",
     "ember-load-initializers": "^2.1.2",
     "ember-modifier": "^3.2.1",

@@ -1,3 +1,4 @@
+/* eslint-disable ember/no-classic-components */
 import EmberComponent from '@ember/component';
 import { ensureSafeComponent } from '@embroider/util';
 import { ComponentLike } from '@glint/template';
