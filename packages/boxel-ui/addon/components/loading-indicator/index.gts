@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import cssVar from '../helpers/css-var';
-import { or } from '../helpers/truth-helpers';
-import { svgJar } from '../helpers/svg-jar';
+import cssVar from '../../helpers/css-var';
+import { svgJar } from '../../helpers/svg-jar';
+import './style.css';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -15,7 +15,7 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
   <div class='boxel-loading-indicator' ...attributes>
     {{svgJar
       'loading-indicator'
-      style=(cssVar icon-color=(or @color '#000'))
+      style=(cssVar icon-color=(if @color @color '#000'))
       role='presentation'
     }}
   </div>

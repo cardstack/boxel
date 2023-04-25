@@ -1,10 +1,11 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { eq } from '../helpers/truth-helpers';
-import cssVar from '../helpers/css-var';
-import cn from '../helpers/cn';
+import { eq } from '../../helpers/truth-helpers';
+import cssVar from '../../helpers/css-var';
+import cn from '../../helpers/cn';
 // import onKey from 'ember-keyboard/helpers/on-key';
 // import setBodyClass from 'ember-set-body-class/helpers/set-body-class';
+import './style.css';
 
 interface Signature {
   Element: HTMLDialogElement;

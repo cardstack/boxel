@@ -4,6 +4,7 @@ import element from '../../helpers/element';
 import { eq, not, or } from '../../helpers/truth-helpers';
 import { svgJar } from '../../helpers/svg-jar';
 import Label from '../label';
+import './style.css';
 
 export interface Signature {
   Element: HTMLElement;

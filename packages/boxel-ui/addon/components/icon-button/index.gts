@@ -2,6 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { svgJar } from '../../helpers/svg-jar';
 import { concat } from '@ember/helper';
 import cn from '../../helpers/cn';
+import './style.css';
 
 export interface Signature {
   Element: HTMLButtonElement;

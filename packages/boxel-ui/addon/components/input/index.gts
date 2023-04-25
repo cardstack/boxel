@@ -8,6 +8,7 @@ import optional from '@cardstack/boxel-ui/helpers/optional';
 import { and, not, bool } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import element from '@cardstack/boxel-ui/helpers/element';
 import cn from '@cardstack/boxel-ui/helpers/cn';
+import './style.css';
 
 export interface Signature {
   Element: HTMLInputElement | HTMLTextAreaElement;

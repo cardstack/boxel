@@ -2,11 +2,12 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import BoxelHeader from './index';
+import BoxelButton from '../button';
 import { fn } from '@ember/helper';
 
 export default class HeaderUsage extends Component {
   @tracked title = 'Header';
-  @tracked noBackground = false;
+  @tracked hasBackground = true;
   @tracked isHighlighted = false;
 
   <template>
@@ -17,11 +18,11 @@ export default class HeaderUsage extends Component {
       <:example>
         <BoxelHeader
           @title={{this.title}}
-          @noBackground={{this.noBackground}}
+          @hasBackground={{this.hasBackground}}
           @isHighlighted={{this.isHighlighted}}
         >
           <:actions>
-            <button>Edit</button>
+            <BoxelButton>Edit</BoxelButton>
           </:actions>
         </BoxelHeader>
       </:example>
@@ -33,11 +34,11 @@ export default class HeaderUsage extends Component {
           @onInput={{fn (mut this.title)}}
         />
         <Args.Bool
-          @name='noBackground'
-          @description='(styling) Removes background color'
+          @name='hasBackground'
+          @description='(styling) Adds background color'
           @defaultValue={{false}}
-          @value={{this.noBackground}}
-          @onInput={{fn (mut this.noBackground)}}
+          @value={{this.hasBackground}}
+          @onInput={{fn (mut this.hasBackground)}}
         />
         <Args.Bool
           @name='isHighlighted'
