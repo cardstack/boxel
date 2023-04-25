@@ -17,20 +17,21 @@ import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { ComponentLike } from '@glint/template';
+import { tracked } from '@glimmer/tracking';
 
 interface Signature {
   Args: {
-    firstCardInStack: Component;
+    firstCardInStack: ComponentLike;
   };
 }
 
 export default class OperatorMode extends Component<Signature> {
-  stack: ComponentLike[] = [];
+  @tracked stack: ComponentLike[];
   @service declare loaderService: LoaderService;
   constructor(owner: unknown, args: any) {
     super(owner, args);
 
-    this.stack = [this.args.firstCardInStack];
+    this.stack = [this.args.firstCardInStack as ComponentLike];
   }
 
   @action
@@ -63,8 +64,11 @@ export default class OperatorMode extends Component<Signature> {
     if (!relativeTo) {
       throw new Error(`bug: should never get here`);
     }
-    // let path = `${newCard.id.slice(relativeTo.href.length)}.json`;
-    // this.router.transitionTo('code', { queryParams: { path } });
+
+    this.stack = [
+      ...this.stack,
+      newCard.constructor.getComponent(newCard, 'isolated'),
+    ];
   });
 
   <template>
