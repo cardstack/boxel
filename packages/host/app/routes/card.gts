@@ -18,7 +18,7 @@ class LocalRealmNotConnectedComponent extends Component {
   </template>
 }
 
-interface Model {
+export interface Model {
   card?: Card;
   component?: ComponentLike<{ Args: {}; Blocks: {} }>;
 }
