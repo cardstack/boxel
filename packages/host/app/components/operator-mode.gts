@@ -16,22 +16,22 @@ import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { ComponentLike } from '@glint/template';
+
 import { tracked } from '@glimmer/tracking';
 
 interface Signature {
   Args: {
-    firstCardInStack: ComponentLike;
+    firstCardInStack: Component;
   };
 }
 
 export default class OperatorMode extends Component<Signature> {
-  @tracked stack: ComponentLike[];
+  @tracked stack: Component[];
   @service declare loaderService: LoaderService;
   constructor(owner: unknown, args: any) {
     super(owner, args);
 
-    this.stack = [this.args.firstCardInStack as ComponentLike];
+    this.stack = [this.args.firstCardInStack];
   }
 
   @action
@@ -67,7 +67,10 @@ export default class OperatorMode extends Component<Signature> {
 
     this.stack = [
       ...this.stack,
-      newCard.constructor.getComponent(newCard, 'isolated'),
+      newCard.constructor.getComponent(
+        newCard,
+        'isolated'
+      ) as unknown as Component,
     ];
   });
 
@@ -81,6 +84,9 @@ export default class OperatorMode extends Component<Signature> {
           <div class='operator-mode-stack-card'>
             <card />
           </div>
+
+          <br />
+          <br />
         {{/each}}
 
         <div>
