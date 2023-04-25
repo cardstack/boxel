@@ -10,23 +10,22 @@ import {
   catalogEntryRef,
   createNewCard,
   baseRealm,
-  // type CardRef,
 } from '@cardstack/runtime-common';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
+import type { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 
 interface Signature {
   Args: {
-    firstCardInStack: Component;
+    firstCardInStack: ComponentLike;
   };
 }
 
 export default class OperatorMode extends Component<Signature> {
-  @tracked stack: Component[];
+  @tracked stack: ComponentLike[];
   @service declare loaderService: LoaderService;
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -67,10 +66,7 @@ export default class OperatorMode extends Component<Signature> {
 
     this.stack = [
       ...this.stack,
-      newCard.constructor.getComponent(
-        newCard,
-        'isolated'
-      ) as unknown as Component,
+      newCard.constructor.getComponent(newCard, 'isolated'),
     ];
   });
 
