@@ -28,6 +28,10 @@
 
 <CodeLink />
 
-{{on-key '.' this.goToOperatorMode}}
+{{on-key '.' this.toggleOperatorMode}}
+
+{{#if this.operatorModeEnabled}}
+  <OperatorMode @firstCardInStack={{this.model}} />
+{{/if}}
 
 {{outlet}}

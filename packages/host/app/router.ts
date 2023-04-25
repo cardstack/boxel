@@ -19,7 +19,5 @@ Router.map(function () {
     this.route('card', { path });
     this.route('code', { path: `${path}/code` });
   }
-  this.route('card', { path: '/*path' }, function () {
-    this.route('operator-mode');
-  });
+  this.route('card', { path: '/*path' });
 });
