@@ -96,3 +96,9 @@ export default class OperatorMode extends Component<Signature> {
     </div>
   </template>
 }
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    OperatorMode: typeof OperatorMode;
+  }
+}
