@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { Card, Format, CardInstanceType } from 'https://cardstack.com/base/card-api';
+import { Card, Format } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import Preview from './preview';
 import { action } from '@ember/object';
@@ -79,14 +79,14 @@ export default class OperatorMode extends Component<Signature> {
 
       let field = fields[fieldName];
       if ((field.fieldType === 'contains' ||  field.fieldType === 'containsMany') && !(await this.cardService.isPrimitive(field.card))) {
-        await this.saveCardFieldValues((card as CardInstanceType<any>)[fieldName]);
+        await this.saveCardFieldValues((card as any)[fieldName]);
       }
 
       let cardFieldValue = this.cardFieldValues.get(card);
       if (!cardFieldValue) {
         cardFieldValue = new Map<string, any>;
       }
-      cardFieldValue.set(fieldName, (card as CardInstanceType<any>)[fieldName]);
+      cardFieldValue.set(fieldName, (card as any)[fieldName]);
       this.cardFieldValues.set(card, cardFieldValue);
     }
   }
@@ -98,12 +98,12 @@ export default class OperatorMode extends Component<Signature> {
 
       let field = fields[fieldName];
       if ((field.fieldType === 'contains' ||  field.fieldType === 'containsMany') && !(await this.cardService.isPrimitive(field.card))) {
-        await this.rollbackCardFieldValue((card as CardInstanceType<any>)[fieldName]);
+        await this.rollbackCardFieldValue((card as any)[fieldName]);
       }
 
       let cardFieldValue = this.cardFieldValues.get(card);
       if (cardFieldValue) {
-        (card as CardInstanceType<any>)[fieldName] = cardFieldValue.get(fieldName);
+        (card as any)[fieldName] = cardFieldValue.get(fieldName);
       }
     }
   }
