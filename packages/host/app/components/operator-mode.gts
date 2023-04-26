@@ -102,7 +102,7 @@ export default class OperatorMode extends Component<Signature> {
             @icon='icon-plus-circle'
             @width='40px'
             @height='40px'
-            @tooltip='Create a new card'
+            @tooltip='Add a new card to this collection'
             class='add-button'
             {{on 'click' this.createNew}}
             data-test-create-new-card-button

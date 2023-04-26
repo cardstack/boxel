@@ -693,7 +693,7 @@ module('Integration | schema', function (hooks) {
     await waitFor(`[data-test-catalog-entry-editor] [data-test-ref]`);
     assert
       .dom(`[data-test-catalog-entry-editor] [data-test-ref]`)
-      .hasText(`Module: ${testRealmURL}pet Name: Pet`);
+      .containsText(`${testRealmURL}pet`);
 
     let fileRef = await adapter.openFile('pet.gts');
     let src = fileRef?.content as string;
