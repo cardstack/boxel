@@ -47,7 +47,7 @@ export default class RenderCard extends Route<Model> {
     }
   }
 
-  async model(params: { path: string }): Promise<Model> {
+  async model(params: { path: string }) {
     let { path } = params;
     path = path || '';
     let url = path
