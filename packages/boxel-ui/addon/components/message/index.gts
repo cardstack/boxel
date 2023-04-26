@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import cn from '../helpers/cn';
-import { svgJar } from '../helpers/svg-jar';
-import { dayjsFormat } from '../helpers/dayjs-format';
+import cn from '../../helpers/cn';
+import { svgJar } from '../../helpers/svg-jar';
+import { dayjsFormat } from '../../helpers/dayjs-format';
 import dayjs from 'dayjs';
 
 interface Signature {
@@ -23,14 +23,14 @@ interface Signature {
 const Message: TemplateOnlyComponent<Signature> = <template>
   <div
     class={{cn
-      'boxel-thread-message'
-      boxel-thread-message--hide-meta=@hideMeta
-      boxel-thread-message--full-width=@fullWidth
+      'boxel-message'
+      boxel-message--hide-meta=@hideMeta
+      boxel-message--full-width=@fullWidth
     }}
-    data-test-boxel-thread-message
+    data-test-boxel-message
     ...attributes
   >
-    <div class={{cn 'boxel-thread-message__meta' boxel-sr-only=@hideMeta}}>
+    <div class={{cn 'boxel-message__meta' boxel-sr-only=@hideMeta}}>
       {{#unless @hideMeta}}
         {{#if @imgURL}}
           <img
@@ -39,10 +39,10 @@ const Message: TemplateOnlyComponent<Signature> = <template>
             width='40px'
             height='40px'
             class={{cn
-              'boxel-thread-message__avatar-img'
-              boxel-thread-message__avatar-img--not-round=@notRound
+              'boxel-message__avatar-img'
+              boxel-message__avatar-img--not-round=@notRound
             }}
-            data-test-boxel-thread-message-avatar
+            data-test-boxel-message-avatar
           />
         {{else}}
           {{svgJar
@@ -53,23 +53,23 @@ const Message: TemplateOnlyComponent<Signature> = <template>
           }}
         {{/if}}
       {{/unless}}
-      <h3 class='boxel-thread-message__info'>
+      <h3 class='boxel-message__info'>
         {{#if @name}}
           <span
-            class={{cn 'boxel-thread-message__name' boxel-sr-only=@hideName}}
-            data-test-boxel-thread-message-name
+            class={{cn 'boxel-message__name' boxel-sr-only=@hideName}}
+            data-test-boxel-message-name
           >
             {{@name}}
           </span>
         {{/if}}
         {{#let (if @datetime @datetime (dayjs)) as |datetime|}}
-          <time datetime={{datetime}} class='boxel-thread-message__time'>
+          <time datetime={{datetime}} class='boxel-message__time'>
             {{dayjsFormat datetime 'MM/DD/YYYY, h:mm A'}}
           </time>
         {{/let}}
       </h3>
     </div>
-    <div class='boxel-thread-message__content'>
+    <div class='boxel-message__content'>
       {{yield}}
     </div>
   </div>

@@ -4,7 +4,10 @@ import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
 import { setup } from 'qunit-dom';
 import { start } from 'ember-qunit';
-import { setRunOptions } from 'ember-a11y-testing/test-support';
+import {
+  setRunOptions,
+  setupConsoleLogger,
+} from 'ember-a11y-testing/test-support';
 
 setApplication(Application.create(config.APP));
 
@@ -17,5 +20,6 @@ setRunOptions({
     'aria-allowed-role': { enabled: false },
   },
 });
+setupConsoleLogger();
 
 start();

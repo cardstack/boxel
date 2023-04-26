@@ -1,4 +1,39 @@
 @font-face {
+  font-family: 'Poppins';
+  src: url('/@cardstack/boxel-ui/fonts/Poppins-Regular.ttf');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('/@cardstack/boxel-ui/fonts/Poppins-Italic.ttf');
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('/@cardstack/boxel-ui/fonts/Poppins-Medium.ttf');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('/@cardstack/boxel-ui/fonts/Poppins-MediumItalic.ttf');
+  font-weight: 500;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('/@cardstack/boxel-ui/fonts/Poppins-Bold.ttf');
+  font-weight: 700;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('/@cardstack/boxel-ui/fonts/Poppins-BoldItalic.ttf');
+  font-weight: 700;
+  font-style: italic;
+}
+
+/* Fallback fonts */
+@font-face {
   font-family: "Open Sans";
   src: url("/@cardstack/boxel-ui/fonts/OpenSans-Light.ttf");
   font-weight: 300;

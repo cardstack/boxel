@@ -9,7 +9,7 @@ interface Signature {
     label?: string;
     title?: string;
     size?: 'large';
-    noBackground?: boolean;
+    hasBackground?: boolean;
     isHighlighted?: boolean;
   };
   Blocks: {
@@ -22,7 +22,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
   <header
     class={{cn
       'boxel-header'
-      boxel-header--no-background=@noBackground
+      boxel-header--has-background=@hasBackground
       boxel-header--highlighted=@isHighlighted
       boxel-header--large=(or (bool @title) (eq @size 'large'))
     }}
