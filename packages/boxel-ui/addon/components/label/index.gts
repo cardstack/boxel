@@ -1,6 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import element from '../../helpers/element';
-import './style.css';
 
 interface Signature {
   Element: HTMLElement;

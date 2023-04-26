@@ -4,7 +4,6 @@ import LoadingIndicator from '../loading-indicator';
 import cn from '../../helpers/cn';
 import { or, eq, not } from '../../helpers/truth-helpers';
 import { LinkTo } from '@ember/routing';
-import './style.css';
 
 interface Signature {
   Element: HTMLButtonElement | HTMLAnchorElement;

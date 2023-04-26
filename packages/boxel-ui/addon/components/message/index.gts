@@ -3,7 +3,6 @@ import cn from '../../helpers/cn';
 import { svgJar } from '../../helpers/svg-jar';
 import { dayjsFormat } from '../../helpers/dayjs-format';
 import dayjs from 'dayjs';
-import './style.css';
 
 interface Signature {
   Element: HTMLDivElement;

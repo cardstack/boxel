@@ -3,7 +3,6 @@ import element from '../../helpers/element';
 import cn from '../../helpers/cn';
 import { or, bool } from '../../helpers/truth-helpers';
 import Header from '../header';
-import './style.css';
 
 interface Signature {
   Element: HTMLElement;

@@ -1,7 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import cssVar from '../../helpers/css-var';
 import { svgJar } from '../../helpers/svg-jar';
-import './style.css';
 
 interface Signature {
   Element: HTMLDivElement;
