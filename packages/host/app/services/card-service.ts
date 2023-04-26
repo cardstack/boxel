@@ -159,7 +159,7 @@ export default class CardService extends Service {
   }
 
   async isPrimitive(
-    card: Card
+    card: typeof Card
   ): Promise<boolean> {
     await this.apiModule.loaded;
     return this.api.primitive in card;

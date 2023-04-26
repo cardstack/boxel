@@ -78,9 +78,8 @@ export default class OperatorMode extends Component<Signature> {
       if (fieldName === 'id') continue;
 
       let field = fields[fieldName];
-      let fieldCard = field.card as unknown as Card;
-      if ((field.fieldType === 'contains' ||  field.fieldType === 'containsMany') && !(await this.cardService.isPrimitive(fieldCard))) {
-        await this.saveCardFieldValues(fieldCard);
+      if ((field.fieldType === 'contains' ||  field.fieldType === 'containsMany') && !(await this.cardService.isPrimitive(field.card))) {
+        await this.saveCardFieldValues((card as CardInstanceType<any>)[fieldName]);
       }
 
       let cardFieldValue = this.cardFieldValues.get(card);
@@ -98,9 +97,8 @@ export default class OperatorMode extends Component<Signature> {
       if (fieldName === 'id') continue;
 
       let field = fields[fieldName];
-      let fieldCard = field.card as unknown as Card;
-      if ((field.fieldType === 'contains' ||  field.fieldType === 'containsMany') && !(await this.cardService.isPrimitive(fieldCard))) {
-        await this.rollbackCardFieldValue(fieldCard);
+      if ((field.fieldType === 'contains' ||  field.fieldType === 'containsMany') && !(await this.cardService.isPrimitive(field.card))) {
+        await this.rollbackCardFieldValue((card as CardInstanceType<any>)[fieldName]);
       }
 
       let cardFieldValue = this.cardFieldValues.get(card);
