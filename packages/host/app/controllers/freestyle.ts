@@ -1,5 +1,6 @@
 import FreestyleController from 'ember-freestyle/controllers/freestyle';
-import SearchBarUsage from '@cardstack/host/components/search-bar/usage';
+import SearchInputUsage from '@cardstack/host/components/search-sheet/search-input/usage';
+import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 import formatComponentName from '../helpers/format-component-name';
 import { ComponentLike } from '@glint/template';
 
@@ -13,13 +14,14 @@ export default class IndexController extends FreestyleController {
   usageComponents: UsageComponent[];
   constructor(...args: any[]) {
     super(...args);
-    this.usageComponents = [['SearchBarUsage', SearchBarUsage]].map(
-      ([name, c]) => {
-        return {
-          title: name,
-          component: c,
-        };
-      }
-    ) as UsageComponent[];
+    this.usageComponents = [
+      ['SearchSheet', SearchSheetUsage],
+      ['SearchSheet::SearchInput', SearchInputUsage],
+    ].map(([name, c]) => {
+      return {
+        title: name,
+        component: c,
+      };
+    }) as UsageComponent[];
   }
 }
