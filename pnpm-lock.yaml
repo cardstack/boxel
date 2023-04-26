@@ -3895,8 +3895,6 @@ packages:
     dependencies:
       '@embroider/shared-internals': 1.8.3
       semver: 7.3.8
-<<<<<<< HEAD
-=======
 
   /@embroider/babel-loader-8/1.9.0_5fsfwkq725jpyle6rguazuku3u:
     resolution: {integrity: sha512-kEAPkyHXEWxJA9n/zmExhRIOCZPhEgWGyAb3t1hxcJGUzzD6r8zAEE6zfZGRIwpfi3jhkCn/FOZi43eVLJsjgA==}
@@ -3912,7 +3910,6 @@ packages:
       - supports-color
       - webpack
     dev: true
->>>>>>> main
 
   /@embroider/babel-loader-8/1.9.0_mg5axfkqq6pv6o25os7kj44oyi:
     resolution: {integrity: sha512-kEAPkyHXEWxJA9n/zmExhRIOCZPhEgWGyAb3t1hxcJGUzzD6r8zAEE6zfZGRIwpfi3jhkCn/FOZi43eVLJsjgA==}
