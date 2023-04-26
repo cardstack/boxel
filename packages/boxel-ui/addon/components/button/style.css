@@ -112,14 +112,13 @@ a.boxel-button:hover {
  */
  .boxel-button--kind-primary:not(:disabled) {
   --boxel-button-color: var(--boxel-highlight);
-  --boxel-button-border: 1px solid var(--boxel-highlight);
-  --boxel-button-text-color: var(--boxel-light);
+  --boxel-button-border: 1px solid var(--boxel-button-color);
+  --boxel-button-text-color: var(--boxel-dark);
 }
 
 .boxel-button--kind-primary:not(:disabled):hover,
 .boxel-button--kind-primary:not(:disabled):active {
   --boxel-button-color: var(--boxel-highlight-hover);
-  --boxel-button-border: 1px solid var(--boxel-highlight-hover);
 }
 
 .boxel-button--kind-secondary-dark:not(:disabled) {

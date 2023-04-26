@@ -26,7 +26,7 @@ export default class ButtonUsage extends Component {
 
   // base button arguments
   @tracked as = 'button';
-  @tracked size = 'base';
+  @tracked size = 'tall';
   @tracked kind = 'primary';
   @tracked disabled = false;
   @tracked loading = false;
