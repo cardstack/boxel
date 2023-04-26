@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import cn from '../helpers/cn';
-import { or, eq, bool } from '../helpers/truth-helpers';
-import Label from './label';
+import cn from '../../helpers/cn';
+import { or, eq, bool } from '../../helpers/truth-helpers';
+import Label from '../label';
 
 interface Signature {
   Element: HTMLElement;

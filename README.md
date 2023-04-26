@@ -62,13 +62,21 @@ In order to support server-side rendered cards, this project incorporates FastBo
 
 The realm server also uses FastBoot to pre-render card html. The realm server boots up the host app in a FastBoot container. The realm server will automatically look for the host app's `dist/` output to use when booting up the infrastructure for pre-rendering cards. Make sure to start to the host app first before starting the realm server so that the host app's `dist/` output will be generated. If you are making changes that effect the `/render` route in the host app, you'll want to restart the host app (or run `pnpm build`) in order for the realm server to pick up your changes.
 
+## Boxel UI Component Explorer
+
+There is a ember-freestyle component explorer available to assist with development. In order to run the freestyle app:
+
+1. `cd packages/boxel-ui`
+2. `pnpm start`
+3. Visit http://localhost:4210/ in your browser
+
 ## Boxel Motion Demo App
 
 In order to run the boxel-motion demo app:
 
-1. `cd to packages/boxel-motion-demo-app`
+1. `cd packages/boxel-motion-demo-app`
 2. `pnpm start`
-3. visit http://localhost:4200 in your browser
+3. Visit http://localhost:4200 in your browser
 
 ## Running the Tests
 

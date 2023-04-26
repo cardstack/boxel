@@ -10,7 +10,8 @@ import {
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
-import { CardContainer } from '@cardstack/boxel-ui';
+import { CardContainer, Button } from '@cardstack/boxel-ui';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Args: {
@@ -27,32 +28,45 @@ interface Signature {
 
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <CardContainer
+    <div
       class='contains-many-editor'
-      @displayBoundaries={{true}}
       data-test-contains-many={{this.args.field.name}}
     >
-      <ul>
-        {{#each @arrayField.children as |boxedElement i|}}
-          <li data-test-item={{i}}>
-            {{#let
-              (getBoxComponent
-                (this.args.cardTypeFor @field boxedElement) @format boxedElement
-              )
-              as |Item|
-            }}
-              <Item />
-            {{/let}}
-            <button
-              {{on 'click' (fn this.remove i)}}
-              type='button'
-              data-test-remove={{i}}
-            >Remove</button>
-          </li>
-        {{/each}}
-      </ul>
-      <button {{on 'click' this.add}} type='button' data-test-add-new>+ Add New</button>
-    </CardContainer>
+      {{#if @arrayField.children.length}}
+        <ul>
+          {{#each @arrayField.children as |boxedElement i|}}
+            <li class='links-to-editor' data-test-item={{i}}>
+              {{#let
+                (getBoxComponent
+                  (this.args.cardTypeFor @field boxedElement)
+                  @format
+                  boxedElement
+                )
+                as |Item|
+              }}
+                <CardContainer class='links-to-editor__item'>
+                  <Item />
+                </CardContainer>
+              {{/let}}
+              <button
+                class='remove-button'
+                {{on 'click' (fn this.remove i)}}
+                data-test-remove={{i}}
+                aria-label='Remove'
+              >
+                {{svgJar 'icon-minus-circle' width='20px' height='20px'}}
+              </button>
+            </li>
+          {{/each}}
+        </ul>
+      {{/if}}
+      <Button
+        @size='small'
+        {{on 'click' this.add}}
+        type='button'
+        data-test-add-new
+      >+ Add New</Button>
+    </div>
   </template>
 
   add = () => {

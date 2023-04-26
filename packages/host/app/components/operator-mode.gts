@@ -1,11 +1,12 @@
 import Component from '@glimmer/component';
 import { Card, Format } from 'https://cardstack.com/base/card-api';
-import { tracked } from '@glimmer/tracking';
 import Preview from './preview';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { service } from '@ember/service';
+import { Button } from '@cardstack/boxel-ui';
+import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
+import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import type CardService from '../services/card-service';
 import type RouterService from '@ember/routing/router-service';
 import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
@@ -13,7 +14,18 @@ import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { restartableTask } from 'ember-concurrency';
-import { TrackedWeakMap } from 'tracked-built-ins';
+import {
+  chooseCard,
+  catalogEntryRef,
+  createNewCard,
+  baseRealm,
+} from '@cardstack/runtime-common';
+import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import type LoaderService from '../services/loader-service';
+import { service } from '@ember/service';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+
+import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
 import { Model as CardRouteModel } from '../routes/card';
 
 interface Signature {
@@ -23,19 +35,54 @@ interface Signature {
 }
 
 export default class OperatorMode extends Component<Signature> {
-  @tracked stack: Card[] = [];
+  stack: Card[];
   formats: WeakMap<Card, Format> = new TrackedWeakMap<Card, Format>();
 
   //A variable to store value of card field
   //before in edit mode.
   cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<Card, Map<string, any>>();
+  @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare router: RouterService;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.stack = [this.args.firstCardInStack.card!];
+    this.stack = new TrackedArray([this.args.firstCardInStack.card!]);
   }
+
+  @action
+  async createNew() {
+    this.createNewCard.perform();
+  }
+
+  private createNewCard = restartableTask(async () => {
+    let card = await chooseCard<CatalogEntry>({
+      filter: {
+        on: catalogEntryRef,
+        eq: { isPrimitive: false },
+      },
+    });
+    if (!card) {
+      return;
+    }
+    let newCard = await createNewCard(card.ref, new URL(card.id));
+    if (!newCard) {
+      throw new Error(
+        `bug: could not create new card from catalog entry ${JSON.stringify(
+          catalogEntryRef
+        )}`
+      );
+    }
+    let api = await this.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`
+    );
+    let relativeTo = newCard[api.relativeTo];
+    if (!relativeTo) {
+      throw new Error(`bug: should never get here`);
+    }
+
+    this.stack.push(newCard);
+  });
 
   @action async edit(card: Card) {
     await this.saveCardFieldValues(card);
@@ -110,6 +157,8 @@ export default class OperatorMode extends Component<Signature> {
 
   <template>
     <div class='operator-mode-desktop-overlay'>
+      <CardCatalogModal />
+      <CreateCardModal />
       <div class='operator-mode-card-stack'>
         {{#each this.stack as |card|}}
           <div class='operator-mode-card-stack__header'>
@@ -153,12 +202,16 @@ export default class OperatorMode extends Component<Signature> {
           {{/if}}
         {{/each}}
       </div>
-      <div>
-        <br />
-
-        {{! TODO open card chooser }}
+      <br />
+      <Button @kind='primary' @size='tall' {{on 'click' this.createNew}}>
         ➕ Add a new card to this collection
-      </div>
+      </Button>
     </div>
   </template>
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    OperatorMode: typeof OperatorMode;
+  }
 }

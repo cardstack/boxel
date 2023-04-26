@@ -1,9 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import cn from '../helpers/cn';
-import element from '../helpers/element';
-import { eq, not, or } from '../helpers/truth-helpers';
-import { svgJar } from '../helpers/svg-jar';
-import Label from './label';
+import cn from '../../helpers/cn';
+import element from '../../helpers/element';
+import { eq, not, or } from '../../helpers/truth-helpers';
+import { svgJar } from '../../helpers/svg-jar';
+import Label from '../label';
 
 export interface Signature {
   Element: HTMLElement;

@@ -10,6 +10,7 @@ export default class Router extends EmberRouter {
 let path = new URL(ownRealmURL).pathname.replace(/\/$/, '');
 
 Router.map(function () {
+  this.route('freestyle', { path: '/_freestyle' });
   this.route('indexer', { path: '/indexer/:id' });
   this.route('acceptance-test-setup');
   if (!path || hostsOwnAssets) {

@@ -15,7 +15,7 @@ import { getSearchResults } from '../resources/search';
 import type CardService from '../services/card-service';
 import CardEditor from './card-editor';
 import { type Card } from 'https://cardstack.com/base/card-api';
-import CardContainer from '@cardstack/boxel-ui/components/card-container';
+import { Button, CardContainer } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
@@ -59,13 +59,14 @@ export default class CatalogEntryEditor extends Component<Signature> {
       {{else if this.catalogEntry.isSearching}}
         <div>Loading...</div>
       {{else}}
-        <button
+        <Button
+          @kind='primary'
+          @size='tall'
           {{on 'click' this.createEntry}}
-          type='button'
           data-test-catalog-entry-publish
         >
           Publish Card Type
-        </button>
+        </Button>
       {{/if}}
     </div>
   </template>
