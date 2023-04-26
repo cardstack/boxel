@@ -6,6 +6,7 @@ import type RouterService from '@ember/routing/router-service';
 
 export default class CardOperatorModeController extends Controller {
   @tracked operatorModeEnabled = false;
+  model: any;
   @service declare router: RouterService;
 
   @action

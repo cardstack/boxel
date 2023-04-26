@@ -136,11 +136,10 @@ module('Integration | operator-mode', function (hooks) {
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/fadhlan`);
-    let model = { card }
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{model}} />
+          <OperatorMode @firstCardInStack={{card}} />
           <CardPrerender />
         </template>
       }
@@ -157,11 +156,10 @@ module('Integration | operator-mode', function (hooks) {
 
   test("it changes the field value if user clicks save in edit view", async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/fadhlan`);
-    let model = { card }
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{model}} />
+          <OperatorMode @firstCardInStack={{card}} />
           <CardPrerender />
         </template>
       }

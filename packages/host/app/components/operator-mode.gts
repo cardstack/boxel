@@ -8,7 +8,6 @@ import { Button } from '@cardstack/boxel-ui';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import type CardService from '../services/card-service';
-import type RouterService from '@ember/routing/router-service';
 import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
@@ -26,11 +25,10 @@ import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
-import { Model as CardRouteModel } from '../routes/card';
 
 interface Signature {
   Args: {
-    firstCardInStack: CardRouteModel;
+    firstCardInStack: Card;
   };
 }
 
@@ -43,11 +41,10 @@ export default class OperatorMode extends Component<Signature> {
   cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<Card, Map<string, any>>();
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  @service declare router: RouterService;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.stack = new TrackedArray([this.args.firstCardInStack.card!]);
+    this.stack = new TrackedArray([this.args.firstCardInStack]);
   }
 
   @action
@@ -98,10 +95,6 @@ export default class OperatorMode extends Component<Signature> {
     let index = this.stack.indexOf(card);
     this.stack.splice(index);
     this.stack = this.stack;
-
-    if (this.stack.length <= 0) {
-      this.router.transitionTo('card', this.args.firstCardInStack);
-    }
   }
 
   @action async cancel(card: Card) {
