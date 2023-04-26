@@ -4,6 +4,9 @@ import { on } from '@ember/modifier';
 import { Button } from '@cardstack/boxel-ui';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
+import SearchSheet, {
+  SearchSheetMode,
+} from '@cardstack/host/components/search-sheet';
 import { restartableTask } from 'ember-concurrency';
 import {
   chooseCard,
@@ -29,6 +32,7 @@ interface Signature {
 export default class OperatorMode extends Component<Signature> {
   @tracked stack: ComponentLike[];
   @service declare loaderService: LoaderService;
+  @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -39,6 +43,16 @@ export default class OperatorMode extends Component<Signature> {
   @action
   async createNew() {
     this.createNewCard.perform();
+  }
+
+  @action onFocusSearchInput() {
+    if (this.searchSheetMode == SearchSheetMode.Closed) {
+      this.searchSheetMode = SearchSheetMode.SearchPrompt;
+    }
+  }
+
+  @action onCancelSearchSheet() {
+    this.searchSheetMode = SearchSheetMode.Closed;
   }
 
   private createNewCard = restartableTask(async () => {
@@ -90,6 +104,11 @@ export default class OperatorMode extends Component<Signature> {
           </Button>
         </div>
       </div>
+      <SearchSheet
+        @mode={{this.searchSheetMode}}
+        @onCancel={{this.onCancelSearchSheet}}
+        @onFocus={{this.onFocusSearchInput}}
+      />
     </div>
   </template>
 }
