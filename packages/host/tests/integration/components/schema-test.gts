@@ -488,14 +488,9 @@ module('Integration | schema', function (hooks) {
       )
       .exists('base realm primitive field displayed');
 
-    await waitFor('[data-test-demo-embedded]');
-
-    assert
-      .dom(`[data-test-card-catalog] [data-test-demo-embedded]`)
-      .exists({ count: 1 }, 'demo card is only displayed for composite card');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"] [data-test-demo-embedded]`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"] [data-test-ref]`
       )
       .exists();
 
