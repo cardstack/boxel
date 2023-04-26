@@ -3,6 +3,7 @@ import {
   field,
   Component,
   Card,
+  Primitive,
   primitive,
   relativeTo,
 } from './card-api';
@@ -14,12 +15,11 @@ import { isEqual } from 'lodash';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
 export class CatalogEntry extends Card {
-  @field title = contains(StringCard);
   @field description = contains(StringCard);
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, {
     computeVia: async function (this: CatalogEntry) {
-      let card: typeof Card | undefined = await loadCard(this.ref, {
+      let card: typeof Primitive | undefined = await loadCard(this.ref, {
         relativeTo: this[relativeTo],
       });
       if (!card) {

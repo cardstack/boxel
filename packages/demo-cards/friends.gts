@@ -11,6 +11,11 @@ import { CardContainer } from '@cardstack/boxel-ui';
 export class Friends extends Card {
   @field firstName = contains(StringCard);
   @field friends = linksToMany(() => Friends);
+  @field title = contains(StringCard, {
+    computeVia: function (this: Friends) {
+      return this.firstName;
+    },
+  });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer class='demo-card' @displayBoundaries={{true}}>

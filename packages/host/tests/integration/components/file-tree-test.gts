@@ -50,6 +50,11 @@ module('Integration | file-tree', function (hooks) {
         export class Person extends Card {
           @field firstName = contains(StringCard);
           @field nickName = contains(StringCard, { computeVia: function() { return this.firstName + '-poo'; }});
+          @field title =  contains(StringCard, {
+            computeVia: function (this: Item) {
+              return this.nickName;
+            },
+          });
           static isolated = class Isolated extends Component<typeof this> {
             <template><h1><@fields.firstName/></h1></template>
           }

@@ -14,4 +14,9 @@ export class Chain extends Card {
       return CHAIN_IDS[this.name];
     },
   });
+  @field title = contains(StringCard, {
+    computeVia: function (this: Chain) {
+      return this.name;
+    },
+  });
 }

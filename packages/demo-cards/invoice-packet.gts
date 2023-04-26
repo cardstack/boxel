@@ -28,6 +28,11 @@ class Details extends Card {
   @field terms = contains(StringCard);
   @field invoiceDocument = contains(StringCard);
   @field memo = contains(TextAreaCard);
+  @field title = contains(StringCard, {
+    computeVia: function (this: Details) {
+      return `Invoice ${this.invoiceNo}`;
+    },
+  });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer class='details'>

@@ -16,6 +16,11 @@ export class Person extends Card {
   @field isCool = contains(BooleanCard);
   @field isHuman = contains(BooleanCard);
   @field pet = linksTo(() => Pet);
+  @field title = contains(StringCard, {
+    computeVia: function (this: Person) {
+      return [this.firstName, this.lastName].filter(Boolean).join(' ');
+    },
+  });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

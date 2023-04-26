@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { type Card, type Box, type Format, type Field } from './card-api';
+import { type Primitive, type Box, type Format, type Field } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
@@ -17,14 +17,14 @@ import {
 
 interface Signature {
   Args: {
-    model: Box<Card>;
-    arrayField: Box<Card[]>;
+    model: Box<Primitive>;
+    arrayField: Box<Primitive[]>;
     format: Format;
-    field: Field<typeof Card>;
+    field: Field<typeof Primitive>;
     cardTypeFor(
-      field: Field<typeof Card>,
-      boxedElement: Box<Card>
-    ): typeof Card;
+      field: Field<typeof Primitive>,
+      boxedElement: Box<Primitive>
+    ): typeof Primitive;
   };
 }
 
@@ -83,7 +83,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard(
+    let chosenCard: Primitive | undefined = await chooseCard(
       {
         filter: {
           every: [{ type }, ...selectedCardsQuery],
@@ -108,11 +108,14 @@ export function getLinksToManyComponent({
   field,
   cardTypeFor,
 }: {
-  model: Box<Card>;
-  arrayField: Box<Card[]>;
+  model: Box<Primitive>;
+  arrayField: Box<Primitive[]>;
   format: Format;
-  field: Field<typeof Card>;
-  cardTypeFor(field: Field<typeof Card>, boxedElement: Box<Card>): typeof Card;
+  field: Field<typeof Primitive>;
+  cardTypeFor(
+    field: Field<typeof Primitive>,
+    boxedElement: Box<Primitive>
+  ): typeof Primitive;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {

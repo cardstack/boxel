@@ -28,6 +28,11 @@ class VendorDetails extends Card {
       return new URL(this.logoURL, this[relativeTo] || this.id).href;
     },
   });
+  @field title = contains(StringCard, {
+    computeVia: function (this: VendorDetails) {
+      return this.name;
+    },
+  });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

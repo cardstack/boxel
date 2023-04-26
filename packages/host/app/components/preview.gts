@@ -1,9 +1,9 @@
 import Component from '@glimmer/component';
-import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import type { Primitive, Format } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
-    card: Card;
+    card: Primitive;
     format?: Format;
   };
 }

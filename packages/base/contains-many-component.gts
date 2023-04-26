@@ -3,10 +3,10 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import {
   primitive,
-  type Card,
   type Box,
   type Format,
   type Field,
+  type Primitive,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
@@ -14,14 +14,14 @@ import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
-    model: Box<Card>;
-    arrayField: Box<Card[]>;
+    model: Box<Primitive>;
+    arrayField: Box<Primitive[]>;
     format: Format;
-    field: Field<typeof Card>;
+    field: Field<typeof Primitive>;
     cardTypeFor(
-      field: Field<typeof Card>,
-      boxedElement: Box<Card>
-    ): typeof Card;
+      field: Field<typeof Primitive>,
+      boxedElement: Box<Primitive>
+    ): typeof Primitive;
   };
 }
 
@@ -88,11 +88,14 @@ export function getContainsManyComponent({
   field,
   cardTypeFor,
 }: {
-  model: Box<Card>;
-  arrayField: Box<Card[]>;
+  model: Box<Primitive>;
+  arrayField: Box<Primitive[]>;
   format: Format;
-  field: Field<typeof Card>;
-  cardTypeFor(field: Field<typeof Card>, boxedElement: Box<Card>): typeof Card;
+  field: Field<typeof Primitive>;
+  cardTypeFor(
+    field: Field<typeof Primitive>,
+    boxedElement: Box<Primitive>
+  ): typeof Primitive;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class ContainsManyEditorTemplate extends GlimmerComponent {

@@ -17,6 +17,11 @@ export class Friend extends Card {
       return 10 / 2;
     },
   });
+  @field title = contains(StringCard, {
+    computeVia: function (this: Friend) {
+      return this.firstName;
+    },
+  });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <@fields.firstName />

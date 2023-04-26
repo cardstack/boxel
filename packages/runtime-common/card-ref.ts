@@ -1,7 +1,7 @@
 import {
-  type Card,
   type CardConstructor,
   type Field,
+  type Primitive,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
 import { isField } from './constants';
@@ -24,9 +24,9 @@ export type CardRef =
 
 // we don't track ExportedCardRef because Loader.identify already handles those
 let localIdentities = new WeakMap<
-  typeof Card,
-  | { type: 'ancestorOf'; card: typeof Card }
-  | { type: 'fieldOf'; card: typeof Card; field: string }
+  typeof Primitive,
+  | { type: 'ancestorOf'; card: typeof Primitive }
+  | { type: 'fieldOf'; card: typeof Primitive; field: string }
 >();
 
 export function isCardRef(ref: any): ref is CardRef {
@@ -55,14 +55,14 @@ export function isCardRef(ref: any): ref is CardRef {
   return false;
 }
 
-export function isCard(card: any): card is typeof Card {
+export function isCard(card: any): card is typeof Primitive {
   return typeof card === 'function' && 'baseCard' in card;
 }
 
 export async function loadCard(
   ref: CardRef,
   opts?: { loader?: Loader; relativeTo?: URL }
-): Promise<typeof Card> {
+): Promise<typeof Primitive> {
   let maybeCard: unknown;
   // when it's possible we want to leverage the loader being used by the
   // indexing process so that we can take advantage of the module cache when
