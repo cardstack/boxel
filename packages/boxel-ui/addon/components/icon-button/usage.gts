@@ -17,6 +17,7 @@ export default class IconButtonUsage extends Component {
   @tracked variant?: string;
   @tracked width = '40px';
   @tracked height = '40px';
+  @tracked tooltip = 'Add a card to this collection';
 
   cssClassName = 'boxel-icon-button';
   @cssVariable declare boxelIconButtonWidth: CSSVariableInfo;
@@ -35,6 +36,7 @@ export default class IconButtonUsage extends Component {
           @variant={{this.variant}}
           @width={{this.width}}
           @height={{this.height}}
+          @tooltip={{this.tooltip}}
           aria-label='Special Button'
           {{on 'click' (fn this.log 'Button clicked')}}
           style={{cssVar
@@ -59,6 +61,12 @@ export default class IconButtonUsage extends Component {
           @options={{array 'primary' 'secondary' '<undefined>'}}
           @onInput={{fn (mut this.variant)}}
           @defaultValue='<undefined>'
+        />
+        <Args.String
+          @name='tooltip'
+          @description='tooltip text on hover'
+          @value={{this.tooltip}}
+          @onInput={{fn (mut this.tooltip)}}
         />
         <Args.Number
           @name='width'

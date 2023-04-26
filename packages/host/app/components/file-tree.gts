@@ -38,8 +38,8 @@ export default class FileTree extends Component<Args> {
       @icon='icon-plus-circle'
       @width='40px'
       @height='40px'
+      @tooltip='Create a new card'
       class='add-button'
-      aria-label='Add new card'
       {{on 'click' this.createNew}}
       data-test-create-new-card-button
     />
