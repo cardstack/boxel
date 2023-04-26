@@ -16,7 +16,9 @@ export default class CardController extends Controller {
   @tracked operatorModeEnabled = false;
 
   get getIsolatedComponent() {
-    return this.model.card ? this.model.card.constructor.getComponent(this.model.card, 'isolated') : this.model.component;
+    return this.model.card
+      ? this.model.card.constructor.getComponent(this.model.card, 'isolated')
+      : this.model.component;
   }
 
   @action

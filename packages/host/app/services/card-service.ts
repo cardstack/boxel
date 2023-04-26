@@ -13,7 +13,11 @@ import {
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
-import type { Card, Field, CardConstructor } from 'https://cardstack.com/base/card-api';
+import type {
+  Card,
+  Field,
+  CardConstructor,
+} from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 
@@ -158,9 +162,7 @@ export default class CardService extends Service {
     return this.api.getFields(card, { includeComputeds: true });
   }
 
-  async isPrimitive(
-    card: typeof Card
-  ): Promise<boolean> {
+  async isPrimitive(card: typeof Card): Promise<boolean> {
     await this.apiModule.loaded;
     return this.api.primitive in card;
   }
