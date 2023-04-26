@@ -18,6 +18,8 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 
+import { TrackedArray } from 'tracked-built-ins';
+
 interface Signature {
   Args: {
     firstCardInStack: ComponentLike;
@@ -27,10 +29,11 @@ interface Signature {
 export default class OperatorMode extends Component<Signature> {
   @tracked stack: ComponentLike[];
   @service declare loaderService: LoaderService;
+
   constructor(owner: unknown, args: any) {
     super(owner, args);
 
-    this.stack = [this.args.firstCardInStack];
+    this.stack = new TrackedArray([this.args.firstCardInStack]);
   }
 
   @action
@@ -64,10 +67,7 @@ export default class OperatorMode extends Component<Signature> {
       throw new Error(`bug: should never get here`);
     }
 
-    this.stack = [
-      ...this.stack,
-      newCard.constructor.getComponent(newCard, 'isolated'),
-    ];
+    this.stack.push(newCard.constructor.getComponent(newCard, 'isolated'));
   });
 
   <template>
@@ -80,9 +80,6 @@ export default class OperatorMode extends Component<Signature> {
           <div class='operator-mode-stack-card'>
             <card />
           </div>
-
-          <br />
-          <br />
         {{/each}}
 
         <div>
