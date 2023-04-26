@@ -1328,6 +1328,7 @@ a.boxel-button:hover {
   overflow: auto;
   background-color: #686283;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
 }
