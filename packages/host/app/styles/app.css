@@ -78,7 +78,6 @@ nav > .directory-level {
 
 .schema,
 .catalog-entry-editor {
-  --boxel-label-color: var(--boxel-dark);
   display: grid;
   gap: var(--boxel-sp);
   padding: var(--boxel-sp);
@@ -122,16 +121,12 @@ nav > .directory-level {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.catalog-entry--edit {
-  --boxel-label-color: var(--boxel-dark);
-}
 .catalog-entry__ref {
   font-size: var(--boxel-font-size-xs);
 }
 
 /* Default Card Component */
 .isolated-card {
-  --boxel-label-color: var(--boxel-dark);
   padding: var(--boxel-sp);
   display: grid;
   gap: var(--boxel-sp-lg);
@@ -182,9 +177,6 @@ nav > .directory-level {
   margin-top: 0;
   margin-bottom: var(--boxel-sp);
   font: 700 var(--boxel-font);
-}
-.invoice-template--edit {
-  --boxel-label-color: var(--boxel-dark);
 }
 .invoice {
   padding: var(--boxel-sp-xl);

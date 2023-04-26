@@ -97,7 +97,7 @@
   --boxel-blue: #0069f9;
   --boxel-navy: #281e78;
 
-  --boxel-label-color: #a0a0a0;
+  --boxel-label-color: var(--boxel-dark);
   /**** End of revisited colors ****/
 
   /* Primary colors */
