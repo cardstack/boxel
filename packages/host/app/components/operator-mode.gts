@@ -1,7 +1,7 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { Button } from '@cardstack/boxel-ui';
+import { IconButton } from '@cardstack/boxel-ui';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import { restartableTask } from 'ember-concurrency';
@@ -84,10 +84,15 @@ export default class OperatorMode extends Component<Signature> {
 
         <div>
           <br />
-
-          <Button @kind='primary' @size='tall' {{on 'click' this.createNew}}>
-            ➕ Add a new card to this collection
-          </Button>
+          <IconButton
+            @icon='icon-plus-circle'
+            @width='40px'
+            @height='40px'
+            @tooltip='Create a new card'
+            class='add-button'
+            {{on 'click' this.createNew}}
+            data-test-create-new-card-button
+          />
         </div>
       </div>
     </div>
