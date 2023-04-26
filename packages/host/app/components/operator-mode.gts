@@ -154,51 +154,53 @@ export default class OperatorMode extends Component<Signature> {
       <CreateCardModal />
       <div class='operator-mode-card-stack'>
         {{#each this.stack as |card|}}
-          <div class='operator-mode-card-stack__header'>
-            {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
+          <div class='operator-mode-card-stack__card'>
+            <div class='operator-mode-card-stack__card__header'>
+              {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
+                <button
+                  class='operator-mode-card-stack__card__header-item icon-button'
+                  {{on 'click' (fn this.edit card)}}
+                  aria-label='Edit'
+                >
+                  {{svgJar 'icon-horizontal-three-dots' width='20px' height='20px'}}
+                </button>
+              {{/if}}
               <button
-                class='operator-mode-card-stack__header-item icon-button'
-                {{on 'click' (fn this.edit card)}}
-                aria-label='Edit'
+                class='operator-mode-card-stack__card__header-item icon-button'
+                {{on 'click' (fn this.close card)}}
+                aria-label='Close'
               >
-                {{svgJar 'icon-horizontal-three-dots' width='20px' height='20px'}}
+                {{svgJar 'icon-x' width='20px' height='20px'}}
               </button>
+            </div>
+            <div class={{cn 'operator-mode-card-stack__card__item' operator-mode-card-stack__card__item_edit=(eq (getValueFromWeakMap this.formats card) 'edit')}}>
+              <Preview @card={{card}} @format={{this.getFormat card}} />
+            </div>
+            {{#if (eq (getValueFromWeakMap this.formats card) 'edit')}}
+            <div class='operator-mode-card-stack__card__footer'>
+              <button
+                class='operator-mode-card-stack__card__footer-button light-button'
+                {{on 'click' (fn this.cancel card)}}
+                aria-label='Cancel'
+              >
+                Cancel
+              </button>
+              <button
+                class='operator-mode-card-stack__card__footer-button'
+                {{on 'click' (fn this.save card)}}
+                aria-label='Save'
+              >
+                Save
+              </button>
+            </div>
             {{/if}}
-            <button
-              class='operator-mode-card-stack__header-item icon-button'
-              {{on 'click' (fn this.close card)}}
-              aria-label='Close'
-            >
-              {{svgJar 'icon-x' width='20px' height='20px'}}
-            </button>
           </div>
-          <div class={{cn 'operator-mode-card-stack__item' operator-mode-card-stack__item_edit=(eq (getValueFromWeakMap this.formats card) 'edit')}}>
-            <Preview @card={{card}} @format={{this.getFormat card}} />
-          </div>
-          {{#if (eq (getValueFromWeakMap this.formats card) 'edit')}}
-          <div class='operator-mode-card-stack__footer'>
-            <button
-              class='operator-mode-card-stack__footer-button light-button'
-              {{on 'click' (fn this.cancel card)}}
-              aria-label='Cancel'
-            >
-              Cancel
-            </button>
-            <button
-              class='operator-mode-card-stack__footer-button'
-              {{on 'click' (fn this.save card)}}
-              aria-label='Save'
-            >
-              Save
-            </button>
-          </div>
-          {{/if}}
         {{/each}}
+        <br />
+        <Button @kind='primary' @size='tall' {{on 'click' this.createNew}}>
+          ➕ Add a new card to this collection
+        </Button>
       </div>
-      <br />
-      <Button @kind='primary' @size='tall' {{on 'click' this.createNew}}>
-        ➕ Add a new card to this collection
-      </Button>
     </div>
   </template>
 }

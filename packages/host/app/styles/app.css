@@ -1328,7 +1328,6 @@ a.boxel-button:hover {
   overflow: auto;
   background-color: #686283;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
 }
@@ -1337,11 +1336,13 @@ a.boxel-button:hover {
   min-width: 400px;
   max-width: 900px;
   width: 70%;
+}
 
+.operator-mode-card-stack__card {
   position: relative;
 }
 
-.operator-mode-card-stack__header {
+.operator-mode-card-stack__card__header {
   position: absolute;
   top: 0;
   right: 0;
@@ -1353,26 +1354,26 @@ a.boxel-button:hover {
   z-index: 99;
 }
 
-.operator-mode-card-stack__header-item {
+.operator-mode-card-stack__card__header-item {
   cursor: pointer;
   margin-right: 10px;
 }
 
-.operator-mode-card-stack__item {
+.operator-mode-card-stack__card__item {
   position: relative;
 
   z-index: 0;
 }
 
-.operator-mode-card-stack__item .boxel-card-container {
+.operator-mode-card-stack__card__item .boxel-card-container {
   padding-top: 42px;
 }
 
-.operator-mode-card-stack__item_edit .boxel-card-container {
+.operator-mode-card-stack__card__item_edit .boxel-card-container {
   padding-bottom: 62px;
 }
 
-.operator-mode-card-stack__footer {
+.operator-mode-card-stack__card__footer {
   position: absolute;
   bottom: 0;
   right: 0;
@@ -1384,7 +1385,7 @@ a.boxel-button:hover {
   z-index: 99;
 }
 
-.operator-mode-card-stack__footer-button {
+.operator-mode-card-stack__card__footer-button {
   --button-bg: var(--boxel-teal);
   --text-color: var(--boxel-light);
 
@@ -1409,6 +1410,6 @@ a.boxel-button:hover {
   border: var(--boxel-border)
 }
 
-.operator-mode-card-stack__footer-button:hover {
+.operator-mode-card-stack__card__footer-button:hover {
   --button-bg: var(--boxel-purple-300);
 }
