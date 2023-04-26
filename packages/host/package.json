@@ -169,5 +169,8 @@
   },
   "ember": {
     "edition": "octane"
+  },
+  "dependencies": {
+    "ember-keyboard": "^8.2.0"
   }
 }

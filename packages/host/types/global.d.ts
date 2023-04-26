@@ -30,6 +30,12 @@ declare module '@glint/environment-ember-loose/registry' {
       };
       Return: void;
     }>;
+    'on-key': new () => Helper<{
+      Args: {
+        Positional: [keyCombo: string, callback: () => void];
+      };
+      Return: void;
+    }>;
   }
 }
 
