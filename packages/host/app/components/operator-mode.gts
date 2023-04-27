@@ -33,7 +33,7 @@ interface Signature {
 }
 
 export default class OperatorMode extends Component<Signature> {
-  stack: Card[];
+  stack: TrackedArray<Card>;
   formats: WeakMap<Card, Format> = new TrackedWeakMap<Card, Format>();
 
   //A variable to store value of card field
