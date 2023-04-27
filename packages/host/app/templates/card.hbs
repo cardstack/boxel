@@ -12,11 +12,11 @@
     {{else if realm.isEmpty}}
       <div class='demo-card'>
         No local realm connected.
-          <a
-            href="#"
-            {{on 'click' (this.withPreventDefault realm.open)}}
-            style='color:#6638ff;text-decoration:underline'
-          >Open a local realm</a>
+        <a
+          href="#"
+          {{on 'click' (this.withPreventDefault realm.open)}}
+          style='color:#6638ff;text-decoration:underline'
+        >Open a local realm</a>
       </div>
     {{else}}
       <p>Local realm state: {{realm.status}}</p>
