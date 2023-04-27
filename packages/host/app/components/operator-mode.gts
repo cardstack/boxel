@@ -105,14 +105,14 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   @action async close(card: Card) {
-    await this.rollbackCardFieldValue(card);
+    await this.rollbackCardFieldValues(card);
     let index = this.stack.indexOf(card);
     this.stack.splice(index);
     this.stack = this.stack;
   }
 
   @action async cancel(card: Card) {
-    await this.rollbackCardFieldValue(card);
+    await this.rollbackCardFieldValues(card);
     this.formats.set(card, 'isolated');
   }
 
@@ -152,7 +152,7 @@ export default class OperatorMode extends Component<Signature> {
 
       let field = fields[fieldName];
       if ((field.fieldType === 'contains' ||  field.fieldType === 'containsMany') && !(await this.cardService.isPrimitive(field.card))) {
-        await this.rollbackCardFieldValue((card as any)[fieldName]);
+        await this.rollbackCardFieldValues((card as any)[fieldName]);
       }
 
       let cardFieldValue = this.cardFieldValues.get(card);
