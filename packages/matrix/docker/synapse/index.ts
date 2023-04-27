@@ -33,18 +33,23 @@ function randB64Bytes(numBytes: number): string {
   return crypto.randomBytes(numBytes).toString('base64').replace(/=*$/, '');
 }
 
-async function cfgDirFromTemplate(template: string): Promise<SynapseConfig> {
+async function cfgDirFromTemplate(
+  template: string,
+  dataDir?: string
+): Promise<SynapseConfig> {
   const templateDir = path.join(__dirname, template);
 
   const stats = await fse.stat(templateDir);
   if (!stats?.isDirectory) {
     throw new Error(`No such template: ${template}`);
   }
-  const tempDir = await fse.mkdtemp(path.join(os.tmpdir(), 'synapsedocker-'));
+  const configDir = dataDir
+    ? dataDir
+    : await fse.mkdtemp(path.join(os.tmpdir(), 'synapsedocker-'));
 
   // copy the contents of the template dir, omitting homeserver.yaml as we'll template that
-  console.log(`Copy ${templateDir} -> ${tempDir}`);
-  await fse.copy(templateDir, tempDir, {
+  console.log(`Copy ${templateDir} -> ${configDir}`);
+  await fse.copy(templateDir, configDir, {
     filter: (f) => path.basename(f) !== 'homeserver.yaml',
   });
 
@@ -65,7 +70,7 @@ async function cfgDirFromTemplate(template: string): Promise<SynapseConfig> {
   hsYaml = hsYaml.replace(/{{FORM_SECRET}}/g, formSecret);
   hsYaml = hsYaml.replace(/{{PUBLIC_BASEURL}}/g, baseUrl);
 
-  await fse.writeFile(path.join(tempDir, 'homeserver.yaml'), hsYaml);
+  await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
 
   // now generate a signing key (we could use synapse's config generation for
   // this, or we could just do this...)
@@ -73,7 +78,7 @@ async function cfgDirFromTemplate(template: string): Promise<SynapseConfig> {
   const signingKey = randB64Bytes(32);
   console.log(`Gen ${path.join(templateDir, 'localhost.signing.key')}`);
   await fse.writeFile(
-    path.join(tempDir, 'localhost.signing.key'),
+    path.join(configDir, 'localhost.signing.key'),
     `ed25519 x ${signingKey}`
   );
 
@@ -81,17 +86,24 @@ async function cfgDirFromTemplate(template: string): Promise<SynapseConfig> {
     port: SYNAPSE_PORT,
     host: SYNAPSE_IP_ADDRESS,
     baseUrl,
-    configDir: tempDir,
+    configDir,
     registrationSecret,
   };
 }
 
 // Start a synapse instance: the template must be the name of one of the
 // templates in the docker/synapse directory
+interface StartOptions {
+  template?: string;
+  dataDir?: string;
+}
 export async function synapseStart(
-  template = 'default'
+  opts?: StartOptions
 ): Promise<SynapseInstance> {
-  const synCfg = await cfgDirFromTemplate(template);
+  const synCfg = await cfgDirFromTemplate(
+    opts?.template ?? 'test',
+    opts?.dataDir
+  );
   console.log(`Starting synapse with config dir ${synCfg.configDir}...`);
   await dockerCreateNetwork({ networkName: 'boxel' });
   const synapseId = await dockerRun({
