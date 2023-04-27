@@ -9,7 +9,7 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import { Card } from 'https://cardstack.com/base/card-api';
 import { renderComponent } from '../../helpers/render-component';
 import { testRealmURL, setupCardLogs, setupMockLocalRealm, TestRealmAdapter, TestRealm } from '../../helpers';
-import { waitFor, click, fillIn } from '@ember/test-helpers';
+import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
@@ -236,5 +236,25 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
     assert.dom('[data-test-city]').hasText('EditedCity');
     assert.dom('[data-test-country]').hasText('EditedCountry');
+  });
+
+  test("no card if user closes the only card in the stack", async function (assert) {
+    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-person]').isVisible();
+
+    await click('[aria-label="Close"]');
+    await waitUntil(() => {
+      return !document.querySelector('.operator-mode-card-stack__card__item')
+    }, { timeout: 3000 });
+    assert.dom('[data-test-person]').isNotVisible();
   });
 });
