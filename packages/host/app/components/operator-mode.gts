@@ -4,7 +4,6 @@ import Preview from './preview';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { Button } from '@cardstack/boxel-ui';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import type CardService from '../services/card-service';
@@ -12,6 +11,10 @@ import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
+import { IconButton } from '@cardstack/boxel-ui';
+import SearchSheet, {
+  SearchSheetMode,
+} from '@cardstack/host/components/search-sheet';
 import { restartableTask } from 'ember-concurrency';
 import {
   chooseCard,
@@ -23,6 +26,7 @@ import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { tracked } from '@glimmer/tracking';
 
 import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
 
@@ -41,6 +45,7 @@ export default class OperatorMode extends Component<Signature> {
   cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<Card, Map<string, any>>();
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -50,6 +55,16 @@ export default class OperatorMode extends Component<Signature> {
   @action
   async createNew() {
     this.createNewCard.perform();
+  }
+
+  @action onFocusSearchInput() {
+    if (this.searchSheetMode == SearchSheetMode.Closed) {
+      this.searchSheetMode = SearchSheetMode.SearchPrompt;
+    }
+  }
+
+  @action onCancelSearchSheet() {
+    this.searchSheetMode = SearchSheetMode.Closed;
   }
 
   private createNewCard = restartableTask(async () => {
@@ -155,26 +170,28 @@ export default class OperatorMode extends Component<Signature> {
       <div class='operator-mode-card-stack'>
         {{#each this.stack as |card|}}
           <div class='operator-mode-card-stack__card'>
-            <div class='operator-mode-card-stack__card__header'>
-              {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
-                <button
-                  class='operator-mode-card-stack__card__header-item icon-button'
-                  {{on 'click' (fn this.edit card)}}
-                  aria-label='Edit'
-                >
-                  {{svgJar 'icon-horizontal-three-dots' width='20px' height='20px'}}
-                </button>
-              {{/if}}
-              <button
-                class='operator-mode-card-stack__card__header-item icon-button'
-                {{on 'click' (fn this.close card)}}
-                aria-label='Close'
-              >
-                {{svgJar 'icon-x' width='20px' height='20px'}}
-              </button>
-            </div>
             <div class={{cn 'operator-mode-card-stack__card__item' operator-mode-card-stack__card__item_edit=(eq (getValueFromWeakMap this.formats card) 'edit')}}>
               <Preview @card={{card}} @format={{this.getFormat card}} />
+            </div>
+            <div class='operator-mode-card-stack__card__header'>
+              {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
+                <IconButton
+                  @icon='icon-horizontal-three-dots'
+                  @width='20px'
+                  @height='20px'
+                  class='icon-button'
+                  aria-label='Edit'
+                  {{on 'click' (fn this.edit card)}}
+                />
+              {{/if}}
+              <IconButton
+                @icon='icon-x'
+                @width='20px'
+                @height='20px'
+                class='icon-button'
+                aria-label='Edit'
+                {{on 'click' (fn this.edit card)}}
+              />
             </div>
             {{#if (eq (getValueFromWeakMap this.formats card) 'edit')}}
             <div class='operator-mode-card-stack__card__footer'>
@@ -196,11 +213,24 @@ export default class OperatorMode extends Component<Signature> {
             {{/if}}
           </div>
         {{/each}}
-        <br />
-        <Button @kind='primary' @size='tall' {{on 'click' this.createNew}}>
-          ➕ Add a new card to this collection
-        </Button>
+        <div>
+          <br />
+          <IconButton
+            @icon='icon-plus-circle'
+            @width='40px'
+            @height='40px'
+            @tooltip='Add a new card to this collection'
+            class='add-button'
+            {{on 'click' this.createNew}}
+            data-test-create-new-card-button
+          />
+        </div>
       </div>
+      <SearchSheet
+        @mode={{this.searchSheetMode}}
+        @onCancel={{this.onCancelSearchSheet}}
+        @onFocus={{this.onFocusSearchInput}}
+      />
     </div>
   </template>
 }

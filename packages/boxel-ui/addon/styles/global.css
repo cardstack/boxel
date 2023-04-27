@@ -1,8 +1,9 @@
-@import "./fonts.css";
-@import "./variables.css";
-
 * {
   box-sizing: border-box;
+}
+
+#isolated-render {
+  display: none;
 }
 
 html,
@@ -13,11 +14,16 @@ body {
 body {
   margin: 0;
   color: var(--boxel-dark, #000);
-  font-family: var(--boxel-font-family, "Open Sans", Helvetica, Arial, sans-serif);
-  background-color: var(--boxel-light-100, #f5f5f5);
-  font-size: 1rem;
-  letter-spacing: 0.025em;
-  line-height: calc(22 / 16);
+  font-family: var(
+    --boxel-font-family,
+    'Open Sans',
+    Helvetica,
+    Arial,
+    sans-serif
+  );
+  background-color: var(--boxel-light, #fff);
+  font-size: 13px;
+  line-height: calc(18 / 13);
   overscroll-behavior: none;
 }
 
@@ -42,7 +48,7 @@ svg {
 }
 
 a:hover {
-  color: var(--boxel-link-highlight);
+  color: var(--boxel-highlight);
   cursor: pointer;
 }
 
@@ -55,17 +61,17 @@ a:focus:not(:focus-visible) {
 }
 
 button:hover:not(:disabled),
-[role="button"]:hover:not(:disabled, [aria-disabled="true"]) {
+[role='button']:hover:not(:disabled, [aria-disabled='true']) {
   cursor: pointer;
 }
 
 button:focus:not(:disabled),
-[role="button"]:focus:not(:disabled) {
+[role='button']:focus:not(:disabled) {
   outline: var(--boxel-outline);
 }
 
 button:focus:not(:focus-visible),
-[role="button"]:focus:not(:focus-visible) {
+[role='button']:focus:not(:focus-visible) {
   outline-color: transparent;
 }
 
@@ -88,8 +94,4 @@ textarea:focus {
   clip-path: inset(50%);
   overflow: hidden;
   white-space: nowrap;
-}
-
-.FreestyleMenu-item, .FreestyleMenu-submenuItem {
-  text-transform: none;
 }

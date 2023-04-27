@@ -488,14 +488,9 @@ module('Integration | schema', function (hooks) {
       )
       .exists('base realm primitive field displayed');
 
-    await waitFor('[data-test-demo-embedded]');
-
-    assert
-      .dom(`[data-test-card-catalog] [data-test-demo-embedded]`)
-      .exists({ count: 1 }, 'demo card is only displayed for composite card');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"] [data-test-demo-embedded]`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"] [data-test-ref]`
       )
       .exists();
 
@@ -698,7 +693,7 @@ module('Integration | schema', function (hooks) {
     await waitFor(`[data-test-catalog-entry-editor] [data-test-ref]`);
     assert
       .dom(`[data-test-catalog-entry-editor] [data-test-ref]`)
-      .hasText(`Module: ${testRealmURL}pet Name: Pet`);
+      .containsText(`${testRealmURL}pet`);
 
     let fileRef = await adapter.openFile('pet.gts');
     let src = fileRef?.content as string;

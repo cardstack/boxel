@@ -1,8 +1,8 @@
 import Component from '@glimmer/component';
 import { array, concat, hash } from '@ember/helper';
-import LoadingIndicator from './loading-indicator';
-import cn from '../helpers/cn';
-import { or, eq, not } from '../helpers/truth-helpers';
+import LoadingIndicator from '../loading-indicator';
+import cn from '../../helpers/cn';
+import { or, eq, not } from '../../helpers/truth-helpers';
 import { LinkTo } from '@ember/routing';
 
 interface Signature {

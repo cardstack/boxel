@@ -1,9 +1,8 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { eq } from '../helpers/truth-helpers';
-import cssVar from '../helpers/css-var';
-import cn from '../helpers/cn';
-// import onKey from 'ember-keyboard/helpers/on-key';
+import { eq } from '../../helpers/truth-helpers';
+import cssVar from '../../helpers/css-var';
+import cn from '../../helpers/cn';
 // import setBodyClass from 'ember-set-body-class/helpers/set-body-class';
 
 interface Signature {
@@ -25,7 +24,6 @@ export default class Modal extends Component<Signature> {
   <template>
     {{#if @isOpen}}
       {{!-- {{setBodyClass "has-modal"}} --}}
-      {{!-- {{onKey "Escape" @onClose event="keydown"}} --}}
       <div
         style={{cssVar
           boxel-modal-z-index=(if
