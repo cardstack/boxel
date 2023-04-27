@@ -9,6 +9,7 @@ import IntegerCard from 'https://cardstack.com/base/integer';
 import StringCard from 'https://cardstack.com/base/string';
 
 export class Friend extends Card {
+  static typeDisplayName = 'Friend';
   @field firstName = contains(StringCard);
   @field friend = linksTo(() => Friend);
   @field test = contains(IntegerCard, {

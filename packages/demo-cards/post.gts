@@ -34,6 +34,7 @@ class VeryBasicCard extends BasicCard {
 }
 
 export class Post extends Card {
+  static typeDisplayName = 'Post';
   @field author = contains(Person);
   @field title = contains(StringCard);
   @field body = contains(TextAreaCard);

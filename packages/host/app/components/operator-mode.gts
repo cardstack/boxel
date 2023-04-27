@@ -166,6 +166,9 @@ export default class OperatorMode extends Component<Signature> {
               <Preview @card={{card}} @format={{this.getFormat card}} />
             </div>
             <div class='operator-mode-card-stack__card__header'>
+              <div
+                class='operator-mode-card-stack__card__header__type'
+              >{{card.typeDisplayName}}</div>
               {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
                 <IconButton
                   @icon='icon-horizontal-three-dots'

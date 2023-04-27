@@ -12,6 +12,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { FieldContainer } from '@cardstack/boxel-ui';
 
 class CryptoPayment extends Card {
+  static typeDisplayName = 'Payment Method';
   @field chain = linksTo(Chain); // dropdown
   @field token = linksTo(Token); // filtered dropdown
   @field toAddress = contains(StringCard);

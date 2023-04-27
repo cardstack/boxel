@@ -15,6 +15,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { PaymentMethod } from './payment-method';
 
 class VendorDetails extends Card {
+  static typeDisplayName = 'Vendor';
   @field name = contains(StringCard); // required
   @field description = contains(TextAreaCard);
   @field logoURL = contains(StringCard); // url format

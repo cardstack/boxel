@@ -62,5 +62,6 @@ class Isolated extends Component<typeof CardsGrid> {
 }
 
 export class CardsGrid extends Card {
+  static typeDisplayName = 'Cards Grid';
   static isolated = Isolated;
 }

@@ -7,6 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 export class Author extends Card {
+  static typeDisplayName = 'Author';
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
   @field title = contains(StringCard, {

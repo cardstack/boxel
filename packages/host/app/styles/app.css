@@ -408,11 +408,17 @@ nav>.directory-level {
 .operator-mode-card-stack__card__header {
   position: absolute;
   top: 0;
+  left: 0;
   right: 0;
   padding: var(--boxel-sp-xs);
 
   display: flex;
   flex-direction: row;
+}
+
+.operator-mode-card-stack__card__header__type {
+  flex-grow: 1;
+  font: var(--boxel-font-lg);
 }
 
 .operator-mode-card-stack__card__header-item {

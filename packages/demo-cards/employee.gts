@@ -7,6 +7,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import { Person } from './person';
 
 export class Employee extends Person {
+  static typeDisplayName = 'Employee';
   @field department = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
