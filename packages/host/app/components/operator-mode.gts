@@ -1,20 +1,12 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import { on } from '@ember/modifier';
-import { IconButton } from '@cardstack/boxel-ui';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
 import { restartableTask } from 'ember-concurrency';
-import {
-  chooseCard,
-  catalogEntryRef,
-  createNewCard,
-  baseRealm,
-} from '@cardstack/runtime-common';
-import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import { baseRealm } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -40,11 +32,6 @@ export default class OperatorMode extends Component<Signature> {
     this.stack = new TrackedArray([this.args.firstCardInStack]);
   }
 
-  @action
-  async createNew() {
-    this.createNewCard.perform();
-  }
-
   @action onFocusSearchInput() {
     if (this.searchSheetMode == SearchSheetMode.Closed) {
       this.searchSheetMode = SearchSheetMode.SearchPrompt;
@@ -55,33 +42,20 @@ export default class OperatorMode extends Component<Signature> {
     this.searchSheetMode = SearchSheetMode.Closed;
   }
 
-  private createNewCard = restartableTask(async () => {
-    let card = await chooseCard<CatalogEntry>({
-      filter: {
-        on: catalogEntryRef,
-        eq: { isPrimitive: false },
-      },
-    });
-    if (!card) {
-      return;
-    }
-    let newCard = await createNewCard(card.ref, new URL(card.id));
-    if (!newCard) {
-      throw new Error(
-        `bug: could not create new card from catalog entry ${JSON.stringify(
-          catalogEntryRef
-        )}`
-      );
-    }
+  addToStack(card: CardAPI.Card) {
+    this.addCardToStack.perform(card);
+  }
+
+  private addCardToStack = restartableTask(async (card: CardAPI.Card) => {
     let api = await this.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`
     );
-    let relativeTo = newCard[api.relativeTo];
+    let relativeTo = card[api.relativeTo];
     if (!relativeTo) {
       throw new Error(`bug: should never get here`);
     }
 
-    this.stack.push(newCard.constructor.getComponent(newCard, 'isolated'));
+    this.stack.push(card.constructor.getComponent(card, 'isolated'));
   });
 
   <template>
@@ -95,19 +69,6 @@ export default class OperatorMode extends Component<Signature> {
             <card />
           </div>
         {{/each}}
-
-        <div>
-          <br />
-          <IconButton
-            @icon='icon-plus-circle'
-            @width='40px'
-            @height='40px'
-            @tooltip='Add a new card to this collection'
-            class='add-button'
-            {{on 'click' this.createNew}}
-            data-test-create-new-card-button
-          />
-        </div>
       </div>
       <SearchSheet
         @mode={{this.searchSheetMode}}
