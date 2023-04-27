@@ -2177,7 +2177,7 @@ export async function getIfReady<T extends Card, K extends keyof T>(
   }
 
   //Only update the value of computed field.
-  if (field.computeVia) {
+  if (field?.computeVia) {
     deserialized.set(fieldName as string, result);
   }
   return result;
