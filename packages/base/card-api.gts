@@ -2073,25 +2073,31 @@ export async function recompute(
     );
     do {
       for (let fieldName of [...pendingFields]) {
-        let value = await getIfReady(
-          model,
-          fieldName as keyof T,
-          undefined,
-          opts
-        );
-        if (!isNotReadyValue(value) && !isStaleValue(value)) {
-          pendingFields.delete(fieldName);
-          if (recomputePromises.get(card) !== recomputePromise) {
-            return;
-          }
-          if (Array.isArray(value)) {
-            for (let item of value) {
-              if (item && isCard(item) && !stack.includes(item)) {
-                await _loadModel(item, [item, ...stack]);
-              }
+        let field = getField(
+          Reflect.getPrototypeOf(model)!.constructor as typeof Card,
+          fieldName as string
+        ) as Field;
+        if (field.computeVia) {
+          let value = await getIfReady(
+            model,
+            fieldName as keyof T,
+            undefined,
+            opts
+          );
+          if (!isNotReadyValue(value) && !isStaleValue(value)) {
+            pendingFields.delete(fieldName);
+            if (recomputePromises.get(card) !== recomputePromise) {
+              return;
             }
-          } else if (isCard(value) && !stack.includes(value)) {
-            await _loadModel(value, [value, ...stack]);
+            if (Array.isArray(value)) {
+              for (let item of value) {
+                if (item && isCard(item) && !stack.includes(item)) {
+                  await _loadModel(item, [item, ...stack]);
+                }
+              }
+            } else if (isCard(value) && !stack.includes(value)) {
+              await _loadModel(value, [value, ...stack]);
+            }
           }
         }
       }
