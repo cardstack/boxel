@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
+  SYNAPSE_PORT,
   type SynapseInstance,
 } from '../docker/synapse';
 
@@ -17,8 +18,7 @@ test.describe('Synapse Smoke test', () => {
   });
 
   test('synapse welcome page', async ({ page }) => {
-    // TODO gid rid of magic constants
-    await page.goto('http://localhost:8008');
+    await page.goto(`http://localhost:${SYNAPSE_PORT}`);
     await expect(page.getByText('It works! Synapse is running')).toBeVisible();
   });
 });

@@ -11,8 +11,8 @@ import {
   dockerStop,
 } from '../index';
 
-const SYNAPSE_IP_ADDRESS = '172.20.0.5';
-const SYNAPSE_PORT = 8008;
+export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
+export const SYNAPSE_PORT = 8008;
 
 interface SynapseConfig {
   configDir: string;
