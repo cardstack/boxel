@@ -689,7 +689,6 @@ importers:
       '@babel/plugin-syntax-typescript': ^7.17.12
       '@cardstack/base': workspace:*
       '@cardstack/boxel-ui': workspace:*
-      '@cardstack/matrix': workspace:*
       '@cardstack/requirejs-monaco-ember-polyfill': ^0.0.1
       '@cardstack/runtime-common': workspace:*
       '@cardstack/worker': workspace:*
@@ -703,7 +702,6 @@ importers:
       '@glint/core': ^1.0.0-beta.4
       '@glint/environment-ember-template-imports': ^1.0.0-beta.4
       '@glint/template': ^1.0.0-beta.4
-      '@playwright/test': ^1.32.3
       '@simple-dom/interface': ^1.4.0
       '@simple-dom/serializer': ^1.4.0
       '@simple-dom/void-map': ^1.4.0
@@ -811,7 +809,6 @@ importers:
       '@babel/plugin-syntax-typescript': 7.20.0_@babel+core@7.20.2
       '@cardstack/base': file:packages/base
       '@cardstack/boxel-ui': link:../boxel-ui
-      '@cardstack/matrix': file:packages/matrix
       '@cardstack/requirejs-monaco-ember-polyfill': 0.0.1
       '@cardstack/runtime-common': file:packages/runtime-common_xsg5ed77smhudxvbo2fc34zs6m
       '@cardstack/worker': file:packages/worker
@@ -825,7 +822,6 @@ importers:
       '@glint/core': 1.0.0-beta.4_typescript@4.9.3
       '@glint/environment-ember-template-imports': 1.0.0-beta.4_yeghggspoqmaibnucjmca2wqky
       '@glint/template': 1.0.0-beta.4
-      '@playwright/test': 1.32.3
       '@simple-dom/interface': 1.4.0
       '@simple-dom/serializer': 1.4.0
       '@simple-dom/void-map': 1.4.0
@@ -928,8 +924,6 @@ importers:
       webpack: 5.75.0
     dependenciesMeta:
       '@cardstack/base':
-        injected: true
-      '@cardstack/matrix':
         injected: true
       '@cardstack/runtime-common':
         injected: true
@@ -22628,12 +22622,6 @@ packages:
   file:packages/base:
     resolution: {directory: packages/base, type: directory}
     name: '@cardstack/base'
-    version: 1.0.0
-    dev: true
-
-  file:packages/matrix:
-    resolution: {directory: packages/matrix, type: directory}
-    name: '@cardstack/matrix'
     version: 1.0.0
     dev: true
 
