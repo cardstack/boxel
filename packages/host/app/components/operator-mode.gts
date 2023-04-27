@@ -9,7 +9,6 @@ import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import type CardService from '../services/card-service';
 import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { IconButton } from '@cardstack/boxel-ui';
 import SearchSheet, {
