@@ -17,6 +17,7 @@ test.describe('Synapse Smoke test', () => {
   });
 
   test('synapse welcome page', async ({ page }) => {
+    // TODO gid rid of magic constants
     await page.goto('http://localhost:8008');
     await expect(page.getByText('It works! Synapse is running')).toBeVisible();
   });
