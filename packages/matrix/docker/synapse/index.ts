@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import * as fse from 'fs-extra';
-
+import { request } from '@playwright/test';
 import {
   dockerCreateNetwork,
   dockerExec,
@@ -88,7 +88,9 @@ async function cfgDirFromTemplate(template: string): Promise<SynapseConfig> {
 
 // Start a synapse instance: the template must be the name of one of the
 // templates in the docker/synapse directory
-export async function synapseStart(template: string): Promise<SynapseInstance> {
+export async function synapseStart(
+  template = 'default'
+): Promise<SynapseInstance> {
   const synCfg = await cfgDirFromTemplate(template);
   console.log(`Starting synapse with config dir ${synCfg.configDir}...`);
   await dockerCreateNetwork({ networkName: 'boxel' });
@@ -155,4 +157,44 @@ export async function synapseStop(id: string): Promise<void> {
   await fse.remove(synCfg.configDir);
   synapses.delete(id);
   console.log(`Stopped synapse id ${id}.`);
+}
+
+interface Credentials {
+  accessToken: string;
+  userId: string;
+  deviceId: string;
+  homeServer: string;
+}
+
+export async function registerUser(
+  synapse: SynapseInstance,
+  username: string,
+  password: string,
+  displayName?: string
+): Promise<Credentials> {
+  const url = `${synapse.baseUrl}/_synapse/admin/v1/register`;
+  const context = await request.newContext({ baseURL: url });
+  const { nonce } = await (await context.get(url)).json();
+  const mac = crypto
+    .createHmac('sha1', synapse.registrationSecret)
+    .update(`${nonce}\0${username}\0${password}\0notadmin`)
+    .digest('hex');
+  const response = await (
+    await context.post(url, {
+      data: {
+        nonce,
+        username,
+        password,
+        mac,
+        admin: false,
+        displayname: displayName,
+      },
+    })
+  ).json();
+  return {
+    homeServer: response.home_server,
+    accessToken: response.access_token,
+    userId: response.user_id,
+    deviceId: response.device_id,
+  };
 }
