@@ -53,7 +53,7 @@ Instead of running `start:base`, you can alternatively use `pnpm start:all` whic
 |:4202 | `/test` host test realm, `/node-test` node test realm |
 |:4203 | `root (/)` base realm                                 |
 |:4204 | `root (/)` demo realm                                 |
-|:5000 | qunit server mounting realms in iframes for testing   |
+|:4205 | qunit server mounting realms in iframes for testing   |
 
 ### Card Pre-rendering
 
@@ -104,7 +104,7 @@ This test suite contains acceptance tests for asserting that the Realm server is
 
 1. `pnpm start:all`
 
-Visit `http://localhost:5000` after the realms have finished starting up
+Visit `http://localhost:4205` after the realms have finished starting up
 
 ### Boxel Motion
 
