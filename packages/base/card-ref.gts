@@ -7,7 +7,7 @@ import {
   Card,
   CardConstructor,
   CardInstanceType,
-  Primitive,
+  CardBase,
   relativeTo,
 } from './card-api';
 
@@ -24,7 +24,7 @@ class BaseView extends Component<typeof CardRefCard> {
 
 type CardId = { name: string; module: string };
 
-export default class CardRefCard extends Primitive {
+export default class CardRefCard extends CardBase {
   static [primitive]: CardId;
 
   static [serialize](cardRef: CardId) {

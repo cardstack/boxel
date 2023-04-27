@@ -14,7 +14,7 @@ import {
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
 import type {
-  Card,
+  CardBase,
   Field,
   CardConstructor,
 } from 'https://cardstack.com/base/card-api';
@@ -73,7 +73,7 @@ export default class CardService extends Service {
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo: URL
-  ): Promise<Primitive> {
+  ): Promise<CardBase> {
     await this.apiModule.loaded;
     let card = await this.api.createFromSerialized(resource, doc, relativeTo, {
       loader: this.loaderService.loader,
@@ -87,7 +87,7 @@ export default class CardService extends Service {
     return card;
   }
 
-  async loadModel(url: URL): Promise<Primitive> {
+  async loadModel(url: URL): Promise<CardBase> {
     await this.apiModule.loaded;
     let json = await this.fetchJSON(url);
     if (!isSingleCardDocument(json)) {
@@ -103,7 +103,7 @@ export default class CardService extends Service {
     );
   }
 
-  async saveModel(card: Primitive): Promise<Primitive> {
+  async saveModel(card: CardBase): Promise<CardBase> {
     await this.apiModule.loaded;
     let doc = this.api.serializeCard(card, { includeComputeds: true });
     let isSaved = this.api.isSaved(card);
@@ -137,7 +137,7 @@ export default class CardService extends Service {
     return json;
   }
 
-  async search(query: Query, realmURL: URL): Promise<Primitive[]> {
+  async search(query: Query, realmURL: URL): Promise<CardBase[]> {
     let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
     if (!isCardCollectionDocument(json)) {
       throw new Error(
@@ -148,7 +148,7 @@ export default class CardService extends Service {
     // TODO the fact that the loader cannot handle a concurrent form of this is
     // indicative of a loader issue. Need to work with Ed around this as I think
     // there is probably missing state in our loader's state machine.
-    let results: Primitive[] = [];
+    let results: CardBase[] = [];
     for (let doc of json.data) {
       results.push(await this.createFromSerialized(doc, json, new URL(doc.id)));
     }
@@ -156,13 +156,13 @@ export default class CardService extends Service {
   }
 
   async getFields(
-    card: Card
+    card: CardBase
   ): Promise<{ [fieldName: string]: Field<CardConstructor> }> {
     await this.apiModule.loaded;
     return this.api.getFields(card, { includeComputeds: true });
   }
 
-  async isPrimitive(card: typeof Card): Promise<boolean> {
+  async isPrimitive(card: typeof CardBase): Promise<boolean> {
     await this.apiModule.loaded;
     return this.api.primitive in card;
   }

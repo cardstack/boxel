@@ -5,7 +5,7 @@ import {
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
 import { getBoxComponent } from './field-component';
-import { type Primitive, type Box, type Field } from './card-api';
+import { type CardBase, type Box, type Field } from './card-api';
 import {
   chooseCard,
   baseCardRef,
@@ -16,8 +16,8 @@ import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
-    model: Box<Primitive | null>;
-    field: Field<typeof Primitive>;
+    model: Box<CardBase | null>;
+    field: Field<typeof CardBase>;
   };
 }
 
@@ -65,13 +65,13 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       );
     }
     let card = Reflect.getPrototypeOf(this.args.model.value)!
-      .constructor as typeof Primitive;
-    return getBoxComponent(card, 'embedded', this.args.model as Box<Primitive>);
+      .constructor as typeof CardBase;
+    return getBoxComponent(card, 'embedded', this.args.model as Box<CardBase>);
   }
 
   private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: Primitive | undefined = await chooseCard(
+    let chosenCard: CardBase | undefined = await chooseCard(
       { filter: { type } },
       { offerToCreate: type }
     );
@@ -82,8 +82,8 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 }
 
 export function getLinksToEditor(
-  model: Box<Primitive | null>,
-  field: Field<typeof Primitive>
+  model: Box<CardBase | null>,
+  field: Field<typeof CardBase>
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   return class LinksToEditTemplate extends GlimmerComponent {
     <template>

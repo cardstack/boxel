@@ -5,7 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask } from 'ember-concurrency';
-import type { Primitive } from 'https://cardstack.com/base/card-api';
+import type { CardBase } from 'https://cardstack.com/base/card-api';
 import type { Query } from '@cardstack/runtime-common/query';
 import { createNewCard, type CardRef } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
@@ -69,7 +69,7 @@ export default class CardCatalogModal extends Component {
   @tracked currentRequest:
     | {
         search: Search;
-        deferred: Deferred<Primitive | undefined>;
+        deferred: Deferred<CardBase | undefined>;
         opts?: { offerToCreate?: CardRef };
       }
     | undefined = undefined;
@@ -87,7 +87,7 @@ export default class CardCatalogModal extends Component {
     });
   }
 
-  async chooseCard<T extends Primitive>(
+  async chooseCard<T extends CardBase>(
     query: Query,
     opts?: { offerToCreate?: CardRef }
   ): Promise<undefined | T> {
@@ -96,7 +96,7 @@ export default class CardCatalogModal extends Component {
   }
 
   private _chooseCard = enqueueTask(
-    async <T extends Primitive>(
+    async <T extends CardBase>(
       query: Query,
       opts: { offerToCreate?: CardRef } = {}
     ) => {
@@ -114,7 +114,7 @@ export default class CardCatalogModal extends Component {
     }
   );
 
-  @action pick(card?: Primitive): void {
+  @action pick(card?: CardBase): void {
     if (this.currentRequest) {
       this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;

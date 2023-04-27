@@ -61,7 +61,7 @@ import { Router, SupportedMimeType } from './router';
 import { parseQueryString } from './query';
 //@ts-ignore service worker can't handle this
 import type { Readable } from 'stream';
-import { Primitive } from 'https://cardstack.com/base/card-api';
+import { CardBase } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
@@ -811,7 +811,7 @@ export class Realm {
     let api = await this.searchIndex.loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api'
     );
-    let card: Primitive = await api.createFromSerialized(
+    let card: CardBase = await api.createFromSerialized(
       doc.data,
       doc,
       relativeTo,

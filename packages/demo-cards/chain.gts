@@ -5,6 +5,7 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
+import MetadataCard from 'https://cardstack.com/base/metadata';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { FieldContainer } from '@cardstack/boxel-ui';
 
@@ -21,9 +22,11 @@ export class Chain extends Card {
       return CHAIN_IDS[this.name];
     },
   });
-  @field title = contains(StringCard, {
+  @field _metadata = contains(MetadataCard, {
     computeVia: function (this: Chain) {
-      return this.name;
+      let metadata = new MetadataCard();
+      metadata.title = this.name;
+      return metadata;
     },
   });
   static edit = class Edit extends Component<typeof Chain> {

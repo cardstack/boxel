@@ -5,6 +5,7 @@ import {
   Component,
   Card,
 } from 'https://cardstack.com/base/card-api';
+import MetadataCard from 'https://cardstack.com/base/metadata';
 import StringCard from 'https://cardstack.com/base/string';
 import { CardContainer } from '@cardstack/boxel-ui';
 import { Pet } from './pet';
@@ -12,9 +13,11 @@ import { Pet } from './pet';
 export class PetPerson extends Card {
   @field firstName = contains(StringCard);
   @field pets = linksToMany(Pet);
-  @field title = contains(StringCard, {
+  @field _metadata = contains(MetadataCard, {
     computeVia: function (this: PetPerson) {
-      return `${this.firstName} Pets`;
+      let metadata = new MetadataCard();
+      metadata.title = `${this.firstName} Pets`;
+      return metadata;
     },
   });
 

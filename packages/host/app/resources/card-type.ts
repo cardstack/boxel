@@ -11,13 +11,13 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
-import type { Primitive, FieldType } from 'https://cardstack.com/base/card-api';
+import type { CardBase, FieldType } from 'https://cardstack.com/base/card-api';
 import { isCardRef, type CardRef } from '@cardstack/runtime-common/card-ref';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {
-    card: typeof Primitive;
+    card: typeof CardBase;
     loader: Loader;
   };
 }
@@ -39,7 +39,7 @@ export class CardType extends Resource<Args> {
     this.assembleType.perform(card);
   }
 
-  private assembleType = restartableTask(async (card: typeof Primitive) => {
+  private assembleType = restartableTask(async (card: typeof CardBase) => {
     let maybeType = await this.toType(card);
     if (isCardRef(maybeType)) {
       throw new Error(`bug: should never get here`);
@@ -48,8 +48,8 @@ export class CardType extends Resource<Args> {
   });
 
   async toType(
-    card: typeof Primitive,
-    stack: (typeof Primitive)[] = []
+    card: typeof CardBase,
+    stack: (typeof CardBase)[] = []
   ): Promise<Type | CardRef> {
     let maybeRef = identifyCard(card);
     if (!maybeRef) {
@@ -102,7 +102,7 @@ export class CardType extends Resource<Args> {
   }
 }
 
-export function getCardType(parent: object, card: () => typeof Primitive) {
+export function getCardType(parent: object, card: () => typeof CardBase) {
   return CardType.from(parent, () => ({
     named: {
       card: card(),

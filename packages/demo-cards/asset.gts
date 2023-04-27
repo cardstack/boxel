@@ -7,6 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
+import MetadataCard from 'https://cardstack.com/base/metadata';
 import { CardContainer } from '@cardstack/boxel-ui';
 
 let EXCHANGE_RATES: Record<string, number> = {
@@ -34,9 +35,11 @@ class Asset extends Card {
       return new URL(this.logoURL, this[relativeTo] || this.id).href;
     },
   });
-  @field title = contains(StringCard, {
+  @field _metadata = contains(MetadataCard, {
     computeVia: function (this: Asset) {
-      return this.name;
+      let metadata = new MetadataCard();
+      metadata.title = this.name;
+      return metadata;
     },
   });
   static embedded = class Embedded extends Component<typeof Asset> {

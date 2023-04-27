@@ -9,7 +9,7 @@ import { Deferred } from '@cardstack/runtime-common/deferred';
 import { enqueueTask } from 'ember-concurrency';
 import { service } from '@ember/service';
 import type CardService from '../services/card-service';
-import type { Primitive } from 'https://cardstack.com/base/card-api';
+import type { CardBase } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
 import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
 
@@ -43,8 +43,8 @@ export default class CreateCardModal extends Component {
   @service declare cardService: CardService;
   @tracked currentRequest:
     | {
-        card: Primitive;
-        deferred: Deferred<Primitive | undefined>;
+        card: CardBase;
+        deferred: Deferred<CardBase | undefined>;
       }
     | undefined = undefined;
 
@@ -61,7 +61,7 @@ export default class CreateCardModal extends Component {
     });
   }
 
-  async create<T extends Primitive>(
+  async create<T extends CardBase>(
     ref: CardRef,
     relativeTo: URL | undefined
   ): Promise<undefined | T> {
@@ -70,7 +70,7 @@ export default class CreateCardModal extends Component {
   }
 
   private _create = enqueueTask(
-    async <T extends Primitive>(ref: CardRef, relativeTo: URL | undefined) => {
+    async <T extends CardBase>(ref: CardRef, relativeTo: URL | undefined) => {
       let doc = { data: { meta: { adoptsFrom: ref } } };
       this.currentRequest = {
         card: await this.cardService.createFromSerialized(
@@ -89,7 +89,7 @@ export default class CreateCardModal extends Component {
     }
   );
 
-  @action save(card?: Primitive): void {
+  @action save(card?: CardBase): void {
     if (this.currentRequest) {
       this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;

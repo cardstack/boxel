@@ -5,8 +5,9 @@ import {
   Card,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
+import MetadataCard from 'https://cardstack.com/base/metadata';
+import StringCard from 'https://cardstack.com/base/string';
 
 export class Friend extends Card {
   @field firstName = contains(StringCard);
@@ -17,9 +18,11 @@ export class Friend extends Card {
       return 10 / 2;
     },
   });
-  @field title = contains(StringCard, {
+  @field _metadata = contains(MetadataCard, {
     computeVia: function (this: Friend) {
-      return this.firstName;
+      let metadata = new MetadataCard();
+      metadata.title = this.firstName;
+      return metadata;
     },
   });
   static embedded = class Embedded extends Component<typeof this> {

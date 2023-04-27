@@ -5,15 +5,19 @@ import {
   contains,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import MetadataCard from 'https://cardstack.com/base/metadata';
 import { BlogPost } from './blog-post';
 
 export class PublishingPacket extends Card {
   @field blogPost = linksTo(BlogPost);
   @field socialBlurb = contains(TextAreaCard);
-  @field title = contains(StringCard, {
+  @field _metadata = contains(MetadataCard, {
     computeVia: function (this: PublishingPacket) {
-      return this.blogPost?.title ? `${this.blogPost?.title} Packet` : 'Packet';
+      return {
+        title: this.blogPost?.title
+          ? `${this.blogPost?.title} Packet`
+          : 'Packet',
+      };
     },
   });
 }

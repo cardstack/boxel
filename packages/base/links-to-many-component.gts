@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { type Primitive, type Box, type Format, type Field } from './card-api';
+import { type CardBase, type Box, type Format, type Field } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
@@ -17,14 +17,14 @@ import {
 
 interface Signature {
   Args: {
-    model: Box<Primitive>;
-    arrayField: Box<Primitive[]>;
+    model: Box<CardBase>;
+    arrayField: Box<CardBase[]>;
     format: Format;
-    field: Field<typeof Primitive>;
+    field: Field<typeof CardBase>;
     cardTypeFor(
-      field: Field<typeof Primitive>,
-      boxedElement: Box<Primitive>
-    ): typeof Primitive;
+      field: Field<typeof CardBase>,
+      boxedElement: Box<CardBase>
+    ): typeof CardBase;
   };
 }
 
@@ -83,7 +83,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: Primitive | undefined = await chooseCard(
+    let chosenCard: CardBase | undefined = await chooseCard(
       {
         filter: {
           every: [{ type }, ...selectedCardsQuery],
@@ -108,14 +108,14 @@ export function getLinksToManyComponent({
   field,
   cardTypeFor,
 }: {
-  model: Box<Primitive>;
-  arrayField: Box<Primitive[]>;
+  model: Box<CardBase>;
+  arrayField: Box<CardBase[]>;
   format: Format;
-  field: Field<typeof Primitive>;
+  field: Field<typeof CardBase>;
   cardTypeFor(
-    field: Field<typeof Primitive>,
-    boxedElement: Box<Primitive>
-  ): typeof Primitive;
+    field: Field<typeof CardBase>,
+    boxedElement: Box<CardBase>
+  ): typeof CardBase;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {

@@ -90,7 +90,7 @@ export {
   isSingleCardDocument,
 } from './card-document';
 
-import type { Primitive } from 'https://cardstack.com/base/card-api';
+import type { CardBase } from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
@@ -101,13 +101,13 @@ export function isCardCatalogAvailable() {
 }
 
 export interface CardChooser {
-  chooseCard<T extends Primitive>(
+  chooseCard<T extends CardBase>(
     query: Query,
     opts?: { offerToCreate: CardRef }
   ): Promise<undefined | T>;
 }
 
-export async function chooseCard<T extends Primitive>(
+export async function chooseCard<T extends CardBase>(
   query: Query,
   opts?: { offerToCreate: CardRef }
 ): Promise<undefined | T> {
@@ -123,13 +123,13 @@ export async function chooseCard<T extends Primitive>(
 }
 
 export interface CardCreator {
-  create<T extends Primitive>(
+  create<T extends CardBase>(
     ref: CardRef,
     relativeTo: URL | undefined
   ): Promise<undefined | T>;
 }
 
-export async function createNewCard<T extends Primitive>(
+export async function createNewCard<T extends CardBase>(
   ref: CardRef,
   relativeTo: URL | undefined
 ): Promise<undefined | T> {

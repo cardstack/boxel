@@ -4,21 +4,21 @@ import {
   type Field,
   type Format,
   type FieldsTypeFor,
-  type Primitive,
+  type CardBase,
 } from './card-api';
 import { defaultComponent } from './default-card-component';
 import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 
 const componentCache = new WeakMap<
-  Box<Primitive>,
+  Box<CardBase>,
   ComponentLike<{ Args: {}; Blocks: {} }>
 >();
 
 export function getBoxComponent(
-  card: typeof Primitive,
+  card: typeof CardBase,
   format: Format,
-  model: Box<Primitive>
+  model: Box<CardBase>
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let stable = componentCache.get(model);
   if (stable) {
@@ -73,7 +73,7 @@ function defaultFieldFormat(format: Format): Format {
   }
 }
 
-function fieldsComponentsFor<T extends Primitive>(
+function fieldsComponentsFor<T extends CardBase>(
   target: object,
   model: Box<T>,
   defaultFormat: Format
@@ -98,7 +98,7 @@ function fieldsComponentsFor<T extends Primitive>(
       let format = getField(modelValue.constructor, property)?.computeVia
         ? 'embedded'
         : defaultFormat;
-      return field.component(model as unknown as Box<Primitive>, format);
+      return field.component(model as unknown as Box<CardBase>, format);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
@@ -142,13 +142,13 @@ function fieldsComponentsFor<T extends Primitive>(
 }
 
 export function getPluralViewComponent(
-  model: Box<Primitive[]>,
-  field: Field<typeof Primitive>,
+  model: Box<CardBase[]>,
+  field: Field<typeof CardBase>,
   format: Format,
   cardTypeFor: (
-    field: Field<typeof Primitive>,
-    boxedElement: Box<Primitive>
-  ) => typeof Primitive
+    field: Field<typeof CardBase>,
+    boxedElement: Box<CardBase>
+  ) => typeof CardBase
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let components = model.children.map((child) =>
     getBoxComponent(cardTypeFor(field, child), format, child)

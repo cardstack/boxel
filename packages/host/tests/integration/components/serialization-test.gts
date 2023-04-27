@@ -19,11 +19,12 @@ import { fillIn } from '@ember/test-helpers';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
-let integer: typeof import('https://cardstack.com/base/integer');
+let cardRef: typeof import('https://cardstack.com/base/card-ref');
 let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
-let cardRef: typeof import('https://cardstack.com/base/card-ref');
+let integer: typeof import('https://cardstack.com/base/integer');
+let metadata: typeof import('https://cardstack.com/base/metadata');
+let string: typeof import('https://cardstack.com/base/string');
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
@@ -42,6 +43,7 @@ module('Integration | serialization', function (hooks) {
     );
 
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
+    metadata = await Loader.import(`${baseRealm.url}metadata`);
     string = await Loader.import(`${baseRealm.url}string`);
     integer = await Loader.import(`${baseRealm.url}integer`);
     date = await Loader.import(`${baseRealm.url}date`);
@@ -147,12 +149,15 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a card that has an ID', async function (assert) {
     let { field, contains, Card, serializeCard } = cardApi;
+    let { default: MetadataCard } = metadata;
     let { default: StringCard } = string;
     class Person extends Card {
       @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -413,22 +418,27 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a linksTo relationship', async function (assert) {
     let { field, contains, linksTo, Card, serializeCard } = cardApi;
+    let { default: MetadataCard } = metadata;
     let { default: StringCard } = string;
 
     class Toy extends Card {
       @field description = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Toy) {
-          return this.description;
+          let metadata = new MetadataCard();
+          metadata.title = this.description;
+          return metadata;
         },
       });
     }
     class Pet extends Card {
       @field firstName = contains(StringCard);
       @field favoriteToy = linksTo(Toy);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Pet) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -437,7 +447,9 @@ module('Integration | serialization', function (hooks) {
       @field pet = linksTo(Pet);
       @field title = contains(StringCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -675,13 +687,16 @@ module('Integration | serialization', function (hooks) {
       relationshipMeta,
       serializeCard,
     } = cardApi;
+    let { default: MetadataCard } = metadata;
     let { default: StringCard } = string;
 
     class Pet extends Card {
       @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Pet) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -690,7 +705,9 @@ module('Integration | serialization', function (hooks) {
       @field pet = linksTo(Pet);
       @field title = contains(StringCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -775,22 +792,27 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize an empty linksTo relationship', async function (assert) {
     let { field, contains, linksTo, Card, serializeCard } = cardApi;
+    let { default: MetadataCard } = metadata;
     let { default: StringCard } = string;
 
     class Pet extends Card {
       @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Pet) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field pet = linksTo(Pet);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -1016,14 +1038,17 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a linksTo relationship that points to own card class', async function (assert) {
     let { field, contains, linksTo, Card, serializeCard } = cardApi;
+    let { default: MetadataCard } = metadata;
     let { default: StringCard } = string;
 
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field friend = linksTo(() => Person);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -1191,22 +1216,27 @@ module('Integration | serialization', function (hooks) {
       serializeCard,
       createFromSerialized,
     } = cardApi;
+    let { default: MetadataCard } = metadata;
     let { default: StringCard } = string;
 
     class Toy extends Card {
       @field description = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Toy) {
-          return this.description;
+          let metadata = new MetadataCard();
+          metadata.title = this.description;
+          return metadata;
         },
       });
     }
     class Pet extends Card {
       @field firstName = contains(StringCard);
       @field favoriteToy = linksTo(Toy);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Pet) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -1215,7 +1245,9 @@ module('Integration | serialization', function (hooks) {
       @field pet = contains(Pet);
       @field title = contains(StringCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -1315,6 +1347,7 @@ module('Integration | serialization', function (hooks) {
       serializeCard,
       createFromSerialized,
     } = cardApi;
+    let { default: MetadataCard } = metadata;
     let { default: StringCard } = string;
 
     class Toy extends Card {
@@ -1328,9 +1361,11 @@ module('Integration | serialization', function (hooks) {
     class Pet extends Card {
       @field firstName = contains(StringCard);
       @field favoriteToy = linksTo(Toy);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Pet) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -1339,7 +1374,9 @@ module('Integration | serialization', function (hooks) {
       @field pets = containsMany(Pet);
       @field title = contains(StringCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -1648,26 +1685,31 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a composite field', async function (assert) {
     let { field, contains, serializeCard, Card } = cardApi;
-    let { default: StringCard } = string;
     let { default: DateCard } = date;
     let { default: DatetimeCard } = datetime;
+    let { default: MetadataCard } = metadata;
+    let { default: StringCard } = string;
 
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field birthdate = contains(DateCard);
       @field lastLogin = contains(DatetimeCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
 
     class Post extends Card {
       @field author = contains(Person);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Post) {
-          return this.author?.title ?? 'Post';
+          let metadata = new MetadataCard();
+          metadata.title = this.author?._metadata?.title ?? 'Post';
+          return metadata;
         },
       });
     }
@@ -1745,13 +1787,16 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a composite field that has been edited', async function (assert) {
     let { field, contains, serializeCard, Card, Component } = cardApi;
+    let { default: MetadataCard } = metadata;
     let { default: StringCard } = string;
     let { default: IntegerCard } = integer;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
       static embedded = class Embedded extends Component<typeof this> {
@@ -2280,23 +2325,28 @@ module('Integration | serialization', function (hooks) {
       Card,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
     let { default: IntegerCard } = integer;
+    let { default: MetadataCard } = metadata;
+    let { default: StringCard } = string;
 
     class Person extends Card {
       @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
 
     class Employee extends Person {
       @field department = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Employee) {
-          return this.department;
+          let metadata = new MetadataCard();
+          metadata.title = this.department;
+          return metadata;
         },
       });
     }
@@ -2408,23 +2458,28 @@ module('Integration | serialization', function (hooks) {
       Card,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: MetadataCard } = metadata;
     let { default: IntegerCard } = integer;
+    let { default: StringCard } = string;
 
     class Person extends Card {
       @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
 
     class Role extends Card {
       @field roleName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Role) {
-          return this.roleName;
+          let metadata = new MetadataCard();
+          metadata.title = this.roleName;
+          return metadata;
         },
       });
     }
@@ -2439,9 +2494,11 @@ module('Integration | serialization', function (hooks) {
 
     class Group extends Card {
       @field people = containsMany(Person);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Group) {
-          return 'Group';
+          let metadata = new MetadataCard();
+          metadata.title = 'Group';
+          return metadata;
         },
       });
     }
@@ -2639,13 +2696,16 @@ module('Integration | serialization', function (hooks) {
   test('can deserialize a card from a resource object', async function (assert) {
     let { field, contains, serializeCard, Card, createFromSerialized } =
       cardApi;
+    let { default: MetadataCard } = metadata;
     let { default: StringCard } = string;
 
     class Person extends Card {
       @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -2763,13 +2823,16 @@ module('Integration | serialization', function (hooks) {
       Card,
       createFromSerialized,
     } = cardApi;
+    let { default: MetadataCard } = metadata;
     let { default: StringCard } = string;
 
     class Person extends Card {
       @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          let metadata = new MetadataCard();
+          metadata.title = this.firstName;
+          return metadata;
         },
       });
     }
@@ -2779,8 +2842,11 @@ module('Integration | serialization', function (hooks) {
     }
     class Blog extends Card {
       @field posts = containsMany(Post);
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Blog) {
+          let metadata = new MetadataCard();
+          metadata.title = 'Blog';
+          return metadata;
           return 'Blog';
         },
       });
@@ -2864,7 +2930,7 @@ module('Integration | serialization', function (hooks) {
   test('can serialize a card with computed field', async function (assert) {
     let { field, contains, serializeCard, Card } = cardApi;
     let { default: DateCard } = date;
-    let { default: StringCard } = string;
+    let { default: MetadataCard } = metadata;
     class Person extends Card {
       @field birthdate = contains(DateCard);
       @field firstBirthday = contains(DateCard, {
@@ -2876,9 +2942,11 @@ module('Integration | serialization', function (hooks) {
           );
         },
       });
-      @field title = contains(StringCard, {
+      @field _metadata = contains(MetadataCard, {
         computeVia: function (this: Person) {
-          return 'Person';
+          let metadata = new MetadataCard();
+          metadata.title = 'Person';
+          return metadata;
         },
       });
     }
@@ -2914,7 +2982,7 @@ module('Integration | serialization', function (hooks) {
         attributes: {
           birthdate: '2019-10-30',
           firstBirthday: '2020-10-30',
-          title: 'Person',
+          _metadata: { title: 'Person' },
         },
         meta: {
           adoptsFrom: {

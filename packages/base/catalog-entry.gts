@@ -3,23 +3,25 @@ import {
   field,
   Component,
   Card,
-  Primitive,
+  CardBase,
   primitive,
   relativeTo,
 } from './card-api';
 import StringCard from './string';
 import BooleanCard from './boolean';
+import MetadataCard from './metadata';
 import CardRefCard from './card-ref';
 import { baseCardRef, loadCard } from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
 export class CatalogEntry extends Card {
+  @field title = contains(StringCard);
   @field description = contains(StringCard);
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, {
     computeVia: async function (this: CatalogEntry) {
-      let card: typeof Primitive | undefined = await loadCard(this.ref, {
+      let card: typeof CardBase | undefined = await loadCard(this.ref, {
         relativeTo: this[relativeTo],
       });
       if (!card) {
@@ -36,6 +38,13 @@ export class CatalogEntry extends Card {
     },
   });
   @field demo = contains(Card);
+  @field _metadata = contains(MetadataCard, {
+    computeVia: function (this: CatalogEntry) {
+      let metadata = new MetadataCard();
+      metadata.title = this.title;
+      return metadata;
+    },
+  });
 
   get showDemo() {
     return !this.isPrimitive;

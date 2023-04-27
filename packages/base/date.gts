@@ -6,7 +6,7 @@ import {
   queryableValue,
   CardInstanceType,
   CardConstructor,
-  Primitive,
+  CardBase,
 } from './card-api';
 import { parse, format } from 'date-fns';
 import { fn } from '@ember/helper';
@@ -22,7 +22,7 @@ const Format = new Intl.DateTimeFormat('en-US', {
 
 const dateFormat = `yyyy-MM-dd`;
 
-export default class DateCard extends Primitive {
+export default class DateCard extends CardBase {
   static [primitive]: Date;
   static [serialize](date: Date) {
     return format(date, dateFormat);

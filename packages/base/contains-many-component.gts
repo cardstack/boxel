@@ -6,7 +6,7 @@ import {
   type Box,
   type Format,
   type Field,
-  type Primitive,
+  type CardBase,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
@@ -14,14 +14,14 @@ import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
-    model: Box<Primitive>;
-    arrayField: Box<Primitive[]>;
+    model: Box<CardBase>;
+    arrayField: Box<CardBase[]>;
     format: Format;
-    field: Field<typeof Primitive>;
+    field: Field<typeof CardBase>;
     cardTypeFor(
-      field: Field<typeof Primitive>,
-      boxedElement: Box<Primitive>
-    ): typeof Primitive;
+      field: Field<typeof CardBase>,
+      boxedElement: Box<CardBase>
+    ): typeof CardBase;
   };
 }
 
@@ -88,14 +88,14 @@ export function getContainsManyComponent({
   field,
   cardTypeFor,
 }: {
-  model: Box<Primitive>;
-  arrayField: Box<Primitive[]>;
+  model: Box<CardBase>;
+  arrayField: Box<CardBase[]>;
   format: Format;
-  field: Field<typeof Primitive>;
+  field: Field<typeof CardBase>;
   cardTypeFor(
-    field: Field<typeof Primitive>,
-    boxedElement: Box<Primitive>
-  ): typeof Primitive;
+    field: Field<typeof CardBase>,
+    boxedElement: Box<CardBase>
+  ): typeof CardBase;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class ContainsManyEditorTemplate extends GlimmerComponent {

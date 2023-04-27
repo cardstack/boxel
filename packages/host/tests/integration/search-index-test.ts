@@ -62,7 +62,7 @@ module('Integration | search-index', function (hooks) {
         id: `${testRealmURL}empty`,
         type: 'card',
         attributes: {
-          title: null,
+          _metadata: { title: 'Untitled' },
         },
         meta: {
           adoptsFrom: {
@@ -803,40 +803,54 @@ module('Integration | search-index', function (hooks) {
     let adapter = new TestRealmAdapter({
       'person-card.gts': `
       import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
+      import MetadataCard from "https://cardstack.com/base/metadata";
       import StringCard from "https://cardstack.com/base/string";
       import { PetCard } from "./pet-card";
 
       export class PersonCard extends Card {
         @field firstName = contains(StringCard);
         @field pet = linksTo(() => PetCard);
-        @field title = contains(StringCard, {
+        @field _metadata = contains(MetadataCard, {
           computeVia: function (this: PersonCard) {
-            return this.firstName;
+            let metadata = new MetadataCard();
+            metadata.title = this.firstName;
+            return metadata;
           },
         });
       }
     `,
       'appointment.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import MetadataCard from "https://cardstack.com/base/metadata";
       import StringCard from "https://cardstack.com/base/string";
       import { PersonCard } from "./person-card";
 
       export class Appointment extends Card {
         @field title = contains(StringCard);
         @field contact = contains(() => PersonCard);
+        @field _metadata = contains(MetadataCard, {
+          computeVia: function (this: Appointment) {
+            let metadata = new MetadataCard();
+            metadata.title = this.title;
+            return metadata;
+          },
+        });
       }
     `,
       'pet-card.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import MetadataCard from "https://cardstack.com/base/metadata";
       import StringCard from "https://cardstack.com/base/string";
       import { Appointment } from "./appointment";
 
       export class PetCard extends Card {
         @field firstName = contains(StringCard);
         @field appointment = contains(() => Appointment);
-        @field title = contains(StringCard, {
+        @field _metadata = contains(MetadataCard, {
           computeVia: function (this: PetCard) {
-            return this.firstName;
+            let metadata = new MetadataCard();
+            metadata.title = this.firstName;
+            return metadata;
           },
         });
       }`,
@@ -880,7 +894,9 @@ module('Integration | search-index', function (hooks) {
           links: { self: `${testRealmURL}jackie` },
           attributes: {
             firstName: 'Jackie',
-            title: 'Jackie',
+            _metadata: {
+              title: 'Jackie',
+            },
             appointment: {
               title: 'Vet visit',
               contact: { firstName: 'Burcu' },
@@ -994,7 +1010,9 @@ module('Integration | search-index', function (hooks) {
           },
           attributes: {
             name: 'Acme Industries',
-            title: 'Acme Industries',
+            _metadata: {
+              title: 'Acme Industries',
+            },
             paymentMethods: [
               {
                 type: 'crypto',
@@ -1049,7 +1067,9 @@ module('Integration | search-index', function (hooks) {
             },
             attributes: {
               name: 'Ethereum Mainnet',
-              title: 'Ethereum Mainnet',
+              _metadata: {
+                title: 'Ethereum Mainnet',
+              },
               chainId: 1,
             },
 
@@ -1071,7 +1091,9 @@ module('Integration | search-index', function (hooks) {
             },
             attributes: {
               name: 'Polygon',
-              title: 'Polygon',
+              _metadata: {
+                title: 'Polygon',
+              },
               chainId: 137,
             },
             meta: {
@@ -1715,7 +1737,9 @@ module('Integration | search-index', function (hooks) {
         },
         attributes: {
           firstName: 'Hassan',
-          title: 'Hassan',
+          _metadata: {
+            title: 'Hassan',
+          },
         },
         relationships: {
           friend: {
@@ -1745,15 +1769,24 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(hassanEntry.searchData, {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
-        title: 'Hassan',
+        _metadata: {
+          id: undefined,
+          title: 'Hassan',
+        },
         friend: {
           id: `${testRealmURL}Friend/mango`,
           firstName: 'Mango',
-          title: 'Mango',
+          _metadata: {
+            id: undefined,
+            title: 'Mango',
+          },
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
             firstName: 'Van Gogh',
-            title: 'Van Gogh',
+            _metadata: {
+              id: undefined,
+              title: 'Van Gogh',
+            },
             friend: null,
           },
         },
@@ -1825,7 +1858,9 @@ module('Integration | search-index', function (hooks) {
           links: { self: `${testRealmURL}Friend/hassan` },
           attributes: {
             firstName: 'Hassan',
-            title: 'Hassan',
+            _metadata: {
+              title: 'Hassan',
+            },
           },
           relationships: {
             friend: {
@@ -1855,7 +1890,9 @@ module('Integration | search-index', function (hooks) {
             links: { self: `${testRealmURL}Friend/mango` },
             attributes: {
               firstName: 'Mango',
-              title: 'Mango',
+              _metadata: {
+                title: 'Mango',
+              },
             },
             relationships: {
               friend: {
@@ -1891,11 +1928,17 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(hassanEntry.searchData, {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
-        title: 'Hassan',
+        _metadata: {
+          id: undefined,
+          title: 'Hassan',
+        },
         friend: {
           id: `${testRealmURL}Friend/mango`,
           firstName: 'Mango',
-          title: 'Mango',
+          _metadata: {
+            id: undefined,
+            title: 'Mango',
+          },
           friend: {
             id: `${testRealmURL}Friend/hassan`,
           },
@@ -1919,7 +1962,9 @@ module('Integration | search-index', function (hooks) {
           links: { self: `${testRealmURL}Friend/mango` },
           attributes: {
             firstName: 'Mango',
-            title: 'Mango',
+            _metadata: {
+              title: 'Mango',
+            },
           },
           relationships: {
             friend: {
@@ -1949,7 +1994,9 @@ module('Integration | search-index', function (hooks) {
             links: { self: `${testRealmURL}Friend/hassan` },
             attributes: {
               firstName: 'Hassan',
-              title: 'Hassan',
+              _metadata: {
+                title: 'Hassan',
+              },
             },
             relationships: {
               friend: {
@@ -1985,7 +2032,10 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(mangoEntry.searchData, {
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
-        title: 'Mango',
+        _metadata: {
+          id: undefined,
+          title: 'Mango',
+        },
         friend: {
           id: `${testRealmURL}Friend/hassan`,
           firstName: 'Hassan',
@@ -2054,7 +2104,7 @@ module('Integration | search-index', function (hooks) {
           id: hassanID,
           type: 'card',
           links: { self: hassanID },
-          attributes: { firstName: 'Hassan', title: 'Hassan' },
+          attributes: { firstName: 'Hassan', _metadata: { title: 'Hassan' } },
           relationships: {
             'friends.0': {
               links: { self: mangoID },
@@ -2080,7 +2130,7 @@ module('Integration | search-index', function (hooks) {
             id: mangoID,
             type: 'card',
             links: { self: mangoID },
-            attributes: { firstName: 'Mango', title: 'Mango' },
+            attributes: { firstName: 'Mango', _metadata: { title: 'Mango' } },
             relationships: {
               'friends.0': {
                 links: { self: hassanID },
@@ -2096,7 +2146,10 @@ module('Integration | search-index', function (hooks) {
             id: vanGoghID,
             type: 'card',
             links: { self: vanGoghID },
-            attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
+            attributes: {
+              firstName: 'Van Gogh',
+              _metadata: { title: 'Van Gogh' },
+            },
             relationships: {
               'friends.0': {
                 links: { self: hassanID },
@@ -2122,12 +2175,12 @@ module('Integration | search-index', function (hooks) {
         {
           id: hassanID,
           firstName: 'Hassan',
-          title: 'Hassan',
+          _metadata: { id: undefined, title: 'Hassan' },
           friends: [
             {
               id: mangoID,
               firstName: 'Mango',
-              title: 'Mango',
+              _metadata: { id: undefined, title: 'Mango' },
               friends: [{ id: hassanID }],
             },
             {
@@ -2151,7 +2204,10 @@ module('Integration | search-index', function (hooks) {
           id: mangoID,
           type: 'card',
           links: { self: mangoID },
-          attributes: { firstName: 'Mango', title: 'Mango' },
+          attributes: {
+            firstName: 'Mango',
+            _metadata: { title: 'Mango' },
+          },
           relationships: {
             'friends.0': {
               links: { self: hassanID },
@@ -2172,7 +2228,10 @@ module('Integration | search-index', function (hooks) {
             id: hassanID,
             type: 'card',
             links: { self: hassanID },
-            attributes: { firstName: 'Hassan', title: 'Hassan' },
+            attributes: {
+              firstName: 'Hassan',
+              _metadata: { title: 'Hassan' },
+            },
             relationships: {
               'friends.0': {
                 links: { self: mangoID },
@@ -2192,7 +2251,10 @@ module('Integration | search-index', function (hooks) {
             id: vanGoghID,
             type: 'card',
             links: { self: vanGoghID },
-            attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
+            attributes: {
+              firstName: 'Van Gogh',
+              _metadata: { title: 'Van Gogh' },
+            },
             relationships: {
               'friends.0': {
                 links: { self: hassanID },
@@ -2218,7 +2280,7 @@ module('Integration | search-index', function (hooks) {
         {
           id: mangoID,
           firstName: 'Mango',
-          title: 'Mango',
+          _metadata: { id: undefined, title: 'Mango' },
           friends: [
             {
               id: hassanID,
@@ -2248,7 +2310,10 @@ module('Integration | search-index', function (hooks) {
           id: vanGoghID,
           type: 'card',
           links: { self: vanGoghID },
-          attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
+          attributes: {
+            firstName: 'Van Gogh',
+            _metadata: { title: 'Van Gogh' },
+          },
           relationships: {
             'friends.0': {
               links: { self: hassanID },
@@ -2269,7 +2334,10 @@ module('Integration | search-index', function (hooks) {
             id: hassanID,
             type: 'card',
             links: { self: hassanID },
-            attributes: { firstName: 'Hassan', title: 'Hassan' },
+            attributes: {
+              firstName: 'Hassan',
+              _metadata: { title: 'Hassan' },
+            },
             relationships: {
               'friends.0': {
                 links: { self: mangoID },
@@ -2289,7 +2357,10 @@ module('Integration | search-index', function (hooks) {
             id: mangoID,
             type: 'card',
             links: { self: mangoID },
-            attributes: { firstName: 'Mango', title: 'Mango' },
+            attributes: {
+              firstName: 'Mango',
+              _metadata: { title: 'Mango' },
+            },
             relationships: {
               'friends.0': {
                 links: { self: hassanID },
@@ -2315,17 +2386,17 @@ module('Integration | search-index', function (hooks) {
         {
           id: vanGoghID,
           firstName: 'Van Gogh',
-          title: 'Van Gogh',
+          _metadata: { id: undefined, title: 'Van Gogh' },
           friends: [
             {
               id: hassanID,
               firstName: 'Hassan',
-              title: 'Hassan',
+              _metadata: { id: undefined, title: 'Hassan' },
               friends: [
                 {
                   id: mangoID,
                   firstName: 'Mango',
-                  title: 'Mango',
+                  _metadata: { id: undefined, title: 'Mango' },
                   friends: [{ id: hassanID }],
                 },
                 { id: vanGoghID },
@@ -2385,6 +2456,7 @@ module('Integration | search-index', function (hooks) {
         'http://localhost:4201/base/integer',
         'http://localhost:4201/base/links-to-editor',
         'http://localhost:4201/base/links-to-many-component',
+        'http://localhost:4201/base/metadata',
         'http://localhost:4201/base/string',
         'http://localhost:4201/base/watched-array',
         'http://localhost:4202/test/person',
