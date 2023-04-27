@@ -145,7 +145,7 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
-  private async rollbackCardFieldValue(card: Card) {
+  private async rollbackCardFieldValues(card: Card) {
     let fields = await this.cardService.getFields(card);
     for(let fieldName of Object.keys(fields)) {
       if (fieldName === 'id') continue;
