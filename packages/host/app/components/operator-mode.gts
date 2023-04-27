@@ -188,8 +188,8 @@ export default class OperatorMode extends Component<Signature> {
                 @width='20px'
                 @height='20px'
                 class='icon-button'
-                aria-label='Edit'
-                {{on 'click' (fn this.edit card)}}
+                aria-label='Close'
+                {{on 'click' (fn this.close card)}}
               />
             </div>
             {{#if (eq (getValueFromWeakMap this.formats card) 'edit')}}
