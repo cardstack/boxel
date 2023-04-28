@@ -36,7 +36,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
           @icon='icon-minus-circle'
           @width='20px'
           @height='20px'
-          class='remove-button'
+          class='icon-button'
           aria-label='Remove'
           {{on 'click' this.remove}}
           disabled={{this.isEmpty}}
