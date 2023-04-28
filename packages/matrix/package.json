@@ -13,6 +13,7 @@
   "scripts": {
     "start:synapse": "mkdir -p ./synapse-data/db && SYNAPSE_DATA_DIR=./synapse-data ts-node --transpileOnly ./scripts/synapse.ts start",
     "stop:synapse": "ts-node --transpileOnly ./scripts/synapse.ts stop",
+    "test": "pnpm playwright test",
     "lint": "glint"
   },
   "dependenciesMeta": {
