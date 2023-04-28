@@ -49,9 +49,14 @@ The calculation can be async:
 });
 ```
 
-The values of async computed fields are available synchronously in other `computedVia` functions.
+The values of async computed fields are available synchronously in other `computedVia` functions. Since async field values are not guaranteed to be present, you can use card API [`getIfReady`](https://github.com/cardstack/boxel/blob/307d78676ebdb93cee75d61b8812914013a094a7/packages/base/card-api.gts#L2112) avoid errors about the field not being ready:
 
-FIXME: how does that work, how is resolution ordered? And with the `[field] is not ready` error, is there a way to wait for it to be ready if it isn’t?
+```javascript
+await getIfReady(this, 'fullName');
+// 'Carl Stack'
+await getIfReady(this, 'fullName');
+// {type: 'not-ready', fieldName: 'fullName', instance: …}
+```
 
 ## Computed `linksTo` and `linksToMany`
 
