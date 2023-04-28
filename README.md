@@ -99,14 +99,19 @@ First you must create an administrative user:
    docker exec -it boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u admin -p your_admin_password --admin
    ```
 
-After you have created an administrative user, you can use the following docker command launch the administrative UI for your matrix server:
+After you have created an administrative user you can start the admin console by executing the following in the packages/matrix workspace:
 ```
-docker run --name synapse-admin -p 8080:80 -d awesometechnologies/synapse-admin
+pnpm start:admin
 ```
 
 Then visit `http://localhost:8080`, and enter the admin user's username (`admin`) and the password, also enter in your matrix server url `http://localhost:8008` in the homeserver URL field, and click "Signin".
 
 Note you can use this same administrative interface to login to the staging and production matrix server. The credentials are available in AWS secrets manager.
+
+To stop the admin console run the following in the packages/matrix workspace:
+```
+pnpm stop:admin
+```
 
 ## Boxel UI Component Explorer
 
