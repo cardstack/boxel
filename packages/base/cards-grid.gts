@@ -1,7 +1,7 @@
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
-import { Component, Card } from 'https://cardstack.com/base/card-api';
+import { Component, Card } from './card-api';
 import { CardContainer, IconButton } from '@cardstack/boxel-ui';
 import {
   chooseCard,
@@ -9,7 +9,7 @@ import {
   createNewCard,
   isCardCatalogAvailable,
 } from '@cardstack/runtime-common';
-import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import { type CatalogEntry } from './catalog-entry';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
