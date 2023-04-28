@@ -8,7 +8,6 @@ import type RouterService from '@ember/routing/router-service';
 import type LocalRealmService from '../services/local-realm';
 import Component from '@glimmer/component';
 import { Card } from 'https://cardstack.com/base/card-api';
-import { baseRealm } from '@cardstack/runtime-common';
 
 const { ownRealmURL, isLocalRealm } = ENV;
 const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
@@ -53,7 +52,7 @@ export default class RenderCard extends Route<Model> {
     path = path || '';
     let url = path
       ? new URL(`/${path}`, ownRealmURL)
-      : new URL('./', baseRealm.url);
+      : new URL('./', ownRealmURL);
     await this.localRealm.startedUp;
     try {
       return { card: await this.cardService.loadModel(url) };
