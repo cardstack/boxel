@@ -2150,11 +2150,8 @@ export async function getIfReady<T extends Card, K extends keyof T>(
     //if it is not an async function. 
     //This ensures that other functions are not executed 
     //by the runtime before this function is finished.
-    if (typeof compute === 'function' && compute.constructor.name === 'AsyncFunction') {
-      result = await compute();
-    } else {
-      result = compute() as T[K];
-    }
+    let computeResult = compute();
+    result = computeResult instanceof Promise ? await computeResult : computeResult;
   } catch (e: any) {
     if (isNotLoadedError(e)) {
       let card = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
