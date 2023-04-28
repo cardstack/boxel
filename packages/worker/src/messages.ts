@@ -157,5 +157,8 @@ interface Destination {
 }
 
 export function send(destination: Destination, message: Message): void {
+  if (!destination) {
+    throw new Error('client or worker message sent with no destination');
+  }
   destination.postMessage(message);
 }

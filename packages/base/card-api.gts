@@ -2118,11 +2118,11 @@ export async function getIfReady<T extends Card, K extends keyof T>(
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let maybeStale = deserialized.get(fieldName as string);
+  let field = getField(
+    Reflect.getPrototypeOf(instance)!.constructor as typeof Card,
+    fieldName as string
+  );
   if (isStaleValue(maybeStale)) {
-    let field = getField(
-      Reflect.getPrototypeOf(instance)!.constructor as typeof Card,
-      fieldName as string
-    );
     if (!field) {
       throw new Error(
         `the field '${fieldName as string} does not exist in card ${
@@ -2145,7 +2145,13 @@ export async function getIfReady<T extends Card, K extends keyof T>(
         : () => (instance as any)[computeVia as string]();
   }
   try {
-    result = await compute();
+    //To avoid race conditions, 
+    //the computeVia function should not perform asynchronous computation 
+    //if it is not an async function. 
+    //This ensures that other functions are not executed 
+    //by the runtime before this function is finished.
+    let computeResult = compute();
+    result = computeResult instanceof Promise ? await computeResult : computeResult;
   } catch (e: any) {
     if (isNotLoadedError(e)) {
       let card = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
@@ -2166,7 +2172,11 @@ export async function getIfReady<T extends Card, K extends keyof T>(
       throw e;
     }
   }
-  deserialized.set(fieldName as string, result);
+
+  //Only update the value of computed field.
+  if (field?.computeVia) {
+    deserialized.set(fieldName as string, result);
+  }
   return result;
 }
 
