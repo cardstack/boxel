@@ -345,17 +345,16 @@ export default class LocalRealm extends Service {
           // if we see a new service worker version getting installed, and if we
           // already have an open file handle, send it to the new worker so we don't
           // lose access
-          // send(newWorker, {
-          //   type: 'setDirectoryHandle',
-          //   handle: this.state.handle,
-          //   realmsServed,
-          // });
-          // TODO: code above is causing inconsistent behavior in the app,
-          // but making it work would make dev experience much better
+          send(newWorker, {
+            type: 'setDirectoryHandle',
+            handle: this.state.handle,
+            realmsServed,
+          });
+          // The code for setDirectoryHandle sometimes causes unstable behavior in the app
 
           if (registration.waiting) {
             log.warn(
-              `A new service worker is waiting  to activate. To use it, refresh the page until you see 'Activating service worker' message, or close all tabs and start a new one.`
+              `A new service worker is waiting to activate. To use it, refresh the page until you see 'Activating service worker' message, or close all tabs and start a new one.`
             );
           }
         }
@@ -368,13 +367,18 @@ export default class LocalRealm extends Service {
 
     if (registration.waiting) {
       log.warn(
-        `A new service worker is waiting to activate. To use it, refresh the page until you see 'Activating service worker' message, or close all tabs and start a new one.`
+        `A new service worker is waiting to  activate. To use it, refresh the page until you see 'Activating service worker' message, or close all tabs and start a new one.`
       );
     }
 
     navigator.serviceWorker.addEventListener('controllerchange', async () => {
       // this event fires when the new service worker is activated
       if ('worker' in this.state && this.state.worker?.state === 'redundant') {
+        log.warn('There is a redundant service worker');
+        // Below we are setting the state and calling maybeSetup() which may
+        // trigger the user to choose a directory again. This is not ideal,
+        // but it's better than what happens otherwise. If we don't do this,
+        // the app gets in a very unstable state and strange occurances ensue.
         this.state = { type: 'starting-up' };
         this.maybeSetup();
       }
