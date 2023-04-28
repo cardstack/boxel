@@ -36,6 +36,8 @@ The field can be used in a template like any other:
 
 When any field consumed by the computed field changes, the value will [rerender](./card-rendering.md#re-rendering-process).
 
+Computed fields are eagerly evaluated, they do not need to be consumed for `computeVia` to run.
+
 ## Async computation
 
 The calculation can be async:
