@@ -15,6 +15,9 @@ module.exports = {
     new webpack.EnvironmentPlugin({
       RESOLVED_BASE_REALM_URL: 'http://localhost:4201/base/',
     }),
+    new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
+      resource.request = resource.request.replace(/^node:/, '');
+    }),
   ],
   module: {
     rules: [
@@ -31,6 +34,7 @@ module.exports = {
   resolve: {
     extensions: ['.ts', '.js', '.json'],
     fallback: {
+      crypto: false,
       fs: false,
       path: require.resolve('path-browserify'),
     },
@@ -48,4 +52,5 @@ module.exports = {
       message: /the request of a dependency is an expression/,
     },
   ],
+  externals: { 'node:path': 'commonjs path' },
 };
