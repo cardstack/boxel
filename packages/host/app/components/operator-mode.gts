@@ -1,8 +1,8 @@
 import Component from '@glimmer/component';
+import { on } from '@ember/modifier';
 import { Card, Format } from 'https://cardstack.com/base/card-api';
 import Preview from './preview';
 import { action } from '@ember/object';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
@@ -15,13 +15,7 @@ import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
 import { restartableTask } from 'ember-concurrency';
-import {
-  chooseCard,
-  catalogEntryRef,
-  createNewCard,
-  baseRealm,
-} from '@cardstack/runtime-common';
-import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import { baseRealm } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -41,7 +35,10 @@ export default class OperatorMode extends Component<Signature> {
 
   //A variable to store value of card field
   //before in edit mode.
-  cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<Card, Map<string, any>>();
+  cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<
+    Card,
+    Map<string, any>
+  >();
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
@@ -49,11 +46,6 @@ export default class OperatorMode extends Component<Signature> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.stack = new TrackedArray([this.args.firstCardInStack]);
-  }
-
-  @action
-  async createNew() {
-    this.createNewCard.perform();
   }
 
   @action onFocusSearchInput() {
@@ -66,33 +58,19 @@ export default class OperatorMode extends Component<Signature> {
     this.searchSheetMode = SearchSheetMode.Closed;
   }
 
-  private createNewCard = restartableTask(async () => {
-    let card = await chooseCard<CatalogEntry>({
-      filter: {
-        on: catalogEntryRef,
-        eq: { isPrimitive: false },
-      },
-    });
-    if (!card) {
-      return;
-    }
-    let newCard = await createNewCard(card.ref, new URL(card.id));
-    if (!newCard) {
-      throw new Error(
-        `bug: could not create new card from catalog entry ${JSON.stringify(
-          catalogEntryRef
-        )}`
-      );
-    }
+  addToStack(card: CardAPI.Card) {
+    this.addCardToStack.perform(card);
+  }
+
+  private addCardToStack = restartableTask(async (card: CardAPI.Card) => {
     let api = await this.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`
     );
-    let relativeTo = newCard[api.relativeTo];
+    let relativeTo = card[api.relativeTo];
     if (!relativeTo) {
       throw new Error(`bug: should never get here`);
     }
-
-    this.stack.push(newCard);
+    this.stack.push(card);
   });
 
   @action async edit(card: Card) {
@@ -128,17 +106,21 @@ export default class OperatorMode extends Component<Signature> {
 
   private async saveCardFieldValues(card: Card) {
     let fields = await this.cardService.getFields(card);
-    for(let fieldName of Object.keys(fields)) {
+    for (let fieldName of Object.keys(fields)) {
       if (fieldName === 'id') continue;
 
       let field = fields[fieldName];
-      if ((field.fieldType === 'contains' ||  field.fieldType === 'containsMany') && !(await this.cardService.isPrimitive(field.card))) {
+      if (
+        (field.fieldType === 'contains' ||
+          field.fieldType === 'containsMany') &&
+        !(await this.cardService.isPrimitive(field.card))
+      ) {
         await this.saveCardFieldValues((card as any)[fieldName]);
       }
 
       let cardFieldValue = this.cardFieldValues.get(card);
       if (!cardFieldValue) {
-        cardFieldValue = new Map<string, any>;
+        cardFieldValue = new Map<string, any>();
       }
       cardFieldValue.set(fieldName, (card as any)[fieldName]);
       this.cardFieldValues.set(card, cardFieldValue);
@@ -147,11 +129,15 @@ export default class OperatorMode extends Component<Signature> {
 
   private async rollbackCardFieldValues(card: Card) {
     let fields = await this.cardService.getFields(card);
-    for(let fieldName of Object.keys(fields)) {
+    for (let fieldName of Object.keys(fields)) {
       if (fieldName === 'id') continue;
 
       let field = fields[fieldName];
-      if ((field.fieldType === 'contains' ||  field.fieldType === 'containsMany') && !(await this.cardService.isPrimitive(field.card))) {
+      if (
+        (field.fieldType === 'contains' ||
+          field.fieldType === 'containsMany') &&
+        !(await this.cardService.isPrimitive(field.card))
+      ) {
         await this.rollbackCardFieldValues((card as any)[fieldName]);
       }
 
@@ -169,7 +155,14 @@ export default class OperatorMode extends Component<Signature> {
       <div class='operator-mode-card-stack'>
         {{#each this.stack as |card|}}
           <div class='operator-mode-card-stack__card'>
-            <div class={{cn 'operator-mode-card-stack__card__item' operator-mode-card-stack__card__item_edit=(eq (getValueFromWeakMap this.formats card) 'edit')}}>
+            <div
+              class={{cn
+                'operator-mode-card-stack__card__item'
+                operator-mode-card-stack__card__item_edit=(eq
+                  (getValueFromWeakMap this.formats card) 'edit'
+                )
+              }}
+            >
               <Preview @card={{card}} @format={{this.getFormat card}} />
             </div>
             <div class='operator-mode-card-stack__card__header'>
@@ -193,37 +186,25 @@ export default class OperatorMode extends Component<Signature> {
               />
             </div>
             {{#if (eq (getValueFromWeakMap this.formats card) 'edit')}}
-            <div class='operator-mode-card-stack__card__footer'>
-              <button
-                class='operator-mode-card-stack__card__footer-button light-button'
-                {{on 'click' (fn this.cancel card)}}
-                aria-label='Cancel'
-              >
-                Cancel
-              </button>
-              <button
-                class='operator-mode-card-stack__card__footer-button'
-                {{on 'click' (fn this.save card)}}
-                aria-label='Save'
-              >
-                Save
-              </button>
-            </div>
+              <div class='operator-mode-card-stack__card__footer'>
+                <button
+                  class='operator-mode-card-stack__card__footer-button light-button'
+                  {{on 'click' (fn this.cancel card)}}
+                  aria-label='Cancel'
+                >
+                  Cancel
+                </button>
+                <button
+                  class='operator-mode-card-stack__card__footer-button'
+                  {{on 'click' (fn this.save card)}}
+                  aria-label='Save'
+                >
+                  Save
+                </button>
+              </div>
             {{/if}}
           </div>
         {{/each}}
-        <div>
-          <br />
-          <IconButton
-            @icon='icon-plus-circle'
-            @width='40px'
-            @height='40px'
-            @tooltip='Add a new card to this collection'
-            class='add-button'
-            {{on 'click' this.createNew}}
-            data-test-create-new-card-button
-          />
-        </div>
       </div>
       <SearchSheet
         @mode={{this.searchSheetMode}}

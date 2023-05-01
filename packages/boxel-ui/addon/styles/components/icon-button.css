@@ -57,11 +57,27 @@ in the gts template when css-encapsulation is enabled */
   transition: opacity 1s ease-in-out;
   position: absolute;
   z-index: 1;
-  left: 140%;
-  top: 10%;
 }
 
 .boxel-icon-button--tooltip:hover::after {
   opacity: 1;
   visibility: visible;
+}
+
+.boxel-icon-button--tooltip__right::after {
+  left: 140%;
+  top: 10%;
+}
+
+.boxel-icon-button--tooltip__left::after {
+  right: 140%;
+  top: 10%;
+}
+
+.boxel-icon-button--tooltip__above::after {
+  bottom: 110%;
+}
+
+.boxel-icon-button--tooltip__below::after {
+  top: 110%;
 }

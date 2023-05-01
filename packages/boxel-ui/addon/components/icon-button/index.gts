@@ -12,6 +12,7 @@ export interface Signature {
     width?: string;
     height?: string;
     tooltip?: string;
+    tooltipPosition?: 'right' | 'left' | 'above' | 'below';
   };
   Blocks: {
     default: [];
@@ -23,7 +24,13 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
     class={{cn
       'boxel-icon-button'
       (if @variant (concat 'boxel-icon-button--' @variant))
-      (if @tooltip 'boxel-icon-button--tooltip')
+      (if
+        @tooltip
+        (concat
+          'boxel-icon-button--tooltip boxel-icon-button--tooltip__'
+          (if @tooltipPosition @tooltipPosition 'right')
+        )
+      )
       @class
     }}
     data-hover={{@tooltip}}

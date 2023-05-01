@@ -4,7 +4,7 @@
     "attributes": {},
     "meta": {
       "adoptsFrom": {
-        "module": "./cards-grid",
+        "module": "https://cardstack.com/base/cards-grid",
         "name": "CardsGrid"
       }
     }
