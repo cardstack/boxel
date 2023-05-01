@@ -98,8 +98,12 @@ First you must create an administrative user:
    ```
    docker exec -it boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u admin -p your_admin_password --admin
    ```
+3. Run the docker container:
+   ```
+   docker run --name synapse-admin -p 8080:80 -d awesometechnologies/synapse-admin
+   ```
 
-After you have created an administrative user you can start the admin console by executing the following in the packages/matrix workspace:
+After you have created an administrative user and have created the docker container you can start the admin console by executing the following in the packages/matrix workspace:
 ```
 pnpm start:admin
 ```

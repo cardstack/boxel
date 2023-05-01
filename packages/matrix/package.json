@@ -12,8 +12,8 @@
   },
   "scripts": {
     "start:synapse": "mkdir -p ./synapse-data/db && SYNAPSE_DATA_DIR=./synapse-data ts-node --transpileOnly ./scripts/synapse.ts start",
-    "start:admin": "docker run --name synapse-admin -p 8080:80 -d awesometechnologies/synapse-admin",
     "stop:synapse": "ts-node --transpileOnly ./scripts/synapse.ts stop",
+    "start:admin": "docker start synapse-admin",
     "stop:admin": "docker stop synapse-admin",
     "test": "pnpm playwright test",
     "lint": "glint"
