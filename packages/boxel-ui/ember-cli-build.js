@@ -3,6 +3,7 @@
 
 const { Webpack } = require('@embroider/webpack');
 const EmberAddon = require('ember-cli/lib/broccoli/ember-addon');
+const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 
 // const { maybeEmbroider } = require('@embroider/test-setup');
 // return maybeEmbroider(app);
@@ -41,6 +42,14 @@ module.exports = function (defaults) {
               },
             },
           ],
+        },
+      },
+      plugins: [new GlimmerScopedCSSWebpackPlugin()],
+      resolveLoader: {
+        alias: {
+          'glimmer-scoped-css/virtual-loader': require.resolve(
+            'glimmer-scoped-css/virtual-loader'
+          ),
         },
       },
       // publicAssetURL: '/boxel-ui/'
