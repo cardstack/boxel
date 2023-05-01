@@ -1,4 +1,5 @@
 'use strict';
+// eslint-disable-next-line node/no-missing-require
 const { installScopedCSS } = require('glimmer-scoped-css');
 
 module.exports = {
