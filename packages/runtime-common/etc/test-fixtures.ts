@@ -5,16 +5,13 @@ import {
   Component,
   Card,
 } from 'https://cardstack.com/base/card-api';
-import MetadataCard from 'https://cardstack.com/base/metadata';
 import StringCard from 'https://cardstack.com/base/string';
 
 export class Person extends Card {
   @field firstName = contains(StringCard);
-  @field _metadata = contains(MetadataCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: Person) {
-      let metadata = new MetadataCard();
-      metadata.title = this.firstName;
-      return metadata;
+      return this.firstName;
     },
   });
   static isolated = class Isolated extends Component<typeof this> {
@@ -40,14 +37,13 @@ function _applyDecoratedDescriptor(target, property, decorators, descriptor, con
 function _initializerWarningHelper(descriptor, context) { throw new Error('Decorating class property failed. Please ensure that ' + 'proposal-class-properties is enabled and runs after the decorators transform.'); }
 
 import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-import MetadataCard from "https://cardstack.com/base/metadata";
 import StringCard from "https://cardstack.com/base/string";
 export let Person = (_class = (_class2 = class Person extends Card {
   constructor(...args) {
     super(...args);
 
     _initializerDefineProperty(this, "firstName", _descriptor, this);
-    _initializerDefineProperty(this, "_metadata", _descriptor2, this);
+    _initializerDefineProperty(this, "title", _descriptor2, this);
   }
 
 }, _defineProperty(_class2, "isolated", setComponentTemplate(createTemplateFactory(
@@ -68,16 +64,14 @@ export let Person = (_class = (_class2 = class Person extends Card {
   initializer: function () {
     return contains(StringCard);
   }
-}), _descriptor2 = _applyDecoratedDescriptor(_class.prototype, "_metadata", [field], {
+}), _descriptor2 = _applyDecoratedDescriptor(_class.prototype, "title", [field], {
   configurable: true,
   enumerable: true,
   writable: true,
   initializer: function () {
-    return contains(MetadataCard, {
+    return contains(StringCard, {
       computeVia: function () {
-        let metadata = new MetadataCard();
-        metadata.title = this.firstName;
-        return metadata;
+        return this.firstName;
       }
     });
   }

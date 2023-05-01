@@ -9,7 +9,6 @@ import {
 import DateCard from 'https://cardstack.com/base/date';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
 import IntegerCard from 'https://cardstack.com/base/integer';
-import MetadataCard from 'https://cardstack.com/base/metadata';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Vendor } from './vendor';
@@ -29,11 +28,9 @@ class Details extends Card {
   @field terms = contains(StringCard);
   @field invoiceDocument = contains(StringCard);
   @field memo = contains(TextAreaCard);
-  @field _metadata = contains(MetadataCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: Details) {
-      let metadata = new MetadataCard();
-      metadata.title = `Invoice ${this.invoiceNo}`;
-      return metadata;
+      return `Invoice ${this.invoiceNo}`;
     },
   });
   static embedded = class Embedded extends Component<typeof this> {

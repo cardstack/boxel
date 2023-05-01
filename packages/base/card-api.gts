@@ -1485,16 +1485,10 @@ export class StringCard extends CardBase {
   };
 }
 
-export class MetadataCard extends CardBase {
-  @field title = contains(StringCard);
-}
-
 export class Card extends CardBase {
-  @field _metadata = contains(() => MetadataCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: Card) {
-      let metadata = new MetadataCard();
-      metadata.title = 'Untitled';
-      return metadata;
+      return 'Untitled';
     },
   });
 }

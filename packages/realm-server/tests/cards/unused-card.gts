@@ -4,16 +4,13 @@ import {
   Component,
   Card,
 } from 'https://cardstack.com/base/card-api';
-import MetadataCard from 'https://cardstack.com/base/metadata';
 import StringCard from 'https://cardstack.com/base/string';
 
 export class UnusedCard extends Card {
   @field firstName = contains(StringCard);
-  @field _metadata = contains(MetadataCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: UnusedCard) {
-      let metadata = new MetadataCard();
-      metadata.title = this.firstName;
-      return metadata;
+      return this.firstName;
     },
   });
   static isolated = class Isolated extends Component<typeof this> {

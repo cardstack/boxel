@@ -7,7 +7,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import DateTimeCard from 'https://cardstack.com/base/datetime';
 import StringCard from 'https://cardstack.com/base/string';
-import MetadataCard from 'https://cardstack.com/base/metadata';
 import { Person } from './person';
 import { Post } from './post';
 
@@ -19,11 +18,9 @@ export class Booking extends Card {
   @field hosts = containsMany(Person);
   @field sponsors = containsMany(StringCard);
   @field posts = containsMany(Post);
-  @field _metadata = contains(MetadataCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: Booking) {
-      let metadata = new MetadataCard();
-      metadata.title = this.title;
-      return metadata;
+      return this.title;
     },
   });
 

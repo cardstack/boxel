@@ -6,7 +6,6 @@ import {
   containsMany,
   relativeTo,
 } from 'https://cardstack.com/base/card-api';
-import MetadataCard from 'https://cardstack.com/base/metadata';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';
@@ -29,11 +28,9 @@ class VendorDetails extends Card {
       return new URL(this.logoURL, this[relativeTo] || this.id).href;
     },
   });
-  @field _metadata = contains(MetadataCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: VendorDetails) {
-      let metadata = new MetadataCard();
-      metadata.title = this.name;
-      return metadata;
+      return this.name;
     },
   });
 

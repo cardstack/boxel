@@ -1,4 +1,3 @@
-import MetadataCard from 'https://cardstack.com/base/metadata';
 import StringCard from 'https://cardstack.com/base/string';
 import {
   Component,
@@ -10,11 +9,9 @@ import {
 export class Author extends Card {
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
-  @field _metadata = contains(MetadataCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: Author) {
-      return {
-        title: [this.firstName, this.lastName].filter(Boolean).join(' '),
-      };
+      return [this.firstName, this.lastName].filter(Boolean).join(' ');
     },
   });
   // @field profilePicture = contains(StringCard); // TODO: image card

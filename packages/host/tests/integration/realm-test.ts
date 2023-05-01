@@ -117,9 +117,7 @@ module('Integration | realm', function (hooks) {
         type: 'card',
         id: `${testRealmURL}dir/empty`,
         attributes: {
-          _metadata: {
-            title: 'Untitled',
-          },
+          title: 'Untitled',
         },
         meta: {
           adoptsFrom: {
@@ -866,9 +864,7 @@ module('Integration | realm', function (hooks) {
           venue: 'Gore Mountain',
           startTime: '2023-02-18T10:00:00.000Z',
           endTime: '2023-02-19T02:00:00.000Z',
-          _metadata: {
-            title: 'Gore Mountain Ski Trip',
-          },
+          title: 'Gore Mountain Ski Trip',
           hosts: [
             {
               firstName: 'Hassan',

@@ -6,7 +6,6 @@ import {
   Card,
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
-import MetadataCard from 'https://cardstack.com/base/metadata';
 import StringCard from 'https://cardstack.com/base/string';
 import { CardContainer } from '@cardstack/boxel-ui';
 import { Pet } from './pet';
@@ -17,11 +16,9 @@ export class Person extends Card {
   @field isCool = contains(BooleanCard);
   @field isHuman = contains(BooleanCard);
   @field pet = linksTo(() => Pet);
-  @field _metadata = contains(MetadataCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: Person) {
-      return {
-        title: [this.firstName, this.lastName].filter(Boolean).join(' '),
-      };
+      return [this.firstName, this.lastName].filter(Boolean).join(' ');
     },
   });
 

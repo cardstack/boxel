@@ -6,7 +6,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import IntegerCard from 'https://cardstack.com/base/integer';
-import MetadataCard from 'https://cardstack.com/base/metadata';
 import StringCard from 'https://cardstack.com/base/string';
 import { CardContainer } from '@cardstack/boxel-ui';
 import { Booking } from './booking';
@@ -18,11 +17,9 @@ export class Pet extends Card {
   @field cutenessRating = contains(IntegerCard);
   @field sleepsOnTheCouch = contains(BooleanCard);
   @field appointment = contains(() => Booking);
-  @field _metadata = contains(MetadataCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: Pet) {
-      let metadata = new MetadataCard();
-      metadata.title = this.firstName;
-      return metadata;
+      return this.firstName;
     },
   });
   static embedded = class Embedded extends Component<typeof this> {

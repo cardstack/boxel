@@ -9,7 +9,6 @@ import {
 } from './card-api';
 import StringCard from './string';
 import BooleanCard from './boolean';
-import MetadataCard from './metadata';
 import CardRefCard from './card-ref';
 import { baseCardRef, loadCard } from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
@@ -38,11 +37,9 @@ export class CatalogEntry extends Card {
     },
   });
   @field demo = contains(Card);
-  @field _metadata = contains(MetadataCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: CatalogEntry) {
-      let metadata = new MetadataCard();
-      metadata.title = this.title;
-      return metadata;
+      return this.title;
     },
   });
 
