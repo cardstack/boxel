@@ -25,4 +25,9 @@ export default class CardController extends Controller {
   toggleOperatorMode() {
     this.operatorModeEnabled = !this.operatorModeEnabled;
   }
+
+  @action
+  closeOperatorMode() {
+    this.operatorModeEnabled = false;
+  }
 }

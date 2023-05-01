@@ -10,7 +10,7 @@ import type CardService from '../services/card-service';
 import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { IconButton } from '@cardstack/boxel-ui';
+import { IconButton, Modal } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
@@ -26,6 +26,7 @@ import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
 interface Signature {
   Args: {
     firstCardInStack: Card;
+    onClose: () => void;
   };
 }
 
@@ -87,6 +88,7 @@ export default class OperatorMode extends Component<Signature> {
     let index = this.stack.indexOf(card);
     this.stack.splice(index);
     this.stack = this.stack;
+    this.args.onClose();
   }
 
   @action async cancel(card: Card) {
@@ -149,9 +151,13 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   <template>
-    <div class='operator-mode-desktop-overlay'>
+    <Modal
+      @isOpen={{true}}
+      @onClose={{@onClose}}
+      @isOverlayDismissalDisabled={{true}}
+      @boxelModalOverlayColor='#686283'
+    >
       <CardCatalogModal />
-      <CreateCardModal />
       <div class='operator-mode-card-stack'>
         {{#each this.stack as |card|}}
           <div class='operator-mode-card-stack__card'>
@@ -164,6 +170,7 @@ export default class OperatorMode extends Component<Signature> {
               }}
             >
               <Preview @card={{card}} @format={{this.getFormat card}} />
+              <CreateCardModal />
             </div>
             <div class='operator-mode-card-stack__card__header'>
               {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
@@ -211,7 +218,7 @@ export default class OperatorMode extends Component<Signature> {
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
       />
-    </div>
+    </Modal>
   </template>
 }
 

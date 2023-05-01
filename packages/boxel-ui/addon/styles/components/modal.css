@@ -30,7 +30,7 @@ in the gts template when css-encapsulation is enabled */
   height: 100%;
   padding: 0;
   border: none;
-  background-color: rgb(0 0 0 / 75%);
+  background-color: var(--boxel-modal-overlay-color, rgb(0 0 0 / 75%));
   text-align: left;
   z-index: calc(var(--boxel-modal-z-index) - 1);
 }
