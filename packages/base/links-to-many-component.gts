@@ -1,7 +1,13 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { type CardBase, type Box, type Format, type Field } from './card-api';
+import {
+  type Card,
+  CardBase,
+  type Box,
+  type Format,
+  type Field,
+} from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
@@ -17,10 +23,10 @@ import {
 
 interface Signature {
   Args: {
-    model: Box<CardBase>;
-    arrayField: Box<CardBase[]>;
+    model: Box<Card>;
+    arrayField: Box<Card[]>;
     format: Format;
-    field: Field<typeof CardBase>;
+    field: Field<typeof Card>;
     cardTypeFor(
       field: Field<typeof CardBase>,
       boxedElement: Box<CardBase>
@@ -108,10 +114,10 @@ export function getLinksToManyComponent({
   field,
   cardTypeFor,
 }: {
-  model: Box<CardBase>;
-  arrayField: Box<CardBase[]>;
+  model: Box<Card>;
+  arrayField: Box<Card[]>;
   format: Format;
-  field: Field<typeof CardBase>;
+  field: Field<typeof Card>;
   cardTypeFor(
     field: Field<typeof CardBase>,
     boxedElement: Box<CardBase>

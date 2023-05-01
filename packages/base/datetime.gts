@@ -5,7 +5,7 @@ import {
   deserialize,
   queryableValue,
   CardInstanceType,
-  CardConstructor,
+  CardBaseConstructor,
   CardBase,
 } from './card-api';
 import { format, parseISO } from 'date-fns';
@@ -31,7 +31,7 @@ export default class DatetimeCard extends CardBase {
     return date.toISOString();
   }
 
-  static async [deserialize]<T extends CardConstructor>(
+  static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
     date: any
   ): Promise<CardInstanceType<T>> {

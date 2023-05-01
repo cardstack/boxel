@@ -49,12 +49,12 @@ export const relativeTo = Symbol('cardstack-relative-to');
 // cannot mark a card as being saved
 const isSavedInstance = Symbol('cardstack-is-saved-instance');
 
-export type CardInstanceType<T extends CardConstructor> = T extends {
+export type CardInstanceType<T extends CardBaseConstructor> = T extends {
   [primitive]: infer P;
 }
   ? P
   : InstanceType<T>;
-export type PartialCardInstanceType<T extends CardConstructor> = T extends {
+export type PartialCardInstanceType<T extends CardBaseConstructor> = T extends {
   [primitive]: infer P;
 }
   ? P | null
@@ -195,7 +195,7 @@ interface JSONAPISingleResourceDocument {
 }
 
 export interface Field<
-  CardT extends CardConstructor = CardConstructor,
+  CardT extends CardBaseConstructor = CardBaseConstructor,
   SearchT = any
 > {
   card: CardT;
@@ -228,11 +228,13 @@ export interface Field<
   queryMatcher(
     innerMatcher: (innerValue: any) => boolean | null
   ): (value: SearchT) => boolean | null;
-  handleNotLoadedError<T extends CardBase>(
-    instance: T,
+  handleNotLoadedError(
+    instance: CardInstanceType<CardT>,
     e: NotLoaded,
     opts?: RecomputeOptions
-  ): Promise<T | T[] | undefined | void>;
+  ): Promise<
+    CardInstanceType<CardT> | CardInstanceType<CardT>[] | undefined | void
+  >;
 }
 
 function callSerializeHook(
@@ -282,7 +284,7 @@ function resourceFrom(
   return res;
 }
 
-function getter<CardT extends CardConstructor>(
+function getter<CardT extends CardBaseConstructor>(
   instance: CardBase,
   field: Field<CardT>
 ): CardInstanceType<CardT> {
@@ -319,7 +321,7 @@ function getter<CardT extends CardConstructor>(
   }
 }
 
-class ContainsMany<FieldT extends CardConstructor>
+class ContainsMany<FieldT extends CardBaseConstructor>
   implements Field<FieldT, any[]>
 {
   readonly fieldType = 'containsMany';
@@ -520,7 +522,7 @@ class ContainsMany<FieldT extends CardConstructor>
   }
 }
 
-class Contains<CardT extends CardConstructor> implements Field<CardT, any> {
+class Contains<CardT extends CardBaseConstructor> implements Field<CardT, any> {
   readonly fieldType = 'contains';
   constructor(
     private cardThunk: () => CardT,
@@ -684,7 +686,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
-  getter(instance: CardBase): CardInstanceType<CardT> {
+  getter(instance: Card): CardInstanceType<CardT> {
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
     cardTracking.get(instance);
@@ -695,7 +697,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     return getter(instance, this);
   }
 
-  queryableValue(instance: any, stack: CardBase[]): any {
+  queryableValue(instance: any, stack: Card[]): any {
     if (primitive in this.card) {
       throw new Error(
         `the linksTo field '${this.name}' contains a primitive card '${this.card.name}'`
@@ -792,7 +794,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     _relationships: undefined,
     _fieldMeta: undefined,
     identityContext: IdentityContext,
-    _instancePromise: Promise<CardBase>,
+    _instancePromise: Promise<Card>,
     relativeTo: URL | undefined
   ): Promise<CardInstanceType<CardT> | null | NotLoadedValue> {
     if (!isRelationship(value)) {
@@ -821,11 +823,11 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     ](resource, relativeTo, doc, identityContext);
   }
 
-  emptyValue(_instance: CardBase) {
+  emptyValue(_instance: Card) {
     return null;
   }
 
-  validate(_instance: CardBase, value: any) {
+  validate(_instance: Card, value: any) {
     // we can't actually place this in the constructor since that would break cards whose field type is themselves
     // so the next opportunity we have to test this scenario is during field assignment
     if (primitive in this.card) {
@@ -846,22 +848,22 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     return value;
   }
 
-  async handleNotLoadedError<T extends CardBase>(
-    instance: T,
+  async handleNotLoadedError(
+    instance: CardInstanceType<CardT>,
     e: NotLoaded,
     opts?: RecomputeOptions
-  ): Promise<T | undefined> {
-    let result: T | undefined;
-    let deserialized = getDataBucket(instance);
+  ): Promise<CardInstanceType<CardT> | undefined> {
+    let result: CardInstanceType<CardT> | undefined;
+    let deserialized = getDataBucket(instance as CardBase);
 
     let identityContext =
-      identityContexts.get(instance) ?? new IdentityContext();
+      identityContexts.get(instance as CardBase) ?? new IdentityContext();
     // taking advantage of the identityMap regardless of whether loadFields is set
     let fieldValue = identityContext.identities.get(e.reference as string);
 
     if (fieldValue !== undefined) {
       deserialized.set(this.name, fieldValue);
-      return fieldValue as T;
+      return fieldValue as CardInstanceType<CardT>;
     }
 
     if (opts?.loadFields) {
@@ -872,14 +874,14 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         instance[relativeTo]
       );
       deserialized.set(this.name, fieldValue);
-      result = fieldValue as T;
+      result = fieldValue as CardInstanceType<CardT>;
     }
 
     return result;
   }
 
   private async loadMissingField(
-    instance: CardBase,
+    instance: Card,
     notLoaded: NotLoadedValue | NotLoaded,
     identityContext: IdentityContext,
     relativeTo: URL | undefined
@@ -916,13 +918,13 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   }
 
   component(
-    model: Box<CardBase>,
+    model: Box<Card>,
     format: Format
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(
         this.name as keyof CardBase
-      ) as unknown as Box<CardBase | null>;
+      ) as unknown as Box<Card | null>;
       return getLinksToEditor(innerModel, this);
     }
     return fieldComponent(this, model, format);
@@ -943,7 +945,7 @@ class LinksToMany<FieldT extends CardConstructor>
     return this.cardThunk();
   }
 
-  getter(instance: CardBase): CardInstanceType<FieldT> {
+  getter(instance: Card): CardInstanceType<FieldT> {
     let deserialized = getDataBucket(instance);
     cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
@@ -962,7 +964,7 @@ class LinksToMany<FieldT extends CardConstructor>
     return getter(instance, this);
   }
 
-  queryableValue(instances: any[] | null, stack: CardBase[]): any[] {
+  queryableValue(instances: any[] | null, stack: Card[]): any[] {
     if (instances == null) {
       return [];
     }
@@ -1240,14 +1242,14 @@ class LinksToMany<FieldT extends CardConstructor>
   }
 
   component(
-    model: Box<CardBase>,
+    model: Box<Card>,
     format: Format
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     let fieldName = this.name as keyof CardBase;
     let arrayField = model.field(
       fieldName,
       useIndexBasedKey in this.card
-    ) as unknown as Box<CardBase[]>;
+    ) as unknown as Box<Card[]>;
     return getLinksToManyComponent({
       model,
       arrayField,
@@ -1278,7 +1280,7 @@ function fieldComponent(
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
 export const field = function (
-  _target: CardConstructor,
+  _target: CardBaseConstructor,
   key: string | symbol,
   { initializer }: { initializer(): any }
 ) {
@@ -1286,7 +1288,7 @@ export const field = function (
 } as unknown as PropertyDecorator;
 (field as any)[fieldDecorator] = undefined;
 
-export function containsMany<CardT extends CardConstructor>(
+export function containsMany<CardT extends CardBaseConstructor>(
   cardOrThunk: CardT | (() => CardT),
   options?: Options
 ): CardInstanceType<CardT>[] {
@@ -1300,7 +1302,7 @@ export function containsMany<CardT extends CardConstructor>(
 }
 containsMany[fieldType] = 'contains-many' as FieldType;
 
-export function contains<CardT extends CardConstructor>(
+export function contains<CardT extends CardBaseConstructor>(
   cardOrThunk: CardT | (() => CardT),
   options?: Options
 ): CardInstanceType<CardT> {
@@ -1348,7 +1350,7 @@ export class CardBase {
   [isBaseCard] = true;
   [isSavedInstance] = false;
   [relativeTo]: URL | undefined = undefined;
-  declare ['constructor']: CardConstructor;
+  declare ['constructor']: CardBaseConstructor;
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
 
@@ -1399,7 +1401,7 @@ export class CardBase {
     }
   }
 
-  static async [deserialize]<T extends CardConstructor>(
+  static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
     data: any,
     relativeTo: URL | undefined,
@@ -1444,9 +1446,9 @@ export function isCard(card: any): card is CardBase {
   return card && typeof card === 'object' && isBaseCard in card;
 }
 
-export class Component<CardT extends CardConstructor> extends GlimmerComponent<
-  SignatureFor<CardT>
-> {}
+export class Component<
+  CardT extends CardBaseConstructor
+> extends GlimmerComponent<SignatureFor<CardT>> {}
 
 class IDCard extends CardBase {
   static [primitive]: string;
@@ -1497,9 +1499,10 @@ export class Card extends CardBase {
   });
 }
 
-export type CardConstructor = typeof CardBase;
+export type CardBaseConstructor = typeof CardBase;
+export type CardConstructor = typeof Card;
 
-function getDataBucket(instance: CardBase): Map<string, any> {
+function getDataBucket<T extends CardBase>(instance: T): Map<string, any> {
   let deserialized = deserializedData.get(instance);
   if (!deserialized) {
     deserialized = new Map();
@@ -1645,7 +1648,7 @@ export function relationshipMeta(
   }
 }
 
-function serializedGet<CardT extends CardConstructor>(
+function serializedGet<CardT extends CardBaseConstructor>(
   model: InstanceType<CardT>,
   fieldName: string,
   doc: JSONAPISingleResourceDocument,
@@ -1661,7 +1664,7 @@ function serializedGet<CardT extends CardConstructor>(
   return field.serialize(peekAtField(model, fieldName), doc, visited, opts);
 }
 
-async function getDeserializedValue<CardT extends CardConstructor>({
+async function getDeserializedValue<CardT extends CardBaseConstructor>({
   card,
   fieldName,
   value,
@@ -1768,7 +1771,7 @@ export type LoaderType = NonNullable<
 // to calculate the computeds that the server has already done.
 
 // use an interface loader and not the class Loader
-export async function createFromSerialized<T extends CardConstructor>(
+export async function createFromSerialized<T extends CardBaseConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
@@ -1794,7 +1797,7 @@ export async function createFromSerialized<T extends CardConstructor>(
   );
 }
 
-export async function updateFromSerialized<T extends CardConstructor>(
+export async function updateFromSerialized<T extends CardBaseConstructor>(
   instance: CardInstanceType<T>,
   doc: LooseSingleCardDocument
 ): Promise<CardInstanceType<T>> {
@@ -1802,7 +1805,7 @@ export async function updateFromSerialized<T extends CardConstructor>(
   return await _updateFromSerialized(instance, doc.data, doc, identityContext);
 }
 
-async function _createFromSerialized<T extends CardConstructor>(
+async function _createFromSerialized<T extends CardBaseConstructor>(
   card: T,
   data: T extends { [primitive]: infer P } ? P : LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument | undefined,
@@ -1843,7 +1846,7 @@ async function _createFromSerialized<T extends CardConstructor>(
   return await _updateFromSerialized(instance, resource, doc, identityContext);
 }
 
-async function _updateFromSerialized<T extends CardConstructor>(
+async function _updateFromSerialized<T extends CardBaseConstructor>(
   instance: CardInstanceType<T>,
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
@@ -1930,7 +1933,7 @@ async function _updateFromSerialized<T extends CardConstructor>(
   return instance;
 }
 
-export async function searchDoc<CardT extends CardConstructor>(
+export async function searchDoc<CardT extends CardBaseConstructor>(
   instance: InstanceType<CardT>
 ): Promise<Record<string, any>> {
   return getQueryableValue(instance.constructor, instance) as Record<
@@ -1957,7 +1960,7 @@ function makeMetaForField(
   };
 }
 
-async function cardClassFromResource<CardT extends CardConstructor>(
+async function cardClassFromResource<CardT extends CardBaseConstructor>(
   resource: LooseCardResource | undefined,
   fallback: CardT,
   relativeTo: URL | undefined
@@ -1985,8 +1988,8 @@ async function cardClassFromResource<CardT extends CardConstructor>(
 }
 
 function makeDescriptor<
-  CardT extends CardConstructor,
-  FieldT extends CardConstructor
+  CardT extends CardBaseConstructor,
+  FieldT extends CardBaseConstructor
 >(field: Field<FieldT>) {
   let descriptor: any = {
     enumerable: true,
@@ -2031,7 +2034,7 @@ function makeDescriptor<
   return descriptor;
 }
 
-function cardThunk<CardT extends CardConstructor>(
+function cardThunk<CardT extends CardBaseConstructor>(
   cardOrThunk: CardT | (() => CardT)
 ): () => CardT {
   if (!cardOrThunk) {
@@ -2046,7 +2049,7 @@ function cardThunk<CardT extends CardConstructor>(
   ) as () => CardT;
 }
 
-export type SignatureFor<CardT extends CardConstructor> = {
+export type SignatureFor<CardT extends CardBaseConstructor> = {
   Args: {
     model: PartialCardInstanceType<CardT>;
     fields: FieldsTypeFor<InstanceType<CardT>>;
@@ -2061,7 +2064,7 @@ export function getComponent(
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let box = Box.create(model);
   let component = getBoxComponent(
-    model.constructor as CardConstructor,
+    model.constructor as CardBaseConstructor,
     format,
     box
   );
@@ -2217,15 +2220,15 @@ export async function getIfReady<T extends CardBase, K extends keyof T>(
 export function getFields(
   card: typeof CardBase,
   opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean }
-): { [fieldName: string]: Field<CardConstructor> };
+): { [fieldName: string]: Field<CardBaseConstructor> };
 export function getFields<T extends CardBase>(
   card: T,
   opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean }
-): { [P in keyof T]?: Field<CardConstructor> };
+): { [P in keyof T]?: Field<CardBaseConstructor> };
 export function getFields(
   cardInstanceOrClass: CardBase | typeof CardBase,
   opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean }
-): { [fieldName: string]: Field<CardConstructor> } {
+): { [fieldName: string]: Field<CardBaseConstructor> } {
   let obj: object | null;
   let usedFields: string[] = [];
   if (isCard(cardInstanceOrClass)) {
@@ -2236,7 +2239,7 @@ export function getFields(
     // this is a card class
     obj = (cardInstanceOrClass as typeof CardBase).prototype;
   }
-  let fields: { [fieldName: string]: Field<CardConstructor> } = {};
+  let fields: { [fieldName: string]: Field<CardBaseConstructor> } = {};
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
     let descs = Object.getOwnPropertyDescriptors(obj);
     let currentFields = flatMap(Object.keys(descs), (maybeFieldName) => {
@@ -2267,14 +2270,14 @@ export function getFields(
 
 function getComputedFields<T extends CardBase>(
   card: T
-): { [P in keyof T]?: Field<CardConstructor> } {
+): { [P in keyof T]?: Field<CardBaseConstructor> } {
   let fields = Object.entries(getFields(card, { includeComputeds: true })) as [
     string,
-    Field<CardConstructor>
+    Field<CardBaseConstructor>
   ][];
   let computedFields = fields.filter(([_, field]) => field.computeVia);
   return Object.fromEntries(computedFields) as {
-    [P in keyof T]?: Field<CardConstructor>;
+    [P in keyof T]?: Field<CardBaseConstructor>;
   };
 }
 
@@ -2327,7 +2330,7 @@ export class Box<T> {
     }
   }
 
-  set = (value: T): void => {
+  set = <V extends T>(value: V): void => {
     this.value = value;
   };
 

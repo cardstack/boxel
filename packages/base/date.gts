@@ -5,7 +5,7 @@ import {
   deserialize,
   queryableValue,
   CardInstanceType,
-  CardConstructor,
+  CardBaseConstructor,
   CardBase,
 } from './card-api';
 import { parse, format } from 'date-fns';
@@ -28,7 +28,7 @@ export default class DateCard extends CardBase {
     return format(date, dateFormat);
   }
 
-  static async [deserialize]<T extends CardConstructor>(
+  static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
     date: any
   ): Promise<CardInstanceType<T>> {

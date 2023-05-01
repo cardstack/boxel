@@ -5,7 +5,7 @@ import {
   deserialize,
   queryableValue,
   Card,
-  CardConstructor,
+  CardBaseConstructor,
   CardInstanceType,
   CardBase,
   relativeTo,
@@ -30,7 +30,7 @@ export default class CardRefCard extends CardBase {
   static [serialize](cardRef: CardId) {
     return { ...cardRef }; // return a new object so that the model cannot be mutated from the outside
   }
-  static async [deserialize]<T extends CardConstructor>(
+  static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
     cardRef: CardId
   ): Promise<CardInstanceType<T>> {
