@@ -26,15 +26,21 @@ export class FetchHandler {
       return await fetch(request);
     }
 
-    let searchParams = new URL(request.url).searchParams;
+    let requestURL = new URL(request.url);
+    // Let matrix requests use native fetch
+    if (requestURL.port === '8008') {
+      return await fetch(request);
+    }
+
+    let searchParams = requestURL.searchParams;
     if (searchParams.get('dropcache') != null) {
       return await this.dropCaches();
     }
 
     if (!this.realm) {
       log.warn(`No realm is currently available`);
-    } else if (this.realm.paths.inRealm(new URL(request.url))) {
-      if (new URL(request.url).pathname === '/tests') {
+    } else if (this.realm.paths.inRealm(requestURL)) {
+      if (requestURL.pathname === '/tests') {
         // allow tests requests to go back to the ember-cli server
         return await fetch(request);
       }

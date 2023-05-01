@@ -81,6 +81,7 @@
     "@types/flat": "^5.0.2",
     "@types/htmlbars-inline-precompile": "^3.0.0",
     "@types/lodash": "^4.14.182",
+    "@types/matrix-js-sdk": "^11.0.1",
     "@types/qs": "^6.9.7",
     "@types/qunit": "^2.11.3",
     "@types/rsvp": "^4.0.4",
@@ -112,6 +113,7 @@
     "ember-focus-trap": "^1.0.1",
     "ember-freestyle": "^0.17.0",
     "ember-functions-as-helper-polyfill": "^2.0.1",
+    "ember-keyboard": "^8.2.0",
     "ember-load-initializers": "^2.1.2",
     "ember-modifier": "^3.2.1",
     "ember-moment": "^10.0.0",
@@ -135,6 +137,7 @@
     "loader.js": "^4.7.0",
     "lodash": "^4.17.21",
     "loglevel": "^1.8.1",
+    "matrix-js-sdk": "^25.0.0",
     "moment": "^2.29.4",
     "moment-locales-webpack-plugin": "^1.2.0",
     "monaco-editor": "^0.33.0",
@@ -169,8 +172,5 @@
   },
   "ember": {
     "edition": "octane"
-  },
-  "dependencies": {
-    "ember-keyboard": "^8.2.0"
   }
 }
