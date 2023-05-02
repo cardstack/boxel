@@ -89,6 +89,10 @@ export default class MatrixRegister extends Component {
         token: string;
         session: string;
       }
+    // TODO we'll need to also add a CAPTCHA state
+    // this will be probably impossible to test
+    // since the whole point of CAPTCHA is to detect
+    // human interaction
     | {
         type: 'login';
         username: string;
