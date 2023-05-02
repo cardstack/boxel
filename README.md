@@ -90,7 +90,7 @@ pnpm stop:synapse
 
 #### Matrix Administration
 
-Matrix administration requires an administrative user and a special client in order to use. Matrix administration is used for creating users, creating rooms, creating registration tokens, managing media, viewing events, etc.
+Matrix administration requires an administrative user and a special client in order to use. Matrix administration is used for creating users, creating rooms, creating registration tokens, managing media, viewing events, etc. Note that you will need to use the matrix administration UI to create tokens to register new matrix users.
 
 First you must create an administrative user:
 1. start the matrix server `pnpm start:synapse`
