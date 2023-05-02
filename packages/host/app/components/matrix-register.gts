@@ -47,10 +47,9 @@ export default class MatrixRegister extends Component {
             />
           </FieldContainer>
           <FieldContainer @label='Password:' @tag='label'>
-            {{! TODO create a boxel masked input field }}
             <BoxelInput
               data-test-password-field
-              type='text'
+              type='password'
               @value={{this.password}}
               @onInput={{this.setPassword}}
             />
