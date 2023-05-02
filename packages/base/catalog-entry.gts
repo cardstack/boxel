@@ -15,6 +15,7 @@ import { isEqual } from 'lodash';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
 export class CatalogEntry extends Card {
+  @field title = contains(StringCard);
   @field description = contains(StringCard);
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, {

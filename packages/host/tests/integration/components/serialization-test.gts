@@ -2914,7 +2914,7 @@ module('Integration | serialization', function (hooks) {
         attributes: {
           birthdate: '2019-10-30',
           firstBirthday: '2020-10-30',
-          _metadata: { title: 'Person' },
+          title: 'Person',
         },
         meta: {
           adoptsFrom: {

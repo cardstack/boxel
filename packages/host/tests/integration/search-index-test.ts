@@ -824,11 +824,6 @@ module('Integration | search-index', function (hooks) {
       export class Appointment extends Card {
         @field title = contains(StringCard);
         @field contact = contains(() => PersonCard);
-        @field title = contains(StringCard, {
-          computeVia: function (this: Appointment) {
-            return this.title;
-          },
-        });
       }
     `,
       'pet-card.gts': `
@@ -841,7 +836,7 @@ module('Integration | search-index', function (hooks) {
         @field appointment = contains(() => Appointment);
         @field title = contains(StringCard, {
           computeVia: function (this: Appointment) {
-            return this.title;
+            return this.firstName;
           },
         });
       }`,
@@ -2411,7 +2406,6 @@ module('Integration | search-index', function (hooks) {
         'http://localhost:4201/base/integer',
         'http://localhost:4201/base/links-to-editor',
         'http://localhost:4201/base/links-to-many-component',
-        'http://localhost:4201/base/metadata',
         'http://localhost:4201/base/string',
         'http://localhost:4201/base/watched-array',
         'http://localhost:4202/test/person',

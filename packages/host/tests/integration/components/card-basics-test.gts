@@ -1005,6 +1005,11 @@ module('Integration | card-basics', function (hooks) {
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field isCool = contains(BooleanCard);
+      @field title = contains(StringCard, {
+        computeVia(this: Person) {
+          return this.firstName;
+        },
+      });
     }
     await shimModule(`${testRealmURL}test-cards`, { Person });
 
@@ -1012,7 +1017,7 @@ module('Integration | card-basics', function (hooks) {
     let root = await renderCard(mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'Mango isCool: true'
+      'Mango isCool: true Mango'
     );
   });
 
