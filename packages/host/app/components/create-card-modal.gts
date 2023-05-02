@@ -13,7 +13,13 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
 import { CardContainer, Header } from '@cardstack/boxel-ui';
 
-export default class CreateCardModal extends Component {
+interface Signature {
+  Args: {
+    nextAction?: (card: Card) => void;
+  };
+}
+
+export default class CreateCardModal extends Component<Signature> {
   <template>
     {{#let this.currentRequest.card as |card|}}
       {{#if card}}
@@ -77,6 +83,9 @@ export default class CreateCardModal extends Component {
       };
       let card = await this.currentRequest.deferred.promise;
       if (card) {
+        if (this.args.nextAction) {
+          this.args.nextAction(card);
+        }
         return card as T;
       } else {
         return undefined;

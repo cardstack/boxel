@@ -59,6 +59,7 @@ export default class OperatorMode extends Component<Signature> {
     this.searchSheetMode = SearchSheetMode.Closed;
   }
 
+  @action
   addToStack(card: CardAPI.Card) {
     this.addCardToStack.perform(card);
   }
@@ -88,7 +89,9 @@ export default class OperatorMode extends Component<Signature> {
     let index = this.stack.indexOf(card);
     this.stack.splice(index);
     this.stack = this.stack;
-    this.args.onClose();
+    if (this.stack.length === 0) {
+      this.args.onClose();
+    }
   }
 
   @action async cancel(card: Card) {
@@ -173,6 +176,7 @@ export default class OperatorMode extends Component<Signature> {
               }}
             >
               <Preview @card={{card}} @format={{this.getFormat card}} />
+              <CreateCardModal @nextAction={{this.addToStack}} />
             </div>
             <div class='operator-mode-card-stack__card__header'>
               {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
