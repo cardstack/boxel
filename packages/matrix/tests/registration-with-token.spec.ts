@@ -50,4 +50,55 @@ test.describe('User Registration w/ Token', () => {
       page.locator('[data-test-registration-complete]')
     ).toContainText('@user1:localhost has been created');
   });
+
+  test('it shows an error when the username is already taken', async ({
+    page,
+  }) => {
+    await registerUser(synapse, 'user1', 'pass');
+
+    await page.goto(`/chat`);
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword');
+    await expect(
+      page.locator(
+        '[data-test-username-field] [data-test-boxel-input-validation-state="initial"]'
+      ),
+      'username field displays initial validation state'
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-username-field] [data-test-boxel-input-error-message]'
+      ),
+      'no error message is displayed'
+    ).toHaveCount(0);
+    await page.locator('[data-test-register-btn]').click();
+
+    await expect(
+      page.locator(
+        '[data-test-username-field] [data-test-boxel-input-validation-state="invalid"]'
+      ),
+      'username field displays invalid validation state'
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-username-field] [data-test-boxel-input-error-message]'
+      )
+    ).toContainText('User ID already taken');
+
+    await page.locator('[data-test-username-field]').fill('user2');
+    await expect(
+      page.locator(
+        '[data-test-username-field] [data-test-boxel-input-error-message]'
+      ),
+      'no error message is displayed'
+    ).toHaveCount(0);
+    await page.locator('[data-test-register-btn]').click();
+
+    await page.locator('[data-test-token-field]').fill('abc123');
+    await page.locator('[data-test-next-btn]').click();
+
+    await expect(
+      page.locator('[data-test-registration-complete]')
+    ).toContainText('@user2:localhost has been created');
+  });
 });

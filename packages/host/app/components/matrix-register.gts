@@ -5,7 +5,12 @@ import { on } from '@ember/modifier';
 import { eq } from '../helpers/truth-helpers';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
-import { BoxelInput, Button, FieldContainer } from '@cardstack/boxel-ui';
+import {
+  BoxelInput,
+  BoxelInputValidationState,
+  Button,
+  FieldContainer,
+} from '@cardstack/boxel-ui';
 import difference from 'lodash/difference';
 import type MatrixService from '../services/matrix-service';
 import { type IAuthData } from 'matrix-js-sdk';
@@ -43,10 +48,12 @@ export default class MatrixRegister extends Component {
         {{/if}}
         {{#if (eq this.state.type 'initial')}}
           <FieldContainer @label='Username:' @tag='label'>
-            <BoxelInput
+            <BoxelInputValidationState
               data-test-username-field
-              type='text'
-              @value={{this.username}}
+              @id=''
+              @state={{this.usernameInputState}}
+              @value={{this.cleanUsername}}
+              @errorMessage={{this.usernameError}}
               @onInput={{this.setUsername}}
             />
           </FieldContainer>
@@ -68,6 +75,8 @@ export default class MatrixRegister extends Component {
     {{/if}}
   </template>
 
+  @tracked
+  private usernameError: string | undefined;
   @tracked
   private username: string | undefined;
   @tracked
@@ -120,6 +129,14 @@ export default class MatrixRegister extends Component {
     return !this.token;
   }
 
+  get cleanUsername() {
+    return this.username || '';
+  }
+
+  get usernameInputState() {
+    return this.usernameError ? 'invalid' : 'initial';
+  }
+
   @action
   setToken(token: string) {
     this.token = token;
@@ -127,8 +144,8 @@ export default class MatrixRegister extends Component {
 
   @action
   setUsername(username: string) {
-    // TODO the element UI app actually checks for a used username here....
     this.username = username;
+    this.usernameError = undefined;
   }
 
   @action
@@ -139,9 +156,13 @@ export default class MatrixRegister extends Component {
   @action
   register() {
     if (!this.username) {
-      // TODO show username error state
+      throw new Error(
+        `bug: should never get here: register button disabled when no username`
+      );
     } else if (!this.password) {
-      // TODO show password error state
+      throw new Error(
+        `bug: should never get here: register button disabled when no password`
+      );
     } else {
       this.state = {
         type: 'register',
@@ -224,8 +245,10 @@ export default class MatrixRegister extends Component {
         }
         let nextStage = remainingStages[0];
         this.nextStateFromResponse(nextStage, maybeRegistrationFlow);
+      } else if (isMatrixError(e) && e.errcode === 'M_USER_IN_USE') {
+        this.usernameError = e.data.error;
+        this.state = { type: 'initial' };
       } else {
-        // TODO handle HTTP 400 {"errcode":"M_USER_IN_USE","error":"User ID already taken."}
         throw e;
       }
     }
@@ -313,6 +336,31 @@ function isRegistrationFlows(
     return registration.flows.every((f: any) => isFlow(f));
   }
   return false;
+}
+
+interface MatrixError {
+  data: {
+    errcode: string;
+    error: string;
+  };
+  httpStatus: number;
+  errcode: string;
+}
+
+function isMatrixError(err: any): err is MatrixError {
+  return (
+    typeof err === 'object' &&
+    'data' in err &&
+    typeof err.data === 'object' &&
+    'errcode' in err.data &&
+    typeof err.data.errcode === 'string' &&
+    'error' in err.data &&
+    typeof err.data.error === 'string' &&
+    'httpStatus' in err &&
+    typeof err.httpStatus === 'number' &&
+    'errcode' in err &&
+    typeof err.errcode === 'string'
+  );
 }
 
 declare module '@glint/environment-ember-loose/registry' {
