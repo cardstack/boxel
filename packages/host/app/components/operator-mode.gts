@@ -158,9 +158,12 @@ export default class OperatorMode extends Component<Signature> {
       @boxelModalOverlayColor='#686283'
     >
       <CardCatalogModal />
-      <div class='operator-mode-card-stack'>
-        {{#each this.stack as |card|}}
-          <div class='operator-mode-card-stack__card'>
+      <div class='stack'>
+        {{#each this.stack as |card i|}}
+          <div
+            class='stack-card stack-card--{{this.cardNo this.stack.length i}}'
+            data-test={{i}}
+          >
             <div
               class={{cn
                 'operator-mode-card-stack__card__item'
@@ -170,7 +173,6 @@ export default class OperatorMode extends Component<Signature> {
               }}
             >
               <Preview @card={{card}} @format={{this.getFormat card}} />
-              <CreateCardModal />
             </div>
             <div class='operator-mode-card-stack__card__header'>
               {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
@@ -220,6 +222,11 @@ export default class OperatorMode extends Component<Signature> {
       />
     </Modal>
   </template>
+
+  cardNo(count: number, i: number) {
+    // 0 is the topmost card, 1 is the second card, etc.
+    return count - (i + 1);
+  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {

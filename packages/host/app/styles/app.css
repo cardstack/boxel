@@ -1,3 +1,7 @@
+:root {
+  --search-sheet-closed-height: 59px;
+}
+
 /* Go template */
 .main {
   position: relative;
@@ -494,7 +498,7 @@ nav>.directory-level {
 }
 
 .search-sheet--closed {
-  height: 59px;
+  height: var(--search-sheet-closed-height);
   padding: 0;
 }
 
@@ -608,4 +612,44 @@ nav>.directory-level {
 
 .search-input__input:focus {
   outline: none;
+}
+
+
+/* stacked cards */
+.stack {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  max-width: 50rem;
+  display: flex;
+  justify-content: center;
+  padding-top: var(--boxel-sp);
+  padding-bottom: var(--search-sheet-closed-height);
+}
+.stack-card {
+  --translate-unit: 45px;
+  justify-self: center;
+  position: absolute;
+  transform: translateY(0);
+  width: 89%;
+  z-index: 0;
+  overflow: hidden;
+  box-shadow:0 15px 30px 0 rgb(0 0 0 / 35%);
+}
+
+.stack-card--0 {
+  transform: translateY(calc(var(--translate-unit) * 2));
+  width: 100%;
+  z-index: 3;
+}
+
+.stack-card--1 {
+  transform: translateY(var(--translate-unit));
+  width: 95%;
+  z-index: 2;
+}
+
+.stack-card--2 {
+  transform: translateY(0);
+  z-index: 1;
 }
