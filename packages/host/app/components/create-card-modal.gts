@@ -11,32 +11,31 @@ import { service } from '@ember/service';
 import type CardService from '../services/card-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
-import { CardContainer, Header } from '@cardstack/boxel-ui';
+import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
 
-interface Signature {
-  Args: {
-    nextAction?: (card: Card) => void;
-  };
-}
-
-export default class CreateCardModal extends Component<Signature> {
+export default class CreateCardModal extends Component {
   <template>
     {{#let this.currentRequest.card as |card|}}
       {{#if card}}
-        <CardContainer
-          @displayBoundaries={{true}}
+        <Modal
+          @size='large'
+          @isOpen={{true}}
+          @onClose={{fn this.save undefined}}
+          style='z-index:{{this.zIndex}}'
           data-test-create-new-card={{card.constructor.name}}
         >
-          <Header @title='Create New Card'>
-            <button
-              {{on 'click' (fn this.save undefined)}}
-              class='dialog-box__close'
-            >x</button>
-          </Header>
-          <div class='dialog-box__content'>
-            <CardEditor @card={{card}} @onSave={{this.save}} />
-          </div>
-        </CardContainer>
+          <CardContainer class='dialog-box' @displayBoundaries={{true}}>
+            <Header @title='Create New Card'>
+              <button
+                {{on 'click' (fn this.save undefined)}}
+                class='dialog-box__close'
+              >x</button>
+            </Header>
+            <div class='dialog-box__content'>
+              <CardEditor @card={{card}} @onSave={{this.save}} />
+            </div>
+          </CardContainer>
+        </Modal>
       {{/if}}
     {{/let}}
   </template>
@@ -83,9 +82,6 @@ export default class CreateCardModal extends Component<Signature> {
       };
       let card = await this.currentRequest.deferred.promise;
       if (card) {
-        if (this.args.nextAction) {
-          this.args.nextAction(card);
-        }
         return card as T;
       } else {
         return undefined;
