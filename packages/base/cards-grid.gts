@@ -6,7 +6,6 @@ import { CardContainer, IconButton } from '@cardstack/boxel-ui';
 import {
   chooseCard,
   catalogEntryRef,
-  createNewCard,
   isCardCatalogAvailable,
 } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
@@ -23,7 +22,7 @@ class Isolated extends Component<typeof CardsGrid> {
           @tooltip='Add a new card to this collection'
           @tooltipPosition='left'
           class='add-button cards-grid__add-button'
-          {{on 'click' this.createNew}}
+          {{on 'click' this.selectCard}}
           data-test-create-new-card-button
         />
       {{/if}}
@@ -35,29 +34,18 @@ class Isolated extends Component<typeof CardsGrid> {
   }
 
   @action
-  async createNew() {
-    this.createNewCard.perform();
+  selectCard() {
+    this.selectNewCard.perform();
   }
 
-  private createNewCard = restartableTask(async () => {
+  private selectNewCard = restartableTask(async () => {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
         eq: { isPrimitive: false },
       },
     });
-    if (!card) {
-      return;
-    }
-    let newCard = await createNewCard(card.ref, new URL(card.id));
-    if (!newCard) {
-      throw new Error(
-        `bug: could not create new card from catalog entry ${JSON.stringify(
-          catalogEntryRef
-        )}`
-      );
-    }
-    return newCard;
+    return card;
   });
 }
 

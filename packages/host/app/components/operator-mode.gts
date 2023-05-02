@@ -5,7 +5,6 @@ import Preview from './preview';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import type CardService from '../services/card-service';
 import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
@@ -96,17 +95,30 @@ export default class OperatorMode extends Component<Signature> {
 
   @action async cancel(card: Card) {
     await this.rollbackCardFieldValues(card);
+    if (!card.id) {
+      // canceling a new card creation also closes the editor
+      return this.close(card);
+    }
     this.formats.set(card, 'isolated');
   }
 
   @action async save(card: Card) {
+    let index: number | undefined = undefined;
+    if (!card.id) {
+      index = this.stack.indexOf(card);
+    }
     await this.saveCardFieldValues(card);
-    this.write.perform(card);
+    let updatedCard = await this.write.perform(card);
+    if (index && updatedCard) {
+      this.stack.splice(index); // remove new card editor
+      this.addToStack(updatedCard);
+    }
   }
 
   private write = restartableTask(async (card: Card) => {
     let updatedCard = await this.cardService.saveModel(card);
     this.formats.set(updatedCard, 'isolated');
+    return updatedCard;
   });
 
   private async saveCardFieldValues(card: Card) {
@@ -160,7 +172,7 @@ export default class OperatorMode extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='#686283'
     >
-      <CardCatalogModal />
+      <CardCatalogModal @onSelect={{this.createNew}} />
       <div class='stack'>
         {{#each this.stack as |card i|}}
           <div
@@ -176,7 +188,6 @@ export default class OperatorMode extends Component<Signature> {
               }}
             >
               <Preview @card={{card}} @format={{this.getFormat card}} />
-              <CreateCardModal @nextAction={{this.addToStack}} />
             </div>
             <div class='operator-mode-card-stack__card__header'>
               {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
@@ -230,6 +241,26 @@ export default class OperatorMode extends Component<Signature> {
   cardNo(count: number, i: number) {
     // 0 is the topmost card, 1 is the second card, etc.
     return count - (i + 1);
+  }
+
+  @action
+  createNew(card: Card) {
+    if (!card) {
+      throw new Error('Cannot create a new card without a card type');
+    }
+    if (card.constructor.name !== 'CatalogEntry') {
+      throw new Error('Card is not a catalog entry');
+    }
+    if (!('demo' in card)) {
+      if (!('ref' in card)) {
+        throw new Error('Cannot create a new card without a card type');
+      }
+      // TODO: using ref to create new card
+      throw new Error('todo');
+    }
+    let newCard = new (card.demo as Card).constructor();
+    this.stack.push(newCard);
+    this.formats.set(newCard, 'edit');
   }
 }
 

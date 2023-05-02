@@ -13,7 +13,13 @@ import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
 import { Modal, CardContainer, Header, Button } from '@cardstack/boxel-ui';
 
-export default class CardCatalogModal extends Component {
+interface Signature {
+  Args: {
+    onSelect?: (card: Card) => void;
+  };
+}
+
+export default class CardCatalogModal extends Component<Signature> {
   <template>
     {{#if this.currentRequest}}
       <Modal
@@ -107,6 +113,9 @@ export default class CardCatalogModal extends Component {
       };
       let card = await this.currentRequest.deferred.promise;
       if (card) {
+        if (this.args.onSelect) {
+          this.args.onSelect(card);
+        }
         return card as T;
       } else {
         return undefined;
