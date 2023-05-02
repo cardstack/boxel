@@ -14,9 +14,9 @@ import {
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
 import type {
+  Card,
   CardBase,
   Field,
-  CardConstructor,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
@@ -73,7 +73,7 @@ export default class CardService extends Service {
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo: URL
-  ): Promise<CardBase> {
+  ): Promise<Card> {
     await this.apiModule.loaded;
     let card = await this.api.createFromSerialized(resource, doc, relativeTo, {
       loader: this.loaderService.loader,
@@ -84,10 +84,10 @@ export default class CardService extends Service {
     // (this is something that the card compiler could optimize for us in the
     // future)
     await this.api.recompute(card, { recomputeAllFields: true });
-    return card;
+    return card as Card;
   }
 
-  async loadModel(url: URL): Promise<CardBase> {
+  async loadModel(url: URL): Promise<Card> {
     await this.apiModule.loaded;
     let json = await this.fetchJSON(url);
     if (!isSingleCardDocument(json)) {
@@ -103,7 +103,7 @@ export default class CardService extends Service {
     );
   }
 
-  async saveModel(card: CardBase): Promise<CardBase> {
+  async saveModel(card: Card): Promise<Card> {
     await this.apiModule.loaded;
     let doc = this.api.serializeCard(card, { includeComputeds: true });
     let isSaved = this.api.isSaved(card);
@@ -113,7 +113,7 @@ export default class CardService extends Service {
       card.id ? new URL(card.id) : undefined
     );
     if (isSaved) {
-      return await this.api.updateFromSerialized(card, json);
+      return (await this.api.updateFromSerialized(card, json)) as Card;
     }
     return await this.createFromSerialized(json.data, json, relativeTo);
   }
@@ -137,7 +137,7 @@ export default class CardService extends Service {
     return json;
   }
 
-  async search(query: Query, realmURL: URL): Promise<CardBase[]> {
+  async search(query: Query, realmURL: URL): Promise<Card[]> {
     let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
     if (!isCardCollectionDocument(json)) {
       throw new Error(
@@ -148,7 +148,7 @@ export default class CardService extends Service {
     // TODO the fact that the loader cannot handle a concurrent form of this is
     // indicative of a loader issue. Need to work with Ed around this as I think
     // there is probably missing state in our loader's state machine.
-    let results: CardBase[] = [];
+    let results: Card[] = [];
     for (let doc of json.data) {
       results.push(await this.createFromSerialized(doc, json, new URL(doc.id)));
     }
@@ -157,7 +157,7 @@ export default class CardService extends Service {
 
   async getFields(
     card: CardBase
-  ): Promise<{ [fieldName: string]: Field<CardConstructor> }> {
+  ): Promise<{ [fieldName: string]: Field<typeof CardBase> }> {
     await this.apiModule.loaded;
     return this.api.getFields(card, { includeComputeds: true });
   }

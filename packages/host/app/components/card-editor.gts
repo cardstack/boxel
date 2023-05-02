@@ -5,17 +5,17 @@ import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
 import { service } from '@ember/service';
 import type CardService from '../services/card-service';
-import type { CardBase, Format } from 'https://cardstack.com/base/card-api';
+import type { Card, Format } from 'https://cardstack.com/base/card-api';
 import FormatPicker from './format-picker';
 import Preview from './preview';
 import Button from '@cardstack/boxel-ui/components/button';
 
 interface Signature {
   Args: {
-    card: CardBase;
+    card: Card;
     format?: Format;
     onCancel?: () => void;
-    onSave?: (card: CardBase) => void;
+    onSave?: (card: Card) => void;
   };
 }
 

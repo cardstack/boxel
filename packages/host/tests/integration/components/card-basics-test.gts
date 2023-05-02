@@ -295,6 +295,7 @@ module('Integration | card-basics', function (hooks) {
 
     class Person extends Card {
       @field firstName = contains(StringCard);
+      // @ts-expect-error Have to purposefully bypass type-checking in order to get into this runtime error state
       @field pet = linksTo(StringCard);
     }
     await shimModule(`${testRealmURL}test-cards`, { Person });
@@ -311,6 +312,7 @@ module('Integration | card-basics', function (hooks) {
 
     let hassan = new Person({ firstName: 'Hassan' });
     try {
+      // @ts-expect-error Have to purposefully bypass type-checking in order to get into this runtime error state
       hassan.pet = 'Mango';
       throw new Error('expected error was not thrown');
     } catch (err: any) {

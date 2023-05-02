@@ -1990,7 +1990,7 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(mangoEntry.searchData, {
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
-       title: 'Mango'
+        title: 'Mango',
         friend: {
           id: `${testRealmURL}Friend/hassan`,
           firstName: 'Hassan',

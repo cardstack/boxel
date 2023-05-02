@@ -1,5 +1,5 @@
 import {
-  type CardConstructor,
+  type CardBaseConstructor,
   type Field,
   type CardBase,
 } from 'https://cardstack.com/base/card-api';
@@ -136,14 +136,14 @@ export function identifyCard(card: unknown): CardRef | undefined {
   }
 }
 
-export function getField<CardT extends CardConstructor>(
+export function getField<CardT extends CardBaseConstructor>(
   card: CardT,
   fieldName: string
-): Field<CardConstructor> | undefined {
+): Field<CardBaseConstructor> | undefined {
   let obj: object | null = card.prototype;
   while (obj) {
     let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
-    let result: Field<CardConstructor> | undefined = (desc?.get as any)?.[
+    let result: Field<CardBaseConstructor> | undefined = (desc?.get as any)?.[
       isField
     ];
     if (result !== undefined && isCard(result.card)) {
@@ -160,8 +160,8 @@ export function getField<CardT extends CardConstructor>(
 }
 
 export function getAncestor(
-  card: CardConstructor
-): CardConstructor | undefined {
+  card: CardBaseConstructor
+): CardBaseConstructor | undefined {
   let superCard = Reflect.getPrototypeOf(card);
   if (isCard(superCard)) {
     localIdentities.set(superCard, {

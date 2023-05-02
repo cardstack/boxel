@@ -23,7 +23,6 @@ let cardRef: typeof import('https://cardstack.com/base/card-ref');
 let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
 let integer: typeof import('https://cardstack.com/base/integer');
-let metadata: typeof import('https://cardstack.com/base/metadata');
 let string: typeof import('https://cardstack.com/base/string');
 
 module('Integration | serialization', function (hooks) {
@@ -43,7 +42,6 @@ module('Integration | serialization', function (hooks) {
     );
 
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
-    metadata = await Loader.import(`${baseRealm.url}metadata`);
     string = await Loader.import(`${baseRealm.url}string`);
     integer = await Loader.import(`${baseRealm.url}integer`);
     date = await Loader.import(`${baseRealm.url}date`);

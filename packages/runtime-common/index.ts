@@ -90,7 +90,7 @@ export {
   isSingleCardDocument,
 } from './card-document';
 
-import type { CardBase } from 'https://cardstack.com/base/card-api';
+import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
@@ -129,7 +129,7 @@ export interface CardCreator {
   ): Promise<undefined | T>;
 }
 
-export async function createNewCard<T extends CardBase>(
+export async function createNewCard<T extends Card>(
   ref: CardRef,
   relativeTo: URL | undefined
 ): Promise<undefined | T> {

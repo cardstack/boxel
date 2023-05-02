@@ -6,7 +6,7 @@ import { service } from '@ember/service';
 import flatMap from 'lodash/flatMap';
 import type CardService from '../services/card-service';
 import type { Query } from '@cardstack/runtime-common/query';
-import type { CardBase } from 'https://cardstack.com/base/card-api';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {
@@ -15,7 +15,7 @@ interface Args {
 }
 
 export class Search extends Resource<Args> {
-  @tracked instances: CardBase[] = [];
+  @tracked instances: Card[] = [];
   @service declare cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {

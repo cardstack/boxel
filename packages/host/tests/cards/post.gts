@@ -15,11 +15,6 @@ export class Post extends Card {
   @field author = contains(Person);
   @field views = contains(IntegerCard);
   @field createdAt = contains(DatetimeCard);
-  @field title = contains(StringCard, {
-    computeVia: function (this: Post) {
-      return this.title;
-    },
-  });
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <h1><@fields.title />

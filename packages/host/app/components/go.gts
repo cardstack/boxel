@@ -26,7 +26,7 @@ import {
 } from '../utils/editor-language';
 import monacoModifier from '../modifiers/monaco';
 import type * as monaco from 'monaco-editor';
-import type { CardBase } from 'https://cardstack.com/base/card-api';
+import type { Card } from 'https://cardstack.com/base/card-api';
 import InLocalRealm from './in-local-realm';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
@@ -131,7 +131,7 @@ export default class Go extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked jsonError: string | undefined;
-  @tracked card: CardBase | undefined;
+  @tracked card: Card | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -222,7 +222,7 @@ export default class Go extends Component<Signature> {
   });
 
   @action
-  onSave(card: CardBase) {
+  onSave(card: Card) {
     this.card = card;
   }
 

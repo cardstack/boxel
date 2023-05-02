@@ -14,7 +14,7 @@ import { hash } from '@ember/helper';
 import { getSearchResults } from '../resources/search';
 import type CardService from '../services/card-service';
 import CardEditor from './card-editor';
-import { type CardBase } from 'https://cardstack.com/base/card-api';
+import { type Card } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer } from '@cardstack/boxel-ui';
 
 interface Signature {
@@ -79,8 +79,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
       eq: { ref: this.args.ref },
     },
   }));
-  @tracked entry: CardBase | undefined;
-  @tracked newEntry: CardBase | undefined;
+  @tracked entry: Card | undefined;
+  @tracked newEntry: Card | undefined;
 
   get card() {
     return this.entry ?? this.catalogEntry.instances[0];
@@ -117,7 +117,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
   }
 
   @action
-  onSave(card: CardBase) {
+  onSave(card: Card) {
     this.entry = card;
   }
 }
