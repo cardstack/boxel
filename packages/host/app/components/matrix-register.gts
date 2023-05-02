@@ -181,7 +181,9 @@ export default class MatrixRegister extends Component {
       );
     }
     if (!this.token) {
-      // TODO show token error state
+      throw new Error(
+        `bug: should never get here: next button disabled when no token`
+      );
     } else {
       this.state = {
         ...this.state,
