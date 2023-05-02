@@ -806,6 +806,7 @@ importers:
       qunit: ^2.18.0
       qunit-dom: ^2.0.0
       start-server-and-test: ^1.14.0
+      stream-browserify: ^3.0.0
       tracked-built-ins: ^2.0.1
       typescript: ^4.6.3
       webpack: ^5.69.1
@@ -933,6 +934,7 @@ importers:
       qunit: 2.19.3
       qunit-dom: 2.0.0
       start-server-and-test: 1.14.0
+      stream-browserify: 3.0.0
       tracked-built-ins: 2.0.1
       typescript: 4.9.3
       webpack: 5.75.0
@@ -20542,6 +20544,13 @@ packages:
     dependencies:
       inherits: 2.0.4
       readable-stream: 2.3.7
+    dev: true
+
+  /stream-browserify/3.0.0:
+    resolution: {integrity: sha512-H73RAHsVBapbim0tU2JwwOiXUj+fikfiaoYAKHF3VJfA0pe2BCzkhAHBlLG6REzE+2WNZcxOXjK7lkso+9euLA==}
+    dependencies:
+      inherits: 2.0.4
+      readable-stream: 3.6.0
     dev: true
 
   /stream-combiner/0.0.4:
