@@ -30,15 +30,20 @@ test.describe('User Registration w/ Token', () => {
       page.locator('[data-test-token-field]'),
       'token field is not displayed'
     ).toHaveCount(0);
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
     await page.locator('[data-test-password-field]').fill('mypassword');
+    await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
     await page.locator('[data-test-register-btn]').click();
 
     await expect(
       page.locator('[data-test-username-field]'),
       'username field is not displayed'
     ).toHaveCount(0);
+    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
     await page.locator('[data-test-token-field]').fill('abc123');
+    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
     await expect(

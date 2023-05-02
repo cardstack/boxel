@@ -35,7 +35,11 @@ export default class MatrixRegister extends Component {
               @onInput={{this.setToken}}
             />
           </FieldContainer>
-          <Button data-test-next-btn {{on 'click' this.sendToken}}>Next</Button>
+          <Button
+            data-test-next-btn
+            @disabled={{this.isNextButtonDisabled}}
+            {{on 'click' this.sendToken}}
+          >Next</Button>
         {{/if}}
         {{#if (eq this.state.type 'initial')}}
           <FieldContainer @label='Username:' @tag='label'>
@@ -54,9 +58,9 @@ export default class MatrixRegister extends Component {
               @onInput={{this.setPassword}}
             />
           </FieldContainer>
-          {{! TODO disable button until both username and password are provided }}
           <Button
             data-test-register-btn
+            @disabled={{this.isRegisterButtonDisabled}}
             {{on 'click' this.register}}
           >Register</Button>
         {{/if}}
@@ -64,8 +68,11 @@ export default class MatrixRegister extends Component {
     {{/if}}
   </template>
 
+  @tracked
   private username: string | undefined;
+  @tracked
   private password: string | undefined;
+  @tracked
   private token: string | undefined;
   @tracked
   private state:
@@ -104,6 +111,14 @@ export default class MatrixRegister extends Component {
       } = { type: 'initial' };
 
   @service declare matrixService: MatrixService;
+
+  get isRegisterButtonDisabled() {
+    return !this.username || !this.password;
+  }
+
+  get isNextButtonDisabled() {
+    return !this.token;
+  }
 
   @action
   setToken(token: string) {
