@@ -15,7 +15,7 @@ export class Person extends Card {
   …
 ```
 
-You can also specify the name of the computation function as a string instead of inlining it:
+You can also specify the name of the computation function on the class as a string instead of inlining it:
 
 ```typescript
 @field fullName = contains(StringCard, { computeVia: 'getFullName' });
