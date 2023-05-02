@@ -171,7 +171,7 @@ export async function synapseStop(id: string): Promise<void> {
   console.log(`Stopped synapse id ${id}.`);
 }
 
-interface Credentials {
+export interface Credentials {
   accessToken: string;
   userId: string;
   deviceId: string;
@@ -182,15 +182,21 @@ export async function registerUser(
   synapse: SynapseInstance,
   username: string,
   password: string,
+  admin = false,
   displayName?: string
 ): Promise<Credentials> {
   const url = `${synapse.baseUrl}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
   const { nonce } = await (await context.get(url)).json();
-  const mac = crypto
-    .createHmac('sha1', synapse.registrationSecret)
-    .update(`${nonce}\0${username}\0${password}\0notadmin`)
-    .digest('hex');
+  const mac = admin
+    ? crypto
+        .createHmac('sha1', synapse.registrationSecret)
+        .update(`${nonce}\0${username}\0${password}\0admin`)
+        .digest('hex')
+    : crypto
+        .createHmac('sha1', synapse.registrationSecret)
+        .update(`${nonce}\0${username}\0${password}\0notadmin`)
+        .digest('hex');
   const response = await (
     await context.post(url, {
       data: {
@@ -198,7 +204,7 @@ export async function registerUser(
         username,
         password,
         mac,
-        admin: false,
+        admin,
         displayname: displayName,
       },
     })
@@ -209,4 +215,29 @@ export async function registerUser(
     userId: response.user_id,
     deviceId: response.device_id,
   };
+}
+
+export async function createRegistrationToken(
+  adminAccessToken: string,
+  registrationToken: string,
+  usesAllowed = 1000
+) {
+  let res = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/registration_tokens/new`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${adminAccessToken}`,
+      },
+      body: JSON.stringify({
+        token: registrationToken,
+        uses_allowed: usesAllowed,
+      }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(
+      `could not create registration token: ${res.status} - ${await res.text()}`
+    );
+  }
 }

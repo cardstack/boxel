@@ -29,16 +29,18 @@ export default class MatrixRegister extends Component {
         {{#if (eq this.state.type 'askForToken')}}
           <FieldContainer @label='Registration Token:' @tag='label'>
             <BoxelInput
+              data-test-token-field
               type='text'
               @value={{this.token}}
               @onInput={{this.setToken}}
             />
           </FieldContainer>
-          <Button {{on 'click' this.sendToken}}>Next</Button>
+          <Button data-test-next-btn {{on 'click' this.sendToken}}>Next</Button>
         {{/if}}
         {{#if (eq this.state.type 'initial')}}
           <FieldContainer @label='Username:' @tag='label'>
             <BoxelInput
+              data-test-username-field
               type='text'
               @value={{this.username}}
               @onInput={{this.setUsername}}
@@ -47,13 +49,17 @@ export default class MatrixRegister extends Component {
           <FieldContainer @label='Password:' @tag='label'>
             {{! TODO create a boxel masked input field }}
             <BoxelInput
+              data-test-password-field
               type='text'
               @value={{this.password}}
               @onInput={{this.setPassword}}
             />
           </FieldContainer>
-          {{! TODO disbale button until both username and password are provided }}
-          <Button {{on 'click' this.register}}>Register</Button>
+          {{! TODO disable button until both username and password are provided }}
+          <Button
+            data-test-register-btn
+            {{on 'click' this.register}}
+          >Register</Button>
         {{/if}}
       </fieldset>
     {{/if}}
