@@ -124,14 +124,8 @@ jobs:
         run: pnpm exec playwright install --with-deps
         working-directory: packages/matrix
       - name: Run Playwright tests
-        run: pnpm exec playwright test
+        run: pnpm test
         working-directory: packages/matrix
-      - name: Start base realm server
-        run: pnpm start:base &
-        working-directory: packages/realm-server
-      - name: serve host app
-        run: pnpm start
-        working-directory: packages/host
       - uses: actions/upload-artifact@v3
         if: always()
         with:
