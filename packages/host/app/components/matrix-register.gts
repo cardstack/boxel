@@ -225,6 +225,7 @@ export default class MatrixRegister extends Component {
         let nextStage = remainingStages[0];
         this.nextStateFromResponse(nextStage, maybeRegistrationFlow);
       } else {
+        // TODO handle HTTP 400 {"errcode":"M_USER_IN_USE","error":"User ID already taken."}
         throw e;
       }
     }

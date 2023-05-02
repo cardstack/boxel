@@ -3,6 +3,11 @@ import { createResponse } from '@cardstack/runtime-common/create-response';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 const log = logger('worker:fetch');
+const MATRIX_URLS = [
+  'http://localhost:8008',
+  'https://matrix.staging.stack.cards',
+  'https://matrix.cardstack.com',
+];
 
 export class FetchHandler {
   private realm: Realm | undefined;
@@ -28,7 +33,7 @@ export class FetchHandler {
 
     let requestURL = new URL(request.url);
     // Let matrix requests use native fetch
-    if (requestURL.port === '8008') {
+    if (MATRIX_URLS.includes(requestURL.origin)) {
       return await fetch(request);
     }
 
