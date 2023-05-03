@@ -46,9 +46,9 @@ export default class BoxelInputValidationState extends Component<Signature> {
   }
 
   <template>
-    <div class='boxel-validation-state-input-group' ...attributes>
+    <div class='input-group' ...attributes>
       <BoxelInput
-        class='boxel-validation-state-input-group__input'
+        class='input'
         @id={{@id}}
         @value={{@value}}
         @required={{unless @disabled true}}
@@ -72,5 +72,26 @@ export default class BoxelInputValidationState extends Component<Signature> {
         }}
       {{/if}}
     </div>
+
+    <style>
+      .input-group {
+        --input-height: 2.5rem;
+        --input-icon-size: var(--boxel-icon-sm);
+        --input-icon-space: var(--boxel-sp-xs);
+
+        position: relative;
+        width: 100%;
+        font-family: var(--boxel-font-family);
+        line-height: calc(27 / 20);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+
+      .input {
+        height: var(--input-height);
+        padding-right: calc(var(--input-icon-size) + var(--input-icon-space) * 2);
+        font: inherit;
+        letter-spacing: inherit;
+      }
+    </style>
   </template>
 }
