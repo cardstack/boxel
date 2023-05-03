@@ -26,6 +26,7 @@ const log = logger('service:local-realm');
 
 export default class LocalRealm extends Service {
   #setEntryDeferred: Deferred<void> | undefined;
+  #waitForReadinessDeferred: Deferred<void> = new Deferred();
   #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
   #incremental:
     | ((
@@ -65,6 +66,11 @@ export default class LocalRealm extends Service {
         }
         break;
       case 'available':
+        if (data.type === 'realmReady') {
+          this.#waitForReadinessDeferred.fulfill();
+          return;
+        }
+
         if (data.type === 'setEntryAcknowledged') {
           if (!this.#setEntryDeferred) {
             throw new Error(
@@ -155,6 +161,8 @@ export default class LocalRealm extends Service {
         worker: this.state.worker,
         adapter: new LocalRealmAdapter(handle),
       };
+
+      send(this.state.worker, { type: 'waitForRealmReadiness' });
     } else {
       this.state = { type: 'empty', worker: this.state.worker };
     }
@@ -217,6 +225,10 @@ export default class LocalRealm extends Service {
       entry,
     });
     await this.#setEntryDeferred.promise;
+  }
+
+  waitForReadiness() {
+    return this.#waitForReadinessDeferred.promise;
   }
 
   get isAvailable(): boolean {
@@ -320,6 +332,7 @@ export default class LocalRealm extends Service {
     if (cb) {
       cb();
     }
+    send(this.state.worker, { type: 'waitForRealmReadiness' });
   });
 
   private async ensureWorker() {
