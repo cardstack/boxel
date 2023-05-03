@@ -54,8 +54,9 @@ export default class InLocalRealm extends Component<Signature> {
   }
 
   @action
-  openRealm() {
-    this.localRealm.chooseDirectory(() => this.router.refresh());
+  async openRealm() {
+    await this.localRealm.chooseDirectory();
+    await this.router.refresh();
   }
 
   @action

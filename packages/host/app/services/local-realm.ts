@@ -271,8 +271,8 @@ export default class LocalRealm extends Service {
     return url;
   }
 
-  chooseDirectory(cb?: () => void): void {
-    this.openDirectory.perform(cb);
+  async chooseDirectory(): Promise<void> {
+    await this.openDirectory.perform();
   }
 
   close(): void {
@@ -290,7 +290,7 @@ export default class LocalRealm extends Service {
     };
   }
 
-  private openDirectory = restartableTask(async (cb?: () => void) => {
+  private openDirectory = restartableTask(async () => {
     let handle = await showDirectoryPicker();
 
     // write a sacrificial file in order to prompt the browser to ask the user
@@ -329,9 +329,6 @@ export default class LocalRealm extends Service {
       adapter,
     };
 
-    if (cb) {
-      cb();
-    }
     send(this.state.worker, { type: 'waitForRealmReadiness' });
   });
 
