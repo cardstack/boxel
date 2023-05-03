@@ -1486,11 +1486,7 @@ export class StringCard extends CardBase {
 }
 
 export class Card extends CardBase {
-  @field title = contains(StringCard, {
-    computeVia: function (this: Card) {
-      return 'Untitled';
-    },
-  });
+  @field title = contains(StringCard);
 }
 
 export type CardBaseConstructor = typeof CardBase;

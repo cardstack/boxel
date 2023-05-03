@@ -2422,7 +2422,7 @@ module('Integration | serialization', function (hooks) {
 
     class Role extends Card {
       @field roleName = contains(StringCard);
-      @field _metadata = contains(StringCard, {
+      @field title = contains(StringCard, {
         computeVia: function (this: Role) {
           return this.roleName;
         },
@@ -2848,6 +2848,7 @@ module('Integration | serialization', function (hooks) {
                 },
               },
             ],
+            title: null,
           },
           meta: {
             adoptsFrom: {

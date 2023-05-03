@@ -62,7 +62,7 @@ module('Integration | search-index', function (hooks) {
         id: `${testRealmURL}empty`,
         type: 'card',
         attributes: {
-          title: 'Untitled',
+          title: null,
         },
         meta: {
           adoptsFrom: {

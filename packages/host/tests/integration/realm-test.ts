@@ -117,7 +117,7 @@ module('Integration | realm', function (hooks) {
         type: 'card',
         id: `${testRealmURL}dir/empty`,
         attributes: {
-          title: 'Untitled',
+          title: null,
         },
         meta: {
           adoptsFrom: {
