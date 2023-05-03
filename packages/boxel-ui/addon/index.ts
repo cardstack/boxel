@@ -1,4 +1,5 @@
 import BoxelInput from './components/input';
+import BoxelInputValidationState from './components/input/validation-state';
 import Button from './components/button';
 import CardContainer from './components/card-container';
 import FieldContainer from './components/field-container';
@@ -11,6 +12,7 @@ import Modal from './components/modal';
 
 export {
   BoxelInput,
+  BoxelInputValidationState,
   Button,
   CardContainer,
   FieldContainer,

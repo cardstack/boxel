@@ -63,6 +63,7 @@ enable_registration: true
 enable_registration_without_verification: true
 disable_msisdn_registration: false
 registration_shared_secret: '{{REGISTRATION_SECRET}}'
+registration_requires_token: true
 report_stats: false
 macaroon_secret_key: '{{MACAROON_SECRET_KEY}}'
 form_secret: '{{FORM_SECRET}}'

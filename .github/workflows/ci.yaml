@@ -124,9 +124,8 @@ jobs:
         run: pnpm exec playwright install --with-deps
         working-directory: packages/matrix
       - name: Run Playwright tests
-        run: pnpm exec playwright test
+        run: pnpm test
         working-directory: packages/matrix
-      # TODO we'll also need to run ember serve to host our matrix client
       - uses: actions/upload-artifact@v3
         if: always()
         with:
