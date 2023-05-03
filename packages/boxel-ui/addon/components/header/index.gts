@@ -21,10 +21,9 @@ interface Signature {
 const Header: TemplateOnlyComponent<Signature> = <template>
   <header
     class={{cn
-      'boxel-header'
-      boxel-header--has-background=@hasBackground
-      boxel-header--highlighted=@isHighlighted
-      boxel-header--large=(or (bool @title) (eq @size 'large'))
+      has-background=@hasBackground
+      highlighted=@isHighlighted
+      large=(or (bool @title) (eq @size 'large'))
     }}
     data-test-boxel-header
     ...attributes
@@ -46,6 +45,39 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       </div>
     {{/if}}
   </header>
+  <style>
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
+      min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
+      color: var(--boxel-header-text-color, var(--boxel-dark));
+      border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
+      border-top-left-radius: calc(var(--boxel-border-radius) - 1px);
+      font: 600 var(--boxel-font-xs);
+      letter-spacing: var(--boxel-lsp-xl);
+      text-transform: uppercase;
+      transition: background-color var(--boxel-transition),
+        color var(--boxel-transition);
+    }
+    .large {
+      padding: var(--boxel-sp-xl);
+      font: 700 var(--boxel-font-lg);
+      letter-spacing: normal;
+      text-transform: none;
+    }
+    .has-background {
+      background-color: var(--boxel-header-background-color, var(--boxel-100));
+    }
+    .highlighted {
+      background-color: var(--boxel-highlight);
+    }
+    .boxel-header__content {
+      display: flex;
+      align-items: center;
+    }
+  </style>
 </template>;
 
 export default Header;
