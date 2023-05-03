@@ -6,11 +6,11 @@ import {
   Card,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
-import TextAreaCard from 'https://cardstack.com/base/text-area';
 import DateCard from 'https://cardstack.com/base/date';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
 import IntegerCard from 'https://cardstack.com/base/integer';
+import StringCard from 'https://cardstack.com/base/string';
+import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Vendor } from './vendor';
 import { formatUSD, balanceInCurrency } from './currency-format';
 import {
@@ -28,6 +28,11 @@ class Details extends Card {
   @field terms = contains(StringCard);
   @field invoiceDocument = contains(StringCard);
   @field memo = contains(TextAreaCard);
+  @field title = contains(StringCard, {
+    computeVia: function (this: Details) {
+      return `Invoice ${this.invoiceNo}`;
+    },
+  });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer class='details'>

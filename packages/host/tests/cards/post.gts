@@ -4,9 +4,9 @@ import {
   Component,
   Card,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
-import IntegerCard from 'https://cardstack.com/base/integer';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
+import IntegerCard from 'https://cardstack.com/base/integer';
+import StringCard from 'https://cardstack.com/base/string';
 import { Person } from './person';
 
 export class Post extends Card {

@@ -15,8 +15,8 @@ import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
 import type {
   Card,
+  CardBase,
   Field,
-  CardConstructor,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
@@ -84,7 +84,7 @@ export default class CardService extends Service {
     // (this is something that the card compiler could optimize for us in the
     // future)
     await this.api.recompute(card, { recomputeAllFields: true });
-    return card;
+    return card as Card;
   }
 
   async loadModel(url: URL): Promise<Card> {
@@ -113,7 +113,7 @@ export default class CardService extends Service {
       card.id ? new URL(card.id) : undefined
     );
     if (isSaved) {
-      return await this.api.updateFromSerialized(card, json);
+      return (await this.api.updateFromSerialized(card, json)) as Card;
     }
     return await this.createFromSerialized(json.data, json, relativeTo);
   }
@@ -156,13 +156,13 @@ export default class CardService extends Service {
   }
 
   async getFields(
-    card: Card
-  ): Promise<{ [fieldName: string]: Field<CardConstructor> }> {
+    card: CardBase
+  ): Promise<{ [fieldName: string]: Field<typeof CardBase> }> {
     await this.apiModule.loaded;
     return this.api.getFields(card, { includeComputeds: true });
   }
 
-  async isPrimitive(card: typeof Card): Promise<boolean> {
+  async isPrimitive(card: typeof CardBase): Promise<boolean> {
     await this.apiModule.loaded;
     return this.api.primitive in card;
   }

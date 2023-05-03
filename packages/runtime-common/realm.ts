@@ -61,7 +61,7 @@ import { Router, SupportedMimeType } from './router';
 import { parseQueryString } from './query';
 //@ts-ignore service worker can't handle this
 import type { Readable } from 'stream';
-import { Card } from 'https://cardstack.com/base/card-api';
+import { CardBase } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
@@ -811,9 +811,14 @@ export class Realm {
     let api = await this.searchIndex.loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api'
     );
-    let card: Card = await api.createFromSerialized(doc.data, doc, relativeTo, {
-      loader: this.searchIndex.loader as unknown as LoaderType,
-    });
+    let card: CardBase = await api.createFromSerialized(
+      doc.data,
+      doc,
+      relativeTo,
+      {
+        loader: this.searchIndex.loader as unknown as LoaderType,
+      }
+    );
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
     delete data.included;

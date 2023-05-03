@@ -18,6 +18,11 @@ export class Person extends Card {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     },
   });
+  @field title = contains(StringCard, {
+    computeVia: function (this: Person) {
+      return this.fullName;
+    },
+  });
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <h1><@fields.firstName /></h1>

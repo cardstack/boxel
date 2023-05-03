@@ -13,7 +13,7 @@ import { CardError, type SerializedError } from './error';
 import { URLMap } from './url-map';
 import flatMap from 'lodash/flatMap';
 import ignore, { type Ignore } from 'ignore';
-import type { Card, Field } from 'https://cardstack.com/base/card-api';
+import type { CardBase, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CardRef, getField, identifyCard, loadCard } from './card-ref';
 import {
@@ -357,7 +357,7 @@ export class SearchIndex {
   }
 
   private async loadField(ref: CardRef, fieldPath: string): Promise<Field> {
-    let card: typeof Card | undefined;
+    let card: typeof CardBase | undefined;
     try {
       card = await loadCard(ref, { loader: this.loader });
     } catch (err: any) {

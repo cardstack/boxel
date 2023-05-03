@@ -40,12 +40,26 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, field, Card } from "https://cardstack.com/base/card-api";
+  import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
 
   export class Person extends Card {
     @field firstName = contains(StringCard);
     @field lastName = contains(StringCard);
+    @field title = contains(StringCard, {
+      computeVia: function (this: Person) {
+        return [this.firstName, this.lastName].filter(Boolean).join(' ');
+      },
+    });
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div data-test-person>
+          <p>First name: <@fields.firstName /></p>
+          <p>Last name: <@fields.lastName /></p>
+          <p>Title: <@fields.title /></p>
+        </div>
+      </template>
+    };
   }
 `;
 
@@ -182,9 +196,9 @@ module('Acceptance | basic tests', function (hooks) {
     assert
       .dom('[data-test-file="Person/1.json"]')
       .exists('Person/1.json file entry is rendered');
-    assert
-      .dom('[data-test-boxel-card-container]')
-      .containsText('Hassan Abdel-Rahman');
+    assert.dom('[data-test-person]').containsText('First name: Hassan');
+    assert.dom('[data-test-person]').containsText('Last name: Abdel-Rahman');
+    assert.dom('[data-test-person]').containsText('Title: Hassan Abdel-Rahman');
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         type: 'card',
@@ -243,9 +257,9 @@ module('Acceptance | basic tests', function (hooks) {
     assert
       .dom('[data-test-file="Person/2.json"]')
       .exists('Person/2.json file entry is rendered');
-    assert
-      .dom('[data-test-boxel-card-container]')
-      .containsText('Mango Abdel-Rahman');
+    assert.dom('[data-test-person]').containsText('First name: Mango');
+    assert.dom('[data-test-person]').containsText('Last name: Abdel-Rahman');
+    assert.dom('[data-test-person]').containsText('Title: Mango Abdel-Rahman');
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         type: 'card',

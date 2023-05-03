@@ -3,6 +3,7 @@ import {
   field,
   Component,
   Card,
+  CardBase,
   primitive,
   relativeTo,
 } from './card-api';
@@ -19,7 +20,7 @@ export class CatalogEntry extends Card {
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, {
     computeVia: async function (this: CatalogEntry) {
-      let card: typeof Card | undefined = await loadCard(this.ref, {
+      let card: typeof CardBase | undefined = await loadCard(this.ref, {
         relativeTo: this[relativeTo],
       });
       if (!card) {
