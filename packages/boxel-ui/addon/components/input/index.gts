@@ -35,7 +35,7 @@ export default class BoxelInput extends Component<Signature> {
 
   <template>
     {{#if (and (not @required) @optional)}}
-      <div class='boxel-input__optional'>Optional</div>
+      <div class='optional'>Optional</div>
     {{/if}}
     {{#let (and @invalid (bool @errorMessage)) as |shouldShowErrorMessage|}}
       {{#let (element (if @multiline 'textarea' 'input')) as |InputTag|}}
@@ -65,7 +65,7 @@ export default class BoxelInput extends Component<Signature> {
         {{#if shouldShowErrorMessage}}
           <div
             id={{concat 'error-message-' this.helperId}}
-            class='boxel-input__error-message'
+            class='error-message'
             aria-live='polite'
             data-test-boxel-input-error-message
           >{{@errorMessage}}</div>
@@ -73,7 +73,7 @@ export default class BoxelInput extends Component<Signature> {
         {{#if @helperText}}
           <div
             id={{concat 'helper-text-' this.helperId}}
-            class='boxel-input__helper-text'
+            class='helper-text'
             data-test-boxel-input-helper-text
           >{{@helperText}}</div>
         {{/if}}
@@ -124,7 +124,7 @@ export default class BoxelInput extends Component<Signature> {
         border-color: var(--boxel-error-100);
       }
 
-      .boxel-input__optional {
+      .optional {
         grid-row: 1;
         grid-column: 1 / -1;
         margin-bottom: var(--boxel-sp-xxxs);
@@ -135,7 +135,7 @@ export default class BoxelInput extends Component<Signature> {
         text-align: right;
       }
 
-      .boxel-input__error-message {
+      .error-message {
         grid-column: 2;
         margin-top: var(--boxel-sp-xs);
         margin-left: var(--boxel-sp-xs);
@@ -144,7 +144,7 @@ export default class BoxelInput extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
       }
 
-      .boxel-input__helper-text {
+      .helper-text {
         grid-column: 2;
         margin-top: var(--boxel-sp-xs);
         margin-left: var(--boxel-sp-xs);
@@ -153,8 +153,12 @@ export default class BoxelInput extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
       }
 
-      .boxel-input:disabled ~ .boxel-input__error-message,
-      .boxel-input:disabled ~ .boxel-input__helper-text {
+      /* FIXME this was previously combined with the block beneath but now that produces a syntax error */
+      .boxel-input:disabled ~ .error-message {
+        display: none;
+      }
+
+      .boxel-input:disabled ~ .helper-text {
         display: none;
       }
     </style>
