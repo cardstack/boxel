@@ -168,6 +168,7 @@ export default class OperatorMode extends Component<Signature> {
             <div class='operator-mode-card-stack__card__header'>
               <div
                 class='operator-mode-card-stack__card__header__type'
+                data-type-display-name
               >{{card.typeDisplayName}}</div>
               {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
                 <IconButton

@@ -56,6 +56,7 @@ module('Integration | schema', function (hooks) {
       import StringCard from "https://cardstack.com/base/string";
 
       export class Person extends Card {
+        static typeDisplayName = 'Person';
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }
@@ -75,11 +76,11 @@ module('Integration | schema', function (hooks) {
     );
 
     await waitFor('[data-test-card-id]');
-
     assert.dom('[data-test-card-id]').exists();
     assert
       .dom('[data-test-card-id]')
       .hasText(`Card ID: ${testRealmURL}person/Person`);
+    assert.dom('[data-test-display-name]').hasText(`Display Name: Person`);
     assert.dom('[data-test-adopts-from').exists();
     assert
       .dom('[data-test-adopts-from')

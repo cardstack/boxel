@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { waitUntil, fillIn, click } from '@ember/test-helpers';
+import { waitUntil, fillIn, click, render } from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import {
   cleanWhiteSpace,
@@ -287,6 +287,19 @@ module('Integration | card-basics', function (hooks) {
     assert
       .dom('[data-test-ref')
       .containsText(`Module: http://localhost:4202/test/person Name: Person`);
+  });
+
+  test('render card typeDisplayName', async function (assert) {
+    let { Card } = cardApi;
+    class DriverCard extends Card {
+      static typeDisplayName = 'Driver';
+    }
+    let card = new DriverCard();
+
+    await render(<template>
+      <div data-test-type-display-name>{{card.typeDisplayName}}</div>
+    </template>);
+    assert.dom('[data-test-type-display-name]').containsText(`Driver`);
   });
 
   test('throws when assigning a value to a linksTo field with a primitive card', async function (assert) {
