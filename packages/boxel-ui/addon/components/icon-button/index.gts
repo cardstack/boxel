@@ -21,9 +21,8 @@ export interface Signature {
 const IconButton: TemplateOnlyComponent<Signature> = <template>
   <button
     class={{cn
-      'boxel-icon-button'
-      (if @variant (concat 'boxel-icon-button--' @variant))
-      (if @tooltip 'boxel-icon-button--tooltip')
+      (if @variant (concat @variant))
+      (if @tooltip 'tooltip')
       @class
     }}
     data-hover={{@tooltip}}
@@ -37,6 +36,72 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
       }}
     {{/if}}
   </button>
+  <style>
+    button {
+      --boxel-icon-button-width: 40px;
+      --boxel-icon-button-height: 40px;
+
+      width: var(--boxel-icon-button-width);
+      height: var(--boxel-icon-button-height);
+      padding: 0;
+      background: none;
+      border: 1px solid transparent;
+      z-index: 1;
+    }
+
+    button:hover {
+      cursor: pointer;
+    }
+
+    .primary {
+      --icon-bg: var(--boxel-highlight);
+      --icon-border: var(--boxel-highlight);
+    }
+
+    .secondary {
+      --icon-color: var(--boxel-highlight);
+
+      border: 1px solid rgb(255 255 255 / 35%);
+      border-radius: 100px;
+      background-color: #41404d;
+    }
+
+    .secondary:hover {
+      background-color: var(--boxel-purple-800);
+    }
+
+    button > svg {
+      display: block;
+      margin: auto;
+    }
+
+    .tooltip {
+      pointer-events: unset !important;
+      position: relative;
+    }
+
+    .tooltip::after {
+      content: attr(data-hover);
+      opacity: 0;
+      background-color: rgb(0 0 0 / 80%);
+      box-shadow: 0 0 0 1px var(--boxel-light-500);
+      color: var(--boxel-light);
+      text-align: center;
+      border-radius: var(--boxel-border-radius-sm);
+      padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
+      width: max-content;
+      transition: opacity 1s ease-in-out;
+      position: absolute;
+      z-index: 1;
+      left: 140%;
+      top: 10%;
+    }
+
+    .tooltip:hover::after {
+      opacity: 1;
+      visibility: visible;
+    }
+  </style>
 </template>;
 
 export default IconButton;
