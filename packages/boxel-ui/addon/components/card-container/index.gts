@@ -24,8 +24,8 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     <Tag
       class={{cn
         'boxel-card-container'
-        boxel-card-container--highlighted=@isHighlighted
-        boxel-card-container--boundaries=@displayBoundaries
+        highlighted=@isHighlighted
+        boundaries=@displayBoundaries
       }}
       data-test-boxel-card-container
       ...attributes
@@ -39,6 +39,21 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       {{yield}}
     </Tag>
   {{/let}}
+  <style>
+    .boxel-card-container {
+      position: relative;
+      background-color: var(--boxel-light);
+      border-radius: var(--boxel-border-radius);
+      transition: max-width var(--boxel-transition),
+        box-shadow var(--boxel-transition);
+    }
+    .boundaries {
+      box-shadow: 0 0 0 1px var(--boxel-light-500);
+    }
+    .highlighted {
+      box-shadow: 0 0 0 2px var(--boxel-highlight);
+    }
+  </style>
 </template>;
 
 export default CardContainer;
