@@ -7,18 +7,26 @@ import { action } from '@ember/object';
 
 import { tracked } from '@glimmer/tracking';
 const { isLocalRealm } = ENV;
+import { ComponentLike } from '@glint/template';
+import { Model } from '@cardstack/host/routes/card';
 
 export default class CardController extends Controller {
   isLocalRealm = isLocalRealm;
-  model: any;
+  isolatedCardComponent: ComponentLike | undefined;
   withPreventDefault = withPreventDefault;
   @service declare router: RouterService;
   @tracked operatorModeEnabled = false;
+  @tracked model: Model | undefined;
 
   get getIsolatedComponent() {
-    return this.model.card
-      ? this.model.card.constructor.getComponent(this.model.card, 'isolated')
-      : this.model.component;
+    if (this.model && this.model.card) {
+      return this.model.card.constructor.getComponent(
+        this.model.card,
+        'isolated'
+      );
+    }
+
+    return null;
   }
 
   @action
