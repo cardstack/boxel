@@ -1,9 +1,0 @@
-/* FIXME this cannot currently be scoped because the icon element from SVG Jar doesn’t have the scoping attribute */
-.boxel-validation-state-input-group__icon {
-  position: absolute;
-  width: var(--input-icon-size);
-  height: var(--input-height);
-  right: var(--input-icon-space);
-  top: 0;
-  user-select: none;
-}

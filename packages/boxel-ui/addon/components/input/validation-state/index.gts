@@ -92,6 +92,15 @@ export default class BoxelInputValidationState extends Component<Signature> {
         font: inherit;
         letter-spacing: inherit;
       }
+
+      :global(.boxel-validation-state-input-group__icon) {
+        position: absolute;
+        width: var(--input-icon-size);
+        height: var(--input-height);
+        right: var(--input-icon-space);
+        top: 0;
+        user-select: none;
+      }
     </style>
   </template>
 }
