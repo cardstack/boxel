@@ -354,6 +354,17 @@ nav>.directory-level {
   margin: 0;
 }
 
+/* CardsGrid Card */
+.cards-grid {
+  position: relative;
+  padding-bottom: var(--boxel-sp-xxxl);
+}
+.cards-grid__add-button {
+  position: absolute;
+  right: var(--boxel-sp);
+  bottom: var(--boxel-sp);
+}
+
 /* Add Button */
 .add-button {
   --icon-bg: var(--boxel-light-100);

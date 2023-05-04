@@ -4,9 +4,9 @@ import {
   serialize,
   deserialize,
   queryableValue,
-  Card,
   CardInstanceType,
-  CardConstructor,
+  CardBaseConstructor,
+  CardBase,
 } from './card-api';
 import { parse, format } from 'date-fns';
 import { fn } from '@ember/helper';
@@ -22,13 +22,13 @@ const Format = new Intl.DateTimeFormat('en-US', {
 
 const dateFormat = `yyyy-MM-dd`;
 
-export default class DateCard extends Card {
+export default class DateCard extends CardBase {
   static [primitive]: Date;
   static [serialize](date: Date) {
     return format(date, dateFormat);
   }
 
-  static async [deserialize]<T extends CardConstructor>(
+  static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
     date: any
   ): Promise<CardInstanceType<T>> {

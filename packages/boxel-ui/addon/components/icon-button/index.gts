@@ -12,6 +12,7 @@ export interface Signature {
     width?: string;
     height?: string;
     tooltip?: string;
+    tooltipPosition?: 'right' | 'left' | 'above' | 'below';
   };
   Blocks: {
     default: [];
@@ -22,7 +23,13 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
   <button
     class={{cn
       (if @variant (concat @variant))
-      (if @tooltip 'tooltip')
+      (if
+        @tooltip
+        (concat
+          'tooltip tooltip__'
+          (if @tooltipPosition @tooltipPosition 'right')
+        )
+      )
       @class
     }}
     data-hover={{@tooltip}}
@@ -93,13 +100,29 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
       transition: opacity 1s ease-in-out;
       position: absolute;
       z-index: 1;
-      left: 140%;
-      top: 10%;
     }
 
     .tooltip:hover::after {
       opacity: 1;
       visibility: visible;
+    }
+
+    .tooltip__right::after {
+      left: 140%;
+      top: 10%;
+    }
+
+    .tooltip__left::after {
+      right: 140%;
+      top: 10%;
+    }
+
+    .tooltip__above::after {
+      bottom: 110%;
+    }
+
+    .tooltip__below::after {
+      top: 110%;
     }
   </style>
 </template>;

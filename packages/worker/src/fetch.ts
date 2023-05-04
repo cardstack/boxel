@@ -3,6 +3,11 @@ import { createResponse } from '@cardstack/runtime-common/create-response';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 const log = logger('worker:fetch');
+const MATRIX_URLS = [
+  'http://localhost:8008',
+  'https://matrix.staging.stack.cards',
+  'https://matrix.cardstack.com',
+];
 
 export class FetchHandler {
   private realm: Realm | undefined;
@@ -26,15 +31,21 @@ export class FetchHandler {
       return await fetch(request);
     }
 
-    let searchParams = new URL(request.url).searchParams;
+    let requestURL = new URL(request.url);
+    // Let matrix requests use native fetch
+    if (MATRIX_URLS.includes(requestURL.origin)) {
+      return await fetch(request);
+    }
+
+    let searchParams = requestURL.searchParams;
     if (searchParams.get('dropcache') != null) {
       return await this.dropCaches();
     }
 
     if (!this.realm) {
       log.warn(`No realm is currently available`);
-    } else if (this.realm.paths.inRealm(new URL(request.url))) {
-      if (new URL(request.url).pathname === '/tests') {
+    } else if (this.realm.paths.inRealm(requestURL)) {
+      if (requestURL.pathname === '/tests') {
         // allow tests requests to go back to the ember-cli server
         return await fetch(request);
       }

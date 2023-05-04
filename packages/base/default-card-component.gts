@@ -1,11 +1,14 @@
 import GlimmerComponent from '@glimmer/component';
 import { startCase } from 'lodash';
-import type { Card } from './card-api';
+import type { CardBase } from './card-api';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
 class DefaultIsolated extends GlimmerComponent<{
-  Args: { model: Card; fields: Record<string, new () => GlimmerComponent> };
+  Args: {
+    model: CardBase;
+    fields: Record<string, new () => GlimmerComponent>;
+  };
 }> {
   <template>
     <CardContainer class='isolated-card' @displayBoundaries={{true}}>
@@ -19,7 +22,10 @@ class DefaultIsolated extends GlimmerComponent<{
 }
 
 class DefaultEdit extends GlimmerComponent<{
-  Args: { model: Card; fields: Record<string, new () => GlimmerComponent> };
+  Args: {
+    model: CardBase;
+    fields: Record<string, new () => GlimmerComponent>;
+  };
 }> {
   <template>
     <CardContainer class='isolated-card' @displayBoundaries={{true}}>

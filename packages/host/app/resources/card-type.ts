@@ -11,7 +11,12 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
-import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
+import type {
+  Card,
+  CardBase,
+  Field,
+  FieldType,
+} from 'https://cardstack.com/base/card-api';
 import { isCardRef, type CardRef } from '@cardstack/runtime-common/card-ref';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -48,8 +53,8 @@ export class CardType extends Resource<Args> {
   });
 
   async toType(
-    card: typeof Card,
-    stack: (typeof Card)[] = []
+    card: typeof CardBase,
+    stack: (typeof CardBase)[] = []
   ): Promise<Type | CardRef> {
     let maybeRef = identifyCard(card);
     if (!maybeRef) {
@@ -85,11 +90,13 @@ export class CardType extends Resource<Args> {
       );
     }
     let fieldTypes: Type['fields'] = await Promise.all(
-      Object.entries(fields).map(async ([name, field]) => ({
-        name,
-        type: field.fieldType,
-        card: await this.toType(field.card, [card, ...stack]),
-      }))
+      Object.entries(fields).map(
+        async ([name, field]: [string, Field<typeof CardBase, any>]) => ({
+          name,
+          type: field.fieldType,
+          card: await this.toType(field.card, [card, ...stack]),
+        })
+      )
     );
     let type: Type = {
       id,
@@ -102,7 +109,7 @@ export class CardType extends Resource<Args> {
   }
 }
 
-export function getCardType(parent: object, card: () => typeof Card) {
+export function getCardType(parent: object, card: () => typeof CardBase) {
   return CardType.from(parent, () => ({
     named: {
       card: card(),

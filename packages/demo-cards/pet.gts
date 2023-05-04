@@ -4,9 +4,9 @@ import {
   Card,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
-import IntegerCard from 'https://cardstack.com/base/integer';
 import BooleanCard from 'https://cardstack.com/base/boolean';
+import IntegerCard from 'https://cardstack.com/base/integer';
+import StringCard from 'https://cardstack.com/base/string';
 import { CardContainer } from '@cardstack/boxel-ui';
 import { Booking } from './booking';
 
@@ -17,6 +17,11 @@ export class Pet extends Card {
   @field cutenessRating = contains(IntegerCard);
   @field sleepsOnTheCouch = contains(BooleanCard);
   @field appointment = contains(() => Booking);
+  @field title = contains(StringCard, {
+    computeVia: function (this: Pet) {
+      return this.firstName;
+    },
+  });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer class='demo-card' @displayBoundaries={{true}}>

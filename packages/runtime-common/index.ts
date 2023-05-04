@@ -90,19 +90,24 @@ export {
   isSingleCardDocument,
 } from './card-document';
 
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
 
+export function isCardCatalogAvailable() {
+  let here = globalThis as any;
+  return !!here._CARDSTACK_CARD_CHOOSER;
+}
+
 export interface CardChooser {
-  chooseCard<T extends Card>(
+  chooseCard<T extends CardBase>(
     query: Query,
     opts?: { offerToCreate: CardRef }
   ): Promise<undefined | T>;
 }
 
-export async function chooseCard<T extends Card>(
+export async function chooseCard<T extends CardBase>(
   query: Query,
   opts?: { offerToCreate: CardRef }
 ): Promise<undefined | T> {
@@ -118,7 +123,7 @@ export async function chooseCard<T extends Card>(
 }
 
 export interface CardCreator {
-  create<T extends Card>(
+  create<T extends CardBase>(
     ref: CardRef,
     relativeTo: URL | undefined
   ): Promise<undefined | T>;

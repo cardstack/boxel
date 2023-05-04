@@ -34,6 +34,11 @@ class Asset extends Card {
       return new URL(this.logoURL, this[relativeTo] || this.id).href;
     },
   });
+  @field title = contains(StringCard, {
+    computeVia: function (this: Asset) {
+      return this.name;
+    },
+  });
   static embedded = class Embedded extends Component<typeof Asset> {
     <template>
       <CardContainer class='asset-card'>

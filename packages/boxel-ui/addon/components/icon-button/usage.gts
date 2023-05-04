@@ -18,6 +18,7 @@ export default class IconButtonUsage extends Component {
   @tracked width = '40px';
   @tracked height = '40px';
   @tracked tooltip = 'Add a card to this collection';
+  @tracked tooltipPosition: 'right' | 'left' | 'above' | 'below' = 'right';
 
   cssClassName = 'boxel-icon-button';
   @cssVariable declare boxelIconButtonWidth: CSSVariableInfo;
@@ -37,6 +38,7 @@ export default class IconButtonUsage extends Component {
           @width={{this.width}}
           @height={{this.height}}
           @tooltip={{this.tooltip}}
+          @tooltipPosition={{this.tooltipPosition}}
           aria-label='Special Button'
           {{on 'click' (fn this.log 'Button clicked')}}
           style={{cssVar
@@ -67,6 +69,15 @@ export default class IconButtonUsage extends Component {
           @description='tooltip text on hover'
           @value={{this.tooltip}}
           @onInput={{fn (mut this.tooltip)}}
+        />
+        <Args.String
+          @name='tooltipPosition'
+          @optional={{true}}
+          @description='position of tooltip'
+          @value={{this.tooltipPosition}}
+          @options={{array 'right' 'left' 'above' 'below'}}
+          @onInput={{fn (mut this.tooltipPosition)}}
+          @defaultValue='right'
         />
         <Args.Number
           @name='width'

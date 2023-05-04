@@ -5,8 +5,8 @@ import {
   Component,
   Card,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
 import DateTimeCard from 'https://cardstack.com/base/datetime';
+import StringCard from 'https://cardstack.com/base/string';
 import { Person } from './person';
 import { Post } from './post';
 
