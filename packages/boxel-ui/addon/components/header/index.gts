@@ -40,7 +40,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     {{yield}}
 
     {{#if (has-block 'actions')}}
-      <div class='boxel-header__content' data-test-boxel-header-content>
+      <div class='content' data-test-boxel-header-content>
         {{yield to='actions'}}
       </div>
     {{/if}}
@@ -73,7 +73,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     .highlighted {
       background-color: var(--boxel-highlight);
     }
-    .boxel-header__content {
+    .content {
       display: flex;
       align-items: center;
     }
