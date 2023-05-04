@@ -9,6 +9,7 @@ import {
   BoxelInput,
   Button,
   FieldContainer,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '../lib/matrix-utils';
 import type MatrixService from '../services/matrix-service';
@@ -22,29 +23,33 @@ export default class Login extends Component {
     {{#if this.error}}
       <div class='error'>{{this.error}}</div>
     {{/if}}
-    <fieldset>
-      <FieldContainer @label='Username:' @tag='label'>
-        <BoxelInput
-          data-test-username-field
-          type='text'
-          @value={{this.username}}
-          @onInput={{this.setUsername}}
-        />
-      </FieldContainer>
-      <FieldContainer @label='Password:' @tag='label'>
-        <BoxelInput
-          data-test-password-field
-          type='password'
-          @value={{this.password}}
-          @onInput={{this.setPassword}}
-        />
-      </FieldContainer>
-      <Button
-        data-test-login-btn
-        @disabled={{this.isLoginButtonDisabled}}
-        {{on 'click' this.login}}
-      >Login</Button>
-    </fieldset>
+    {{#if this.doLogin.isRunning}}
+      <LoadingIndicator />
+    {{else}}
+      <fieldset>
+        <FieldContainer @label='Username:' @tag='label'>
+          <BoxelInput
+            data-test-username-field
+            type='text'
+            @value={{this.username}}
+            @onInput={{this.setUsername}}
+          />
+        </FieldContainer>
+        <FieldContainer @label='Password:' @tag='label'>
+          <BoxelInput
+            data-test-password-field
+            type='password'
+            @value={{this.password}}
+            @onInput={{this.setPassword}}
+          />
+        </FieldContainer>
+        <Button
+          data-test-login-btn
+          @disabled={{this.isLoginButtonDisabled}}
+          {{on 'click' this.login}}
+        >Login</Button>
+      </fieldset>
+    {{/if}}
   </template>
 
   @tracked error: string | undefined;

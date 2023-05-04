@@ -9,6 +9,7 @@ import {
   BoxelHeader,
   BoxelInput,
   BoxelInputValidationState,
+  LoadingIndicator,
   Button,
   FieldContainer,
 } from '@cardstack/boxel-ui';
@@ -27,8 +28,10 @@ const MATRIX_REGISTRATION_TYPES = {
 export default class RegisterUser extends Component {
   <template>
     <BoxelHeader @title='Register User' @hasBackground={{TRUE}} />
-    <fieldset>
-      {{#if (eq this.state.type 'askForToken')}}
+    {{#if this.doRegistrationFlow.isRunning}}
+      <LoadingIndicator />
+    {{else if (eq this.state.type 'askForToken')}}
+      <fieldset>
         <FieldContainer @label='Registration Token:' @tag='label'>
           <BoxelInputValidationState
             data-test-token-field
@@ -44,8 +47,9 @@ export default class RegisterUser extends Component {
           @disabled={{this.isNextButtonDisabled}}
           {{on 'click' this.sendToken}}
         >Next</Button>
-      {{/if}}
-      {{#if (eq this.state.type 'initial')}}
+      </fieldset>
+    {{else if (eq this.state.type 'initial')}}
+      <fieldset>
         <FieldContainer @label='Username:' @tag='label'>
           <BoxelInputValidationState
             data-test-username-field
@@ -69,8 +73,8 @@ export default class RegisterUser extends Component {
           @disabled={{this.isRegisterButtonDisabled}}
           {{on 'click' this.register}}
         >Register</Button>
-      {{/if}}
-    </fieldset>
+      </fieldset>
+    {{/if}}
   </template>
 
   @tracked
