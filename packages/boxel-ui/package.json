@@ -27,7 +27,6 @@
   },
   "dependencies": {
     "@embroider/macros": "^1.10.0",
-    "@embroider/util": "^1.9.0",
     "classnames": "^2.3.2",
     "dayjs": "^1.11.7",
     "ember-auto-import": "^2.4.3",
