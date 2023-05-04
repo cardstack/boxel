@@ -594,6 +594,7 @@ importers:
       typescript: ^4.7.4
       webpack: ^5.74.0
     dependencies:
+      '@embroider/util': 1.9.0_ember-source@4.6.0
       classnames: 2.3.2
       dayjs: 1.11.7
       ember-auto-import: 2.4.3_webpack@5.75.0
@@ -615,7 +616,6 @@ importers:
       '@embroider/compat': 2.1.2-unstable.e2cd385_x3ijd5fiynprp4z5bxafxvuwfy
       '@embroider/core': 2.1.2-unstable.e2cd385
       '@embroider/macros': 1.10.0
-      '@embroider/util': 1.9.0_ember-source@4.6.0
       '@embroider/webpack': 2.1.2-unstable.e2cd385_l6d2kenkyxryo77cunuspxxrn4
       '@glimmer/component': 1.1.2_@babel+core@7.20.2
       '@glimmer/tracking': 1.1.2
@@ -4011,6 +4011,7 @@ packages:
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
+    dev: true
 
   /@ember/test-waiters/3.0.2:
     resolution: {integrity: sha512-H8Q3Xy9rlqhDKnQpwt2pzAYDouww4TZIGSI1pZJhM7mQIGufQKuB0ijzn/yugA6Z+bNdjYp1HioP8Y4hn2zazQ==}
@@ -14759,6 +14760,16 @@ packages:
     dependencies:
       tabbable: 5.3.3
 
+  /follow-redirects/1.15.2:
+    resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
+    engines: {node: '>=4.0'}
+    peerDependencies:
+      debug: '*'
+    peerDependenciesMeta:
+      debug:
+        optional: true
+    dev: true
+
   /follow-redirects/1.15.2_debug@4.3.2:
     resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
     engines: {node: '>=4.0'}
@@ -15824,7 +15835,7 @@ packages:
     engines: {node: '>=8.0.0'}
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.2_debug@4.3.2
+      follow-redirects: 1.15.2
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
