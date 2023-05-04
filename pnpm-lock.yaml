@@ -594,6 +594,7 @@ importers:
       typescript: ^4.7.4
       webpack: ^5.74.0
     dependencies:
+      '@embroider/macros': 1.10.0
       '@embroider/util': 1.9.0_ember-source@4.6.0
       classnames: 2.3.2
       dayjs: 1.11.7
@@ -615,7 +616,6 @@ importers:
       '@ember/test-helpers': 2.8.1_mjl3znqfqz4o673rlet2hb3jru
       '@embroider/compat': 2.1.2-unstable.e2cd385_x3ijd5fiynprp4z5bxafxvuwfy
       '@embroider/core': 2.1.2-unstable.e2cd385
-      '@embroider/macros': 1.10.0
       '@embroider/webpack': 2.1.2-unstable.e2cd385_l6d2kenkyxryo77cunuspxxrn4
       '@glimmer/component': 1.1.2_@babel+core@7.20.2
       '@glimmer/tracking': 1.1.2
