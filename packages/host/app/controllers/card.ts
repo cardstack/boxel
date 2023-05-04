@@ -19,11 +19,8 @@ export default class CardController extends Controller {
   @tracked model: Model | undefined;
 
   get getIsolatedComponent() {
-    if (this.model && this.model.card) {
-      return this.model.card.constructor.getComponent(
-        this.model.card,
-        'isolated'
-      );
+    if (this.model) {
+      return this.model.constructor.getComponent(this.model, 'isolated');
     }
 
     return null;

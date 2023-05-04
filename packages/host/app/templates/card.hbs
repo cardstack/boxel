@@ -33,8 +33,8 @@
 
 {{#if this.operatorModeEnabled }}
   {{!-- TODO: Rather than a dedicated argument for the first card in the stack, refactor this so that there will be a state that reflects the whole stack --}}
-  {{#if this.model.card}}
-    <OperatorMode @firstCardInStack={{this.model.card}} />
+  {{#if this.model}}
+    <OperatorMode @firstCardInStack={{this.model}} />
   {{/if}}
 {{/if}}
 

@@ -10,9 +10,7 @@ import { Card } from 'https://cardstack.com/base/card-api';
 const { ownRealmURL, isLocalRealm } = ENV;
 const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
 
-export interface Model {
-  card: Card;
-}
+export type Model = Card | null;
 
 export default class RenderCard extends Route<Model | null> {
   @service declare cardService: CardService;
@@ -38,7 +36,7 @@ export default class RenderCard extends Route<Model | null> {
     }
   }
 
-  async model(params: { path: string }): Promise<Model | null> {
+  async model(params: { path: string }): Promise<Model> {
     let { path } = params;
     path = path || '';
     let url = path
@@ -59,8 +57,7 @@ export default class RenderCard extends Route<Model | null> {
     }
 
     try {
-      let card = await this.cardService.loadModel(url);
-      return { card };
+      return await this.cardService.loadModel(url);
     } catch (e) {
       (e as any).failureLoadingIndexCard = url.href === ownRealmURL;
       throw e;
