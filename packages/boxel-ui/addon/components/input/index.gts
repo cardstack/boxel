@@ -153,7 +153,7 @@ export default class BoxelInput extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
       }
 
-      /* FIXME this was previously combined with the block beneath but now that produces a syntax error */
+      /* Combine these when this is fixed: https://github.com/cardstack/glimmer-scoped-css/pull/11 */
       .boxel-input:disabled ~ .error-message {
         display: none;
       }
