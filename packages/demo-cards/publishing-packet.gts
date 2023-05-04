@@ -9,7 +9,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import { BlogPost } from './blog-post';
 
 export class PublishingPacket extends Card {
-  static typeDisplayName = 'Publishing Packet';
+  static displayName = 'Publishing Packet';
   @field blogPost = linksTo(BlogPost);
   @field socialBlurb = contains(TextAreaCard);
   @field title = contains(StringCard, {

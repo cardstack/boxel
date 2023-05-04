@@ -15,7 +15,7 @@ let CHAIN_IDS: Record<string, number> = {
 };
 
 export class Chain extends Card {
-  static typeDisplayName = 'Chain';
+  static displayName = 'Chain';
   @field name = contains(StringCard); // dropdown
   @field chainId = contains(IntegerCard, {
     computeVia: function (this: Chain) {

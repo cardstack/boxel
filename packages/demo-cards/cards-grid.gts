@@ -2,7 +2,7 @@ import { Component, Card } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui';
 
 export class CardsGrid extends Card {
-  static typeDisplayName = 'Cards Grid';
+  static displayName = 'Cards Grid';
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <CardContainer class='demo-card' @displayBoundaries={{true}}>

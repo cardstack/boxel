@@ -118,7 +118,7 @@ module('Integration | operator-mode', function (hooks) {
         
 
         export class Person extends Card {
-          static typeDisplayName = 'Person';
+          static displayName = 'Person';
           @field firstName = contains(StringCard);
           @field pet = linksTo(Pet);
           @field firstLetterOfTheName = contains(StringCard, {

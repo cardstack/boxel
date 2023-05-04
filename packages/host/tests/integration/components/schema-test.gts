@@ -56,7 +56,7 @@ module('Integration | schema', function (hooks) {
       import StringCard from "https://cardstack.com/base/string";
 
       export class Person extends Card {
-        static typeDisplayName = 'Person';
+        static displayName = 'Person';
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }

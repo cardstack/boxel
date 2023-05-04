@@ -11,7 +11,7 @@ import { CardContainer } from '@cardstack/boxel-ui';
 import { Booking } from './booking';
 
 export class Pet extends Card {
-  static typeDisplayName = 'Pet';
+  static displayName = 'Pet';
   @field firstName = contains(StringCard);
   @field favoriteToy = contains(StringCard);
   @field favoriteTreat = contains(StringCard);

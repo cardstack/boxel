@@ -9,7 +9,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import { CardContainer } from '@cardstack/boxel-ui';
 
 export class Friends extends Card {
-  static typeDisplayName = 'Friends';
+  static displayName = 'Friends';
   @field firstName = contains(StringCard);
   @field friends = linksToMany(() => Friends);
   @field title = contains(StringCard, {

@@ -14,7 +14,7 @@ import parseISO from 'date-fns/parseISO';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import type { CardRef } from '@cardstack/runtime-common';
-import type {
+import {
   SignatureFor,
   primitive as primitiveType,
   queryableValue as queryableValueType,
@@ -22,6 +22,7 @@ import type {
 import BoxelInput from '@cardstack/boxel-ui/components/input';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import format from 'date-fns/format';
+import { cardTypeDisplayName } from '@cardstack/host/helpers/card-type-display-name';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -292,12 +293,12 @@ module('Integration | card-basics', function (hooks) {
   test('render card typeDisplayName', async function (assert) {
     let { Card } = cardApi;
     class DriverCard extends Card {
-      static typeDisplayName = 'Driver';
+      static displayName = 'Driver';
     }
     let card = new DriverCard();
 
     await render(<template>
-      <div data-test-type-display-name>{{card.typeDisplayName}}</div>
+      <div data-test-type-display-name>{{cardTypeDisplayName card}}</div>
     </template>);
     assert.dom('[data-test-type-display-name]').containsText(`Driver`);
   });

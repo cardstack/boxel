@@ -301,7 +301,7 @@ class EditTemplate extends Component<typeof InvoicePacket> {
 }
 
 export class InvoicePacket extends Card {
-  static typeDisplayName = 'Invoice Packet';
+  static displayName = 'Invoice Packet';
   @field vendor = linksTo(Vendor);
   @field details = contains(Details);
   @field lineItems = containsMany(LineItem);

@@ -103,7 +103,7 @@ export class CardType extends Resource<Args> {
       id,
       module: moduleFrom(ref),
       super: superType,
-      displayName: card.typeDisplayName,
+      displayName: card.prototype.constructor.displayName || 'Card',
       fields: fieldTypes,
     };
     this.typeCache.set(id, type);

@@ -10,7 +10,7 @@ import DateTimeCard from 'https://cardstack.com/base/datetime';
 import { Person } from './person';
 
 export class Booking extends Card {
-  static typeDisplayName = 'Booking';
+  static displayName = 'Booking';
   @field title = contains(StringCard);
   @field venue = contains(StringCard);
   @field startTime = contains(DateTimeCard);
