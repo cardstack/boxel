@@ -10,7 +10,7 @@ interface Signature<T extends keyof HTMLElementTagNameMap> {
 export default function element<T extends keyof HTMLElementTagNameMap>(
   tagName: T | undefined
 ): ComponentLike<Signature<T>> {
-    return class DynamicElement extends EmberComponent<Signature<T>> {
-      tagName = (tagName ?? ('div' as T)) as string;
-    };
+  return class DynamicElement extends EmberComponent<Signature<T>> {
+    tagName = (tagName ?? ('div' as T)) as string;
+  };
 }
