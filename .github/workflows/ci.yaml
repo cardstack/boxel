@@ -149,9 +149,6 @@ jobs:
       - name: Build host dist/ for fastboot
         run: pnpm build
         working-directory: packages/host
-      - name: FIXME remove; start base realm server in foreground
-        run: pnpm start:base:root
-        working-directory: packages/realm-server
       - name: Start base realm server
         run: pnpm start:all &
         working-directory: packages/realm-server
