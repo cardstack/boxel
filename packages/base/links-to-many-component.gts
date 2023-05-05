@@ -13,6 +13,7 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
+  createNewCard,
 } from '@cardstack/runtime-common';
 
 interface Signature {
@@ -69,12 +70,19 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         {{on 'click' this.add}}
         type='button'
         data-test-add-new
-      >+ Add New</Button>
+      >Choose</Button>
+      <Button @size='small' {{on 'click' this.create}} data-test-create-new>
+        Create New
+      </Button>
     </div>
   </template>
 
   add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
+  };
+
+  create = () => {
+    (this.createCard as unknown as Descriptor<any, any[]>).perform();
   };
 
   private chooseCard = restartableTask(async () => {
@@ -83,16 +91,22 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard(
-      {
-        filter: {
-          every: [{ type }, ...selectedCardsQuery],
-        },
+    let chosenCard: Card | undefined = await chooseCard({
+      filter: {
+        every: [{ type }, ...selectedCardsQuery],
       },
-      { offerToCreate: type }
-    );
+    });
     if (chosenCard) {
       selectedCards.push(chosenCard);
+    }
+  });
+
+  private createCard = restartableTask(async () => {
+    let type = identifyCard(this.args.field.card) ?? baseCardRef;
+    let newCard = await createNewCard(type);
+    if (newCard) {
+      let cards = (this.args.model.value as any)[this.args.field.name];
+      cards.push(newCard);
     }
   });
 

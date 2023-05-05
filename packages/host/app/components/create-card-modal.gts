@@ -21,7 +21,6 @@ export default class CreateCardModal extends Component {
           @size='large'
           @isOpen={{true}}
           @onClose={{fn this.save undefined}}
-          style='z-index:{{this.zIndex}}'
           data-test-create-new-card={{card.constructor.name}}
         >
           <CardContainer class='dialog-box' @displayBoundaries={{true}}>
@@ -48,11 +47,6 @@ export default class CreateCardModal extends Component {
       }
     | undefined = undefined;
 
-  @tracked zIndex = 20;
-  @action incrementZIndex() {
-    this.zIndex++;
-  }
-
   constructor(owner: unknown, args: {}) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CREATE_NEW_CARD = this;
@@ -63,14 +57,13 @@ export default class CreateCardModal extends Component {
 
   async create<T extends Card>(
     ref: CardRef,
-    relativeTo: URL | undefined
+    relativeTo?: URL
   ): Promise<undefined | T> {
-    this.incrementZIndex();
     return (await this._create.perform(ref, relativeTo)) as T | undefined;
   }
 
   private _create = enqueueTask(
-    async <T extends Card>(ref: CardRef, relativeTo: URL | undefined) => {
+    async <T extends Card>(ref: CardRef, relativeTo?: URL) => {
       let doc = { data: { meta: { adoptsFrom: ref } } };
       this.currentRequest = {
         card: await this.cardService.createFromSerialized(

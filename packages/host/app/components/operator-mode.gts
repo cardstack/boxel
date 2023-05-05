@@ -14,7 +14,7 @@ import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
 import { restartableTask } from 'ember-concurrency';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, loadCard, type CardRef } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -96,7 +96,7 @@ export default class OperatorMode extends Component<Signature> {
   @action async cancel(card: Card) {
     await this.rollbackCardFieldValues(card);
     if (!card.id) {
-      // canceling a new card creation also closes the editor
+      // canceling new card creation
       return this.close(card);
     }
     this.formats.set(card, 'isolated');
@@ -244,23 +244,29 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   @action
-  createNew(card: Card) {
+  async createNew(card: Card) {
     if (!card) {
       throw new Error('Cannot create a new card without a card type');
     }
     if (card.constructor.name !== 'CatalogEntry') {
       throw new Error('Card is not a catalog entry');
     }
-    if (!('demo' in card)) {
-      if (!('ref' in card)) {
-        throw new Error('Cannot create a new card without a card type');
-      }
-      // TODO: using ref to create new card
-      throw new Error('todo');
+
+    let newCard: Card | undefined = undefined;
+
+    if ('demo' in card) {
+      newCard = new (card.demo as Card).constructor();
+    } else if ('ref' in card) {
+      let cardClass = await loadCard(card.ref as CardRef);
+      newCard = new cardClass();
+    } else {
+      throw new Error('Cannot create a new card without a card type');
     }
-    let newCard = new (card.demo as Card).constructor();
-    this.stack.push(newCard);
-    this.formats.set(newCard, 'edit');
+
+    if (newCard) {
+      this.stack.push(newCard);
+      this.formats.set(newCard, 'edit');
+    }
   }
 }
 

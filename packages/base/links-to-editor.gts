@@ -10,6 +10,7 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
+  createNewCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
@@ -26,7 +27,10 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     <div class='links-to-editor{{if this.isEmpty "--empty"}}'>
       {{#if this.isEmpty}}
         <Button @size='small' {{on 'click' this.choose}} data-test-choose-card>
-          + Add New
+          Choose
+        </Button>
+        <Button @size='small' {{on 'click' this.create}} data-test-create-new>
+          Create New
         </Button>
       {{else}}
         <CardContainer class='links-to-editor__item'>
@@ -50,6 +54,10 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
 
+  create = () => {
+    (this.createCard as unknown as Descriptor<any, any[]>).perform();
+  };
+
   remove = () => {
     this.args.model.value = null;
   };
@@ -71,12 +79,17 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 
   private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard(
-      { filter: { type } },
-      { offerToCreate: type }
-    );
+    let chosenCard: Card | undefined = await chooseCard({ filter: { type } });
     if (chosenCard) {
       this.args.model.value = chosenCard;
+    }
+  });
+
+  private createCard = restartableTask(async () => {
+    let type = identifyCard(this.args.field.card) ?? baseCardRef;
+    let newCard = await createNewCard(type);
+    if (newCard) {
+      this.args.model.value = newCard;
     }
   });
 }
