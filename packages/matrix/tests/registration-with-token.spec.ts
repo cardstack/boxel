@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { testServer } from '../helpers';
+import { testServer, assertLoggedIn, assertLoggedOut } from '../helpers';
 import {
   synapseStart,
   synapseStop,
@@ -27,6 +27,7 @@ test.describe('User Registration w/ Token', () => {
 
   test('it can register a user with a registration token', async ({ page }) => {
     await page.goto(`/chat`);
+    await assertLoggedOut(page);
     await page.getByRole('link', { name: 'Register new user' }).click();
     await expect(page.url()).toBe(`${testServer}/chat/register`);
     await expect(
@@ -51,12 +52,7 @@ test.describe('User Registration w/ Token', () => {
 
     await page.waitForURL(`${testServer}/chat`);
 
-    await expect(
-      page.locator('[data-test-field-value="userId"]')
-    ).toContainText('@user1:localhost');
-    await expect(
-      page.locator('[data-test-field-value="displayName"]')
-    ).toContainText('user1');
+    await assertLoggedIn(page);
   });
 
   test('it shows an error when the username is already taken', async ({
@@ -105,11 +101,10 @@ test.describe('User Registration w/ Token', () => {
     await page.locator('[data-test-token-field]').fill('abc123');
     await page.locator('[data-test-next-btn]').click();
 
-    await page.waitForURL(`${testServer}/chat`);
-
-    await expect(
-      page.locator('[data-test-field-value="userId"]')
-    ).toContainText('@user2:localhost');
+    await assertLoggedIn(page, {
+      userId: '@user2:localhost',
+      displayName: 'user2',
+    });
   });
 
   test(`it show an error when a invalid registration token is used`, async ({
@@ -161,10 +156,6 @@ test.describe('User Registration w/ Token', () => {
     ).toHaveCount(0);
     await page.locator('[data-test-next-btn]').click();
 
-    await page.waitForURL(`${testServer}/chat`);
-
-    await expect(
-      page.locator('[data-test-field-value="userId"]')
-    ).toContainText('@user1:localhost');
+    await assertLoggedIn(page);
   });
 });

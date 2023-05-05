@@ -56,7 +56,7 @@ export default class UserProfile extends Component {
     </FieldContainer>
     {{#if this.isEditMode}}
       <Button
-        data-test-profile-edit-btn
+        data-test-profile-save-btn
         @disabled={{not this.displayName}}
         {{on 'click' this.save}}
       >Save</Button>

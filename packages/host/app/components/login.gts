@@ -21,7 +21,7 @@ export default class Login extends Component {
   <template>
     <BoxelHeader @title='Login' @hasBackground={{TRUE}} />
     {{#if this.error}}
-      <div class='error'>{{this.error}}</div>
+      <div class='error' data-test-login-error>{{this.error}}</div>
     {{/if}}
     {{#if this.doLogin.isRunning}}
       <LoadingIndicator />
