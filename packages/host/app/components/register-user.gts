@@ -231,7 +231,7 @@ export default class RegisterUser extends Component {
             }
           : {}),
       });
-      await this.matrixService.startFromAuth(auth);
+      await this.matrixService.startWithAuth(auth);
       this.router.transitionTo('chat');
     } catch (e: any) {
       let maybeRegistrationFlow = e.data;

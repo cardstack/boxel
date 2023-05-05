@@ -36,7 +36,7 @@ export default class MatrixService extends Service {
     }
   }
 
-  async startFromAuth(auth: IAuthData): Promise<void> {
+  async startWithAuth(auth: IAuthData): Promise<void> {
     let { access_token: accessToken, user_id: userId } = auth;
     if (!accessToken) {
       throw new Error(

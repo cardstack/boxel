@@ -104,7 +104,7 @@ export default class Login extends Component {
       }
     }
     if (auth) {
-      await this.matrixService.startFromAuth(auth);
+      await this.matrixService.startWithAuth(auth);
     }
   });
 }
