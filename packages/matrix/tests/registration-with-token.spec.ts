@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { testServer } from '../helpers';
 import {
   synapseStart,
   synapseStop,
@@ -26,6 +27,8 @@ test.describe('User Registration w/ Token', () => {
 
   test('it can register a user with a registration token', async ({ page }) => {
     await page.goto(`/chat`);
+    await page.getByRole('link', { name: 'Register new user' }).click();
+    await expect(page.url()).toBe(`${testServer}/chat/register`);
     await expect(
       page.locator('[data-test-token-field]'),
       'token field is not displayed'
@@ -46,9 +49,14 @@ test.describe('User Registration w/ Token', () => {
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
+    await page.waitForURL(`${testServer}/chat`);
+
     await expect(
-      page.locator('[data-test-registration-complete]')
-    ).toContainText('@user1:localhost has been created');
+      page.locator('[data-test-field-value="userId"]')
+    ).toContainText('@user1:localhost');
+    await expect(
+      page.locator('[data-test-field-value="displayName"]')
+    ).toContainText('user1');
   });
 
   test('it shows an error when the username is already taken', async ({
@@ -56,7 +64,7 @@ test.describe('User Registration w/ Token', () => {
   }) => {
     await registerUser(synapse, 'user1', 'pass');
 
-    await page.goto(`/chat`);
+    await page.goto(`/chat/register`);
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('mypassword');
     await expect(
@@ -97,8 +105,66 @@ test.describe('User Registration w/ Token', () => {
     await page.locator('[data-test-token-field]').fill('abc123');
     await page.locator('[data-test-next-btn]').click();
 
+    await page.waitForURL(`${testServer}/chat`);
+
     await expect(
-      page.locator('[data-test-registration-complete]')
-    ).toContainText('@user2:localhost has been created');
+      page.locator('[data-test-field-value="userId"]')
+    ).toContainText('@user2:localhost');
+  });
+
+  test(`it show an error when a invalid registration token is used`, async ({
+    page,
+  }) => {
+    await page.goto(`/chat/register`);
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword');
+    await page.locator('[data-test-register-btn]').click();
+
+    await page.locator('[data-test-token-field]').fill('invalid token');
+    await expect(
+      page.locator(
+        '[data-test-token-field] [data-test-boxel-input-validation-state="initial"]'
+      ),
+      'token field displays initial validation state'
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-token-field] [data-test-boxel-input-error-message]'
+      ),
+      'no error message is displayed'
+    ).toHaveCount(0);
+    await page.locator('[data-test-next-btn]').click();
+    await expect(
+      page.locator(
+        '[data-test-token-field] [data-test-boxel-input-validation-state="invalid"]'
+      ),
+      'token field displays invalid validation state'
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-token-field] [data-test-boxel-input-error-message]'
+      )
+    ).toContainText('Invalid registration token');
+
+    await page.locator('[data-test-token-field]').fill('abc123');
+    await expect(
+      page.locator(
+        '[data-test-token-field] [data-test-boxel-input-validation-state="initial"]'
+      ),
+      'token field displays initial validation state'
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-token-field] [data-test-boxel-input-error-message]'
+      ),
+      'no error message is displayed'
+    ).toHaveCount(0);
+    await page.locator('[data-test-next-btn]').click();
+
+    await page.waitForURL(`${testServer}/chat`);
+
+    await expect(
+      page.locator('[data-test-field-value="userId"]')
+    ).toContainText('@user1:localhost');
   });
 });

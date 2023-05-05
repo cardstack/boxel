@@ -4,6 +4,7 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
+import { testServer } from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
   let synapse: SynapseInstance;
@@ -22,6 +23,8 @@ test.describe('User Registration w/o Token', () => {
     page,
   }) => {
     await page.goto(`/chat`);
+    await page.getByRole('link', { name: 'Register new user' }).click();
+    await expect(page.url()).toBe(`${testServer}/chat/register`);
     await expect(
       page.locator('[data-test-token-field]'),
       'token field is not displayed'
@@ -30,8 +33,13 @@ test.describe('User Registration w/o Token', () => {
     await page.locator('[data-test-password-field]').fill('mypassword');
     await page.locator('[data-test-register-btn]').click();
 
+    await page.waitForURL(`${testServer}/chat`);
+
     await expect(
-      page.locator('[data-test-registration-complete]')
-    ).toContainText('@user1:localhost has been created');
+      page.locator('[data-test-field-value="userId"]')
+    ).toContainText('@user1:localhost');
+    await expect(
+      page.locator('[data-test-field-value="displayName"]')
+    ).toContainText('user1');
   });
 });
