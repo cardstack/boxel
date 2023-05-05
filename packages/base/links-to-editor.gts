@@ -10,7 +10,6 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
-  createNewCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
@@ -19,6 +18,7 @@ interface Signature {
   Args: {
     model: Box<Card | null>;
     field: Field<typeof Card>;
+    actions?: { createCard: (card: typeof Card) => void };
   };
 }
 
@@ -29,9 +29,11 @@ class LinksToEditor extends GlimmerComponent<Signature> {
         <Button @size='small' {{on 'click' this.choose}} data-test-choose-card>
           Choose
         </Button>
-        <Button @size='small' {{on 'click' this.create}} data-test-create-new>
-          Create New
-        </Button>
+        {{#if @actions.createCard}}
+          <Button @size='small' {{on 'click' this.create}} data-test-create-new>
+            Create New
+          </Button>
+        {{/if}}
       {{else}}
         <CardContainer class='links-to-editor__item'>
           <this.linkedCard />
@@ -86,11 +88,13 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   });
 
   private createCard = restartableTask(async () => {
-    let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let newCard = await createNewCard(type);
-    if (newCard) {
-      this.args.model.value = newCard;
-    }
+    console.log(this.args.actions);
+    this.args.actions?.createCard(this.args.field.card);
+    // let type = identifyCard(this.args.field.card) ?? baseCardRef;
+    // let newCard = await createNewCard(type);
+    // if (newCard) {
+    //   this.args.model.value = newCard;
+    // }
   });
 }
 

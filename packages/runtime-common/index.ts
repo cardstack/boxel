@@ -95,11 +95,6 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
 
-export function isCardCatalogAvailable() {
-  let here = globalThis as any;
-  return !!here._CARDSTACK_CARD_CHOOSER;
-}
-
 export interface CardChooser {
   chooseCard<T extends Card>(
     query: Query,

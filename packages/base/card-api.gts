@@ -1410,8 +1410,8 @@ export class Card {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(card: Card, format: Format) {
-    return getComponent(card, format);
+  static getComponent(card: Card, format: Format, actions?: {}) {
+    return getComponent(card, format, actions);
   }
 
   constructor(data?: Record<string, any>) {
@@ -2020,18 +2020,21 @@ export type SignatureFor<CardT extends CardConstructor> = {
     fields: FieldsTypeFor<InstanceType<CardT>>;
     set: Setter;
     fieldName: string | undefined;
+    actions?: { createCard: (cardClass: typeof Card) => void };
   };
 };
 
 export function getComponent(
   model: Card,
-  format: Format
+  format: Format,
+  actions?: {}
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let box = Box.create(model);
   let component = getBoxComponent(
     model.constructor as CardConstructor,
     format,
-    box
+    box,
+    actions
   );
   return component;
 }

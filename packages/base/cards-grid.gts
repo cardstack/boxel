@@ -6,7 +6,7 @@ import { CardContainer, IconButton } from '@cardstack/boxel-ui';
 import {
   chooseCard,
   catalogEntryRef,
-  isCardCatalogAvailable,
+  loadCard,
 } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
 
@@ -14,7 +14,7 @@ class Isolated extends Component<typeof CardsGrid> {
   <template>
     <CardContainer class='demo-card cards-grid' @displayBoundaries={{true}}>
       This cards-grid instance should become even better.
-      {{#if this.isCardCatalogAvailable}}
+      {{#if @actions.createCard}}
         <IconButton
           @icon='icon-plus-circle'
           @width='40px'
@@ -22,30 +22,41 @@ class Isolated extends Component<typeof CardsGrid> {
           @tooltip='Add a new card to this collection'
           @tooltipPosition='left'
           class='add-button cards-grid__add-button'
-          {{on 'click' this.selectCard}}
+          {{on 'click' this.createCard}}
           data-test-create-new-card-button
         />
       {{/if}}
     </CardContainer>
   </template>
 
-  get isCardCatalogAvailable() {
-    return isCardCatalogAvailable();
-  }
-
   @action
-  selectCard() {
-    this.selectNewCard.perform();
+  createCard() {
+    this.createNewCard.perform();
   }
 
-  private selectNewCard = restartableTask(async () => {
+  private createNewCard = restartableTask(async () => {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
         eq: { isPrimitive: false },
       },
     });
-    return card;
+
+    if (!card) {
+      return;
+    }
+
+    let cardClass = card.demo.constructor ?? (await loadCard(card.ref));
+
+    if (!cardClass) {
+      throw new Error(
+        `bug: could not get the card class from catalog entry ${JSON.stringify(
+          catalogEntryRef
+        )}`
+      );
+    }
+
+    this.args.actions?.createCard?.(cardClass);
   });
 }
 

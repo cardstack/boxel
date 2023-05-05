@@ -14,7 +14,7 @@ import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
 import { restartableTask } from 'ember-concurrency';
-import { baseRealm, loadCard, type CardRef } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -58,18 +58,20 @@ export default class OperatorMode extends Component<Signature> {
     this.searchSheetMode = SearchSheetMode.Closed;
   }
 
-  @action
   addToStack(card: CardAPI.Card) {
     this.addCardToStack.perform(card);
   }
 
   private addCardToStack = restartableTask(async (card: CardAPI.Card) => {
-    let api = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`
-    );
-    let relativeTo = card[api.relativeTo];
-    if (!relativeTo) {
-      throw new Error(`bug: should never get here`);
+    if (card.id) {
+      // new card instances don't have an id yet
+      let api = await this.loaderService.loader.import<typeof CardAPI>(
+        `${baseRealm.url}card-api`
+      );
+      let relativeTo = card[api.relativeTo];
+      if (!relativeTo) {
+        throw new Error(`bug: should never get here`);
+      }
     }
     this.stack.push(card);
   });
@@ -144,6 +146,14 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
+  private publicAPI = {
+    createCard: (cardClass: typeof Card) => {
+      let newCard = new cardClass();
+      this.addToStack(newCard);
+      this.formats.set(newCard, 'edit');
+    },
+  };
+
   private async rollbackCardFieldValues(card: Card) {
     let fields = await this.cardService.getFields(card);
     for (let fieldName of Object.keys(fields)) {
@@ -165,6 +175,11 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
+  cardOrderFromTop(count: number, i: number) {
+    // 0 is the topmost card, 1 is the one behind it, and so on...
+    return count - (i + 1);
+  }
+
   <template>
     <Modal
       @isOpen={{true}}
@@ -172,11 +187,14 @@ export default class OperatorMode extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='#686283'
     >
-      <CardCatalogModal @onSelect={{this.createNew}} />
+      <CardCatalogModal />
       <div class='stack'>
         {{#each this.stack as |card i|}}
           <div
-            class='stack-card stack-card--{{this.cardNo this.stack.length i}}'
+            class='stack-card stack-card--{{this.cardOrderFromTop
+                this.stack.length
+                i
+              }}'
             data-test={{i}}
           >
             <div
@@ -187,7 +205,11 @@ export default class OperatorMode extends Component<Signature> {
                 )
               }}
             >
-              <Preview @card={{card}} @format={{this.getFormat card}} />
+              <Preview
+                @card={{card}}
+                @format={{this.getFormat card}}
+                @actions={{this.publicAPI}}
+              />
             </div>
             <div class='operator-mode-card-stack__card__header'>
               {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
@@ -237,37 +259,6 @@ export default class OperatorMode extends Component<Signature> {
       />
     </Modal>
   </template>
-
-  cardNo(count: number, i: number) {
-    // 0 is the topmost card, 1 is the second card, etc.
-    return count - (i + 1);
-  }
-
-  @action
-  async createNew(card: Card) {
-    if (!card) {
-      throw new Error('Cannot create a new card without a card type');
-    }
-    if (card.constructor.name !== 'CatalogEntry') {
-      throw new Error('Card is not a catalog entry');
-    }
-
-    let newCard: Card | undefined = undefined;
-
-    if ('demo' in card) {
-      newCard = new (card.demo as Card).constructor();
-    } else if ('ref' in card) {
-      let cardClass = await loadCard(card.ref as CardRef);
-      newCard = new cardClass();
-    } else {
-      throw new Error('Cannot create a new card without a card type');
-    }
-
-    if (newCard) {
-      this.stack.push(newCard);
-      this.formats.set(newCard, 'edit');
-    }
-  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {

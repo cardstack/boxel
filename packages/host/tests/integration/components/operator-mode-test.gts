@@ -8,7 +8,13 @@ import OperatorMode from '@cardstack/host/components/operator-mode';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import { Card } from 'https://cardstack.com/base/card-api';
 import { renderComponent } from '../../helpers/render-component';
-import { testRealmURL, setupCardLogs, setupMockLocalRealm, TestRealmAdapter, TestRealm } from '../../helpers';
+import {
+  testRealmURL,
+  setupCardLogs,
+  setupMockLocalRealm,
+  TestRealmAdapter,
+  TestRealm,
+} from '../../helpers';
 import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -109,7 +115,7 @@ module('Integration | operator-mode', function (hooks) {
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
-        
+
 
         export class Person extends Card {
           @field firstName = contains(StringCard);
@@ -158,7 +164,7 @@ module('Integration | operator-mode', function (hooks) {
             address: {
               city: 'Bandung',
               country: 'Indonesia',
-            }
+            },
           },
           relationships: {
             pet: {
@@ -183,10 +189,11 @@ module('Integration | operator-mode', function (hooks) {
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    let onClose = () => {};
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} />
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
           <CardPrerender />
         </template>
       }
@@ -199,9 +206,15 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[aria-label="Edit"]');
     await fillIn('[data-test-boxel-input]', 'EditedName');
-    await fillIn('[data-test-boxel-input-city] [data-test-boxel-input]', 'EditedCity');
-    await fillIn('[data-test-boxel-input-country] [data-test-boxel-input]', 'EditedCountry');
-    
+    await fillIn(
+      '[data-test-boxel-input-city] [data-test-boxel-input]',
+      'EditedCity'
+    );
+    await fillIn(
+      '[data-test-boxel-input-country] [data-test-boxel-input]',
+      'EditedCountry'
+    );
+
     await click('[aria-label="Cancel"]');
     assert.dom('[data-test-person]').hasText('Fadhlan');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
@@ -209,12 +222,13 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-country]').hasText('Indonesia');
   });
 
-  test("it changes the field value if user clicks save in edit view", async function (assert) {
+  test('it changes the field value if user clicks save in edit view', async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    let onClose = () => {};
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} />
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
           <CardPrerender />
         </template>
       }
@@ -227,8 +241,14 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[aria-label="Edit"]');
     await fillIn('[data-test-boxel-input]', 'EditedName');
-    await fillIn('[data-test-boxel-input-city] [data-test-boxel-input]', 'EditedCity');
-    await fillIn('[data-test-boxel-input-country] [data-test-boxel-input]', 'EditedCountry');
+    await fillIn(
+      '[data-test-boxel-input-city] [data-test-boxel-input]',
+      'EditedCity'
+    );
+    await fillIn(
+      '[data-test-boxel-input-country] [data-test-boxel-input]',
+      'EditedCountry'
+    );
     await click('[aria-label="Save"]');
 
     await waitFor('[data-test-person="EditedName"]');
@@ -238,12 +258,13 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-country]').hasText('EditedCountry');
   });
 
-  test("no card if user closes the only card in the stack", async function (assert) {
+  test('no card if user closes the only card in the stack', async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    let onClose = () => {};
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} />
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
           <CardPrerender />
         </template>
       }
@@ -252,9 +273,12 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-person]').isVisible();
 
     await click('[aria-label="Close"]');
-    await waitUntil(() => {
-      return !document.querySelector('.operator-mode-card-stack__card__item')
-    }, { timeout: 3000 });
+    await waitUntil(
+      () => {
+        return !document.querySelector('.operator-mode-card-stack__card__item');
+      },
+      { timeout: 3000 }
+    );
     assert.dom('[data-test-person]').isNotVisible();
   });
 });

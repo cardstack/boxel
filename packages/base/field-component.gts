@@ -18,7 +18,8 @@ const componentCache = new WeakMap<
 export function getBoxComponent(
   card: typeof Card,
   format: Format,
-  model: Box<Card>
+  model: Box<Card>,
+  actions?: {}
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let stable = componentCache.get(model);
   if (stable) {
@@ -41,6 +42,7 @@ export function getBoxComponent(
       @fields={{internalFields}}
       @set={{model.set}}
       @fieldName={{model.name}}
+      @actions={{actions}}
     />
   </template>;
 

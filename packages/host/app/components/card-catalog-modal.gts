@@ -15,7 +15,7 @@ import { Modal, CardContainer, Header, Button } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
-    onSelect?: (card: Card) => void;
+    actions?: {};
   };
 }
 
@@ -52,7 +52,11 @@ export default class CardCatalogModal extends Component<Signature> {
               <ul class='card-catalog' data-test-card-catalog>
                 {{#each this.currentRequest.search.instances as |card|}}
                   <li data-test-card-catalog-item={{card.id}}>
-                    <Preview @card={{card}} @format='embedded' />
+                    <Preview
+                      @card={{card}}
+                      @format='embedded'
+                      @actions={{@actions}}
+                    />
                     <button
                       {{on 'click' (fn this.pick card)}}
                       data-test-select={{card.id}}
@@ -106,9 +110,6 @@ export default class CardCatalogModal extends Component<Signature> {
       };
       let card = await this.currentRequest.deferred.promise;
       if (card) {
-        if (this.args.onSelect) {
-          this.args.onSelect(card);
-        }
         return card as T;
       } else {
         return undefined;
