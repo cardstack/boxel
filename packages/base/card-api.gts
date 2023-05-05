@@ -220,7 +220,8 @@ export interface Field<
   validate(instance: Card, value: any): void;
   component(
     model: Box<Card>,
-    format: Format
+    format: Format,
+    actions?: {}
   ): ComponentLike<{ Args: {}; Blocks: {} }>;
   getter(instance: Card): CardInstanceType<CardT>;
   queryableValue(value: any, stack: Card[]): SearchT;
@@ -915,13 +916,14 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
 
   component(
     model: Box<Card>,
-    format: Format
+    format: Format,
+    actions: { createCard: (card: typeof Card) => void }
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(
         this.name as keyof Card
       ) as unknown as Box<Card | null>;
-      return getLinksToEditor(innerModel, this);
+      return getLinksToEditor(innerModel, this, actions);
     }
     return fieldComponent(this, model, format);
   }

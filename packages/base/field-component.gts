@@ -33,7 +33,8 @@ export function getBoxComponent(
   let internalFields = fieldsComponentsFor(
     {},
     model,
-    defaultFieldFormat(format)
+    defaultFieldFormat(format),
+    actions
   );
 
   let component: ComponentLike<{ Args: {}; Blocks: {} }> = <template>
@@ -56,7 +57,8 @@ export function getBoxComponent(
   let externalFields = fieldsComponentsFor(
     component,
     model,
-    defaultFieldFormat(format)
+    defaultFieldFormat(format),
+    actions
   );
 
   // This cast is safe because we're returning a proxy that wraps component.
@@ -78,7 +80,8 @@ function defaultFieldFormat(format: Format): Format {
 function fieldsComponentsFor<T extends Card>(
   target: object,
   model: Box<T>,
-  defaultFormat: Format
+  defaultFormat: Format,
+  actions?: {}
 ): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
@@ -100,7 +103,7 @@ function fieldsComponentsFor<T extends Card>(
       let format = getField(modelValue.constructor, property)?.computeVia
         ? 'embedded'
         : defaultFormat;
-      return field.component(model as unknown as Box<Card>, format);
+      return field.component(model as unknown as Box<Card>, format, actions);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated

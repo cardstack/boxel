@@ -88,7 +88,6 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   });
 
   private createCard = restartableTask(async () => {
-    console.log(this.args.actions);
     this.args.actions?.createCard(this.args.field.card);
     // let type = identifyCard(this.args.field.card) ?? baseCardRef;
     // let newCard = await createNewCard(type);
@@ -100,11 +99,12 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 
 export function getLinksToEditor(
   model: Box<Card | null>,
-  field: Field<typeof Card>
+  field: Field<typeof Card>,
+  actions?: { createCard: (card: typeof Card) => void }
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   return class LinksToEditTemplate extends GlimmerComponent {
     <template>
-      <LinksToEditor @model={{model}} @field={{field}} />
+      <LinksToEditor @model={{model}} @field={{field}} @actions={{actions}} />
     </template>
   };
 }
