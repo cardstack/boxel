@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 
-export const testServer = 'http://127.0.0.1:4200';
+export const testHost = 'http://127.0.0.1:4200';
 
 interface ProfileAssertions {
   userId?: string;
@@ -8,7 +8,7 @@ interface ProfileAssertions {
 }
 
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
-  await page.waitForURL(`${testServer}/chat`);
+  await page.waitForURL(`${testHost}/chat`);
   await expect(
     page.locator('[data-test-username-field]'),
     'username field is not displayed'
@@ -26,7 +26,7 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
 }
 
 export async function assertLoggedOut(page: Page) {
-  await page.waitForURL(`${testServer}/chat`);
+  await page.waitForURL(`${testHost}/chat`);
   await expect(
     page.locator('[data-test-username-field]'),
     'username field is displayed'

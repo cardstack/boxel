@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { testServer, assertLoggedIn, assertLoggedOut } from '../helpers';
+import { testHost, assertLoggedIn, assertLoggedOut } from '../helpers';
 import {
   synapseStart,
   synapseStop,
@@ -29,7 +29,7 @@ test.describe('User Registration w/ Token', () => {
     await page.goto(`/chat`);
     await assertLoggedOut(page);
     await page.getByRole('link', { name: 'Register new user' }).click();
-    await expect(page.url()).toBe(`${testServer}/chat/register`);
+    await expect(page.url()).toBe(`${testHost}/chat/register`);
     await expect(
       page.locator('[data-test-token-field]'),
       'token field is not displayed'
@@ -50,7 +50,7 @@ test.describe('User Registration w/ Token', () => {
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
-    await page.waitForURL(`${testServer}/chat`);
+    await page.waitForURL(`${testHost}/chat`);
 
     await assertLoggedIn(page);
   });
