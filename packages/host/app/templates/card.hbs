@@ -2,7 +2,8 @@
 {{#if this.isLocalRealm}}
   <InLocalRealm as |realm|>
     {{#if realm.connected}}
-      <this.getIsolatedComponent/>
+      <this.getIsolatedComponent />
+
       <LocalRealmFooter
         @connected={{realm.connected}}
         @close={{realm.close}}
@@ -23,16 +24,18 @@
     {{/if}}
   </InLocalRealm>
 {{else}}
-<this.getIsolatedComponent />
+  <this.getIsolatedComponent />
 {{/if}}
 
 <CodeLink />
 
 {{on-key '.' this.toggleOperatorMode}}
 
-{{#if this.operatorModeEnabled}}
+{{#if this.operatorModeEnabled }}
   {{!-- TODO: Rather than a dedicated argument for the first card in the stack, refactor this so that there will be a state that reflects the whole stack --}}
-  <OperatorMode @firstCardInStack={{this.model.card}} />
+  {{#if this.model}}
+    <OperatorMode @firstCardInStack={{this.model}} />
+  {{/if}}
 {{/if}}
 
 {{outlet}}
