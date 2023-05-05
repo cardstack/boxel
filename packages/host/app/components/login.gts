@@ -104,7 +104,7 @@ export default class Login extends Component {
       }
     }
     if (auth) {
-      await this.matrixService.startWithAuth(auth);
+      await this.matrixService.start(auth);
     } else {
       throw new Error(
         `bug: should be impossible to get here - successful matrix login with no auth response`

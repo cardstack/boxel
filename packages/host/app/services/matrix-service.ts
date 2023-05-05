@@ -13,6 +13,7 @@ export default class MatrixService extends Service {
   get isLoggedIn() {
     return this.client.isLoggedIn();
   }
+
   get userId() {
     return this.client.getUserId();
   }
@@ -23,20 +24,14 @@ export default class MatrixService extends Service {
     this.client = createClient({ baseUrl: matrixURL });
   }
 
-  async start() {
-    let auth = getAuth();
+  async start(auth?: IAuthData) {
     if (!auth) {
-      return;
+      auth = getAuth();
+      if (!auth) {
+        return;
+      }
     }
 
-    let { access_token: accessToken, user_id: userId } = auth;
-    this.client = createClient({ baseUrl: matrixURL, accessToken, userId });
-    if (this.isLoggedIn) {
-      await this.client.startClient();
-    }
-  }
-
-  async startWithAuth(auth: IAuthData): Promise<void> {
     let { access_token: accessToken, user_id: userId } = auth;
     if (!accessToken) {
       throw new Error(
@@ -57,8 +52,10 @@ export default class MatrixService extends Service {
       );
     }
     this.client = createClient({ baseUrl: matrixURL, accessToken, userId });
-    await this.client.startClient();
-    saveAuth(auth);
+    if (this.isLoggedIn) {
+      await this.client.startClient();
+      saveAuth(auth);
+    }
   }
 }
 
