@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { eq } from '../helpers/truth-helpers';
 import { tracked } from '@glimmer/tracking';
+import { type IAuthData } from 'matrix-js-sdk';
 import { restartableTask } from 'ember-concurrency';
 import {
   BoxelHeader,
@@ -215,8 +216,9 @@ export default class RegisterUser extends Component {
         `invalid state: cannot doRegistrationFlow() in state ${this.state.type}`
       );
     }
+    let auth: IAuthData | undefined;
     try {
-      let auth = await this.matrixService.client.registerRequest({
+      auth = await this.matrixService.client.registerRequest({
         username: this.state.username,
         password: this.state.password,
         ...(this.state.type !== 'register'
@@ -231,8 +233,6 @@ export default class RegisterUser extends Component {
             }
           : {}),
       });
-      await this.matrixService.start(auth);
-      this.router.transitionTo('chat');
     } catch (e: any) {
       let maybeRegistrationFlow = e.data;
       if (
@@ -260,6 +260,15 @@ export default class RegisterUser extends Component {
       } else {
         throw e;
       }
+    }
+
+    if (auth) {
+      await this.matrixService.start(auth);
+      let preparedKey = await this.matrixService.client.prepareKeyBackupVersion(
+        this.password
+      );
+      await this.matrixService.client.createKeyBackupVersion(preparedKey);
+      this.router.transitionTo('chat');
     }
   });
 

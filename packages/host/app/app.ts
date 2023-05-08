@@ -1,5 +1,5 @@
 import './lib/public-path'; // this should be first
-import './lib/setup-logger'; // This should be second
+import './lib/setup-globals'; // This should be second
 import Application from '@ember/application';
 import Resolver from 'ember-resolver';
 import loadInitializers from 'ember-load-initializers';
