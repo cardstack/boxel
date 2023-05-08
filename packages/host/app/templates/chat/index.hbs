@@ -1,0 +1,10 @@
+{{! template-lint-disable no-inline-styles }}
+{{#if this.isLoggedIn}}
+  <UserProfile/>
+{{else}}
+  <Login />
+  <LinkTo
+    @route="chat.register"
+    style='color:#6638ff;text-decoration:underline'
+  >Register new user</LinkTo>
+{{/if}}

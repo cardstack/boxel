@@ -5,5 +5,7 @@ import type MatrixService from '../services/matrix-service';
 export default class Chat extends Route<void> {
   @service declare matrixService: MatrixService;
 
-  async model() {}
+  async model() {
+    await this.matrixService.start();
+  }
 }
