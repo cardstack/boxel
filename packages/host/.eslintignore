@@ -14,7 +14,7 @@
 # dependencies
 /bower_components/
 /node_modules/
-olm*
+public/olm*
 
 # misc
 /coverage/
