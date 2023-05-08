@@ -702,6 +702,7 @@ importers:
       '@glint/core': ^1.0.0-beta.4
       '@glint/environment-ember-template-imports': ^1.0.0-beta.4
       '@glint/template': ^1.0.0-beta.4
+      '@matrix-org/olm': ^3.2.15
       '@simple-dom/interface': ^1.4.0
       '@simple-dom/serializer': ^1.4.0
       '@simple-dom/void-map': ^1.4.0
@@ -806,6 +807,7 @@ importers:
       qunit: ^2.18.0
       qunit-dom: ^2.0.0
       start-server-and-test: ^1.14.0
+      stream-browserify: ^3.0.0
       tracked-built-ins: ^2.0.1
       typescript: ^4.6.3
       webpack: ^5.69.1
@@ -829,6 +831,7 @@ importers:
       '@glint/core': 1.0.0-beta.4_typescript@4.9.3
       '@glint/environment-ember-template-imports': 1.0.0-beta.4_yeghggspoqmaibnucjmca2wqky
       '@glint/template': 1.0.0-beta.4
+      '@matrix-org/olm': link:../../vendor/olm
       '@simple-dom/interface': 1.4.0
       '@simple-dom/serializer': 1.4.0
       '@simple-dom/void-map': 1.4.0
@@ -933,6 +936,7 @@ importers:
       qunit: 2.19.3
       qunit-dom: 2.0.0
       start-server-and-test: 1.14.0
+      stream-browserify: 3.0.0
       tracked-built-ins: 2.0.1
       typescript: 4.9.3
       webpack: 5.75.0
@@ -1294,6 +1298,12 @@ importers:
       release-it-lerna-changelog: 3.1.0_release-it@14.14.3
       typescript: 4.9.3
       webpack: 5.75.0
+
+  vendor/olm:
+    specifiers:
+      jasmine: ^3.0.0
+    devDependencies:
+      jasmine: 3.99.0
 
   vendor/transform-modules-amd-plugin:
     specifiers:
@@ -16381,6 +16391,18 @@ packages:
       iterate-iterator: 1.0.2
     dev: true
 
+  /jasmine-core/3.99.1:
+    resolution: {integrity: sha512-Hu1dmuoGcZ7AfyynN3LsfruwMbxMALMka+YtZeGoLuDEySVmVAPaonkNoBRIw/ectu8b9tVQCJNgp4a4knp+tg==}
+    dev: true
+
+  /jasmine/3.99.0:
+    resolution: {integrity: sha512-YIThBuHzaIIcjxeuLmPD40SjxkEcc8i//sGMDKCgkRMVgIwRJf5qyExtlJpQeh7pkeoBSOe6lQEdg+/9uKg9mw==}
+    hasBin: true
+    dependencies:
+      glob: 7.2.3
+      jasmine-core: 3.99.1
+    dev: true
+
   /jest-worker/27.5.1:
     resolution: {integrity: sha512-7vuh85V5cdDofPyxn58nrPjBktZo0u9x1g8WtjQol+jZDaE+fhN+cIvTj11GndBnMnyfrUOG1sZQxCdjKh+DKg==}
     engines: {node: '>= 10.13.0'}
@@ -20451,6 +20473,13 @@ packages:
     dependencies:
       inherits: 2.0.4
       readable-stream: 2.3.7
+    dev: true
+
+  /stream-browserify/3.0.0:
+    resolution: {integrity: sha512-H73RAHsVBapbim0tU2JwwOiXUj+fikfiaoYAKHF3VJfA0pe2BCzkhAHBlLG6REzE+2WNZcxOXjK7lkso+9euLA==}
+    dependencies:
+      inherits: 2.0.4
+      readable-stream: 3.6.0
     dev: true
 
   /stream-combiner/0.0.4:

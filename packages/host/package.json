@@ -47,6 +47,7 @@
     "@glint/core": "^1.0.0-beta.4",
     "@glint/environment-ember-template-imports": "^1.0.0-beta.4",
     "@glint/template": "^1.0.0-beta.4",
+    "@matrix-org/olm": "^3.2.15",
     "@simple-dom/interface": "^1.4.0",
     "@simple-dom/serializer": "^1.4.0",
     "@simple-dom/void-map": "^1.4.0",
@@ -151,6 +152,7 @@
     "qunit": "^2.18.0",
     "qunit-dom": "^2.0.0",
     "start-server-and-test": "^1.14.0",
+    "stream-browserify": "^3.0.0",
     "tracked-built-ins": "^2.0.1",
     "typescript": "^4.6.3",
     "webpack": "^5.69.1"
