@@ -35,11 +35,9 @@ class LinksToEditor extends GlimmerComponent<Signature> {
         <Button @size='small' {{on 'click' this.choose}} data-test-choose-card>
           Choose
         </Button>
-        {{#if @actions.createCard}}
-          <Button @size='small' {{on 'click' this.create}} data-test-create-new>
-            Create New
-          </Button>
-        {{/if}}
+        <Button @size='small' {{on 'click' this.create}} data-test-create-new>
+          Create New
+        </Button>
       {{else}}
         <CardContainer class='links-to-editor__item'>
           <this.linkedCard />
