@@ -26,6 +26,12 @@ interface Signature {
       field: Field<typeof Card>,
       boxedElement: Box<Card>
     ): typeof Card;
+    actions?: {
+      createCard: (
+        card: typeof Card,
+        opts?: { createInPlace?: boolean }
+      ) => Promise<Card | undefined>;
+    };
   };
 }
 
@@ -102,11 +108,20 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   });
 
   private createCard = restartableTask(async () => {
-    let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let newCard = await createNewCard(type);
-    if (newCard) {
+    let card: Card | undefined;
+
+    if (this.args.actions?.createCard) {
+      card = await this.args.actions?.createCard(this.args.field.card, {
+        createInPlace: true,
+      });
+    } else {
+      let type = identifyCard(this.args.field.card) ?? baseCardRef;
+      card = await createNewCard(type);
+    }
+
+    if (card) {
       let cards = (this.args.model.value as any)[this.args.field.name];
-      cards.push(newCard);
+      cards.push(card);
     }
   });
 
@@ -121,12 +136,19 @@ export function getLinksToManyComponent({
   format,
   field,
   cardTypeFor,
+  actions,
 }: {
   model: Box<Card>;
   arrayField: Box<Card[]>;
   format: Format;
   field: Field<typeof Card>;
   cardTypeFor(field: Field<typeof Card>, boxedElement: Box<Card>): typeof Card;
+  actions?: {
+    createCard: (
+      card: typeof Card,
+      opts?: { createInPlace?: boolean }
+    ) => Promise<Card | undefined>;
+  };
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {
@@ -137,6 +159,7 @@ export function getLinksToManyComponent({
           @field={{field}}
           @format={{format}}
           @cardTypeFor={{cardTypeFor}}
+          @actions={{actions}}
         />
       </template>
     };

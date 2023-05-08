@@ -917,7 +917,12 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   component(
     model: Box<Card>,
     format: Format,
-    actions: { createCard: (card: typeof Card) => void }
+    actions: {
+      createCard: (
+        card: typeof Card,
+        opts?: { createInPlace?: boolean }
+      ) => Promise<Card | undefined>;
+    }
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(
@@ -1241,7 +1246,13 @@ class LinksToMany<FieldT extends CardConstructor>
 
   component(
     model: Box<Card>,
-    format: Format
+    format: Format,
+    actions?: {
+      createCard: (
+        card: typeof Card,
+        opts?: { createInPlace?: boolean }
+      ) => Promise<Card | undefined>;
+    }
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     let fieldName = this.name as keyof Card;
     let arrayField = model.field(
@@ -1254,6 +1265,7 @@ class LinksToMany<FieldT extends CardConstructor>
       field: this,
       format,
       cardTypeFor,
+      actions,
     });
   }
 }
@@ -2022,7 +2034,12 @@ export type SignatureFor<CardT extends CardConstructor> = {
     fields: FieldsTypeFor<InstanceType<CardT>>;
     set: Setter;
     fieldName: string | undefined;
-    actions?: { createCard: (cardClass: typeof Card) => void };
+    actions?: {
+      createCard: (
+        cardClass: typeof Card,
+        opts?: { createInPlace?: boolean }
+      ) => Promise<Card | undefined>;
+    };
   };
 };
 

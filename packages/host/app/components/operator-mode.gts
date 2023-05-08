@@ -14,7 +14,7 @@ import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
 import { restartableTask } from 'ember-concurrency';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -32,6 +32,10 @@ interface Signature {
 export default class OperatorMode extends Component<Signature> {
   stack: TrackedArray<Card>;
   formats: WeakMap<Card, Format> = new TrackedWeakMap<Card, Format>();
+  requests: WeakMap<Card, Deferred<Card>> = new TrackedWeakMap<
+    Card,
+    Deferred<Card>
+  >();
 
   //A variable to store value of card field
   //before in edit mode.
@@ -113,7 +117,14 @@ export default class OperatorMode extends Component<Signature> {
     let updatedCard = await this.write.perform(card);
     if (index && updatedCard) {
       this.stack.splice(index); // remove new card editor
-      this.addToStack(updatedCard);
+
+      let cardRequest = this.requests.get(card);
+      if (cardRequest) {
+        cardRequest.fulfill(updatedCard);
+        this.requests.delete(card);
+      } else {
+        this.addToStack(updatedCard);
+      }
     }
   }
 
@@ -147,10 +158,26 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   private publicAPI = {
-    createCard: (cardClass: typeof Card) => {
+    createCard: async (
+      cardClass: typeof Card,
+      opts?: { createInPlace?: boolean }
+    ) => {
       let newCard = new cardClass();
       this.addToStack(newCard);
       this.formats.set(newCard, 'edit');
+
+      if (opts?.createInPlace) {
+        this.requests.set(newCard, new Deferred());
+        let card = await this.requests.get(newCard)?.promise;
+
+        if (card) {
+          return card;
+        } else {
+          return undefined;
+        }
+      }
+
+      return;
     },
   };
 

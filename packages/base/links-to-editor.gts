@@ -10,6 +10,7 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
+  createNewCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
@@ -18,7 +19,12 @@ interface Signature {
   Args: {
     model: Box<Card | null>;
     field: Field<typeof Card>;
-    actions?: { createCard: (card: typeof Card) => void };
+    actions?: {
+      createCard: (
+        card: typeof Card,
+        opts?: { createInPlace?: boolean }
+      ) => Promise<Card | undefined>;
+    };
   };
 }
 
@@ -88,19 +94,32 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   });
 
   private createCard = restartableTask(async () => {
-    this.args.actions?.createCard(this.args.field.card);
-    // let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    // let newCard = await createNewCard(type);
-    // if (newCard) {
-    //   this.args.model.value = newCard;
-    // }
+    let card: Card | undefined;
+
+    if (this.args.actions?.createCard) {
+      card = await this.args.actions?.createCard(this.args.field.card, {
+        createInPlace: true,
+      });
+    } else {
+      let type = identifyCard(this.args.field.card) ?? baseCardRef;
+      card = await createNewCard(type);
+    }
+
+    if (card) {
+      this.args.model.value = card;
+    }
   });
 }
 
 export function getLinksToEditor(
   model: Box<Card | null>,
   field: Field<typeof Card>,
-  actions?: { createCard: (card: typeof Card) => void }
+  actions?: {
+    createCard: (
+      card: typeof Card,
+      opts?: { createInPlace?: boolean }
+    ) => Promise<Card | undefined>;
+  }
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   return class LinksToEditTemplate extends GlimmerComponent {
     <template>

@@ -56,7 +56,7 @@ class Isolated extends Component<typeof CardsGrid> {
       );
     }
 
-    this.args.actions?.createCard?.(cardClass);
+    this.args.actions?.createCard?.(cardClass, { createInPlace: false });
   });
 }
 
