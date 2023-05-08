@@ -384,6 +384,9 @@ nav>.directory-level {
 }
 
 /* OPERATOR MODE */
+.operator-mode > div {
+  align-items: flex-start;
+}
 
 .operator-mode-desktop-overlay {
   position: fixed;
@@ -618,14 +621,15 @@ nav>.directory-level {
 /* stacked cards */
 .stack {
   position: relative;
-  height: 100%;
+  height: calc(100% - var(--search-sheet-closed-height));
   width: 100%;
   max-width: 50rem;
   display: flex;
   justify-content: center;
-  padding-top: var(--boxel-sp);
-  padding-bottom: var(--search-sheet-closed-height);
+  overflow: auto;
+  z-index: 0;
 }
+
 .stack-card {
   --translate-unit: 45px;
   justify-self: center;

@@ -182,6 +182,7 @@ export default class OperatorMode extends Component<Signature> {
 
   <template>
     <Modal
+      class='operator-mode'
       @isOpen={{true}}
       @onClose={{@onClose}}
       @isOverlayDismissalDisabled={{true}}
