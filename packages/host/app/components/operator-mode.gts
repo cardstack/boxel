@@ -22,6 +22,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 
 import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
+import { cardTypeDisplayName } from '@cardstack/host/helpers/card-type-display-name';
 
 interface Signature {
   Args: {
@@ -166,6 +167,10 @@ export default class OperatorMode extends Component<Signature> {
               <Preview @card={{card}} @format={{this.getFormat card}} />
             </div>
             <div class='operator-mode-card-stack__card__header'>
+              <div
+                class='operator-mode-card-stack__card__header__type'
+                data-type-display-name
+              >{{cardTypeDisplayName card}}</div>
               {{#if (not (eq (getValueFromWeakMap this.formats card) 'edit'))}}
                 <IconButton
                   @icon='icon-horizontal-three-dots'

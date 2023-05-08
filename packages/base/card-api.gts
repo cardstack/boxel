@@ -1353,6 +1353,7 @@ export class CardBase {
   declare ['constructor']: CardBaseConstructor;
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
+  static displayName = 'Card';
 
   static [serialize](
     value: any,

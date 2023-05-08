@@ -7,6 +7,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 
 export class Address extends Card {
+  static displayName = 'Address';
   @field streetAddress = contains(StringCard); // required
   @field city = contains(StringCard); // required
   @field region = contains(StringCard);

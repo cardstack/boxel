@@ -55,6 +55,9 @@ export default class Schema extends Component<Signature> {
         <FieldContainer @label='Adopts From:' data-test-adopts-from>
           {{this.cardType.type.super.id}}
         </FieldContainer>
+        <FieldContainer @label='Display Name:' data-test-display-name>
+          {{this.cardType.type.displayName}}
+        </FieldContainer>
         <section>
           <Label>Fields:</Label>
           <ul>

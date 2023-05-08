@@ -9,6 +9,7 @@ import {
 import { Author } from './author';
 
 export class BlogPost extends Card {
+  static displayName = 'Blog Post';
   @field title = contains(StringCard);
   @field slug = contains(StringCard);
   @field body = contains(TextAreaCard); // TODO: rich text
