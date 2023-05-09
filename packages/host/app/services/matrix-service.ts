@@ -5,6 +5,7 @@ import {
   type Room as MatrixRoom,
   type MatrixEvent,
   type RoomMember,
+  type EmittedEvents,
   Preset,
   RoomMemberEvent,
   RoomEvent,
@@ -30,11 +31,20 @@ export default class MatrixService extends Service {
   client = createClient({ baseUrl: matrixURL });
   invites: TrackedMap<string, RoomInvite>;
   joinedRooms: TrackedMap<string, Room>;
+  eventBindings: [EmittedEvents, (...arg: any[]) => void][];
 
   constructor(properties: object) {
     super(properties);
     this.invites = new TrackedMap();
     this.joinedRooms = new TrackedMap();
+
+    // building the event bindings like this so that we can consistently bind
+    // and unbind these events programmatically--this way if we add a new event
+    // we won't forget to unbind it.
+    this.eventBindings = [
+      [RoomMemberEvent.Membership, this.onMembership],
+      [RoomEvent.Name, this.onRoomName],
+    ];
   }
 
   get isLoggedIn() {
@@ -139,12 +149,14 @@ export default class MatrixService extends Service {
   }
 
   private bindEventListeners() {
-    this.client.on(RoomMemberEvent.Membership, this.onMembership);
-    this.client.on(RoomEvent.Name, this.onRoomName);
+    for (let [event, handler] of this.eventBindings) {
+      this.client.on(event, handler);
+    }
   }
   private unbindEventListeners() {
-    this.client.off(RoomMemberEvent.Membership, this.onMembership);
-    this.client.off(RoomEvent.Name, this.onRoomName);
+    for (let [event, handler] of this.eventBindings) {
+      this.client.off(event, handler);
+    }
   }
 
   private onMembership = (e: MatrixEvent, member: RoomMember) => {
@@ -185,7 +197,8 @@ export default class MatrixService extends Service {
     }
   };
 
-  // populate room names in the joined/invited rooms
+  // populate room names in the joined/invited rooms. This event seems to always
+  // come after the room membership events above
   private onRoomName = (room: MatrixRoom) => {
     let { roomId, name } = room;
     // This seems to be some kind of matrix default which is not helpful
