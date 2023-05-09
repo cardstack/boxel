@@ -223,7 +223,8 @@ export default class OperatorMode extends Component<Signature> {
                 this.stack.length
                 i
               }}'
-            data-test={{i}}
+            data-test-stack-card-index={{i}}
+            data-test-stack-card={{card.id}}
           >
             <div
               class={{cn
@@ -272,6 +273,7 @@ export default class OperatorMode extends Component<Signature> {
                   class='operator-mode-card-stack__card__footer-button'
                   {{on 'click' (fn this.save card)}}
                   aria-label='Save'
+                  data-test-operator-mode-save-button
                 >
                   Save
                 </button>

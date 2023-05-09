@@ -181,6 +181,113 @@ module('Integration | operator-mode', function (hooks) {
           },
         },
       },
+      'grid.json': {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/cards-grid',
+              name: 'CardsGrid',
+            },
+          },
+        },
+      },
+      'blog-post.gts': `
+        import StringCard from 'https://cardstack.com/base/string';
+        import TextAreaCard from 'https://cardstack.com/base/text-area';
+        import {
+          Card,
+          field,
+          contains,
+          linksTo,
+          Component,
+        } from 'https://cardstack.com/base/card-api';
+        import { Author } from './author';
+
+        export class BlogPost extends Card {
+          @field title = contains(StringCard);
+          @field slug = contains(StringCard);
+          @field body = contains(TextAreaCard);
+          @field authorBio = linksTo(Author);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <@fields.title /> by <@fields.authorBio />
+            </template>
+          };
+        }
+      `,
+      'author.gts': `
+        import StringCard from 'https://cardstack.com/base/string';
+        import {
+          Component,
+          Card,
+          field,
+          contains,
+        } from 'https://cardstack.com/base/card-api';
+
+        export class Author extends Card {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <@fields.firstName /> <@fields.lastName />
+            </template>
+          };
+        }
+      `,
+      'publishing-packet.gts': `
+        import TextAreaCard from 'https://cardstack.com/base/text-area';
+        import {
+          Card,
+          field,
+          contains,
+          linksTo,
+        } from 'https://cardstack.com/base/card-api';
+        import { BlogPost } from './blog-post';
+
+        export class PublishingPacket extends Card {
+          @field blogPost = linksTo(BlogPost);
+          @field socialBlurb = contains(TextAreaCard);
+        }
+      `,
+      'CatalogEntry/publishing-packet.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Publishing Packet',
+            description: 'Catalog entry for PublishingPacket',
+            ref: {
+              module: '../publishing-packet',
+              name: 'PublishingPacket',
+            },
+            demo: {
+              socialBlurb: null,
+            },
+          },
+          relationships: {
+            'demo.blogPost': {
+              links: {
+                self: '../BlogPost/1',
+              },
+            },
+          },
+          meta: {
+            fields: {
+              demo: {
+                adoptsFrom: {
+                  module: '../publishing-packet',
+                  name: 'PublishingPacket',
+                },
+              },
+            },
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/catalog-entry',
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
@@ -280,5 +387,140 @@ module('Integration | operator-mode', function (hooks) {
       { timeout: 3000 }
     );
     assert.dom('[data-test-person]').isNotVisible();
+  });
+
+  test('can create new card from the cards-grid card', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    let onClose = () => {};
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+
+    await click('[data-test-create-new-card-button]');
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`
+    );
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
+
+    await click(
+      `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`
+    );
+    await waitFor('[data-test-stack-card-index="1"]');
+    assert
+      .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
+      .exists();
+
+    await click('[data-test-operator-mode-save-button]');
+    await waitFor(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`);
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
+      .exists();
+  });
+
+  test('create new card editor opens in the stack at each nesting level', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    let onClose = () => {};
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+
+    await click('[data-test-create-new-card-button]');
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`
+    );
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
+
+    await click(
+      `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`
+    );
+    await waitFor('[data-test-stack-card-index="1"]');
+    assert
+      .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
+      .exists();
+
+    await click('[data-test-create-new]');
+
+    await waitFor(`[data-test-stack-card-index="2"]`);
+    assert.dom('[data-test-stack-card-index]').exists({ count: 3 });
+    assert
+      .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
+      .exists();
+
+    await click(
+      '[data-test-stack-card-index="2"] [data-test-field="authorBio"] [data-test-create-new]'
+    );
+    await waitFor(`[data-test-stack-card-index="3"]`);
+
+    assert
+      .dom('[data-test-field="firstName"] [data-test-boxel-input]')
+      .exists();
+    await fillIn(
+      '[data-test-field="firstName"] [data-test-boxel-input]',
+      'Alice'
+    );
+    await fillIn(
+      '[data-test-field="lastName"] [data-test-boxel-input]',
+      'Enwunder'
+    );
+
+    await click(
+      '[data-test-stack-card-index="3"] [data-test-operator-mode-save-button]'
+    );
+    await waitUntil(
+      () => !document.querySelector('[data-test-stack-card-index="3"]')
+    );
+
+    assert
+      .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
+      .containsText('Alice Enwunder');
+
+    await fillIn(
+      '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
+      'Mad As a Hatter'
+    );
+    await click(
+      '[data-test-stack-card-index="2"] [data-test-operator-mode-save-button]'
+    );
+    await waitUntil(
+      () => !document.querySelector('[data-test-stack-card-index="2"]')
+    );
+
+    assert
+      .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
+      .containsText('Mad As a Hatter by Alice Enwunder');
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
+      .doesNotExist();
+
+    await fillIn(
+      '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
+      `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`
+    );
+    await click(
+      '[data-test-stack-card-index="1"] [data-test-operator-mode-save-button]'
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`);
+
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
+      .containsText(
+        'Everyone knows that Alice ran the show in the Brady household.'
+      );
   });
 });
