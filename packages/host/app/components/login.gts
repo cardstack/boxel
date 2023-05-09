@@ -52,31 +52,29 @@ export default class Login extends Component {
     {{/if}}
   </template>
 
-  @tracked error: string | undefined;
-  @tracked
-  private username: string | undefined;
-  @tracked
-  private password: string | undefined;
-  @service declare matrixService: MatrixService;
+  @tracked private error: string | undefined;
+  @tracked private username: string | undefined;
+  @tracked private password: string | undefined;
+  @service private declare matrixService: MatrixService;
 
-  get isLoginButtonDisabled() {
+  private get isLoginButtonDisabled() {
     return !this.username || !this.password;
   }
 
   @action
-  setUsername(username: string) {
+  private setUsername(username: string) {
     this.username = username;
     this.error = undefined;
   }
 
   @action
-  setPassword(password: string) {
+  private setPassword(password: string) {
     this.password = password;
     this.error = undefined;
   }
 
   @action
-  login() {
+  private login() {
     this.doLogin.perform();
   }
 

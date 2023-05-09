@@ -63,10 +63,9 @@ export default class UserProfile extends Component {
     {{/if}}
   </template>
 
-  @service declare matrixService: MatrixService;
-  @tracked isEditMode = false;
-  @tracked displayName: string | undefined;
-  @tracked userUpdateTime: number | undefined;
+  @service private declare matrixService: MatrixService;
+  @tracked private isEditMode = false;
+  @tracked private displayName: string | undefined;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -78,31 +77,31 @@ export default class UserProfile extends Component {
     this.loadProfile.perform();
   }
 
-  get userId() {
+  private get userId() {
     return this.matrixService.client.getUserId()!; // This component only renders when we are logged in, so we'll always have a userId
   }
 
-  get showLoading() {
+  private get showLoading() {
     return !this.displayName && this.loadProfile.isRunning;
   }
 
   @action
-  setDisplayName(displayName: string) {
+  private setDisplayName(displayName: string) {
     this.displayName = displayName;
   }
 
   @action
-  doEdit() {
+  private doEdit() {
     this.isEditMode = true;
   }
 
   @action
-  save() {
+  private save() {
     this.doSave.perform();
   }
 
   @action
-  logout() {
+  private logout() {
     this.doLogout.perform();
   }
 
