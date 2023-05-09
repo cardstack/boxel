@@ -213,7 +213,7 @@ export default class OperatorMode extends Component<Signature> {
       @isOpen={{true}}
       @onClose={{@onClose}}
       @isOverlayDismissalDisabled={{true}}
-      @boxelModalOverlayColor='#686283'
+      @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
       <div class='stack'>
