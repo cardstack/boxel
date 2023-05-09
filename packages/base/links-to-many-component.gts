@@ -61,7 +61,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 @icon='icon-minus-circle'
                 @width='20px'
                 @height='20px'
-                class='remove-button'
+                class='icon-button'
                 {{on 'click' (fn this.remove i)}}
                 data-test-remove-card
                 data-test-remove={{i}}
@@ -71,12 +71,9 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           {{/each}}
         </ul>
       {{/if}}
-      <Button
-        @size='small'
-        {{on 'click' this.add}}
-        type='button'
-        data-test-add-new
-      >Choose</Button>
+      <Button @size='small' {{on 'click' this.add}} data-test-add-new>
+        Choose
+      </Button>
       <Button @size='small' {{on 'click' this.create}} data-test-create-new>
         Create New
       </Button>
@@ -103,7 +100,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       },
     });
     if (chosenCard) {
-      selectedCards.push(chosenCard);
+      selectedCards = [...selectedCards, chosenCard];
+      (this.args.model.value as any)[this.args.field.name] = selectedCards;
     }
   });
 
@@ -120,8 +118,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     }
 
     if (card) {
-      let cards = (this.args.model.value as any)[this.args.field.name];
-      cards.push(card);
+      (this.args.model.value as any)[this.args.field.name].push(card);
     }
   });
 

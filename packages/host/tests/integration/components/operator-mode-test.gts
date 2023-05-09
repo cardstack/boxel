@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
@@ -111,15 +111,15 @@ module('Integration | operator-mode', function (hooks) {
         }
       `,
       'person.gts': `
-        import { contains, linksTo, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, Component, Card, linksToMany } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
 
-
         export class Person extends Card {
           @field firstName = contains(StringCard);
           @field pet = linksTo(Pet);
+          @field friends = linksToMany(Pet);
           @field firstLetterOfTheName = contains(StringCard, {
             computeVia: function (this: Chain) {
               return this.firstName[0];
@@ -135,6 +135,7 @@ module('Integration | operator-mode', function (hooks) {
                 <@fields.firstLetterOfTheName/>
               </p>
               Pet: <@fields.pet/>
+              Friends: <@fields.friends/>
               Address: <@fields.address/>
             </template>
           }
@@ -146,6 +147,21 @@ module('Integration | operator-mode', function (hooks) {
           id: `${testRealmURL}Pet/mango`,
           attributes: {
             name: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'Pet/jackie.json': {
+        data: {
+          type: 'card',
+          id: `${testRealmURL}Pet/jackie`,
+          attributes: {
+            name: 'Jackie',
           },
           meta: {
             adoptsFrom: {
@@ -170,6 +186,28 @@ module('Integration | operator-mode', function (hooks) {
             pet: {
               links: {
                 self: `${testRealmURL}Pet/mango`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'Person/burcu.json': {
+        data: {
+          type: 'card',
+          id: `${testRealmURL}Person/burcu`,
+          attributes: {
+            firstName: 'Burcu',
+          },
+          relationships: {
+            'friends.0': {
+              links: {
+                self: `${testRealmURL}Pet/jackie`,
               },
             },
           },
@@ -213,6 +251,11 @@ module('Integration | operator-mode', function (hooks) {
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <@fields.title /> by <@fields.authorBio />
+            </template>
+          };
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-blog-post-isolated><@fields.title /> by <@fields.authorBio /></div>
             </template>
           };
         }
@@ -284,6 +327,78 @@ module('Integration | operator-mode', function (hooks) {
             adoptsFrom: {
               module: 'https://cardstack.com/base/catalog-entry',
               name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+      'BlogPost/1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Outer Space Journey',
+            body: 'Hello world',
+          },
+          relationships: {
+            authorBio: {
+              links: {
+                self: '../Author/1',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../blog-post',
+              name: 'BlogPost',
+            },
+          },
+        },
+      },
+      'BlogPost/2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Beginnings',
+          },
+          relationships: {
+            authorBio: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../blog-post',
+              name: 'BlogPost',
+            },
+          },
+        },
+      },
+      'Author/1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Alien',
+            lastName: 'Bob',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../author',
+              name: 'Author',
+            },
+          },
+        },
+      },
+      'Author/2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'R2-D2',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../author',
+              name: 'Author',
             },
           },
         },
@@ -418,7 +533,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .exists();
 
-    await click('[data-test-operator-mode-save-button]');
+    await click('[data-test-save-button]');
     await waitFor(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`);
     assert
       .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
@@ -479,9 +594,7 @@ module('Integration | operator-mode', function (hooks) {
       'Enwunder'
     );
 
-    await click(
-      '[data-test-stack-card-index="3"] [data-test-operator-mode-save-button]'
-    );
+    await click('[data-test-stack-card-index="3"] [data-test-save-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="3"]')
     );
@@ -494,9 +607,7 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
       'Mad As a Hatter'
     );
-    await click(
-      '[data-test-stack-card-index="2"] [data-test-operator-mode-save-button]'
-    );
+    await click('[data-test-stack-card-index="2"] [data-test-save-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="2"]')
     );
@@ -512,9 +623,7 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
       `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`
     );
-    await click(
-      '[data-test-stack-card-index="1"] [data-test-operator-mode-save-button]'
-    );
+    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
     await waitFor(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`);
 
     assert
@@ -523,4 +632,340 @@ module('Integration | operator-mode', function (hooks) {
         'Everyone knows that Alice ran the show in the Brady household.'
       );
   });
+
+  test('can choose a card for a linksTo field that has an existing value', async function (assert) {
+    let card = await loadCard(`${testRealmURL}BlogPost/1`);
+    let onClose = () => {};
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
+    assert.dom('[data-test-choose-card]').doesNotExist();
+    assert.dom('[data-test-create-new]').doesNotExist();
+
+    await click('[data-test-remove-card]');
+    assert.dom('[data-test-choose-card]').exists();
+    assert.dom('[data-test-create-new]').exists();
+
+    await click('[data-test-choose-card]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
+    await click(`[data-test-select="${testRealmURL}Author/2"]`);
+
+    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
+  });
+
+  test('can choose a card for a linksTo field that has no existing value', async function (assert) {
+    let card = await loadCard(`${testRealmURL}BlogPost/2`);
+    let onClose = () => {};
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-choose-card]').exists();
+    assert.dom('[data-test-create-new]').exists();
+
+    await click('[data-test-choose-card]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
+    await click(`[data-test-select="${testRealmURL}Author/2"]`);
+
+    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
+
+    await click('[data-test-save-button]');
+    await waitFor('[data-test-blog-post-isolated]');
+
+    assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by R2-D2');
+  });
+
+  test('can create a new card to populate a linksTo field', async function (assert) {
+    let card = await loadCard(`${testRealmURL}BlogPost/2`);
+    let onClose = () => {};
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-choose-card]').exists();
+    assert.dom('[data-test-create-new]').exists();
+
+    await click('[data-test-create-new]');
+    await waitFor('[data-test-stack-card-index="1"]');
+
+    assert
+      .dom('[data-test-stack-card-index="1"] [data-test-field="firstName"]')
+      .exists();
+    await fillIn(
+      '[data-test-stack-card-index="1"] [data-test-field="firstName"] [data-test-boxel-input]',
+      'Alice'
+    );
+
+    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
+    await waitUntil(
+      () => !document.querySelector('[data-test-stack-card-index="1"]')
+    );
+
+    assert.dom('[data-test-choose-card]').doesNotExist();
+    assert.dom('[data-test-create-new]').doesNotExist();
+    assert.dom('[data-test-field="authorBio"]').containsText('Alice');
+
+    await click('[data-test-stack-card-index="0"] [data-test-save-button]');
+    await waitFor('[data-test-blog-post-isolated]');
+
+    assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
+  });
+
+  test('can remove the link for a linksTo field', async function (assert) {
+    let card = await loadCard(`${testRealmURL}BlogPost/1`);
+    let onClose = () => {};
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
+    await click('[data-test-field="authorBio"] [data-test-remove-card]');
+    await click('[data-test-save-button]');
+
+    await waitFor('[data-test-blog-post-isolated]');
+    assert
+      .dom('[data-test-blog-post-isolated]')
+      .hasText('Outer Space Journey by');
+  });
+
+  test('can add a card to linksToMany field that has existing values', async function (assert) {
+    let card = await loadCard(`${testRealmURL}Person/burcu`);
+    let onClose = () => {};
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-field="friends"]').containsText('Jackie');
+    assert.dom('[data-test-field="friends"] [data-test-add-new]').exists();
+    assert.dom('[data-test-field="friends"] [data-test-create-new]').exists();
+
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+
+    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    assert.dom('[data-test-field="friends"]').containsText('Jackie Mango');
+  });
+
+  // test('can add a card to linksToMany field that has no existing values', async function (assert) {
+  //   let card = await loadCard(`${testRealmURL}BlogPost/2`);
+  //   let onClose = () => {};
+  //   await renderComponent(
+  //     class TestDriver extends GlimmerComponent {
+  //       <template>
+  //         <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+  //         <CardPrerender />
+  //       </template>
+  //     }
+  //   );
+
+  //   await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
+  //   await click('[data-test-edit-button]');
+
+  //   assert.dom('[data-test-choose-card]').exists();
+  //   assert.dom('[data-test-create-new]').exists();
+
+  //   await click('[data-test-choose-card]');
+  //   await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
+  //   await click(`[data-test-select="${testRealmURL}Author/2"]`);
+
+  //   await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+  //   assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
+
+  //   await click('[data-test-stack-card-index="0"] [data-test-save-button]');
+  //   await waitFor('[data-test-blog-post-isolated]');
+
+  //   assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by R2-D2');
+  // });
+
+  // test('can change the item selection in a linksToMany field', async function (assert) {
+  //   let card = await loadCard(`${testRealmURL}BlogPost/1`);
+  //   let onClose = () => {};
+  //   await renderComponent(
+  //     class TestDriver extends GlimmerComponent {
+  //       <template>
+  //         <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+  //         <CardPrerender />
+  //       </template>
+  //     }
+  //   );
+
+  //   await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
+  //   await click('[data-test-edit-button]');
+
+  //   assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
+  //   assert.dom('[data-test-choose-card]').doesNotExist();
+  //   assert.dom('[data-test-create-new]').doesNotExist();
+
+  //   await click('[data-test-remove-card]');
+  //   assert.dom('[data-test-choose-card]').exists();
+  //   assert.dom('[data-test-create-new]').exists();
+
+  //   await click('[data-test-choose-card]');
+  //   await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
+  //   await click(`[data-test-select="${testRealmURL}Author/2"]`);
+
+  //   await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+  //   assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
+  // });
+
+  // test('can create a new card to add to a linksToMany field with no existing value', async function (assert) {
+  //   let card = await loadCard(`${testRealmURL}BlogPost/2`);
+  //   let onClose = () => {};
+  //   await renderComponent(
+  //     class TestDriver extends GlimmerComponent {
+  //       <template>
+  //         <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+  //         <CardPrerender />
+  //       </template>
+  //     }
+  //   );
+
+  //   await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
+  //   await click('[data-test-edit-button]');
+
+  //   assert.dom('[data-test-choose-card]').exists();
+  //   assert.dom('[data-test-create-new]').exists();
+
+  //   await click('[data-test-create-new]');
+  //   await waitFor('[data-test-stack-card-index="1"]');
+
+  //   assert
+  //     .dom('[data-test-stack-card-index="1"] [data-test-field="firstName"]')
+  //     .exists();
+  //   await fillIn(
+  //     '[data-test-stack-card-index="1"] [data-test-field="firstName"] [data-test-boxel-input]',
+  //     'Alice'
+  //   );
+
+  //   await click('[data-test-stack-card-index="1"] [data-test-save-button]');
+  //   await waitUntil(
+  //     () => !document.querySelector('[data-test-stack-card-index="1"]')
+  //   );
+
+  //   assert.dom('[data-test-choose-card]').doesNotExist();
+  //   assert.dom('[data-test-create-new]').doesNotExist();
+  //   assert.dom('[data-test-field="authorBio"]').containsText('Alice');
+
+  //   await click('[data-test-stack-card-index="0"] [data-test-save-button]');
+  //   await waitFor('[data-test-blog-post-isolated]');
+
+  //   assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
+  // });
+
+  // test('can create a new card to add to a linksToMany field with existing values', async function (assert) {
+  //   let card = await loadCard(`${testRealmURL}BlogPost/2`);
+  //   let onClose = () => {};
+  //   await renderComponent(
+  //     class TestDriver extends GlimmerComponent {
+  //       <template>
+  //         <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+  //         <CardPrerender />
+  //       </template>
+  //     }
+  //   );
+
+  //   await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
+  //   await click('[data-test-edit-button]');
+
+  //   assert.dom('[data-test-choose-card]').exists();
+  //   assert.dom('[data-test-create-new]').exists();
+
+  //   await click('[data-test-create-new]');
+  //   await waitFor('[data-test-stack-card-index="1"]');
+
+  //   assert
+  //     .dom('[data-test-stack-card-index="1"] [data-test-field="firstName"]')
+  //     .exists();
+  //   await fillIn(
+  //     '[data-test-stack-card-index="1"] [data-test-field="firstName"] [data-test-boxel-input]',
+  //     'Alice'
+  //   );
+
+  //   await click('[data-test-stack-card-index="1"] [data-test-save-button]');
+  //   await waitUntil(
+  //     () => !document.querySelector('[data-test-stack-card-index="1"]')
+  //   );
+
+  //   assert.dom('[data-test-choose-card]').doesNotExist();
+  //   assert.dom('[data-test-create-new]').doesNotExist();
+  //   assert.dom('[data-test-field="authorBio"]').containsText('Alice');
+
+  //   await click('[data-test-stack-card-index="0"] [data-test-save-button]');
+  //   await waitFor('[data-test-blog-post-isolated]');
+
+  //   assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
+  // });
+
+  // test('can remove all the items of a linksToMany field', async function (assert) {
+  //   let card = await loadCard(`${testRealmURL}BlogPost/1`);
+  //   let onClose = () => {};
+  //   await renderComponent(
+  //     class TestDriver extends GlimmerComponent {
+  //       <template>
+  //         <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+  //         <CardPrerender />
+  //       </template>
+  //     }
+  //   );
+
+  //   await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
+  //   await click('[data-test-edit-button]');
+
+  //   assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
+  //   await click('[data-test-field="authorBio"] [data-test-remove-card]');
+  //   await click('[data-test-save-button]');
+
+  //   await waitFor('[data-test-blog-post-isolated]');
+  //   assert
+  //     .dom('[data-test-blog-post-isolated]')
+  //     .hasText('Outer Space Journey by');
+  // });
+
+  skip('can create a specialized a new card to populate a linksTo field');
+  skip('can create a specialized a new card to populate a linksToMany field');
 });

@@ -249,6 +249,7 @@ export default class OperatorMode extends Component<Signature> {
                   class='icon-button'
                   aria-label='Edit'
                   {{on 'click' (fn this.edit card)}}
+                  data-test-edit-button
                 />
               {{/if}}
               <IconButton
@@ -258,6 +259,7 @@ export default class OperatorMode extends Component<Signature> {
                 class='icon-button'
                 aria-label='Close'
                 {{on 'click' (fn this.close card)}}
+                data-test-close-button
               />
             </div>
             {{#if (eq (getValueFromWeakMap this.formats card) 'edit')}}
@@ -266,6 +268,7 @@ export default class OperatorMode extends Component<Signature> {
                   class='operator-mode-card-stack__card__footer-button light-button'
                   {{on 'click' (fn this.cancel card)}}
                   aria-label='Cancel'
+                  data-test-cancel-button
                 >
                   Cancel
                 </button>
@@ -273,7 +276,7 @@ export default class OperatorMode extends Component<Signature> {
                   class='operator-mode-card-stack__card__footer-button'
                   {{on 'click' (fn this.save card)}}
                   aria-label='Save'
-                  data-test-operator-mode-save-button
+                  data-test-save-button
                 >
                   Save
                 </button>
