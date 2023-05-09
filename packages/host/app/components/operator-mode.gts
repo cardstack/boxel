@@ -62,7 +62,7 @@ export default class OperatorMode extends Component<Signature> {
     this.searchSheetMode = SearchSheetMode.Closed;
   }
 
-  addToStack(card: CardAPI.Card) {
+  @action addToStack(card: CardAPI.Card) {
     this.addCardToStack.perform(card);
   }
 

@@ -412,11 +412,11 @@ nav>.directory-level {
   position: relative;
 }
 
-.operator-mode-card-stack__card__item .boxel-card-container {
+.operator-mode-card-stack__card__item > .boxel-card-container {
   padding-top: 42px;
 }
 
-.operator-mode-card-stack__card__item_edit .boxel-card-container {
+.operator-mode-card-stack__card__item_edit > .boxel-card-container {
   padding-bottom: 62px;
 }
 

@@ -9,6 +9,7 @@ import {
 import { defaultComponent } from './default-card-component';
 import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
+import { CardContainer } from '@cardstack/boxel-ui';
 
 const componentCache = new WeakMap<
   Box<Card>,
@@ -160,12 +161,14 @@ export function getPluralViewComponent(
   );
   let defaultComponent = class PluralView extends GlimmerComponent {
     <template>
-      {{#each model.children as |child|}}
+      {{#each model.children as |child i|}}
         {{#let
           (getBoxComponent (cardTypeFor field child) format child)
           as |Item|
         }}
-          <Item />
+          <CardContainer data-test-plural-view-item={{i}}>
+            <Item />
+          </CardContainer>
         {{/let}}
       {{/each}}
     </template>

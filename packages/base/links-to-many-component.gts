@@ -118,12 +118,16 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     }
 
     if (card) {
-      (this.args.model.value as any)[this.args.field.name].push(card);
+      let cards = (this.args.model.value as any)[this.args.field.name];
+      cards = [...cards, card];
+      (this.args.model.value as any)[this.args.field.name] = cards;
     }
   });
 
   remove = (index: number) => {
-    (this.args.model.value as any)[this.args.field.name].splice(index, 1);
+    let cards = (this.args.model.value as any)[this.args.field.name];
+    cards = cards.filter((_c: Card, i: number) => i !== index);
+    (this.args.model.value as any)[this.args.field.name] = cards;
   };
 }
 
