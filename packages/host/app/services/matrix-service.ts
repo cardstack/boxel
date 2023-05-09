@@ -1,14 +1,41 @@
 import Service from '@ember/service';
 import { createClient } from 'matrix-js-sdk';
-import { type IAuthData } from 'matrix-js-sdk';
+import {
+  type IAuthData,
+  type Room as MatrixRoom,
+  type MatrixEvent,
+  type RoomMember,
+  Preset,
+  RoomMemberEvent,
+  RoomEvent,
+} from 'matrix-js-sdk';
 import { tracked } from '@glimmer/tracking';
+import { TrackedMap } from 'tracked-built-ins';
 import ENV from '@cardstack/host/config/environment';
 
 const { matrixURL } = ENV;
 
+export interface Room {
+  roomId: string;
+  name?: string;
+  timestamp: number;
+}
+
+export interface RoomInvite extends Room {
+  sender: string;
+}
+
 export default class MatrixService extends Service {
   @tracked
   client = createClient({ baseUrl: matrixURL });
+  invites: TrackedMap<string, RoomInvite>;
+  joinedRooms: TrackedMap<string, Room>;
+
+  constructor(properties: object) {
+    super(properties);
+    this.invites = new TrackedMap();
+    this.joinedRooms = new TrackedMap();
+  }
 
   get isLoggedIn() {
     return this.client.isLoggedIn();
@@ -20,8 +47,10 @@ export default class MatrixService extends Service {
 
   async logout() {
     clearAuth();
+    this.unbindEventListeners();
+    await this.client.stopClient();
     await this.client.logout();
-    this.client = createClient({ baseUrl: matrixURL });
+    this.resetState();
   }
 
   async start(auth?: IAuthData) {
@@ -78,10 +107,101 @@ export default class MatrixService extends Service {
         console.error(`Error initializing crypto`, e);
         throw e;
       }
-      await this.client.startClient();
+
       saveAuth(auth);
+      this.bindEventListeners();
+
+      await this.client.startClient();
     }
   }
+
+  async createRoom(
+    name: string,
+    localInvite: string[], // these are just local names--assume no federation, all users live on the same homeserver
+    topic?: string
+  ): Promise<string> {
+    let homeserver = new URL(this.client.getHomeserverUrl());
+    let invite = localInvite.map((i) => `@${i}:${homeserver.hostname}`);
+    let { room_id: roomId } = await this.client.createRoom({
+      preset: Preset.TrustedPrivateChat, // private chat where all members have same power level as user that creates the room
+      invite,
+      name,
+      topic,
+      room_alias_name: encodeURIComponent(name),
+    });
+    return roomId;
+  }
+
+  private resetState() {
+    this.invites = new TrackedMap();
+    this.joinedRooms = new TrackedMap();
+    this.client = createClient({ baseUrl: matrixURL });
+  }
+
+  private bindEventListeners() {
+    this.client.on(RoomMemberEvent.Membership, this.onMembership);
+    this.client.on(RoomEvent.Name, this.onRoomName);
+  }
+  private unbindEventListeners() {
+    this.client.off(RoomMemberEvent.Membership, this.onMembership);
+    this.client.off(RoomEvent.Name, this.onRoomName);
+  }
+
+  private onMembership = (e: MatrixEvent, member: RoomMember) => {
+    let { event } = e;
+    if (member.userId === this.client.getUserId()) {
+      let { room_id: roomId, origin_server_ts: timestamp } = event;
+      if (!roomId) {
+        throw new Error(
+          `received room membership event without a room ID: ${JSON.stringify(
+            event,
+            null,
+            2
+          )}`
+        );
+      }
+      if (timestamp == null) {
+        throw new Error(
+          `received room membership event without a timestamp: ${JSON.stringify(
+            event,
+            null,
+            2
+          )}`
+        );
+      }
+      if (member.membership === 'invite') {
+        this.invites.set(roomId, {
+          roomId,
+          sender: event.sender!,
+          timestamp,
+        });
+      }
+      if (member.membership === 'join') {
+        this.joinedRooms.set(roomId, {
+          roomId,
+          timestamp,
+        });
+      }
+    }
+  };
+
+  // populate room names in the joined/invited rooms
+  private onRoomName = (room: MatrixRoom) => {
+    let { roomId, name } = room;
+    // This seems to be some kind of matrix default which is not helpful
+    if (name === 'Empty room') {
+      return;
+    }
+
+    let invite = this.invites.get(roomId);
+    if (invite) {
+      this.invites.set(roomId, { ...invite, name });
+    }
+    let joinedRoom = this.joinedRooms.get(roomId);
+    if (joinedRoom) {
+      this.joinedRooms.set(roomId, { ...joinedRoom, name });
+    }
+  };
 }
 
 function saveAuth(auth: IAuthData) {
