@@ -14,7 +14,7 @@ import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
 import { restartableTask } from 'ember-concurrency';
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, type Actions } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -158,7 +158,7 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
-  private publicAPI = {
+  private publicAPI: Actions = {
     createCard: async (
       cardClass: typeof Card,
       opts?: { createInPlace?: boolean }

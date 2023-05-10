@@ -20,6 +20,7 @@ import {
   baseCardRef,
   identifyCard,
   createNewCard,
+  type Actions,
 } from '@cardstack/runtime-common';
 
 interface Signature {
@@ -32,12 +33,7 @@ interface Signature {
       field: Field<typeof CardBase>,
       boxedElement: Box<CardBase>
     ): typeof CardBase;
-    actions?: {
-      createCard: (
-        card: typeof Card,
-        opts?: { createInPlace?: boolean }
-      ) => Promise<Card | undefined>;
-    };
+    actions?: Actions;
   };
 }
 
@@ -153,12 +149,7 @@ export function getLinksToManyComponent({
     field: Field<typeof CardBase>,
     boxedElement: Box<CardBase>
   ): typeof CardBase;
-  actions?: {
-    createCard: (
-      card: typeof Card,
-      opts?: { createInPlace?: boolean }
-    ) => Promise<Card | undefined>;
-  };
+  actions?: Actions;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {

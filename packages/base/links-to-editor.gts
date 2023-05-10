@@ -11,6 +11,7 @@ import {
   baseCardRef,
   identifyCard,
   createNewCard,
+  type Actions,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
@@ -19,12 +20,7 @@ interface Signature {
   Args: {
     model: Box<Card | null>;
     field: Field<typeof Card>;
-    actions?: {
-      createCard: (
-        card: typeof Card,
-        opts?: { createInPlace?: boolean }
-      ) => Promise<Card | undefined>;
-    };
+    actions?: Actions;
   };
 }
 
@@ -112,12 +108,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 export function getLinksToEditor(
   model: Box<Card | null>,
   field: Field<typeof Card>,
-  actions?: {
-    createCard: (
-      card: typeof Card,
-      opts?: { createInPlace?: boolean }
-    ) => Promise<Card | undefined>;
-  }
+  actions?: Actions
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   return class LinksToEditTemplate extends GlimmerComponent {
     <template>

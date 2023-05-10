@@ -7,7 +7,11 @@ import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask } from 'ember-concurrency';
 import type { CardBase } from 'https://cardstack.com/base/card-api';
 import type { Query } from '@cardstack/runtime-common/query';
-import { createNewCard, type CardRef } from '@cardstack/runtime-common';
+import {
+  createNewCard,
+  type CardRef,
+  type Actions,
+} from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
@@ -15,7 +19,7 @@ import { Modal, CardContainer, Header, Button } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
-    actions?: {};
+    actions?: Actions;
   };
 }
 

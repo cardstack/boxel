@@ -34,6 +34,7 @@ import {
   type LooseSingleCardDocument,
   type CardDocument,
   type CardResource,
+  type Actions,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 
@@ -222,7 +223,7 @@ export interface Field<
   component(
     model: Box<CardBase>,
     format: Format,
-    actions?: {}
+    actions?: Actions
   ): ComponentLike<{ Args: {}; Blocks: {} }>;
   getter(instance: CardBase): CardInstanceType<CardT>;
   queryableValue(value: any, stack: CardBase[]): SearchT;
@@ -921,12 +922,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   component(
     model: Box<Card>,
     format: Format,
-    actions: {
-      createCard: (
-        card: typeof Card,
-        opts?: { createInPlace?: boolean }
-      ) => Promise<Card | undefined>;
-    }
+    actions: Actions
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(
@@ -1251,12 +1247,7 @@ class LinksToMany<FieldT extends CardConstructor>
   component(
     model: Box<Card>,
     format: Format,
-    actions?: {
-      createCard: (
-        card: typeof Card,
-        opts?: { createInPlace?: boolean }
-      ) => Promise<Card | undefined>;
-    }
+    actions?: Actions
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     let fieldName = this.name as keyof CardBase;
     let arrayField = model.field(
@@ -1430,7 +1421,7 @@ export class CardBase {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(card: CardBase, format: Format, actions?: {}) {
+  static getComponent(card: CardBase, format: Format, actions?: Actions) {
     return getComponent(card, format, actions);
   }
 
@@ -2060,19 +2051,14 @@ export type SignatureFor<CardT extends CardBaseConstructor> = {
     fields: FieldsTypeFor<InstanceType<CardT>>;
     set: Setter;
     fieldName: string | undefined;
-    actions?: {
-      createCard: (
-        cardClass: typeof CardBase,
-        opts?: { createInPlace?: boolean }
-      ) => Promise<Card | undefined>;
-    };
+    actions?: Actions;
   };
 };
 
 export function getComponent(
   model: CardBase,
   format: Format,
-  actions?: {}
+  actions?: Actions
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let box = Box.create(model);
   let component = getBoxComponent(

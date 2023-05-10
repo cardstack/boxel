@@ -139,6 +139,13 @@ export async function createNewCard<T extends Card>(
   return await cardCreator.create<T>(ref, relativeTo);
 }
 
+export interface Actions {
+  createCard: (
+    cardClass: typeof Card,
+    opts?: { createInPlace?: boolean }
+  ) => Promise<Card | undefined>;
+}
+
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {
     if (path.endsWith(extension)) {

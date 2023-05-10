@@ -7,7 +7,7 @@ import {
   type CardBase,
 } from './card-api';
 import { defaultComponent } from './default-card-component';
-import { getField } from '@cardstack/runtime-common';
+import { getField, type Actions } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui';
 
@@ -20,7 +20,7 @@ export function getBoxComponent(
   card: typeof CardBase,
   format: Format,
   model: Box<CardBase>,
-  actions?: {}
+  actions?: Actions
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let stable = componentCache.get(model);
   if (stable) {
@@ -82,7 +82,7 @@ function fieldsComponentsFor<T extends CardBase>(
   target: object,
   model: Box<T>,
   defaultFormat: Format,
-  actions?: {}
+  actions?: Actions
 ): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
