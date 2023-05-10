@@ -149,6 +149,7 @@ export default class RoomsManager extends Component {
     } catch (e) {
       if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
         this.roomNameError = 'Room already exists';
+        return;
       }
       throw e;
     }
