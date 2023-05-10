@@ -6,11 +6,7 @@ on:
   pull_request:
 
 env:
-  PNPM_VERSION: 7.28.0
-
-  # This controls what version of node first boots pnpm, but pnpm itself will
-  # read the .npmrc file and download a different version if they don't match.
-  NODE_VERSION: 18.6.0
+  VOLTA_FEATURE_PNPM: 1
 
 permissions:
   contents: read
@@ -22,13 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+      - uses: volta-cli/action@v4
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Lint Boxel Motion
@@ -54,13 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+      - uses: volta-cli/action@v4
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Run Tests
@@ -71,13 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+      - uses: volta-cli/action@v4
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Run test suite
@@ -88,13 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+      - uses: volta-cli/action@v4
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Build host dist/ for fastboot
@@ -111,13 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+      - uses: volta-cli/action@v4
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Install Playwright Browsers
@@ -137,13 +103,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+      - uses: volta-cli/action@v4
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Build host dist/ for fastboot
