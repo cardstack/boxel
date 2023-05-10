@@ -2487,6 +2487,21 @@ posts/please-ignore-me.json
     }
   });
 
+  test('search index ignored .realm.json file', async function (assert) {
+    let realm = await TestRealm.create(
+      {
+        '.realm.json': `{ name: 'Example Workspace' }`,
+        'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+      },
+      this.owner
+    );
+
+    await realm.ready;
+    let indexer = realm.searchIndex;
+    let card = await indexer.card(new URL(`${testRealmURL}post`));
+    assert.ok(card, 'instance exists');
+  });
+
   test("incremental indexing doesn't process ignored files", async function (assert) {
     let realm = await TestRealm.create(
       {

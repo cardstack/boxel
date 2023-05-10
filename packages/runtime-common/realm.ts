@@ -187,6 +187,7 @@ export class Realm {
         SupportedMimeType.CardJson,
         this.patchCard.bind(this)
       )
+      .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .get(
         '/|/.+(?<!.json)',
@@ -799,6 +800,36 @@ export class Realm {
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true }
     );
+    return createResponse(JSON.stringify(doc, null, 2), {
+      headers: { 'content-type': SupportedMimeType.CardJson },
+    });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private async realmInfo(_request: Request): Promise<Response> {
+    let fileURL = this.paths.fileURL(`.realm.json`);
+    let localPath: LocalPath = this.paths.local(fileURL);
+    let realmConfig = await this.readFileAsText(localPath);
+    let name = 'Unnamed Workspace';
+    if (realmConfig) {
+      try {
+        let realmConfigJson = JSON.parse(realmConfig.content);
+        if (realmConfigJson.name) {
+          name = realmConfigJson.name;
+        }
+      } catch (e) {
+        this.#log.warn(`failed to parse realm config: ${e}`);
+      }
+    }
+    let doc = {
+      data: {
+        id: this.paths.url.toString(),
+        type: 'realm-info',
+        attributes: {
+          name,
+        },
+      },
+    };
     return createResponse(JSON.stringify(doc, null, 2), {
       headers: { 'content-type': SupportedMimeType.CardJson },
     });
