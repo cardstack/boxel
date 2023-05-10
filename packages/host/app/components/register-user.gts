@@ -78,18 +78,12 @@ export default class RegisterUser extends Component {
     {{/if}}
   </template>
 
-  @tracked
-  private usernameError: string | undefined;
-  @tracked
-  private tokenError: string | undefined;
-  @tracked
-  private username: string | undefined;
-  @tracked
-  private password: string | undefined;
-  @tracked
-  private token: string | undefined;
-  @tracked
-  private state:
+  @tracked private usernameError: string | undefined;
+  @tracked private tokenError: string | undefined;
+  @tracked private username: string | undefined;
+  @tracked private password: string | undefined;
+  @tracked private token: string | undefined;
+  @tracked private state:
     | { type: 'initial' }
     | {
         type: 'register';
@@ -120,52 +114,52 @@ export default class RegisterUser extends Component {
         session: string;
       } = { type: 'initial' };
 
-  @service declare matrixService: MatrixService;
-  @service declare router: RouterService;
+  @service private declare matrixService: MatrixService;
+  @service private declare router: RouterService;
 
-  get isRegisterButtonDisabled() {
+  private get isRegisterButtonDisabled() {
     return !this.username || !this.password;
   }
 
-  get isNextButtonDisabled() {
+  private get isNextButtonDisabled() {
     return !this.token;
   }
 
-  get cleanUsername() {
+  private get cleanUsername() {
     return this.username || '';
   }
 
-  get cleanToken() {
+  private get cleanToken() {
     return this.token || '';
   }
 
-  get usernameInputState() {
+  private get usernameInputState() {
     return this.usernameError ? 'invalid' : 'initial';
   }
 
-  get tokenInputState() {
+  private get tokenInputState() {
     return this.tokenError ? 'invalid' : 'initial';
   }
 
   @action
-  setToken(token: string) {
+  private setToken(token: string) {
     this.token = token;
     this.tokenError = undefined;
   }
 
   @action
-  setUsername(username: string) {
+  private setUsername(username: string) {
     this.username = username;
     this.usernameError = undefined;
   }
 
   @action
-  setPassword(password: string) {
+  private setPassword(password: string) {
     this.password = password;
   }
 
   @action
-  register() {
+  private register() {
     if (!this.username) {
       throw new Error(
         `bug: should never get here: register button disabled when no username`
@@ -185,7 +179,7 @@ export default class RegisterUser extends Component {
   }
 
   @action
-  sendToken() {
+  private sendToken() {
     if (this.state.type !== 'askForToken') {
       throw new Error(
         `invalid state: cannot sendToken() in state ${this.state.type}`
@@ -272,7 +266,7 @@ export default class RegisterUser extends Component {
     }
   });
 
-  nextStateFromResponse(
+  private nextStateFromResponse(
     nextStage: string,
     registrationFlows: RegistrationFlows
   ) {
