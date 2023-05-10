@@ -22,7 +22,7 @@ class Isolated extends Component<typeof CardsGrid> {
           @tooltip='Add a new card to this collection'
           @tooltipPosition='left'
           class='add-button cards-grid__add-button'
-          {{on 'click' this.createCard}}
+          {{on 'click' this.createNew}}
           data-test-create-new-card-button
         />
       {{/if}}
@@ -30,7 +30,7 @@ class Isolated extends Component<typeof CardsGrid> {
   </template>
 
   @action
-  createCard() {
+  createNew() {
     this.createNewCard.perform();
   }
 
@@ -50,7 +50,7 @@ class Isolated extends Component<typeof CardsGrid> {
 
     if (!cardClass) {
       throw new Error(
-        `bug: could not get the card class from catalog entry ${JSON.stringify(
+        `bug: could not create new card from catalog entry ${JSON.stringify(
           catalogEntryRef
         )}`
       );
