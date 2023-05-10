@@ -16,13 +16,13 @@ import ENV from '@cardstack/host/config/environment';
 
 const { matrixURL } = ENV;
 
-export interface Room {
+interface Room {
   roomId: string;
   name?: string;
   timestamp: number;
 }
 
-export interface RoomInvite extends Room {
+interface RoomInvite extends Room {
   sender: string;
 }
 
