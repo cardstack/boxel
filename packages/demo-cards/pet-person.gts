@@ -10,8 +10,14 @@ import { CardContainer } from '@cardstack/boxel-ui';
 import { Pet } from './pet';
 
 export class PetPerson extends Card {
+  static displayName = 'Pet Person';
   @field firstName = contains(StringCard);
   @field pets = linksToMany(Pet);
+  @field title = contains(StringCard, {
+    computeVia: function (this: PetPerson) {
+      return `${this.firstName} Pets`;
+    },
+  });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

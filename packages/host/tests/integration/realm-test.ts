@@ -116,6 +116,9 @@ module('Integration | realm', function (hooks) {
       data: {
         type: 'card',
         id: `${testRealmURL}dir/empty`,
+        attributes: {
+          title: null,
+        },
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/card-api',

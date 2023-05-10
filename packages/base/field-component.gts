@@ -1,10 +1,10 @@
 import GlimmerComponent from '@glimmer/component';
 import {
-  type Card,
   type Box,
   type Field,
   type Format,
   type FieldsTypeFor,
+  type CardBase,
 } from './card-api';
 import { defaultComponent } from './default-card-component';
 import { getField } from '@cardstack/runtime-common';
@@ -12,14 +12,14 @@ import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui';
 
 const componentCache = new WeakMap<
-  Box<Card>,
+  Box<CardBase>,
   ComponentLike<{ Args: {}; Blocks: {} }>
 >();
 
 export function getBoxComponent(
-  card: typeof Card,
+  card: typeof CardBase,
   format: Format,
-  model: Box<Card>,
+  model: Box<CardBase>,
   actions?: {}
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let stable = componentCache.get(model);
@@ -78,7 +78,7 @@ function defaultFieldFormat(format: Format): Format {
   }
 }
 
-function fieldsComponentsFor<T extends Card>(
+function fieldsComponentsFor<T extends CardBase>(
   target: object,
   model: Box<T>,
   defaultFormat: Format,
@@ -104,7 +104,11 @@ function fieldsComponentsFor<T extends Card>(
       let format = getField(modelValue.constructor, property)?.computeVia
         ? 'embedded'
         : defaultFormat;
-      return field.component(model as unknown as Box<Card>, format, actions);
+      return field.component(
+        model as unknown as Box<CardBase>,
+        format,
+        actions
+      );
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
@@ -148,13 +152,13 @@ function fieldsComponentsFor<T extends Card>(
 }
 
 export function getPluralViewComponent(
-  model: Box<Card[]>,
-  field: Field<typeof Card>,
+  model: Box<CardBase[]>,
+  field: Field<typeof CardBase>,
   format: Format,
   cardTypeFor: (
-    field: Field<typeof Card>,
-    boxedElement: Box<Card>
-  ) => typeof Card
+    field: Field<typeof CardBase>,
+    boxedElement: Box<CardBase>
+  ) => typeof CardBase
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let components = model.children.map((child) =>
     getBoxComponent(cardTypeFor(field, child), format, child)

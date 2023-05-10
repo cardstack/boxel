@@ -25,6 +25,7 @@ module.exports = function (environment) {
       enabled: false,
     },
     logLevels: process.env.LOG_LEVELS || '*=info,current-run=error',
+    matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
 
     // the fields below may be rewritten by the realm server
     ownRealmURL:

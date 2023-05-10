@@ -7,8 +7,14 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 export class Author extends Card {
+  static displayName = 'Author';
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
+  @field title = contains(StringCard, {
+    computeVia: function (this: Author) {
+      return [this.firstName, this.lastName].filter(Boolean).join(' ');
+    },
+  });
   // @field profilePicture = contains(StringCard); // TODO: image card
   static embedded = class Embedded extends Component<typeof this> {
     <template>

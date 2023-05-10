@@ -18,6 +18,7 @@ let EXCHANGE_RATES: Record<string, number> = {
 };
 
 class Asset extends Card {
+  static displayName = 'Asset';
   @field name = contains(StringCard);
   @field symbol = contains(StringCard);
   @field logoURL = contains(StringCard);
@@ -32,6 +33,11 @@ class Asset extends Card {
         return null;
       }
       return new URL(this.logoURL, this[relativeTo] || this.id).href;
+    },
+  });
+  @field title = contains(StringCard, {
+    computeVia: function (this: Asset) {
+      return this.name;
     },
   });
   static embedded = class Embedded extends Component<typeof Asset> {

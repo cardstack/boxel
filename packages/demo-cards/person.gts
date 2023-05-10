@@ -5,17 +5,23 @@ import {
   Component,
   Card,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
 import BooleanCard from 'https://cardstack.com/base/boolean';
+import StringCard from 'https://cardstack.com/base/string';
 import { CardContainer } from '@cardstack/boxel-ui';
 import { Pet } from './pet';
 
 export class Person extends Card {
+  static displayName = 'Person';
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
   @field isCool = contains(BooleanCard);
   @field isHuman = contains(BooleanCard);
   @field pet = linksTo(() => Pet);
+  @field title = contains(StringCard, {
+    computeVia: function (this: Person) {
+      return [this.firstName, this.lastName].filter(Boolean).join(' ');
+    },
+  });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

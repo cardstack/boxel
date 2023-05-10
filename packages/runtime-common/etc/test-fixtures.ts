@@ -9,6 +9,11 @@ import StringCard from 'https://cardstack.com/base/string';
 
 export class Person extends Card {
   @field firstName = contains(StringCard);
+  @field title = contains(StringCard, {
+    computeVia: function (this: Person) {
+      return this.firstName;
+    },
+  });
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <h1 data-test-card><@fields.firstName /></h1>
@@ -18,7 +23,7 @@ export class Person extends Card {
 
 export function compiledCard(id = 'null') {
   return `
-var _class, _descriptor, _class2;
+var _class, _descriptor, _descriptor2, _class2;
 
 import { createTemplateFactory } from "@ember/template-factory";
 import { setComponentTemplate } from "@ember/component";
@@ -38,6 +43,7 @@ export let Person = (_class = (_class2 = class Person extends Card {
     super(...args);
 
     _initializerDefineProperty(this, "firstName", _descriptor, this);
+    _initializerDefineProperty(this, "title", _descriptor2, this);
   }
 
 }, _defineProperty(_class2, "isolated", setComponentTemplate(createTemplateFactory(
@@ -57,6 +63,17 @@ export let Person = (_class = (_class2 = class Person extends Card {
   writable: true,
   initializer: function () {
     return contains(StringCard);
+  }
+}), _descriptor2 = _applyDecoratedDescriptor(_class.prototype, "title", [field], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: function () {
+    return contains(StringCard, {
+      computeVia: function () {
+        return this.firstName;
+      }
+    });
   }
 })), _class);
 `.trim();

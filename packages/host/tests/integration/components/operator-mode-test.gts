@@ -119,6 +119,7 @@ module('Integration | operator-mode', function (hooks) {
         import { Address } from "./address";
 
         export class Person extends Card {
+          static displayName = 'Person';
           @field firstName = contains(StringCard);
           @field pet = linksTo(Pet);
           @field friends = linksToMany(Pet);
@@ -435,6 +436,24 @@ module('Integration | operator-mode', function (hooks) {
     await realm.ready;
   });
 
+  test('it loads a card and renders its isolated view', async function (assert) {
+    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor('[data-test-person]');
+    assert.dom('[data-type-display-name]').hasText('Person');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+    assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
+    assert.dom('[data-test-city]').hasText('Bandung');
+    assert.dom('[data-test-country]').hasText('Indonesia');
+  });
+
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -446,11 +465,6 @@ module('Integration | operator-mode', function (hooks) {
       }
     );
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-    assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
-    assert.dom('[data-test-city]').hasText('Bandung');
-    assert.dom('[data-test-country]').hasText('Indonesia');
-
     await click('[aria-label="Edit"]');
     await fillIn('[data-test-boxel-input]', 'EditedName');
     await fillIn(
@@ -480,11 +494,6 @@ module('Integration | operator-mode', function (hooks) {
       }
     );
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-    assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
-    assert.dom('[data-test-city]').hasText('Bandung');
-    assert.dom('[data-test-country]').hasText('Indonesia');
-
     await click('[aria-label="Edit"]');
     await fillIn('[data-test-boxel-input]', 'EditedName');
     await fillIn(

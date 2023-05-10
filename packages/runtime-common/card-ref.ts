@@ -1,7 +1,7 @@
 import {
-  type Card,
-  type CardConstructor,
+  type CardBaseConstructor,
   type Field,
+  type CardBase,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
 import { isField } from './constants';
@@ -24,9 +24,9 @@ export type CardRef =
 
 // we don't track ExportedCardRef because Loader.identify already handles those
 let localIdentities = new WeakMap<
-  typeof Card,
-  | { type: 'ancestorOf'; card: typeof Card }
-  | { type: 'fieldOf'; card: typeof Card; field: string }
+  typeof CardBase,
+  | { type: 'ancestorOf'; card: typeof CardBase }
+  | { type: 'fieldOf'; card: typeof CardBase; field: string }
 >();
 
 export function isCardRef(ref: any): ref is CardRef {
@@ -55,14 +55,14 @@ export function isCardRef(ref: any): ref is CardRef {
   return false;
 }
 
-export function isCard(card: any): card is typeof Card {
+export function isCard(card: any): card is typeof CardBase {
   return typeof card === 'function' && 'baseCard' in card;
 }
 
 export async function loadCard(
   ref: CardRef,
   opts?: { loader?: Loader; relativeTo?: URL }
-): Promise<typeof Card> {
+): Promise<typeof CardBase> {
   let maybeCard: unknown;
   // when it's possible we want to leverage the loader being used by the
   // indexing process so that we can take advantage of the module cache when
@@ -136,14 +136,14 @@ export function identifyCard(card: unknown): CardRef | undefined {
   }
 }
 
-export function getField<CardT extends CardConstructor>(
+export function getField<CardT extends CardBaseConstructor>(
   card: CardT,
   fieldName: string
-): Field<CardConstructor> | undefined {
+): Field<CardBaseConstructor> | undefined {
   let obj: object | null = card.prototype;
   while (obj) {
     let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
-    let result: Field<CardConstructor> | undefined = (desc?.get as any)?.[
+    let result: Field<CardBaseConstructor> | undefined = (desc?.get as any)?.[
       isField
     ];
     if (result !== undefined && isCard(result.card)) {
@@ -160,8 +160,8 @@ export function getField<CardT extends CardConstructor>(
 }
 
 export function getAncestor(
-  card: CardConstructor
-): CardConstructor | undefined {
+  card: CardBaseConstructor
+): CardBaseConstructor | undefined {
   let superCard = Reflect.getPrototypeOf(card);
   if (isCard(superCard)) {
     localIdentities.set(superCard, {

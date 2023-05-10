@@ -39,6 +39,11 @@ module('Integration | catalog-entry-editor', function (hooks) {
         import StringCard from "https://cardstack.com/base/string";
         export class Person extends Card {
           @field firstName = contains(StringCard);
+          @field title =  contains(StringCard, {
+            computeVia: function (this: Person) {
+              return this.firstName;
+            },
+          });
           static embedded = class Embedded extends Component<typeof this> {
             <template><@fields.firstName/></template>
           }
@@ -55,6 +60,12 @@ module('Integration | catalog-entry-editor', function (hooks) {
           @field lovesWalks = contains(BooleanCard);
           @field birthday = contains(DateCard);
           @field owner = contains(Person);
+          @field title =  contains(StringCard, {
+            computeVia: function (this: Pet) {
+              return this.name;
+            },
+          });
+
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <h2 data-test-pet-name><@fields.name/></h2>
@@ -713,6 +724,11 @@ module('Integration | catalog-entry-editor', function (hooks) {
       import StringCard from "https://cardstack.com/base/string";
       class Vendor extends Card {
         @field company = contains(StringCard);
+        @field title =  contains(StringCard, {
+          computeVia: function (this: Vendor) {
+            return this.company;
+          },
+        });
         static embedded = class Embedded extends Component<typeof this> {
           <template><div data-test-company><@fields.company/></div></template>
         };
@@ -720,6 +736,11 @@ module('Integration | catalog-entry-editor', function (hooks) {
       class Item extends Card {
         @field name = contains(StringCard);
         @field price = contains(IntegerCard);
+        @field title =  contains(StringCard, {
+          computeVia: function (this: Item) {
+            return this.name + ' ' + this.price;
+          },
+        });
       }
       class LineItem extends Item {
         @field quantity = contains(IntegerCard);
@@ -733,6 +754,11 @@ module('Integration | catalog-entry-editor', function (hooks) {
         @field balanceDue = contains(IntegerCard, { computeVia: function(this: Invoice) {
           return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.price * i.quantity).reduce((a, b) => (a + b));
         }});
+        @field title =  contains(StringCard, {
+          computeVia: function (this: Invoice) {
+            return this.vendor ? 'Invoice from ' + this.vendor.title : 'Invoice'
+          },
+        });
         static embedded = class Embedded extends Component<typeof Invoice> {
           <template>
             <h3>Invoice</h3>

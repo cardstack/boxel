@@ -1,7 +1,13 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { type Card, type Box, type Format, type Field } from './card-api';
+import {
+  type Card,
+  CardBase,
+  type Box,
+  type Format,
+  type Field,
+} from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
@@ -23,9 +29,9 @@ interface Signature {
     format: Format;
     field: Field<typeof Card>;
     cardTypeFor(
-      field: Field<typeof Card>,
-      boxedElement: Box<Card>
-    ): typeof Card;
+      field: Field<typeof CardBase>,
+      boxedElement: Box<CardBase>
+    ): typeof CardBase;
     actions?: {
       createCard: (
         card: typeof Card,
@@ -94,7 +100,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard({
+    let chosenCard: CardBase | undefined = await chooseCard({
       filter: {
         every: [{ type }, ...selectedCardsQuery],
       },
@@ -143,7 +149,10 @@ export function getLinksToManyComponent({
   arrayField: Box<Card[]>;
   format: Format;
   field: Field<typeof Card>;
-  cardTypeFor(field: Field<typeof Card>, boxedElement: Box<Card>): typeof Card;
+  cardTypeFor(
+    field: Field<typeof CardBase>,
+    boxedElement: Box<CardBase>
+  ): typeof CardBase;
   actions?: {
     createCard: (
       card: typeof Card,

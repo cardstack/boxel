@@ -3,7 +3,7 @@ import {
   serialize,
   queryableValue,
   Component,
-  Card,
+  CardBase,
   useIndexBasedKey,
 } from './card-api';
 import { on } from '@ember/modifier';
@@ -28,7 +28,7 @@ class View extends Component<typeof BooleanCard> {
   }
 }
 
-export default class BooleanCard extends Card {
+export default class BooleanCard extends CardBase {
   static [primitive]: boolean;
   static [useIndexBasedKey]: never;
   static [serialize](val: any) {

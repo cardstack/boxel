@@ -5,7 +5,7 @@ import {
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
 import { getBoxComponent } from './field-component';
-import { type Card, type Box, type Field } from './card-api';
+import { type Card, type CardBase, type Box, type Field } from './card-api';
 import {
   chooseCard,
   baseCardRef,
@@ -79,8 +79,8 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       );
     }
     let card = Reflect.getPrototypeOf(this.args.model.value)!
-      .constructor as typeof Card;
-    return getBoxComponent(card, 'embedded', this.args.model as Box<Card>);
+      .constructor as typeof CardBase;
+    return getBoxComponent(card, 'embedded', this.args.model as Box<CardBase>);
   }
 
   private chooseCard = restartableTask(async () => {

@@ -61,6 +61,9 @@ module('Integration | search-index', function (hooks) {
       {
         id: `${testRealmURL}empty`,
         type: 'card',
+        attributes: {
+          title: null,
+        },
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/card-api',
@@ -806,6 +809,11 @@ module('Integration | search-index', function (hooks) {
       export class PersonCard extends Card {
         @field firstName = contains(StringCard);
         @field pet = linksTo(() => PetCard);
+        @field title = contains(StringCard, {
+          computeVia: function (this: PersonCard) {
+            return this.firstName;
+          },
+        });
       }
     `,
       'appointment.gts': `
@@ -826,6 +834,11 @@ module('Integration | search-index', function (hooks) {
       export class PetCard extends Card {
         @field firstName = contains(StringCard);
         @field appointment = contains(() => Appointment);
+        @field title = contains(StringCard, {
+          computeVia: function (this: Appointment) {
+            return this.firstName;
+          },
+        });
       }`,
       'jackie.json': {
         data: {
@@ -867,6 +880,7 @@ module('Integration | search-index', function (hooks) {
           links: { self: `${testRealmURL}jackie` },
           attributes: {
             firstName: 'Jackie',
+            title: 'Jackie',
             appointment: {
               title: 'Vet visit',
               contact: { firstName: 'Burcu' },
@@ -980,6 +994,7 @@ module('Integration | search-index', function (hooks) {
           },
           attributes: {
             name: 'Acme Industries',
+            title: 'Acme Industries',
             paymentMethods: [
               {
                 type: 'crypto',
@@ -1034,6 +1049,7 @@ module('Integration | search-index', function (hooks) {
             },
             attributes: {
               name: 'Ethereum Mainnet',
+              title: 'Ethereum Mainnet',
               chainId: 1,
             },
 
@@ -1055,6 +1071,7 @@ module('Integration | search-index', function (hooks) {
             },
             attributes: {
               name: 'Polygon',
+              title: 'Polygon',
               chainId: 137,
             },
             meta: {
@@ -1698,6 +1715,7 @@ module('Integration | search-index', function (hooks) {
         },
         attributes: {
           firstName: 'Hassan',
+          title: 'Hassan',
         },
         relationships: {
           friend: {
@@ -1727,12 +1745,15 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(hassanEntry.searchData, {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
+        title: 'Hassan',
         friend: {
           id: `${testRealmURL}Friend/mango`,
           firstName: 'Mango',
+          title: 'Mango',
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
             firstName: 'Van Gogh',
+            title: 'Van Gogh',
             friend: null,
           },
         },
@@ -1804,6 +1825,7 @@ module('Integration | search-index', function (hooks) {
           links: { self: `${testRealmURL}Friend/hassan` },
           attributes: {
             firstName: 'Hassan',
+            title: 'Hassan',
           },
           relationships: {
             friend: {
@@ -1833,6 +1855,7 @@ module('Integration | search-index', function (hooks) {
             links: { self: `${testRealmURL}Friend/mango` },
             attributes: {
               firstName: 'Mango',
+              title: 'Mango',
             },
             relationships: {
               friend: {
@@ -1868,9 +1891,11 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(hassanEntry.searchData, {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
+        title: 'Hassan',
         friend: {
           id: `${testRealmURL}Friend/mango`,
           firstName: 'Mango',
+          title: 'Mango',
           friend: {
             id: `${testRealmURL}Friend/hassan`,
           },
@@ -1894,6 +1919,7 @@ module('Integration | search-index', function (hooks) {
           links: { self: `${testRealmURL}Friend/mango` },
           attributes: {
             firstName: 'Mango',
+            title: 'Mango',
           },
           relationships: {
             friend: {
@@ -1923,6 +1949,7 @@ module('Integration | search-index', function (hooks) {
             links: { self: `${testRealmURL}Friend/hassan` },
             attributes: {
               firstName: 'Hassan',
+              title: 'Hassan',
             },
             relationships: {
               friend: {
@@ -1958,6 +1985,7 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(mangoEntry.searchData, {
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
+        title: 'Mango',
         friend: {
           id: `${testRealmURL}Friend/hassan`,
           firstName: 'Hassan',
@@ -2026,7 +2054,7 @@ module('Integration | search-index', function (hooks) {
           id: hassanID,
           type: 'card',
           links: { self: hassanID },
-          attributes: { firstName: 'Hassan' },
+          attributes: { firstName: 'Hassan', title: 'Hassan' },
           relationships: {
             'friends.0': {
               links: { self: mangoID },
@@ -2052,7 +2080,7 @@ module('Integration | search-index', function (hooks) {
             id: mangoID,
             type: 'card',
             links: { self: mangoID },
-            attributes: { firstName: 'Mango' },
+            attributes: { firstName: 'Mango', title: 'Mango' },
             relationships: {
               'friends.0': {
                 links: { self: hassanID },
@@ -2068,7 +2096,10 @@ module('Integration | search-index', function (hooks) {
             id: vanGoghID,
             type: 'card',
             links: { self: vanGoghID },
-            attributes: { firstName: 'Van Gogh' },
+            attributes: {
+              firstName: 'Van Gogh',
+              title: 'Van Gogh',
+            },
             relationships: {
               'friends.0': {
                 links: { self: hassanID },
@@ -2094,10 +2125,12 @@ module('Integration | search-index', function (hooks) {
         {
           id: hassanID,
           firstName: 'Hassan',
+          title: 'Hassan',
           friends: [
             {
               id: mangoID,
               firstName: 'Mango',
+              title: 'Mango',
               friends: [{ id: hassanID }],
             },
             {
@@ -2121,7 +2154,10 @@ module('Integration | search-index', function (hooks) {
           id: mangoID,
           type: 'card',
           links: { self: mangoID },
-          attributes: { firstName: 'Mango' },
+          attributes: {
+            firstName: 'Mango',
+            title: 'Mango',
+          },
           relationships: {
             'friends.0': {
               links: { self: hassanID },
@@ -2142,7 +2178,10 @@ module('Integration | search-index', function (hooks) {
             id: hassanID,
             type: 'card',
             links: { self: hassanID },
-            attributes: { firstName: 'Hassan' },
+            attributes: {
+              firstName: 'Hassan',
+              title: 'Hassan',
+            },
             relationships: {
               'friends.0': {
                 links: { self: mangoID },
@@ -2162,7 +2201,10 @@ module('Integration | search-index', function (hooks) {
             id: vanGoghID,
             type: 'card',
             links: { self: vanGoghID },
-            attributes: { firstName: 'Van Gogh' },
+            attributes: {
+              firstName: 'Van Gogh',
+              title: 'Van Gogh',
+            },
             relationships: {
               'friends.0': {
                 links: { self: hassanID },
@@ -2188,6 +2230,7 @@ module('Integration | search-index', function (hooks) {
         {
           id: mangoID,
           firstName: 'Mango',
+          title: 'Mango',
           friends: [
             {
               id: hassanID,
@@ -2217,7 +2260,10 @@ module('Integration | search-index', function (hooks) {
           id: vanGoghID,
           type: 'card',
           links: { self: vanGoghID },
-          attributes: { firstName: 'Van Gogh' },
+          attributes: {
+            firstName: 'Van Gogh',
+            title: 'Van Gogh',
+          },
           relationships: {
             'friends.0': {
               links: { self: hassanID },
@@ -2238,7 +2284,10 @@ module('Integration | search-index', function (hooks) {
             id: hassanID,
             type: 'card',
             links: { self: hassanID },
-            attributes: { firstName: 'Hassan' },
+            attributes: {
+              firstName: 'Hassan',
+              title: 'Hassan',
+            },
             relationships: {
               'friends.0': {
                 links: { self: mangoID },
@@ -2258,7 +2307,10 @@ module('Integration | search-index', function (hooks) {
             id: mangoID,
             type: 'card',
             links: { self: mangoID },
-            attributes: { firstName: 'Mango' },
+            attributes: {
+              firstName: 'Mango',
+              title: 'Mango',
+            },
             relationships: {
               'friends.0': {
                 links: { self: hassanID },
@@ -2284,14 +2336,17 @@ module('Integration | search-index', function (hooks) {
         {
           id: vanGoghID,
           firstName: 'Van Gogh',
+          title: 'Van Gogh',
           friends: [
             {
               id: hassanID,
               firstName: 'Hassan',
+              title: 'Hassan',
               friends: [
                 {
                   id: mangoID,
                   firstName: 'Mango',
+                  title: 'Mango',
                   friends: [{ id: hassanID }],
                 },
                 { id: vanGoghID },
