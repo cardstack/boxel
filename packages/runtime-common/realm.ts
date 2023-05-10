@@ -805,7 +805,6 @@ export class Realm {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private async realmInfo(_request: Request): Promise<Response> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
@@ -831,7 +830,7 @@ export class Realm {
       },
     };
     return createResponse(JSON.stringify(doc, null, 2), {
-      headers: { 'content-type': SupportedMimeType.CardJson },
+      headers: { 'content-type': SupportedMimeType.RealmInfo },
     });
   }
 
