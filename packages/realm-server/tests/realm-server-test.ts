@@ -540,14 +540,6 @@ module('Realm Server serving from root', function (hooks) {
           id: testRealmHref,
           type: 'directory',
           relationships: {
-            '.realm.json': {
-              links: {
-                related: 'http://127.0.0.1:4444/.realm.json',
-              },
-              meta: {
-                kind: 'file',
-              },
-            },
             'a.js': {
               links: {
                 related: `${testRealmHref}a.js`,
