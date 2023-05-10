@@ -5,7 +5,7 @@ import {
   registerUser,
   type SynapseInstance,
 } from '../docker/synapse';
-import { assertLoggedIn, assertLoggedOut } from '../helpers';
+import { assertLoggedIn, assertLoggedOut, login, logout } from '../helpers';
 
 test.describe('Login', () => {
   let synapse: SynapseInstance;
@@ -45,13 +45,10 @@ test.describe('Login', () => {
   });
 
   test('it can logout', async ({ page }) => {
-    await page.goto(`/chat`);
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('pass');
-    await page.locator('[data-test-login-btn]').click();
+    await login(page, 'user1', 'pass');
     await assertLoggedIn(page);
 
-    await page.locator('[data-test-logout-btn]').click();
+    await logout(page);
     assertLoggedOut(page);
 
     // reload to page to show that the logout state persists
@@ -62,9 +59,7 @@ test.describe('Login', () => {
   test('it shows an error when invalid credentials are provided', async ({
     page,
   }) => {
-    await page.goto(`/chat`);
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('bad pass');
+    await login(page, 'user1', 'bad pass');
 
     await expect(
       page.locator('[data-test-login-error]'),

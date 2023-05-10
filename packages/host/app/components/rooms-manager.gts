@@ -9,9 +9,11 @@ import {
   BoxelHeader,
   BoxelInput,
   LoadingIndicator,
+  BoxelInputValidationState,
   Button,
   FieldContainer,
 } from '@cardstack/boxel-ui';
+import { isMatrixError } from '../lib/matrix-utils';
 import type MatrixService from '../services/matrix-service';
 
 const TRUE = true;
@@ -33,10 +35,12 @@ export default class RoomsManager extends Component {
       {{else}}
         <fieldset>
           <FieldContainer @label='Room Name:' @tag='label'>
-            <BoxelInput
+            <BoxelInputValidationState
               data-test-room-name-field
-              type='text'
-              @value={{this.newRoomName}}
+              @id=''
+              @state={{this.roomNameInputState}}
+              @value={{this.cleanNewRoomName}}
+              @errorMessage={{this.roomNameError}}
               @onInput={{this.setNewRoomName}}
             />
           </FieldContainer>
@@ -63,15 +67,17 @@ export default class RoomsManager extends Component {
     <div data-test-invites-list>
       <h3>Invites</h3>
       {{#each this.sortedInvites as |invite|}}
-        <div data-test-invited-room={{invite.roomId}}>{{invite.name}}
+        <div data-test-invited-room={{invite.name}}>{{invite.name}}
           (from:
-          {{invite.sender}})</div>
+          <span
+            data-test-invite-sender={{invite.sender}}
+          >{{invite.sender}})</span></div>
       {{/each}}
     </div>
     <div data-test-rooms-list>
       <h3>Rooms</h3>
       {{#each this.sortedJoinedRooms as |room|}}
-        <div data-test-joined-room={{room.roomId}}>{{room.name}}</div>
+        <div data-test-joined-room={{room.name}}>{{room.name}}</div>
       {{/each}}
     </div>
   </template>
@@ -80,6 +86,7 @@ export default class RoomsManager extends Component {
   @tracked private isCreateRoomMode = false;
   @tracked private newRoomName: string | undefined;
   @tracked private newRoomInvite: string[] = [];
+  @tracked private roomNameError: string | undefined;
 
   private get sortedJoinedRooms() {
     return [...this.matrixService.joinedRooms.values()].sort(
@@ -97,6 +104,14 @@ export default class RoomsManager extends Component {
     return this.newRoomInvite.join(', ');
   }
 
+  get cleanNewRoomName() {
+    return this.newRoomName ?? '';
+  }
+
+  get roomNameInputState() {
+    return this.roomNameError ? 'invalid' : 'initial';
+  }
+
   @action
   private showCreateRoomMode() {
     this.isCreateRoomMode = true;
@@ -105,6 +120,7 @@ export default class RoomsManager extends Component {
   @action
   private setNewRoomName(name: string) {
     this.newRoomName = name;
+    this.roomNameError = undefined;
   }
 
   @action
@@ -128,7 +144,14 @@ export default class RoomsManager extends Component {
         `bug: should never get here, create button is disabled when there is no new room name`
       );
     }
-    await this.matrixService.createRoom(this.newRoomName, this.newRoomInvite);
+    try {
+      await this.matrixService.createRoom(this.newRoomName, this.newRoomInvite);
+    } catch (e) {
+      if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
+        this.roomNameError = 'Room already exists';
+      }
+      throw e;
+    }
     this.resetCreateRoom();
   });
 
