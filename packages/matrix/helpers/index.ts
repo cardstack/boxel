@@ -7,6 +7,62 @@ interface ProfileAssertions {
   displayName?: string;
 }
 
+export async function login(page: Page, username: string, password: string) {
+  await page.goto(`/chat`);
+  await page.locator('[data-test-username-field]').fill(username);
+  await page.locator('[data-test-password-field]').fill(password);
+  await page.locator('[data-test-login-btn]').click();
+}
+
+export async function logout(page: Page) {
+  await page.goto(`/chat`);
+  await page.locator('[data-test-logout-btn]').click();
+}
+
+interface RoomAssertions {
+  joinedRooms?: string[];
+  invitedRooms?: { name: string; sender: string }[];
+}
+
+export async function assertRooms(page: Page, rooms: RoomAssertions) {
+  if (rooms.joinedRooms && rooms.joinedRooms.length > 0) {
+    await expect(
+      page.locator('[data-test-joined-room]'),
+      `${rooms.joinedRooms.length} joined room(s) are displayed`
+    ).toHaveCount(rooms.joinedRooms.length);
+    for (let name of rooms.joinedRooms) {
+      await expect(
+        page.locator(`[data-test-joined-room="${name}"]`),
+        `the joined room '${name}' is displayed`
+      ).toHaveCount(1);
+    }
+  } else {
+    await expect(
+      page.locator('[data-test-joined-room]'),
+      `joined rooms are not displayed`
+    ).toHaveCount(0);
+  }
+  if (rooms.invitedRooms && rooms.invitedRooms.length > 0) {
+    await expect(
+      page.locator('[data-test-invited-room]'),
+      `${rooms.invitedRooms.length} invited room(s) are displayed`
+    ).toHaveCount(rooms.invitedRooms.length);
+    for (let { name, sender } of rooms.invitedRooms) {
+      await expect(
+        page.locator(
+          `[data-test-invited-room="${name}"] [data-test-invite-sender="${sender}"]`
+        ),
+        `the invited room '${name}' from '${sender}' is displayed`
+      ).toHaveCount(1);
+    }
+  } else {
+    await expect(
+      page.locator('[data-test-invited-room]'),
+      `invited rooms are not displayed`
+    ).toHaveCount(0);
+  }
+}
+
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   await page.waitForURL(`${testHost}/chat`);
   await expect(
