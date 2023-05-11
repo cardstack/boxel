@@ -14,10 +14,13 @@ import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
 import { restartableTask } from 'ember-concurrency';
-import { baseRealm, Deferred, type Actions } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  type Actions,
+  type CardRef,
+} from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 
 import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
@@ -31,8 +34,8 @@ interface Signature {
 }
 
 export default class OperatorMode extends Component<Signature> {
-  stack: TrackedArray<Card>;
-  formats: WeakMap<Card, Format> = new TrackedWeakMap<Card, Format>();
+  stack: TrackedArray<Card>; // deferred can be a part of this
+  formats: WeakMap<Card, Format> = new TrackedWeakMap<Card, Format>(); // this could also be part of the stack
   requests: WeakMap<Card, Deferred<Card>> = new TrackedWeakMap<
     Card,
     Deferred<Card>
@@ -63,23 +66,9 @@ export default class OperatorMode extends Component<Signature> {
     this.searchSheetMode = SearchSheetMode.Closed;
   }
 
-  @action addToStack(card: CardAPI.Card) {
-    this.addCardToStack.perform(card);
-  }
-
-  private addCardToStack = restartableTask(async (card: CardAPI.Card) => {
-    if (card.id) {
-      // new card instances don't have an id yet
-      let api = await this.loaderService.loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`
-      );
-      let relativeTo = card[api.relativeTo];
-      if (!relativeTo) {
-        throw new Error(`bug: should never get here`);
-      }
-    }
+  @action addToStack(card: Card) {
     this.stack.push(card);
-  });
+  }
 
   @action async edit(card: Card) {
     await this.saveCardFieldValues(card);
@@ -101,11 +90,12 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   @action async cancel(card: Card) {
-    await this.rollbackCardFieldValues(card);
-    if (!card.id) {
-      // canceling new card creation
-      return this.close(card);
+    let cardRequest = this.requests.get(card);
+    if (cardRequest) {
+      this.requests.delete(card);
+      this.close(card);
     }
+    await this.rollbackCardFieldValues(card);
     this.formats.set(card, 'isolated');
   }
 
@@ -123,8 +113,6 @@ export default class OperatorMode extends Component<Signature> {
       if (cardRequest) {
         cardRequest.fulfill(updatedCard);
         this.requests.delete(card);
-      } else {
-        this.addToStack(updatedCard);
       }
     }
   }
@@ -160,26 +148,22 @@ export default class OperatorMode extends Component<Signature> {
 
   private publicAPI: Actions = {
     createCard: async (
-      cardClass: typeof Card,
-      opts?: { createInPlace?: boolean }
-    ) => {
-      let newCard = new cardClass();
+      ref: CardRef,
+      relativeTo: URL | undefined
+    ): Promise<Card | undefined> => {
+      let doc = { data: { meta: { adoptsFrom: ref } } };
+      let newCard = await this.cardService.createFromSerialized(
+        doc.data,
+        doc,
+        relativeTo ?? this.cardService.defaultURL
+      );
       this.addToStack(newCard);
       this.formats.set(newCard, 'edit');
+      this.requests.set(newCard, new Deferred());
 
-      if (opts?.createInPlace) {
-        this.requests.set(newCard, new Deferred());
-        let card = await this.requests.get(newCard)?.promise;
-
-        if (card) {
-          return card;
-        } else {
-          return undefined;
-        }
-      }
-
-      return;
+      return await this.requests.get(newCard)?.promise;
     },
+    // more CRUD ops to come...
   };
 
   private async rollbackCardFieldValues(card: Card) {

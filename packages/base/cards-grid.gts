@@ -1,13 +1,9 @@
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
-import { Component, Card } from './card-api';
+import { Component, Card, relativeTo } from './card-api';
 import { CardContainer, IconButton } from '@cardstack/boxel-ui';
-import {
-  chooseCard,
-  catalogEntryRef,
-  loadCard,
-} from '@cardstack/runtime-common';
+import { chooseCard, catalogEntryRef } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
 
 class Isolated extends Component<typeof CardsGrid> {
@@ -31,34 +27,24 @@ class Isolated extends Component<typeof CardsGrid> {
 
   @action
   createNew() {
-    this.createNewCard.perform();
+    this.createCard.perform();
   }
 
-  private createNewCard = restartableTask(async () => {
+  private createCard = restartableTask(async () => {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
         eq: { isPrimitive: false },
       },
     });
-
     if (!card) {
       return;
     }
 
-    let cardClass = card.demo.constructor ?? (await loadCard(card.ref));
-
-    if (!cardClass) {
-      throw new Error(
-        `bug: could not create new card from catalog entry ${JSON.stringify(
-          catalogEntryRef
-        )}`
-      );
-    }
-
-    this.args.actions?.createCard?.(cardClass as typeof Card, {
-      createInPlace: false,
-    });
+    await this.args.actions?.createCard?.(
+      card.ref,
+      this.args.model[relativeTo]
+    );
   });
 }
 

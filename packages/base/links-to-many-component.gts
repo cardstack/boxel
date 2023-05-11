@@ -96,7 +96,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: CardBase | undefined = await chooseCard({
+    let chosenCard: Card | undefined = await chooseCard({
       filter: {
         every: [{ type }, ...selectedCardsQuery],
       },
@@ -108,20 +108,13 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   });
 
   private createCard = restartableTask(async () => {
-    let card: Card | undefined;
-
-    if (this.args.actions?.createCard) {
-      card = await this.args.actions?.createCard(this.args.field.card, {
-        createInPlace: true,
-      });
-    } else {
-      let type = identifyCard(this.args.field.card) ?? baseCardRef;
-      card = await createNewCard(type);
-    }
-
-    if (card) {
-      let cards = (this.args.model.value as any)[this.args.field.name];
-      cards = [...cards, card];
+    let cards = (this.args.model.value as any)[this.args.field.name];
+    let type = identifyCard(this.args.field.card) ?? baseCardRef;
+    let newCard: Card | undefined =
+      (await this.args.actions?.createCard(type, undefined)) ??
+      (await createNewCard(type, undefined)); // remove this when no longer supporting `createCardModal`
+    if (newCard) {
+      cards = [...cards, newCard];
       (this.args.model.value as any)[this.args.field.name] = cards;
     }
   });

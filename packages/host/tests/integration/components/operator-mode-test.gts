@@ -328,7 +328,7 @@ module('Integration | operator-mode', function (hooks) {
             title: 'Publishing Packet',
             description: 'Catalog entry for PublishingPacket',
             ref: {
-              module: '../publishing-packet',
+              module: `${testRealmURL}publishing-packet`,
               name: 'PublishingPacket',
             },
             demo: {
@@ -346,7 +346,7 @@ module('Integration | operator-mode', function (hooks) {
             fields: {
               demo: {
                 adoptsFrom: {
-                  module: '../publishing-packet',
+                  module: `../publishing-packet`,
                   name: 'PublishingPacket',
                 },
               },
@@ -536,7 +536,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-person]').isNotVisible();
   });
 
-  test('can create new card from the cards-grid card', async function (assert) {
+  test('can create a card using the cards-grid', async function (assert) {
     let card = await loadCard(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -689,7 +689,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
 
-    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    await waitFor(`[data-test-author="R2-D2"]`);
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
   });
 

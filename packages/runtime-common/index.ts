@@ -96,15 +96,11 @@ export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
 
 export interface CardChooser {
-  chooseCard<T extends CardBase>(
-    query: Query,
-    opts?: { offerToCreate: CardRef }
-  ): Promise<undefined | T>;
+  chooseCard<T extends CardBase>(query: Query): Promise<undefined | T>;
 }
 
-export async function chooseCard<T extends CardBase>(
-  query: Query,
-  opts?: { offerToCreate: CardRef }
+export async function chooseCard<T extends Card>(
+  query: Query
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
@@ -114,19 +110,19 @@ export async function chooseCard<T extends CardBase>(
   }
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
 
-  return await chooser.chooseCard<T>(query, opts);
+  return await chooser.chooseCard<T>(query);
 }
 
 export interface CardCreator {
-  create<T extends CardBase>(
+  create<T extends Card>(
     ref: CardRef,
-    relativeTo?: URL
+    relativeTo: URL | undefined
   ): Promise<undefined | T>;
 }
 
 export async function createNewCard<T extends Card>(
   ref: CardRef,
-  relativeTo?: URL
+  relativeTo: URL | undefined
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
@@ -141,9 +137,10 @@ export async function createNewCard<T extends Card>(
 
 export interface Actions {
   createCard: (
-    cardClass: typeof Card,
-    opts?: { createInPlace?: boolean }
+    ref: CardRef,
+    relativeTo: URL | undefined
   ) => Promise<Card | undefined>;
+  // more CRUD ops to come...
 }
 
 export function hasExecutableExtension(path: string): boolean {

@@ -88,19 +88,12 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   });
 
   private createCard = restartableTask(async () => {
-    let card: Card | undefined;
-
-    if (this.args.actions?.createCard) {
-      card = await this.args.actions?.createCard(this.args.field.card, {
-        createInPlace: true,
-      });
-    } else {
-      let type = identifyCard(this.args.field.card) ?? baseCardRef;
-      card = await createNewCard(type);
-    }
-
-    if (card) {
-      this.args.model.value = card;
+    let type = identifyCard(this.args.field.card) ?? baseCardRef;
+    let newCard: Card | undefined =
+      (await this.args.actions?.createCard(type, undefined)) ??
+      (await createNewCard(type, undefined)); // remove this when no longer supporting `createCardModal`
+    if (newCard) {
+      this.args.model.value = newCard;
     }
   });
 }

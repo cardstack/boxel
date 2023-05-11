@@ -922,7 +922,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   component(
     model: Box<Card>,
     format: Format,
-    actions: Actions
+    actions?: Actions
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(
