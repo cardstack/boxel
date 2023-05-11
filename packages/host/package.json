@@ -47,7 +47,6 @@
     "@glint/core": "^1.0.0-beta.4",
     "@glint/environment-ember-template-imports": "^1.0.0-beta.4",
     "@glint/template": "^1.0.0-beta.4",
-    "@matrix-org/olm": "^3.2.1",
     "@simple-dom/interface": "^1.4.0",
     "@simple-dom/serializer": "^1.4.0",
     "@simple-dom/void-map": "^1.4.0",
@@ -173,6 +172,9 @@
   },
   "engines": {
     "node": "18"
+  },
+  "volta": {
+    "extends": "../../package.json"
   },
   "ember": {
     "edition": "octane"

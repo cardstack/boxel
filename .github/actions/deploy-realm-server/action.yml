@@ -23,14 +23,6 @@ inputs:
   staging_waypoint_server_address:
     description: Staging Waypoint server address
     required: true
-  pnpm_version:
-    description: Used by pnpm/action-setup
-    default: 7.2.1
-    required: false
-  node_version:
-    description: This controls what version of node first boots pnpm, but pnpm itself will read the .npmrc file and download a different version if they don't match.
-    default: 18.6.0
-    required: false
 
 runs:
   using: composite
@@ -40,13 +32,7 @@ runs:
         fetch-depth: 0
     - name: restore timestamps
       uses: chetan/git-restore-mtime-action@v2
-    - uses: pnpm/action-setup@v2
-      with:
-        version: ${{ inputs.pnpm_version }}
-    - uses: actions/setup-node@v3
-      with:
-        node-version: ${{ inputs.node_version }}
-        cache: pnpm
+    - uses: volta-cli/action@v4
 
     - name: Set up env
       shell: bash

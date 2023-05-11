@@ -1748,4 +1748,94 @@ posts/ignore-me.gts
       );
     }
   });
+
+  test('realm can serve info requests by reading .realm.json', async function (assert) {
+    let realm = await TestRealm.create(
+      {
+        '.realm.json': `{
+          "name": "Example Workspace"
+        }`,
+      },
+      this.owner
+    );
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(`${testRealmURL}_info`, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+      })
+    );
+    let json = await response.json();
+    assert.deepEqual(
+      json,
+      {
+        data: {
+          id: testRealmURL,
+          type: 'realm-info',
+          attributes: {
+            name: 'Example Workspace',
+          },
+        },
+      },
+      '/_info response is correct'
+    );
+  });
+
+  test('realm can serve info requests if .realm.json is missing', async function (assert) {
+    let realm = await TestRealm.create({}, this.owner);
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(`${testRealmURL}_info`, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+      })
+    );
+    let json = await response.json();
+    assert.deepEqual(
+      json,
+      {
+        data: {
+          id: testRealmURL,
+          type: 'realm-info',
+          attributes: {
+            name: 'Unnamed Workspace',
+          },
+        },
+      },
+      '/_info response is correct'
+    );
+  });
+
+  test('realm can serve info requests if .realm.json is malformed', async function (assert) {
+    let realm = await TestRealm.create(
+      {
+        '.realm.json': `Some example content that is not valid json`,
+      },
+      this.owner
+    );
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(`${testRealmURL}_info`, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+      })
+    );
+    let json = await response.json();
+    assert.deepEqual(
+      json,
+      {
+        data: {
+          id: testRealmURL,
+          type: 'realm-info',
+          attributes: {
+            name: 'Unnamed Workspace',
+          },
+        },
+      },
+      '/_info response is correct'
+    );
+  });
 });

@@ -154,6 +154,9 @@ class MockLocalRealm extends Service {
     }
     return this.#adapter;
   }
+  waitForReadiness() {
+    return Promise.resolve();
+  }
 }
 
 export function setupMockLocalRealm(hooks: NestedHooks) {

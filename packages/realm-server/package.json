@@ -68,5 +68,8 @@
     "start:demo:production": "pnpm setup:base-in-deployment:production && pnpm setup:demo-in-deployment:production && NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' ts-node --transpileOnly main --port=3000 --distURL='https://boxel-host.cardstack.com' --path='/persistent/base' --fromUrl='https://cardstack.com/base/' --toUrl='https://realm-demo.cardstack.com/base/' --path='/persistent/demo' --fromUrl='https://realm-demo.cardstack.com/demo/' --toUrl='https://realm-demo.cardstack.com/demo/' --fromUrl='https://cardstack.com/base/' --toUrl='https://realm-demo.cardstack.com/base/' --fromUrl='https://realm-demo.cardstack.com/base/' --toUrl='https://realm-demo.cardstack.com/base/'",
     "wait": "sleep 10000000",
     "lint": "glint"
+  },
+  "volta": {
+    "extends": "../../package.json"
   }
 }
