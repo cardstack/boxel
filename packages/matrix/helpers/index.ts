@@ -19,6 +19,20 @@ export async function logout(page: Page) {
   await page.locator('[data-test-logout-btn]').click();
 }
 
+export async function createRoom(
+  page: Page,
+  roomDetails: { name: string; invites?: string[] }
+) {
+  await page.locator('[data-test-create-room-mode-btn]').click();
+  await page.locator('[data-test-room-name-field]').fill(roomDetails.name);
+  if (roomDetails.invites && roomDetails.invites.length > 0) {
+    await page
+      .locator('[data-test-room-invite-field]')
+      .fill(roomDetails.invites.join(', '));
+  }
+  await page.locator('[data-test-create-room-btn]').click();
+}
+
 interface RoomAssertions {
   joinedRooms?: string[];
   invitedRooms?: { name: string; sender: string }[];

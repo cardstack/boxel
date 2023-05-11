@@ -303,11 +303,11 @@ export default class MatrixService extends Service {
 
     this.roomNames.set(roomId, name);
     let invite = this.invites.get(roomId);
-    if (invite && this.invites.has(roomId)) {
+    if (invite) {
       this.invites.set(roomId, { ...invite, name });
     }
     let joinedRoom = this.joinedRooms.get(roomId);
-    if (joinedRoom && this.joinedRooms.has(roomId)) {
+    if (joinedRoom) {
       this.joinedRooms.set(roomId, { ...joinedRoom, name });
     }
   };
