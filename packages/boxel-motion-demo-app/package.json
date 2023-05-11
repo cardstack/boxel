@@ -107,6 +107,9 @@
   "engines": {
     "node": "10.* || >= 12"
   },
+  "volta": {
+    "extends": "../../package.json"
+  },
   "ember": {
     "edition": "octane"
   }
