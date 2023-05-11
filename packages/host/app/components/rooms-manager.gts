@@ -1,10 +1,11 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
-import { not } from '../helpers/truth-helpers';
-import { restartableTask } from 'ember-concurrency';
+import { not, eq } from '../helpers/truth-helpers';
+import { restartableTask, timeout } from 'ember-concurrency';
 import {
   BoxelHeader,
   BoxelInput,
@@ -14,6 +15,7 @@ import {
   FieldContainer,
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '../lib/matrix-utils';
+import { eventDebounceMs } from '../services/matrix-service';
 import type MatrixService from '../services/matrix-service';
 
 const TRUE = true;
@@ -71,13 +73,33 @@ export default class RoomsManager extends Component {
           (from:
           <span
             data-test-invite-sender={{invite.sender}}
-          >{{invite.sender}})</span></div>
+          >{{invite.sender}})</span>
+          <Button
+            data-test-decline-room-btn={{invite.name}}
+            {{on 'click' (fn this.leaveRoom invite.roomId)}}
+          >Decline</Button>
+          <Button
+            data-test-join-room-btn={{invite.name}}
+            {{on 'click' (fn this.joinRoom invite.roomId)}}
+          >Join</Button>
+          {{#if (eq invite.roomId this.roomIdForCurrentAction)}}
+            <LoadingIndicator />
+          {{/if}}
+        </div>
       {{/each}}
     </div>
     <div data-test-rooms-list>
       <h3>Rooms</h3>
       {{#each this.sortedJoinedRooms as |room|}}
-        <div data-test-joined-room={{room.name}}>{{room.name}}</div>
+        <div data-test-joined-room={{room.name}}>{{room.name}}
+          <Button
+            data-test-leave-room-btn={{room.name}}
+            {{on 'click' (fn this.leaveRoom room.roomId)}}
+          >Leave</Button>
+          {{#if (eq room.roomId this.roomIdForCurrentAction)}}
+            <LoadingIndicator />
+          {{/if}}
+        </div>
       {{/each}}
     </div>
   </template>
@@ -87,6 +109,7 @@ export default class RoomsManager extends Component {
   @tracked private newRoomName: string | undefined;
   @tracked private newRoomInvite: string[] = [];
   @tracked private roomNameError: string | undefined;
+  @tracked private roomIdForCurrentAction: string | undefined;
 
   private get sortedJoinedRooms() {
     return [...this.matrixService.joinedRooms.values()].sort(
@@ -138,6 +161,16 @@ export default class RoomsManager extends Component {
     this.resetCreateRoom();
   }
 
+  @action
+  private leaveRoom(roomId: string) {
+    this.doLeaveRoom.perform(roomId);
+  }
+
+  @action
+  private joinRoom(roomId: string) {
+    this.doJoinRoom.perform(roomId);
+  }
+
   private doCreateRoom = restartableTask(async () => {
     if (!this.newRoomName) {
       throw new Error(
@@ -154,6 +187,20 @@ export default class RoomsManager extends Component {
       throw e;
     }
     this.resetCreateRoom();
+  });
+
+  private doLeaveRoom = restartableTask(async (roomId: string) => {
+    this.roomIdForCurrentAction = roomId;
+    await this.matrixService.client.leave(roomId);
+    await timeout(eventDebounceMs); // this makes it feel a bit more responsive
+    this.roomIdForCurrentAction = undefined;
+  });
+
+  private doJoinRoom = restartableTask(async (roomId: string) => {
+    this.roomIdForCurrentAction = roomId;
+    await this.matrixService.client.joinRoom(roomId);
+    await timeout(eventDebounceMs); // this makes it feel a bit more responsive
+    this.roomIdForCurrentAction = undefined;
   });
 
   private resetCreateRoom() {
