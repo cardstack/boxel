@@ -703,6 +703,7 @@ importers:
       '@simple-dom/interface': ^1.4.0
       '@simple-dom/serializer': ^1.4.0
       '@simple-dom/void-map': ^1.4.0
+      '@types/dompurify': ^3.0.2
       '@types/ember-data': ^4.0.0
       '@types/ember-data__adapter': ^4.0.0
       '@types/ember-data__model': ^4.0.0
@@ -734,6 +735,7 @@ importers:
       '@types/flat': ^5.0.2
       '@types/htmlbars-inline-precompile': ^3.0.0
       '@types/lodash': ^4.14.182
+      '@types/marked': ^4.3.0
       '@types/matrix-js-sdk': ^11.0.1
       '@types/qs': ^6.9.7
       '@types/qunit': ^2.11.3
@@ -745,6 +747,7 @@ importers:
       buffer: ^6.0.3
       crypto-browserify: ^3.12.0
       date-fns: ^2.28.0
+      dompurify: ^3.0.3
       ember-auto-import: ^2.4.0
       ember-cli: ~4.2.0
       ember-cli-app-version: ^5.0.0
@@ -792,6 +795,7 @@ importers:
       loader.js: ^4.7.0
       lodash: ^4.17.21
       loglevel: ^1.8.1
+      marked: ^5.0.2
       matrix-js-sdk: ^25.0.0
       moment: ^2.29.4
       moment-locales-webpack-plugin: ^1.2.0
@@ -831,6 +835,7 @@ importers:
       '@simple-dom/interface': 1.4.0
       '@simple-dom/serializer': 1.4.0
       '@simple-dom/void-map': 1.4.0
+      '@types/dompurify': 3.0.2
       '@types/ember-data': 4.4.6_@babel+core@7.20.2
       '@types/ember-data__adapter': 4.0.1_@babel+core@7.20.2
       '@types/ember-data__model': 4.0.0_@babel+core@7.20.2
@@ -862,6 +867,7 @@ importers:
       '@types/flat': 5.0.2
       '@types/htmlbars-inline-precompile': 3.0.0
       '@types/lodash': 4.14.189
+      '@types/marked': 4.3.0
       '@types/matrix-js-sdk': 11.0.1
       '@types/qs': 6.9.7
       '@types/qunit': 2.19.3
@@ -873,6 +879,7 @@ importers:
       buffer: 6.0.3
       crypto-browserify: 3.12.0
       date-fns: 2.29.3
+      dompurify: 3.0.3
       ember-auto-import: 2.4.3_webpack@5.75.0
       ember-cli: 4.2.0_lodash@4.17.21
       ember-cli-app-version: 5.0.0
@@ -920,6 +927,7 @@ importers:
       loader.js: 4.7.0
       lodash: 4.17.21
       loglevel: 1.8.1
+      marked: 5.0.2
       matrix-js-sdk: 25.0.0
       moment: 2.29.4
       moment-locales-webpack-plugin: 1.2.0_x2665sonagxlkw2a4ers27pnju
@@ -5238,6 +5246,12 @@ packages:
   /@types/diff/5.0.2:
     resolution: {integrity: sha512-uw8eYMIReOwstQ0QKF0sICefSy8cNO/v7gOTiIy9SbwuHyEecJUm7qlgueOO5S1udZ5I/irVydHVwMchgzbKTg==}
 
+  /@types/dompurify/3.0.2:
+    resolution: {integrity: sha512-YBL4ziFebbbfQfH5mlC+QTJsvh0oJUrWbmxKMyEdL7emlHJqGR2Qb34TEFKj+VCayBvjKy3xczMFNhugThUsfQ==}
+    dependencies:
+      '@types/trusted-types': 2.0.3
+    dev: true
+
   /@types/ember-data/4.4.6_@babel+core@7.20.2:
     resolution: {integrity: sha512-r9LpQ8Nr8C/UM+MouLeMcGG56EpKH496+fDf05yPig7n+Kjc4I+PrUuLsbm2RrV0FCgq2PmRZj91Gq6d6NM+Bg==}
     dependencies:
@@ -5371,7 +5385,7 @@ packages:
   /@types/ember__controller/4.0.3:
     resolution: {integrity: sha512-7+Lpgcsa/gjGZtUN0JfQoLzUStCT68p8o6t1e4LBXyC+a5DHg2NJYFZ0U3f8F8TgQJcgtFoUAuv8p77XY6FxwQ==}
     dependencies:
-      '@types/ember__object': 4.0.5
+      '@types/ember__object': 4.0.5_@babel+core@7.20.2
     dev: true
 
   /@types/ember__controller/4.0.3_@babel+core@7.20.2:
@@ -5682,6 +5696,10 @@ packages:
   /@types/lodash/4.14.189:
     resolution: {integrity: sha512-kb9/98N6X8gyME9Cf7YaqIMvYGnBSWqEci6tiettE6iJWH1XdJz/PO8LB0GtLCG7x8dU3KWhZT+lA1a35127tA==}
 
+  /@types/marked/4.3.0:
+    resolution: {integrity: sha512-zK4gSFMjgslsv5Lyvr3O1yCjgmnE4pr8jbG8qVn4QglMwtpvPCf4YT2Wma7Nk95OxUUJI8Z+kzdXohbM7mVpGw==}
+    dev: true
+
   /@types/matrix-js-sdk/11.0.1:
     resolution: {integrity: sha512-0cI+IlIf96mxsTgtS9x7Cw2tZKhhkqwAmodKXGW+rf7THmbiM7rvOsRmp3eDik16mRlWrluq2egVFtQ8NGjgPw==}
     dev: true
@@ -5813,6 +5831,10 @@ packages:
 
   /@types/tough-cookie/4.0.2:
     resolution: {integrity: sha512-Q5vtl1W5ue16D+nIaW8JWebSSraJVlK+EthKn7e7UcD4KWsaSJ8BqGPXNaPghgtcn/fhvrN17Tv8ksUsQpiplw==}
+    dev: true
+
+  /@types/trusted-types/2.0.3:
+    resolution: {integrity: sha512-NfQ4gyz38SL8sDNrSixxU2Os1a5xcdFxipAFxYEuLUlvU2uDwS4NUpsImcf1//SlWItCVMMLiylsxbmNMToV/g==}
     dev: true
 
   /@types/unist/2.0.6:
@@ -7138,7 +7160,7 @@ packages:
       '@babel/core': ^7.0.0
       webpack: '>=2'
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       find-cache-dir: 3.3.2
       loader-utils: 2.0.4
       make-dir: 3.1.0
@@ -8972,7 +8994,7 @@ packages:
       mississippi: 3.0.0
       mkdirp: 0.5.6
       move-concurrently: 1.0.1
-      promise-inflight: 1.0.1
+      promise-inflight: 1.0.1_bluebird@3.7.2
       rimraf: 2.7.1
       ssri: 6.0.2
       unique-filename: 1.1.1
@@ -10713,6 +10735,10 @@ packages:
     dependencies:
       domelementtype: 2.3.0
     dev: false
+
+  /dompurify/3.0.3:
+    resolution: {integrity: sha512-axQ9zieHLnAnHh0sfAamKYiqXMJAVwu+LM/alQ7WDagoWessyWvMSFyW65CqF3owufNu8HBcE4cM2Vflu7YWcQ==}
+    dev: true
 
   /domutils/1.7.0:
     resolution: {integrity: sha512-Lgd2XcJ/NjEw+7tFvfKxOzCYKZsdct5lczQ2ZaQY8Djz7pfAD3Gbp8ySJWtreII/vDlMVmxwa6pHmdxIYgttDg==}
@@ -12542,7 +12568,7 @@ packages:
       '@ember/test-helpers':
         optional: true
     dependencies:
-      '@ember/test-helpers': 2.8.1_mjl3znqfqz4o673rlet2hb3jru
+      '@ember/test-helpers': 2.8.1_c3ll764h35tb7zumth7bce2v2e
       '@embroider/addon-shim': 1.8.3
       ember-destroyable-polyfill: 2.0.3_@babel+core@7.20.2
       ember-modifier: 3.2.7_@babel+core@7.20.2
@@ -17312,6 +17338,12 @@ packages:
       uc.micro: 1.0.6
     dev: true
 
+  /marked/5.0.2:
+    resolution: {integrity: sha512-TXksm9GwqXCRNbFUZmMtqNLvy3K2cQHuWmyBDLOrY1e6i9UvZpOTJXoz7fBjYkJkaUFzV9hBFxMuZSyQt8R6KQ==}
+    engines: {node: '>= 18'}
+    hasBin: true
+    dev: true
+
   /matcher-collection/1.1.2:
     resolution: {integrity: sha512-YQ/teqaOIIfUHedRam08PB3NK7Mjct6BvzRnJmpGDm8uFXpNr1sbY4yuflI5JcEs6COpYA0FpRQhSDBf1tT95g==}
     dependencies:
@@ -18896,6 +18928,17 @@ packages:
     peerDependenciesMeta:
       bluebird:
         optional: true
+    dev: true
+
+  /promise-inflight/1.0.1_bluebird@3.7.2:
+    resolution: {integrity: sha512-6zWPyEOFaQBJYcGMHBKTKJ3u6TBsnMFOIZSa6ce1e/ZrrsOlnHRHbabMjLiBYKp+n44X9eUI6VUPaukCXHuG4g==}
+    peerDependencies:
+      bluebird: '*'
+    peerDependenciesMeta:
+      bluebird:
+        optional: true
+    dependencies:
+      bluebird: 3.7.2
     dev: true
 
   /promise-map-series/0.2.3:

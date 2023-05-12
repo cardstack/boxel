@@ -17,7 +17,6 @@ import {
 import { isMatrixError } from '../lib/matrix-utils';
 import difference from 'lodash/difference';
 import type MatrixService from '../services/matrix-service';
-import RouterService from '@ember/routing/router-service';
 
 const TRUE = true;
 const MATRIX_REGISTRATION_TYPES = {
@@ -115,7 +114,6 @@ export default class RegisterUser extends Component {
       } = { type: 'initial' };
 
   @service private declare matrixService: MatrixService;
-  @service private declare router: RouterService;
 
   private get isRegisterButtonDisabled() {
     return !this.username || !this.password;
@@ -262,7 +260,6 @@ export default class RegisterUser extends Component {
         this.password
       );
       await this.matrixService.client.createKeyBackupVersion(preparedKey);
-      this.router.transitionTo('chat');
     }
   });
 

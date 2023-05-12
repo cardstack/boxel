@@ -1,4 +1,4 @@
-import Service from '@ember/service';
+import Service, { service } from '@ember/service';
 import { createClient } from 'matrix-js-sdk';
 import {
   type IAuthData,
@@ -6,13 +6,15 @@ import {
   type MatrixEvent,
   type RoomMember,
   type EmittedEvents,
+  type IEvent,
   Preset,
   RoomMemberEvent,
   RoomEvent,
 } from 'matrix-js-sdk';
 import { tracked } from '@glimmer/tracking';
-import { TrackedMap } from 'tracked-built-ins';
+import { TrackedMap, TrackedArray } from 'tracked-built-ins';
 import debounce from 'lodash/debounce';
+import RouterService from '@ember/routing/router-service';
 import ENV from '@cardstack/host/config/environment';
 
 const { matrixURL } = ENV;
@@ -29,13 +31,17 @@ interface RoomInvite extends Room {
   sender: string;
 }
 
+type Event = Partial<IEvent>;
+
 export default class MatrixService extends Service {
+  @service private declare router: RouterService;
   @tracked
   client = createClient({ baseUrl: matrixURL });
-  invites: TrackedMap<string, RoomInvite>;
-  joinedRooms: TrackedMap<string, Room>;
+  invites: TrackedMap<string, RoomInvite> = new TrackedMap();
+  joinedRooms: TrackedMap<string, Room> = new TrackedMap();
+  roomNames: Map<string, string> = new Map();
+  timelines: Map<string, TrackedArray<Event>> = new Map();
   private eventBindings: [EmittedEvents, (...arg: any[]) => void][];
-  private roomNames: Map<string, string> = new Map();
   // we process the matrix events in batched queues so that we can collapse the
   // interstitial state between events to prevent unnecessary flashing on the
   // screen, i.e. user was invited to a room and then declined the invite should
@@ -49,15 +55,13 @@ export default class MatrixService extends Service {
 
   constructor(properties: object) {
     super(properties);
-    this.invites = new TrackedMap();
-    this.joinedRooms = new TrackedMap();
-
     // building the event bindings like this so that we can consistently bind
     // and unbind these events programmatically--this way if we add a new event
     // we won't forget to unbind it.
     this.eventBindings = [
       [RoomMemberEvent.Membership, this.onMembership],
       [RoomEvent.Name, this.onRoomName],
+      [RoomEvent.Timeline, this.onTimeline],
     ];
   }
 
@@ -75,6 +79,7 @@ export default class MatrixService extends Service {
     await this.client.stopClient();
     await this.client.logout();
     this.resetState();
+    this.router.transitionTo('chat');
   }
 
   async start(auth?: IAuthData) {
@@ -124,6 +129,7 @@ export default class MatrixService extends Service {
       deviceId,
     });
     if (this.isLoggedIn) {
+      this.router.transitionTo('chat.index');
       try {
         await this.client.initCrypto();
       } catch (e) {
@@ -172,6 +178,22 @@ export default class MatrixService extends Service {
       this.client.off(event, handler);
     }
   }
+
+  private onTimeline = (
+    e: MatrixEvent,
+    room: MatrixRoom,
+    _toStartOfTimeline: boolean // unsure what this means...
+  ) => {
+    let { event } = e;
+    if (event.type === 'm.room.message') {
+      let timeline = this.timelines.get(room.roomId);
+      if (!timeline) {
+        timeline = new TrackedArray<Event>();
+        this.timelines.set(room.roomId, timeline);
+      }
+      timeline.push(event);
+    }
+  };
 
   private onMembership = (e: MatrixEvent, member: RoomMember) => {
     let { event } = e;

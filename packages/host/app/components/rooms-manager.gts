@@ -15,6 +15,7 @@ import {
   FieldContainer,
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '../lib/matrix-utils';
+import { LinkTo } from '@ember/routing';
 import { eventDebounceMs } from '../services/matrix-service';
 import type MatrixService from '../services/matrix-service';
 
@@ -91,7 +92,15 @@ export default class RoomsManager extends Component {
     <div data-test-rooms-list>
       <h3>Rooms</h3>
       {{#each this.sortedJoinedRooms as |room|}}
-        <div data-test-joined-room={{room.name}}>{{room.name}}
+        <div data-test-joined-room={{room.name}}>
+          <LinkTo
+            class='link'
+            data-test-enter-room={{room.name}}
+            @route='chat.room'
+            @model={{room.roomId}}
+          >
+            {{room.name}}
+          </LinkTo>
           <Button
             data-test-leave-room-btn={{room.name}}
             {{on 'click' (fn this.leaveRoom room.roomId)}}

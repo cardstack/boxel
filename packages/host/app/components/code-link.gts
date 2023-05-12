@@ -10,11 +10,7 @@ export default class CodeLink extends Component<Signature> {
     {{! template-lint-disable no-inline-styles }}
     <footer style='text-align:center;margin:1em auto;' data-test-moved>The card
       code editor has moved to
-      <LinkTo
-        @route='code'
-        style='color:#6638ff;text-decoration:underline'
-        data-test-code-link
-      >/code</LinkTo>
+      <LinkTo @route='code' class='link' data-test-code-link>/code</LinkTo>
     </footer>
   </template>
 }

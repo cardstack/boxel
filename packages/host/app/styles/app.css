@@ -130,6 +130,14 @@ nav>.directory-level {
   color: var(--boxel-error-100);
 }
 
+.link {
+  color: var(--boxel-highlight);
+  text-decoration:underline
+}
+.link:hover {
+  color: var(--boxel-highlight-hover);
+}
+
 /* Catalog Entry */
 .catalog-entry {
   padding: calc(2 * var(--boxel-sp-sm)) var(--boxel-sp-sm);
