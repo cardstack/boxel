@@ -114,6 +114,7 @@ export default class OperatorMode extends Component<Signature> {
         cardRequest.fulfill(updatedCard);
         this.requests.delete(card);
       }
+      this.addToStack(updatedCard); // TODO: do not do this for linked fields
     }
   }
 
