@@ -34,6 +34,7 @@ import {
   type LooseSingleCardDocument,
   type CardDocument,
   type CardResource,
+  type Actions,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 
@@ -221,7 +222,8 @@ export interface Field<
   validate(instance: CardBase, value: any): void;
   component(
     model: Box<CardBase>,
-    format: Format
+    format: Format,
+    actions?: Actions
   ): ComponentLike<{ Args: {}; Blocks: {} }>;
   getter(instance: CardBase): CardInstanceType<CardT>;
   queryableValue(value: any, stack: CardBase[]): SearchT;
@@ -919,13 +921,14 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
 
   component(
     model: Box<Card>,
-    format: Format
+    format: Format,
+    actions?: Actions
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(
         this.name as keyof CardBase
       ) as unknown as Box<Card | null>;
-      return getLinksToEditor(innerModel, this);
+      return getLinksToEditor(innerModel, this, actions);
     }
     return fieldComponent(this, model, format);
   }
@@ -1243,7 +1246,8 @@ class LinksToMany<FieldT extends CardConstructor>
 
   component(
     model: Box<Card>,
-    format: Format
+    format: Format,
+    actions?: Actions
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     let fieldName = this.name as keyof CardBase;
     let arrayField = model.field(
@@ -1256,6 +1260,7 @@ class LinksToMany<FieldT extends CardConstructor>
       field: this,
       format,
       cardTypeFor,
+      actions,
     });
   }
 }
@@ -1416,8 +1421,8 @@ export class CardBase {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(card: CardBase, format: Format) {
-    return getComponent(card, format);
+  static getComponent(card: CardBase, format: Format, actions?: Actions) {
+    return getComponent(card, format, actions);
   }
 
   constructor(data?: Record<string, any>) {
@@ -2046,18 +2051,21 @@ export type SignatureFor<CardT extends CardBaseConstructor> = {
     fields: FieldsTypeFor<InstanceType<CardT>>;
     set: Setter;
     fieldName: string | undefined;
+    actions?: Actions;
   };
 };
 
 export function getComponent(
   model: CardBase,
-  format: Format
+  format: Format,
+  actions?: Actions
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let box = Box.create(model);
   let component = getBoxComponent(
     model.constructor as CardBaseConstructor,
     format,
-    box
+    box,
+    actions
   );
   return component;
 }

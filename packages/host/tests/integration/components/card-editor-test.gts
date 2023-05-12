@@ -466,10 +466,7 @@ module('Integration | card-editor', function (hooks) {
       }
     );
 
-    await click('[data-test-choose-card]');
-    await waitFor('[data-test-create-new]');
     await click('[data-test-create-new]');
-
     await waitFor('[data-test-create-new-card="Pet"]');
 
     assert.dom('[data-test-field="name"] input').exists();

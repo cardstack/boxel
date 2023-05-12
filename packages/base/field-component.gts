@@ -7,8 +7,9 @@ import {
   type CardBase,
 } from './card-api';
 import { defaultComponent } from './default-card-component';
-import { getField } from '@cardstack/runtime-common';
+import { getField, type Actions } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
+import { CardContainer } from '@cardstack/boxel-ui';
 
 const componentCache = new WeakMap<
   Box<CardBase>,
@@ -18,7 +19,8 @@ const componentCache = new WeakMap<
 export function getBoxComponent(
   card: typeof CardBase,
   format: Format,
-  model: Box<CardBase>
+  model: Box<CardBase>,
+  actions?: Actions
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let stable = componentCache.get(model);
   if (stable) {
@@ -32,7 +34,8 @@ export function getBoxComponent(
   let internalFields = fieldsComponentsFor(
     {},
     model,
-    defaultFieldFormat(format)
+    defaultFieldFormat(format),
+    actions
   );
 
   let component: ComponentLike<{ Args: {}; Blocks: {} }> = <template>
@@ -41,6 +44,7 @@ export function getBoxComponent(
       @fields={{internalFields}}
       @set={{model.set}}
       @fieldName={{model.name}}
+      @actions={{actions}}
     />
   </template>;
 
@@ -54,7 +58,8 @@ export function getBoxComponent(
   let externalFields = fieldsComponentsFor(
     component,
     model,
-    defaultFieldFormat(format)
+    defaultFieldFormat(format),
+    actions
   );
 
   // This cast is safe because we're returning a proxy that wraps component.
@@ -76,7 +81,8 @@ function defaultFieldFormat(format: Format): Format {
 function fieldsComponentsFor<T extends CardBase>(
   target: object,
   model: Box<T>,
-  defaultFormat: Format
+  defaultFormat: Format,
+  actions?: Actions
 ): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
@@ -98,7 +104,11 @@ function fieldsComponentsFor<T extends CardBase>(
       let format = getField(modelValue.constructor, property)?.computeVia
         ? 'embedded'
         : defaultFormat;
-      return field.component(model as unknown as Box<CardBase>, format);
+      return field.component(
+        model as unknown as Box<CardBase>,
+        format,
+        actions
+      );
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
@@ -155,12 +165,14 @@ export function getPluralViewComponent(
   );
   let defaultComponent = class PluralView extends GlimmerComponent {
     <template>
-      {{#each model.children as |child|}}
+      {{#each model.children as |child i|}}
         {{#let
           (getBoxComponent (cardTypeFor field child) format child)
           as |Item|
         }}
-          <Item />
+          <CardContainer data-test-plural-view-item={{i}}>
+            <Item />
+          </CardContainer>
         {{/let}}
       {{/each}}
     </template>

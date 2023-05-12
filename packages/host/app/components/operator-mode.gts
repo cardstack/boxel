@@ -5,20 +5,22 @@ import Preview from './preview';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import type CardService from '../services/card-service';
 import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { IconButton } from '@cardstack/boxel-ui';
+import { IconButton, Modal } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
 import { restartableTask } from 'ember-concurrency';
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  type Actions,
+  type CardRef,
+} from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 
 import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
@@ -27,12 +29,17 @@ import { cardTypeDisplayName } from '@cardstack/host/helpers/card-type-display-n
 interface Signature {
   Args: {
     firstCardInStack: Card;
+    onClose: () => void;
   };
 }
 
 export default class OperatorMode extends Component<Signature> {
-  stack: TrackedArray<Card>;
-  formats: WeakMap<Card, Format> = new TrackedWeakMap<Card, Format>();
+  stack: TrackedArray<Card>; // deferred can be a part of this
+  formats: WeakMap<Card, Format> = new TrackedWeakMap<Card, Format>(); // this could also be part of the stack
+  requests: WeakMap<Card, Deferred<Card>> = new TrackedWeakMap<
+    Card,
+    Deferred<Card>
+  >();
 
   //A variable to store value of card field
   //before in edit mode.
@@ -59,20 +66,9 @@ export default class OperatorMode extends Component<Signature> {
     this.searchSheetMode = SearchSheetMode.Closed;
   }
 
-  addToStack(card: CardAPI.Card) {
-    this.addCardToStack.perform(card);
-  }
-
-  private addCardToStack = restartableTask(async (card: CardAPI.Card) => {
-    let api = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`
-    );
-    let relativeTo = card[api.relativeTo];
-    if (!relativeTo) {
-      throw new Error(`bug: should never get here`);
-    }
+  @action addToStack(card: Card) {
     this.stack.push(card);
-  });
+  }
 
   @action async edit(card: Card) {
     await this.saveCardFieldValues(card);
@@ -88,21 +84,44 @@ export default class OperatorMode extends Component<Signature> {
     let index = this.stack.indexOf(card);
     this.stack.splice(index);
     this.stack = this.stack;
+    if (this.stack.length === 0) {
+      this.args.onClose();
+    }
   }
 
   @action async cancel(card: Card) {
+    let cardRequest = this.requests.get(card);
+    if (cardRequest) {
+      this.requests.delete(card);
+      this.close(card);
+    }
     await this.rollbackCardFieldValues(card);
     this.formats.set(card, 'isolated');
   }
 
   @action async save(card: Card) {
+    let index: number | undefined = undefined;
+    if (!card.id) {
+      index = this.stack.indexOf(card);
+    }
     await this.saveCardFieldValues(card);
-    this.write.perform(card);
+    let updatedCard = await this.write.perform(card);
+    if (index && updatedCard) {
+      this.stack.splice(index); // remove new card editor
+
+      let cardRequest = this.requests.get(card);
+      if (cardRequest) {
+        cardRequest.fulfill(updatedCard);
+        this.requests.delete(card);
+      }
+      this.addToStack(updatedCard); // TODO: do not do this for linked fields
+    }
   }
 
   private write = restartableTask(async (card: Card) => {
     let updatedCard = await this.cardService.saveModel(card);
     this.formats.set(updatedCard, 'isolated');
+    return updatedCard;
   });
 
   private async saveCardFieldValues(card: Card) {
@@ -128,6 +147,26 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
+  private publicAPI: Actions = {
+    createCard: async (
+      ref: CardRef,
+      relativeTo: URL | undefined
+    ): Promise<Card | undefined> => {
+      let doc = { data: { meta: { adoptsFrom: ref } } };
+      let newCard = await this.cardService.createFromSerialized(
+        doc.data,
+        doc,
+        relativeTo ?? this.cardService.defaultURL
+      );
+      this.addToStack(newCard);
+      this.formats.set(newCard, 'edit');
+      this.requests.set(newCard, new Deferred());
+
+      return await this.requests.get(newCard)?.promise;
+    },
+    // more CRUD ops to come...
+  };
+
   private async rollbackCardFieldValues(card: Card) {
     let fields = await this.cardService.getFields(card);
     for (let fieldName of Object.keys(fields)) {
@@ -149,13 +188,30 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
+  cardOrderFromTop(count: number, i: number) {
+    // 0 is the topmost card, 1 is the one behind it, and so on...
+    return count - (i + 1);
+  }
+
   <template>
-    <div class='operator-mode-desktop-overlay'>
+    <Modal
+      class='operator-mode'
+      @isOpen={{true}}
+      @onClose={{@onClose}}
+      @isOverlayDismissalDisabled={{true}}
+      @boxelModalOverlayColor='var(--operator-mode-bg-color)'
+    >
       <CardCatalogModal />
-      <CreateCardModal />
-      <div class='operator-mode-card-stack'>
-        {{#each this.stack as |card|}}
-          <div class='operator-mode-card-stack__card'>
+      <div class='stack'>
+        {{#each this.stack as |card i|}}
+          <div
+            class='stack-card stack-card--{{this.cardOrderFromTop
+                this.stack.length
+                i
+              }}'
+            data-test-stack-card-index={{i}}
+            data-test-stack-card={{card.id}}
+          >
             <div
               class={{cn
                 'operator-mode-card-stack__card__item'
@@ -164,7 +220,11 @@ export default class OperatorMode extends Component<Signature> {
                 )
               }}
             >
-              <Preview @card={{card}} @format={{this.getFormat card}} />
+              <Preview
+                @card={{card}}
+                @format={{this.getFormat card}}
+                @actions={{this.publicAPI}}
+              />
             </div>
             <div class='operator-mode-card-stack__card__header'>
               <div
@@ -179,6 +239,7 @@ export default class OperatorMode extends Component<Signature> {
                   class='icon-button'
                   aria-label='Edit'
                   {{on 'click' (fn this.edit card)}}
+                  data-test-edit-button
                 />
               {{/if}}
               <IconButton
@@ -188,6 +249,7 @@ export default class OperatorMode extends Component<Signature> {
                 class='icon-button'
                 aria-label='Close'
                 {{on 'click' (fn this.close card)}}
+                data-test-close-button
               />
             </div>
             {{#if (eq (getValueFromWeakMap this.formats card) 'edit')}}
@@ -196,6 +258,7 @@ export default class OperatorMode extends Component<Signature> {
                   class='operator-mode-card-stack__card__footer-button light-button'
                   {{on 'click' (fn this.cancel card)}}
                   aria-label='Cancel'
+                  data-test-cancel-button
                 >
                   Cancel
                 </button>
@@ -203,6 +266,7 @@ export default class OperatorMode extends Component<Signature> {
                   class='operator-mode-card-stack__card__footer-button'
                   {{on 'click' (fn this.save card)}}
                   aria-label='Save'
+                  data-test-save-button
                 >
                   Save
                 </button>
@@ -216,7 +280,7 @@ export default class OperatorMode extends Component<Signature> {
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
       />
-    </div>
+    </Modal>
   </template>
 }
 

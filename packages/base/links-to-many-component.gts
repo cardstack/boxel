@@ -19,6 +19,8 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
+  createNewCard,
+  type Actions,
 } from '@cardstack/runtime-common';
 
 interface Signature {
@@ -31,6 +33,7 @@ interface Signature {
       field: Field<typeof CardBase>,
       boxedElement: Box<CardBase>
     ): typeof CardBase;
+    actions?: Actions;
   };
 }
 
@@ -60,7 +63,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 @icon='icon-minus-circle'
                 @width='20px'
                 @height='20px'
-                class='remove-button'
+                class='icon-button'
                 {{on 'click' (fn this.remove i)}}
                 data-test-remove-card
                 data-test-remove={{i}}
@@ -70,17 +73,21 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           {{/each}}
         </ul>
       {{/if}}
-      <Button
-        @size='small'
-        {{on 'click' this.add}}
-        type='button'
-        data-test-add-new
-      >+ Add New</Button>
+      <Button @size='small' {{on 'click' this.add}} data-test-add-new>
+        Choose
+      </Button>
+      <Button @size='small' {{on 'click' this.create}} data-test-create-new>
+        Create New
+      </Button>
     </div>
   </template>
 
   add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
+  };
+
+  create = () => {
+    (this.createCard as unknown as Descriptor<any, any[]>).perform();
   };
 
   private chooseCard = restartableTask(async () => {
@@ -89,21 +96,33 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: CardBase | undefined = await chooseCard(
-      {
-        filter: {
-          every: [{ type }, ...selectedCardsQuery],
-        },
+    let chosenCard: Card | undefined = await chooseCard({
+      filter: {
+        every: [{ type }, ...selectedCardsQuery],
       },
-      { offerToCreate: type }
-    );
+    });
     if (chosenCard) {
-      selectedCards.push(chosenCard);
+      selectedCards = [...selectedCards, chosenCard];
+      (this.args.model.value as any)[this.args.field.name] = selectedCards;
+    }
+  });
+
+  private createCard = restartableTask(async () => {
+    let cards = (this.args.model.value as any)[this.args.field.name];
+    let type = identifyCard(this.args.field.card) ?? baseCardRef;
+    let newCard: Card | undefined =
+      (await this.args.actions?.createCard(type, undefined)) ??
+      (await createNewCard(type, undefined)); // remove this when no longer supporting `createCardModal`
+    if (newCard) {
+      cards = [...cards, newCard];
+      (this.args.model.value as any)[this.args.field.name] = cards;
     }
   });
 
   remove = (index: number) => {
-    (this.args.model.value as any)[this.args.field.name].splice(index, 1);
+    let cards = (this.args.model.value as any)[this.args.field.name];
+    cards = cards.filter((_c: Card, i: number) => i !== index);
+    (this.args.model.value as any)[this.args.field.name] = cards;
   };
 }
 
@@ -113,6 +132,7 @@ export function getLinksToManyComponent({
   format,
   field,
   cardTypeFor,
+  actions,
 }: {
   model: Box<Card>;
   arrayField: Box<Card[]>;
@@ -122,6 +142,7 @@ export function getLinksToManyComponent({
     field: Field<typeof CardBase>,
     boxedElement: Box<CardBase>
   ): typeof CardBase;
+  actions?: Actions;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {
@@ -132,6 +153,7 @@ export function getLinksToManyComponent({
           @field={{field}}
           @format={{format}}
           @cardTypeFor={{cardTypeFor}}
+          @actions={{actions}}
         />
       </template>
     };

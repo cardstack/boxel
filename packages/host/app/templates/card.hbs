@@ -1,4 +1,3 @@
-{{! template-lint-disable no-inline-styles }}
 {{#if this.isLocalRealm}}
   <InLocalRealm as |realm|>
     {{#if realm.connected}}
@@ -16,7 +15,6 @@
         <a
           href="#"
           {{on 'click' (this.withPreventDefault realm.open)}}
-          style='color:#6638ff;text-decoration:underline'
         >Open a local realm</a>
       </div>
     {{else}}
@@ -31,10 +29,15 @@
 
 {{on-key '.' this.toggleOperatorMode}}
 
-{{#if this.operatorModeEnabled }}
-  {{!-- TODO: Rather than a dedicated argument for the first card in the stack, refactor this so that there will be a state that reflects the whole stack --}}
+{{#if this.operatorModeEnabled}}
+  {{!-- TODO: Rather than a dedicated argument for the first card
+  in the stack, refactor this so that there will be a state that
+  reflects the whole stack --}}
   {{#if this.model}}
-    <OperatorMode @firstCardInStack={{this.model}} />
+    <OperatorMode
+      @firstCardInStack={{this.model}}
+      @onClose={{this.closeOperatorMode}}
+    />
   {{/if}}
 {{/if}}
 
