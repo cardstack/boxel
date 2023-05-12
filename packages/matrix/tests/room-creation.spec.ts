@@ -5,7 +5,7 @@ import {
   registerUser,
   type SynapseInstance,
 } from '../docker/synapse';
-import { login, logout, assertRooms } from '../helpers';
+import { login, logout, assertRooms, createRoom } from '../helpers';
 
 test.describe('Room creation', () => {
   let synapse: SynapseInstance;
@@ -77,23 +77,15 @@ test.describe('Room creation', () => {
 
   test('rooms are sorted by creation date', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await page.locator('[data-test-create-room-mode-btn]').click();
-    await page.locator('[data-test-room-name-field]').fill('Room Z');
-    await page.locator('[data-test-create-room-btn]').click();
-
-    await page.locator('[data-test-create-room-mode-btn]').click();
-    await page.locator('[data-test-room-name-field]').fill('Room A');
-    await page.locator('[data-test-create-room-btn]').click();
+    await createRoom(page, { name: 'Room Z' });
+    await createRoom(page, { name: 'Room A' });
 
     await assertRooms(page, { joinedRooms: ['Room Z', 'Room A'] });
   });
 
   test('it can invite a user to a new room', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await page.locator('[data-test-create-room-mode-btn]').click();
-    await page.locator('[data-test-room-name-field]').fill('Room 1');
-    await page.locator('[data-test-room-invite-field]').fill('user2');
-    await page.locator('[data-test-create-room-btn]').click();
+    await createRoom(page, { name: 'Room 1', invites: ['user2'] });
 
     await assertRooms(page, { joinedRooms: ['Room 1'] });
 
@@ -106,15 +98,8 @@ test.describe('Room creation', () => {
 
   test('invites are sorted by invitation date', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await page.locator('[data-test-create-room-mode-btn]').click();
-    await page.locator('[data-test-room-name-field]').fill('Room Z');
-    await page.locator('[data-test-room-invite-field]').fill('user2');
-    await page.locator('[data-test-create-room-btn]').click();
-
-    await page.locator('[data-test-create-room-mode-btn]').click();
-    await page.locator('[data-test-room-name-field]').fill('Room A');
-    await page.locator('[data-test-room-invite-field]').fill('user2');
-    await page.locator('[data-test-create-room-btn]').click();
+    await createRoom(page, { name: 'Room Z', invites: ['user2'] });
+    await createRoom(page, { name: 'Room A', invites: ['user2'] });
 
     await logout(page);
     await login(page, 'user2', 'pass');
@@ -130,9 +115,7 @@ test.describe('Room creation', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass');
-    await page.locator('[data-test-create-room-mode-btn]').click();
-    await page.locator('[data-test-room-name-field]').fill('Room 1');
-    await page.locator('[data-test-create-room-btn]').click();
+    await createRoom(page, { name: 'Room 1' });
 
     await page.locator('[data-test-create-room-mode-btn]').click();
     await page.locator('[data-test-room-name-field]').fill('Room 1');
