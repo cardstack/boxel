@@ -1,6 +1,10 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { Card, Format } from 'https://cardstack.com/base/card-api';
+import {
+  Card,
+  CardRenderingContext,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 import Preview from './preview';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -25,12 +29,23 @@ import { tracked } from '@glimmer/tracking';
 
 import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
 import { cardTypeDisplayName } from '@cardstack/host/helpers/card-type-display-name';
+import OperatorModeOverlays from '@cardstack/host/components/operator-mode-overlays';
+import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
+import { schedule } from '@ember/runloop';
+import { htmlSafe } from '@ember/template';
 
 interface Signature {
   Args: {
     firstCardInStack: Card;
     onClose: () => void;
   };
+}
+
+export interface RenderedLinksToCard {
+  element: HTMLElement;
+  card: Card;
+  context: CardRenderingContext;
+  stackedAtIndex: number;
 }
 
 export default class OperatorMode extends Component<Signature> {
@@ -188,9 +203,44 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
-  cardOrderFromTop(count: number, i: number) {
-    // 0 is the topmost card, 1 is the one behind it, and so on...
-    return count - (i + 1);
+  get context() {
+    return {
+      renderedIn: this,
+      cardComponentModifier: LinksToCardComponentModifier,
+      optional: {
+        stack: this.stack, // Not used currently, but eventually there will be more than one stack and we will need to know which one we are in.
+      },
+    };
+  }
+
+  @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
+  registerLinkedCardElement(
+    linksToCardElement: HTMLElement,
+    linksToCard: Card,
+    context: CardRenderingContext
+  ) {
+    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
+    schedule('afterRender', () => {
+      this.renderedLinksToCards.push({
+        element: linksToCardElement,
+        card: linksToCard,
+        stackedAtIndex: this.stack.length,
+        context,
+      });
+    });
+  }
+
+  styleForStackedCard(stack: Card[], index: number) {
+    let invertedIndex = stack.length - index - 1;
+
+    let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
+    let offsetPx = 65; // Every new card on the stack is 65px lower than the previous one
+
+    return htmlSafe(`
+      width: ${100 - invertedIndex * widthReductionPercent}%;
+      z-index: ${stack.length - invertedIndex};
+      margin-top: calc(${offsetPx}px * ${index + 1});
+      `);
   }
 
   <template>
@@ -201,16 +251,22 @@ export default class OperatorMode extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
+
       <CardCatalogModal />
-      <div class='stack'>
+
+      <div class='operator-mode-card-stack'>
+        <OperatorModeOverlays
+          @renderedLinksToCards={{this.renderedLinksToCards}}
+          @addToStack={{this.addToStack}}
+          @stack={{this.stack}}
+        />
+
         {{#each this.stack as |card i|}}
           <div
-            class='stack-card stack-card--{{this.cardOrderFromTop
-                this.stack.length
-                i
-              }}'
+            class='operator-mode-card-stack__card'
             data-test-stack-card-index={{i}}
             data-test-stack-card={{card.id}}
+            style={{this.styleForStackedCard this.stack i}}
           >
             <div
               class={{cn
@@ -224,6 +280,7 @@ export default class OperatorMode extends Component<Signature> {
                 @card={{card}}
                 @format={{this.getFormat card}}
                 @actions={{this.publicAPI}}
+                @context={{this.context}}
               />
             </div>
             <div class='operator-mode-card-stack__card__header'>

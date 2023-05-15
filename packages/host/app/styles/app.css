@@ -467,6 +467,12 @@ nav>.directory-level {
   --button-bg: var(--boxel-purple-300);
 }
 
+.operator-mode-overlayed-button {
+  position: absolute;
+  border: none;
+  width: auto;
+}
+
 .freestyle-search-sheet-example-container {
   background: #494559;
   min-height: 300px;
@@ -605,7 +611,7 @@ nav>.directory-level {
 }
 
 /* stacked cards */
-.stack {
+.operator-mode-card-stack {
   position: relative;
   height: calc(100% - var(--search-sheet-closed-height));
   width: 100%;
@@ -616,30 +622,12 @@ nav>.directory-level {
   z-index: 0;
 }
 
-.stack-card {
-  --translate-unit: 45px;
+.operator-mode-card-stack__card {
   justify-self: center;
   position: absolute;
-  transform: translateY(0);
   width: 89%;
   z-index: 0;
   overflow: hidden;
   box-shadow:0 15px 30px 0 rgb(0 0 0 / 35%);
 }
 
-.stack-card--0 {
-  transform: translateY(calc(var(--translate-unit) * 2));
-  width: 100%;
-  z-index: 3;
-}
-
-.stack-card--1 {
-  transform: translateY(var(--translate-unit));
-  width: 95%;
-  z-index: 2;
-}
-
-.stack-card--2 {
-  transform: translateY(0);
-  z-index: 1;
-}

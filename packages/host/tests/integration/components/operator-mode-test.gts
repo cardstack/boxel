@@ -46,7 +46,7 @@ module('Integration | operator-mode', function (hooks) {
     let card = await createFromSerialized<typeof Card>(
       result.doc.data,
       result.doc,
-      undefined,
+      new URL(url),
       {
         loader: Loader.getLoaderFor(createFromSerialized),
       }
@@ -74,9 +74,11 @@ module('Integration | operator-mode', function (hooks) {
           @field name = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
-              <h3 data-test-pet={{@model.name}}>
-                <@fields.name/>
-              </h3>
+              <div ...attributes>
+                <h3 data-test-pet={{@model.name}}>
+                  <@fields.name/>
+                </h3>
+              </div>
             </template>
           }
         }
@@ -446,12 +448,20 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       }
     );
+
     await waitFor('[data-test-person]');
     assert.dom('[data-type-display-name]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
     assert.dom('[data-test-city]').hasText('Bandung');
     assert.dom('[data-test-country]').hasText('Indonesia');
+    assert.dom('.operator-mode-card-stack__card').exists({ count: 1 });
+    await waitFor('[data-test-cardstack-operator-mode-overlay-button]');
+    await click('[data-test-cardstack-operator-mode-overlay-button]');
+    assert.dom('.operator-mode-card-stack__card').exists({ count: 2 });
+    assert
+      .dom('.operator-mode-card-stack__card:nth-of-type(2)')
+      .includesText('Mango');
   });
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
