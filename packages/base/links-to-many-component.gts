@@ -19,7 +19,6 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
-  createNewCard,
   type Actions,
 } from '@cardstack/runtime-common';
 
@@ -76,9 +75,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       <Button @size='small' {{on 'click' this.add}} data-test-add-new>
         Choose
       </Button>
-      <Button @size='small' {{on 'click' this.create}} data-test-create-new>
-        Create New
-      </Button>
+      {{#if @actions.createCard}}
+        <Button @size='small' {{on 'click' this.create}} data-test-create-new>
+          Create New
+        </Button>
+      {{/if}}
     </div>
   </template>
 
@@ -96,11 +97,10 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard({
-      filter: {
-        every: [{ type }, ...selectedCardsQuery],
-      },
-    });
+    let filter = { every: [{ type }, ...selectedCardsQuery] };
+    let chosenCard: Card | undefined = this.args.actions?.createCard
+      ? await chooseCard({ filter })
+      : await chooseCard({ filter }, { offerToCreate: type });
     if (chosenCard) {
       selectedCards = [...selectedCards, chosenCard];
       (this.args.model.value as any)[this.args.field.name] = selectedCards;
@@ -110,9 +110,10 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   private createCard = restartableTask(async () => {
     let cards = (this.args.model.value as any)[this.args.field.name];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let newCard: Card | undefined =
-      (await this.args.actions?.createCard(type, undefined)) ??
-      (await createNewCard(type, undefined)); // remove this when no longer supporting `createCardModal`
+    let newCard: Card | undefined = await this.args.actions?.createCard(
+      type,
+      undefined
+    );
     if (newCard) {
       cards = [...cards, newCard];
       (this.args.model.value as any)[this.args.field.name] = cards;
