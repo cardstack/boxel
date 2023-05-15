@@ -11,6 +11,7 @@ on:
 env:
   # FIXME this would be in the dispatch event
   ENVIRONMENT: staging
+  VOLTA_FEATURE_PNPM: 1
 
 permissions:
   contents: read
