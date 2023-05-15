@@ -68,4 +68,8 @@ test.describe('Room membership', () => {
   test.skip('it can invite members to a room that has already been created', ({
     page,
   }) => {});
+
+  test.skip('it transitions to the chat.index route if you leave a room that is the current route', ({
+    page,
+  }) => {});
 });

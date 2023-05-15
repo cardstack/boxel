@@ -45,6 +45,7 @@ export default class MatrixService extends Service {
   > = new TrackedMap();
   roomNames: Map<string, string> = new Map();
   timelines: Map<string, TrackedMap<string, Event>> = new Map();
+  flushTimeline: Promise<void> | undefined;
   private eventBindings: [EmittedEvents, (...arg: any[]) => void][];
   // we process the matrix events in batched queues so that we can collapse the
   // interstitial state between events to prevent unnecessary flashing on the
@@ -56,6 +57,7 @@ export default class MatrixService extends Service {
     | (Room & { type: 'join' })
     | { type: 'leave'; roomId: string }
   )[] = [];
+  private timelineQueue: MatrixEvent[] = [];
 
   constructor(properties: object) {
     super(properties);
@@ -162,6 +164,13 @@ export default class MatrixService extends Service {
       name,
       topic,
       room_alias_name: encodeURIComponent(name),
+      // default to always making encrypted rooms
+      initial_state: [
+        {
+          content: { algorithm: 'm.megolm.v1.aes-sha2' },
+          type: 'm.room.encryption',
+        },
+      ],
     });
     return roomId;
   }
@@ -198,24 +207,58 @@ export default class MatrixService extends Service {
     }
   }
 
-  private onTimeline = (e: MatrixEvent, room: MatrixRoom) => {
-    let { event } = e;
-    let { event_id: eventId } = event;
+  private onTimeline = (e: MatrixEvent) => {
+    this.timelineQueue.push(e);
+    this.debouncedTimelineDrain();
+  };
+
+  private debouncedTimelineDrain = debounce(() => {
+    this.drainTimeline();
+  }, eventDebounceMs);
+
+  private async drainTimeline() {
+    await this.flushTimeline;
+
+    let eventsDrained: () => void;
+    this.flushTimeline = new Promise((res) => (eventsDrained = res));
+    let events = [...this.timelineQueue];
+    this.timelineQueue = [];
+    for (let event of events) {
+      await this.client.decryptEventIfNeeded(event);
+      this.processDecryptedEvent({
+        ...event.event,
+        content: event.getContent() || undefined,
+      });
+    }
+    eventsDrained!();
+  }
+
+  private processDecryptedEvent(event: Event) {
+    let { event_id: eventId, room_id: roomId } = event;
     if (!eventId) {
       throw new Error(
         `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`
       );
     }
-    if (event.type === 'm.room.message') {
-      let timeline = this.timelines.get(room.roomId);
+    if (event.type === 'm.room.message' || event.type === 'm.room.encrypted') {
+      if (!roomId) {
+        throw new Error(
+          `bug: roomId is undefined for message event ${JSON.stringify(
+            event,
+            null,
+            2
+          )}`
+        );
+      }
+      let timeline = this.timelines.get(roomId);
       if (!timeline) {
         timeline = new TrackedMap<string, Event>();
-        this.timelines.set(room.roomId, timeline);
+        this.timelines.set(roomId, timeline);
       }
       // we use a map for the timeline to de-dupe events
       timeline.set(eventId, event);
     }
-  };
+  }
 
   private onMembership = (e: MatrixEvent, member: RoomMember) => {
     let { event } = e;

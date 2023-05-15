@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
-import { not } from '../helpers/truth-helpers';
+import { not, or } from '../helpers/truth-helpers';
 import { ScrollIntoView, ScrollPaginate } from '../modifiers/scrollers';
 import { restartableTask } from 'ember-concurrency';
 import {
@@ -87,7 +87,9 @@ export default class Room extends Component<RoomArgs> {
     >
       <div class='room__messages'>
         <div class='room__messages__notices'>
-          {{#if this.doRoomScrollBack.isRunning}}
+          {{#if
+            (or this.doRoomScrollBack.isRunning this.doTimelineFlush.isRunning)
+          }}
             <LoadingIndicator />
           {{/if}}
           {{#if this.atBeginningOfTimeline}}
@@ -131,6 +133,11 @@ export default class Room extends Component<RoomArgs> {
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
   private messages: TrackedMap<string, string | undefined> = new TrackedMap();
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.doTimelineFlush.perform();
+  }
 
   get room() {
     this.paginationTime; // just consume this so that we can invalidate the room after pagination
@@ -242,6 +249,10 @@ export default class Room extends Component<RoomArgs> {
   private doInvite = restartableTask(async () => {
     await this.matrixService.invite(this.args.roomId, this.membersToInvite);
     this.resetInvite();
+  });
+
+  private doTimelineFlush = restartableTask(async () => {
+    await this.matrixService.flushTimeline;
   });
 
   private resetInvite() {

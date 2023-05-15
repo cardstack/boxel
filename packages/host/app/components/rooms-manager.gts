@@ -17,6 +17,7 @@ import {
 import { isMatrixError } from '../lib/matrix-utils';
 import { LinkTo } from '@ember/routing';
 import { eventDebounceMs } from '../services/matrix-service';
+import RouterService from '@ember/routing/router-service';
 import type MatrixService from '../services/matrix-service';
 
 const TRUE = true;
@@ -124,6 +125,7 @@ export default class RoomsManager extends Component {
   </template>
 
   @service private declare matrixService: MatrixService;
+  @service private declare router: RouterService;
   @tracked private isCreateRoomMode = false;
   @tracked private newRoomName: string | undefined;
   @tracked private newRoomInvite: string[] = [];
@@ -213,6 +215,12 @@ export default class RoomsManager extends Component {
     await this.matrixService.client.leave(roomId);
     await timeout(eventDebounceMs); // this makes it feel a bit more responsive
     this.roomIdForCurrentAction = undefined;
+    if (
+      this.router.currentRoute.name === 'chat.room' &&
+      this.router.currentRoute.params.id === roomId
+    ) {
+      this.router.transitionTo('chat');
+    }
   });
 
   private doJoinRoom = restartableTask(async (roomId: string) => {
