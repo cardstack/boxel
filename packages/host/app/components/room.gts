@@ -17,6 +17,8 @@ import {
 import { type RoomMember } from 'matrix-js-sdk';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { formatRFC3339 } from 'date-fns';
+import { marked } from 'marked';
+import { sanitize } from 'dompurify';
 import type MatrixService from '../services/matrix-service';
 import { TrackedMap } from 'tracked-built-ins';
 import { type Event } from '../services/matrix-service';
@@ -223,8 +225,12 @@ export default class Room extends Component<RoomArgs> {
   }
 
   private doSendMessage = restartableTask(async (message: string) => {
-    // TODO message is markdown--parse to HTML and send
-    await this.matrixService.client.sendTextMessage(this.args.roomId, message);
+    let html = sanitize(marked(message));
+    await this.matrixService.client.sendHtmlMessage(
+      this.args.roomId,
+      message,
+      html
+    );
     this.messages.set(this.args.roomId, undefined);
   });
 
@@ -288,13 +294,12 @@ class Message extends Component<MessageArgs> {
     return member;
   }
 
-  // TODO remove this after we start using markdown
   get content() {
     return this.htmlContent ?? this.rawContent;
   }
 
   get htmlContent() {
-    // TODO probably we need to sanitize this...
+    // We have sanitized this using DOMPurify
     return this.args.event.content?.formatted_body;
   }
 
