@@ -39,6 +39,10 @@ export default class MatrixService extends Service {
   client = createClient({ baseUrl: matrixURL });
   invites: TrackedMap<string, RoomInvite> = new TrackedMap();
   joinedRooms: TrackedMap<string, Room> = new TrackedMap();
+  roomMembers: TrackedMap<
+    string,
+    TrackedMap<string, { member: RoomMember; status: 'join' | 'invite' }>
+  > = new TrackedMap();
   roomNames: Map<string, string> = new Map();
   timelines: Map<string, TrackedMap<string, Event>> = new Map();
   private eventBindings: [EmittedEvents, (...arg: any[]) => void][];
@@ -162,9 +166,20 @@ export default class MatrixService extends Service {
     return roomId;
   }
 
+  // these are just local names--assume no federation, all users live on the same homeserver
+  async invite(roomId: string, localInvites: string[]) {
+    let homeserver = new URL(this.client.getHomeserverUrl());
+    await Promise.all(
+      localInvites.map((localName) =>
+        this.client.invite(roomId, `@${localName}:${homeserver.hostname}`)
+      )
+    );
+  }
+
   private resetState() {
     this.invites = new TrackedMap();
     this.joinedRooms = new TrackedMap();
+    this.roomMembers = new TrackedMap();
     this.roomNames = new Map();
     this.timelines = new Map();
     this.roomMembershipQueue = [];
@@ -183,15 +198,8 @@ export default class MatrixService extends Service {
     }
   }
 
-  private onTimeline = (
-    e: MatrixEvent,
-    room: MatrixRoom,
-    toStartOfTimeline: boolean // unsure what this means...
-  ) => {
+  private onTimeline = (e: MatrixEvent, room: MatrixRoom) => {
     let { event } = e;
-    console.log(
-      `received event '${event.type}' for room ${room.roomId}, toStartOfTimeline=${toStartOfTimeline}`
-    );
     let { event_id: eventId } = event;
     if (!eventId) {
       throw new Error(
@@ -211,6 +219,26 @@ export default class MatrixService extends Service {
 
   private onMembership = (e: MatrixEvent, member: RoomMember) => {
     let { event } = e;
+    let { roomId, userId } = member;
+    let members = this.roomMembers.get(roomId);
+    if (!members) {
+      members = new TrackedMap();
+      this.roomMembers.set(roomId, members);
+    }
+    switch (member.membership) {
+      case 'leave':
+        members.delete(userId);
+        break;
+      case 'invite':
+      case 'join':
+        members.set(userId, { member, status: member.membership });
+        break;
+      default:
+        throw new Error(
+          `don't know how to handle membership status of '${member.membership}`
+        );
+    }
+
     if (member.userId === this.client.getUserId()) {
       let {
         event_id: eventId,

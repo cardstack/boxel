@@ -62,4 +62,10 @@ test.describe('Room membership', () => {
     await page.reload();
     await assertRooms(page, {});
   });
+
+  test.skip('it can show the members of a room', ({ page }) => {});
+
+  test.skip('it can invite members to a room that has already been created', ({
+    page,
+  }) => {});
 });

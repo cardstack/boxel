@@ -11,29 +11,71 @@ import {
   BoxelMessage,
   BoxelInput,
   LoadingIndicator,
+  FieldContainer,
   Button,
 } from '@cardstack/boxel-ui';
+import { type RoomMember } from 'matrix-js-sdk';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { formatRFC3339 } from 'date-fns';
 import type MatrixService from '../services/matrix-service';
 import { TrackedMap } from 'tracked-built-ins';
 import { type Event } from '../services/matrix-service';
-import { type Room as MatrixRoom } from 'matrix-js-sdk';
 
 const TRUE = true;
 
 interface RoomArgs {
   Args: {
     roomId: string;
+    members: TrackedMap<
+      string,
+      { member: RoomMember; status: 'join' | 'invite' }
+    >;
   };
 }
 export default class Room extends Component<RoomArgs> {
   <template>
-    <BoxelHeader @title={{this.roomName}} @hasBackground={{TRUE}} />
+    <BoxelHeader
+      @title={{this.roomName}}
+      @hasBackground={{TRUE}}
+      class='room__header'
+    >
+      <:actions>
+        <Button
+          data-test-invite-mode-btn
+          class='room__header__invite-btn'
+          {{on 'click' this.showInviteMode}}
+          @disabled={{this.isInviteMode}}
+        >Invite</Button>
+        <div data-test-room-members class='room__members'><b>Members:</b>
+          {{this.memberNames}}</div>
+      </:actions>
+    </BoxelHeader>
+    {{#if this.isInviteMode}}
+      {{#if this.doInvite.isRunning}}
+        <LoadingIndicator />
+      {{/if}}
+      <fieldset>
+        <FieldContainer @label='Invite:' @tag='label'>
+          <BoxelInput
+            data-test-room-invite-field
+            type='text'
+            @value={{this.membersToInviteFormatted}}
+            @onInput={{this.setMembersToInvite}}
+          />
+        </FieldContainer>
+        <Button
+          data-test-create-room-cancel-btn
+          {{on 'click' this.cancelInvite}}
+        >Cancel</Button>
+        <Button
+          data-test-create-room-btn
+          @kind='primary'
+          @disabled={{not this.membersToInvite}}
+          {{on 'click' this.invite}}
+        >Invite</Button>
+      </fieldset>
+    {{/if}}
 
-    <div data-test-room-members>
-      TODO: Room members
-    </div>
     <div
       class='room__messages-wrapper'
       {{ScrollPaginate
@@ -53,7 +95,7 @@ export default class Room extends Component<RoomArgs> {
           {{/if}}
         </div>
         {{#each this.timelineEvents as |event|}}
-          <Message @event={{event}} />
+          <Message @event={{event}} @members={{this.members}} />
         {{else}}
           <div data-test-no-messages>
             (No messages)
@@ -83,19 +125,32 @@ export default class Room extends Component<RoomArgs> {
   </template>
 
   @service private declare matrixService: MatrixService;
-  @tracked private room: MatrixRoom;
-  // TODO make sure to test for pending room specific message
+  @tracked private paginationTime: number | undefined;
+  @tracked private isInviteMode = false;
+  @tracked private membersToInvite: string[] = [];
   private messages: TrackedMap<string, string | undefined> = new TrackedMap();
 
-  constructor(owner: unknown, args: any) {
-    super(owner, args);
+  get room() {
+    this.paginationTime; // just consume this so that we can invalidate the room after pagination
     let room = this.matrixService.client.getRoom(this.args.roomId);
     if (!room) {
       throw new Error(
         `bug: should never get here--matrix sdk returned a null room for ${this.args.roomId}`
       );
     }
-    this.room = room;
+    return room;
+  }
+
+  get members() {
+    return [...this.args.members.values()];
+  }
+
+  get memberNames() {
+    return this.members
+      .map(
+        (m) => `${m.member.name}${m.status === 'invite' ? ' (invited)' : ''}`
+      )
+      .join(', ');
   }
 
   get roomName() {
@@ -116,6 +171,10 @@ export default class Room extends Component<RoomArgs> {
 
   get message() {
     return this.messages.get(this.args.roomId);
+  }
+
+  get membersToInviteFormatted() {
+    return this.membersToInvite.join(', ');
   }
 
   @action
@@ -143,6 +202,26 @@ export default class Room extends Component<RoomArgs> {
     this.doRoomScrollBack.perform();
   }
 
+  @action
+  private showInviteMode() {
+    this.isInviteMode = true;
+  }
+
+  @action
+  private setMembersToInvite(invite: string) {
+    this.membersToInvite = invite.split(',').map((i) => i.trim());
+  }
+
+  @action
+  private cancelInvite() {
+    this.resetInvite();
+  }
+
+  @action
+  private invite() {
+    this.doInvite.perform();
+  }
+
   private doSendMessage = restartableTask(async (message: string) => {
     // TODO message is markdown--parse to HTML and send
     await this.matrixService.client.sendTextMessage(this.args.roomId, message);
@@ -150,13 +229,25 @@ export default class Room extends Component<RoomArgs> {
   });
 
   private doRoomScrollBack = restartableTask(async () => {
-    this.room = await this.matrixService.client.scrollback(this.room!);
+    await this.matrixService.client.scrollback(this.room!);
+    this.paginationTime = Date.now();
   });
+
+  private doInvite = restartableTask(async () => {
+    await this.matrixService.invite(this.args.roomId, this.membersToInvite);
+    this.resetInvite();
+  });
+
+  private resetInvite() {
+    this.membersToInvite = [];
+    this.isInviteMode = false;
+  }
 }
 
 interface MessageArgs {
   Args: {
     event: Event;
+    members: { member: RoomMember }[];
   };
 }
 
@@ -172,7 +263,7 @@ class Message extends Component<MessageArgs> {
   <template>
     <BoxelMessage
       {{ScrollIntoView}}
-      @name={{this.sender}}
+      @name={{this.sender.member.name}}
       @datetime={{formatRFC3339 this.timestamp}}
       style={{cssVar
         boxel-message-avatar-size=messageStyle.boxelMessageAvatarSize
@@ -186,7 +277,15 @@ class Message extends Component<MessageArgs> {
   </template>
 
   get sender() {
-    return this.args.event.sender;
+    let member = this.args.members.find(
+      (m) => m.member.userId === this.args.event.sender
+    );
+    if (!member) {
+      throw new Error(
+        `bug: cannot find room member with userId '${this.args.event.sender}'`
+      );
+    }
+    return member;
   }
 
   // TODO remove this after we start using markdown

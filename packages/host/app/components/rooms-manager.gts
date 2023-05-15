@@ -61,6 +61,7 @@ export default class RoomsManager extends Component {
           >Cancel</Button>
           <Button
             data-test-create-room-btn
+            @kind='primary'
             @disabled={{not this.newRoomName}}
             {{on 'click' this.createRoom}}
           >Create</Button>
@@ -70,14 +71,14 @@ export default class RoomsManager extends Component {
     <div class='room-manager__room-list' data-test-invites-list>
       <h3>Invites</h3>
       {{#each this.sortedInvites as |invite|}}
-        <div
-          class='room-manager__room'
-          data-test-invited-room={{invite.name}}
-        >{{invite.name}}
-          (from:
-          <span
-            data-test-invite-sender={{invite.sender}}
-          >{{invite.sender}})</span>
+        <div class='room-manager__room' data-test-invited-room={{invite.name}}>
+          <span class='room-manager__room__item'>
+            {{invite.name}}
+            (from:
+            <span
+              data-test-invite-sender={{invite.sender}}
+            >{{invite.sender}})</span>
+          </span>
           <Button
             data-test-decline-room-btn={{invite.name}}
             {{on 'click' (fn this.leaveRoom invite.roomId)}}
@@ -98,14 +99,16 @@ export default class RoomsManager extends Component {
       <h3>Rooms</h3>
       {{#each this.sortedJoinedRooms as |room|}}
         <div class='room-manager__room' data-test-joined-room={{room.name}}>
-          <LinkTo
-            class='link'
-            data-test-enter-room={{room.name}}
-            @route='chat.room'
-            @model={{room.roomId}}
-          >
-            {{room.name}}
-          </LinkTo>
+          <span class='room-manager__room__item'>
+            <LinkTo
+              class='link'
+              data-test-enter-room={{room.name}}
+              @route='chat.room'
+              @model={{room.roomId}}
+            >
+              {{room.name}}
+            </LinkTo>
+          </span>
           <Button
             data-test-leave-room-btn={{room.name}}
             {{on 'click' (fn this.leaveRoom room.roomId)}}

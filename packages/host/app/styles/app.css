@@ -671,8 +671,24 @@ nav>.directory-level {
   margin-top: var(--boxel-sp-sm);
 }
 
+.room-manager__room__item {
+  display: inline-block;
+  min-width: 30rem;
+}
+
 .room-manager__room button {
   margin-left: var(--boxel-sp-xs);
+}
+
+.room__header .boxel-header__content {
+  display: block;
+}
+
+.room__header__invite-btn {
+  display: block;
+  float: right;
+  margin-bottom: var(--boxel-sp-sm);
+
 }
 
 .room__messages-wrapper {
@@ -693,4 +709,10 @@ nav>.directory-level {
   flex-wrap: wrap;
   row-gap: var(--boxel-sp-sm);
   margin: 0 var(--boxel-sp);
+}
+
+.room__members {
+  clear: both;
+  font-size: var(--boxel-font-size-sm);
+  font-weight: initial;
 }
