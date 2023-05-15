@@ -26,6 +26,7 @@ const log = logger('service:local-realm');
 
 export default class LocalRealm extends Service {
   #setEntryDeferred: Deferred<void> | undefined;
+  #waitForReadinessDeferred: Deferred<void> = new Deferred();
   #fromScratch: ((realmURL: URL) => Promise<RunState>) | undefined;
   #incremental:
     | ((
@@ -65,6 +66,11 @@ export default class LocalRealm extends Service {
         }
         break;
       case 'available':
+        if (data.type === 'realmReady') {
+          this.#waitForReadinessDeferred.fulfill();
+          return;
+        }
+
         if (data.type === 'setEntryAcknowledged') {
           if (!this.#setEntryDeferred) {
             throw new Error(
@@ -155,6 +161,8 @@ export default class LocalRealm extends Service {
         worker: this.state.worker,
         adapter: new LocalRealmAdapter(handle),
       };
+
+      send(this.state.worker, { type: 'waitForRealmReadiness' });
     } else {
       this.state = { type: 'empty', worker: this.state.worker };
     }
@@ -219,6 +227,10 @@ export default class LocalRealm extends Service {
     await this.#setEntryDeferred.promise;
   }
 
+  waitForReadiness() {
+    return this.#waitForReadinessDeferred.promise;
+  }
+
   get isAvailable(): boolean {
     this.maybeSetup();
     return this.state.type === 'available';
@@ -259,8 +271,8 @@ export default class LocalRealm extends Service {
     return url;
   }
 
-  chooseDirectory(cb?: () => void): void {
-    this.openDirectory.perform(cb);
+  async chooseDirectory(): Promise<void> {
+    await this.openDirectory.perform();
   }
 
   close(): void {
@@ -278,7 +290,7 @@ export default class LocalRealm extends Service {
     };
   }
 
-  private openDirectory = restartableTask(async (cb?: () => void) => {
+  private openDirectory = restartableTask(async () => {
     let handle = await showDirectoryPicker();
 
     // write a sacrificial file in order to prompt the browser to ask the user
@@ -317,9 +329,7 @@ export default class LocalRealm extends Service {
       adapter,
     };
 
-    if (cb) {
-      cb();
-    }
+    send(this.state.worker, { type: 'waitForRealmReadiness' });
   });
 
   private async ensureWorker() {

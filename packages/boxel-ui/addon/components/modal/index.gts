@@ -14,6 +14,7 @@ interface Signature {
     isOpen?: boolean;
     isOverlayDismissalDisabled?: boolean;
     onClose: () => void;
+    boxelModalOverlayColor?: string;
   };
   Blocks: {
     default: [];
@@ -38,6 +39,7 @@ export default class Modal extends Component<Signature> {
           type='button'
           {{on 'click' @onClose}}
           class='overlay'
+          style={{cssVar boxel-modal-overlay-color=@boxelModalOverlayColor}}
           tabindex='-1'
         >
           <span class='boxel-sr-only'>Close modal</span>
@@ -89,7 +91,7 @@ export default class Modal extends Component<Signature> {
         height: 100%;
         padding: 0;
         border: none;
-        background-color: rgb(0 0 0 / 75%);
+        background-color: var(--boxel-modal-overlay-color, rgb(0 0 0 / 75%));
         text-align: left;
         z-index: calc(var(--boxel-modal-z-index) - 1);
       }

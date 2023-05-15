@@ -40,7 +40,7 @@ export class MessageHandler {
     );
   }
 
-  handle(event: ExtendableMessageEvent) {
+  async handle(event: ExtendableMessageEvent) {
     let { data, source } = event;
     if (!isClientMessage(data) || !source) {
       return;
@@ -66,6 +66,14 @@ export class MessageHandler {
               type: 'setDirectoryHandleAcknowledged',
             });
           }
+        }
+        return;
+      case 'waitForRealmReadiness':
+        {
+          await this.fetchHandler.waitForReadiness();
+          send(source, {
+            type: 'realmReady',
+          });
         }
         return;
       case 'setEntry':

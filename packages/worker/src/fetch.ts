@@ -15,6 +15,12 @@ export class FetchHandler {
 
   constructor(private livenessWatcher?: { alive: boolean }) {}
 
+  async waitForReadiness() {
+    if (this.realm) {
+      await this.realm.ready;
+    }
+  }
+
   addRealm(realm: Realm) {
     this.realm = realm;
   }

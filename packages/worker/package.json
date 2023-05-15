@@ -26,5 +26,8 @@
     "@cardstack/runtime-common": {
       "injected": true
     }
+  },
+  "volta": {
+    "extends": "../../package.json"
   }
 }

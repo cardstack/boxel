@@ -1,21 +1,16 @@
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
-import { Component, Card } from './card-api';
+import { Component, Card, relativeTo } from './card-api';
 import { CardContainer, IconButton } from '@cardstack/boxel-ui';
-import {
-  chooseCard,
-  catalogEntryRef,
-  createNewCard,
-  isCardCatalogAvailable,
-} from '@cardstack/runtime-common';
+import { chooseCard, catalogEntryRef } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <CardContainer class='demo-card cards-grid' @displayBoundaries={{true}}>
       This cards-grid instance should become even better.
-      {{#if this.isCardCatalogAvailable}}
+      {{#if @actions.createCard}}
         <IconButton
           @icon='icon-plus-circle'
           @width='40px'
@@ -30,16 +25,12 @@ class Isolated extends Component<typeof CardsGrid> {
     </CardContainer>
   </template>
 
-  get isCardCatalogAvailable() {
-    return isCardCatalogAvailable();
-  }
-
   @action
-  async createNew() {
-    this.createNewCard.perform();
+  createNew() {
+    this.createCard.perform();
   }
 
-  private createNewCard = restartableTask(async () => {
+  private createCard = restartableTask(async () => {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
@@ -49,18 +40,15 @@ class Isolated extends Component<typeof CardsGrid> {
     if (!card) {
       return;
     }
-    let newCard = await createNewCard(card.ref, new URL(card.id));
-    if (!newCard) {
-      throw new Error(
-        `bug: could not create new card from catalog entry ${JSON.stringify(
-          catalogEntryRef
-        )}`
-      );
-    }
-    return newCard;
+
+    await this.args.actions?.createCard?.(
+      card.ref,
+      this.args.model[relativeTo]
+    );
   });
 }
 
 export class CardsGrid extends Card {
+  static displayName = 'Cards Grid';
   static isolated = Isolated;
 }

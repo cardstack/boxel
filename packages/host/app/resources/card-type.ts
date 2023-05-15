@@ -29,6 +29,7 @@ interface Args {
 export interface Type {
   id: string;
   module: string;
+  displayName: string;
   super: Type | undefined;
   fields: { name: string; card: Type | CardRef; type: FieldType }[];
 }
@@ -102,6 +103,7 @@ export class CardType extends Resource<Args> {
       id,
       module: moduleFrom(ref),
       super: superType,
+      displayName: card.prototype.constructor.displayName || 'Card',
       fields: fieldTypes,
     };
     this.typeCache.set(id, type);

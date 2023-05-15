@@ -4,87 +4,86 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { eq } from '../helpers/truth-helpers';
 import { tracked } from '@glimmer/tracking';
+import { type IAuthData } from 'matrix-js-sdk';
 import { restartableTask } from 'ember-concurrency';
 import {
+  BoxelHeader,
   BoxelInput,
   BoxelInputValidationState,
+  LoadingIndicator,
   Button,
   FieldContainer,
 } from '@cardstack/boxel-ui';
+import { isMatrixError } from '../lib/matrix-utils';
 import difference from 'lodash/difference';
 import type MatrixService from '../services/matrix-service';
-import { type IAuthData } from 'matrix-js-sdk';
+import RouterService from '@ember/routing/router-service';
 
+const TRUE = true;
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
   login: 'm.login.dummy',
   askForToken: undefined,
 };
 
-export default class MatrixRegister extends Component {
+export default class RegisterUser extends Component {
   <template>
-    {{#if (eq this.state.type 'complete')}}
-      <div data-test-registration-complete>The user
-        {{! @glint-ignore: glint doesn't understand that only 'completed' state exists here }}
-        <b>{{this.state.auth.user_id}}</b>
-        has been created</div>
-    {{else}}
+    <BoxelHeader @title='Register User' @hasBackground={{TRUE}} />
+    {{#if this.doRegistrationFlow.isRunning}}
+      <LoadingIndicator />
+    {{else if (eq this.state.type 'askForToken')}}
       <fieldset>
-        <legend>Register User</legend>
-        {{#if (eq this.state.type 'askForToken')}}
-          <FieldContainer @label='Registration Token:' @tag='label'>
-            <BoxelInput
-              data-test-token-field
-              type='text'
-              @value={{this.token}}
-              @onInput={{this.setToken}}
-            />
-          </FieldContainer>
-          <Button
-            data-test-next-btn
-            @disabled={{this.isNextButtonDisabled}}
-            {{on 'click' this.sendToken}}
-          >Next</Button>
-        {{/if}}
-        {{#if (eq this.state.type 'initial')}}
-          <FieldContainer @label='Username:' @tag='label'>
-            <BoxelInputValidationState
-              data-test-username-field
-              @id=''
-              @state={{this.usernameInputState}}
-              @value={{this.cleanUsername}}
-              @errorMessage={{this.usernameError}}
-              @onInput={{this.setUsername}}
-            />
-          </FieldContainer>
-          <FieldContainer @label='Password:' @tag='label'>
-            <BoxelInput
-              data-test-password-field
-              type='password'
-              @value={{this.password}}
-              @onInput={{this.setPassword}}
-            />
-          </FieldContainer>
-          <Button
-            data-test-register-btn
-            @disabled={{this.isRegisterButtonDisabled}}
-            {{on 'click' this.register}}
-          >Register</Button>
-        {{/if}}
+        <FieldContainer @label='Registration Token:' @tag='label'>
+          <BoxelInputValidationState
+            data-test-token-field
+            @id=''
+            @state={{this.tokenInputState}}
+            @value={{this.cleanToken}}
+            @errorMessage={{this.tokenError}}
+            @onInput={{this.setToken}}
+          />
+        </FieldContainer>
+        <Button
+          data-test-next-btn
+          @disabled={{this.isNextButtonDisabled}}
+          {{on 'click' this.sendToken}}
+        >Next</Button>
+      </fieldset>
+    {{else if (eq this.state.type 'initial')}}
+      <fieldset>
+        <FieldContainer @label='Username:' @tag='label'>
+          <BoxelInputValidationState
+            data-test-username-field
+            @id=''
+            @state={{this.usernameInputState}}
+            @value={{this.cleanUsername}}
+            @errorMessage={{this.usernameError}}
+            @onInput={{this.setUsername}}
+          />
+        </FieldContainer>
+        <FieldContainer @label='Password:' @tag='label'>
+          <BoxelInput
+            data-test-password-field
+            type='password'
+            @value={{this.password}}
+            @onInput={{this.setPassword}}
+          />
+        </FieldContainer>
+        <Button
+          data-test-register-btn
+          @disabled={{this.isRegisterButtonDisabled}}
+          {{on 'click' this.register}}
+        >Register</Button>
       </fieldset>
     {{/if}}
   </template>
 
-  @tracked
-  private usernameError: string | undefined;
-  @tracked
-  private username: string | undefined;
-  @tracked
-  private password: string | undefined;
-  @tracked
-  private token: string | undefined;
-  @tracked
-  private state:
+  @tracked private usernameError: string | undefined;
+  @tracked private tokenError: string | undefined;
+  @tracked private username: string | undefined;
+  @tracked private password: string | undefined;
+  @tracked private token: string | undefined;
+  @tracked private state:
     | { type: 'initial' }
     | {
         type: 'register';
@@ -113,48 +112,54 @@ export default class MatrixRegister extends Component {
         username: string;
         password: string;
         session: string;
-      }
-    | {
-        type: 'complete';
-        auth: IAuthData;
       } = { type: 'initial' };
 
-  @service declare matrixService: MatrixService;
+  @service private declare matrixService: MatrixService;
+  @service private declare router: RouterService;
 
-  get isRegisterButtonDisabled() {
+  private get isRegisterButtonDisabled() {
     return !this.username || !this.password;
   }
 
-  get isNextButtonDisabled() {
+  private get isNextButtonDisabled() {
     return !this.token;
   }
 
-  get cleanUsername() {
+  private get cleanUsername() {
     return this.username || '';
   }
 
-  get usernameInputState() {
+  private get cleanToken() {
+    return this.token || '';
+  }
+
+  private get usernameInputState() {
     return this.usernameError ? 'invalid' : 'initial';
   }
 
-  @action
-  setToken(token: string) {
-    this.token = token;
+  private get tokenInputState() {
+    return this.tokenError ? 'invalid' : 'initial';
   }
 
   @action
-  setUsername(username: string) {
+  private setToken(token: string) {
+    this.token = token;
+    this.tokenError = undefined;
+  }
+
+  @action
+  private setUsername(username: string) {
     this.username = username;
     this.usernameError = undefined;
   }
 
   @action
-  setPassword(password: string) {
+  private setPassword(password: string) {
     this.password = password;
   }
 
   @action
-  register() {
+  private register() {
     if (!this.username) {
       throw new Error(
         `bug: should never get here: register button disabled when no username`
@@ -174,7 +179,7 @@ export default class MatrixRegister extends Component {
   }
 
   @action
-  sendToken() {
+  private sendToken() {
     if (this.state.type !== 'askForToken') {
       throw new Error(
         `invalid state: cannot sendToken() in state ${this.state.type}`
@@ -200,13 +205,14 @@ export default class MatrixRegister extends Component {
   // the registration until the final step which results in a new user (and
   // successful HTTP response)
   private doRegistrationFlow = restartableTask(async () => {
-    if (this.state.type === 'initial' || this.state.type === 'complete') {
+    if (this.state.type === 'initial') {
       throw new Error(
         `invalid state: cannot doRegistrationFlow() in state ${this.state.type}`
       );
     }
+    let auth: IAuthData | undefined;
     try {
-      let auth = await this.matrixService.client.registerRequest({
+      auth = await this.matrixService.client.registerRequest({
         username: this.state.username,
         password: this.state.password,
         ...(this.state.type !== 'register'
@@ -221,11 +227,6 @@ export default class MatrixRegister extends Component {
             }
           : {}),
       });
-      this.state = {
-        type: 'complete',
-        auth,
-      };
-      // TODO get new matrix client from auth
     } catch (e: any) {
       let maybeRegistrationFlow = e.data;
       if (
@@ -254,20 +255,32 @@ export default class MatrixRegister extends Component {
         throw e;
       }
     }
+
+    if (auth) {
+      await this.matrixService.start(auth);
+      let preparedKey = await this.matrixService.client.prepareKeyBackupVersion(
+        this.password
+      );
+      await this.matrixService.client.createKeyBackupVersion(preparedKey);
+      this.router.transitionTo('chat');
+    }
   });
 
-  nextStateFromResponse(
+  private nextStateFromResponse(
     nextStage: string,
     registrationFlows: RegistrationFlows
   ) {
     let { session } = registrationFlows;
-    if (this.state.type === 'initial' || this.state.type === 'complete') {
+    if (this.state.type === 'initial') {
       throw new Error(
         `invalid state: cannot do nextStateFromResponse() in state ${this.state.type}`
       );
     }
     switch (nextStage) {
       case 'm.login.registration_token':
+        if (registrationFlows.error) {
+          this.tokenError = registrationFlows.error;
+        }
         this.state = {
           ...this.state,
           type: 'askForToken',
@@ -294,6 +307,8 @@ interface RegistrationFlows {
   completed?: string[];
   session: string;
   flows: Flow[];
+  error?: string;
+  errcode?: string;
 }
 
 interface Flow {
@@ -324,6 +339,12 @@ function isRegistrationFlows(
     'flows' in registration &&
     Array.isArray(registration.flows)
   ) {
+    if ('error' in registration && typeof registration.error !== 'string') {
+      return false;
+    }
+    if ('errcode' in registration && typeof registration.errcode !== 'string') {
+      return false;
+    }
     if ('completed' in registration && !Array.isArray(registration.completed)) {
       return false;
     }
@@ -340,33 +361,8 @@ function isRegistrationFlows(
   return false;
 }
 
-interface MatrixError {
-  data: {
-    errcode: string;
-    error: string;
-  };
-  httpStatus: number;
-  errcode: string;
-}
-
-function isMatrixError(err: any): err is MatrixError {
-  return (
-    typeof err === 'object' &&
-    'data' in err &&
-    typeof err.data === 'object' &&
-    'errcode' in err.data &&
-    typeof err.data.errcode === 'string' &&
-    'error' in err.data &&
-    typeof err.data.error === 'string' &&
-    'httpStatus' in err &&
-    typeof err.httpStatus === 'number' &&
-    'errcode' in err &&
-    typeof err.errcode === 'string'
-  );
-}
-
 declare module '@glint/environment-ember-loose/registry' {
-  export default interface MatrixRegister {
-    MatrixRegister: typeof MatrixRegister;
+  export default interface RegisterUser {
+    RegisterUser: typeof RegisterUser;
   }
 }

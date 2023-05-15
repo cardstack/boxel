@@ -408,6 +408,28 @@ module('Realm Server', function (hooks) {
     );
   });
 
+  test('serves a /_info GET request', async function (assert) {
+    let response = await request
+      .get(`/_info`)
+      .set('Accept', 'application/vnd.api+json');
+
+    assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    let json = response.body;
+    assert.deepEqual(
+      json,
+      {
+        data: {
+          id: testRealmHref,
+          type: 'realm-info',
+          attributes: {
+            name: 'Test Realm',
+          },
+        },
+      },
+      '/_info response is correct'
+    );
+  });
+
   test('can dynamically load a card definition from own realm', async function (assert) {
     let loader = Loader.createLoaderFromGlobal();
     let ref = {

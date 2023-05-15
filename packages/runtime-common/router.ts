@@ -8,6 +8,7 @@ export enum SupportedMimeType {
   CardJson = 'application/vnd.card+json',
   CardSource = 'application/vnd.card+source',
   DirectoryListing = 'application/vnd.api+json',
+  RealmInfo = 'application/vnd.api+json',
   EventStream = 'text/event-stream',
   HTML = 'text/html',
 }

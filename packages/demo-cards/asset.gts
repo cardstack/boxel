@@ -18,6 +18,7 @@ let EXCHANGE_RATES: Record<string, number> = {
 };
 
 class Asset extends Card {
+  static displayName = 'Asset';
   @field name = contains(StringCard);
   @field symbol = contains(StringCard);
   @field logoURL = contains(StringCard);

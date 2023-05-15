@@ -56,18 +56,30 @@ export interface IncrementalCompleted {
   state: SerializableRunState;
 }
 
+export interface waitForRealmReadiness {
+  type: 'waitForRealmReadiness';
+}
+
+export interface realmReady {
+  type: 'realmReady';
+}
+
 export type ClientMessage =
   | RequestDirectoryHandle
   | SetDirectoryHandle
   | SetEntry
   | FromScratchCompleted
-  | IncrementalCompleted;
+  | IncrementalCompleted
+  | waitForRealmReadiness;
+
 export type WorkerMessage =
   | DirectoryHandleResponse
   | SetDirectoryHandleAcknowledged
   | SetEntryAcknowledged
   | StartFromScratchIndex
-  | StartIncrementalIndex;
+  | StartIncrementalIndex
+  | realmReady;
+
 export type Message = ClientMessage | WorkerMessage;
 
 function isMessageLike(
@@ -86,6 +98,8 @@ export function isClientMessage(message: unknown): message is ClientMessage {
     return false;
   }
   switch (message.type) {
+    case 'waitForRealmReadiness':
+      return true;
     case 'getRunStateRequest':
     case 'requestDirectoryHandle':
       return 'realmsServed' in message && Array.isArray(message.realmsServed);
@@ -146,6 +160,8 @@ export function isWorkerMessage(message: unknown): message is WorkerMessage {
         typeof message.operation === 'string' &&
         ['update', 'delete'].includes(message.operation)
       );
+    case 'realmReady':
+      return true;
     default:
       return false;
   }
