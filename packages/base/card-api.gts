@@ -1,3 +1,4 @@
+import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
@@ -82,6 +83,12 @@ interface Options {
 interface NotLoadedValue {
   type: 'not-loaded';
   reference: string;
+}
+
+export interface CardRenderingContext {
+  cardComponentModifier?: Modifier;
+  renderedIn?: GlimmerComponent;
+  optional?: any;
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {
@@ -670,9 +677,11 @@ class Contains<CardT extends CardBaseConstructor> implements Field<CardT, any> {
 
   component(
     model: Box<CardBase>,
-    format: Format
+    format: Format,
+    actions?: Actions,
+    context?: CardRenderingContext
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
-    return fieldComponent(this, model, format);
+    return fieldComponent(this, model, format, actions, context);
   }
 }
 
@@ -912,17 +921,24 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         )}`
       );
     }
-    let fieldInstance = await createFromSerialized(json.data, json, undefined, {
-      loader,
-      identityContext,
-    });
+
+    let fieldInstance = await createFromSerialized(
+      json.data,
+      json,
+      relativeTo,
+      {
+        loader,
+        identityContext,
+      }
+    );
     return fieldInstance;
   }
 
   component(
     model: Box<Card>,
     format: Format,
-    actions?: Actions
+    actions?: Actions,
+    context?: CardRenderingContext
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(
@@ -930,7 +946,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       ) as unknown as Box<Card | null>;
       return getLinksToEditor(innerModel, this, actions);
     }
-    return fieldComponent(this, model, format);
+    return fieldComponent(this, model, format, actions, context);
   }
 }
 
@@ -1268,7 +1284,9 @@ class LinksToMany<FieldT extends CardConstructor>
 function fieldComponent(
   field: Field<typeof CardBase>,
   model: Box<CardBase>,
-  format: Format
+  format: Format,
+  actions?: Actions,
+  context?: CardRenderingContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let fieldName = field.name as keyof CardBase;
   let card: typeof CardBase;
@@ -1279,7 +1297,11 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof CardBase) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<CardBase>;
-  return getBoxComponent(card, format, innerModel);
+
+  return getBoxComponent(card, format, innerModel, actions, {
+    ...context,
+    ...{ optional: { fieldType: field.fieldType } },
+  });
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -1421,8 +1443,13 @@ export class CardBase {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(card: CardBase, format: Format, actions?: Actions) {
-    return getComponent(card, format, actions);
+  static getComponent(
+    card: CardBase,
+    format: Format,
+    actions?: Actions,
+    context?: CardRenderingContext
+  ) {
+    return getComponent(card, format, actions, context);
   }
 
   constructor(data?: Record<string, any>) {
@@ -2058,14 +2085,16 @@ export type SignatureFor<CardT extends CardBaseConstructor> = {
 export function getComponent(
   model: CardBase,
   format: Format,
-  actions?: Actions
+  actions?: Actions,
+  context?: unknown
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let box = Box.create(model);
   let component = getBoxComponent(
     model.constructor as CardBaseConstructor,
     format,
     box,
-    actions
+    actions,
+    context
   );
   return component;
 }
