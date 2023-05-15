@@ -13,8 +13,8 @@ export function monacoMiddleware(assetsURL: URL) {
   );
   return compose([
     router.routes(),
-    ...['editor', 'json', 'css', 'ts', 'html'].map((f) =>
-      proxyAsset(`/${assetsDir}${f}.worker.js`, assetsURL)
+    ...['editor', 'json', 'css', 'ts', 'html'].map(
+      (f) => proxyAsset(`/${assetsDir}${f}.worker.js`, assetsURL) // TODO: without worker, what do we do?
     ),
   ]);
 }

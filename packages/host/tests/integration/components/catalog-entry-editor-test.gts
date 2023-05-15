@@ -10,7 +10,7 @@ import {
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
-  setupMockLocalRealm,
+  setupLocalIndexing,
 } from '../../helpers';
 import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -23,7 +23,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
 
   hooks.beforeEach(async function () {
     // this seeds the loader used during index which obtains url mappings

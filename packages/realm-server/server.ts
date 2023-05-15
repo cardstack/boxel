@@ -12,7 +12,6 @@ import {
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { setupCloseHandler } from './node-realm';
 import {
-  proxyAsset,
   livenessCheck,
   healthCheck,
   httpLogging,
@@ -28,19 +27,16 @@ import { nodeStreamToText } from './stream';
 import mime from 'mime-types';
 
 interface Options {
-  hostLocalRealm?: boolean;
   assetsURL?: URL;
 }
 
 export class RealmServer {
-  private hostLocalRealm = false;
   private assetsURL: URL;
   private log = logger('realm:requests');
 
   constructor(private realms: Realm[], opts?: Options) {
     detectRealmCollision(realms);
     this.realms = realms;
-    this.hostLocalRealm = Boolean(opts?.hostLocalRealm);
     // defaults to using the base realm to host assets (this is the dev env default)
     this.assetsURL =
       opts?.assetsURL ?? Loader.resolve(`${baseRealm.url}${assetsDir}`);
@@ -53,12 +49,10 @@ export class RealmServer {
     router.get(
       '/',
       healthCheck,
-      this.serveIndex({ serveLocalRealm: false }),
+      this.serveIndex(),
       rootRealmRedirect(this.realms),
       this.serveFromRealm
     );
-    router.get('/local', this.serveIndex({ serveLocalRealm: true }));
-    router.get(/\/local\/.*/, this.serveIndex({ serveLocalRealm: true }));
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
@@ -72,11 +66,6 @@ export class RealmServer {
       )
       .use(monacoMiddleware(this.assetsURL))
       .use(assetRedirect(this.assetsURL))
-      .use(
-        proxyAsset('/local/worker.js', this.assetsURL, {
-          responseHeaders: { 'Service-Worker-Allowed': '/' },
-        })
-      )
       .use(convertAcceptHeaderQueryParam)
       .use(rootRealmRedirect(this.realms))
       .use(router.routes())
@@ -91,20 +80,11 @@ export class RealmServer {
     return instance;
   }
 
-  private serveIndex({
-    serveLocalRealm,
-  }: {
-    serveLocalRealm: boolean;
-  }): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  private serveIndex(): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
     return async (ctxt: Koa.Context, next: Koa.Next) => {
       if (ctxt.header.accept?.includes('text/html') && this.realms.length > 0) {
         ctxt.type = 'html';
         ctxt.body = await this.realms[0].getIndexHTML({
-          hostLocalRealm: serveLocalRealm && this.hostLocalRealm,
-          localRealmURL:
-            serveLocalRealm && this.hostLocalRealm
-              ? `${fullRequestURL(ctxt).origin}/local/`
-              : undefined,
           realmsServed: this.realms.map((r) => r.url),
         });
         return;

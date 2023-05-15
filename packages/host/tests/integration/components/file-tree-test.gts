@@ -10,7 +10,7 @@ import {
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
-  setupMockLocalRealm,
+  setupLocalIndexing,
 } from '../../helpers';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
@@ -30,7 +30,7 @@ module('Integration | file-tree', function (hooks) {
     }
   }
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
 
   hooks.beforeEach(async function () {
     didTransition = undefined;

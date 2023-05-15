@@ -17,7 +17,6 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   useTestingDomain,
-  hostLocalRealm,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -55,11 +54,6 @@ let {
       description:
         'relaxes document domain rules so that cross origin scripting can be used for test assertions across iframe boundaries',
       type: 'boolean',
-    },
-    hostLocalRealm: {
-      description: `Provide a local realm hosted at /local`,
-      type: 'boolean',
-      default: false,
     },
   })
   .parseSync();
@@ -122,7 +116,6 @@ if (distURL) {
   }
 
   let server = new RealmServer(realms, {
-    hostLocalRealm,
     ...(distURL ? { assetsURL: new URL(distURL) } : {}),
   });
   server.listen(port);
@@ -141,6 +134,7 @@ if (distURL) {
 
   for (let realm of realms) {
     log.info(`Starting realm ${realm.url}...`);
+    debugger;
     await realm.start();
     log.info(
       `Realm ${realm.url} has started (${JSON.stringify(

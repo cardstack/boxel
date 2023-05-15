@@ -27,12 +27,10 @@ import {
 import monacoModifier from '../modifiers/monaco';
 import type * as monaco from 'monaco-editor';
 import type { Card } from 'https://cardstack.com/base/card-api';
-import InLocalRealm from './in-local-realm';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
-import { Button } from '@cardstack/boxel-ui';
 
-const { ownRealmURL, isLocalRealm } = ENV;
+const { ownRealmURL } = ENV;
 const log = logger('component:go');
 
 interface Signature {
@@ -48,33 +46,11 @@ export default class Go extends Component<Signature> {
   <template>
     <div class='main'>
       <div class='main__column'>
-        {{#if isLocalRealm}}
-          <InLocalRealm as |realm|>
-            {{#if realm.connected}}
-              <Button @size='small' {{on 'click' realm.close}}>Close local realm<br
-                />({{realm.connected.directoryName}})</Button>
-              <FileTree
-                @url={{realm.connected.url}}
-                @openFile={{@path}}
-                @openDirs={{@openDirs}}
-              />
-            {{else if realm.isLoading}}
-              ...
-            {{else if realm.isEmpty}}
-              <Button
-                @kind='primary'
-                @size='tall'
-                {{on 'click' realm.open}}
-              >Open a local realm</Button>
-            {{/if}}
-          </InLocalRealm>
-        {{else}}
-          <FileTree
-            @url={{ownRealmURL}}
-            @openFile={{@path}}
-            @openDirs={{@openDirs}}
-          />
-        {{/if}}
+        <FileTree
+          @url={{ownRealmURL}}
+          @openFile={{@path}}
+          @openDirs={{@openDirs}}
+        />
       </div>
       {{#if this.openFile}}
         <div class='editor__column'>
