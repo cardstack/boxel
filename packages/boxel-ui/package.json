@@ -43,7 +43,7 @@
   "devDependencies": {
     "@babel/core": "^7.17.10",
     "@ember/optional-features": "^2.0.0",
-    "@ember/test-helpers": "^2.8.1",
+    "@ember/test-helpers": "^2.9.3",
     "@embroider/compat": "^1.8.3",
     "@embroider/macros": "^1.10.0",
     "@embroider/webpack": "^1.5.0",

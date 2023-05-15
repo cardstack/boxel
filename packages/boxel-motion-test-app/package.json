@@ -30,7 +30,7 @@
     "@babel/core": "^7.17.10",
     "@cardstack/boxel-motion": "workspace:^1.0.0",
     "@ember/optional-features": "^2.0.0",
-    "@ember/test-helpers": "^2.6.0",
+    "@ember/test-helpers": "^2.9.3",
     "@embroider/test-setup": "^1.5.0",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
