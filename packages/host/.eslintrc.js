@@ -2,7 +2,7 @@
 
 module.exports = {
   root: true,
-  parser: '@babel/eslint-parser',
+  parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 'latest',
     sourceType: 'module',
@@ -60,6 +60,9 @@ module.exports = {
         node: true,
       },
       extends: ['plugin:n/recommended'],
+      rules: {
+        '@typescript-eslint/no-var-requires': 'off',
+      },
     },
     {
       // test files

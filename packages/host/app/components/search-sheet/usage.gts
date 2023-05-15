@@ -8,6 +8,7 @@ import { action } from '@ember/object';
 const validModes = Object.values(SearchSheetMode);
 
 export default class SearchSheetUsage extends Component {
+  defaultMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked mode: SearchSheetMode = SearchSheetMode.Closed;
 
   @action onFocus() {
@@ -42,7 +43,7 @@ export default class SearchSheetUsage extends Component {
           @onInput={{fn (mut this.mode)}}
           @options={{validModes}}
           @value={{this.mode}}
-          @defaultValue={{unbound this.mode}}
+          @defaultValue={{this.defaultMode}}
         />
         <Args.Action
           @name='onCancel'

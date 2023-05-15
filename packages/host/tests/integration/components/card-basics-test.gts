@@ -1,6 +1,12 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { waitUntil, fillIn, click, render } from '@ember/test-helpers';
+import {
+  waitUntil,
+  fillIn,
+  click,
+  render,
+  RenderingTestContext,
+} from '@ember/test-helpers';
 import { renderCard } from '../../helpers/render-component';
 import {
   cleanWhiteSpace,
@@ -611,7 +617,7 @@ module('Integration | card-basics', function (hooks) {
     );
   });
 
-  test('render a containsMany composite field', async function (assert) {
+  test('render a containsMany composite field', async function (this: RenderingTestContext, assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
     class Person extends Card {
@@ -663,8 +669,8 @@ module('Integration | card-basics', function (hooks) {
         <template>
           <@fields.firstName />
           speaks
-          {{#each @fields.languagesSpoken as |language|}}
-            <language />
+          {{#each @fields.languagesSpoken as |Language|}}
+            <Language />
           {{/each}}
         </template>
       };
@@ -682,7 +688,7 @@ module('Integration | card-basics', function (hooks) {
     );
   });
 
-  test('can #each over a containsMany composite @fields', async function (assert) {
+  test('can #each over a containsMany composite @fields', async function (this: RenderingTestContext, assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
     class Person extends Card {
@@ -699,8 +705,8 @@ module('Integration | card-basics', function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div>
-            {{#each @fields.people as |person|}}
-              <person />
+            {{#each @fields.people as |Person|}}
+              <Person />
             {{/each}}
           </div>
         </template>
@@ -728,7 +734,7 @@ module('Integration | card-basics', function (hooks) {
     );
   });
 
-  test('can #each over a linksToMany @fields', async function (assert) {
+  test('can #each over a linksToMany @fields', async function (this: RenderingTestContext, assert) {
     let { field, contains, linksToMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
     class Person extends Card {
@@ -745,8 +751,8 @@ module('Integration | card-basics', function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div>
-            {{#each @fields.people as |person|}}
-              <person />
+            {{#each @fields.people as |Person|}}
+              <Person />
             {{/each}}
           </div>
         </template>
