@@ -472,9 +472,6 @@ importers:
       prettier-plugin-ember-template-tag: ^0.3.2
       qunit: ^2.19.4
       qunit-dom: ^2.0.0
-      stylelint: ^15.4.0
-      stylelint-config-standard: ^32.0.0
-      stylelint-prettier: ^3.0.0
       typescript: ^4.7.4
       webpack: ^5.78.0
     dependencies:
@@ -542,9 +539,6 @@ importers:
       prettier-plugin-ember-template-tag: 0.3.2
       qunit: 2.19.4
       qunit-dom: 2.0.0
-      stylelint: 15.6.1
-      stylelint-config-standard: 32.0.0_stylelint@15.6.1
-      stylelint-prettier: 3.0.0_ydhac4dv5nk3447o7ol4jd6c7a
       typescript: 4.9.3
       webpack: 5.82.1
 
@@ -4175,7 +4169,7 @@ packages:
       ajv: 6.12.6
       debug: 4.3.4
       espree: 7.3.1
-      globals: 13.18.0
+      globals: 13.20.0
       ignore: 4.0.6
       import-fresh: 3.3.0
       js-yaml: 3.14.1
@@ -4572,7 +4566,7 @@ packages:
         optional: true
     dependencies:
       '@glint/template': 1.0.2
-      ember-template-imports: 3.4.0_ember-cli-htmlbars@6.2.0
+      ember-template-imports: 3.4.0_ember-cli-htmlbars@6.1.1
     dev: true
 
   /@glint/environment-ember-template-imports/1.0.2_lvm73xdsabjhrbwnal3eyv5yza:
