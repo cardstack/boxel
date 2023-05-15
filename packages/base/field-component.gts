@@ -102,7 +102,7 @@ function fieldsComponentsFor<T extends CardBase>(
   model: Box<T>,
   defaultFormat: Format,
   actions?: Actions,
-  context?: unknown
+  context?: CardRenderingContext
 ): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {

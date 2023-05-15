@@ -86,8 +86,8 @@ interface NotLoadedValue {
 }
 
 export interface CardRenderingContext {
-  cardComponentModifier?: Modifier;
-  renderedIn?: GlimmerComponent;
+  cardComponentModifier?: typeof Modifier<any>;
+  renderedIn?: Component<any>;
   optional?: any;
 }
 
@@ -230,7 +230,8 @@ export interface Field<
   component(
     model: Box<CardBase>,
     format: Format,
-    actions?: Actions
+    actions?: Actions,
+    context?: CardRenderingContext
   ): ComponentLike<{ Args: {}; Blocks: {} }>;
   getter(instance: CardBase): CardInstanceType<CardT>;
   queryableValue(value: any, stack: CardBase[]): SearchT;
@@ -2086,7 +2087,7 @@ export function getComponent(
   model: CardBase,
   format: Format,
   actions?: Actions,
-  context?: unknown
+  context?: CardRenderingContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let box = Box.create(model);
   let component = getBoxComponent(

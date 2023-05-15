@@ -7,8 +7,12 @@ import { Card } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
 import { task, timeout } from 'ember-concurrency';
 import config from '@cardstack/host/config/environment';
-import { RenderedLinksToCard } from '@cardstack/host/components/operator-mode';
+import {
+  RenderedLinksToCard,
+  StackItem,
+} from '@cardstack/host/components/operator-mode';
 import { htmlSafe } from '@ember/template';
+import { action } from '@ember/object';
 
 interface OverlayedButton {
   x: number;
@@ -21,8 +25,7 @@ interface OverlayedButton {
 interface Signature {
   Args: {
     renderedLinksToCards: RenderedLinksToCard[];
-    stack: Card[];
-    addToStack: (card: Card) => void;
+    addToStack: (stackItem: StackItem) => void;
   };
 }
 
@@ -30,7 +33,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   <template>
     {{#each this.overlayedButtons as |overlayedButton|}}
       <button
-        {{on 'click' (fn this.args.addToStack overlayedButton.linksToCard)}}
+        {{on 'click' (fn this.addToStack overlayedButton.linksToCard)}}
         style={{this.styleForOverlayedButton overlayedButton}}
         class='operator-mode-overlayed-button'
         data-test-cardstack-operator-mode-overlay-button
@@ -49,6 +52,13 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
     registerDestructor(this, () => {
       this.refreshOverlayedButtons.cancelAll();
+    });
+  }
+
+  @action addToStack(card: Card) {
+    this.args.addToStack({
+      card,
+      format: 'isolated',
     });
   }
 
@@ -83,7 +93,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           linksToCardElement: renderedLinksToCard.element,
         };
       });
-    // debugger;
+
     let didLayoutChange = refreshedOverlayedButtons.some(
       (refreshedOverlayedButton) => {
         let currentOverlayedButton = this.overlayedButtons.find(
