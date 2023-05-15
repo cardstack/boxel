@@ -651,3 +651,46 @@ nav>.directory-level {
   transform: translateY(0);
   z-index: 1;
 }
+
+/* matrix spike */
+.user-profile__wrapper {
+  padding: 0 var(--boxel-sp);
+  margin: var(--boxel-sp) 0;
+}
+
+.user-profile__wrapper label{
+  margin-top: var(--boxel-sp-sm);
+}
+
+.room-manager__room-list {
+  padding: 0 var(--boxel-sp);
+  margin: var(--boxel-sp) 0;
+}
+
+.room-manager__room {
+  margin-top: var(--boxel-sp-sm);
+}
+
+.room-manager__room button {
+  margin-left: var(--boxel-sp-xs);
+}
+
+.room__messages-wrapper {
+  overflow-y: auto;
+  max-height: 30vh;
+  padding: 0 var(--boxel-sp);
+  margin: var(--boxel-sp) 0;
+}
+
+.room__messages__notices {
+  display: flex;
+  justify-content: center;
+}
+
+.room__send-message {
+  display: flex;
+  justify-content: right;
+  flex-wrap: wrap;
+  row-gap: var(--boxel-sp-sm);
+  margin: 0 var(--boxel-sp);
+}

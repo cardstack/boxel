@@ -44,6 +44,7 @@ export default class RegisterUser extends Component {
         </FieldContainer>
         <Button
           data-test-next-btn
+          @kind='primary'
           @disabled={{this.isNextButtonDisabled}}
           {{on 'click' this.sendToken}}
         >Next</Button>
@@ -70,6 +71,7 @@ export default class RegisterUser extends Component {
         </FieldContainer>
         <Button
           data-test-register-btn
+          @kind='primary'
           @disabled={{this.isRegisterButtonDisabled}}
           {{on 'click' this.register}}
         >Register</Button>

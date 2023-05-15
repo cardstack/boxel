@@ -67,10 +67,13 @@ export default class RoomsManager extends Component {
         </fieldset>
       {{/if}}
     {{/if}}
-    <div data-test-invites-list>
+    <div class='room-manager__room-list' data-test-invites-list>
       <h3>Invites</h3>
       {{#each this.sortedInvites as |invite|}}
-        <div data-test-invited-room={{invite.name}}>{{invite.name}}
+        <div
+          class='room-manager__room'
+          data-test-invited-room={{invite.name}}
+        >{{invite.name}}
           (from:
           <span
             data-test-invite-sender={{invite.sender}}
@@ -87,12 +90,14 @@ export default class RoomsManager extends Component {
             <LoadingIndicator />
           {{/if}}
         </div>
+      {{else}}
+        (No invites)
       {{/each}}
     </div>
-    <div data-test-rooms-list>
+    <div class='room-manager__room-list' data-test-rooms-list>
       <h3>Rooms</h3>
       {{#each this.sortedJoinedRooms as |room|}}
-        <div data-test-joined-room={{room.name}}>
+        <div class='room-manager__room' data-test-joined-room={{room.name}}>
           <LinkTo
             class='link'
             data-test-enter-room={{room.name}}
@@ -109,6 +114,8 @@ export default class RoomsManager extends Component {
             <LoadingIndicator />
           {{/if}}
         </div>
+      {{else}}
+        (No rooms)
       {{/each}}
     </div>
   </template>

@@ -12,7 +12,7 @@ import {
   RoomEvent,
 } from 'matrix-js-sdk';
 import { tracked } from '@glimmer/tracking';
-import { TrackedMap, TrackedArray } from 'tracked-built-ins';
+import { TrackedMap } from 'tracked-built-ins';
 import debounce from 'lodash/debounce';
 import RouterService from '@ember/routing/router-service';
 import ENV from '@cardstack/host/config/environment';
@@ -31,7 +31,7 @@ interface RoomInvite extends Room {
   sender: string;
 }
 
-type Event = Partial<IEvent>;
+export type Event = Partial<IEvent>;
 
 export default class MatrixService extends Service {
   @service private declare router: RouterService;
@@ -40,7 +40,7 @@ export default class MatrixService extends Service {
   invites: TrackedMap<string, RoomInvite> = new TrackedMap();
   joinedRooms: TrackedMap<string, Room> = new TrackedMap();
   roomNames: Map<string, string> = new Map();
-  timelines: Map<string, TrackedArray<Event>> = new Map();
+  timelines: Map<string, TrackedMap<string, Event>> = new Map();
   private eventBindings: [EmittedEvents, (...arg: any[]) => void][];
   // we process the matrix events in batched queues so that we can collapse the
   // interstitial state between events to prevent unnecessary flashing on the
@@ -165,6 +165,10 @@ export default class MatrixService extends Service {
   private resetState() {
     this.invites = new TrackedMap();
     this.joinedRooms = new TrackedMap();
+    this.roomNames = new Map();
+    this.timelines = new Map();
+    this.roomMembershipQueue = [];
+    this.unbindEventListeners();
     this.client = createClient({ baseUrl: matrixURL });
   }
 
@@ -182,16 +186,26 @@ export default class MatrixService extends Service {
   private onTimeline = (
     e: MatrixEvent,
     room: MatrixRoom,
-    _toStartOfTimeline: boolean // unsure what this means...
+    toStartOfTimeline: boolean // unsure what this means...
   ) => {
     let { event } = e;
+    console.log(
+      `received event '${event.type}' for room ${room.roomId}, toStartOfTimeline=${toStartOfTimeline}`
+    );
+    let { event_id: eventId } = event;
+    if (!eventId) {
+      throw new Error(
+        `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`
+      );
+    }
     if (event.type === 'm.room.message') {
       let timeline = this.timelines.get(room.roomId);
       if (!timeline) {
-        timeline = new TrackedArray<Event>();
+        timeline = new TrackedMap<string, Event>();
         this.timelines.set(room.roomId, timeline);
       }
-      timeline.push(event);
+      // we use a map for the timeline to de-dupe events
+      timeline.set(eventId, event);
     }
   };
 
