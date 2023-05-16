@@ -273,6 +273,7 @@ export default class OperatorMode extends Component<Signature> {
       <CardCatalogModal />
 
       <div class='operator-mode-card-stack'>
+        {{! z-index and offset calculation in the OperatorModeOverlays operates under assumption that it is nested under element with class operator-mode-card-stack }}
         <OperatorModeOverlays
           @renderedLinksToCards={{this.renderedLinksToCards}}
           @addToStack={{this.addToStack}}

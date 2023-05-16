@@ -69,16 +69,31 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   calculateOverlayedButtonCoordinates(linksToCardElement: HTMLElement) {
-    let rect = linksToCardElement.getBoundingClientRect();
+    let cardElementRect = linksToCardElement.getBoundingClientRect();
 
-    // Place the button in the top right of the linksTo card
+    let stackElement = linksToCardElement.closest('.operator-mode-card-stack');
+    if (!stackElement) {
+      throw new Error(
+        'Linked card must be nested under .operator-mode-card-stack element'
+      );
+    }
+
+    // This is absolute x axis distance between the operator mode stack and the card
+    let delta =
+      cardElementRect.left - stackElement.getBoundingClientRect().left;
+
+    // Places the button in the top right of the linksTo card
     return {
-      x: rect.width - 40,
-      y: rect.y + 10,
+      x: delta + cardElementRect.width - 60, // x starts at the left edge of the operator mode stack
+      y: cardElementRect.y + 10,
     };
   }
 
   refreshOverlayedButtons = task(async () => {
+    if (this.args.renderedLinksToCards.length === 0) {
+      this.overlayedButtons = new TrackedArray([]);
+    }
+
     let refreshedOverlayedButtons: OverlayedButton[] =
       this.args.renderedLinksToCards.map((renderedLinksToCard) => {
         let { x, y } = this.calculateOverlayedButtonCoordinates(
