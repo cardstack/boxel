@@ -945,7 +945,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       let innerModel = model.field(
         this.name as keyof CardBase
       ) as unknown as Box<Card | null>;
-      return getLinksToEditor(innerModel, this, actions);
+      return getLinksToEditor(innerModel, this, actions, context);
     }
     return fieldComponent(this, model, format, actions, context);
   }

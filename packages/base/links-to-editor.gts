@@ -5,7 +5,13 @@ import {
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
 import { getBoxComponent } from './field-component';
-import { type Card, type CardBase, type Box, type Field } from './card-api';
+import {
+  type Card,
+  type CardBase,
+  type Box,
+  type Field,
+  CardRenderingContext,
+} from './card-api';
 import {
   chooseCard,
   baseCardRef,
@@ -21,6 +27,7 @@ interface Signature {
     model: Box<Card | null>;
     field: Field<typeof Card>;
     actions?: Actions;
+    context?: CardRenderingContext;
   };
 }
 
@@ -76,7 +83,16 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     }
     let card = Reflect.getPrototypeOf(this.args.model.value)!
       .constructor as typeof CardBase;
-    return getBoxComponent(card, 'embedded', this.args.model as Box<CardBase>);
+    return getBoxComponent(
+      card,
+      'embedded',
+      this.args.model as Box<CardBase>,
+      this.args.actions,
+      {
+        ...this.args.context,
+        ...{ optional: { fieldType: this.args.field.fieldType } },
+      }
+    );
   }
 
   private chooseCard = restartableTask(async () => {
@@ -101,11 +117,17 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 export function getLinksToEditor(
   model: Box<Card | null>,
   field: Field<typeof Card>,
-  actions?: Actions
+  actions?: Actions,
+  context?: CardRenderingContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   return class LinksToEditTemplate extends GlimmerComponent {
     <template>
-      <LinksToEditor @model={{model}} @field={{field}} @actions={{actions}} />
+      <LinksToEditor
+        @model={{model}}
+        @field={{field}}
+        @actions={{actions}}
+        @context={{context}}
+      />
     </template>
   };
 }
