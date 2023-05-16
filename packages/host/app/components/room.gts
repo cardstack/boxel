@@ -101,8 +101,12 @@ export default class Room extends Component<RoomArgs> {
             </div>
           {{/if}}
         </div>
-        {{#each this.timelineEvents as |event|}}
-          <Message @event={{event}} @members={{this.members}} />
+        {{#each this.timelineEvents as |event index|}}
+          <Message
+            @event={{event}}
+            @members={{this.members}}
+            @index={{index}}
+          />
         {{else}}
           <div data-test-no-messages>
             (No messages)
@@ -269,6 +273,7 @@ export default class Room extends Component<RoomArgs> {
 interface MessageArgs {
   Args: {
     event: Event;
+    index: number;
     members: { member: RoomMember }[];
   };
 }
@@ -285,6 +290,7 @@ class Message extends Component<MessageArgs> {
   <template>
     <BoxelMessage
       {{ScrollIntoView}}
+      data-test-message-idx={{this.args.index}}
       @name={{this.sender.member.name}}
       @datetime={{formatRFC3339 this.timestamp}}
       style={{cssVar

@@ -32,6 +32,40 @@ export async function createRoom(
   await page.locator('[data-test-create-room-btn]').click();
 }
 
+export async function openRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-enter-room="${roomName}"]`).click();
+}
+
+export async function sendMessage(page: Page, message: string) {
+  await page.locator('[data-test-message-field]').fill(message);
+  await page.locator('[data-test-send-message-btn]').click();
+}
+
+export async function assertMessages(
+  page: Page,
+  messages: { from: string; message: string }[]
+) {
+  const limit = 5;
+  if (messages.length > limit) {
+    throw new Error(
+      `don't use assertMessages() for more than ${limit} messages as pagination may unnecessarily break the assertion`
+    );
+  }
+  await expect(page.locator('[data-test-message-idx]')).toHaveCount(
+    messages.length
+  );
+  for (let [index, { from, message }] of messages.entries()) {
+    await expect(
+      page.locator(
+        `[data-test-message-idx="${index}"] [data-test-boxel-message-name]`
+      )
+    ).toContainText(from);
+    await expect(
+      page.locator(`[data-test-message-idx="${index}"] .boxel-message__content`)
+    ).toContainText(message);
+  }
+}
+
 interface RoomAssertions {
   joinedRooms?: string[];
   invitedRooms?: { name: string; sender: string }[];
