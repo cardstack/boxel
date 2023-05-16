@@ -12,7 +12,7 @@ import {
   TestRealmAdapter,
   testRealmURL,
   setupCardLogs,
-  setupMockLocalRealm,
+  setupLocalIndexing,
 } from '../../helpers';
 import { Realm } from '@cardstack/runtime-common/realm';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
@@ -26,7 +26,7 @@ module('Integration | schema', function (hooks) {
   let adapter: TestRealmAdapter;
 
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)

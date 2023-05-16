@@ -18,7 +18,7 @@ import {
   TestRealm,
   testRealmURL,
   setupCardLogs,
-  setupMockLocalRealm,
+  setupLocalIndexing,
   setupMockMessageService,
 } from '../../helpers';
 import moment from 'moment';
@@ -59,7 +59,7 @@ module('Integration | Component | go', function (hooks) {
   let realm: Realm;
 
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
   setupMockMessageService(hooks);
   setupCardLogs(
     hooks,

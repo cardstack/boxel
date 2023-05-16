@@ -20,7 +20,7 @@
     "lint:js": "eslint . --cache --ext ts,js",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "start": "FASTBOOT_DISABLED=true HOST_LOCAL_REALM=true ember serve",
+    "start": "FASTBOOT_DISABLED=true OWN_REALM_URL=http://localhost:4204/ ember serve",
     "start:build": "FASTBOOT_DISABLED=true ember build --watch",
     "test": "npm-run-all lint test:*",
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.card%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/test/hassan?acceptHeader=application%2Fvnd.card%2Bjson' 'ember-test-pre-built'",
@@ -36,7 +36,6 @@
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/requirejs-monaco-ember-polyfill": "^0.0.1",
     "@cardstack/runtime-common": "workspace:*",
-    "@cardstack/worker": "workspace:*",
     "@ember/optional-features": "^2.0.0",
     "@ember/test-helpers": "^2.6.0",
     "@embroider/compat": "^1.5.0",
@@ -168,9 +167,6 @@
       "injected": true
     },
     "@cardstack/runtime-common": {
-      "injected": true
-    },
-    "@cardstack/worker": {
       "injected": true
     }
   },
