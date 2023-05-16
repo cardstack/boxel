@@ -44,7 +44,7 @@ export default class MatrixService extends Service {
     TrackedMap<string, { member: RoomMember; status: 'join' | 'invite' }>
   > = new TrackedMap();
   roomNames: Map<string, string> = new Map();
-  timelines: Map<string, TrackedMap<string, Event>> = new Map();
+  timelines: TrackedMap<string, TrackedMap<string, Event>> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   private eventBindings: [EmittedEvents, (...arg: any[]) => void][];
   // we process the matrix events in batched queues so that we can collapse the
@@ -190,7 +190,7 @@ export default class MatrixService extends Service {
     this.joinedRooms = new TrackedMap();
     this.roomMembers = new TrackedMap();
     this.roomNames = new Map();
-    this.timelines = new Map();
+    this.timelines = new TrackedMap();
     this.roomMembershipQueue = [];
     this.unbindEventListeners();
     this.client = createClient({ baseUrl: matrixURL });

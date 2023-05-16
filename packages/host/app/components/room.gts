@@ -93,7 +93,10 @@ export default class Room extends Component<RoomArgs> {
             <LoadingIndicator />
           {{/if}}
           {{#if this.atBeginningOfTimeline}}
-            <div data-test-timeline-start>
+            <div
+              data-test-timeline-start
+              class='room__messages__timeline-start'
+            >
               - Beginning of conversation -
             </div>
           {{/if}}
@@ -171,11 +174,13 @@ export default class Room extends Component<RoomArgs> {
   }
 
   get timelineEvents() {
-    return [
-      ...(
-        this.matrixService.timelines.get(this.args.roomId) ?? new TrackedMap()
-      ).values(),
-    ].sort((a, b) => a.origin_server_ts! - b.origin_server_ts!);
+    let roomTimeline = this.matrixService.timelines.get(this.args.roomId);
+    if (!roomTimeline) {
+      return [];
+    }
+    return [...roomTimeline.values()].sort(
+      (a, b) => a.origin_server_ts! - b.origin_server_ts!
+    );
   }
 
   get message() {

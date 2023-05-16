@@ -698,6 +698,10 @@ nav>.directory-level {
   margin: var(--boxel-sp) 0;
 }
 
+.room__messages__timeline-start {
+  padding-bottom: var(--boxel-sp);
+}
+
 .room__messages__notices {
   display: flex;
   justify-content: center;
