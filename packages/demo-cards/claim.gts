@@ -93,6 +93,9 @@ export class Claim extends Card {
         <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
         <FieldContainer @label='Connected'><@fields.connected
           /></FieldContainer>
+        <Button>
+          Look at Claim
+        </Button>
       </CardContainer>
     </template>
   };
