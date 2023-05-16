@@ -74,5 +74,14 @@ module.exports = {
         'prettier/prettier': 'off',
       },
     },
+    {
+      // typescript-eslint recommends turning off no-undef for Typescript files since
+      // Typescript will better analyse that:
+      // https://github.com/typescript-eslint/typescript-eslint/blob/5b0e577f2552e8b2c53a3fb22edc9d219589b937/docs/linting/Troubleshooting.mdx#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
+      files: ['**/*.ts', '**/*.gts'],
+      rules: {
+        'no-undef': 'off',
+      },
+    },
   ],
 };
