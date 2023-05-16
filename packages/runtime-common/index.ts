@@ -117,6 +117,16 @@ export async function chooseCard<T extends Card>(
   return await chooser.chooseCard<T>(query, opts);
 }
 
+export interface CardSearch {
+  runSearch(query: Query): any; // TODO: return type?
+}
+
+export async function runSearch(query: Query) {
+  let here = globalThis as any;
+  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
+  return finder.runSearch(query);
+}
+
 export interface CardCreator {
   create<T extends Card>(
     ref: CardRef,
