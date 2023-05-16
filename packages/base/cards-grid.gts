@@ -89,7 +89,7 @@ class Isolated extends Component<typeof CardsGrid> {
       return;
     }
 
-    await this.args.actions?.createCard?.(
+    await this.args.context?.actions?.createCard?.(
       card.ref,
       this.args.model[relativeTo]
     );
