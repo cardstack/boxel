@@ -1,10 +1,6 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import {
-  Card,
-  CardRenderingContext,
-  Format,
-} from 'https://cardstack.com/base/card-api';
+import { Card, CardContext, Format } from 'https://cardstack.com/base/card-api';
 import Preview from './preview';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -50,7 +46,7 @@ export type StackItem = {
 export interface RenderedLinksToCard {
   element: HTMLElement;
   card: Card;
-  context: CardRenderingContext;
+  context: CardContext;
   stackedAtIndex: number;
 }
 
@@ -219,6 +215,7 @@ export default class OperatorMode extends Component<Signature> {
       optional: {
         stack: this.stack, // Not used currently, but eventually there will be more than one stack and we will need to know which one we are in.
       },
+      actions: this.publicAPI,
     };
   }
 
@@ -226,7 +223,7 @@ export default class OperatorMode extends Component<Signature> {
   registerLinkedCardElement(
     linksToCardElement: HTMLElement,
     linksToCard: Card,
-    context: CardRenderingContext
+    context: CardContext
   ) {
     // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
     schedule('afterRender', () => {
@@ -297,7 +294,6 @@ export default class OperatorMode extends Component<Signature> {
               <Preview
                 @card={{item.card}}
                 @format={{item.format}}
-                @actions={{this.publicAPI}}
                 @context={{this.context}}
               />
             </div>

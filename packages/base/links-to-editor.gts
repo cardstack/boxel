@@ -10,14 +10,13 @@ import {
   type CardBase,
   type Box,
   type Field,
-  CardRenderingContext,
+  CardContext,
 } from './card-api';
 import {
   chooseCard,
   baseCardRef,
   identifyCard,
   createNewCard,
-  type Actions,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
@@ -26,8 +25,7 @@ interface Signature {
   Args: {
     model: Box<Card | null>;
     field: Field<typeof Card>;
-    actions?: Actions;
-    context?: CardRenderingContext;
+    context?: CardContext;
   };
 }
 
@@ -83,16 +81,10 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     }
     let card = Reflect.getPrototypeOf(this.args.model.value)!
       .constructor as typeof CardBase;
-    return getBoxComponent(
-      card,
-      'embedded',
-      this.args.model as Box<CardBase>,
-      this.args.actions,
-      {
-        ...this.args.context,
-        ...{ optional: { fieldType: this.args.field.fieldType } },
-      }
-    );
+    return getBoxComponent(card, 'embedded', this.args.model as Box<CardBase>, {
+      ...this.args.context,
+      ...{ optional: { fieldType: this.args.field.fieldType } },
+    });
   }
 
   private chooseCard = restartableTask(async () => {
@@ -106,7 +98,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   private createCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let newCard: Card | undefined =
-      (await this.args.actions?.createCard(type, undefined)) ??
+      (await this.args.context?.actions?.createCard(type, undefined)) ??
       (await createNewCard(type, undefined)); // remove this when no longer supporting `createCardModal`
     if (newCard) {
       this.args.model.value = newCard;
@@ -117,17 +109,11 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 export function getLinksToEditor(
   model: Box<Card | null>,
   field: Field<typeof Card>,
-  actions?: Actions,
-  context?: CardRenderingContext
+  context?: CardContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   return class LinksToEditTemplate extends GlimmerComponent {
     <template>
-      <LinksToEditor
-        @model={{model}}
-        @field={{field}}
-        @actions={{actions}}
-        @context={{context}}
-      />
+      <LinksToEditor @model={{model}} @field={{field}} @context={{context}} />
     </template>
   };
 }

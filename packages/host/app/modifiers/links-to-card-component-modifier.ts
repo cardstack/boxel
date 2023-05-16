@@ -1,13 +1,10 @@
 import Modifier from 'ember-modifier';
-import {
-  CardBase,
-  CardRenderingContext,
-} from 'https://cardstack.com/base/card-api';
+import { CardBase, CardContext } from 'https://cardstack.com/base/card-api';
 import { registerDestructor } from '@ember/destroyable';
 
 interface Signature {
   Args: {
-    Positional: [card: CardBase, context: CardRenderingContext];
+    Positional: [card: CardBase, context: CardContext];
   };
 }
 

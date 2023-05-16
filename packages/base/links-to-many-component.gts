@@ -7,6 +7,7 @@ import {
   type Box,
   type Format,
   type Field,
+  CardContext,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
@@ -20,7 +21,6 @@ import {
   baseCardRef,
   identifyCard,
   createNewCard,
-  type Actions,
 } from '@cardstack/runtime-common';
 
 interface Signature {
@@ -33,7 +33,7 @@ interface Signature {
       field: Field<typeof CardBase>,
       boxedElement: Box<CardBase>
     ): typeof CardBase;
-    actions?: Actions;
+    context?: CardContext;
   };
 }
 
@@ -111,7 +111,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let cards = (this.args.model.value as any)[this.args.field.name];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let newCard: Card | undefined =
-      (await this.args.actions?.createCard(type, undefined)) ??
+      (await this.args.context?.actions?.createCard(type, undefined)) ??
       (await createNewCard(type, undefined)); // remove this when no longer supporting `createCardModal`
     if (newCard) {
       cards = [...cards, newCard];
@@ -132,7 +132,7 @@ export function getLinksToManyComponent({
   format,
   field,
   cardTypeFor,
-  actions,
+  context,
 }: {
   model: Box<Card>;
   arrayField: Box<Card[]>;
@@ -142,7 +142,7 @@ export function getLinksToManyComponent({
     field: Field<typeof CardBase>,
     boxedElement: Box<CardBase>
   ): typeof CardBase;
-  actions?: Actions;
+  context?: CardContext;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {
@@ -153,7 +153,7 @@ export function getLinksToManyComponent({
           @field={{field}}
           @format={{format}}
           @cardTypeFor={{cardTypeFor}}
-          @actions={{actions}}
+          @context={{context}}
         />
       </template>
     };

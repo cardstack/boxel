@@ -5,10 +5,10 @@ import {
   type Format,
   type FieldsTypeFor,
   type CardBase,
-  CardRenderingContext,
+  CardContext,
 } from './card-api';
 import { defaultComponent } from './default-card-component';
-import { getField, type Actions } from '@cardstack/runtime-common';
+import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui';
 
@@ -21,8 +21,7 @@ export function getBoxComponent(
   card: typeof CardBase,
   format: Format,
   model: Box<CardBase>,
-  actions?: Actions,
-  context: CardRenderingContext = {}
+  context: CardContext = {}
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let stable = componentCache.get(model);
   if (stable) {
@@ -37,7 +36,6 @@ export function getBoxComponent(
     {},
     model,
     defaultFieldFormat(format),
-    actions,
     context
   );
 
@@ -49,7 +47,6 @@ export function getBoxComponent(
         @fields={{internalFields}}
         @set={{model.set}}
         @fieldName={{model.name}}
-        @actions={{actions}}
         @context={{context}}
         {{! @glint-ignore: Argument of type 'ClassBasedModifier<DefaultSignature>' is not assignable to parameter of type 'DirectInvokable<AnyFunction>'.}}
         {{context.cardComponentModifier model.value context}}
@@ -60,7 +57,6 @@ export function getBoxComponent(
         @fields={{internalFields}}
         @set={{model.set}}
         @fieldName={{model.name}}
-        @actions={{actions}}
         @context={{context}}
       />
     {{/if}}
@@ -77,7 +73,6 @@ export function getBoxComponent(
     component,
     model,
     defaultFieldFormat(format),
-    actions,
     context
   );
 
@@ -101,8 +96,7 @@ function fieldsComponentsFor<T extends CardBase>(
   target: object,
   model: Box<T>,
   defaultFormat: Format,
-  actions?: Actions,
-  context?: CardRenderingContext
+  context?: CardContext
 ): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
@@ -127,7 +121,6 @@ function fieldsComponentsFor<T extends CardBase>(
       return field.component(
         model as unknown as Box<CardBase>,
         format,
-        actions,
         context
       );
     },

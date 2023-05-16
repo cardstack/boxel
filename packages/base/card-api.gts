@@ -85,7 +85,8 @@ interface NotLoadedValue {
   reference: string;
 }
 
-export interface CardRenderingContext {
+export interface CardContext {
+  actions?: Actions;
   cardComponentModifier?: typeof Modifier<any>;
   renderedIn?: Component<any>;
   optional?: any;
@@ -230,8 +231,7 @@ export interface Field<
   component(
     model: Box<CardBase>,
     format: Format,
-    actions?: Actions,
-    context?: CardRenderingContext
+    context?: CardContext
   ): ComponentLike<{ Args: {}; Blocks: {} }>;
   getter(instance: CardBase): CardInstanceType<CardT>;
   queryableValue(value: any, stack: CardBase[]): SearchT;
@@ -679,10 +679,9 @@ class Contains<CardT extends CardBaseConstructor> implements Field<CardT, any> {
   component(
     model: Box<CardBase>,
     format: Format,
-    actions?: Actions,
-    context?: CardRenderingContext
+    context?: CardContext
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
-    return fieldComponent(this, model, format, actions, context);
+    return fieldComponent(this, model, format, context);
   }
 }
 
@@ -938,16 +937,15 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   component(
     model: Box<Card>,
     format: Format,
-    actions?: Actions,
-    context?: CardRenderingContext
+    context?: CardContext
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(
         this.name as keyof CardBase
       ) as unknown as Box<Card | null>;
-      return getLinksToEditor(innerModel, this, actions, context);
+      return getLinksToEditor(innerModel, this, context);
     }
-    return fieldComponent(this, model, format, actions, context);
+    return fieldComponent(this, model, format, context);
   }
 }
 
@@ -1264,7 +1262,7 @@ class LinksToMany<FieldT extends CardConstructor>
   component(
     model: Box<Card>,
     format: Format,
-    actions?: Actions
+    context?: CardContext
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     let fieldName = this.name as keyof CardBase;
     let arrayField = model.field(
@@ -1277,7 +1275,7 @@ class LinksToMany<FieldT extends CardConstructor>
       field: this,
       format,
       cardTypeFor,
-      actions,
+      context,
     });
   }
 }
@@ -1286,8 +1284,7 @@ function fieldComponent(
   field: Field<typeof CardBase>,
   model: Box<CardBase>,
   format: Format,
-  actions?: Actions,
-  context?: CardRenderingContext
+  context?: CardContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let fieldName = field.name as keyof CardBase;
   let card: typeof CardBase;
@@ -1299,7 +1296,7 @@ function fieldComponent(
   }
   let innerModel = model.field(fieldName) as unknown as Box<CardBase>;
 
-  return getBoxComponent(card, format, innerModel, actions, {
+  return getBoxComponent(card, format, innerModel, {
     ...context,
     ...{ optional: { fieldType: field.fieldType } },
   });
@@ -1444,13 +1441,8 @@ export class CardBase {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(
-    card: CardBase,
-    format: Format,
-    actions?: Actions,
-    context?: CardRenderingContext
-  ) {
-    return getComponent(card, format, actions, context);
+  static getComponent(card: CardBase, format: Format, context?: CardContext) {
+    return getComponent(card, format, context);
   }
 
   constructor(data?: Record<string, any>) {
@@ -2079,22 +2071,20 @@ export type SignatureFor<CardT extends CardBaseConstructor> = {
     fields: FieldsTypeFor<InstanceType<CardT>>;
     set: Setter;
     fieldName: string | undefined;
-    actions?: Actions;
+    context?: CardContext;
   };
 };
 
 export function getComponent(
   model: CardBase,
   format: Format,
-  actions?: Actions,
-  context?: CardRenderingContext
+  context?: CardContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let box = Box.create(model);
   let component = getBoxComponent(
     model.constructor as CardBaseConstructor,
     format,
     box,
-    actions,
     context
   );
   return component;
