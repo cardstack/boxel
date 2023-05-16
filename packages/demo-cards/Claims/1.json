@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "relationships": {
+      "claims.0": {
+        "links": {
+          "self": "http://localhost:4200/Claim/1"
+        }
+      },
+      "claims.1": {
+        "links": {
+          "self": "http://localhost:4200/Claim/2"
+        }
+      }
+    },
+    "attributes": {
+      "title": "List of Claims"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4200/claims",
+        "name": "Claims"
+      }
+    }
+  }
+}
