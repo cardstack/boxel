@@ -77,7 +77,7 @@ export class Claim extends Card {
   // chainId and networkId are not the same. You can get networkId using the metamask api.
   async getChainId() {
     if (!this.isMetamaskInstalled()) {
-      return -1; //returning 0
+      return -1;
     }
     let hexChainId = await window.ethereum.request({ method: 'eth_chainId' });
     return parseInt(hexChainId, 16);
@@ -87,8 +87,10 @@ export class Claim extends Card {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer class='demo-card' @displayBoundaries={{true}}>
-        <h3><@fields.title /></h3>
-        <p><@fields.explanation /></p>
+        <FieldContainer @label='Title'><@fields.title /></FieldContainer>
+        <FieldContainer @label='Explanation'><@fields.explanation
+          /></FieldContainer>
+        <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
       </CardContainer>
     </template>
   };
