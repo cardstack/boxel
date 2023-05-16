@@ -26,7 +26,6 @@
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
       "https://cardstack.com/base/*": ["../base/*"],
-      "//local-realm/*": ["../demo-cards/*"],
       "cards": ["../demo-cards/*"],
       "*": ["types/*"],
       "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"],

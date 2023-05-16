@@ -13,7 +13,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import {
   TestRealm,
   TestRealmAdapter,
-  setupMockLocalRealm,
+  setupLocalIndexing,
   setupMockMessageService,
   testRealmURL,
 } from '../helpers';
@@ -68,7 +68,7 @@ module('Acceptance | basic tests', function (hooks) {
   let adapter: TestRealmAdapter;
 
   setupApplicationTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
   setupMockMessageService(hooks);
 
   hooks.beforeEach(async function () {

@@ -10,7 +10,6 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
-  createNewCard,
   type Actions,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -31,9 +30,11 @@ class LinksToEditor extends GlimmerComponent<Signature> {
         <Button @size='small' {{on 'click' this.choose}} data-test-choose-card>
           Choose
         </Button>
-        <Button @size='small' {{on 'click' this.create}} data-test-create-new>
-          Create New
-        </Button>
+        {{#if @actions.createCard}}
+          <Button @size='small' {{on 'click' this.create}} data-test-create-new>
+            Create New
+          </Button>
+        {{/if}}
       {{else}}
         <CardContainer class='links-to-editor__item'>
           <this.linkedCard />
@@ -81,7 +82,9 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 
   private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard({ filter: { type } });
+    let chosenCard: Card | undefined = this.args.actions?.createCard
+      ? await chooseCard({ filter: { type } })
+      : await chooseCard({ filter: { type } }, { offerToCreate: type });
     if (chosenCard) {
       this.args.model.value = chosenCard;
     }
@@ -89,9 +92,10 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 
   private createCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let newCard: Card | undefined =
-      (await this.args.actions?.createCard(type, undefined)) ??
-      (await createNewCard(type, undefined)); // remove this when no longer supporting `createCardModal`
+    let newCard: Card | undefined = await this.args.actions?.createCard(
+      type,
+      undefined
+    );
     if (newCard) {
       this.args.model.value = newCard;
     }

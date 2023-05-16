@@ -36,9 +36,6 @@ jobs:
       - name: Lint Realm Server
         run: pnpm run lint
         working-directory: packages/realm-server
-      - name: Lint Worker
-        run: pnpm run lint
-        working-directory: packages/worker
   boxel-motion-test:
     name: Boxel Motion Tests
     runs-on: ubuntu-latest
@@ -138,7 +135,6 @@ jobs:
               - 'packages/base/**'
               - 'packages/boxel-ui/**'
               - 'packages/runtime-common/**'
-              - 'packages/worker/**'
               - '.github/workflows/ci.yaml'
               - '.github/actions/deploy-boxel-host/**'
               - '.github/actions/deploy-ember-preview/**'

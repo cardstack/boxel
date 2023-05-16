@@ -1,29 +1,6 @@
-{{! template-lint-disable no-inline-styles }}
-{{#if this.isLocalRealm}}
-  <InLocalRealm as |realm|>
-    {{#if realm.connected}}
-      <CardError
-        @isIndexCard={{this.model.failureLoadingIndexCard}}
-        @message={{this.model.message}}
-      />
-    {{else if realm.isLoading}}
-      Loading local realm...
-    {{else if realm.isEmpty}}
-      No local realm connected.
-      <a
-        href="#"
-        {{on 'click' (this.withPreventDefault realm.open)}}
-        style='color:#6638ff;text-decoration:underline'
-      >Open a local realm</a>
-    {{else}}
-      <p>Local realm state: {{realm.status}}</p>
-    {{/if}}
-  </InLocalRealm>
-{{else}}
-  <CardError
-    @isIndexCard={{this.model.failureLoadingIndexCard}}
-    @message={{this.model.message}}
-  />
-{{/if}}
+<CardError
+  @isIndexCard={{this.model.failureLoadingIndexCard}}
+  @message={{this.model.message}}
+/>
 
 <CodeLink />

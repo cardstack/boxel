@@ -34,7 +34,6 @@
         "--path='../base'",
         "--fromUrl='https://cardstack.com/base/'",
         "--toUrl='/base/'",
-        "--hostLocalRealm"
       ],
       "cwd": "${workspaceFolder}/packages/realm-server",
       "outFiles": ["${workspaceFolder}/**/*.js"],

@@ -30,7 +30,6 @@ module.exports = function (environment) {
         ? 'http://test-realm/test/'
         : process.env.OWN_REALM_URL || 'http://localhost:4200/', // this should be provided as an *unresolved* URL
     hostsOwnAssets: true,
-    isLocalRealm: process.env.HOST_LOCAL_REALM === 'true',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
   };

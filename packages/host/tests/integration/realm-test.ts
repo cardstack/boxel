@@ -9,7 +9,7 @@ import {
   TestRealmAdapter,
   testRealmURL,
   setupCardLogs,
-  setupMockLocalRealm,
+  setupLocalIndexing,
 } from '../helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { stringify } from 'qs';
@@ -21,7 +21,7 @@ import { Deferred } from '@cardstack/runtime-common/deferred';
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
