@@ -49,14 +49,6 @@ export interface RunState {
   stats: Stats;
 }
 
-export interface SerializableRunState {
-  realmURL: string;
-  instances: [string, SearchEntryWithErrors][];
-  ignoreMap: [string, string][];
-  modules: [string, ModuleWithErrors][];
-  stats: Stats;
-}
-
 export type RunnerRegistration = (
   fromScratch: (realmURL: URL) => Promise<RunState>,
   incremental: (
@@ -775,37 +767,6 @@ export function isIgnored(
   let realmPath = new RealmPaths(realmURL);
   let pathname = realmPath.local(url);
   return ignore.test(pathname).ignored;
-}
-
-export function serializeRunState(state: RunState): SerializableRunState {
-  let {
-    modules,
-    instances,
-    realmURL,
-    ignoreMapContents: ignoreMap,
-    stats,
-  } = state;
-  return {
-    stats,
-    realmURL: realmURL.href,
-    modules: [...modules],
-    instances: [...instances].map(([k, v]) => [k.href, v]),
-    ignoreMap: [...ignoreMap].map(([k, v]) => [k.href, v]),
-  };
-}
-
-export function deserializeRunState(state: SerializableRunState): RunState {
-  let { modules, instances, realmURL, ignoreMap, stats } = state;
-  return {
-    realmURL: new URL(realmURL),
-    stats,
-    modules: new Map(modules),
-    instances: new URLMap(instances.map(([k, v]) => [new URL(k), v])),
-    ignoreMap: new URLMap(
-      ignoreMap.map(([k, v]) => [new URL(k), ignore().add(v)])
-    ),
-    ignoreMapContents: new URLMap(ignoreMap.map(([k, v]) => [new URL(k), v])),
-  };
 }
 
 // three-valued version of Array.every that propagates nulls. Here, the presence
