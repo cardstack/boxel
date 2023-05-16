@@ -21,7 +21,11 @@ test.describe('Room membership', () => {
 
   test('it can decline an invite', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1', invites: ['user2'] });
+    await createRoom(page, {
+      name: 'Room 1',
+      invites: ['user2'],
+      encrypted: true,
+    });
     await logout(page);
     await login(page, 'user2', 'pass');
 
@@ -37,7 +41,11 @@ test.describe('Room membership', () => {
 
   test('it can accept an invite', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1', invites: ['user2'] });
+    await createRoom(page, {
+      name: 'Room 1',
+      invites: ['user2'],
+      encrypted: true,
+    });
     await logout(page);
     await login(page, 'user2', 'pass');
 
@@ -45,17 +53,23 @@ test.describe('Room membership', () => {
       invitedRooms: [{ name: 'Room 1', sender: '@user1:localhost' }],
     });
     await page.locator('[data-test-join-room-btn="Room 1"]').click();
-    await assertRooms(page, { joinedRooms: ['Room 1'] });
+    await assertRooms(page, {
+      joinedRooms: [{ name: 'Room 1', encrypted: true }],
+    });
 
     await page.reload();
-    await assertRooms(page, { joinedRooms: ['Room 1'] });
+    await assertRooms(page, {
+      joinedRooms: [{ name: 'Room 1', encrypted: true }],
+    });
   });
 
   test('it can leave a joined room', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1' });
+    await createRoom(page, { name: 'Room 1', encrypted: true });
 
-    await assertRooms(page, { joinedRooms: ['Room 1'] });
+    await assertRooms(page, {
+      joinedRooms: [{ name: 'Room 1', encrypted: true }],
+    });
     await page.locator('[data-test-leave-room-btn="Room 1"]').click();
     await assertRooms(page, {});
 

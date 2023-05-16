@@ -8,13 +8,12 @@ import {
 import {
   login,
   logout,
-  assertRooms,
   createRoom,
   openRoom,
   assertMessages,
 } from '../helpers';
 
-test.describe('Room messages', () => {
+test.describe('Encrypted Room messages', () => {
   let synapse: SynapseInstance;
   test.beforeEach(async () => {
     synapse = await synapseStart();
@@ -27,9 +26,9 @@ test.describe('Room messages', () => {
   });
 
   test(`it can send a message in a room`, async ({ page }) => {
-    // make sure to test that room state doesn't leak
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1', invites: ['user2'] });
+    await createRoom(page, { name: 'Room 1', invites: [], encrypted: true });
+    await createRoom(page, { name: 'Room 2', invites: [], encrypted: true });
     await openRoom(page, 'Room 1');
 
     await expect(page.locator('[data-test-timeline-start]')).toHaveCount(1);
@@ -52,9 +51,24 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     await openRoom(page, 'Room 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+
+    // make sure that room state doesn't leak
+    await openRoom(page, 'Room 2');
+    await assertMessages(page, []);
+
+    await openRoom(page, 'Room 1');
+    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
   });
 
-  test.skip(`it can scroll back to beginning of timeline`, async ({
+  test.skip(`it lets multiple users send messages in a room`, async ({
+    page,
+  }) => {});
+
+  test.skip(`invited users to a room can view messages send from before they joined`, async ({
+    page,
+  }) => {});
+
+  test.skip(`it can paginate back to beginning of timeline for timelines that truncated`, async ({
     page,
   }) => {});
 
@@ -63,4 +77,6 @@ test.describe('Room messages', () => {
   test.skip(`it can create a room specific pending message`, async ({
     page,
   }) => {});
+
+  test.skip('message sender has left room', async ({ page }) => {});
 });

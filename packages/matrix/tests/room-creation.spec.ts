@@ -44,14 +44,20 @@ test.describe('Room creation', () => {
     await expect(page.locator('[data-test-create-room-btn]')).toBeEnabled();
     await page.locator('[data-test-create-room-btn]').click();
 
-    await assertRooms(page, { joinedRooms: ['Room 1'] });
+    await assertRooms(page, {
+      joinedRooms: [{ name: 'Room 1' }],
+    });
 
     await page.reload();
-    await assertRooms(page, { joinedRooms: ['Room 1'] });
+    await assertRooms(page, {
+      joinedRooms: [{ name: 'Room 1' }],
+    });
 
     await logout(page);
     await login(page, 'user1', 'pass');
-    await assertRooms(page, { joinedRooms: ['Room 1'] });
+    await assertRooms(page, {
+      joinedRooms: [{ name: 'Room 1' }],
+    });
 
     // The room created is a private room, user2 was not invited to it
     await logout(page);
@@ -77,17 +83,28 @@ test.describe('Room creation', () => {
 
   test('rooms are sorted by creation date', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room Z' });
-    await createRoom(page, { name: 'Room A' });
+    await createRoom(page, { name: 'Room Z', encrypted: true });
+    await createRoom(page, { name: 'Room A', encrypted: true });
 
-    await assertRooms(page, { joinedRooms: ['Room Z', 'Room A'] });
+    await assertRooms(page, {
+      joinedRooms: [
+        { name: 'Room Z', encrypted: true },
+        { name: 'Room A', encrypted: true },
+      ],
+    });
   });
 
   test('it can invite a user to a new room', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1', invites: ['user2'] });
+    await createRoom(page, {
+      name: 'Room 1',
+      invites: ['user2'],
+      encrypted: true,
+    });
 
-    await assertRooms(page, { joinedRooms: ['Room 1'] });
+    await assertRooms(page, {
+      joinedRooms: [{ name: 'Room 1', encrypted: true }],
+    });
 
     await logout(page);
     await login(page, 'user2', 'pass');
@@ -98,8 +115,16 @@ test.describe('Room creation', () => {
 
   test('invites are sorted by invitation date', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room Z', invites: ['user2'] });
-    await createRoom(page, { name: 'Room A', invites: ['user2'] });
+    await createRoom(page, {
+      name: 'Room Z',
+      invites: ['user2'],
+      encrypted: true,
+    });
+    await createRoom(page, {
+      name: 'Room A',
+      invites: ['user2'],
+      encrypted: true,
+    });
 
     await logout(page);
     await login(page, 'user2', 'pass');
@@ -115,7 +140,7 @@ test.describe('Room creation', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1' });
+    await createRoom(page, { name: 'Room 1', encrypted: true });
 
     await page.locator('[data-test-create-room-mode-btn]').click();
     await page.locator('[data-test-room-name-field]').fill('Room 1');
@@ -160,6 +185,8 @@ test.describe('Room creation', () => {
     ).toHaveCount(0);
     await page.locator('[data-test-create-room-btn]').click();
 
-    await assertRooms(page, { joinedRooms: ['Room 1', 'Room 2'] });
+    await assertRooms(page, {
+      joinedRooms: [{ name: 'Room 1', encrypted: true }, { name: 'Room 2' }],
+    });
   });
 });

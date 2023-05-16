@@ -679,6 +679,11 @@ nav>.directory-level {
 .room-manager__room button {
   margin-left: var(--boxel-sp-xs);
 }
+.room-manager__checkbox-field {
+  font-weight: bold;
+  display: block;
+  margin-bottom: var(--boxel-sp);
+}
 
 .room__header .boxel-header__content {
   display: block;

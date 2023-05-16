@@ -5,6 +5,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { not, eq } from '../helpers/truth-helpers';
+import { Input } from '@ember/component';
 import { restartableTask, timeout } from 'ember-concurrency';
 import {
   BoxelHeader,
@@ -56,6 +57,13 @@ export default class RoomsManager extends Component {
               @onInput={{this.setNewRoomInvite}}
             />
           </FieldContainer>
+          <label class='room-manager__checkbox-field'>Encrypted:
+            <Input
+              data-test-encrypted-field
+              @type='checkbox'
+              @checked={{this.isNewRoomEncrypted}}
+            />
+          </label>
           <Button
             data-test-create-room-cancel-btn
             {{on 'click' this.cancelCreateRoom}}
@@ -108,6 +116,9 @@ export default class RoomsManager extends Component {
               @model={{room.roomId}}
             >
               {{room.name}}
+              {{#if room.encrypted}}
+                <span data-test-encrypted-room>(encrypted)</span>
+              {{/if}}
             </LinkTo>
           </span>
           <Button
@@ -128,6 +139,7 @@ export default class RoomsManager extends Component {
   @service private declare router: RouterService;
   @tracked private isCreateRoomMode = false;
   @tracked private newRoomName: string | undefined;
+  @tracked private isNewRoomEncrypted = false;
   @tracked private newRoomInvite: string[] = [];
   @tracked private roomNameError: string | undefined;
   @tracked private roomIdForCurrentAction: string | undefined;
@@ -199,7 +211,11 @@ export default class RoomsManager extends Component {
       );
     }
     try {
-      await this.matrixService.createRoom(this.newRoomName, this.newRoomInvite);
+      await this.matrixService.createRoom(
+        this.newRoomName,
+        this.newRoomInvite,
+        this.isNewRoomEncrypted
+      );
     } catch (e) {
       if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
         this.roomNameError = 'Room already exists';
@@ -234,6 +250,7 @@ export default class RoomsManager extends Component {
     this.newRoomName = undefined;
     this.newRoomInvite = [];
     this.isCreateRoomMode = false;
+    this.isNewRoomEncrypted = false;
   }
 }
 

@@ -20,15 +20,19 @@ import ENV from '@cardstack/host/config/environment';
 const { matrixURL } = ENV;
 export const eventDebounceMs = 300;
 
-interface Room {
+interface Room extends RoomMeta {
   eventId: string;
   roomId: string;
-  name?: string;
   timestamp: number;
 }
 
 interface RoomInvite extends Room {
   sender: string;
+}
+
+interface RoomMeta {
+  name?: string;
+  encrypted?: boolean;
 }
 
 export type Event = Partial<IEvent>;
@@ -43,7 +47,7 @@ export default class MatrixService extends Service {
     string,
     TrackedMap<string, { member: RoomMember; status: 'join' | 'invite' }>
   > = new TrackedMap();
-  roomNames: Map<string, string> = new Map();
+  rooms: Map<string, RoomMeta> = new Map();
   timelines: TrackedMap<string, TrackedMap<string, Event>> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   private eventBindings: [EmittedEvents, (...arg: any[]) => void][];
@@ -154,6 +158,7 @@ export default class MatrixService extends Service {
   async createRoom(
     name: string,
     localInvite: string[], // these are just local names--assume no federation, all users live on the same homeserver
+    encrypted: boolean,
     topic?: string
   ): Promise<string> {
     let homeserver = new URL(this.client.getHomeserverUrl());
@@ -164,13 +169,16 @@ export default class MatrixService extends Service {
       name,
       topic,
       room_alias_name: encodeURIComponent(name),
-      // default to always making encrypted rooms
-      initial_state: [
-        {
-          content: { algorithm: 'm.megolm.v1.aes-sha2' },
-          type: 'm.room.encryption',
-        },
-      ],
+      ...(encrypted
+        ? {
+            initial_state: [
+              {
+                content: { algorithm: 'm.megolm.v1.aes-sha2' },
+                type: 'm.room.encryption',
+              },
+            ],
+          }
+        : {}),
     });
     return roomId;
   }
@@ -189,7 +197,7 @@ export default class MatrixService extends Service {
     this.invites = new TrackedMap();
     this.joinedRooms = new TrackedMap();
     this.roomMembers = new TrackedMap();
-    this.roomNames = new Map();
+    this.rooms = new Map();
     this.timelines = new TrackedMap();
     this.roomMembershipQueue = [];
     this.unbindEventListeners();
@@ -208,8 +216,27 @@ export default class MatrixService extends Service {
   }
 
   private onTimeline = (e: MatrixEvent) => {
-    this.timelineQueue.push(e);
-    this.debouncedTimelineDrain();
+    let { event } = e;
+    if (
+      event.type === 'm.room.encryption' &&
+      // this is the only algorithm that matrix supports for room encryption
+      event.content?.algorithm === 'm.megolm.v1.aes-sha2'
+    ) {
+      let { room_id: roomId } = event;
+      if (!roomId) {
+        throw new Error(
+          `bug: roomId is undefined for message event ${JSON.stringify(
+            event,
+            null,
+            2
+          )}`
+        );
+      }
+      this.setRoomMeta(roomId, { encrypted: true });
+    } else {
+      this.timelineQueue.push(e);
+      this.debouncedTimelineDrain();
+    }
   };
 
   private debouncedTimelineDrain = debounce(() => {
@@ -354,14 +381,17 @@ export default class MatrixService extends Service {
       switch (membership.type) {
         case 'invite': {
           let { type: _remove, ...invite } = membership;
-          let name = this.roomNames.get(roomId) ?? invite.name;
+          let name = this.rooms.get(roomId)?.name ?? invite.name;
+          // note that we can't see room encryption events for rooms we haven't joined
           invites.set(roomId, { ...invite, name });
           break;
         }
         case 'join': {
           let { type: _remove, ...joinedRoom } = membership;
-          let name = this.roomNames.get(roomId) ?? joinedRoom.name;
-          joinedRooms.set(roomId, { ...joinedRoom, name });
+          let name = this.rooms.get(roomId)?.name ?? joinedRoom.name;
+          let encrypted =
+            this.rooms.get(roomId)?.encrypted ?? joinedRoom.encrypted;
+          joinedRooms.set(roomId, { ...joinedRoom, ...{ name, encrypted } });
           // once we join a room we remove any invites for this room that are
           // part of this flush as well as historical invites for this room
           invites.delete(roomId);
@@ -408,16 +438,28 @@ export default class MatrixService extends Service {
       return;
     }
 
-    this.roomNames.set(roomId, name);
+    this.setRoomMeta(roomId, { name });
+  };
+
+  private setRoomMeta(roomId: string, meta: RoomMeta) {
+    let roomMeta = this.rooms.get(roomId);
+    if (!roomMeta) {
+      roomMeta = {};
+      this.rooms.set(roomId, roomMeta);
+    }
+    if (meta.name !== undefined) {
+      roomMeta.name = meta.name;
+    }
+    roomMeta.encrypted = roomMeta.encrypted ?? meta.encrypted;
     let invite = this.invites.get(roomId);
     if (invite) {
-      this.invites.set(roomId, { ...invite, name });
+      this.invites.set(roomId, { ...invite, ...roomMeta });
     }
     let joinedRoom = this.joinedRooms.get(roomId);
     if (joinedRoom) {
-      this.joinedRooms.set(roomId, { ...joinedRoom, name });
+      this.joinedRooms.set(roomId, { ...joinedRoom, ...roomMeta });
     }
-  };
+  }
 }
 
 function saveAuth(auth: IAuthData) {

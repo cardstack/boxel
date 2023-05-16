@@ -30,7 +30,7 @@ interface RoomArgs {
     roomId: string;
     members: TrackedMap<
       string,
-      { member: RoomMember; status: 'join' | 'invite' }
+      { member: RoomMember; status: 'join' | 'invite' | 'leave' }
     >;
   };
 }
@@ -170,7 +170,14 @@ export default class Room extends Component<RoomArgs> {
   }
 
   get roomName() {
-    return this.matrixService.roomNames.get(this.args.roomId);
+    let isEncrypted = this.matrixService.rooms.get(this.args.roomId)?.encrypted;
+    return `${this.matrixService.rooms.get(this.args.roomId)?.name}${
+      isEncrypted ? ' (encrypted)' : ''
+    }`;
+  }
+
+  get isEncrypted() {
+    return this.matrixService.rooms.get(this.args.roomId)?.encrypted;
   }
 
   get atBeginningOfTimeline() {
@@ -304,14 +311,19 @@ class Message extends Component<MessageArgs> {
     </BoxelMessage>
   </template>
 
+  @service private declare matrixService: MatrixService;
+
   get sender() {
     let member = this.args.members.find(
       (m) => m.member.userId === this.args.event.sender
     );
     if (!member) {
-      throw new Error(
-        `bug: cannot find room member with userId '${this.args.event.sender}'`
-      );
+      let user = this.matrixService.client.getUser(this.args.event.sender!);
+      return {
+        member: {
+          name: `${user?.displayName ?? this.args.event.sender} (left room)`,
+        },
+      };
     }
     return member;
   }
