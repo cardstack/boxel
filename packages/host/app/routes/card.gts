@@ -4,17 +4,15 @@ import ENV from '@cardstack/host/config/environment';
 import { parse } from 'qs';
 import type CardService from '../services/card-service';
 import type RouterService from '@ember/routing/router-service';
-import type LocalRealmService from '../services/local-realm';
 import { Card } from 'https://cardstack.com/base/card-api';
 
-const { ownRealmURL, isLocalRealm } = ENV;
+const { ownRealmURL } = ENV;
 const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
 
 export type Model = Card | null;
 
 export default class RenderCard extends Route<Model | null> {
   @service declare cardService: CardService;
-  @service declare localRealm: LocalRealmService;
   @service declare router: RouterService;
 
   beforeModel(transition: any) {
@@ -42,19 +40,6 @@ export default class RenderCard extends Route<Model | null> {
     let url = path
       ? new URL(`/${path}`, ownRealmURL)
       : new URL('./', ownRealmURL);
-
-    if (isLocalRealm) {
-      await this.localRealm.startedUp;
-
-      if (this.localRealm.isEmpty) {
-        return null;
-      }
-
-      if (this.localRealm.isAvailable) {
-        // Readiness means indexing in the local realm is complete. We want to wait for that so that we can fetch the card from the index.
-        await this.localRealm.waitForReadiness();
-      }
-    }
 
     try {
       return await this.cardService.loadModel(url);

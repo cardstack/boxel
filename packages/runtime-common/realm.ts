@@ -131,13 +131,10 @@ export interface RealmAdapter {
 
 interface Options {
   deferStartUp?: true;
-  isLocalRealm?: true;
   useTestingDomain?: true;
 }
 
 interface IndexHTMLOptions {
-  hostLocalRealm?: boolean;
-  localRealmURL?: string;
   realmsServed?: string[];
 }
 
@@ -147,7 +144,6 @@ export class Realm {
   #adapter: RealmAdapter;
   #router: Router;
   #deferStartup: boolean;
-  #isLocalRealm = false;
   #useTestingDomain = false;
   #transpileCache = new Map<string, string>();
   #log = logger('realm');
@@ -169,7 +165,6 @@ export class Realm {
     this.paths = new RealmPaths(url);
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
-    this.#isLocalRealm = Boolean(opts?.isLocalRealm);
     Loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
@@ -297,7 +292,7 @@ export class Realm {
 
   async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
     // local requests are allowed to query the realm as the index is being built up
-    if (!request.isLocal && !this.#isLocalRealm) {
+    if (!request.isLocal) {
       await this.ready;
     }
     if (!this.searchIndex) {
@@ -338,9 +333,8 @@ export class Realm {
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
         config = merge({}, config, {
-          ownRealmURL: opts?.localRealmURL ?? this.url,
+          ownRealmURL: this.url,
           resolvedBaseRealmURL,
-          isLocalRealm: !isNode || Boolean(opts?.hostLocalRealm),
           hostsOwnAssets: !isNode,
           realmsServed: opts?.realmsServed,
         });

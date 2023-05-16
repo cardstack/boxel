@@ -13,14 +13,17 @@ import {
 } from '@cardstack/runtime-common/search-index';
 import type RenderService from '../services/render-service';
 import type LoaderService from '../services/loader-service';
-import type LocalRealm from '../services/local-realm';
+import type LocalIndexer from '../services/local-indexer';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 
+// This component is used in a node/Fastboot context to perform
+// server-side rendering for indexing as well as by the TestRealm
+// to perform rendering for indexing in Ember test contexts.
 export default class CardPrerender extends Component {
   @service declare loaderService: LoaderService;
   @service declare renderService: RenderService;
   @service declare fastboot: { isFastBoot: boolean };
-  @service declare localRealm: LocalRealm;
+  @service declare localIndexer: LocalIndexer;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -37,7 +40,7 @@ export default class CardPrerender extends Component {
       }
     } else {
       this.warmUpModuleCache.perform();
-      this.localRealm.setupIndexing(
+      this.localIndexer.setup(
         this.fromScratch.bind(this),
         this.incremental.bind(this)
       );
@@ -154,18 +157,18 @@ export default class CardPrerender extends Component {
       ): Promise<{ content: string; lastModified: number } | undefined> {
         return _readFileAsText(
           path,
-          self.localRealm.adapter.openFile.bind(self.localRealm.adapter),
+          self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
           opts
         );
       }
       return {
         reader: {
-          readdir: this.localRealm.adapter.readdir.bind(
-            this.localRealm.adapter
+          readdir: this.localIndexer.adapter.readdir.bind(
+            this.localIndexer.adapter
           ),
           readFileAsText,
         },
-        entrySetter: this.localRealm.setEntry.bind(this.localRealm),
+        entrySetter: this.localIndexer.setEntry.bind(this.localIndexer),
       };
     }
   }

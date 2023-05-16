@@ -14,8 +14,7 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
 
-class MockLocalRealm extends Service {
-  isAvailable = true;
+class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
 }
 
@@ -29,7 +28,7 @@ module('Integration | preview', function (hooks) {
       .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
-    this.owner.register('service:local-realm', MockLocalRealm);
+    this.owner.register('service:local-indexer', MockLocalIndexer);
   });
 
   test('renders card', async function (assert) {

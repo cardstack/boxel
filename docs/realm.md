@@ -26,18 +26,11 @@ actually execute the card code.
 
 ## Types of realms
 
-The realm is isomorphic JavaScript code meant to be run in any environment, and there exists a RealmAdapter whose job is to provide environment specific implementations for 3 different types of realms.
+The realm is isomorphic JavaScript code meant to be run in any environment, and there exists a RealmAdapter whose job is to provide environment specific implementations for 2 different types of realms.
 
 ### Hosted realm
 
 This realm runs in a Node.js environment on a server.
-
-### Local realm
-
-Runs locally, in the user's browser. This enables card authors to write and run cards on their computer.
-There is a service worker included which runs the realm code, and all requests described above are served from the realm hosted
-in the service worker. Service worker acts as an intermediary between the browser and the local filesystem, and hosts the realm
-together with the locally indexed card data.
 
 ### DOM realm
 
