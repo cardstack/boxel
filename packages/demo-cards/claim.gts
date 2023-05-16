@@ -47,7 +47,7 @@ export class Claim extends Card {
   //metamask api
 
   async isMetamaskInstalled() {
-    let isInstalled = typeof window.ethereum !== 'undefined';
+    let isInstalled = window.ethereum !== 'undefined';
     console.log(`MetaMask is installed: ${isInstalled}`);
     return isInstalled;
   }
@@ -91,6 +91,8 @@ export class Claim extends Card {
         <FieldContainer @label='Explanation'><@fields.explanation
           /></FieldContainer>
         <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
+        <FieldContainer @label='Connected'><@fields.connected
+          /></FieldContainer>
       </CardContainer>
     </template>
   };
