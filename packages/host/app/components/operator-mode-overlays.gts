@@ -131,8 +131,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
         let currentOverlayedButton = this.overlayedButtons.find(
           (previousOverlayedButton) => {
             return (
-              previousOverlayedButton.linksToCard.id ===
-              refreshedOverlayedButton.linksToCard.id
+              previousOverlayedButton.linksToCard?.id ===
+              refreshedOverlayedButton.linksToCard?.id
             );
           }
         );
