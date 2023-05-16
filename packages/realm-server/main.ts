@@ -134,7 +134,6 @@ if (distURL) {
 
   for (let realm of realms) {
     log.info(`Starting realm ${realm.url}...`);
-    debugger;
     await realm.start();
     log.info(
       `Realm ${realm.url} has started (${JSON.stringify(
