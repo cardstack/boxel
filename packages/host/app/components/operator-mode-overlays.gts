@@ -30,6 +30,9 @@ interface Signature {
 }
 
 export default class OperatorModeOverlays extends Component<Signature> {
+  refreshLoopStartedAt: number | null = null;
+  refreshLoopTimeout: number | null = null;
+
   <template>
     {{#each this.overlayedButtons as |overlayedButton|}}
       <button
@@ -48,6 +51,13 @@ export default class OperatorModeOverlays extends Component<Signature> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
 
+    if (config.environment === 'test') {
+      // Allow a small time window for overlays to show up in operator mode component tests. After
+      // that time passes we need to stop the refresh loop so that the tests don't hang
+      this.refreshLoopTimeout = 100;
+    }
+
+    this.refreshLoopStartedAt = Date.now();
     this.refreshOverlayedButtons.perform();
 
     registerDestructor(this, () => {
@@ -90,6 +100,13 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   refreshOverlayedButtons = task(async () => {
+    if (
+      this.refreshLoopTimeout &&
+      Date.now() - this.refreshLoopStartedAt! > this.refreshLoopTimeout!
+    ) {
+      return;
+    }
+
     if (this.args.renderedLinksToCards.length === 0) {
       this.overlayedButtons = new TrackedArray([]);
     }
@@ -130,16 +147,13 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
     if (didLayoutChange) {
       this.overlayedButtons = new TrackedArray(refreshedOverlayedButtons);
-      if (config.environment == 'test') {
-        // Cancel continous refreshing when button gets displayed so that the test can finish
-        this.refreshOverlayedButtons.cancelAll();
-      }
     }
 
     let refreshRateMs = 40;
     // This rate feels snappy enough for repositioning when resizing and interacting with cards
     // in the stack. Probably could be more performant using some kind of an observer or a
     // reactive mechanism -- but this is a quick solution for now which we can improve later.
+
     await timeout(refreshRateMs);
     this.refreshOverlayedButtons.perform();
   });
