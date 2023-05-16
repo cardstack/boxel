@@ -13,7 +13,7 @@ import { Claim } from './claim';
 // perhaps cards-grid??
 export class Claims extends Card {
   static displayName = 'Claims';
-  @field claims = linksToMany(Claim);
+  @field claims = linksToMany(() => Claim);
   @field count = contains(IntegerCard, {
     computeVia(this: Claims) {
       return this.claims.length;
