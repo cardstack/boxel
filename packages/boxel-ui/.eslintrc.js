@@ -66,5 +66,13 @@ module.exports = {
       files: ['tests/**/*-test.{js,ts}'],
       extends: ['plugin:qunit/recommended'],
     },
+    {
+      // Skip Prettier for .gts files as the rules are being applied after preprocessing
+      // https://github.com/gitKrystan/prettier-plugin-ember-template-tag/issues/20
+      files: ['**/*.gts'],
+      rules: {
+        'prettier/prettier': 'off',
+      },
+    },
   ],
 };
