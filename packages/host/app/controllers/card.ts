@@ -37,8 +37,7 @@ export default class CardController extends Controller {
 
   @action
   runSearch(query: Query): Search {
-    this.results = getSearchResults(this, () => query);
-    return this.results;
+    return getSearchResults(this, () => query);
   }
 
   @action

@@ -118,7 +118,10 @@ export async function chooseCard<T extends Card>(
 }
 
 export interface CardSearch {
-  runSearch(query: Query): any; // TODO: return type?
+  runSearch(query: Query): {
+    instances: Card[];
+    isLoading: boolean;
+  };
 }
 
 export async function runSearch(query: Query) {
