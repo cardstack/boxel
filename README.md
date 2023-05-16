@@ -56,13 +56,13 @@ Live reloads are not available in this mode, but you can just refresh the page t
 
 Instead of running `start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
 
-| Port | Description                                           | Running `start:base` | Running `start:base` |
-| ---- | ------------------------------------------------------|----------------------|----------------------|
-|:4201 | `/base` base realm                                    |           ✅         |           ✅         |
-|:4202 | `/test` host test realm, `/node-test` node test realm |           ✅         |           🚫         |
-|:4203 | `root (/)` base realm                                 |           ✅         |           🚫         |
-|:4204 | `root (/)` demo realm                                 |           ✅         |           🚫         |
-|:4205 | qunit server mounting realms in iframes for testing   |           ✅         |           🚫         |
+| Port | Description                                           | Running `start:all` | Running `start:base` |
+| ---- | ------------------------------------------------------|---------------------|----------------------|
+|:4201 | `/base` base realm                                    |          ✅         |          ✅          |
+|:4202 | `/test` host test realm, `/node-test` node test realm |          ✅         |          🚫          |
+|:4203 | `root (/)` base realm                                 |          ✅         |          🚫          |
+|:4204 | `root (/)` demo realm                                 |          ✅         |          🚫          |
+|:4205 | qunit server mounting realms in iframes for testing   |          ✅         |          🚫          |
 
 ### Card Pre-rendering
 
