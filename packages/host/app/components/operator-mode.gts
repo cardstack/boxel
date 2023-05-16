@@ -239,6 +239,15 @@ export default class OperatorMode extends Component<Signature> {
     });
   }
 
+  unregisterLinkedCardElement(card: Card) {
+    let index = this.renderedLinksToCards.findIndex(
+      (renderedLinksToCard) => renderedLinksToCard.card === card
+    );
+    if (index !== -1) {
+      this.renderedLinksToCards.splice(index, 1);
+    }
+  }
+
   styleForStackedCard(stack: StackItem[], index: number) {
     let invertedIndex = stack.length - index - 1;
 

@@ -3,6 +3,7 @@ import {
   CardBase,
   CardRenderingContext,
 } from 'https://cardstack.com/base/card-api';
+import { registerDestructor } from '@ember/destroyable';
 
 interface Signature {
   Args: {
@@ -22,5 +23,9 @@ export default class LinksToCardComponentModifier extends Modifier<Signature> {
         context
       );
     }
+
+    registerDestructor(this, () => {
+      (context.renderedIn as any)?.unregisterLinkedCardElement(card);
+    });
   }
 }
