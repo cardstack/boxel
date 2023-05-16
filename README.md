@@ -54,7 +54,7 @@ Live reloads are not available in this mode, but you can just refresh the page t
 
 #### Using `start:all`
 
-WInstead of running `start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
+Instead of running `start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
 
 | Port | Description                                           | Running `start:base` | Running `start:base` |
 | ---- | ------------------------------------------------------|----------------------|----------------------|
