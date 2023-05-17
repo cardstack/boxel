@@ -127,7 +127,7 @@ export interface CardSearch {
 export async function getCards(query: Query) {
   let here = globalThis as any;
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder.getCards(query);
+  return finder?.getCards(query);
 }
 
 export interface CardCreator {

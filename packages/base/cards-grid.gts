@@ -8,6 +8,7 @@ import {
   chooseCard,
   catalogEntryRef,
   getCards,
+  baseRealm,
 } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
 
@@ -21,11 +22,16 @@ class Isolated extends Component<typeof CardsGrid> {
               <div class='grid-card__thumbnail'>
                 <div
                   class='grid-card__thumbnail-text'
+                  data-test-cards-grid-item-thumbnail-text
                 >{{card.constructor.displayName}}</div>
               </div>
-              <h3 class='grid-card__title'>{{card.title}}</h3>
+              <h3
+                class='grid-card__title'
+                data-test-cards-grid-item-title
+              >{{card.title}}</h3>
               <h4
                 class='grid-card__display-name'
+                data-test-cards-grid-item-display-name
               >{{card.constructor.displayName}}</h4>
             </CardContainer>
           </li>
@@ -67,7 +73,15 @@ class Isolated extends Component<typeof CardsGrid> {
     this.request = await getCards({
       filter: {
         not: {
-          type: catalogEntryRef,
+          any: [
+            { type: catalogEntryRef },
+            {
+              type: {
+                module: `${baseRealm.url}cards-grid`,
+                name: 'CardsGrid',
+              },
+            },
+          ],
         },
       },
     });
