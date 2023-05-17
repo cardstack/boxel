@@ -67,14 +67,6 @@ module.exports = {
       extends: ['plugin:qunit/recommended'],
     },
     {
-      // Skip Prettier for .gts files as the rules are being applied after preprocessing
-      // https://github.com/gitKrystan/prettier-plugin-ember-template-tag/issues/20
-      files: ['**/*.gts'],
-      rules: {
-        'prettier/prettier': 'off',
-      },
-    },
-    {
       // typescript-eslint recommends turning off no-undef for Typescript files since
       // Typescript will better analyse that:
       // https://github.com/typescript-eslint/typescript-eslint/blob/5b0e577f2552e8b2c53a3fb22edc9d219589b937/docs/linting/Troubleshooting.mdx#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors

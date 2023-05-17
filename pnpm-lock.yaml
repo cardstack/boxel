@@ -464,7 +464,7 @@ importers:
       ember-try: ^2.0.0
       eslint: ^8.37.0
       eslint-config-prettier: ^8.8.0
-      eslint-plugin-ember: ^11.5.0
+      eslint-plugin-ember: ^11.6.0
       eslint-plugin-n: ^15.7.0
       eslint-plugin-prettier: ^4.0.0
       eslint-plugin-qunit: ^7.3.4
@@ -533,7 +533,7 @@ importers:
       ember-try: 2.0.0
       eslint: 8.40.0
       eslint-config-prettier: 8.8.0_eslint@8.40.0
-      eslint-plugin-ember: 11.5.2_eslint@8.40.0
+      eslint-plugin-ember: 11.6.0_eslint@8.40.0
       eslint-plugin-n: 15.7.0_eslint@8.40.0
       eslint-plugin-prettier: 4.2.1_mnhdxnhvwtt24ndv5d2pwtkrna
       eslint-plugin-qunit: 7.3.4_eslint@8.40.0
@@ -13010,6 +13010,29 @@ packages:
 
   /eslint-plugin-ember/11.5.2_eslint@8.40.0:
     resolution: {integrity: sha512-OFlBkV0VSemGtq3cZDWOm/kwOipiswvPIVL6VDJjpEv85BDtbGdqoyvaF9d6/MY7u5aDCh62oOgKQFw9JQGadA==}
+    engines: {node: 14.* || 16.* || >= 18}
+    peerDependencies:
+      eslint: '>= 7'
+    dependencies:
+      '@ember-data/rfc395-data': 0.0.4
+      '@glimmer/syntax': 0.84.3
+      css-tree: 2.3.1
+      ember-rfc176-data: 0.3.17
+      ember-template-imports: 3.4.2
+      eslint: 8.40.0
+      eslint-utils: 3.0.0_eslint@8.40.0
+      estraverse: 5.3.0
+      lodash.camelcase: 4.3.0
+      lodash.kebabcase: 4.1.1
+      magic-string: 0.30.0
+      requireindex: 1.2.0
+      snake-case: 3.0.4
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
+
+  /eslint-plugin-ember/11.6.0_eslint@8.40.0:
+    resolution: {integrity: sha512-M/M63t/Y5yr/yuWUbtUZ/tE5B5A8/+6LOR6fJlXpLZR4XMtN3KueYsuEIDGP6AInmq5tjDPmBXX0wV+FkjQmvA==}
     engines: {node: 14.* || 16.* || >= 18}
     peerDependencies:
       eslint: '>= 7'
