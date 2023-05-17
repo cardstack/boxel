@@ -680,7 +680,6 @@ nav>.directory-level {
   display: block;
   float: right;
   margin-bottom: var(--boxel-sp-sm);
-
 }
 
 .room__messages-wrapper {
