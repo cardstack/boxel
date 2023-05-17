@@ -3,7 +3,7 @@ lockfileVersion: 5.4
 overrides:
   '@types/eslint': 8.4.1
   jsesc: ^3.0.0
-  ember-concurrency: ^2.3.4
+  ember-concurrency: ^3.0.0
   ember-modifier: ^4.1.0
 
 patchedDependencies:
@@ -81,7 +81,7 @@ importers:
       '@types/flat': ^5.0.2
       '@types/lodash': ^4.14.182
       ember-cli-htmlbars: ^6.2.0
-      ember-concurrency: ^2.3.4
+      ember-concurrency: ^3.0.0
       ember-modifier: ^4.1.0
       tracked-built-ins: ^2.0.1
     devDependencies:
@@ -94,7 +94,7 @@ importers:
       '@types/flat': 5.0.2
       '@types/lodash': 4.14.189
       ember-cli-htmlbars: 6.2.0
-      ember-concurrency: 2.3.7_@babel+core@7.20.2
+      ember-concurrency: 3.0.0_@babel+core@7.20.2
       ember-modifier: 4.1.0
       tracked-built-ins: 2.0.1
     dependenciesMeta:
@@ -117,7 +117,7 @@ importers:
       ember-cli-babel: ^7.26.11
       ember-cli-htmlbars: ^6.2.0
       ember-cli-typescript: ^5.2.1
-      ember-concurrency: ^2.3.4
+      ember-concurrency: ^3.0.0
       ember-modifier: ^4.1.0
       ember-template-imports: ^3.0.1
       ember-template-lint: ^4.3.0
@@ -139,7 +139,7 @@ importers:
       ember-cli-babel: 7.26.11
       ember-cli-htmlbars: 6.2.0
       ember-cli-typescript: 5.2.1
-      ember-concurrency: 2.3.7_@babel+core@7.20.2
+      ember-concurrency: 3.0.0_@babel+core@7.20.2
       ember-modifier: 4.1.0
       macro-decorators: 0.1.2
       style-value-types: 5.1.2
@@ -197,7 +197,7 @@ importers:
       ember-cli-terser: ^4.0.2
       ember-cli-typescript: ^5.2.1
       ember-cli-typescript-blueprints: ^3.0.0
-      ember-concurrency: ^2.3.4
+      ember-concurrency: ^3.0.0
       ember-css-modules: ^2.0.1
       ember-export-application-global: ^2.0.1
       ember-fetch: ^8.1.2
@@ -260,7 +260,7 @@ importers:
       ember-cli-terser: 4.0.2
       ember-cli-typescript: 5.2.1
       ember-cli-typescript-blueprints: 3.0.0
-      ember-concurrency: 2.3.7_@babel+core@7.20.2
+      ember-concurrency: 3.0.0_@babel+core@7.20.2
       ember-css-modules: 2.0.1
       ember-export-application-global: 2.0.1
       ember-fetch: 8.1.2
@@ -607,7 +607,7 @@ importers:
       ember-cli-sri: ^2.1.1
       ember-cli-terser: ^4.0.2
       ember-cli-typescript-blueprints: ^3.0.0
-      ember-concurrency: ^2.3.4
+      ember-concurrency: ^3.0.0
       ember-focus-trap: ^1.0.1
       ember-freestyle: ^0.17.0
       ember-functions-as-helper-polyfill: ^2.0.1
@@ -705,7 +705,7 @@ importers:
       ember-cli-sri: 2.1.1
       ember-cli-terser: 4.0.2
       ember-cli-typescript-blueprints: 3.0.0
-      ember-concurrency: 2.3.7_@babel+core@7.20.2
+      ember-concurrency: 3.0.0_@babel+core@7.20.2
       ember-focus-trap: 1.0.1
       ember-freestyle: 0.17.0_hyb35ykxf4ngfa5gr2c32swp4e
       ember-functions-as-helper-polyfill: 2.1.1_ember-source@4.12.0
@@ -716,7 +716,7 @@ importers:
       ember-page-title: 7.0.0
       ember-qunit: 6.2.0_px4ic4xjm2xmxrluwamhh7f5kq
       ember-resolver: 10.1.0_5npmtrl3y5gg7x6ys6ybk27jme
-      ember-resources: 4.10.0_e2r6avqzootywleeycw7jctt6a
+      ember-resources: 4.10.0_7t75pfl73pbq4sp47n4vxx37vi
       ember-source: 4.12.0_3pbogmdper3j567aoi62iitzry
       ember-template-imports: 3.4.0_ember-cli-htmlbars@6.2.0
       ember-template-lint: 5.7.3
@@ -11768,12 +11768,12 @@ packages:
       - supports-color
     dev: false
 
-  /ember-concurrency/2.3.7_@babel+core@7.20.2:
-    resolution: {integrity: sha512-sz6sTIXN/CuLb5wdpauFa+rWXuvXXSnSHS4kuNzU5GSMDX1pLBWSuovoUk61FUe6CYRqBmT1/UushObwBGickQ==}
+  /ember-concurrency/3.0.0_@babel+core@7.20.2:
+    resolution: {integrity: sha512-MUsOgl4qLkINxrY+9FuohSOsn7Ytd3xCxu9mThSrMPatxomscZz/0lT4M95S7xy2aNO4o/zGfAEULECQ09YkWA==}
     engines: {node: 10.* || 12.* || 14.* || >= 16}
     dependencies:
       '@babel/helper-plugin-utils': 7.20.2
-      '@babel/types': 7.20.2
+      '@babel/types': 7.21.5
       '@glimmer/tracking': 1.1.2
       ember-cli-babel: 7.26.11
       ember-cli-babel-plugin-helpers: 1.1.1
@@ -12121,7 +12121,7 @@ packages:
       - supports-color
     dev: true
 
-  /ember-resources/4.10.0_e2r6avqzootywleeycw7jctt6a:
+  /ember-resources/4.10.0_7t75pfl73pbq4sp47n4vxx37vi:
     resolution: {integrity: sha512-xt/qJLLXUZ0FQZ3u0L4rw2rrV2b+7k9Apwr9X/zkD13bXB2pTpUcG7dlG7Ukb28Vvv83HlpOHEV67FM+os3YKw==}
     peerDependencies:
       '@ember/test-waiters': ^3.0.0
@@ -12138,7 +12138,7 @@ packages:
       '@embroider/addon-shim': 1.8.3
       '@embroider/macros': 1.10.0
       '@glimmer/tracking': 1.1.2
-      ember-concurrency: 2.3.7_@babel+core@7.20.2
+      ember-concurrency: 3.0.0_@babel+core@7.20.2
       ember-source: 4.12.0_3pbogmdper3j567aoi62iitzry
     transitivePeerDependencies:
       - supports-color
