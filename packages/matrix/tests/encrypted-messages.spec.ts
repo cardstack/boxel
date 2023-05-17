@@ -36,8 +36,13 @@ test.describe('Encrypted Room messages', () => {
     });
     await openRoom(page, 'Room 1');
     await sendMessage(page, 'first message');
-    await logout(page);
+    await assertMessages(page, [{ from: 'user1', message: 'first message' }]);
 
+    await page.reload();
+    await openRoom(page, 'Room 1');
+    await assertMessages(page, [{ from: 'user1', message: 'first message' }]);
+
+    await logout(page);
     await login(page, 'user2', 'pass');
     await joinRoom(page, 'Room 1');
     await openRoom(page, 'Room 1');
